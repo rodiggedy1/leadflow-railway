@@ -483,10 +483,18 @@ function GenerateDialog({
 
 function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => void }) {
   const utils = trpc.useUtils();
+  const [emailSent, setEmailSent] = useState(false);
   const deleteMut = trpc.invoice.deleteInvoice.useMutation({
     onSuccess: () => {
       utils.invoice.listInvoices.invalidate();
       toast.success("Invoice deleted");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const sendEmailMut = trpc.invoice.sendByEmail.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Invoice #${data.invoiceNumber} sent to ${data.toEmail}`);
+      setEmailSent(true);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -521,6 +529,19 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
             </button>
           ) : (
             <span className="text-xs text-gray-400">No PDF</span>
+          )}
+          {inv.pdfUrl && (
+            emailSent ? (
+              <span className="text-xs text-green-600 font-medium">✓ Sent</span>
+            ) : (
+              <button
+                onClick={() => sendEmailMut.mutate({ invoiceId: inv.id })}
+                disabled={sendEmailMut.isPending}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+              >
+                {sendEmailMut.isPending ? "Sending..." : "Email"}
+              </button>
+            )
           )}
           <button
             onClick={() => {

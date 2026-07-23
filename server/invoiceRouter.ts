@@ -16,12 +16,13 @@
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { invoiceTemplates, invoices } from "../drizzle/schema";
+import { invoiceTemplates, invoices, completedJobs } from "../drizzle/schema";
 import { eq, desc, like, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { MIB_LOGO_B64 } from "./invoiceLogo";
 import { storagePut } from "./storage";
+import { sendNewGmailEmailWithAttachment } from "./gmailService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -624,5 +625,67 @@ export const invoiceRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       await db.delete(invoices).where(eq(invoices.id, input.id));
       return { ok: true };
+    }),
+
+  // ── Send invoice by email ──────────────────────────────────────────────────
+
+  sendByEmail: adminAgentProcedure
+    .input(z.object({
+      invoiceId: z.number(),
+      /** Override recipient email — if omitted, looked up from completed_jobs by customerName */
+      toEmail: z.string().email().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Load the invoice
+      const [inv] = await db.select().from(invoices).where(eq(invoices.id, input.invoiceId));
+      if (!inv) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
+      if (!inv.pdfUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Invoice has no PDF yet" });
+
+      // Resolve recipient email
+      let toEmail = input.toEmail ?? null;
+      if (!toEmail) {
+        // Look up most recent completed_jobs record with this customer name that has an email
+        const [jobRow] = await db
+          .select({ email: completedJobs.email })
+          .from(completedJobs)
+          .where(like(completedJobs.name, `%${inv.customerName}%`))
+          .orderBy(desc(completedJobs.id))
+          .limit(1);
+        toEmail = jobRow?.email ?? null;
+      }
+
+      if (!toEmail) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `No email found for ${inv.customerName}. Please provide the email address manually.`,
+        });
+      }
+
+      const totalDollars = (inv.totalCents / 100).toFixed(2);
+      const subject = `Your Invoice #${inv.invoiceNumber} from Maids In Black — $${totalDollars}`;
+      const bodyHtml = [
+        `<p>Hi ${inv.customerName.split(" ")[0]},</p>`,
+        `<p>Please find your invoice attached for cleaning services on <strong>${inv.serviceDate}</strong>.</p>`,
+        `<p><strong>Invoice #${inv.invoiceNumber}</strong> &mdash; Total Due: <strong>$${totalDollars}</strong></p>`,
+        inv.stripeLink
+          ? `<p>You can pay securely online here: <a href="${inv.stripeLink}">${inv.stripeLink}</a></p>`
+          : "",
+        `<p>Thank you for choosing Maids In Black!</p>`,
+        `<p style="color:#888;font-size:12px">Maids In Black &bull; Support@maidsinblacksupport.com &bull; 202-888-5362 &bull; MaidsInBlack.com</p>`,
+      ].join("\n");
+
+      const filename = `Invoice_${inv.invoiceNumber}_${inv.customerName.replace(/\s+/g, "_")}.pdf`;
+
+      await sendNewGmailEmailWithAttachment({
+        to: toEmail,
+        subject,
+        bodyHtml,
+        attachments: [{ url: inv.pdfUrl, filename, mimeType: "application/pdf" }],
+      });
+
+      return { ok: true, toEmail, invoiceNumber: inv.invoiceNumber, customerName: inv.customerName };
     }),
 });

@@ -1881,14 +1881,20 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
   });
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   const [serviceDate, setServiceDate] = React.useState(today);
-  const [result, setResult] = React.useState<{ invoiceNumber: number; pdfUrl: string; customerName: string } | null>(null);
+  const [result, setResult] = React.useState<{ id: number; invoiceNumber: number; pdfUrl: string; customerName: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [emailSent, setEmailSent] = React.useState(false);
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const generateMutation = trpc.invoice.generateInvoice.useMutation({
     onSuccess: (data) => {
-      setResult({ invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName });
+      setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName });
       setError(null);
     },
     onError: (e) => setError(e.message),
+  });
+  const sendEmailMutation = trpc.invoice.sendByEmail.useMutation({
+    onSuccess: () => { setEmailSent(true); setEmailError(null); },
+    onError: (e) => setEmailError(e.message),
   });
   const selectedTemplate = card.templates.find(t => t.id === selectedTemplateId);
   const lineItems = (selectedTemplate?.lineItems as Array<{ price: number }> | null) ?? [];
@@ -1901,14 +1907,28 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
           <span style={{ fontWeight: 700, fontSize: 14, color: "#22c55e" }}>Invoice Generated!</span>
         </div>
         <p style={{ fontSize: 13, color: "#c8cde8", marginBottom: 4 }}>Invoice #{result.invoiceNumber} · {result.customerName}</p>
-        <a
-          href={result.pdfUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: "inline-block", marginTop: 8, padding: "7px 16px", background: "#f97316", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
-        >
-          Download PDF
-        </a>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <a
+            href={result.pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "inline-block", padding: "7px 16px", background: "#f97316", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
+          >
+            Download PDF
+          </a>
+          {emailSent ? (
+            <span style={{ padding: "7px 12px", background: "#16a34a", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>✓ Email Sent</span>
+          ) : (
+            <button
+              onClick={() => sendEmailMutation.mutate({ invoiceId: result.id })}
+              disabled={sendEmailMutation.isPending}
+              style={{ padding: "7px 16px", background: sendEmailMutation.isPending ? "#6b7280" : "#6366f1", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer" }}
+            >
+              {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
+            </button>
+          )}
+        </div>
+        {emailError && <p style={{ fontSize: 11, color: "#ef4444", marginTop: 6 }}>{emailError}</p>}
       </div>
     );
   }
