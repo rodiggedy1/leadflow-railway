@@ -2282,12 +2282,6 @@ async function handleUnansweredSms(
   const thresholdMs = thresholdMinutes * 60 * 1000;
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
   const now = Date.now();
-  // Same source filter as getUnansweredCsCount
-  const sourceFilter = or(
-    eq(conversationSessions.leadSource, "cs-inbound"),
-    eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
-    eq(conversationSessions.leadSource, "cs_initiated"),
-  );
   const sessions = await db
     .select({
       id: conversationSessions.id,
@@ -2299,16 +2293,14 @@ async function handleUnansweredSms(
       lastMessageText: conversationSessions.lastMessageText,
     })
     .from(conversationSessions)
-    .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)));
+    .where(isNull(conversationSessions.csResolvedAt));
   const result: UnansweredSmsResult["rows"] = [];
   for (const s of sessions) {
     try {
       // Skip if the last message was from staff (already answered)
       if (s.lastMessageRole && s.lastMessageRole !== "user") continue;
       // Use lastCustomerMessageTs as the authoritative timestamp
-      const resolvedTs = s.lastCustomerMessageTs && s.lastCustomerMessageTs > 1_000_000_000_000
-        ? s.lastCustomerMessageTs
-        : null;
+      const resolvedTs = s.lastCustomerMessageTs ?? null;
       if (!resolvedTs) continue;
       const age = now - resolvedTs;
       if (age > THIRTY_DAYS_MS) continue; // skip stale/dead sessions
