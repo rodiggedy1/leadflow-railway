@@ -2294,29 +2294,39 @@ async function handleUnansweredSms(
       leadName: conversationSessions.leadName,
       leadPhone: conversationSessions.leadPhone,
       messageHistory: conversationSessions.messageHistory,
-      lastCustomerReplyAt: conversationSessions.lastCustomerReplyAt,
+      lastCustomerMessageTs: conversationSessions.lastCustomerMessageTs,
+      lastMessageRole: conversationSessions.lastMessageRole,
+      lastMessageText: conversationSessions.lastMessageText,
     })
     .from(conversationSessions)
     .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)));
   const result: UnansweredSmsResult["rows"] = [];
   for (const s of sessions) {
     try {
-      const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
-      const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
-      if (!lastReal || lastReal.role !== "user") continue; // last message is from agent — answered
-      const msgTs = lastReal.ts && lastReal.ts > 1_000_000_000_000 ? lastReal.ts : null;
-      const fallbackTs = s.lastCustomerReplyAt && s.lastCustomerReplyAt > 1_000_000_000_000 ? s.lastCustomerReplyAt : null;
-      const resolvedTs = msgTs ?? fallbackTs;
+      // Skip if the last message was from staff (already answered)
+      if (s.lastMessageRole && s.lastMessageRole !== "user") continue;
+      // Use lastCustomerMessageTs as the authoritative timestamp
+      const resolvedTs = s.lastCustomerMessageTs && s.lastCustomerMessageTs > 1_000_000_000_000
+        ? s.lastCustomerMessageTs
+        : null;
       if (!resolvedTs) continue;
       const age = now - resolvedTs;
       if (age > THIRTY_DAYS_MS) continue; // skip stale/dead sessions
       if (age < thresholdMs) continue; // not waiting long enough yet
-      const preview = typeof lastReal.content === "string" ? lastReal.content.slice(0, 120) : "";
+      // Get preview from lastMessageText or fall back to messageHistory
+      let preview = s.lastMessageText ?? "";
+      if (!preview) {
+        try {
+          const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
+          const lastUser = [...history].reverse().find(m => m.role === "user");
+          preview = typeof lastUser?.content === "string" ? lastUser.content.slice(0, 120) : "";
+        } catch { /* ignore */ }
+      }
       result.push({
         sessionId: s.id,
         leadName: s.leadName ?? null,
         leadPhone: s.leadPhone,
-        lastMessagePreview: preview,
+        lastMessagePreview: preview.slice(0, 120),
         waitMs: age,
       });
     } catch { /* skip malformed */ }
