@@ -2,49 +2,12 @@
  * Madison Readiness Domain — shared types
  */
 
-import { z } from "zod";
-
-// ── ReadinessPlan ─────────────────────────────────────────────────────────────
-
-export const ReadinessPlanSchema = z.object({
-  dateScope: z.object({
-    type: z.literal("service_date"),
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  }),
-  filters: z
-    .object({
-      timeOfDay: z.enum(["morning", "afternoon", "evening"]).nullable().optional(),
-      startTime: z
-        .string()
-        .regex(/^\d{2}:\d{2}$/)
-        .nullable()
-        .optional(), // "HH:MM" 24h
-      endTime: z
-        .string()
-        .regex(/^\d{2}:\d{2}$/)
-        .nullable()
-        .optional(),
-      dimension: z
-        .enum([
-          "all",
-          "assignment",
-          "confirmation",
-          "payment",
-          "access",
-          "schedule",
-        ])
-        .nullable()
-        .optional(),
-      onlyNeedsAttention: z.boolean().nullable().optional(),
-      minimumFlagCount: z.number().int().min(1).max(5).nullable().optional(),
-    })
-    .nullable()
-    .optional(),
-  sort: z.enum(["service_time", "risk"]).nullable().optional(),
-});
-
-export type ReadinessPlan = z.infer<typeof ReadinessPlanSchema>;
+// ── ReadinessPlan — single source of truth is schema/readinessPlanSchema.ts ──
+// Re-exported here for backwards compatibility with existing imports.
+export {
+  READINESS_PLAN_ZOD_SCHEMA as ReadinessPlanSchema,
+  type ReadinessPlan,
+} from "./schema/readinessPlanSchema";
 
 // ── Projection ────────────────────────────────────────────────────────────────
 
