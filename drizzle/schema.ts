@@ -3687,3 +3687,37 @@ export const madisonMissions = mysqlTable("madison_missions", {
 ]);
 export type MadisonMission = typeof madisonMissions.$inferSelect;
 export type InsertMadisonMission = typeof madisonMissions.$inferInsert;
+
+// ─── Invoice Templates ────────────────────────────────────────────────────────
+export const invoiceTemplates = mysqlTable("invoiceTemplates", {
+  id: int("id").autoincrement().primaryKey(),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  billTo: text("billTo").notNull(),
+  serviceAddress: varchar("serviceAddress", { length: 500 }).notNull(),
+  stripeLink: varchar("stripeLink", { length: 1000 }).notNull().default(""),
+  lineItems: json("lineItems").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type InvoiceTemplate = typeof invoiceTemplates.$inferSelect;
+export type InsertInvoiceTemplate = typeof invoiceTemplates.$inferInsert;
+
+// ─── Generated Invoices ───────────────────────────────────────────────────────
+export const invoices = mysqlTable("invoices", {
+  id: int("id").autoincrement().primaryKey(),
+  invoiceNumber: int("invoiceNumber").notNull().unique(),
+  templateId: int("templateId").notNull(),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  serviceDate: varchar("serviceDate", { length: 10 }).notNull(),
+  billingDate: varchar("billingDate", { length: 10 }).notNull(),
+  stripeLink: varchar("stripeLink", { length: 1000 }).notNull().default(""),
+  lineItems: json("lineItems").notNull(),
+  totalCents: int("totalCents").notNull(),
+  pdfUrl: varchar("pdfUrl", { length: 1000 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+  index("idx_invoices_templateId").on(t.templateId),
+  index("idx_invoices_customerName").on(t.customerName),
+]);
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = typeof invoices.$inferInsert;

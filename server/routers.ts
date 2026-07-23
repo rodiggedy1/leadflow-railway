@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminAgentProcedure, agentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
+import { invoiceRouter } from "./invoiceRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
@@ -7097,6 +7098,7 @@ Return JSON with exactly these fields:
   campaigns: campaignRouter,
   completedJobs: reviewRouter,
   messageTemplates: messageTemplateRouter,
+  invoice: invoiceRouter,
   launch27: launch27Router,
   alwaysOn: alwaysOnRouter,
   syncHealth: syncHealthRouter,

@@ -249,6 +249,7 @@ type MessageContent =
   | { type: "confirmation_results"; card: ConfirmationResultsCard }
   | { type: "job_status_stream"; card: JobStatusStreamCard }
   | { type: "unanswered_sms"; card: UnansweredSmsCard }
+  | { type: "generate_invoice"; card: GenerateInvoiceCard }
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
   | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
@@ -1153,6 +1154,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "generate_invoice" && (
+          <div>
+            <GenerateInvoiceCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "prepare_checklist" && (
           <div>
             <PrepareChecklistCardView card={msg.content.card} />
@@ -1858,8 +1865,48 @@ function UnansweredSmsCardView({ card, onSwitchToCSSession }: { card: Unanswered
     </div>
   );
 }
-// ─── Job Status Stream card ──────────────────────────────────────────────────
+// ─── Generate Invoice card ──────────────────────────────────────────────────
+interface GenerateInvoiceCard {
+  customerName: string;
+  found: boolean;
+  invoiceNumber?: number;
+  pdfUrl?: string;
+  message: string;
+}
+function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
+  return (
+    <div style={{ background: "#0f1120", border: "1px solid #2a2e47", borderRadius: 12, padding: "14px 16px", minWidth: 260, maxWidth: 420 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 18 }}>🧾</span>
+        <span style={{ fontWeight: 700, fontSize: 14, color: "#c8cde8" }}>Invoice Generator</span>
+      </div>
+      {card.found ? (
+        <div>
+          <p style={{ fontSize: 13, color: "#22c55e", marginBottom: 8 }}>{card.message}</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>Invoice #{card.invoiceNumber}</span>
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>·</span>
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>{card.customerName}</span>
+          </div>
+          {card.pdfUrl && (
+            <a
+              href={card.pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "inline-block", marginTop: 10, padding: "6px 14px", background: "#f97316", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
+            >
+              Download PDF
+            </a>
+          )}
+        </div>
+      ) : (
+        <p style={{ fontSize: 13, color: "#f97316", margin: 0 }}>{card.message}</p>
+      )}
+    </div>
+  );
+}
 
+// ─── Job Status Stream card ──────────────────────────────────────────────────
 interface JobStatusStreamCard {
   alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>;
   cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }>;
@@ -3195,7 +3242,8 @@ type ServerResult =
   | { type: "confirmation_texts"; date: string; dateLabel: string; rows: Array<{ cleanerJobId: number; customerName: string; customerPhone: string | null; serviceDateTime: string | null; teamName: string | null; alreadySent: boolean; smsConfirmedAt: number | null }> }
   | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number }
   | { type: "job_status_stream"; alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> }
-  | { type: "unanswered_sms"; thresholdMinutes: number; rows: Array<{ sessionId: number; leadName: string | null; leadPhone: string; lastMessagePreview: string; waitMs: number }> };
+  | { type: "unanswered_sms"; thresholdMinutes: number; rows: Array<{ sessionId: number; leadName: string | null; leadPhone: string; lastMessagePreview: string; waitMs: number }> }
+  | { type: "generate_invoice"; customerName: string; found: boolean; invoiceNumber?: number; pdfUrl?: string; message: string };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -3405,6 +3453,14 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "unanswered_sms", card: { thresholdMinutes: result.thresholdMinutes, rows: result.rows } },
+      ts,
+    };
+  }
+  if (result.type === "generate_invoice") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "generate_invoice", card: { customerName: result.customerName, found: result.found, invoiceNumber: result.invoiceNumber, pdfUrl: result.pdfUrl, message: result.message } },
       ts,
     };
   }

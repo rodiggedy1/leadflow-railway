@@ -45,6 +45,7 @@ import {
   BarChart3,
   TrendingUp,
   CreditCard,
+  Receipt,
 } from "lucide-react";
 
 // ── Delayed-enable hook — prevents health checks from joining the initial page-load batch.
@@ -287,7 +288,8 @@ export type AdminTab =
   | "missed-calls"
   | "cleaner-calls"
   | "payments"
-  | "sms-campaigns";
+  | "sms-campaigns"
+  | "invoices";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -407,6 +409,13 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: <Users className="w-3.5 h-3.5" />,
     href: "/admin/hiring",
     tabId: "hiring" as AdminTab,
+  },
+  {
+    id: "invoices",
+    label: "Invoices",
+    icon: <Receipt className="w-3.5 h-3.5" />,
+    href: "/admin/invoices",
+    tabId: "invoices" as AdminTab,
   },
   {
     id: "settings",

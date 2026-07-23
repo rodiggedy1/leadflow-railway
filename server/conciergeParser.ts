@@ -52,7 +52,7 @@ interface ParsedResponse {
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
   "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta",
-  "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "unknown",
+  "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "unknown",
 ] as const;
 
 const VALID_FIELDS: RequestedField[] = [
@@ -233,6 +233,7 @@ Choose ONE of:
 - "list_no_eta" — user wants to see which teams/cleaners have not yet submitted an ETA today (e.g. "which teams have no ETA", "who hasn't submitted ETA", "missing ETA", "no ETA teams", "teams with no ETA", "who still needs to send ETA")
 - "job_status_stream" — user wants to see the live status stream of all today's jobs and alerts (e.g. "show me today's jobs", "job status", "what's going on today", "status stream", "show all jobs", "live status", "team status")
 - "unanswered_sms" — user wants to see CS inbox conversations where the customer's last message has been sitting unanswered for longer than a time threshold (e.g. "unanswered texts over 30 minutes", "any SMS over an hour", "who's been waiting more than 45 minutes", "unanswered messages"). Use questionHint to store the threshold in minutes as a plain number string (e.g. "30", "60", "120"). Default to "30" if no threshold is specified.
+- "generate_invoice" — user wants to generate an invoice PDF for a customer (e.g. "generate invoice for Janice", "create invoice for Mary", "invoice for Sarah", "make an invoice for Jennifer"). Use clientName to store the customer name. Use questionHint to store the service date if mentioned.
 - "unknown" — cannot determine intent
 
 ## entities (for "query" action)
@@ -321,6 +322,9 @@ Classify who the action targets:
 "Any SMS over an hour" → action: "unanswered_sms", questionHint: "60", timeScope: {type: null}, requestedFields: []
 "Who's been waiting more than 45 minutes" → action: "unanswered_sms", questionHint: "45", timeScope: {type: null}, requestedFields: []
 "Unanswered messages" → action: "unanswered_sms", questionHint: "30", timeScope: {type: null}, requestedFields: []
+"Generate invoice for Janice" → action: "generate_invoice", clientName: "Janice", questionHint: null, timeScope: {type: null}, requestedFields: []
+"Create invoice for Mary Jones" → action: "generate_invoice", clientName: "Mary Jones", questionHint: null, timeScope: {type: null}, requestedFields: []
+"Invoice for Sarah for June 29" → action: "generate_invoice", clientName: "Sarah", questionHint: "June 29", timeScope: {type: null}, requestedFields: []
 "Last 5 ratings for maidsplus" → action: "query", entities: {cleanerName: "maidsplus", teamName: "maidsplus"}, timeScope: {type: null, originalPhrase: "last 5"}, requestedFields: ["rating"]
 "How has Team 3 been rated recently?" → action: "query", entities: {teamName: "Team 3"}, timeScope: {type: null, originalPhrase: "recently"}, requestedFields: ["rating"]
 "Ratings for Pilar this month" → action: "query", entities: {cleanerName: "Pilar"}, timeScope: {type: "this_month"}, requestedFields: ["rating"]`,
@@ -337,7 +341,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "unknown"],
             },
             entities: {
               type: "object",
@@ -447,7 +451,7 @@ function fallbackPlan(message: string): QueryPlan {
 // every handler in this PR.
 
 export interface LegacyIntent {
-  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unanswered_sms" | "unknown";
+  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unanswered_sms" | "generate_invoice" | "unknown";
   teamHint?: string | null;
   targetHint?: string | null;
   clientName?: string | null;
