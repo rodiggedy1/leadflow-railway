@@ -646,6 +646,10 @@ export const invoiceRouter = router({
       invoiceId: z.number(),
       /** Override recipient email — if omitted, looked up from completed_jobs by customerName */
       toEmail: z.string().email().optional(),
+      /** Override subject line */
+      subject: z.string().optional(),
+      /** Override plain-text body (converted to simple HTML paragraphs) */
+      bodyText: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -677,17 +681,26 @@ export const invoiceRouter = router({
       }
 
       const totalDollars = (inv.totalCents / 100).toFixed(2);
-      const subject = `Your Invoice #${inv.invoiceNumber} from Maids In Black — $${totalDollars}`;
-      const bodyHtml = [
-        `<p>Hi ${inv.customerName.split(" ")[0]},</p>`,
-        `<p>Please find your invoice attached for cleaning services on <strong>${inv.serviceDate}</strong>.</p>`,
-        `<p><strong>Invoice #${inv.invoiceNumber}</strong> &mdash; Total Due: <strong>$${totalDollars}</strong></p>`,
-        inv.stripeLink
-          ? `<p>You can pay securely online here: <a href="${inv.stripeLink}">${inv.stripeLink}</a></p>`
-          : "",
-        `<p>Thank you for choosing Maids In Black!</p>`,
-        `<p style="color:#888;font-size:12px">Maids In Black &bull; Support@maidsinblacksupport.com &bull; 202-888-5362 &bull; MaidsInBlack.com</p>`,
-      ].join("\n");
+      const subject = input.subject ?? `Your Invoice #${inv.invoiceNumber} from Maids In Black — $${totalDollars}`;
+      let bodyHtml: string;
+      if (input.bodyText) {
+        // Convert plain-text body to HTML paragraphs
+        bodyHtml = input.bodyText
+          .split(/\n\n+/)
+          .map(para => `<p>${para.replace(/\n/g, "<br>")}</p>`)
+          .join("\n");
+      } else {
+        bodyHtml = [
+          `<p>Hi ${inv.customerName.split(" ")[0]},</p>`,
+          `<p>Please find your invoice attached for cleaning services on <strong>${inv.serviceDate}</strong>.</p>`,
+          `<p><strong>Invoice #${inv.invoiceNumber}</strong> &mdash; Total Due: <strong>$${totalDollars}</strong></p>`,
+          inv.stripeLink
+            ? `<p>You can pay securely online here: <a href="${inv.stripeLink}">${inv.stripeLink}</a></p>`
+            : "",
+          `<p>Thank you for choosing Maids In Black!</p>`,
+          `<p style="color:#888;font-size:12px">Maids In Black &bull; Support@maidsinblacksupport.com &bull; 202-888-5362 &bull; MaidsInBlack.com</p>`,
+        ].join("\n");
+      }
 
       const filename = `Invoice_${inv.invoiceNumber}_${inv.customerName.replace(/\s+/g, "_")}.pdf`;
 

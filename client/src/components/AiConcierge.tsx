@@ -1881,17 +1881,37 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
   });
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   const [serviceDate, setServiceDate] = React.useState(today);
-  const [result, setResult] = React.useState<{ id: number; invoiceNumber: number; pdfUrl: string; customerName: string } | null>(null);
+  const [result, setResult] = React.useState<{ id: number; invoiceNumber: number; pdfUrl: string; customerName: string; serviceDate: string; totalCents: number; stripeLink?: string | null } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [emailSent, setEmailSent] = React.useState(false);
   const [emailError, setEmailError] = React.useState<string | null>(null);
   const [toEmail, setToEmail] = React.useState("");
   const [editingEmail, setEditingEmail] = React.useState(false);
   const [emailDraft, setEmailDraft] = React.useState("");
+  const [subject, setSubject] = React.useState("");
+  const [bodyText, setBodyText] = React.useState("");
+  const [showPreview, setShowPreview] = React.useState(false);
   const generateMutation = trpc.invoice.generateInvoice.useMutation({
     onSuccess: (data) => {
-      setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName });
+      setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName, serviceDate: data.serviceDate, totalCents: data.totalCents, stripeLink: data.stripeLink });
       if (data.customerEmail) setToEmail(data.customerEmail);
+      const total = (data.totalCents / 100).toFixed(2);
+      const firstName = data.customerName.split(" ")[0];
+      setSubject(`Your Invoice #${data.invoiceNumber} from Maids In Black — $${total}`);
+      setBodyText([
+        `Hi ${firstName},`,
+        ``,
+        `Please find your invoice attached for cleaning services on ${data.serviceDate}.`,
+        ``,
+        `Invoice #${data.invoiceNumber} — Total Due: $${total}`,
+        data.stripeLink ? `
+You can pay securely online here: ${data.stripeLink}` : ``,
+        ``,
+        `Thank you for choosing Maids In Black!`,
+        ``,
+        `Maids In Black • Support@maidsinblacksupport.com • 202-888-5362 • MaidsInBlack.com`,
+      ].filter((l, i, arr) => !(l === `` && arr[i-1] === ``)).join("
+"));
       setError(null);
     },
     onError: (e) => setError(e.message),
@@ -1900,6 +1920,14 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
     onSuccess: () => { setEmailSent(true); setEmailError(null); },
     onError: (e) => setEmailError(e.message),
   });
+  const handleSendEmail = (invoiceId: number) => {
+    sendEmailMutation.mutate({
+      invoiceId,
+      toEmail: toEmail.trim(),
+      subject: subject.trim() || undefined,
+      bodyText: bodyText.trim() || undefined,
+    });
+  };
   const selectedTemplate = card.templates.find(t => t.id === selectedTemplateId);
   const lineItems = (selectedTemplate?.lineItems as Array<{ price: number }> | null) ?? [];
   const total = lineItems.reduce((s, i) => s + (Number(i.price) || 0), 0);
@@ -1927,18 +1955,45 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
         ) : (
           <div style={{ marginTop: 12 }}>
             {toEmail && !editingEmail ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 8, padding: "8px 12px" }}>
-                <span style={{ fontSize: 13 }}>📧</span>
-                <span style={{ flex: 1, fontSize: 12, color: "#c8cde8", fontWeight: 500 }}>{toEmail}</span>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13 }}>📧</span>
+                  <span style={{ flex: 1, fontSize: 12, color: "#c8cde8", fontWeight: 500 }}>{toEmail}</span>
+                  <button
+                    onClick={() => { setEmailDraft(toEmail); setEditingEmail(true); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: 11, padding: "0 4px" }}
+                    title="Change email"
+                  >✏️</button>
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 10, color: "#6b7280", display: "block", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" }}>Subject</label>
+                  <input
+                    type="text"
+                    value={subject}
+                    onChange={e => setSubject(e.target.value)}
+                    style={{ width: "100%", background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, color: "#c8cde8", fontSize: 12, padding: "6px 8px", outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                    <label style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Message</label>
+                    <button onClick={() => setShowPreview(p => !p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10, color: "#6366f1" }}>{showPreview ? "Edit" : "Preview"}</button>
+                  </div>
+                  {showPreview ? (
+                    <div style={{ background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, padding: "8px 10px", fontSize: 12, color: "#c8cde8", whiteSpace: "pre-wrap", lineHeight: 1.6, maxHeight: 160, overflowY: "auto" }}>{bodyText}</div>
+                  ) : (
+                    <textarea
+                      value={bodyText}
+                      onChange={e => setBodyText(e.target.value)}
+                      rows={6}
+                      style={{ width: "100%", background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, color: "#c8cde8", fontSize: 12, padding: "6px 8px", outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5 }}
+                    />
+                  )}
+                </div>
                 <button
-                  onClick={() => { setEmailDraft(toEmail); setEditingEmail(true); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: 11, padding: "0 4px" }}
-                  title="Change email"
-                >✏️</button>
-                <button
-                  onClick={() => sendEmailMutation.mutate({ invoiceId: result.id, toEmail: toEmail.trim() })}
+                  onClick={() => handleSendEmail(result.id)}
                   disabled={sendEmailMutation.isPending}
-                  style={{ padding: "5px 14px", background: sendEmailMutation.isPending ? "#6b7280" : "#6366f1", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer" }}
+                  style={{ width: "100%", padding: "8px 0", background: sendEmailMutation.isPending ? "#6b7280" : "#6366f1", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer" }}
                 >
                   {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
                 </button>
@@ -1960,7 +2015,7 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
                       const val = editingEmail ? emailDraft : toEmail;
                       if (!val.trim()) return;
                       if (editingEmail) { setToEmail(emailDraft); setEditingEmail(false); }
-                      else sendEmailMutation.mutate({ invoiceId: result.id, toEmail: val.trim() });
+                      else handleSendEmail(result.id);
                     }}
                     disabled={sendEmailMutation.isPending}
                     style={{ padding: "6px 14px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
