@@ -1897,7 +1897,7 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
       if (data.customerEmail) setToEmail(data.customerEmail);
       const total = (data.totalCents / 100).toFixed(2);
       const firstName = data.customerName.split(" ")[0];
-      setSubject(`Your Invoice #${data.invoiceNumber} from Maids In Black — $${total}`);
+      setSubject(`Your Invoice from Maids In Black`);
       setBodyText([
         `Hi ${firstName},`,
         ``,
