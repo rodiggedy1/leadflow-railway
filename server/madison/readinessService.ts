@@ -164,6 +164,19 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
 
   const jobIds = jobs.map((j) => j.id);
 
+  // TEMP DEBUG: log assignment fields for any job matching DIAMONE
+  const diamoneJob = jobs.find((j) => (j.customerName ?? "").toUpperCase().includes("DIAMONE"));
+  if (diamoneJob) {
+    console.log("[Madison DEBUG] Diamone job:", JSON.stringify({
+      id: diamoneJob.id,
+      customerName: diamoneJob.customerName,
+      cleanerProfileId: diamoneJob.cleanerProfileId,
+      cleanerName: diamoneJob.cleanerName,
+      teamName: diamoneJob.teamName,
+      teamId: diamoneJob.teamId,
+    }));
+  }
+
   // ── 1b. Load active acknowledgements for these jobs ───────────────────
   if (jobIds.length > 0) {
     const activeAcks = await db
