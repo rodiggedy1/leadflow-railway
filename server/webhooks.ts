@@ -801,6 +801,15 @@ export function registerWebhookRoutes(app: Express) {
       // during active conversations. Pausing here caused new leads to always
       // show as "paused" in the UI even while mid-conversation with Jade.
 
+      // ── GLOBAL AI KILL SWITCH ─────────────────────────────────────────────────
+      // AI auto-replies on the leads line are DISABLED. All inbound messages are
+      // stored and surfaced in the inbox for staff to handle manually.
+      {
+        console.log(`[Webhook] AI disabled globally — storing inbound for session ${session.id}, skipping AI reply.`);
+        const { broadcastOpsUpdate: bcastGlobal } = await import("./sseBroadcast");
+        bcastGlobal("lead_update");
+        return;
+      }
       // If agent has taken over (aiMode = 0), just store the inbound message and stop.
       // The agent will reply manually from the app.
       // NOTE: messageHistory + lastCustomerReplyAt were already saved above — no second update needed.
