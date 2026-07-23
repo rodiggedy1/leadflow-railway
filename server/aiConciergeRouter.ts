@@ -3097,9 +3097,12 @@ export const aiConciergeRouter = router({
       const seedItemCount = seedResult.debug?.seedItemCount ?? 0;
       const seedHadItems = seedItemCount > 0;
       // Verification passes when:
-      //   (a) executor succeeded and items were persisted, OR
+      //   (a) executor succeeded — whether it wrote new rows OR found already-acknowledged
+      //       rows via the idempotency check (acknowledgedCount=0 is valid idempotent success), OR
       //   (b) seed found no items (nothing to acknowledge — correct behavior)
-      const verificationPassed = persisted || !seedHadItems;
+      // Note: the old condition `persisted || !seedHadItems` was too strict — it failed
+      // on idempotent re-runs where the executor correctly skipped already-acked items.
+      const verificationPassed = executorSucceeded || !seedHadItems;
 
       // === CLEANUP (finally-style) ===
       // Runs whenever undoActionId exists — i.e. whenever the executor wrote rows.

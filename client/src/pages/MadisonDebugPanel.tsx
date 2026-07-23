@@ -603,7 +603,17 @@ export default function MadisonDebugPanel() {
   const runAll = useCallback(async () => {
     setRunning(true);
     runStartRef.current = Date.now();
-    const allResults = await Promise.all(TESTS.map(t => runTest(t.id)));
+    // Single tests run in parallel — no shared DB state.
+    // Sequence tests run sequentially — each one writes then reverses DB rows;
+    // running them in parallel causes duplicate-key races on the same jobs.
+    const singleTests = TESTS.filter(t => t.kind === "single");
+    const sequenceTests = TESTS.filter(t => t.kind === "sequence");
+    const singleResults = await Promise.all(singleTests.map(t => runTest(t.id)));
+    const sequenceResults: TestResult[] = [];
+    for (const t of sequenceTests) {
+      sequenceResults.push(await runTest(t.id));
+    }
+    const allResults = [...singleResults, ...sequenceResults];
     const durationMs = Date.now() - runStartRef.current;
     const passed = allResults.filter(r => getTestOutcome(r) === "pass").length;
     const failed = allResults.length - passed;
