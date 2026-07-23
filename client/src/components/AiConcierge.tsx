@@ -2195,6 +2195,7 @@ const EXAMPLES = [
   { emoji: "📋", label: "Customer notes", example: "Customer notes for today" },
   { emoji: "💳", label: "Credit card status", example: "Check credit card status for today" },
   { emoji: "📩", label: "Send confirmation texts", example: "Send confirmation texts for tomorrow" },
+  { emoji: "💬", label: "Unanswered SMS", example: "Unanswered texts over 30 minutes" },
 ];
 
 const HINT_EXAMPLES = [
