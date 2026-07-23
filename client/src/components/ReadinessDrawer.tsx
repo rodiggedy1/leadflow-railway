@@ -31,7 +31,7 @@ import { trpc } from "@/lib/trpc";
 
 // ─── Types (mirrors server return shape) ─────────────────────────────────────
 
-type PaymentStatus = "on_hold" | "no_preauth" | "no_card";
+type PaymentStatus = "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card";
 type ConfirmStatus = "confirmed" | "pending";
 type ClientReqStatus = "honored" | "violated" | "unassigned";
 
@@ -293,15 +293,16 @@ function buildSections(data: SummaryData): SectionDef[] {
       </RowBase>
     ));
 
-  // 2. Payment Methods — show only non-on-hold rows
+  // 2. Payment Methods — show only non-on-hold rows (lf_on_hold = has LeadFlow hold, counts as good)
   const paymentIssueRows = d.payments.rows
-    .filter(r => r.status !== "on_hold")
+    .filter(r => r.status !== "on_hold" && r.status !== "lf_on_hold")
     .map((r, i) => {
-      const statusLabel = r.status === "no_preauth" ? "No Pre-Auth" : "No Card";
+      const statusLabel = r.status === "no_preauth" ? "No Pre-Auth" : r.status === "lf_card" ? "LF Card" : "No Card";
+      const isIssue = r.status !== "lf_card"; // lf_card is partial — has a card but no hold
       const detail = r.cardBrand && r.last4 ? `${r.cardBrand} ···· ${r.last4}` : "No card on file";
       return (
         <RowBase key={i} name={r.customerName} time={r.jobTime} detail={detail}>
-          <StatusBadge label={statusLabel} isIssue={true} />
+          <StatusBadge label={statusLabel} isIssue={isIssue} />
         </RowBase>
       );
     });
