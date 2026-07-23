@@ -1548,6 +1548,8 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           smsReply: confirmationCalls.smsReply,
           smsReplies: confirmationCalls.smsReplies,
           aiFlexibility: confirmationCalls.aiFlexibility,
+          aiOutcome: confirmationCalls.aiOutcome,
+          smsConfirmedAt: confirmationCalls.smsConfirmedAt,
           calledPhone: confirmationCalls.calledPhone,
           smsFollowupSent: confirmationCalls.smsFollowupSent,
         })
@@ -1661,14 +1663,24 @@ Extract:
       };
       const outcomeFields = outcomeMap[intent];
 
-      console.log(`[ConfirmSMS] Updating confirmation_calls id=${row.id} with intent=${intent}, flexibility=${smsFlexibility}`);
+      // Never downgrade a confirmed status — if already confirmed, only update
+      // supplementary fields (replies, flexibility, notes). A second message like
+      // "Not flexible" must not wipe out the confirmed outcome.
+      const alreadyConfirmed = row.aiOutcome === 'confirmed';
+
+      console.log(`[ConfirmSMS] Updating confirmation_calls id=${row.id} with intent=${intent}, flexibility=${smsFlexibility}, alreadyConfirmed=${alreadyConfirmed}`);
       await db.update(confirmationCalls)
         .set({
           smsReply: inboundText,
           smsReplies: updatedReplies,
-          smsConfirmedAt: intent === 'confirmed' ? Date.now() : null,
-          aiOutcome: outcomeFields.aiOutcome,
-          aiOutcomeLabel: outcomeFields.aiOutcomeLabel,
+          // Only update outcome fields if not already confirmed (or if this message is also a confirmation)
+          ...(alreadyConfirmed ? {} : {
+            smsConfirmedAt: intent === 'confirmed' ? Date.now() : null,
+            aiOutcome: outcomeFields.aiOutcome,
+            aiOutcomeLabel: outcomeFields.aiOutcomeLabel,
+          }),
+          // If this message IS a confirmation, set smsConfirmedAt even if already confirmed (idempotent)
+          ...(intent === 'confirmed' ? { smsConfirmedAt: Date.now(), aiOutcome: outcomeFields.aiOutcome, aiOutcomeLabel: outcomeFields.aiOutcomeLabel } : {}),
           ...(smsFlexibility && !row.aiFlexibility ? { aiFlexibility: smsFlexibility } : {}),
           ...(smsNotes ? { aiNotes: smsNotes } : {}),
         })
@@ -1676,7 +1688,8 @@ Extract:
       await markInboundSms('processed', row.id);
 
       // ── STEP 4: Post CommandChat alert for cancellations and unclear replies ──
-      if (intent === 'cancellation' || intent === 'unclear') {
+      // Don't fire unclear alert if the row was already confirmed — supplementary messages are fine
+      if (intent === 'cancellation' || (intent === 'unclear' && !alreadyConfirmed)) {
         const alertEmoji = intent === 'cancellation' ? '🚨' : '❓';
         const alertTitle = intent === 'cancellation' ? 'Cancellation Request' : 'Unclear SMS Reply';
         const alertBody = `${alertEmoji} **${alertTitle}** — ${row.clientName ?? fromPhone} (${row.jobDate})
