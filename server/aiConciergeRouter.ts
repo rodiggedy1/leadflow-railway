@@ -33,6 +33,7 @@ import { buildSystemPrompt } from "./csReplyStream";
 import { resolveQuery } from "./conciergeResolvers";
 import type { QueryPlan } from "./conciergeQuery";
 import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
+import { isReadinessDomain, handleMadisonReadiness } from "./madison";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // getTodayET and resolveServiceDateRange are imported from ./conciergeTime
@@ -2530,6 +2531,24 @@ export const aiConciergeRouter = router({
       // When the chip type conflicts with the classified intent, fall back to the
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
+
+      // ── Madison Readiness Domain ──────────────────────────────────────────
+      // Feature-flagged: MADISON_PLANNER_ENABLED=true to activate.
+      // No chip context needed for readiness queries — they are date/dimension scoped.
+      if (ENV.madisonPlannerEnabled && !re && isReadinessDomain(input.message)) {
+        const madisonResult = await handleMadisonReadiness(db, input.message);
+        if (madisonResult.handled && madisonResult.response) {
+          return {
+            type: "query_result" as const,
+            answer: madisonResult.response,
+            status: "success" as const,
+          };
+        }
+        // Execution failed — fall through to legacy concierge once
+        console.warn("[Madison] Falling back to legacy concierge:", madisonResult.fallbackReason);
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       // Use new unified parser — replaces classifyIntent for all intents
       const rawPlan = await parseConciergeRequest(input.message);
       // Validate and normalize: resolve contradictions before dispatch
