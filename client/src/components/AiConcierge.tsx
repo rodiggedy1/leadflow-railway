@@ -43,6 +43,7 @@ import {
   Sparkles,
   ChevronRight,
   Sun,
+  Mic,
 } from "lucide-react";
 import ReadinessDrawer from "./ReadinessDrawer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -50,6 +51,7 @@ import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useMissionHistory, type MissionMetadata, type MadisonMission, type MissionViewState } from "@/hooks/useMissionHistory";
+import { toast } from "sonner";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2675,6 +2677,53 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
   const [readinessDate, setReadinessDate] = useState<string | undefined>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // ── Voice / PTT ──────────────────────────────────────────────────────────
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isPttActive, setIsPttActive] = useState(false);
+  const isPttActiveRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation();
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  }, []);
+  const stopRecordingAndSend = useCallback(async () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    setIsRecording(false);
+    setIsPttActive(false);
+    isPttActiveRef.current = false;
+    setIsTranscribing(true);
+    await new Promise<void>(resolve => { mr.onstop = () => resolve(); mr.stop(); mr.stream.getTracks().forEach(t => t.stop()); });
+    try {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const { text } = await transcribeVoice.mutateAsync({ dataBase64, mimeType: "audio/webm" });
+      if (!text.trim()) return;
+      setInput(text.trim());
+      setTimeout(() => inputRef.current?.focus(), 0);
+    } catch {
+      toast.error("Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [transcribeVoice]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Prepare Tomorrow flow (real tRPC data) ────────────────────────────────
   const PREPARE_STEPS = [
@@ -3405,16 +3454,37 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
                 <span>Today</span>
               </button>
             </div>
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || isThinking}
-              className="w-9 h-9 rounded-full disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all flex-shrink-0 shadow-sm"
-              style={{ background: "linear-gradient(145deg, #7650ff, #6233eb)" }}
-            >
-              {isThinking
-                ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
-                : <Send className="w-3.5 h-3.5 text-white" />}
-            </button>
+            <div className="flex items-center gap-2">
+              {/* PTT mic button — hold to talk, release to fill composer */}
+              <button
+                style={{ width: 36, height: 36, borderRadius: 12, border: isPttActive ? "1px solid #ef4444" : "1px solid #e0e4ef", background: isPttActive ? "#ef4444" : isTranscribing ? "#f5f3ff" : "#fff", color: isPttActive ? "#fff" : isTranscribing ? "#a78bfa" : "#6e7890", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: isTranscribing ? "wait" : "pointer", transition: "background .15s", userSelect: "none" }}
+                onMouseDown={(e) => { e.preventDefault(); if (!isPttActiveRef.current && !isTranscribing) { isPttActiveRef.current = true; setIsPttActive(true); startRecording(); } }}
+                onMouseUp={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
+                onMouseLeave={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
+                onTouchStart={(e) => { e.preventDefault(); if (!isPttActiveRef.current && !isTranscribing) { isPttActiveRef.current = true; setIsPttActive(true); startRecording(); } }}
+                onTouchEnd={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
+                title="Hold to talk"
+                disabled={isTranscribing}
+              >
+                {isPttActive ? (
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", display: "inline-block" }} />
+                ) : isTranscribing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Mic className="h-3.5 w-3.5" />
+                )}
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || isThinking}
+                className="w-9 h-9 rounded-full disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all flex-shrink-0 shadow-sm"
+                style={{ background: "linear-gradient(145deg, #7650ff, #6233eb)" }}
+              >
+                {isThinking
+                  ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                  : <Send className="w-3.5 h-3.5 text-white" />}
+              </button>
+            </div>
           </div>
         {!input && (
           <p className="px-4 pb-2 text-[11px] transition-all" style={{ color: "#9a96a0" }}>💡 {HINT_EXAMPLES[hintIdx]}</p>
