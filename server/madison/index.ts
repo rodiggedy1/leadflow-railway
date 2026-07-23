@@ -44,7 +44,11 @@ export interface MadisonDebugInfo {
   plannerError?: string;
   executorInvoked: boolean;
   executorError?: string;
-  responseType: "query_result" | "action_result" | "fallback" | null;
+  responseType: "query_result" | "action_result" | "needs_context" | "fallback" | null;
+  /** Only set when responseType = needs_context */
+  needsContextReason?: "NO_TARGET_IDS";
+  /** Only set when responseType = action_result and executor succeeded */
+  acknowledgedCount?: number;
   durationMs: number;
 }
 
@@ -73,12 +77,25 @@ export async function handleMadisonReadiness(
   message: string,
   requestId?: string,
   agentId?: number,
-  options?: { debug?: boolean }
+  options?: { debug?: boolean; clearContext?: boolean }
 ): Promise<MadisonResult> {
   const rid = requestId ?? randomBytes(4).toString("hex");
   const effectiveAgentId = agentId ?? 0;
   const debugMode = options?.debug ?? false;
+  const clearContext = options?.clearContext ?? false;
   const startedAt = Date.now();
+
+  // ── Optional context reset (for regression tests) ─────────────────────────
+  if (clearContext && effectiveAgentId > 0) {
+    try {
+      const { madisonConversationContext } = await import("../../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
+      await db.delete(madisonConversationContext).where(eq(madisonConversationContext.agentId, effectiveAgentId));
+      console.log(`[Madison] clearContext: deleted context for agentId=${effectiveAgentId}`);
+    } catch (clearErr) {
+      console.warn("[Madison] clearContext failed (non-fatal):", clearErr instanceof Error ? clearErr.message : String(clearErr));
+    }
+  }
 
   // Always evaluate gate diagnostics (cheap, used for debug and double-check)
   const gateDiag = evaluateReadinessGate(message);
@@ -178,10 +195,15 @@ export async function handleMadisonReadiness(
           plannerType: "action",
           plannerFailed: false,
           executorInvoked: false,
-          responseType: "fallback",
+          responseType: "needs_context",
+          needsContextReason: "NO_TARGET_IDS",
           durationMs: Date.now() - startedAt,
         } : undefined;
-        return { handled: false, fallbackReason: "NO_TARGET_IDS", debug };
+        return {
+          handled: true,
+          response: "I'm not sure which readiness items you mean. Show me the jobs first, then I can acknowledge them.",
+          debug,
+        };
       }
 
       let ackResult;
@@ -303,6 +325,7 @@ export async function handleMadisonReadiness(
         plannerFailed: false,
         executorInvoked: true,
         responseType: "action_result",
+        acknowledgedCount: ackResult.acknowledgedCount,
         durationMs: Date.now() - startedAt,
       } : undefined;
       return {

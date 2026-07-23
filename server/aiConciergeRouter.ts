@@ -3041,18 +3041,75 @@ export const aiConciergeRouter = router({
    * Requires agent session auth (same as chat).
    */
   debugChat: agentProcedure
-    .input(z.object({ message: z.string().min(1).max(2000) }))
+    .input(z.object({
+      message: z.string().min(1).max(2000),
+      /** When true, clears the agent's conversation context before running. Used by regression tests. */
+      clearContext: z.boolean().optional().default(false),
+    }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const rid = crypto.randomUUID().slice(0, 8);
-      const result = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId, { debug: true });
+      const result = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId, { debug: true, clearContext: input.clearContext });
       return {
         handled: result.handled,
         response: result.response ?? null,
         fallbackReason: result.fallbackReason ?? null,
         undoActionId: result.undoActionId ?? null,
         debug: result.debug ?? null,
+      };
+    }),
+
+  /**
+   * debugChatSequence — runs a two-step stateful integration test:
+   *   Step 1: seed message (a readiness query) — establishes context
+   *   Step 2: acknowledge message — runs against seeded context
+   * Clears context before step 1 to ensure isolation.
+   * Returns both step results plus a verification summary.
+   */
+  debugChatSequence: agentProcedure
+    .input(z.object({
+      seedMessage: z.string().min(1).max(2000),
+      acknowledgeMessage: z.string().min(1).max(2000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Step 1: clear context and run seed query
+      const rid1 = crypto.randomUUID().slice(0, 8);
+      const seedResult = await handleMadisonReadiness(db, input.seedMessage, rid1, ctx.agent.agentId, { debug: true, clearContext: true });
+
+      // Step 2: run acknowledge against the seeded context
+      const rid2 = crypto.randomUUID().slice(0, 8);
+      const ackResult = await handleMadisonReadiness(db, input.acknowledgeMessage, rid2, ctx.agent.agentId, { debug: true });
+
+      // Verification: did the acknowledge actually write something?
+      const acknowledgedCount = ackResult.debug?.acknowledgedCount ?? 0;
+      const executorSucceeded = ackResult.debug?.responseType === "action_result";
+      const needsContext = ackResult.debug?.responseType === "needs_context";
+      const persisted = executorSucceeded && acknowledgedCount > 0;
+
+      return {
+        seed: {
+          handled: seedResult.handled,
+          response: seedResult.response ?? null,
+          fallbackReason: seedResult.fallbackReason ?? null,
+          debug: seedResult.debug ?? null,
+        },
+        acknowledge: {
+          handled: ackResult.handled,
+          response: ackResult.response ?? null,
+          fallbackReason: ackResult.fallbackReason ?? null,
+          undoActionId: ackResult.undoActionId ?? null,
+          debug: ackResult.debug ?? null,
+        },
+        verification: {
+          executorSucceeded,
+          acknowledgedCount,
+          needsContext,
+          persisted,
+        },
       };
     }),
 });
