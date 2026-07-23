@@ -2308,6 +2308,7 @@ const EXAMPLES = [
   { emoji: "💳", label: "Credit card status", example: "Check credit card status for today" },
   { emoji: "📩", label: "Send confirmation texts", example: "Send confirmation texts for tomorrow" },
   { emoji: "💬", label: "Unanswered SMS", example: "Unanswered texts over 30 minutes" },
+  { emoji: "🧾", label: "Create invoice", example: "Create invoice" },
 ];
 
 const HINT_EXAMPLES = [
@@ -2967,6 +2968,34 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       (lc.includes("prepare") && !!parsedDate);
     if (isPrepare) {
       runPrepareTomorrow(parsedDate);
+      return;
+    }
+    // ── Intercept invoice keywords — skip LLM, fire directly ──
+    const isInvoice =
+      lc === "create invoice" ||
+      lc === "new invoice" ||
+      lc === "make an invoice" ||
+      lc === "invoice" ||
+      lc.startsWith("create invoice") ||
+      lc.startsWith("generate invoice") ||
+      lc.startsWith("make invoice") ||
+      lc.startsWith("new invoice");
+    if (isInvoice) {
+      setIsThinking(true);
+      chatMutation.mutate(
+        { message: text },
+        {
+          onSuccess: (result) => {
+            setIsThinking(false);
+            const aiMsg = buildAiMessage(result);
+            if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
+          },
+          onError: (err) => {
+            setIsThinking(false);
+            setMessages((prev) => [...prev, { id: uid(), role: "ai", content: { type: "text", text: `Something went wrong: ${err.message}` }, ts: nowTime() }]);
+          },
+        }
+      );
       return;
     }
 

@@ -325,6 +325,9 @@ Classify who the action targets:
 "Generate invoice for Janice" → action: "generate_invoice", clientName: "Janice", questionHint: null, timeScope: {type: null}, requestedFields: []
 "Create invoice for Mary Jones" → action: "generate_invoice", clientName: "Mary Jones", questionHint: null, timeScope: {type: null}, requestedFields: []
 "Invoice for Sarah for June 29" → action: "generate_invoice", clientName: "Sarah", questionHint: "June 29", timeScope: {type: null}, requestedFields: []
+"Create invoice" → action: "generate_invoice", clientName: null, questionHint: null, timeScope: {type: null}, requestedFields: []
+"New invoice" → action: "generate_invoice", clientName: null, questionHint: null, timeScope: {type: null}, requestedFields: []
+"Make an invoice" → action: "generate_invoice", clientName: null, questionHint: null, timeScope: {type: null}, requestedFields: []
 "Last 5 ratings for maidsplus" → action: "query", entities: {cleanerName: "maidsplus", teamName: "maidsplus"}, timeScope: {type: null, originalPhrase: "last 5"}, requestedFields: ["rating"]
 "How has Team 3 been rated recently?" → action: "query", entities: {teamName: "Team 3"}, timeScope: {type: null, originalPhrase: "recently"}, requestedFields: ["rating"]
 "Ratings for Pilar this month" → action: "query", entities: {cleanerName: "Pilar"}, timeScope: {type: "this_month"}, requestedFields: ["rating"]`,
