@@ -1886,6 +1886,8 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
   const [emailSent, setEmailSent] = React.useState(false);
   const [emailError, setEmailError] = React.useState<string | null>(null);
   const [toEmail, setToEmail] = React.useState("");
+  const [editingEmail, setEditingEmail] = React.useState(false);
+  const [emailDraft, setEmailDraft] = React.useState("");
   const generateMutation = trpc.invoice.generateInvoice.useMutation({
     onSuccess: (data) => {
       setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName });
@@ -1918,29 +1920,59 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
           Download PDF
         </a>
         {emailSent ? (
-          <p style={{ fontSize: 12, color: "#22c55e", marginTop: 10, fontWeight: 700 }}>✓ Email sent to {toEmail}</p>
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 13, color: "#22c55e", fontWeight: 700 }}>✓ Sent</span>
+            <span style={{ fontSize: 12, color: "#6b7280" }}>to {toEmail}</span>
+          </div>
         ) : (
           <div style={{ marginTop: 12 }}>
-            <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>SEND TO EMAIL</label>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                type="email"
-                value={toEmail}
-                onChange={e => setToEmail(e.target.value)}
-                placeholder="customer@email.com"
-                style={{ flex: 1, background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, color: "#c8cde8", fontSize: 12, padding: "6px 8px", outline: "none" }}
-              />
-              <button
-                onClick={() => {
-                  if (!toEmail.trim()) return;
-                  sendEmailMutation.mutate({ invoiceId: result.id, toEmail: toEmail.trim() });
-                }}
-                disabled={sendEmailMutation.isPending || !toEmail.trim()}
-                style={{ padding: "6px 14px", background: sendEmailMutation.isPending ? "#6b7280" : "#6366f1", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
-              >
-                {sendEmailMutation.isPending ? "Sending..." : "Send"}
-              </button>
-            </div>
+            {toEmail && !editingEmail ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 8, padding: "8px 12px" }}>
+                <span style={{ fontSize: 13 }}>📧</span>
+                <span style={{ flex: 1, fontSize: 12, color: "#c8cde8", fontWeight: 500 }}>{toEmail}</span>
+                <button
+                  onClick={() => { setEmailDraft(toEmail); setEditingEmail(true); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: 11, padding: "0 4px" }}
+                  title="Change email"
+                >✏️</button>
+                <button
+                  onClick={() => sendEmailMutation.mutate({ invoiceId: result.id, toEmail: toEmail.trim() })}
+                  disabled={sendEmailMutation.isPending}
+                  style={{ padding: "5px 14px", background: sendEmailMutation.isPending ? "#6b7280" : "#6366f1", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer" }}
+                >
+                  {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>SEND TO EMAIL</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="email"
+                    value={editingEmail ? emailDraft : toEmail}
+                    onChange={e => editingEmail ? setEmailDraft(e.target.value) : setToEmail(e.target.value)}
+                    placeholder="customer@email.com"
+                    autoFocus
+                    style={{ flex: 1, background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, color: "#c8cde8", fontSize: 12, padding: "6px 8px", outline: "none" }}
+                  />
+                  <button
+                    onClick={() => {
+                      const val = editingEmail ? emailDraft : toEmail;
+                      if (!val.trim()) return;
+                      if (editingEmail) { setToEmail(emailDraft); setEditingEmail(false); }
+                      else sendEmailMutation.mutate({ invoiceId: result.id, toEmail: val.trim() });
+                    }}
+                    disabled={sendEmailMutation.isPending}
+                    style={{ padding: "6px 14px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    {editingEmail ? "Save" : (sendEmailMutation.isPending ? "Sending..." : "Send")}
+                  </button>
+                  {editingEmail && (
+                    <button onClick={() => setEditingEmail(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: 12 }}>✕</button>
+                  )}
+                </div>
+              </div>
+            )}
             {emailError && <p style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>{emailError}</p>}
           </div>
         )}
