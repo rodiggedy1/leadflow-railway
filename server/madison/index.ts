@@ -71,6 +71,7 @@ export async function handleMadisonReadiness(
   }
 
   const planCreatedAt = Date.now();
+  console.log(`[Madison] plan created: requestId=${rid} dateScope=${JSON.stringify(plan.dateScope)} filters=${JSON.stringify(plan.filters ?? {})} sort=${plan.sort ?? 'default'}`);
 
   let projection;
   try {
