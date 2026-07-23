@@ -30,7 +30,7 @@ const READINESS_PATTERNS: RegExp[] = [
   /\bjobs?\s+(at|with)\s+(risk|issues?|problems?)\b/i,
 
   // Double-booking / schedule conflicts
-  /\bdouble.?book(ed|ing|ings?)?\b/i,
+  /\bdouble.{0,3}book(k?ed|k?ing|k?ings?)?\b/i,
   /\bschedule\s+(conflict|issue|problem)\b/i,
   /\bconflict(s|ing)?\b.*\b(job|cleaner|schedule|tomorrow|today)\b/i,
   /\b(cleaner|team)\b.*\b(double|conflict|overlap)\b/i,
