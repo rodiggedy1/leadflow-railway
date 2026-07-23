@@ -41,7 +41,7 @@ For type: "query" plans:
 - "this week" → startDate = today, endDate = today + 6 days
 - timeOfDay: "morning" = before 12:00, "afternoon" = 12:00–17:00, "evening" = after 17:00
 - If the user asks about a specific time like "9 AM jobs", set startTime and endTime to a 1-hour window: "09:00" to "10:00"
-- dimension: use "assignment" for unassigned/cleaner questions, "confirmation" for confirmed/unconfirmed, "payment" for card/payment questions, "access" for instructions/notes, "schedule" for double-booking/conflicts, "all" for general readiness
+- dimension: use "assignment" for unassigned/no cleaner questions, "confirmation" for confirmed/unconfirmed, "payment" for card/payment questions, "access" for instructions/notes/access, "schedule" for double-booked/double-booking/schedule conflicts/overlap, "all" for general readiness
 - onlyNeedsAttention: true when user asks about problems, issues, risks, or "what needs attention"
 - minimumFlagCount: set to 2 when user asks about jobs "at risk" (multiple issues)
 - sort: "risk" when asking about problems/issues, "service_time" otherwise

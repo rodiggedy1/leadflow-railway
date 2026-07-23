@@ -21,13 +21,23 @@ const READINESS_PATTERNS: RegExp[] = [
   /\bat\s+risk\b/i,
 
   // Specific dimension questions
-  /\bwhich\s+jobs?\b.*\b(aren[''t]t?\s+confirmed|not\s+confirmed|unconfirmed)\b/i,
+  /\bwhich\s+jobs?\b.*\b(aren[''']t?\s+confirmed|not\s+confirmed|unconfirmed)\b/i,
   /\bwhich\s+jobs?\b.*\b(no\s+cleaner|unassigned|not\s+assigned)\b/i,
   /\bwhich\s+jobs?\b.*\b(payment|no\s+card|no\s+payment)\b/i,
   /\bwhich\s+jobs?\b.*\b(access|instructions?)\b/i,
   /\bwhich\s+(afternoon|morning|evening)\s+jobs?\b/i,
   /\bshow\s+(me\s+)?(only\s+)?(the\s+)?\d+\s*(am|pm)\s+jobs?\b/i,
   /\bjobs?\s+(at|with)\s+(risk|issues?|problems?)\b/i,
+
+  // Double-booking / schedule conflicts
+  /\bdouble.?book(ed|ing|ings?)?\b/i,
+  /\bschedule\s+(conflict|issue|problem)\b/i,
+  /\bconflict(s|ing)?\b.*\b(job|cleaner|schedule|tomorrow|today)\b/i,
+  /\b(cleaner|team)\b.*\b(double|conflict|overlap)\b/i,
+
+  // Unassigned / no cleaner — standalone (without "which jobs" prefix)
+  /\b(unassigned|no\s+cleaner|not\s+assigned)\b.*\b(job|jobs|tomorrow|today)\b/i,
+  /\b(job|jobs)\b.*\b(unassigned|no\s+cleaner|not\s+assigned)\b/i,
 
   // Confirmation / payment / assignment questions
   /\b(confirm|confirmed|confirmation)\s+(status|issues?|problems?)\b/i,

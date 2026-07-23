@@ -55,6 +55,23 @@ describe("isReadinessDomain — gate", () => {
     );
   });
 
+  // Double-booked / schedule conflict patterns
+  it("matches: Show me double-booked jobs tomorrow", () => {
+    expect(isReadinessDomain("Show me double-booked jobs tomorrow")).toBe(true);
+  });
+
+  it("matches: Are there any double bookings tomorrow?", () => {
+    expect(isReadinessDomain("Are there any double bookings tomorrow?")).toBe(true);
+  });
+
+  it("matches: Any schedule conflicts tomorrow?", () => {
+    expect(isReadinessDomain("Any schedule conflicts tomorrow?")).toBe(true);
+  });
+
+  it("matches: Which jobs have no cleaner tomorrow?", () => {
+    expect(isReadinessDomain("Which jobs have no cleaner tomorrow?")).toBe(true);
+  });
+
   // Non-readiness messages should NOT match
   it("does not match: Text Maria about her job", () => {
     expect(isReadinessDomain("Text Maria about her job")).toBe(false);
