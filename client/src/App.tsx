@@ -58,6 +58,7 @@ const SmsCampaigns = lazy(() => import("./pages/SmsCampaigns"));
 const IconPicker = lazy(() => import("./pages/IconPicker"));
 const ReadinessDashboard = lazy(() => import("./pages/ReadinessDashboard"));
 const InvoiceManager = lazy(() => import("./pages/InvoiceManager"));
+const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -131,6 +132,7 @@ function Router() {
         <Route path={"/admin/sms-campaigns"} component={SmsCampaigns} />
         <Route path={"/admin/readiness"} component={ReadinessDashboard} />
         <Route path={"/admin/invoices"} component={InvoiceManager} />
+        <Route path={"/madison-debug"} component={MadisonDebugPanel} />
         <Route path={"/icon-picker"} component={IconPicker} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />

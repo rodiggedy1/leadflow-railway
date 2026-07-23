@@ -1,10 +1,15 @@
 import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+
+const GIT_COMMIT = (() => {
+  try { return execSync("git rev-parse --short HEAD").toString().trim(); } catch { return "unknown"; }
+})();
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -154,6 +159,9 @@ const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(
 
 export default defineConfig({
   plugins,
+  define: {
+    __GIT_COMMIT__: JSON.stringify(GIT_COMMIT),
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
