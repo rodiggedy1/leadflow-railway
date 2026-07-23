@@ -209,6 +209,9 @@ async function _execute(
     jr.confirmation.outcomeLabel = outcomeLabelByKey.get(key) ?? null;
   }
 
+  // ── Diagnostic logging ─────────────────────────────────────────────────
+  console.log(`[Madison] executor: date=${targetDate} totalJobs=${jobs.length} unassigned=${jobs.filter(j => !j.cleanerProfileId).length} filters=${JSON.stringify(plan.filters)} sort=${plan.sort}`);
+
   // ── Apply filters deterministically ──────────────────────────────────
   const filters = plan.filters ?? {};
   let filterDescription: string | null = null;
@@ -234,6 +237,17 @@ async function _execute(
       return mins >= start && mins <= end;
     });
     filterDescription = `${filters.startTime}–${filters.endTime} jobs only`;
+  }
+
+  // Exact time filter (e.g. "8:30 AM jobs" → exactTime: "08:30")
+  if (filters.exactTime) {
+    const exactMins = parseHHMM(filters.exactTime);
+    jobRows = jobRows.filter((j) => {
+      const mins = jobMinutes(j.jobTime);
+      if (mins === null) return false;
+      return mins === exactMins;
+    });
+    filterDescription = `${filters.exactTime} jobs only`;
   }
 
   // Dimension filter

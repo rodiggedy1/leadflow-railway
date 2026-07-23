@@ -37,6 +37,8 @@ Rules:
 - minimumFlagCount: set to 2 when user asks about jobs "at risk" (multiple issues)
 - sort: "risk" when asking about problems/issues, "service_time" otherwise
 - For fields you cannot determine, use null (do not omit them)
+- If the user does not specify a date or time reference, default dateScope to TODAY (not tomorrow)
+- For exact time queries like "8:30 AM jobs" or "9 AM jobs", set exactTime to "08:30" or "09:00" (HH:MM 24-hour format) — do NOT use startTime/endTime for exact time matches
 
 Return ONLY valid JSON matching the schema. No explanation.`;
 

@@ -34,6 +34,7 @@ export const READINESS_PLAN_ZOD_SCHEMA = z.object({
       timeOfDay: z.enum(["morning", "afternoon", "evening"]).nullable().optional(),
       startTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
       endTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+      exactTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
       dimension: z
         .enum(["all", "assignment", "confirmation", "payment", "access", "schedule"])
         .nullable()
@@ -87,6 +88,7 @@ export const READINESS_PLAN_JSON_SCHEMA = {
             },
             startTime: { anyOf: [{ type: "string" }, { type: "null" }] },
             endTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+            exactTime: { anyOf: [{ type: "string" }, { type: "null" }] },
             dimension: {
               anyOf: [
                 {
@@ -103,6 +105,7 @@ export const READINESS_PLAN_JSON_SCHEMA = {
             "timeOfDay",
             "startTime",
             "endTime",
+            "exactTime",
             "dimension",
             "onlyNeedsAttention",
             "minimumFlagCount",

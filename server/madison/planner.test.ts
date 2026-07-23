@@ -126,7 +126,7 @@ describe("createReadinessPlan()", () => {
   it("parses a well-formed tomorrow readiness response", async () => {
     const validPlan = {
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
-      filters: { timeOfDay: null, startTime: null, endTime: null, dimension: "all", onlyNeedsAttention: null, minimumFlagCount: null },
+      filters: { timeOfDay: null, startTime: null, endTime: null, exactTime: null, dimension: "all", onlyNeedsAttention: null, minimumFlagCount: null },
       sort: "service_time",
     };
     mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(validPlan)));
@@ -205,6 +205,7 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
         timeOfDay: "morning",
         startTime: null,
         endTime: null,
+        exactTime: null,
         dimension: "all",
         onlyNeedsAttention: true,
         minimumFlagCount: null,
@@ -239,5 +240,48 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
       sort: null,
     });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts exactTime in HH:MM format", () => {
+    const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      dateScope: { type: "service_date", startDate: "2026-07-23", endDate: "2026-07-23" },
+      filters: {
+        timeOfDay: null,
+        startTime: null,
+        endTime: null,
+        exactTime: "08:30",
+        dimension: null,
+        onlyNeedsAttention: null,
+        minimumFlagCount: null,
+      },
+      sort: "service_time",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects exactTime in non-HH:MM format", () => {
+    const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      dateScope: { type: "service_date", startDate: "2026-07-23", endDate: "2026-07-23" },
+      filters: {
+        timeOfDay: null,
+        startTime: null,
+        endTime: null,
+        exactTime: "8:30 AM",
+        dimension: null,
+        onlyNeedsAttention: null,
+        minimumFlagCount: null,
+      },
+      sort: "service_time",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ── JSON schema includes exactTime in filters.required ────────────────────────
+
+describe("READINESS_PLAN_JSON_SCHEMA — exactTime field", () => {
+  it("includes exactTime in filters required array", () => {
+    const filtersSchema = (READINESS_PLAN_JSON_SCHEMA.properties.filters as { anyOf: Array<{ required?: string[] }> }).anyOf[0];
+    expect(filtersSchema.required).toContain("exactTime");
   });
 });
