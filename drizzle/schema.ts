@@ -318,6 +318,10 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * Only set for cs-inbound and cs-inbound-cleaner sessions.
    */
   csResolvedAt: bigint("csResolvedAt", { mode: "number" }),
+  /** OpenID of the staff member who resolved this session. */
+  csResolvedBy: varchar("csResolvedBy", { length: 128 }),
+  /** Display name of the staff member who resolved this session. */
+  csResolvedByName: varchar("csResolvedByName", { length: 255 }),
   /**
    * CS inbox queue label — manually assigned by agents.
    * One of: "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams"

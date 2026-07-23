@@ -3625,12 +3625,18 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
      */
     resolveSession: opsChatProcedure
       .input(z.object({ sessionId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
+        const caller = (ctx as any).opsCaller as { id: string; name: string; isOwner: boolean } | undefined;
         await db
           .update(conversationSessions)
-          .set({ csResolvedAt: Date.now(), lastReadAt: sql`lastCustomerReplyAt` } as any)
+          .set({
+            csResolvedAt: Date.now(),
+            csResolvedBy: caller?.id ?? null,
+            csResolvedByName: caller?.name ?? null,
+            lastReadAt: sql`lastCustomerReplyAt`,
+          } as any)
           .where(eq(conversationSessions.id, input.sessionId));
         // Broadcast so CS badge updates immediately on all connected clients
         const { broadcastOpsUpdate: bcastResolve } = await import("./sseBroadcast");
