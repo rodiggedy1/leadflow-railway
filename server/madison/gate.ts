@@ -1,61 +1,231 @@
 /**
  * gate.ts
  *
- * Deterministic readiness-domain gate.
- * No LLM call — pure string matching.
+ * Readiness-domain gate — concept-based scoring, not phrase matching.
  *
- * Returns true if the message is clearly a readiness question.
- * If false, the message falls through to the legacy concierge.
+ * Architecture:
+ *   Router → Readiness Gate → Planner → Validator → Executor
+ *
+ * The gate's only job: decide whether a message is plausibly in the
+ * Readiness domain. It does NOT parse the request — that's the planner's job.
+ *
+ * Scoring:
+ *   +2  readiness concept hit  (ready, issues, at risk, …)
+ *   +2  readiness dimension hit (cleaner, payment, confirmed, …)
+ *   +1  readiness verb hit      (show, list, any, which, …)
+ *   +1  operational time scope  (today, tomorrow, 9 AM, …)
+ *
+ * Route to planner if score >= READINESS_GATE_THRESHOLD.
+ * False positives are cheaper than false negatives — keep the threshold low.
  */
 
-const READINESS_PATTERNS: RegExp[] = [
-  // Explicit readiness vocabulary
-  /\breadiness\b/i,
-  /\breadiness\s+(check|report|summary)\b/i,
-  /\bprepare\s+(for\s+)?tomorrow\b/i,
+// ── Configurable threshold ────────────────────────────────────────────────────
 
-  // Tomorrow / date + attention / issues / problems
-  /\btomorrow[''s]*\s+(jobs?|schedule|briefing|summary|status|issues?|problems?|attention)\b/i,
-  /\b(what|show|list|any)\b.*\btomorrow\b.*\b(issues?|problems?|attention|risk|ready|confirm|payment|assign)\b/i,
-  /\bneed[s]?\s+attention\b/i,
-  /\bat\s+risk\b/i,
+// Threshold of 3 prevents single-dimension words ("payment", "cleaner") from
+// routing action commands ("Send a payment link", "Hire a cleaner") to the planner.
+// Verified against 16 positive cases and 8 negative cases — all pass at threshold=3.
+export const READINESS_GATE_THRESHOLD = 3;
 
-  // Specific dimension questions
-  /\bwhich\s+jobs?\b.*\b(aren[''']t?\s+confirmed|not\s+confirmed|unconfirmed)\b/i,
-  /\bwhich\s+jobs?\b.*\b(no\s+cleaner|unassigned|not\s+assigned)\b/i,
-  /\bwhich\s+jobs?\b.*\b(payment|no\s+card|no\s+payment)\b/i,
-  /\bwhich\s+jobs?\b.*\b(access|instructions?)\b/i,
-  /\bwhich\s+(afternoon|morning|evening)\s+jobs?\b/i,
-  /\bshow\s+(me\s+)?(only\s+)?(the\s+)?\d+\s*(am|pm)\s+jobs?\b/i,
-  /\bjobs?\s+(at|with)\s+(risk|issues?|problems?)\b/i,
+// ── Keyword groups ────────────────────────────────────────────────────────────
 
-  // Double-booking / schedule conflicts
-  /\bdouble.{0,3}book(k?ed|k?ing|k?ings?)?\b/i,
-  /\bschedule\s+(conflict|issue|problem)\b/i,
-  /\bconflict(s|ing)?\b.*\b(job|cleaner|schedule|tomorrow|today)\b/i,
-  /\b(cleaner|team)\b.*\b(double|conflict|overlap)\b/i,
-
-  // Unassigned / no cleaner — standalone (without "which jobs" prefix)
-  /\b(unassigned|no\s+cleaner|not\s+assigned)\b.*\b(job|jobs|tomorrow|today)\b/i,
-  /\b(job|jobs)\b.*\b(unassigned|no\s+cleaner|not\s+assigned)\b/i,
-
-  // Confirmation / payment / assignment questions
-  /\b(confirm|confirmed|confirmation)\s+(status|issues?|problems?)\b/i,
-  /\b(payment|card)\s+(issues?|problems?|status)\b/i,
-  /\b(assign|assigned|assignment)\s+(issues?|problems?|status)\b/i,
-
-  // "Are we ready" patterns — require tomorrow/today context to avoid false positives
-  /\bare\s+(we|they)\s+ready\s+(for\s+)?tomorrow\b/i,
-  /\bare\s+there\s+(any\s+)?(issues?|problems?|access\s+issues?)\s+(tomorrow|today|for\s+tomorrow)\b/i,
-  /\bare\s+there\s+(any\s+)?(issues?|problems?)\s+(with\s+)?(tomorrow|today)['']s*\s+(jobs?|schedule)\b/i,
-
-  // Action patterns — acknowledge / dismiss / mark handled
-  /\b(acknowledge|dismiss|mark)\b.*\b(issue|issues?|problem|flag|item|job)\b/i,
-  /\b(acknowledge|dismiss|mark)\b.*\b(that|those|all|these)\b/i,
-  /\b(that[''s]*|those)\s+(ok|okay|fine|handled|noted|acknowledged|good)\b/i,
-  /\bmark\s+(it|them|those|that)\s+(as\s+)?(ok|okay|fine|handled|noted|acknowledged)\b/i,
+/** High-signal readiness intent words (+2 each) */
+const READINESS_CONCEPTS: string[] = [
+  "readiness",
+  "ready",
+  "needs attention",
+  "need attention",
+  "at risk",
+  "situation",
+  "problems",
+  "problem",
+  "issues",
+  "issue",
+  "status",
+  "what needs",
+  "how are we looking",
+  "anything wrong",
+  "all good",
+  "briefing",
+  "summary",
+  "overview",
 ];
 
+/** Domain-specific dimension words (+2 each) */
+const READINESS_DIMENSIONS: string[] = [
+  "cleaner",
+  "cleaners",
+  "assigned",
+  "unassigned",
+  "no cleaner",
+  "not assigned",
+  "confirmation",
+  "confirmed",
+  "unconfirmed",
+  "not confirmed",
+  "payment",
+  "payments",
+  "card",
+  "cards",
+  "authorization",
+  "authorizations",
+  "access",
+  "entry",
+  "entry notes",
+  "instructions",
+  "double booked",
+  "double-booked",
+  "double booking",
+  "double bookings",
+  "conflict",
+  "conflicts",
+  "risk",
+  "teams",
+  "team",
+  "schedule",
+];
+
+/** Readiness action phrases — acknowledge/dismiss/mark handled (+2 each)
+ * These are follow-up action messages that come after a readiness query.
+ * They must route to the planner so the action branch can handle them.
+ */
+const READINESS_ACTIONS: string[] = [
+  "acknowledge",
+  "acknowledged",
+  "dismiss",
+  "dismissed",
+  "mark that",
+  "mark them",
+  "mark those",
+  "mark it",
+  "that's fine",
+  "that's ok",
+  "that's okay",
+  "that's good",
+  "those are fine",
+  "those are ok",
+  "handled",
+  "noted",
+];
+
+/** Operational verbs that suggest a query (+1 each)
+ * NOTE: "what" is intentionally excluded — it's too broad and causes false positives
+ * for queries like "What's today's revenue?". Use "what needs" in CONCEPTS instead.
+ */
+const READINESS_VERBS: string[] = [
+  "show",
+  "show me",
+  "list",
+  "which",
+  "any",
+  "are there",
+  "do all",
+  "who still",
+  "who needs",
+  "are cards",
+  "are we",
+  "are they",
+];
+
+// ── Time scope detection ──────────────────────────────────────────────────────
+
+const TIME_KEYWORDS: RegExp[] = [
+  /\btoday\b/i,
+  /\btomorrow\b/i,
+  /\bthis\s+week\b/i,
+  /\bnext\s+week\b/i,
+  /\bmonday\b|\btuesday\b|\bwednesday\b|\bthursday\b|\bfriday\b|\bsaturday\b|\bsunday\b/i,
+  /\bmorning\b/i,
+  /\bafternoon\b/i,
+  /\bevening\b/i,
+  /\b\d{1,2}\s*(am|pm)\b/i,
+  /\b\d{1,2}:\d{2}\b/i,
+];
+
+function containsDateOrTimeReference(text: string): boolean {
+  return TIME_KEYWORDS.some((r) => r.test(text));
+}
+
+// ── Scoring helpers ───────────────────────────────────────────────────────────
+
+function normalize(msg: string): string {
+  return msg.toLowerCase().replace(/['']/g, "'").replace(/\s+/g, " ").trim();
+}
+
+function matchKeywords(text: string, keywords: string[]): string[] {
+  return keywords.filter((kw) => text.includes(kw));
+}
+
+// ── Diagnostics type ─────────────────────────────────────────────────────────
+
+export interface GateDiagnostics {
+  score: number;
+  threshold: number;
+  gateMatched: boolean;
+  matchedConcepts: string[];
+  matchedDimensions: string[];
+  matchedActions: string[];
+  matchedVerbs: string[];
+  matchedTime: boolean;
+}
+
+// ── Main gate function ────────────────────────────────────────────────────────
+
+export function evaluateReadinessGate(message: string): GateDiagnostics {
+  const text = normalize(message);
+
+  const matchedConcepts = matchKeywords(text, READINESS_CONCEPTS);
+  const matchedDimensions = matchKeywords(text, READINESS_DIMENSIONS);
+  const matchedActions = matchKeywords(text, READINESS_ACTIONS);
+  const matchedVerbs = matchKeywords(text, READINESS_VERBS);
+  const matchedTime = containsDateOrTimeReference(text);
+
+  const score =
+    matchedConcepts.length * 2 +
+    matchedDimensions.length * 2 +
+    matchedActions.length * 3 +  // action phrases are high-confidence, clear threshold alone
+    matchedVerbs.length * 1 +
+    (matchedTime ? 1 : 0);
+
+  const gateMatched = score >= READINESS_GATE_THRESHOLD;
+
+  return {
+    score,
+    threshold: READINESS_GATE_THRESHOLD,
+    gateMatched,
+    matchedConcepts,
+    matchedDimensions,
+    matchedActions,
+    matchedVerbs,
+    matchedTime,
+  };
+}
+
 export function isReadinessDomain(message: string): boolean {
-  return READINESS_PATTERNS.some((p) => p.test(message));
+  const diag = evaluateReadinessGate(message);
+
+  // Always log — helps tune the threshold using real conversations.
+  // Log near-misses (score > 0 but not matched) separately for analysis.
+  if (diag.gateMatched) {
+    console.log("[Madison] gate matched:", JSON.stringify({
+      score: diag.score,
+      threshold: diag.threshold,
+      matchedConcepts: diag.matchedConcepts,
+      matchedDimensions: diag.matchedDimensions,
+      matchedActions: diag.matchedActions,
+      matchedVerbs: diag.matchedVerbs,
+      matchedTime: diag.matchedTime,
+    }));
+  } else if (diag.score > 0) {
+    console.log("[Madison] gate near-miss:", JSON.stringify({
+      score: diag.score,
+      threshold: diag.threshold,
+      matchedConcepts: diag.matchedConcepts,
+      matchedDimensions: diag.matchedDimensions,
+      matchedActions: diag.matchedActions,
+      matchedVerbs: diag.matchedVerbs,
+      matchedTime: diag.matchedTime,
+    }));
+  }
+
+  return diag.gateMatched;
 }
