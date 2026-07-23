@@ -8,11 +8,11 @@
 
 import { computeReadinessSummary, type JobRow } from "./readinessService";
 import {
-  type ReadinessPlan,
   type ReadinessProjection,
   type JobReadinessRow,
   MadisonError,
 } from "./types";
+import { type ReadinessQueryPlan } from "./schema/readinessPlanSchema";
 
 const EXECUTION_TIMEOUT_MS = 15_000;
 const MAX_JOBS_TO_LLM = 40; // hard cap on jobs sent to response LLM
@@ -88,7 +88,7 @@ function mapPaymentStatus(rawStatus: string): {
 export async function executePlan(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
-  plan: ReadinessPlan
+  plan: ReadinessQueryPlan
 ): Promise<ReadinessProjection> {
   // Enforce execution timeout
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -110,9 +110,9 @@ export async function executePlan(
 async function _execute(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
-  plan: ReadinessPlan
+  plan: ReadinessQueryPlan
 ): Promise<ReadinessProjection> {
-  // For Phase 1, use startDate only (single-day readiness)
+  // Use startDate only (single-day readiness)
   const targetDate = plan.dateScope.startDate;
 
   let summary;

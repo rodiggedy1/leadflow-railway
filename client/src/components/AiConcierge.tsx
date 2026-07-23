@@ -128,6 +128,8 @@ interface CallClientPendingCard {
 interface QueryResultCard {
   answer: string;
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
+  /** Present when the response was an acknowledge action — enables Undo button */
+  undoActionId?: string | null;
 }
 // ─── Prepare Tomorrow types ──────────────────────────────────────────────────
 
@@ -1261,6 +1263,25 @@ function QueryResultCardView({ card }: { card: QueryResultCard }) {
   };
   const color = statusColor[card.status] ?? "#6b7280";
 
+  // Undo state for acknowledge actions
+  const undoMutation = trpc.aiConcierge.undoMadisonAcknowledgement.useMutation();
+  const [undoState, setUndoState] = React.useState<"idle" | "loading" | "done" | "error">("idle");
+
+  const handleUndo = async () => {
+    if (!card.undoActionId || undoState !== "idle") return;
+    setUndoState("loading");
+    try {
+      const result = await undoMutation.mutateAsync({ actionId: card.undoActionId });
+      if (result.status === "reversed") {
+        setUndoState("done");
+      } else {
+        setUndoState("error");
+      }
+    } catch {
+      setUndoState("error");
+    }
+  };
+
   return (
     <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
       {/* Header */}
@@ -1282,6 +1303,35 @@ function QueryResultCardView({ card }: { card: QueryResultCard }) {
           <p key={i} style={{ fontSize: 13, color: "#c8cde8", lineHeight: 1.6, marginBottom: 4 }}>{line}</p>
         ))}
       </div>
+
+      {/* Undo button — only shown for acknowledge actions */}
+      {card.undoActionId && (
+        <div style={{ padding: "8px 14px 12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          {undoState === "done" ? (
+            <span style={{ fontSize: 12, color: "#34d399" }}>Acknowledgement reversed.</span>
+          ) : undoState === "error" ? (
+            <span style={{ fontSize: 12, color: "#f87171" }}>Undo failed — the window may have expired.</span>
+          ) : (
+            <button
+              onClick={handleUndo}
+              disabled={undoState === "loading"}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: undoState === "loading" ? "#6b7280" : "#a78bfa",
+                background: "transparent",
+                border: "1px solid rgba(167,139,250,0.3)",
+                borderRadius: 8,
+                padding: "4px 12px",
+                cursor: undoState === "loading" ? "not-allowed" : "pointer",
+                transition: "opacity 0.15s",
+              }}
+            >
+              {undoState === "loading" ? "Undoing…" : "↩ Undo"}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -3678,7 +3728,7 @@ function buildAiMessage(result: ServerResult): Message | null {
     return {
       id: uid(),
       role: "ai",
-      content: { type: "query_result", card: { answer: result.answer, status: result.status } },
+      content: { type: "query_result", card: { answer: result.answer, status: result.status, undoActionId: (result as { undoActionId?: string | null }).undoActionId ?? null } },
       ts,
     };
   }

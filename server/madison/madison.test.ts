@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { isReadinessDomain } from "./gate";
 import { executePlan } from "./executor";
-import type { ReadinessPlan } from "./types";
+import type { ReadinessQueryPlan } from "./schema/readinessPlanSchema";
 
 // ── Gate tests ────────────────────────────────────────────────────────────────
 
@@ -133,7 +133,8 @@ import { computeReadinessSummary } from "./readinessService";
 
 const mockComputeReadinessSummary = vi.mocked(computeReadinessSummary);
 
-const basePlan = (overrides: Partial<ReadinessPlan> = {}): ReadinessPlan => ({
+const basePlan = (overrides: Partial<ReadinessQueryPlan> = {}): ReadinessQueryPlan => ({
+  type: "query",
   dateScope: {
     type: "service_date",
     startDate: "2026-07-24",

@@ -25,7 +25,11 @@ Your job is to interpret a natural-language question about operational readiness
 
 Today's date in Eastern Time will be provided. Use it to resolve relative date references like "tomorrow", "today", "this week".
 
-Rules:
+Plan types:
+- type: "query" — for read-only readiness questions (most requests)
+- type: "action" — ONLY when the user explicitly asks to acknowledge, dismiss, or mark items as handled
+
+For type: "query" plans:
 - dateScope.startDate and endDate must be YYYY-MM-DD strings
 - "tomorrow" → next calendar day from today
 - "today" → today's date
@@ -39,6 +43,12 @@ Rules:
 - For fields you cannot determine, use null (do not omit them)
 - If the user does not specify a date or time reference, default dateScope to TODAY (not tomorrow)
 - For exact time queries like "8:30 AM jobs" or "9 AM jobs", set exactTime to "08:30" or "09:00" (HH:MM 24-hour format) — do NOT use startTime/endTime for exact time matches
+
+For type: "action" plans (acknowledge_readiness):
+- Set action: "acknowledge_readiness"
+- targetIds: array of encoded item IDs in "jobId:serviceDate:issueType" format (from conversation context)
+- serviceDate: the YYYY-MM-DD date of the items being acknowledged
+- Only produce this plan type when the user explicitly asks to acknowledge/dismiss/mark items
 
 Return ONLY valid JSON matching the schema. No explanation.`;
 

@@ -37,7 +37,13 @@ const READINESS_PATTERNS: RegExp[] = [
   // "Are we ready" patterns — require tomorrow/today context to avoid false positives
   /\bare\s+(we|they)\s+ready\s+(for\s+)?tomorrow\b/i,
   /\bare\s+there\s+(any\s+)?(issues?|problems?|access\s+issues?)\s+(tomorrow|today|for\s+tomorrow)\b/i,
-  /\bare\s+there\s+(any\s+)?(issues?|problems?)\s+(with\s+)?(tomorrow|today)[''s]*\s+(jobs?|schedule)\b/i,
+  /\bare\s+there\s+(any\s+)?(issues?|problems?)\s+(with\s+)?(tomorrow|today)['']s*\s+(jobs?|schedule)\b/i,
+
+  // Action patterns — acknowledge / dismiss / mark handled
+  /\b(acknowledge|dismiss|mark)\b.*\b(issue|issues?|problem|flag|item|job)\b/i,
+  /\b(acknowledge|dismiss|mark)\b.*\b(that|those|all|these)\b/i,
+  /\b(that[''s]*|those)\s+(ok|okay|fine|handled|noted|acknowledged|good)\b/i,
+  /\bmark\s+(it|them|those|that)\s+(as\s+)?(ok|okay|fine|handled|noted|acknowledged)\b/i,
 ];
 
 export function isReadinessDomain(message: string): boolean {

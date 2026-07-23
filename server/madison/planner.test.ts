@@ -9,6 +9,7 @@
  *   3. Verify createReadinessPlan() throws PLAN_FAILED on LLM error.
  *   4. Verify createReadinessPlan() throws PLAN_INVALID on malformed LLM JSON.
  *   5. Verify the schema rejects a response that omits a required field.
+ *   6. Verify action plan variant parses correctly.
  *
  * If any of these fail after a schema edit, the schema is broken and must be fixed
  * before deploying — this is the CI guard against the PLAN_FAILED regression.
@@ -86,6 +87,13 @@ describe("READINESS_PLAN_JSON_SCHEMA — OpenAI strict mode compliance", () => {
       }
     }
 
+    // Recurse into anyOf branches at the current level
+    if (schema.anyOf) {
+      for (let i = 0; i < (schema.anyOf as unknown[]).length; i++) {
+        errors.push(...validateStrictObject((schema.anyOf as Record<string, unknown>[])[i], `${path}[anyOf[${i}]]`));
+      }
+    }
+
     return errors;
   }
 
@@ -102,17 +110,28 @@ describe("READINESS_PLAN_JSON_SCHEMA — OpenAI strict mode compliance", () => {
     }
   });
 
-  it("has required array at root level", () => {
-    expect(READINESS_PLAN_JSON_SCHEMA.required).toContain("dateScope");
-    expect(READINESS_PLAN_JSON_SCHEMA.required).toContain("filters");
-    expect(READINESS_PLAN_JSON_SCHEMA.required).toContain("sort");
+  it("has type field in query variant required array", () => {
+    const queryVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[0] as { required: string[] };
+    expect(queryVariant.required).toContain("type");
+    expect(queryVariant.required).toContain("dateScope");
+    expect(queryVariant.required).toContain("filters");
+    expect(queryVariant.required).toContain("sort");
   });
 
-  it("has required array in dateScope", () => {
-    const dateScope = READINESS_PLAN_JSON_SCHEMA.properties.dateScope;
+  it("has required array in query variant dateScope", () => {
+    const queryVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[0] as { properties: { dateScope: { required: string[] } } };
+    const dateScope = queryVariant.properties.dateScope;
     expect(dateScope.required).toContain("type");
     expect(dateScope.required).toContain("startDate");
     expect(dateScope.required).toContain("endDate");
+  });
+
+  it("has type field in action variant required array", () => {
+    const actionVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[1] as { required: string[] };
+    expect(actionVariant.required).toContain("type");
+    expect(actionVariant.required).toContain("action");
+    expect(actionVariant.required).toContain("targetIds");
+    expect(actionVariant.required).toContain("serviceDate");
   });
 });
 
@@ -123,8 +142,9 @@ describe("createReadinessPlan()", () => {
     vi.clearAllMocks();
   });
 
-  it("parses a well-formed tomorrow readiness response", async () => {
+  it("parses a well-formed tomorrow readiness response (query)", async () => {
     const validPlan = {
+      type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
       filters: { timeOfDay: null, startTime: null, endTime: null, exactTime: null, dimension: "all", onlyNeedsAttention: null, minimumFlagCount: null },
       sort: "service_time",
@@ -133,13 +153,17 @@ describe("createReadinessPlan()", () => {
 
     const result = await createReadinessPlan("are we ready for tomorrow");
 
-    expect(result.dateScope.startDate).toBe("2026-07-24");
-    expect(result.dateScope.type).toBe("service_date");
-    expect(result.sort).toBe("service_time");
+    expect(result.type).toBe("query");
+    if (result.type === "query") {
+      expect(result.dateScope.startDate).toBe("2026-07-24");
+      expect(result.dateScope.type).toBe("service_date");
+      expect(result.sort).toBe("service_time");
+    }
   });
 
-  it("parses a response with null filters gracefully", async () => {
+  it("parses a response with null filters gracefully (query)", async () => {
     const planWithNullFilters = {
+      type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
       filters: null,
       sort: null,
@@ -148,9 +172,31 @@ describe("createReadinessPlan()", () => {
 
     const result = await createReadinessPlan("are we ready for tomorrow");
 
-    expect(result.dateScope.startDate).toBe("2026-07-24");
-    expect(result.filters).toBeNull();
-    expect(result.sort).toBeNull();
+    expect(result.type).toBe("query");
+    if (result.type === "query") {
+      expect(result.dateScope.startDate).toBe("2026-07-24");
+      expect(result.filters).toBeNull();
+      expect(result.sort).toBeNull();
+    }
+  });
+
+  it("parses a well-formed action plan (acknowledge_readiness)", async () => {
+    const actionPlan = {
+      type: "action",
+      action: "acknowledge_readiness",
+      targetIds: ["123:2026-07-24:UNASSIGNED", "456:2026-07-24:CUSTOMER_UNCONFIRMED"],
+      serviceDate: "2026-07-24",
+    };
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(actionPlan)));
+
+    const result = await createReadinessPlan("acknowledge those unassigned jobs");
+
+    expect(result.type).toBe("action");
+    if (result.type === "action") {
+      expect(result.action).toBe("acknowledge_readiness");
+      expect(result.targetIds).toHaveLength(2);
+      expect(result.serviceDate).toBe("2026-07-24");
+    }
   });
 
   it("throws PLAN_FAILED when invokeLLM rejects", async () => {
@@ -172,8 +218,8 @@ describe("createReadinessPlan()", () => {
     });
   });
 
-  it("throws PLAN_INVALID when LLM returns JSON missing required dateScope", async () => {
-    const badPlan = { sort: "service_time" }; // missing dateScope
+  it("throws PLAN_INVALID when LLM returns JSON missing required type field", async () => {
+    const badPlan = { dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" }, sort: "service_time" }; // missing type
     mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(badPlan)));
 
     await expect(createReadinessPlan("are we ready for tomorrow")).rejects.toMatchObject({
@@ -183,6 +229,7 @@ describe("createReadinessPlan()", () => {
 
   it("throws PLAN_INVALID when dateScope has wrong date format", async () => {
     const badPlan = {
+      type: "query",
       dateScope: { type: "service_date", startDate: "July 24 2026", endDate: "July 24 2026" },
       filters: null,
       sort: null,
@@ -198,8 +245,9 @@ describe("createReadinessPlan()", () => {
 // ── Zod schema validates correctly ───────────────────────────────────────────
 
 describe("READINESS_PLAN_ZOD_SCHEMA", () => {
-  it("accepts a complete valid plan", () => {
+  it("accepts a complete valid query plan", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
       filters: {
         timeOfDay: "morning",
@@ -215,8 +263,9 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts null filters", () => {
+  it("accepts null filters in query plan", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
       filters: null,
       sort: null,
@@ -226,6 +275,7 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
 
   it("rejects invalid date format in startDate", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "query",
       dateScope: { type: "service_date", startDate: "24-07-2026", endDate: "2026-07-24" },
       filters: null,
       sort: null,
@@ -235,6 +285,7 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
 
   it("rejects unknown dimension value", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
       filters: { dimension: "unknown_dimension" },
       sort: null,
@@ -244,6 +295,7 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
 
   it("accepts exactTime in HH:MM format", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-23", endDate: "2026-07-23" },
       filters: {
         timeOfDay: null,
@@ -261,6 +313,7 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
 
   it("rejects exactTime in non-HH:MM format", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-23", endDate: "2026-07-23" },
       filters: {
         timeOfDay: null,
@@ -275,13 +328,44 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts a valid action plan", () => {
+    const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "action",
+      action: "acknowledge_readiness",
+      targetIds: ["123:2026-07-24:UNASSIGNED"],
+      serviceDate: "2026-07-24",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects action plan with unknown action type", () => {
+    const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "action",
+      action: "delete_jobs",
+      targetIds: ["123:2026-07-24:UNASSIGNED"],
+      serviceDate: "2026-07-24",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects plan with unknown type", () => {
+    const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "unknown",
+      dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ── JSON schema includes exactTime in filters.required ────────────────────────
 
 describe("READINESS_PLAN_JSON_SCHEMA — exactTime field", () => {
-  it("includes exactTime in filters required array", () => {
-    const filtersSchema = (READINESS_PLAN_JSON_SCHEMA.properties.filters as { anyOf: Array<{ required?: string[] }> }).anyOf[0];
+  it("includes exactTime in query variant filters required array", () => {
+    const queryVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[0] as {
+      properties: { filters: { anyOf: Array<{ required?: string[] }> } };
+    };
+    const filtersSchema = queryVariant.properties.filters.anyOf[0];
     expect(filtersSchema.required).toContain("exactTime");
   });
 });

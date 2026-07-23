@@ -2503,7 +2503,7 @@ export const aiConciergeRouter = router({
         ]).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
@@ -2537,12 +2537,14 @@ export const aiConciergeRouter = router({
       // No chip context needed for readiness queries — they are date/dimension scoped.
       console.log(`[Madison] gate check: re=${JSON.stringify(re)} msg=${JSON.stringify(input.message)} gateMatch=${isReadinessDomain(input.message)}`);
       if (isReadinessDomain(input.message)) {
-        const madisonResult = await handleMadisonReadiness(db, input.message);
+        const rid = crypto.randomUUID().slice(0, 8);
+        const madisonResult = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId);
         if (madisonResult.handled && madisonResult.response) {
           return {
             type: "query_result" as const,
             answer: madisonResult.response,
             status: "complete" as const,
+            undoActionId: madisonResult.undoActionId ?? null,
           };
         }
         // Execution failed — fall through to legacy concierge once
@@ -3004,6 +3006,32 @@ export const aiConciergeRouter = router({
       } catch (err) {
         console.error("[getReadinessSummary] ERROR:", err);
         throw err;
+      }
+    }),
+
+  /**
+   * undoMadisonAcknowledgement
+   * Reverses a previously completed acknowledge_readiness action within the 24h undo window.
+   * Called from the Undo button in the chat message card.
+   */
+  undoMadisonAcknowledgement: agentProcedure
+    .input(z.object({ actionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { undoAcknowledgement } = await import("./madison/acknowledgeService");
+      try {
+        const result = await undoAcknowledgement(db, {
+          actionId: input.actionId,
+          reversedBy: ctx.agent.agentId,
+        });
+        return result;
+      } catch (err) {
+        console.error("[undoMadisonAcknowledgement] ERROR:", err);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: err instanceof Error ? err.message : "Undo failed",
+        });
       }
     }),
 });
