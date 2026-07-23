@@ -350,6 +350,188 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_missions index failed (non-fatal):', err);
   }
+
+  // ── Madison Phase 2 — write architecture tables ───────────────────────────
+  // All four tables are idempotent (CREATE TABLE IF NOT EXISTS).
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_conversation_context (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        agentId INT NOT NULL UNIQUE,
+        activeDomain VARCHAR(64),
+        resolvedDateStart DATE,
+        resolvedDateEnd DATE,
+        lastProjectionId VARCHAR(64),
+        lastReadinessItemIds JSON,
+        lastSelectionItemIds JSON,
+        lastRequestId VARCHAR(64),
+        version INT NOT NULL DEFAULT 1,
+        updatedAt DATETIME(3) NOT NULL
+      )
+    `));
+    console.log('[Migration] madison_conversation_context: OK');
+  } catch (err) {
+    console.error('[Migration] madison_conversation_context failed (non-fatal):', err);
+  }
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS readiness_acknowledgements (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        jobId VARCHAR(64) NOT NULL,
+        serviceDate DATE NOT NULL,
+        issueType ENUM('UNASSIGNED','CUSTOMER_UNCONFIRMED','PAYMENT_NOT_READY','ACCESS_MISSING','SCHEDULE_CONFLICT') NOT NULL,
+        acknowledgedBy INT NOT NULL,
+        acknowledgedAt DATETIME(3) NOT NULL,
+        reversedAt DATETIME(3),
+        reversedBy INT,
+        actionId VARCHAR(64) NOT NULL,
+        activeMarker TINYINT GENERATED ALWAYS AS (CASE WHEN reversedAt IS NULL THEN 1 ELSE NULL END) STORED
+      )
+    `));
+    console.log('[Migration] readiness_acknowledgements: OK');
+  } catch (err) {
+    console.error('[Migration] readiness_acknowledgements failed (non-fatal):', err);
+  }
+
+  // Indexes for readiness_acknowledgements (conditional — safe to skip if already exist)
+  try {
+    const [ackIdxRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'readiness_acknowledgements'
+        AND index_name = 'uq_active_readiness_ack'
+    `)) as any;
+    if (!(Array.isArray(ackIdxRows) && ackIdxRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE UNIQUE INDEX uq_active_readiness_ack ON readiness_acknowledgements (jobId, serviceDate, issueType, activeMarker)`
+      ));
+      console.log('[Migration] readiness_acknowledgements uq index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] readiness_acknowledgements uq index failed (non-fatal):', err);
+  }
+  try {
+    const [ackLookupRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'readiness_acknowledgements'
+        AND index_name = 'idx_readiness_ack_lookup'
+    `)) as any;
+    if (!(Array.isArray(ackLookupRows) && ackLookupRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE INDEX idx_readiness_ack_lookup ON readiness_acknowledgements (jobId, serviceDate, issueType, reversedAt)`
+      ));
+      console.log('[Migration] readiness_acknowledgements lookup index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] readiness_acknowledgements lookup index failed (non-fatal):', err);
+  }
+  try {
+    const [ackActionRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'readiness_acknowledgements'
+        AND index_name = 'idx_readiness_ack_action'
+    `)) as any;
+    if (!(Array.isArray(ackActionRows) && ackActionRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE INDEX idx_readiness_ack_action ON readiness_acknowledgements (actionId)`
+      ));
+      console.log('[Migration] readiness_acknowledgements action index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] readiness_acknowledgements action index failed (non-fatal):', err);
+  }
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_actions (
+        id VARCHAR(64) PRIMARY KEY,
+        conversationAgentId INT NOT NULL,
+        actionType VARCHAR(64) NOT NULL,
+        riskLevel VARCHAR(64) NOT NULL,
+        requestedTargets JSON NOT NULL,
+        executedTargets JSON NOT NULL,
+        requestedCount INT NOT NULL DEFAULT 0,
+        acknowledgedCount INT NOT NULL DEFAULT 0,
+        alreadyAcknowledgedCount INT NOT NULL DEFAULT 0,
+        invalidCount INT NOT NULL DEFAULT 0,
+        status ENUM('planned','executing','completed','failed','verification_failed','reversed') NOT NULL,
+        failureCode VARCHAR(64),
+        failureMessage TEXT,
+        executedBy INT NOT NULL,
+        createdAt DATETIME(3) NOT NULL,
+        executionStartedAt DATETIME(3),
+        executedAt DATETIME(3),
+        verifiedAt DATETIME(3),
+        reversedAt DATETIME(3),
+        undoExpiresAt DATETIME(3)
+      )
+    `));
+    console.log('[Migration] madison_actions: OK');
+  } catch (err) {
+    console.error('[Migration] madison_actions failed (non-fatal):', err);
+  }
+  try {
+    const [actIdxRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_actions'
+        AND index_name = 'idx_madison_actions_agent'
+    `)) as any;
+    if (!(Array.isArray(actIdxRows) && actIdxRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE INDEX idx_madison_actions_agent ON madison_actions (conversationAgentId, createdAt)`
+      ));
+      console.log('[Migration] madison_actions agent index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_actions agent index failed (non-fatal):', err);
+  }
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_action_items (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        actionId VARCHAR(64) NOT NULL,
+        readinessItemId VARCHAR(255) NOT NULL,
+        acknowledgementId BIGINT,
+        result ENUM('acknowledged','already_acknowledged','invalid','verification_failed','reversed') NOT NULL,
+        createdAt DATETIME(3) NOT NULL
+      )
+    `));
+    console.log('[Migration] madison_action_items: OK');
+  } catch (err) {
+    console.error('[Migration] madison_action_items failed (non-fatal):', err);
+  }
+  try {
+    const [aiUqRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_action_items'
+        AND index_name = 'uq_action_item'
+    `)) as any;
+    if (!(Array.isArray(aiUqRows) && aiUqRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE UNIQUE INDEX uq_action_item ON madison_action_items (actionId, readinessItemId)`
+      ));
+      console.log('[Migration] madison_action_items uq index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_action_items uq index failed (non-fatal):', err);
+  }
+  try {
+    const [aiAckRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_action_items'
+        AND index_name = 'idx_action_item_ack'
+    `)) as any;
+    if (!(Array.isArray(aiAckRows) && aiAckRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE INDEX idx_action_item_ack ON madison_action_items (acknowledgementId)`
+      ));
+      console.log('[Migration] madison_action_items ack index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_action_items ack index failed (non-fatal):', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB
