@@ -226,9 +226,9 @@ describe("executePlan — filters", () => {
 
   it("filters to unassigned jobs (assignment dimension)", async () => {
     const jobs = [
-      mockJob({ id: 1, cleanerProfileId: 1 }),
-      mockJob({ id: 2, cleanerProfileId: null }),
-      mockJob({ id: 3, cleanerProfileId: null }),
+      mockJob({ id: 1, cleanerProfileId: 1, cleanerName: "Jane Doe", teamName: "Team A" }),
+      mockJob({ id: 2, cleanerProfileId: null, cleanerName: null, teamName: null }),
+      mockJob({ id: 3, cleanerProfileId: null, cleanerName: null, teamName: null }),
     ];
     mockComputeReadinessSummary.mockResolvedValueOnce(mockSummary(jobs) as any);
 
@@ -260,8 +260,8 @@ describe("executePlan — filters", () => {
 
   it("filters to jobs needing attention (onlyNeedsAttention)", async () => {
     const jobs = [
-      mockJob({ id: 1, cleanerProfileId: null }), // unassigned — has flag
-      mockJob({ id: 2, cleanerProfileId: 1 }),    // assigned, confirmed, on_hold — no flags
+      mockJob({ id: 1, cleanerProfileId: null, cleanerName: null, teamName: null }), // unassigned — has flag
+      mockJob({ id: 2, cleanerProfileId: 1, cleanerName: "Jane Doe", teamName: "Team A" }),    // assigned, confirmed, on_hold — no flags
     ];
     mockComputeReadinessSummary.mockResolvedValueOnce(mockSummary(jobs) as any);
 
@@ -304,8 +304,8 @@ describe("executePlan — filters", () => {
 
   it("returns correct projection summary counts", async () => {
     const jobs = [
-      mockJob({ id: 1, cleanerProfileId: null }),  // unassigned
-      mockJob({ id: 2, cleanerProfileId: 1 }),     // assigned
+      mockJob({ id: 1, cleanerProfileId: null, cleanerName: null, teamName: null }),  // unassigned
+      mockJob({ id: 2, cleanerProfileId: 1, cleanerName: "Jane Doe", teamName: "Team A" }),     // assigned
     ];
     mockComputeReadinessSummary.mockResolvedValueOnce(
       mockSummary(jobs, "pending") as any

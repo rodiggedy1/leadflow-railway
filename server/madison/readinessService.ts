@@ -225,7 +225,10 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
 
   // ── DIMENSION 1: Jobs Scheduled ───────────────────────────────────────
   const totalJobs = jobs.length;
-  const unassignedJobs = jobs.filter((j) => !j.cleanerProfileId);
+  // A job is unassigned when it has no cleaner name AND no team name.
+  // cleanerProfileId alone is not reliable — jobs can have a stale profile ID
+  // with null name fields after a cleaner is removed from the assignment.
+  const unassignedJobs = jobs.filter((j) => !j.cleanerName && !j.teamName);
 
   // Double-booking: same cleaner at same time
   const timeKeyMap = new Map<string, JobRow[]>();

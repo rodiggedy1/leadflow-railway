@@ -56,7 +56,8 @@ function computeFlags(
   isDoubleBooked: boolean
 ): JobReadinessRow["flags"] {
   const flags: JobReadinessRow["flags"] = [];
-  if (!job.cleanerProfileId) flags.push("unassigned");
+  // Match readinessService: unassigned = no cleanerName AND no teamName
+  if (!job.cleanerName && !job.teamName) flags.push("unassigned");
   if (confirmationStatus === "pending") flags.push("unconfirmed");
   if (paymentRawStatus === "no_card") flags.push("no_payment");
   if (isDoubleBooked) flags.push("double_booked");
@@ -170,7 +171,7 @@ async function _execute(
       serviceType: j.serviceType ?? null,
       teamName: j.teamName ?? null,
       assignment: {
-        status: j.cleanerProfileId ? "assigned" : "unassigned",
+        status: (j.cleanerName || j.teamName) ? "assigned" : "unassigned",
         cleanerName: j.cleanerName ?? null,
       },
       confirmation: {
