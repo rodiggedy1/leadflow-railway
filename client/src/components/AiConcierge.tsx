@@ -1271,29 +1271,26 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
-        {msg.content.type === "card_status" && (() => {
-          const noCardRows = msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth");
-          const hasIssues = noCardRows.length > 0;
-          return (
-            <div>
-              <CardStatusCardView card={msg.content.card} />
-              <PostToCommandChatButton
-                body={hasIssues
-                  ? `Hey team 👋\nI noticed ${noCardRows.length} customer${noCardRows.length !== 1 ? "s" : ""} on ${msg.content.card.date}'s schedule don't have a card on file yet.\nCollecting payment methods tonight will help us avoid headaches tomorrow.`
+        {msg.content.type === "card_status" && (
+          <div>
+            <CardStatusCardView card={msg.content.card} />
+            <PostToCommandChatButton
+              body={
+                msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0
+                  ? `Hey team 👋\nI noticed ${msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length} customer${msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length !== 1 ? "s" : ""} on ${msg.content.card.date}'s schedule don't have a card on file yet.\nCollecting payment methods tonight will help us avoid headaches tomorrow.`
                   : `Hey team 👋\nAll customers on ${msg.content.card.date}'s schedule have cards on file. We're good to go!`
-                }
-                action={hasIssues ? "send_payment_links" : null}
-                buttonLabel={hasIssues ? "Send Payment Links" : null}
-                chainCommand={hasIssues ? "find customers without cards for today and send them payment links" : null}
-                stats={[
-                  { icon: "👥", label: "Customers", value: String(msg.content.card.rows.length) },
-                  { icon: "⚠️", label: "Missing card", value: String(noCardRows.length), color: noCardRows.length > 0 ? "#f97316" : undefined },
-                ]}
-              />
-              <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
-            </div>
-          );
-        })()}
+              }
+              action={msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "send_payment_links" : null}
+              buttonLabel={msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "Send Payment Links" : null}
+              chainCommand={msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "find customers without cards for today and send them payment links" : null}
+              stats={[
+                { icon: "👥", label: "Customers", value: String(msg.content.card.rows.length) },
+                { icon: "⚠️", label: "Missing card", value: String(msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length), color: msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "#f97316" : undefined },
+              ]}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "rank_teams" && (
           <div>
             <TeamRatingsCardView card={msg.content.card} />
