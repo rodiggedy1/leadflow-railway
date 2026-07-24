@@ -150,8 +150,7 @@ const confirmationsQueryStatus: CapabilityHandler<ConfirmationsQueryArgs, Confir
     }
 
     const dateLabel = date === getTodayET() ? "today" : date;
-    const notYetConfirmed = [...unconfirmed, ...alreadySent];
-    return { date, dateLabel, unconfirmed, alreadySent, confirmed, notYetConfirmed };
+    return { date, dateLabel, unconfirmed, alreadySent, confirmed };
   },
 
   async verify(args, result, ctx): Promise<VerificationResult> {

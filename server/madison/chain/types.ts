@@ -50,8 +50,6 @@ export interface ConfirmationStatusOutput {
   unconfirmed: Recipient[];
   alreadySent: Recipient[];
   confirmed: Recipient[];
-  /** unconfirmed + alreadySent — everyone who hasn't confirmed yet */
-  notYetConfirmed: Recipient[];
 }
 
 export interface CardStatusOutput {
