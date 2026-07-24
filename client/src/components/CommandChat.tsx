@@ -1370,154 +1370,253 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
 
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  // Split body: first line is the greeting, rest is the body text
-  const bodyLines = msg.body.split("\n");
-  const greetingLine = bodyLines[0] ?? "";
-  const bodyText = bodyLines.slice(1).join("\n").trim();
+  // Parse body: first non-empty line = greeting, rest = body text
+  const rawLines = msg.body.split("\n");
+  const greetingLine = rawLines[0]?.trim() ?? "";
+  const bodyText = rawLines.slice(1).join("\n").trim();
 
-  return (
-    <div key={msg.id} className="flex gap-3 items-start px-4 py-2">
-      {/* Madison avatar */}
-      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
-        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
-      </div>
-      <div className="flex-1 min-w-0">
-        {/* Sender meta row */}
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
-          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
-          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
-        </div>
-        {/* ── Card shell ── */}
-        <div
-          style={{
-            maxWidth: 540,
-            background: isResult ? "#ffffff" : "#ffffff",
-            border: isResult ? "1.5px solid #bbf7d0" : "1.5px solid #e0d9f8",
+  // ── RECOMMENDATION CARD (matches v2 mockup exactly) ──────────────────────
+  if (!isResult) {
+    return (
+      <div key={msg.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        {/* Avatar */}
+        <img
+          src={MADISON_PHOTO}
+          alt="Madison"
+          style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Sender meta */}
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦</span>
+            <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400 }}>{msgTime}</span>
+          </div>
+          {/* Card */}
+          <div style={{
+            background: "#ffffff",
+            border: "1.5px solid #e0d9f8",
             borderRadius: 16,
             overflow: "hidden",
-            boxShadow: isResult ? "0 2px 16px rgba(16,185,129,0.08)" : "0 2px 16px rgba(99,102,241,0.08)",
+            maxWidth: 540,
+            boxShadow: "0 2px 16px rgba(99,102,241,0.08)",
             opacity: isDismissed ? 0.55 : 1,
-          }}
-        >
-          {/* Card body */}
-          <div
-            style={{
-              padding: "20px 22px 18px",
-              background: isResult ? "linear-gradient(160deg,#f0fdf4 0%,#f7fffe 100%)" : "linear-gradient(160deg,#faf9ff 0%,#f5f3ff 100%)",
-            }}
-          >
-            {/* Greeting / result header */}
-            {isResult ? (
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
-                  style={{ background: "#22c55e", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}
-                >✅</div>
-                <div className="font-bold text-[17px]" style={{ color: "#15803d" }}>{greetingLine}</div>
-              </div>
-            ) : (
-              <div className="font-bold text-[18px] mb-2" style={{ color: "#4f46e5" }}>
+          }}>
+            {/* Card body */}
+            <div style={{ padding: "20px 22px 18px", background: "linear-gradient(160deg,#faf9ff 0%,#f5f3ff 100%)" }}>
+              {/* Greeting — italic Georgia serif purple, exactly as mockup */}
+              <div style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#4f46e5",
+                marginBottom: 10,
+                fontStyle: "italic",
+                fontFamily: "Georgia, 'Times New Roman', serif",
+                letterSpacing: "-0.01em",
+              }}>
                 {greetingLine}
               </div>
-            )}
-            {/* Body text */}
-            {bodyText.length > 0 && (
-              <div className="text-[14px] leading-relaxed mb-4" style={{ color: "#374151", whiteSpace: "pre-wrap" }}>
-                {bodyText}
-              </div>
-            )}
-            {/* Stats row */}
-            {meta.stats && meta.stats.length > 0 && (
-              <div
-                className="flex mb-4 rounded-[10px] overflow-hidden"
-                style={{ border: isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8", background: "#ffffff" }}
-              >
-                {meta.stats.map((s, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 px-3 py-2.5 flex-1"
-                    style={{ borderRight: i < (meta.stats?.length ?? 0) - 1 ? (isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8") : "none" }}
-                  >
-                    <div
-                      className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[14px] flex-shrink-0"
-                      style={{ background: isResult ? "#dcfce7" : "#ede9fe" }}
-                    >
-                      {s.icon}
+              {/* Body text */}
+              {bodyText.length > 0 && (
+                <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, marginBottom: 16, whiteSpace: "pre-wrap" }}
+                  dangerouslySetInnerHTML={{ __html: bodyText.replace(/\*\*(.+?)\*\*/g, "<strong style='color:#111827;font-weight:700'>$1</strong>") }}
+                />
+              )}
+              {/* Stats row */}
+              {meta.stats && meta.stats.length > 0 && (
+                <div style={{
+                  display: "flex",
+                  border: "1px solid #e0d9f8",
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  marginBottom: 18,
+                  background: "#ffffff",
+                }}>
+                  {meta.stats.map((s, i) => (
+                    <div key={i} style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      borderRight: i < (meta.stats?.length ?? 0) - 1 ? "1px solid #e0d9f8" : "none",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 9,
+                    }}>
+                      <div style={{
+                        width: 30, height: 30, borderRadius: "50%",
+                        background: s.color === "orange" ? "#fff7ed" : s.color === "blue" ? "#eff6ff" : "#ede9fe",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 14, flexShrink: 0,
+                      }}>{s.icon}</div>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{s.label}</div>
+                        <div style={{
+                          fontSize: s.value.length > 6 ? 13 : 16,
+                          fontWeight: 800,
+                          color: s.color === "orange" ? "#ea580c" : "#111827",
+                          lineHeight: 1,
+                        }}>{s.value}</div>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              )}
+              {/* CTA section */}
+              {!isDismissed && !executedBy && meta.action && (
+                <>
+                  {!isConfirming && !isExecuting && (
+                    <>
+                      <div style={{
+                        fontSize: 14, fontWeight: 600, color: "#7c3aed",
+                        marginBottom: 12, fontStyle: "italic", fontFamily: "Georgia, serif",
+                      }}>Want me to take care of it?</div>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" as const }}>
+                        <button
+                          onClick={handleActionClick}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 7,
+                            background: "#4f46e5", color: "#fff", border: "none",
+                            borderRadius: 10, padding: "10px 20px",
+                            fontSize: 13, fontWeight: 700, cursor: "pointer",
+                          }}
+                        >
+                          ✈ {meta.buttonLabel ?? "Take Action"}
+                        </button>
+                        <button
+                          onClick={() => dismissMutation.mutate({ messageId: msg.id })}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 7,
+                            background: "#ffffff", color: "#6b7280",
+                            border: "1.5px solid #d1d5db", borderRadius: 10,
+                            padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          Not right now
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {isConfirming && (
+                    <div style={{ background: "#f5f3ff", borderTop: "1.5px solid #e0d9f8", padding: "16px 0 0" }}>
+                      <div style={{ fontSize: 13, color: "#4b5563", marginBottom: 12, lineHeight: 1.55 }}>
+                        ⚡ Ready to proceed? This action will be executed immediately.
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={handleConfirmExecute}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            background: "#4f46e5", color: "#fff", border: "none",
+                            borderRadius: 8, padding: "9px 18px",
+                            fontSize: 13, fontWeight: 700, cursor: "pointer",
+                          }}
+                        >
+                          ✓ Yes, send now
+                        </button>
+                        <button
+                          onClick={handleCancelConfirm}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            background: "transparent", color: "#9ca3af",
+                            border: "1.5px solid #e5e7eb", borderRadius: 8,
+                            padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {isExecuting && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#7c3aed" }}>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Madison is working on it…
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Executed badge */}
+              {executedBy && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#22c55e" }}>
+                  <CheckCircle2 style={{ width: 14, height: 14 }} />
+                  Action confirmed by {executedBy}
+                </div>
+              )}
+              {/* Dismissed badge */}
+              {isDismissed && (
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>Dismissed — no action taken.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RESULT CARD ───────────────────────────────────────────────────────────
+  return (
+    <div key={msg.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+      <img
+        src={MADISON_PHOTO}
+        alt="Madison"
+        style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦</span>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400 }}>{msgTime}</span>
+        </div>
+        <div style={{
+          background: "#ffffff",
+          border: "1.5px solid #bbf7d0",
+          borderRadius: 16,
+          overflow: "hidden",
+          maxWidth: 540,
+          boxShadow: "0 2px 16px rgba(16,185,129,0.08)",
+        }}>
+          <div style={{ padding: "20px 22px 18px", background: "linear-gradient(160deg,#f0fdf4 0%,#f7fffe 100%)" }}>
+            {/* Result header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 14 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: "50%",
+                background: "#22c55e", display: "flex", alignItems: "center",
+                justifyContent: "center", fontSize: 18, flexShrink: 0,
+                boxShadow: "0 2px 8px rgba(34,197,94,0.3)",
+              }}>✅</div>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "#15803d", fontStyle: "italic", fontFamily: "Georgia, serif" }}>
+                  {greetingLine}
+                </div>
+                {bodyText.length > 0 && (
+                  <div style={{ fontSize: 13, color: "#4b5563", marginTop: 2 }}>{bodyText}</div>
+                )}
+              </div>
+            </div>
+            {/* Result stats */}
+            {meta.stats && meta.stats.length > 0 && (
+              <div style={{
+                display: "flex", border: "1px solid #bbf7d0",
+                borderRadius: 10, overflow: "hidden", marginBottom: 16, background: "#ffffff",
+              }}>
+                {meta.stats.map((s, i) => (
+                  <div key={i} style={{
+                    flex: 1, padding: "10px 12px",
+                    borderRight: i < (meta.stats?.length ?? 0) - 1 ? "1px solid #bbf7d0" : "none",
+                    display: "flex", alignItems: "center", gap: 9,
+                  }}>
+                    <div style={{
+                      width: 30, height: 30, borderRadius: "50%",
+                      background: s.color === "blue" ? "#dbeafe" : s.color === "amber" ? "#fef3c7" : "#dcfce7",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 14, flexShrink: 0,
+                    }}>{s.icon}</div>
                     <div>
-                      <div className="text-[10px] font-medium" style={{ color: "#9ca3af" }}>{s.label}</div>
-                      <div className="text-[16px] font-extrabold leading-none" style={{ color: s.color ?? "#111827" }}>{s.value}</div>
+                      <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{s.label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: "#111827", lineHeight: 1 }}>{s.value}</div>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-            {/* Action buttons — recommendation card only */}
-            {!isResult && !isDismissed && !executedBy && meta.action && (
-              <>
-                {!isConfirming && !isExecuting && (
-                  <div>
-                    <div className="text-[14px] font-semibold mb-3" style={{ color: "#7c3aed" }}>Want me to take care of it?</div>
-                    <div className="flex gap-2.5 flex-wrap">
-                      <button
-                        onClick={handleActionClick}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-bold text-white"
-                        style={{ background: "#4f46e5" }}
-                      >
-                        ✈ {meta.buttonLabel ?? "Take Action"}
-                      </button>
-                      <button
-                        onClick={() => dismissMutation.mutate({ messageId: msg.id })}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold"
-                        style={{ background: "#ffffff", border: "1.5px solid #d1d5db", color: "#6b7280" }}
-                      >
-                        Not right now
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {isConfirming && (
-                  <div className="rounded-xl px-4 py-3" style={{ background: "#f5f3ff", border: "1.5px solid #e0d9f8" }}>
-                    <div className="text-[13px] mb-3" style={{ color: "#4b5563", lineHeight: 1.55 }}>
-                      ⚡ Ready to proceed? This action will be executed immediately.
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleConfirmExecute}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-bold text-white"
-                        style={{ background: "#4f46e5" }}
-                      >
-                        ✓ Yes, go ahead
-                      </button>
-                      <button
-                        onClick={handleCancelConfirm}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
-                        style={{ background: "transparent", border: "1.5px solid #e5e7eb", color: "#9ca3af" }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {isExecuting && (
-                  <div className="flex items-center gap-2 text-[13px]" style={{ color: "#7c3aed" }}>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Madison is working on it…
-                  </div>
-                )}
-              </>
-            )}
-            {/* Executed badge */}
-            {executedBy && !isResult && (
-              <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "#22c55e" }}>
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Action confirmed by {executedBy}
-              </div>
-            )}
-            {/* Dismissed badge */}
-            {isDismissed && (
-              <div className="text-[12px]" style={{ color: "#9ca3af" }}>Dismissed — no action taken.</div>
             )}
           </div>
         </div>
