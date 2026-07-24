@@ -48,6 +48,7 @@ import {
   Eye,
   CheckCircle,
   MinusCircle,
+  X,
 } from "lucide-react";
 import ReadinessDrawer from "./ReadinessDrawer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -450,13 +451,25 @@ function ClientDisambiguationCardView({
 function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; onSent: (result: BulkSmsSentCard) => void }) {
   const [draft, setDraft] = useState(card.draftMessage);
   const [sent, setSent] = useState(false);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const sendMutation = trpc.aiConcierge.sendBulkSms.useMutation();
+
+  const activeRecipients = card.recipients.filter(r => !excluded.has(r.phone));
+
+  function toggleRecipient(phone: string) {
+    setExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(phone)) next.delete(phone);
+      else next.add(phone);
+      return next;
+    });
+  }
 
   function handleSend() {
     if (sent || sendMutation.isPending) return;
     sendMutation.mutate(
       {
-        recipients: card.recipients,
+        recipients: activeRecipients,
         message: draft,
         ...(card.command ? { command: card.command } : {}),
       },
@@ -474,17 +487,35 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
       <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
         <Users className="w-4 h-4 flex-shrink-0" style={{color:"#7447f5"}} />
         <p className="text-sm font-semibold" style={{color:"#202431"}}>Text {card.targetDescription}</p>
-        <span className="ml-auto text-xs text-gray-500">{card.recipients.length} recipient{card.recipients.length !== 1 ? "s" : ""}</span>
+        <span className="ml-auto text-xs text-gray-500">{activeRecipients.length} of {card.recipients.length} recipient{card.recipients.length !== 1 ? "s" : ""}</span>
       </div>
       <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
-        {card.recipients.map((r) => (
-          <span key={r.phone} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs" style={{background:"rgba(116,71,245,0.08)",border:"1px solid #e5d9ea",color:"#4a4a5a"}}>
-            <User className="w-3 h-3" style={{color:"#9b8aaa"}} />
-            <span className="font-medium" style={{color:"#202431"}}>{r.name}</span>
-            <span className="text-gray-500">·</span>
-            <span style={{color:"#7447f5"}}>{r.phone}</span>
-          </span>
-        ))}
+        {card.recipients.map((r) => {
+          const isExcluded = excluded.has(r.phone);
+          return (
+            <button
+              key={r.phone}
+              type="button"
+              onClick={() => !sent && toggleRecipient(r.phone)}
+              title={isExcluded ? "Click to re-add" : "Click to remove"}
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-all"
+              style={{
+                background: isExcluded ? "rgba(0,0,0,0.04)" : "rgba(116,71,245,0.08)",
+                border: isExcluded ? "1px solid #d0d0d8" : "1px solid #e5d9ea",
+                color: isExcluded ? "#aaa" : "#4a4a5a",
+                opacity: isExcluded ? 0.5 : 1,
+                cursor: sent ? "default" : "pointer",
+                textDecoration: isExcluded ? "line-through" : "none",
+              }}
+            >
+              <User className="w-3 h-3" style={{color: isExcluded ? "#bbb" : "#9b8aaa"}} />
+              <span className="font-medium" style={{color: isExcluded ? "#aaa" : "#202431"}}>{r.name}</span>
+              <span style={{color: isExcluded ? "#ccc" : "#9b8aaa"}}>·</span>
+              <span style={{color: isExcluded ? "#aaa" : "#7447f5"}}>{r.phone}</span>
+              {isExcluded && <X className="w-3 h-3 ml-0.5" style={{color:"#bbb"}} />}
+            </button>
+          );
+        })}
       </div>
       <div className="px-4 pb-3">
         <div className="flex items-center gap-1.5 mb-1.5">
@@ -503,13 +534,13 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
         <div className="px-4 pb-4">
           <button
             onClick={handleSend}
-            disabled={!draft.trim() || sendMutation.isPending}
+            disabled={!draft.trim() || sendMutation.isPending || activeRecipients.length === 0}
             className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}
           >
             {sendMutation.isPending ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
             ) : (
-              <><Send className="w-4 h-4" /> Send text{card.recipients.length > 1 ? ` to ${card.recipients.length} people` : ""}</>
+              <><Send className="w-4 h-4" /> Send text{activeRecipients.length > 1 ? ` to ${activeRecipients.length} people` : ""}</>
             )}
           </button>
         </div>
