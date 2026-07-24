@@ -2593,8 +2593,8 @@ export const aiConciergeRouter = router({
           }
         }
 
-        if (routing.mode === "single" && routing.plan?.steps?.[0]) {
-          const capId = routing.plan.steps[0].capabilityId;
+        if (routing.mode === "single" && routing.capabilityId) {
+          const capId = routing.capabilityId;
           const rid = crypto.randomUUID().slice(0, 8);
 
           // Route to existing single-capability handler by capabilityId
