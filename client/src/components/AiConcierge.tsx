@@ -3016,14 +3016,46 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
   const updateEntityRecognition = useCallback((val: string) => {
     if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
     acDebounceRef.current = setTimeout(() => {
+      const trimmed = val.trim();
+      if (trimmed.length < 2) { setAcQuery(null); return; }
+
+      // Strategy 1: explicit verb prefix — extract everything after the verb
       const COMMAND_RE = /^(?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+(.+)/i;
-      const cmdMatch = val.match(COMMAND_RE);
+      const cmdMatch = trimmed.match(COMMAND_RE);
       if (cmdMatch) {
         const entity = cmdMatch[1].trim();
         setAcQuery(entity.length >= 2 ? entity : null);
-      } else {
-        setAcQuery(null);
+        return;
       }
+
+      // Strategy 2: natural-language query — extract the longest run of capitalised
+      // words (proper-name candidates) from the input, ignoring common stop words.
+      // e.g. "what job is Maria doing today" → "Maria"
+      //      "how many cleans has Anna Maria done" → "Anna Maria"
+      const STOP_WORDS = new Set([
+        "what","how","when","where","who","why","is","are","was","were","has","have",
+        "had","did","do","does","the","a","an","for","of","in","on","at","to","by",
+        "with","about","from","and","or","but","not","today","tomorrow","yesterday",
+        "this","that","their","they","she","he","her","his","its","our","my","your",
+        "doing","done","going","been","get","got","many","much","any","all","last",
+        "next","job","jobs","clean","cleans","cleaning","team","teams","payment",
+        "payments","schedule","scheduled","booking","bookings","show","me","us",
+        "tell","give","find","look","check","see","can","could","would","should",
+      ]);
+      const words = trimmed.split(/\s+/);
+      let bestRun = "";
+      let currentRun = "";
+      for (const word of words) {
+        const clean = word.replace(/[^a-zA-Z'-]/g, "");
+        const isProper = clean.length >= 2 && /^[A-Z]/.test(clean) && !STOP_WORDS.has(clean.toLowerCase());
+        if (isProper) {
+          currentRun = currentRun ? `${currentRun} ${clean}` : clean;
+          if (currentRun.length > bestRun.length) bestRun = currentRun;
+        } else {
+          currentRun = "";
+        }
+      }
+      setAcQuery(bestRun.length >= 2 ? bestRun : null);
     }, 200);
   }, []);
 
