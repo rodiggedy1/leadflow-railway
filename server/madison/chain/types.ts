@@ -149,6 +149,8 @@ export type StepStatus = "planned" | "running" | "succeeded" | "failed" | "skipp
 export interface StepExecutionResult {
   stepId: string;
   capabilityId: CapabilityId;
+  /** Human-readable label from the plan (persisted in chain_executions.plan) */
+  label: string;
   status: StepStatus;
   result?: unknown;
   verificationResult?: VerificationResult;
@@ -169,6 +171,10 @@ export interface ChainExecutionResult {
   steps: StepExecutionResult[];
   /** Overall human-readable summary */
   summary: string;
+  /** Counts derived from final persisted step statuses */
+  successCount: number;
+  failCount: number;
+  skippedCount: number;
 }
 
 // ── Confirm card data (sent to UI before executing writes) ────────────────────

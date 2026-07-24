@@ -100,6 +100,7 @@ export async function executeChain(
       executionResults.push({
         stepId: step.id,
         capabilityId: step.capabilityId,
+        label: step.label,
         status: "succeeded",
         result: prevResult,
         summary: `${step.label} (already completed)`,
@@ -131,6 +132,7 @@ export async function executeChain(
         stepResult = {
           stepId: step.id,
           capabilityId: step.capabilityId,
+          label: step.label,
           status: "skipped",
           summary: `${step.label}: skipped — ${validation.reason ?? "validation failed"}`,
         };
@@ -170,6 +172,7 @@ export async function executeChain(
       stepResult = {
         stepId: step.id,
         capabilityId: step.capabilityId,
+        label: step.label,
         status: "succeeded",
         result,
         verificationResult: verification,
@@ -188,6 +191,7 @@ export async function executeChain(
       stepResult = {
         stepId: step.id,
         capabilityId: step.capabilityId,
+        label: step.label,
         status: "failed",
         errorMessage,
         summary: `${step.label}: failed — ${errorMessage}`,
@@ -201,6 +205,7 @@ export async function executeChain(
           executionResults.push({
             stepId: remaining.id,
             capabilityId: remaining.capabilityId,
+            label: remaining.label,
             status: "cancelled",
             summary: `${remaining.label}: cancelled due to prior failure`,
           });
@@ -214,14 +219,15 @@ export async function executeChain(
   }
 
   // Determine overall status
-  const succeeded = executionResults.filter(r => r.status === "succeeded").length;
-  const failed = executionResults.filter(r => r.status === "failed").length;
-  const total = plan.steps.length;
+  const successCount = executionResults.filter(r => r.status === "succeeded").length;
+  const failCount = executionResults.filter(r => r.status === "failed").length;
+  const skippedCount = executionResults.filter(r => r.status === "skipped").length;
+  // Note: "cancelled" and "running" are not counted as success, fail, or skipped
 
   let overallStatus: ChainExecutionResult["status"];
-  if (failed === 0) {
+  if (failCount === 0) {
     overallStatus = "succeeded";
-  } else if (succeeded === 0) {
+  } else if (successCount === 0) {
     overallStatus = "failed";
   } else {
     overallStatus = "partial";
@@ -239,6 +245,9 @@ export async function executeChain(
     status: overallStatus,
     steps: executionResults,
     summary: overallSummary,
+    successCount,
+    failCount,
+    skippedCount,
   };
 }
 
