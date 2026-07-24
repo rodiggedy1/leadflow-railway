@@ -5069,10 +5069,10 @@ Return ONLY valid JSON in this exact shape:
 {
   "body": "Hey team 👋\n\nI noticed **4 customers** on tomorrow's schedule don't have a card on file yet.\nCollecting payment methods tonight will help us avoid headaches tomorrow.",
   "stats": [
-    { "icon": "customers", "label": "Customers", "value": "4" },
-    { "icon": "jobs", "label": "Jobs affected", "value": "4" },
-    { "icon": "risk", "label": "Risk", "value": "Medium", "color": "orange" },
-    { "icon": "clock", "label": "Best time to act", "value": "Tonight" }
+    { "icon": "👥", "label": "Customers", "value": "4", "color": null },
+    { "icon": "📅", "label": "Jobs affected", "value": "4", "color": null },
+    { "icon": "⚠️", "label": "Risk", "value": "Medium", "color": "orange" },
+    { "icon": "🕐", "label": "Best time to act", "value": "Tonight", "color": null }
   ],
   "action": "send_payment_links",
   "buttonLabel": "Send Payment Links",
@@ -5113,9 +5113,9 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
                         icon: { type: "string" },
                         label: { type: "string" },
                         value: { type: "string" },
-                        color: { type: "string" },
+                        color: { type: ["string", "null"] },
                       },
-                      required: ["icon", "label", "value"],
+                      required: ["icon", "label", "value", "color"],
                       additionalProperties: false,
                     },
                   },
@@ -5131,9 +5131,12 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         });
         const content = llmResult.choices?.[0]?.message?.content;
         parsed = typeof content === "string" ? JSON.parse(content) : content;
-      } catch {
+      } catch (llmErr) {
+        console.error("[generateAndPostAsMadison] LLM/parse error, using fallback:", llmErr);
+        // Fallback: wrap raw text in a proper greeting+body structure
+        const truncated = input.rawText.slice(0, 1800);
         parsed = {
-          body: input.rawText.slice(0, 2000),
+          body: `Quick update 📋\n\n${truncated}`,
           stats: [],
           action: null,
           buttonLabel: null,
