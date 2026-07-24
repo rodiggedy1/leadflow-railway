@@ -227,6 +227,8 @@ export interface ClientDisambiguationResult {
     totalCleans: number;
     ltv: number;
     lastJobDate: string | null;
+    entityType?: "customer" | "cleaner";
+    cleanerProfileId?: number;
   }>;
 }
 
@@ -2498,6 +2500,9 @@ export const aiConciergeRouter = router({
         resolvedCallClient: z.boolean().optional(),
         resolvedCallPersonName: z.string().optional(),
         resolvedCallQuestionHint: z.string().nullable().optional(),
+        resolvedCleanerPhone: z.string().optional(),
+        resolvedCleanerName: z.string().optional(),
+        resolvedCleanerMessageHint: z.string().nullable().optional(),
         resolvedEntity: z.discriminatedUnion("type", [
           z.object({ type: z.literal("customer"), phone: z.string(), name: z.string() }),
           z.object({ type: z.literal("cleaner"), cleanerProfileId: z.number(), name: z.string() }),
@@ -2512,6 +2517,15 @@ export const aiConciergeRouter = router({
         return await handleEtaUpdateByJobId(input.resolvedJobId, db);
       }
 
+      // Cleaner disambiguation path — picked from disambiguation card
+      if (input.resolvedCleanerPhone) {
+        const cleanerPhone = input.resolvedCleanerPhone;
+        const cleanerName = input.resolvedCleanerName ?? cleanerPhone;
+        const hint = input.resolvedCleanerMessageHint ?? null;
+        const recipient = { cleanerProfileId: 0, name: cleanerName, phone: cleanerPhone };
+        const draftMessage = await draftCleanerMessage(hint, cleanerName, [recipient]);
+        return { type: "bulk_sms_confirm" as const, targetDescription: cleanerName, recipients: [recipient], draftMessage, command: input.message };
+      }
       // Legacy resolvedClientPhone path (disambiguation card flows — entity already resolved upstream)
       if (input.resolvedClientPhone) {
         if (input.resolvedPaymentLink) {

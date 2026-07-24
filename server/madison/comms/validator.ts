@@ -232,9 +232,29 @@ export async function resolveCommsTarget(plan: CommsPlan, db: Db): Promise<Valid
   // Group
   if (GROUP_PATTERNS.some(p => p.test(targetRef))) return resolveGroup(dateScope, specificDate, db);
 
-  // Named individual — try customer first, then cleaner
-  const customerResult = await resolveCustomer(targetRef, messageHint, db);
-  if (customerResult.kind !== "not_found") return customerResult;
+  // Named individual — search customers AND cleaners in parallel, merge for disambiguation
+  const [customerResult, cleanerResult] = await Promise.all([
+    resolveCustomer(targetRef, messageHint, db),
+    resolveCleaner(targetRef, db),
+  ]);
 
-  return resolveCleaner(targetRef, db);
+  // Exactly one side found a single match — return it directly
+  if (customerResult.kind === "resolved" && cleanerResult.kind === "not_found") return customerResult;
+  if (cleanerResult.kind === "resolved" && customerResult.kind === "not_found") return cleanerResult;
+
+  // Collect all matches from both sides
+  const allMatches: CommsRecipient[] = [
+    ...(customerResult.kind === "resolved" ? customerResult.recipients :
+        customerResult.kind === "disambiguation" ? customerResult.matches : []),
+    ...(cleanerResult.kind === "resolved" ? cleanerResult.recipients :
+        cleanerResult.kind === "disambiguation" ? cleanerResult.matches : []),
+  ];
+
+  if (allMatches.length === 0) return { kind: "not_found", message: `No one found matching "${targetRef}".` };
+  if (allMatches.length === 1) {
+    const r = allMatches[0];
+    return { kind: "resolved", recipients: [r], targetDescription: r.displayName, excludedCount: 0, excludedReasons: [] };
+  }
+
+  return { kind: "disambiguation", targetRef, messageHint, matches: allMatches };
 }

@@ -80,7 +80,7 @@ interface BulkSmsRecipient {
 }
 interface ClientDisambiguationCard {
   messageHint: string | null;
-  matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null }>;
+  matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null; entityType?: "customer" | "cleaner"; cleanerProfileId?: number }>;
 }
 interface BulkSmsConfirmCard {
   targetDescription: string;
@@ -360,29 +360,46 @@ function ClientDisambiguationCardView({
   onPick,
 }: {
   card: ClientDisambiguationCard;
-  onPick: (phone: string, name: string) => void;
+  onPick: (phone: string, name: string, entityType?: string, cleanerProfileId?: number) => void;
 }) {
+  const customers = card.matches.filter((m) => m.entityType !== "cleaner");
+  const cleaners = card.matches.filter((m) => m.entityType === "cleaner");
+  const hasBothSections = customers.length > 0 && cleaners.length > 0;
+
+  function renderMatch(m: ClientDisambiguationCard["matches"][0]) {
+    return (
+      <button
+        key={m.phone + (m.cleanerProfileId ?? "")}
+        onClick={() => onPick(m.phone, m.name, m.entityType, m.cleanerProfileId)}
+        className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-purple-50" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}
+      >
+        <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:"rgba(116,71,245,0.12)"}}>
+          {m.entityType === "cleaner" ? <Users className="w-4 h-4" style={{color:"#7447f5"}} /> : <User className="w-4 h-4" style={{color:"#7447f5"}} />}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold" style={{color:"#202431"}}>{m.name}</p>
+          <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
+        </div>
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
       <div className="px-4 py-3" style={{borderBottom:"1px solid #e5d9ea"}}>
         <p className="text-sm font-semibold" style={{color:"#202431"}}>Multiple matches — choose one</p>
       </div>
       <div className="px-4 py-3 space-y-2">
-        {card.matches.map((m) => (
-          <button
-            key={m.phone}
-            onClick={() => onPick(m.phone, m.name)}
-            className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-purple-50" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}
-          >
-            <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:"rgba(116,71,245,0.12)"}}>
-              <User className="w-4 h-4" style={{color:"#7447f5"}} />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold" style={{color:"#202431"}}>{m.name}</p>
-              <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
-            </div>
-          </button>
-        ))}
+        {hasBothSections ? (
+          <>
+            <p className="text-xs font-semibold uppercase tracking-wide px-1 pb-1" style={{color:"#8a8a9a"}}>Customers</p>
+            {customers.map(renderMatch)}
+            <p className="text-xs font-semibold uppercase tracking-wide px-1 pb-1 pt-2" style={{color:"#8a8a9a"}}>Teams / Cleaners</p>
+            {cleaners.map(renderMatch)}
+          </>
+        ) : (
+          card.matches.map(renderMatch)
+        )}
       </div>
     </div>
   );
@@ -964,7 +981,7 @@ function MessageBubble({
   msg: Message;
   agentPhotoUrl?: string;
   onPickTeam: (jobId: number, teamName: string) => void;
-  onPickClient: (phone: string, name: string, messageHint: string | null) => void;
+  onPickClient: (phone: string, name: string, messageHint: string | null, entityType?: string, cleanerProfileId?: number) => void;
   onAddMessage: (m: Message) => void;
   onAddMission: (metadata: MissionMetadata) => void;
   onOpenReadiness: (rawDate?: string) => void;
@@ -1054,9 +1071,9 @@ function MessageBubble({
           <div>
             <ClientDisambiguationCardView
               card={msg.content.card}
-              onPick={(phone, name) => {
+              onPick={(phone, name, entityType, cleanerProfileId) => {
                 const hint = msg.content.type === "client_disambiguation" ? msg.content.card.messageHint : null;
-                onPickClient(phone, name, hint);
+                onPickClient(phone, name, hint, entityType, cleanerProfileId);
               }}
             />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
@@ -3065,7 +3082,41 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
   }, [messages]);
 
   // Called when agent picks a client from a disambiguation card
-    const handlePickClient = useCallback((phone: string, name: string, messageHint: string | null) => {
+    const handlePickClient = useCallback((phone: string, name: string, messageHint: string | null, entityType?: string, cleanerProfileId?: number) => {
+    // Cleaner pick — route via resolvedCleanerPhone
+    if (entityType === "cleaner") {
+      const userMsg: Message = {
+        id: uid(),
+        role: "user",
+        content: { type: "text", text: `Text ${name}` },
+        ts: nowTime(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setIsThinking(true);
+      chatMutation.mutate(
+        {
+          message: `Text ${name}`,
+          resolvedCleanerPhone: phone,
+          resolvedCleanerName: name,
+          resolvedCleanerMessageHint: messageHint,
+        },
+        {
+          onSuccess: (result) => {
+            setIsThinking(false);
+            const aiMsg = buildAiMessage(result);
+            if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
+          },
+          onError: (err) => {
+            setIsThinking(false);
+            setMessages((prev) => [
+              ...prev,
+              { id: uid(), role: "ai", content: { type: "text", text: `Something went wrong: ${err.message}` }, ts: nowTime() },
+            ]);
+          },
+        }
+      );
+      return;
+    }
     const isPaymentLink = messageHint === "__payment_link__";
     const isCallClient = (messageHint ?? "").startsWith("__call_client__");
     const callQuestionHint = isCallClient ? (messageHint ?? "").replace("__call_client__:", "") || null : null;

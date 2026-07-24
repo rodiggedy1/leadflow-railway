@@ -59,7 +59,19 @@ export async function handleMadisonComms(
         type: "client_disambiguation",
         query: validatorResult.targetRef,
         messageHint: validatorResult.messageHint,
-        matches: validatorResult.matches,
+        // Map CommsRecipient to ClientDisambiguationResult match shape
+        matches: validatorResult.matches.map(m => ({
+          phone: m.phone,
+          name: m.displayName,
+          city: m.contextLabel,
+          totalCleans: 0,
+          ltv: 0,
+          lastJobDate: null,
+          entityType: m.entityType as "customer" | "cleaner",
+          cleanerProfileId: m.entityType === "cleaner"
+            ? parseInt(m.entityId.replace("cleaner:", ""), 10) || undefined
+            : undefined,
+        })),
       },
     };
   }
