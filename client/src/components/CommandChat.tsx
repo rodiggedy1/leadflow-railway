@@ -1304,10 +1304,13 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
   const [isConfirming, setIsConfirming] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
 
+  const utils = trpc.useUtils();
   const dismissMutation = trpc.opsChat.dismissMadisonPost.useMutation({
-    onSuccess: () => { /* SSE will refresh */ },
+    onSuccess: () => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }),
   });
-  const markExecutedMutation = trpc.opsChat.markMadisonPostExecuted.useMutation();
+  const markExecutedMutation = trpc.opsChat.markMadisonPostExecuted.useMutation({
+    onSuccess: () => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }),
+  });
   const postResultMutation = trpc.opsChat.postAsMadison.useMutation();
   const chatMutation = trpc.aiConcierge.chat.useMutation();
   const chainExecuteMutation = trpc.aiConcierge.chain_execute.useMutation();
@@ -1338,9 +1341,6 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
     setIsConfirming(false);
     setIsExecuting(true);
     try {
-      // Post the agent's auto-reply
-      // (fire and forget — don't await)
-      // Execute the chain via aiConcierge.chat
       const chatResult = await chatMutation.mutateAsync({ message: meta.chainCommand });
       if (chatResult.type === "chain_confirm" && chatResult.chainExecutionId) {
         const execResult = await chainExecuteMutation.mutateAsync({ chainExecutionId: chatResult.chainExecutionId });
@@ -1362,7 +1362,6 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
         });
       }
     } catch (err: any) {
-      // toast is available globally via sonner
       console.error("Madison action failed", err);
     } finally {
       setIsExecuting(false);
@@ -1371,71 +1370,84 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
 
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  // Split body: first line is the greeting, rest is the body text
+  const bodyLines = msg.body.split("\n");
+  const greetingLine = bodyLines[0] ?? "";
+  const bodyText = bodyLines.slice(1).join("\n").trim();
+
   return (
-    <div className="flex gap-3 items-start px-4 py-2">
+    <div key={msg.id} className="flex gap-3 items-start px-4 py-2">
       {/* Madison avatar */}
       <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
         <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
       </div>
       <div className="flex-1 min-w-0">
-        {/* Sender meta */}
+        {/* Sender meta row */}
         <div className="flex items-center gap-2 mb-1.5">
           <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
-          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
           <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
         </div>
-        {/* Card */}
+        {/* ── Card shell ── */}
         <div
-          className="rounded-2xl overflow-hidden"
           style={{
-            maxWidth: 520,
-            background: isResult ? "linear-gradient(160deg, #f0fdf4 0%, #f7fffe 100%)" : "linear-gradient(160deg, #faf9ff 0%, #f5f3ff 100%)",
+            maxWidth: 540,
+            background: isResult ? "#ffffff" : "#ffffff",
             border: isResult ? "1.5px solid #bbf7d0" : "1.5px solid #e0d9f8",
+            borderRadius: 16,
+            overflow: "hidden",
             boxShadow: isResult ? "0 2px 16px rgba(16,185,129,0.08)" : "0 2px 16px rgba(99,102,241,0.08)",
             opacity: isDismissed ? 0.55 : 1,
           }}
         >
-          <div className="px-5 py-4">
-            {/* Result header */}
-            {isResult && (
+          {/* Card body */}
+          <div
+            style={{
+              padding: "20px 22px 18px",
+              background: isResult ? "linear-gradient(160deg,#f0fdf4 0%,#f7fffe 100%)" : "linear-gradient(160deg,#faf9ff 0%,#f5f3ff 100%)",
+            }}
+          >
+            {/* Greeting / result header */}
+            {isResult ? (
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{ background: "#22c55e", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}>✅</div>
-                <div>
-                  <div className="font-bold text-[16px]" style={{ color: "#15803d", fontStyle: "italic", fontFamily: "Georgia, serif" }}>{msg.body.split(".")[0]}.</div>
-                </div>
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
+                  style={{ background: "#22c55e", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}
+                >✅</div>
+                <div className="font-bold text-[17px]" style={{ color: "#15803d" }}>{greetingLine}</div>
               </div>
-            )}
-            {/* Recommendation greeting */}
-            {!isResult && (
-              <div className="font-bold text-[17px] mb-2" style={{ color: "#4f46e5", fontStyle: "italic", fontFamily: "Georgia, serif" }}>
-                {msg.body.split("\n")[0]}
+            ) : (
+              <div className="font-bold text-[18px] mb-2" style={{ color: "#4f46e5" }}>
+                {greetingLine}
               </div>
             )}
             {/* Body text */}
-            <div className="text-[14px] leading-relaxed mb-3" style={{ color: "#374151", whiteSpace: "pre-wrap" }}>
-              {isResult ? msg.body.split(".").slice(1).join(".").trim() : msg.body.split("\n").slice(1).join("\n").trim()}
-            </div>
+            {bodyText.length > 0 && (
+              <div className="text-[14px] leading-relaxed mb-4" style={{ color: "#374151", whiteSpace: "pre-wrap" }}>
+                {bodyText}
+              </div>
+            )}
             {/* Stats row */}
             {meta.stats && meta.stats.length > 0 && (
               <div
-                className="flex mb-4 rounded-xl overflow-hidden"
+                className="flex mb-4 rounded-[10px] overflow-hidden"
                 style={{ border: isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8", background: "#ffffff" }}
               >
                 {meta.stats.map((s, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-2 px-3 py-2 flex-1"
-                    style={{ borderRight: i < meta.stats!.length - 1 ? (isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8") : "none" }}
+                    className="flex items-center gap-2 px-3 py-2.5 flex-1"
+                    style={{ borderRight: i < (meta.stats?.length ?? 0) - 1 ? (isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8") : "none" }}
                   >
                     <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                      className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[14px] flex-shrink-0"
                       style={{ background: isResult ? "#dcfce7" : "#ede9fe" }}
                     >
                       {s.icon}
                     </div>
                     <div>
                       <div className="text-[10px] font-medium" style={{ color: "#9ca3af" }}>{s.label}</div>
-                      <div className="text-[15px] font-extrabold leading-none" style={{ color: s.color ?? "#111827" }}>{s.value}</div>
+                      <div className="text-[16px] font-extrabold leading-none" style={{ color: s.color ?? "#111827" }}>{s.value}</div>
                     </div>
                   </div>
                 ))}
@@ -1445,19 +1457,19 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
             {!isResult && !isDismissed && !executedBy && meta.action && (
               <>
                 {!isConfirming && !isExecuting && (
-                  <div className="mb-1">
-                    <div className="text-[13px] font-semibold mb-2" style={{ color: "#7c3aed", fontStyle: "italic", fontFamily: "Georgia, serif" }}>Want me to take care of it?</div>
-                    <div className="flex gap-2 flex-wrap">
+                  <div>
+                    <div className="text-[14px] font-semibold mb-3" style={{ color: "#7c3aed" }}>Want me to take care of it?</div>
+                    <div className="flex gap-2.5 flex-wrap">
                       <button
                         onClick={handleActionClick}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-bold text-white"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-bold text-white"
                         style={{ background: "#4f46e5" }}
                       >
                         ✈ {meta.buttonLabel ?? "Take Action"}
                       </button>
                       <button
                         onClick={() => dismissMutation.mutate({ messageId: msg.id })}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold"
                         style={{ background: "#ffffff", border: "1.5px solid #d1d5db", color: "#6b7280" }}
                       >
                         Not right now
@@ -1467,7 +1479,7 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
                 )}
                 {isConfirming && (
                   <div className="rounded-xl px-4 py-3" style={{ background: "#f5f3ff", border: "1.5px solid #e0d9f8" }}>
-                    <div className="text-[13px] mb-2" style={{ color: "#4b5563" }}>
+                    <div className="text-[13px] mb-3" style={{ color: "#4b5563", lineHeight: 1.55 }}>
                       ⚡ Ready to proceed? This action will be executed immediately.
                     </div>
                     <div className="flex gap-2">
