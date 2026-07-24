@@ -2537,7 +2537,8 @@ export const aiConciergeRouter = router({
       // ── Madison Communications Domain ─────────────────────────────────────
       // SMS intent: text/message a named contact, group, or job-scoped customer.
       // Runs before Readiness so "text Maria about her job" doesn't fall into readiness.
-      if (isCommsDomain(input.message)) {
+      // Skip comms gate if entity is already resolved (chip or disambiguation follow-up)
+      if (!input.resolvedClientPhone && !re && isCommsDomain(input.message)) {
         const rid = crypto.randomUUID().slice(0, 8);
         console.log(`[Comms] gate matched: msg=${JSON.stringify(input.message)} rid=${rid}`);
         const commsResult = await handleMadisonComms(db, input.message, rid, ctx.agent.agentId);
