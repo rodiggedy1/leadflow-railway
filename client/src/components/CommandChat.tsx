@@ -1297,6 +1297,223 @@ function EtaCallResultCard({
 }
 
 
+
+// ── MadisonPostCard ─────────────────────────────────────────────────────────
+// Self-contained component so it can declare its own hooks (state + mutations)
+function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; createdAt: string | Date }; callerName: string }) {
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+
+  const dismissMutation = trpc.opsChat.dismissMadisonPost.useMutation({
+    onSuccess: () => { /* SSE will refresh */ },
+  });
+  const markExecutedMutation = trpc.opsChat.markMadisonPostExecuted.useMutation();
+  const postResultMutation = trpc.opsChat.postAsMadison.useMutation();
+  const chatMutation = trpc.aiConcierge.chat.useMutation();
+  const chainExecuteMutation = trpc.aiConcierge.chain_execute.useMutation();
+
+  let meta: {
+    variant?: string;
+    action?: string | null;
+    buttonLabel?: string | null;
+    chainCommand?: string | null;
+    stats?: Array<{ icon: string; label: string; value: string; color?: string }>;
+    dismissed?: boolean;
+    executedBy?: string | null;
+    parentMessageId?: number | null;
+  } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+
+  const isResult = meta.variant === "result";
+  const isDismissed = meta.dismissed === true;
+  const executedBy = meta.executedBy ?? null;
+
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+
+  const handleActionClick = () => setIsConfirming(true);
+  const handleCancelConfirm = () => setIsConfirming(false);
+
+  const handleConfirmExecute = async () => {
+    if (!meta.chainCommand) return;
+    setIsConfirming(false);
+    setIsExecuting(true);
+    try {
+      // Post the agent's auto-reply
+      // (fire and forget — don't await)
+      // Execute the chain via aiConcierge.chat
+      const chatResult = await chatMutation.mutateAsync({ message: meta.chainCommand });
+      if (chatResult.type === "chain_confirm" && chatResult.chainExecutionId) {
+        const execResult = await chainExecuteMutation.mutateAsync({ chainExecutionId: chatResult.chainExecutionId });
+        const executionResult = execResult as { status: string; summary: string; successCount: number; failCount: number };
+        markExecutedMutation.mutate({ messageId: msg.id, executedBy: callerName });
+        const resultBody = executionResult.status === "succeeded"
+          ? `All set! 🎉 ${executionResult.summary}`
+          : executionResult.status === "partial"
+          ? `Partially done. ${executionResult.summary}`
+          : `Something went wrong. ${executionResult.summary}`;
+        postResultMutation.mutate({
+          body: resultBody,
+          variant: "result",
+          parentMessageId: msg.id,
+          stats: [
+            { icon: "✅", label: "Succeeded", value: String(executionResult.successCount) },
+            ...(executionResult.failCount > 0 ? [{ icon: "❌", label: "Failed", value: String(executionResult.failCount) }] : []),
+          ],
+        });
+      }
+    } catch (err: any) {
+      // toast is available globally via sonner
+      console.error("Madison action failed", err);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div className="flex gap-3 items-start px-4 py-2">
+      {/* Madison avatar */}
+      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        {/* Sender meta */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦</span>
+          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
+        </div>
+        {/* Card */}
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{
+            maxWidth: 520,
+            background: isResult ? "linear-gradient(160deg, #f0fdf4 0%, #f7fffe 100%)" : "linear-gradient(160deg, #faf9ff 0%, #f5f3ff 100%)",
+            border: isResult ? "1.5px solid #bbf7d0" : "1.5px solid #e0d9f8",
+            boxShadow: isResult ? "0 2px 16px rgba(16,185,129,0.08)" : "0 2px 16px rgba(99,102,241,0.08)",
+            opacity: isDismissed ? 0.55 : 1,
+          }}
+        >
+          <div className="px-5 py-4">
+            {/* Result header */}
+            {isResult && (
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{ background: "#22c55e", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}>✅</div>
+                <div>
+                  <div className="font-bold text-[16px]" style={{ color: "#15803d", fontStyle: "italic", fontFamily: "Georgia, serif" }}>{msg.body.split(".")[0]}.</div>
+                </div>
+              </div>
+            )}
+            {/* Recommendation greeting */}
+            {!isResult && (
+              <div className="font-bold text-[17px] mb-2" style={{ color: "#4f46e5", fontStyle: "italic", fontFamily: "Georgia, serif" }}>
+                {msg.body.split("\n")[0]}
+              </div>
+            )}
+            {/* Body text */}
+            <div className="text-[14px] leading-relaxed mb-3" style={{ color: "#374151", whiteSpace: "pre-wrap" }}>
+              {isResult ? msg.body.split(".").slice(1).join(".").trim() : msg.body.split("\n").slice(1).join("\n").trim()}
+            </div>
+            {/* Stats row */}
+            {meta.stats && meta.stats.length > 0 && (
+              <div
+                className="flex mb-4 rounded-xl overflow-hidden"
+                style={{ border: isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8", background: "#ffffff" }}
+              >
+                {meta.stats.map((s, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 flex-1"
+                    style={{ borderRight: i < meta.stats!.length - 1 ? (isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8") : "none" }}
+                  >
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                      style={{ background: isResult ? "#dcfce7" : "#ede9fe" }}
+                    >
+                      {s.icon}
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-medium" style={{ color: "#9ca3af" }}>{s.label}</div>
+                      <div className="text-[15px] font-extrabold leading-none" style={{ color: s.color ?? "#111827" }}>{s.value}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Action buttons — recommendation card only */}
+            {!isResult && !isDismissed && !executedBy && meta.action && (
+              <>
+                {!isConfirming && !isExecuting && (
+                  <div className="mb-1">
+                    <div className="text-[13px] font-semibold mb-2" style={{ color: "#7c3aed", fontStyle: "italic", fontFamily: "Georgia, serif" }}>Want me to take care of it?</div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={handleActionClick}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-bold text-white"
+                        style={{ background: "#4f46e5" }}
+                      >
+                        ✈ {meta.buttonLabel ?? "Take Action"}
+                      </button>
+                      <button
+                        onClick={() => dismissMutation.mutate({ messageId: msg.id })}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold"
+                        style={{ background: "#ffffff", border: "1.5px solid #d1d5db", color: "#6b7280" }}
+                      >
+                        Not right now
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isConfirming && (
+                  <div className="rounded-xl px-4 py-3" style={{ background: "#f5f3ff", border: "1.5px solid #e0d9f8" }}>
+                    <div className="text-[13px] mb-2" style={{ color: "#4b5563" }}>
+                      ⚡ Ready to proceed? This action will be executed immediately.
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleConfirmExecute}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-bold text-white"
+                        style={{ background: "#4f46e5" }}
+                      >
+                        ✓ Yes, go ahead
+                      </button>
+                      <button
+                        onClick={handleCancelConfirm}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
+                        style={{ background: "transparent", border: "1.5px solid #e5e7eb", color: "#9ca3af" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isExecuting && (
+                  <div className="flex items-center gap-2 text-[13px]" style={{ color: "#7c3aed" }}>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Madison is working on it…
+                  </div>
+                )}
+              </>
+            )}
+            {/* Executed badge */}
+            {executedBy && !isResult && (
+              <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "#22c55e" }}>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Action confirmed by {executedBy}
+              </div>
+            )}
+            {/* Dismissed badge */}
+            {isDismissed && (
+              <div className="text-[12px]" style={{ color: "#9ca3af" }}>Dismissed — no action taken.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const MessageList = memo(function MessageList({
   channelMsgs,
   channelLoading,
@@ -2977,217 +3194,8 @@ const MessageList = memo(function MessageList({
                   );
                 }
                 // ── Madison Post card ──────────────────────────────────────────────────
-                if (msg.quickAction === "madison_post") {
-                  let meta: {
-                    variant?: string;
-                    action?: string | null;
-                    buttonLabel?: string | null;
-                    chainCommand?: string | null;
-                    stats?: Array<{ icon: string; label: string; value: string; color?: string }>;
-                    dismissed?: boolean;
-                    executedBy?: string | null;
-                    parentMessageId?: number | null;
-                  } = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const isResult = meta.variant === "result";
-                  const isDismissed = meta.dismissed === true;
-                  const executedBy = meta.executedBy ?? null;
-                  const isConfirming = madisonConfirmState[msg.id] ?? false;
-                  const isExecuting = madisonExecutingState[msg.id] ?? false;
-                  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
-
-                  const handleActionClick = () => {
-                    setMadisonConfirmState(prev => ({ ...prev, [msg.id]: true }));
-                  };
-                  const handleCancelConfirm = () => {
-                    setMadisonConfirmState(prev => ({ ...prev, [msg.id]: false }));
-                  };
-                  const handleConfirmExecute = async () => {
-                    if (!meta.chainCommand) return;
-                    setMadisonConfirmState(prev => ({ ...prev, [msg.id]: false }));
-                    setMadisonExecutingState(prev => ({ ...prev, [msg.id]: true }));
-                    try {
-                      // Step 1: post agent's reply into Command Chat
-                      onSendMessage(`@Madison yes, go ahead.`);
-                      // Step 2: call aiConcierge.chat to plan the chain
-                      const chatResult = await madisonChatMutation.mutateAsync({ message: meta.chainCommand! });
-                      // Step 3: if chain_confirm, execute it immediately
-                      let executionResult: { status: string; summary: string; successCount: number; failCount: number } | null = null;
-                      if (chatResult.type === "chain_confirm") {
-                        const execResult = await madisonChainExecuteMutation.mutateAsync({ chainExecutionId: chatResult.chainExecutionId });
-                        executionResult = execResult.result;
-                      } else if (chatResult.type === "chain_result") {
-                        executionResult = chatResult.result;
-                      }
-                      // Step 4: mark original card as executed
-                      markMadisonPostExecutedMutation.mutate({ messageId: msg.id, executedBy: callerName });
-                      // Step 5: post result card back to Command Chat
-                      if (executionResult) {
-                        const resultBody = executionResult.status === "succeeded"
-                          ? `All set! 🎉 ${executionResult.summary}`
-                          : executionResult.status === "partial"
-                          ? `Partially done. ${executionResult.summary}`
-                          : `Something went wrong. ${executionResult.summary}`;
-                        postAsMadisonMutation.mutate({
-                          body: resultBody,
-                          variant: "result",
-                          parentMessageId: msg.id,
-                          stats: [
-                            { icon: "✅", label: "Succeeded", value: String(executionResult.successCount) },
-                            ...(executionResult.failCount > 0 ? [{ icon: "❌", label: "Failed", value: String(executionResult.failCount) }] : []),
-                          ],
-                        });
-                      }
-                    } catch (err: any) {
-                      toast.error("Action failed", { description: err?.message ?? "Unknown error" });
-                    } finally {
-                      setMadisonExecutingState(prev => ({ ...prev, [msg.id]: false }));
-                    }
-                  };
-
-                  return (
-                    <div key={msg.id} className="flex gap-3 items-start px-4 py-2">
-                      {/* Madison avatar */}
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
-                        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        {/* Sender meta */}
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
-                          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦</span>
-                          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Card */}
-                        <div
-                          className="rounded-2xl overflow-hidden"
-                          style={{
-                            maxWidth: 520,
-                            background: isResult ? "linear-gradient(160deg, #f0fdf4 0%, #f7fffe 100%)" : "linear-gradient(160deg, #faf9ff 0%, #f5f3ff 100%)",
-                            border: isResult ? "1.5px solid #bbf7d0" : "1.5px solid #e0d9f8",
-                            boxShadow: isResult ? "0 2px 16px rgba(16,185,129,0.08)" : "0 2px 16px rgba(99,102,241,0.08)",
-                            opacity: isDismissed ? 0.55 : 1,
-                          }}
-                        >
-                          <div className="px-5 py-4">
-                            {/* Result header */}
-                            {isResult && (
-                              <div className="flex items-center gap-3 mb-3">
-                                <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{ background: "#22c55e", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}>✅</div>
-                                <div>
-                                  <div className="font-bold text-[16px]" style={{ color: "#15803d", fontStyle: "italic", fontFamily: "Georgia, serif" }}>{msg.body.split(".")[0]}.</div>
-                                </div>
-                              </div>
-                            )}
-                            {/* Recommendation greeting */}
-                            {!isResult && (
-                              <div className="font-bold text-[17px] mb-2" style={{ color: "#4f46e5", fontStyle: "italic", fontFamily: "Georgia, serif" }}>
-                                {msg.body.split("\n")[0]}
-                              </div>
-                            )}
-                            {/* Body text */}
-                            <div className="text-[14px] leading-relaxed mb-3" style={{ color: "#374151", whiteSpace: "pre-wrap" }}>
-                              {isResult ? msg.body.split(".").slice(1).join(".").trim() : msg.body.split("\n").slice(1).join("\n").trim()}
-                            </div>
-                            {/* Stats row */}
-                            {meta.stats && meta.stats.length > 0 && (
-                              <div
-                                className="flex mb-4 rounded-xl overflow-hidden"
-                                style={{ border: isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8", background: "#ffffff" }}
-                              >
-                                {meta.stats.map((s, i) => (
-                                  <div
-                                    key={i}
-                                    className="flex items-center gap-2 px-3 py-2 flex-1"
-                                    style={{ borderRight: i < meta.stats!.length - 1 ? (isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8") : "none" }}
-                                  >
-                                    <div
-                                      className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
-                                      style={{ background: isResult ? "#dcfce7" : "#ede9fe" }}
-                                    >
-                                      {s.icon}
-                                    </div>
-                                    <div>
-                                      <div className="text-[10px] font-medium" style={{ color: "#9ca3af" }}>{s.label}</div>
-                                      <div className="text-[15px] font-extrabold leading-none" style={{ color: s.color ?? "#111827" }}>{s.value}</div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {/* Action buttons — recommendation card only */}
-                            {!isResult && !isDismissed && !executedBy && meta.action && (
-                              <>
-                                {!isConfirming && !isExecuting && (
-                                  <div className="mb-1">
-                                    <div className="text-[13px] font-semibold mb-2" style={{ color: "#7c3aed", fontStyle: "italic", fontFamily: "Georgia, serif" }}>Want me to take care of it?</div>
-                                    <div className="flex gap-2 flex-wrap">
-                                      <button
-                                        onClick={handleActionClick}
-                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-bold text-white"
-                                        style={{ background: "#4f46e5" }}
-                                      >
-                                        ✈ {meta.buttonLabel ?? "Take Action"}
-                                      </button>
-                                      <button
-                                        onClick={() => dismissMadisonPostMutation.mutate({ messageId: msg.id })}
-                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold"
-                                        style={{ background: "#ffffff", border: "1.5px solid #d1d5db", color: "#6b7280" }}
-                                      >
-                                        Not right now
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                                {isConfirming && (
-                                  <div className="rounded-xl px-4 py-3" style={{ background: "#f5f3ff", border: "1.5px solid #e0d9f8" }}>
-                                    <div className="text-[13px] mb-2" style={{ color: "#4b5563" }}>
-                                      ⚡ Ready to proceed? This action will be executed immediately.
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <button
-                                        onClick={handleConfirmExecute}
-                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-bold text-white"
-                                        style={{ background: "#4f46e5" }}
-                                      >
-                                        ✓ Yes, go ahead
-                                      </button>
-                                      <button
-                                        onClick={handleCancelConfirm}
-                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
-                                        style={{ background: "transparent", border: "1.5px solid #e5e7eb", color: "#9ca3af" }}
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                                {isExecuting && (
-                                  <div className="flex items-center gap-2 text-[13px]" style={{ color: "#7c3aed" }}>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Madison is working on it…
-                                  </div>
-                                )}
-                              </>
-                            )}
-                            {/* Executed badge */}
-                            {executedBy && !isResult && (
-                              <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "#22c55e" }}>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Action confirmed by {executedBy}
-                              </div>
-                            )}
-                            {/* Dismissed badge */}
-                            {isDismissed && (
-                              <div className="text-[12px]" style={{ color: "#9ca3af" }}>Dismissed — no action taken.</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Default bubble ─────────────────────────────────────────────────────
+                if (msg.quickAction === "madison_post") { return <MadisonPostCard msg={msg} callerName={callerName} />; }
+                                // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
                   const reactionGroups = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
@@ -4362,21 +4370,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
     },
   });
-
-  // ── Madison Post mutations + state ─────────────────────────────────────────
-  const dismissMadisonPostMutation = trpc.opsChat.dismissMadisonPost.useMutation({
-    onSuccess: () => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }),
-  });
-  const markMadisonPostExecutedMutation = trpc.opsChat.markMadisonPostExecuted.useMutation();
-  const postAsMadisonMutation = trpc.opsChat.postAsMadison.useMutation({
-    onSuccess: () => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }),
-  });
-  const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
-  const madisonChainExecuteMutation = trpc.aiConcierge.chain_execute.useMutation();
-  // Track which madison_post cards are in "confirm" state (messageId -> true)
-  const [madisonConfirmState, setMadisonConfirmState] = useState<Record<number, boolean>>({});
-  // Track which madison_post cards are executing (messageId -> true)
-  const [madisonExecutingState, setMadisonExecutingState] = useState<Record<number, boolean>>({});
   const claimLeadMutation = trpc.opsChat.claimLead.useMutation({
     onSuccess: (res) => {
       if (!res.success && 'alreadyClaimedBy' in res) {
