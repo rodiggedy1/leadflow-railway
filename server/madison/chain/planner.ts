@@ -229,10 +229,12 @@ export function isObviouslyLegacy(message: string): boolean {
   // Very short messages are almost never chains
   if (lower.length < 10) return true;
 
-  // Pure questions / lookups
+  // Pure questions / lookups — but only if they don't combine with action verbs
   if (/^(what|who|when|where|how many|show|list|get|find|check|is there|are there|tell me|do we|does|did)\b/.test(lower)) {
-    // Unless they contain "and" with action verbs
-    if (!/\b(and|also|both|then)\b.*(send|text|call|charge|release|notify|remind)/.test(lower)) {
+    // If the message contains a conjunction + action verb anywhere, it's a chain candidate
+    const hasChainSignal = /\b(and|also|both|then|plus)\b/.test(lower) &&
+      /\b(send|text|call|charge|release|notify|remind|message|payment|link)\b/.test(lower);
+    if (!hasChainSignal) {
       return true;
     }
   }
