@@ -3469,31 +3469,46 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
             </div>
           </div>
         )}
-        {showRecognitionPill && allMatches.length > 1 && (
-          <div className="mb-2 rounded-xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #c4b5fd",boxShadow:"0 4px 16px rgba(116,71,245,0.12)"}}>
-            <div className="px-3 py-2" style={{borderBottom:"1px solid #e5d9ea"}}>
-              <p className="text-xs font-semibold" style={{color:"#7447f5"}}>{allMatches.length} people found — who did you mean?</p>
+        {showRecognitionPill && allMatches.length > 1 && (() => {
+          const pillCustomers = allMatches.filter(m => !m.isCleaner).slice(0, 4);
+          const pillCleaners = allMatches.filter(m => m.isCleaner).slice(0, 3);
+          const hasBoth = pillCustomers.length > 0 && pillCleaners.length > 0;
+          const renderPillRow = (m: typeof allMatches[0]) => (
+            <button
+              key={m.phone + (m.cleanerProfileId ?? "")}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
+              className="flex items-center gap-2.5 px-3 py-2.5 transition-all text-left last:border-0 hover:bg-purple-50" style={{borderBottom:"1px solid #f0e8fa"}}
+            >
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.12)",color:"#7447f5"}}>
+                {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold truncate" style={{color:"#202431"}}>{m.name}</p>
+                <p className="text-[11px] truncate" style={{color:"#8a8a9a"}}>{m.subtitle}</p>
+              </div>
+            </button>
+          );
+          return (
+            <div className="mb-2 rounded-xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #c4b5fd",boxShadow:"0 4px 16px rgba(116,71,245,0.12)"}}>
+              <div className="px-3 py-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+                <p className="text-xs font-semibold" style={{color:"#7447f5"}}>{allMatches.length} people found — who did you mean?</p>
+              </div>
+              <div className="flex flex-col">
+                {hasBoth ? (
+                  <>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide px-3 py-1.5" style={{color:"#aaa",background:"rgba(116,71,245,0.04)"}}>Customers</p>
+                    {pillCustomers.map(renderPillRow)}
+                    <p className="text-[10px] font-semibold uppercase tracking-wide px-3 py-1.5" style={{color:"#aaa",background:"rgba(116,71,245,0.04)"}}>Teams / Cleaners</p>
+                    {pillCleaners.map(renderPillRow)}
+                  </>
+                ) : (
+                  allMatches.slice(0, 4).map(renderPillRow)
+                )}
+              </div>
             </div>
-            <div className="flex flex-col">
-              {allMatches.slice(0, 4).map((m, idx) => (
-                <button
-                  key={m.phone}
-                  type="button"
-                  onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
-                  className="flex items-center gap-2.5 px-3 py-2.5 transition-all text-left last:border-0 hover:bg-purple-50" style={{borderBottom:"1px solid #f0e8fa"}}
-                >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.12)",color:"#7447f5"}}>
-                    {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold truncate" style={{color:"#202431"}}>{m.name}</p>
-                    <p className="text-[11px] truncate" style={{color:"#8a8a9a"}}>{m.subtitle}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Change popup: shown when user taps Change on the locked pill ── */}
         {showChangePopup && focusedCustomer && (
