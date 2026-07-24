@@ -3861,3 +3861,62 @@ export const madisonActionItems = mysqlTable("madison_action_items", {
 ]);
 export type MadisonActionItem = typeof madisonActionItems.$inferSelect;
 export type InsertMadisonActionItem = typeof madisonActionItems.$inferInsert;
+
+// ── Madison Chain Executions ──────────────────────────────────────────────────
+/**
+ * chain_executions — one row per multi-step command chain initiated by an agent.
+ */
+export const chainExecutions = mysqlTable("chain_executions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  agentId: int("agentId").notNull(),
+  originalMessage: text("originalMessage").notNull(),
+  plan: json("plan").notNull(),
+  status: mysqlEnum("status", [
+    "planned",
+    "awaiting_confirmation",
+    "running",
+    "succeeded",
+    "partial",
+    "failed",
+    "cancelled",
+  ]).notNull().default("planned"),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  confirmedAt: datetime("confirmedAt", { mode: "date", fsp: 3 }),
+  completedAt: datetime("completedAt", { mode: "date", fsp: 3 }),
+}, (t) => [
+  index("idx_chain_exec_agent").on(t.agentId, t.createdAt),
+]);
+export type ChainExecution = typeof chainExecutions.$inferSelect;
+export type InsertChainExecution = typeof chainExecutions.$inferInsert;
+
+/**
+ * chain_step_executions — one row per step within a chain execution.
+ */
+export const chainStepExecutions = mysqlTable("chain_step_executions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  chainExecutionId: varchar("chainExecutionId", { length: 64 }).notNull(),
+  stepId: varchar("stepId", { length: 128 }).notNull(),
+  capabilityId: varchar("capabilityId", { length: 128 }).notNull(),
+  status: mysqlEnum("status", [
+    "planned",
+    "running",
+    "succeeded",
+    "failed",
+    "skipped",
+    "cancelled",
+  ]).notNull().default("planned"),
+  resolvedArgs: json("resolvedArgs"),
+  result: json("result"),
+  verificationResult: json("verificationResult"),
+  idempotencyKey: varchar("idempotencyKey", { length: 128 }).unique(),
+  externalResultId: varchar("externalResultId", { length: 255 }),
+  errorMessage: text("errorMessage"),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  startedAt: datetime("startedAt", { mode: "date", fsp: 3 }),
+  completedAt: datetime("completedAt", { mode: "date", fsp: 3 }),
+}, (t) => [
+  index("idx_chain_step_chain").on(t.chainExecutionId, t.stepId),
+  uniqueIndex("uq_chain_step").on(t.chainExecutionId, t.stepId),
+]);
+export type ChainStepExecution = typeof chainStepExecutions.$inferSelect;
+export type InsertChainStepExecution = typeof chainStepExecutions.$inferInsert;

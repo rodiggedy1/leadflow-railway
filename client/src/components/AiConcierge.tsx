@@ -44,6 +44,10 @@ import {
   ChevronRight,
   Sun,
   Mic,
+  Layers,
+  Eye,
+  CheckCircle,
+  MinusCircle,
 } from "lucide-react";
 import ReadinessDrawer from "./ReadinessDrawer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -131,6 +135,41 @@ interface QueryResultCard {
   /** Present when the response was an acknowledge action — enables Undo button */
   undoActionId?: string | null;
 }
+// ─── Chain Engine types ─────────────────────────────────────────────────────
+
+interface ChainConfirmStep {
+  id: string;
+  capabilityId: string;
+  label: string;
+  isWrite: boolean;
+  preview?: string;
+  entities?: Array<{ name: string; phone?: string | null }>;
+}
+
+interface ChainConfirmCard {
+  chainExecutionId: string;
+  summary: string;
+  steps: ChainConfirmStep[];
+}
+
+interface ChainStepResult {
+  stepId: string;
+  capabilityId: string;
+  label: string;
+  status: "succeeded" | "failed" | "skipped";
+  summary: string;
+  error?: string;
+}
+
+interface ChainResultCard {
+  chainExecutionId: string;
+  status: "succeeded" | "partial" | "failed";
+  steps: ChainStepResult[];
+  successCount: number;
+  failCount: number;
+  skippedCount: number;
+}
+
 // ─── Prepare Tomorrow types ──────────────────────────────────────────────────
 
 interface PrepareChecklistCard {
@@ -255,7 +294,9 @@ type MessageContent =
   | { type: "unanswered_sms"; card: UnansweredSmsCard }
   | { type: "generate_invoice"; card: GenerateInvoiceCard }
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
-  | { type: "prepare_result"; card: PrepareResultCard };
+  | { type: "prepare_result"; card: PrepareResultCard }
+  | { type: "chain_confirm"; card: ChainConfirmCard }
+  | { type: "chain_result"; card: ChainResultCard };
   // customer_profile removed — all informational queries return query_result
 
 interface Message {
@@ -1193,6 +1234,28 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "chain_confirm" && (
+          <div>
+            <ChainConfirmCardView
+              card={msg.content.card}
+              onResult={(result) => {
+                onAddMessage({
+                  id: uid(),
+                  role: "ai",
+                  content: { type: "chain_result", card: result },
+                  ts: nowTime(),
+                });
+              }}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "chain_result" && (
+          <div>
+            <ChainResultCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {/* customer_profile branch removed — all informational queries return query_result */}
       </div>
     </div>
@@ -1201,6 +1264,143 @@ function MessageBubble({
 
 
 // ─── Prepare checklist card ──────────────────────────────────────────────────
+
+
+// ─── Chain Engine card views ─────────────────────────────────────────────────
+
+function ChainConfirmCardView({ card, onResult }: { card: ChainConfirmCard; onResult: (result: ChainResultCard) => void }) {
+  const [executing, setExecuting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+  const executeMutation = trpc.aiConcierge.chain_execute.useMutation();
+
+  function toggleExpand(id: string) {
+    setExpandedSteps(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function handleProceed() {
+    if (executing || done) return;
+    setExecuting(true);
+    executeMutation.mutate(
+      { chainExecutionId: card.chainExecutionId },
+      {
+        onSuccess: (res) => {
+          setDone(true);
+          setExecuting(false);
+          const r = res.result as any;
+          onResult({
+            chainExecutionId: card.chainExecutionId,
+            status: r.status,
+            steps: r.steps,
+            successCount: r.successCount,
+            failCount: r.failCount,
+            skippedCount: r.skippedCount,
+          });
+        },
+        onError: () => setExecuting(false),
+      }
+    );
+  }
+
+  const writeSteps = card.steps.filter(s => s.isWrite);
+
+  return (
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f0f4ff)",border:"1px solid #d9e0f0",boxShadow:"0 4px 20px rgba(71,100,245,0.08)"}}>
+      <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #d9e0f0"}}>
+        <Layers className="w-4 h-4 flex-shrink-0" style={{color:"#4764f5"}} />
+        <p className="text-sm font-semibold" style={{color:"#202431"}}>{card.summary}</p>
+        <span className="ml-auto text-xs text-gray-500">{writeSteps.length} action{writeSteps.length !== 1 ? "s" : ""}</span>
+      </div>
+      <div className="px-4 py-3 flex flex-col gap-2">
+        {card.steps.map((step) => (
+          <div key={step.id} className="rounded-xl overflow-hidden" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e0e6f5"}}>
+            <div className="px-3 py-2 flex items-center gap-2">
+              {step.isWrite ? (
+                <Zap className="w-3.5 h-3.5 flex-shrink-0" style={{color:"#4764f5"}} />
+              ) : (
+                <Eye className="w-3.5 h-3.5 flex-shrink-0" style={{color:"#9b8aaa"}} />
+              )}
+              <span className="text-sm font-medium" style={{color:"#202431"}}>{step.label}</span>
+              {step.preview && <span className="ml-auto text-xs text-gray-500">{step.preview}</span>}
+              {step.entities && step.entities.length > 0 && (
+                <button
+                  onClick={() => toggleExpand(step.id)}
+                  className="ml-1 text-xs" style={{color:"#4764f5"}}
+                >
+                  {expandedSteps.has(step.id) ? "▲" : "▼"}
+                </button>
+              )}
+            </div>
+            {expandedSteps.has(step.id) && step.entities && (
+              <div className="px-3 pb-2 flex flex-wrap gap-1">
+                {step.entities.slice(0, 10).map((e, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" style={{background:"rgba(71,100,245,0.08)",border:"1px solid #d9e0f0",color:"#4a4a5a"}}>
+                    <User className="w-2.5 h-2.5" style={{color:"#9b8aaa"}} />
+                    {e.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {!done && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={handleProceed}
+            disabled={executing}
+            className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#4764f5,#7447f5)"}}
+          >
+            {executing ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Running…</>
+            ) : (
+              <><Zap className="w-4 h-4" /> Proceed</>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChainResultCardView({ card }: { card: ChainResultCard }) {
+  const statusColor = card.status === "succeeded" ? "#16a34a" : card.status === "partial" ? "#d97706" : "#dc2626";
+  const statusLabel = card.status === "succeeded" ? "Completed" : card.status === "partial" ? "Partial" : "Failed";
+
+  return (
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#f9fff9,#f0f4ff)",border:"1px solid #d9e0f0",boxShadow:"0 4px 20px rgba(71,100,245,0.08)"}}>
+      <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #d9e0f0"}}>
+        <CheckCircle className="w-4 h-4 flex-shrink-0" style={{color:statusColor}} />
+        <p className="text-sm font-semibold" style={{color:statusColor}}>{statusLabel}</p>
+        <span className="ml-auto text-xs text-gray-500">
+          {card.successCount} succeeded{card.failCount > 0 ? `, ${card.failCount} failed` : ""}{card.skippedCount > 0 ? `, ${card.skippedCount} skipped` : ""}
+        </span>
+      </div>
+      <div className="px-4 py-3 flex flex-col gap-2">
+        {card.steps.map((step) => (
+          <div key={step.stepId} className="flex items-start gap-2">
+            {step.status === "succeeded" ? (
+              <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{color:"#16a34a"}} />
+            ) : step.status === "failed" ? (
+              <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{color:"#dc2626"}} />
+            ) : (
+              <MinusCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{color:"#9ca3af"}} />
+            )}
+            <div>
+              <p className="text-sm font-medium" style={{color:"#202431"}}>{step.label}</p>
+              <p className="text-xs text-gray-500">{step.summary}</p>
+              {step.error && <p className="text-xs" style={{color:"#dc2626"}}>{step.error}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function PrepareChecklistCardView({ card }: { card: PrepareChecklistCard }) {
   return (
@@ -3681,7 +3881,9 @@ type ServerResult =
   | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number }
   | { type: "job_status_stream"; alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> }
   | { type: "unanswered_sms"; thresholdMinutes: number; rows: Array<{ sessionId: number; leadName: string | null; leadPhone: string; lastMessagePreview: string; waitMs: number }> }
-  | { type: "generate_invoice"; templates: Array<{ id: number; customerName: string; serviceAddress: string; stripeLink: string; lineItems: unknown }>; customerHint?: string };
+  | { type: "generate_invoice"; templates: Array<{ id: number; customerName: string; serviceAddress: string; stripeLink: string; lineItems: unknown }>; customerHint?: string }
+  | { type: "chain_confirm"; chainExecutionId: string; card: ChainConfirmCard }
+  | { type: "chain_result"; chainExecutionId: string; result: ChainResultCard };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -3899,6 +4101,22 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "generate_invoice", card: { templates: result.templates, customerHint: result.customerHint } },
+      ts,
+    };
+  }
+  if (result.type === "chain_confirm") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "chain_confirm", card: result.card },
+      ts,
+    };
+  }
+  if (result.type === "chain_result") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "chain_result", card: result.result },
       ts,
     };
   }

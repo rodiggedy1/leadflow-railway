@@ -36,6 +36,9 @@ import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
 import { isReadinessDomain, handleMadisonReadiness } from "./madison";
 import { isCommsDomain, handleMadisonComms } from "./madison/comms";
 import { computeReadinessSummary } from "./madison/readinessService";
+import { handleMadisonChain, executeConfirmedChain } from "./madison/chain";
+import type { ChainConfirmCard, ChainExecutionResult, ExecutionPlan } from "./madison/chain/types";
+import { chainExecutions } from "../drizzle/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // getTodayET and resolveServiceDateRange are imported from ./conciergeTime
@@ -412,6 +415,20 @@ export interface CustomerProfileResult {
   };
 }
 
+/** Returned when Madison chain has write steps — agent must confirm before executing */
+export interface ChainConfirmResult {
+  type: "chain_confirm";
+  chainExecutionId: string;
+  card: ChainConfirmCard;
+}
+
+/** Returned after a chain execution completes */
+export interface ChainResultResult {
+  type: "chain_result";
+  chainExecutionId: string;
+  result: ChainExecutionResult;
+}
+
 type ConciergeResult =
   | EtaPendingResult
   | CompletedResult
@@ -432,7 +449,9 @@ type ConciergeResult =
   | ConfirmationResultsResult
   | JobStatusStreamResult
   | UnansweredSmsResult
-  | GenerateInvoiceResult;
+  | GenerateInvoiceResult
+  | ChainConfirmResult
+  | ChainResultResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 /** Returned when the concierge shows the live job status stream */
@@ -2548,6 +2567,29 @@ export const aiConciergeRouter = router({
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
 
+      // ── Madison Chain Engine ───────────────────────────────────────────────
+      // Multi-capability chain: runs before all single-domain gates.
+      // Only fires when the message clearly requests multiple capabilities.
+      // Falls back to legacy routing if the planner returns mode != "chain".
+      if (!input.resolvedClientPhone && !re) {
+        try {
+          const chainResult = await handleMadisonChain(input.message, {
+            db,
+            agentId: ctx.agent.agentId,
+            agentName: ctx.agent.agentName ?? undefined,
+          });
+          if (chainResult.type === "chain_confirm") {
+            return { type: "chain_confirm" as const, chainExecutionId: chainResult.chainExecutionId, card: chainResult.card };
+          }
+          if (chainResult.type === "chain_result") {
+            return { type: "chain_result" as const, chainExecutionId: chainResult.chainExecutionId, result: chainResult.result };
+          }
+          // chain_legacy → fall through to existing gates
+        } catch (err) {
+          console.warn("[Chain] Error, falling back to legacy:", err);
+        }
+      }
+
       // ── Madison Communications Domain ─────────────────────────────────────
       // SMS intent: text/message a named contact, group, or job-scoped customer.
       // Runs before Readiness so "text Maria about her job" doesn't fall into readiness.
@@ -3191,5 +3233,32 @@ export const aiConciergeRouter = router({
           },
         },
       };
+    }),
+
+  /**
+   * chain_execute — executes a confirmed chain plan.
+   * Called from the chain_confirm card after the agent clicks Proceed.
+   */
+  chain_execute: agentProcedure
+    .input(z.object({
+      chainExecutionId: z.string().min(1).max(128),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      try {
+        const result = await executeConfirmedChain(input.chainExecutionId, {
+          db,
+          agentId: ctx.agent.agentId,
+          agentName: ctx.agent.agentName ?? undefined,
+        });
+        return { type: "chain_result" as const, chainExecutionId: input.chainExecutionId, result };
+      } catch (err) {
+        console.error("[chain_execute] ERROR:", err);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: err instanceof Error ? err.message : "Chain execution failed",
+        });
+      }
     }),
 });
