@@ -33,9 +33,7 @@ function buildCapabilityCatalog(): string {
       case "confirmations.queryStatus":
         contract = [
           '  inputs:  { date?: "YYYY-MM-DD" }',
-          '  outputs: { notYetConfirmed: [{phone, name, jobId}] }',
-          '  notYetConfirmed = everyone who has not confirmed yet (no text sent + text sent but no reply).',
-          '  When texting unconfirmed customers, ALWAYS use path="notYetConfirmed" in dataRefs.',
+          '  outputs: { notYetConfirmed: [{phone, name, jobId}] — customers who have not yet confirmed (no text sent + text sent but no reply) }',
         ].join("\n");
         break;
       case "payments.queryCardStatus":
@@ -58,7 +56,9 @@ function buildCapabilityCatalog(): string {
         break;
       case "communications.sendBulkSms":
         contract = [
-          '  inputs:  { recipients: [{phone, name}], message: string }',
+          '  inputs:  { recipients: Recipient[] (REQUIRED), message: string (REQUIRED) }',
+          '  recipients must be satisfied by: (1) explicit user-provided list, (2) trusted resolved context, or (3) a dataRef from a prior step output.',
+          '  The planner must NOT invent or omit recipients. If no source exists, add a capability that produces them.',
           '  outputs: { results: [{name, success}] }',
         ].join("\n");
         break;
@@ -91,6 +91,15 @@ DATA REFERENCES:
 A step can consume the output of a prior step using dataRefs.
 Format: "dataRefs": { "<inputKey>": { "fromStep": "<step-id>", "path": "<dot.path.into.output>" } }
 Use this when the user's intent requires the output of one capability as the input to another.
+
+PLANNER CONSTRAINT:
+Every required capability input must be satisfied by: (1) explicit arguments from the user, (2) trusted resolved context already supplied, or (3) a dataRef from an earlier step.
+If a required input is missing:
+  - first, check if another capability in the registry can produce it — if so, add that capability as a prior step;
+  - if no capability can produce it and the user did not provide it, request clarification or return a planner validation failure;
+  - do NOT silently omit the requested action;
+  - do NOT fall back to mode="legacy" — legacy means conversational, not "I could not build a plan";
+  - do NOT fabricate input values.
 
 Return ONLY valid JSON:
 {
