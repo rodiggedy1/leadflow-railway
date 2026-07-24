@@ -6,6 +6,10 @@
  * Called from aiConciergeRouter when the chain gate fires.
  * Returns either a chain_confirm card (for write plans) or
  * executes immediately and returns a chain_result card (for read-only plans).
+ *
+ * Special case: when the final write step is sendBulkSms, we skip the chain
+ * confirm card entirely and return bulk_sms_confirm — the existing card that
+ * already shows the draft message, editable text, and recipient list.
  */
 
 import type { CapabilityContext, ExecutionPlan, ChainConfirmCard, ChainExecutionResult } from "./types";
@@ -14,6 +18,8 @@ import { executeChain } from "./executor";
 import { getCapabilityHandler } from "./registry";
 import { chainExecutions } from "../../../drizzle/schema";
 import { randomUUID } from "crypto";
+import { buildSmsPreview } from "../comms/smsService";
+import type { CommsSmsPreview } from "../comms/smsService";
 
 // ── Result types returned to aiConciergeRouter ────────────────────────────────
 
@@ -33,7 +39,12 @@ export interface ChainLegacyResult {
   type: "chain_legacy";
 }
 
-export type ChainHandlerResult = ChainConfirmResult | ChainResultOutput | ChainLegacyResult;
+export interface ChainBulkSmsConfirmResult {
+  type: "bulk_sms_confirm";
+  card: CommsSmsPreview;
+}
+
+export type ChainHandlerResult = ChainConfirmResult | ChainResultOutput | ChainLegacyResult | ChainBulkSmsConfirmResult;
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
@@ -72,6 +83,20 @@ export async function handleMadisonChain(
       chainExecutionId,
       result,
     };
+  }
+
+  // Special case: read-then-sendBulkSms chain → reuse existing bulk_sms_confirm card
+  // This gives the agent the full draft + editable text + recipient list experience
+  // instead of the generic chain confirm card.
+  const bulkSmsCard = await tryBuildBulkSmsConfirm(chainExecutionId, plan, ctx);
+  if (bulkSmsCard) {
+    // Delete the chain execution record — it was just a planning artifact.
+    // The actual send is handled by the existing sendBulkSms procedure.
+    const { eq } = await import("drizzle-orm");
+    await (ctx.db as any)
+      .delete(chainExecutions)
+      .where(eq(chainExecutions.id, chainExecutionId));
+    return { type: "bulk_sms_confirm", card: bulkSmsCard };
   }
 
   // Write plans: build confirm card with previews
@@ -265,4 +290,75 @@ function getPath(obj: unknown, path: string): unknown {
     current = (current as Record<string, unknown>)[part];
   }
   return current;
+}
+
+// ── Bulk SMS shortcut ─────────────────────────────────────────────────────────
+// When the chain is: [read step] → sendBulkSms, skip the generic chain confirm
+// card and return the existing bulk_sms_confirm card instead. This reuses the
+// full draft + editable text + recipient list UI that already exists.
+
+async function tryBuildBulkSmsConfirm(
+  chainExecutionId: string,
+  plan: ExecutionPlan,
+  ctx: CapabilityContext,
+): Promise<CommsSmsPreview | null> {
+  const steps = plan.steps;
+
+  // Pattern: last step is sendBulkSms, all prior steps are read steps
+  const lastStep = steps[steps.length - 1];
+  if (!lastStep || lastStep.capabilityId !== "communications.sendBulkSms") return null;
+
+  const readSteps = steps.slice(0, -1);
+  if (readSteps.some(s => getCapabilityHandler(s.capabilityId)?.isWrite)) return null;
+
+  // Execute the read steps to get the recipient list
+  const previewResults = new Map<string, unknown>();
+  for (const step of readSteps) {
+    const handler = getCapabilityHandler(step.capabilityId);
+    if (!handler) return null;
+
+    const resolvedArgs = resolveDataRefsForPreview(step, previewResults);
+    try {
+      const validation = await handler.validate(resolvedArgs, ctx);
+      if (!validation.ok) return null;
+      const effectiveArgs = validation.resolvedArgs ?? resolvedArgs;
+      const result = await handler.execute(effectiveArgs, ctx);
+      previewResults.set(step.id, result);
+    } catch {
+      return null;
+    }
+  }
+
+  // Resolve the sendBulkSms args (recipients come from a dataRef)
+  const resolvedSmsArgs = resolveDataRefsForPreview(lastStep, previewResults);
+  const rawRecipients = (resolvedSmsArgs.recipients as any[]) ?? [];
+
+  if (rawRecipients.length === 0) return null;
+
+  // Map to CommsRecipient shape for buildSmsPreview
+  const commsRecipients = rawRecipients.map((r: any) => ({
+    entityType: "customer" as const,
+    entityId: `customer:${r.phone ?? r.name}`,
+    displayName: r.name ?? r.phone,
+    phone: r.phone ?? "",
+    contextLabel: "",
+  })).filter(r => r.phone);
+
+  if (commsRecipients.length === 0) return null;
+
+  const targetDescription = `${commsRecipients.length} unconfirmed customer${commsRecipients.length !== 1 ? "s" : ""}`;
+  const messageHint = (resolvedSmsArgs.message as string | undefined) ?? plan.summary ?? "send confirmation reminder";
+
+  try {
+    return await buildSmsPreview(
+      commsRecipients,
+      targetDescription,
+      messageHint,
+      plan.summary,
+      0,
+      [],
+    );
+  } catch {
+    return null;
+  }
 }

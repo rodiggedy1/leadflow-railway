@@ -2593,6 +2593,10 @@ export const aiConciergeRouter = router({
           if (chainResult.type === "chain_result") {
             return { type: "chain_result" as const, chainExecutionId: chainResult.chainExecutionId, result: chainResult.result };
           }
+          // bulk_sms_confirm shortcut — chain resolved to existing SMS confirm card
+          if (chainResult.type === "bulk_sms_confirm") {
+            return { ...chainResult.card, command: input.message };
+          }
           // chain_legacy returned — for a forced-chain request this is an error
           if (_isForceChain) {
             return {
