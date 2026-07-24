@@ -1,11 +1,16 @@
 /**
  * server/madison/chain/planner.ts
  *
- * Chain Planner — uses the LLM to convert a natural-language message into an
- * ExecutionPlan (ordered list of capability steps with resolved args and data refs).
+ * Chain Planner — converts a natural-language message into an ExecutionPlan.
  *
- * The planner knows about capabilities but not about business logic.
- * It only produces a plan — it does not execute anything.
+ * Architecture:
+ *   1. Deterministic pre-parser classifies the message as "chain" or "single".
+ *      This decision is AUTHORITATIVE — the LLM cannot override it.
+ *   2. The LLM's only job is to build the execution steps for the determined mode.
+ *
+ * The pre-parser fires on coordination signals (and, then, after, also, etc.).
+ * If a coordination signal is present → mode is forced to "chain".
+ * If not → mode is forced to "single" (or "legacy" if no capability matches).
  */
 
 import type { ExecutionPlan, CapabilityId, ChainRoutingDecision } from "./types";
@@ -13,12 +18,27 @@ import { getAllCapabilities } from "./registry";
 import { invokeLLM } from "../../_core/llm";
 import { getTodayET } from "../../conciergeTime";
 
-// ── Capability catalog for the planner prompt ─────────────────────────────────
+// ── Deterministic pre-parser ──────────────────────────────────────────────────
 
 /**
- * Builds a capability catalog that includes both input args AND output schemas,
- * so the LLM can reason about data flow between steps from contracts alone.
+ * Coordination signals that indicate the user intends multiple actions.
+ * Matched case-insensitively against the full message.
+ *
+ * The pattern requires the keyword to appear as a standalone word (word boundary)
+ * to avoid false positives inside other words (e.g. "Anderson").
  */
+const COORDINATION_PATTERN = /\b(and|then|after|also|as well|plus)\b/i;
+
+/**
+ * Returns true if the message contains a coordination signal that indicates
+ * two or more actions should be chained.
+ */
+export function hasCoordinationSignal(message: string): boolean {
+  return COORDINATION_PATTERN.test(message);
+}
+
+// ── Capability catalog for the planner prompt ─────────────────────────────────
+
 function buildCapabilityCatalog(): string {
   const caps = getAllCapabilities();
   return caps.map(c => {
@@ -67,22 +87,14 @@ function buildCapabilityCatalog(): string {
   }).join("\n\n");
 }
 
-// ── Routing decision (single LLM pass) ───────────────────────────────────────
+// ── LLM prompt builders ───────────────────────────────────────────────────────
 
-export async function planChainRouting(
-  message: string,
-  businessDate: string = getTodayET(),
-): Promise<ChainRoutingDecision> {
-  const catalog = buildCapabilityCatalog();
-
-  const systemPrompt = `You are the Madison command planner for a cleaning business operations tool.
+function buildChainPlanPrompt(catalog: string, businessDate: string): string {
+  return `You are the Madison command planner for a cleaning business operations tool.
 Today's date is ${businessDate}.
 
-Analyze the message and decide how to route it:
-
-- mode="legacy"  — general question, lookup, or conversational; not a command to execute capabilities
-- mode="single"  — exactly one capability from the registry is needed
-- mode="chain"   — two or more capabilities are needed, possibly with data flowing between steps
+The user's message has been pre-classified as requiring MULTIPLE STEPS (chain mode).
+Your job is ONLY to build the execution plan — do NOT change the mode.
 
 CAPABILITY REGISTRY:
 ${catalog}
@@ -90,37 +102,73 @@ ${catalog}
 DATA REFERENCES:
 A step can consume the output of a prior step using dataRefs.
 Format: "dataRefs": { "<inputKey>": { "fromStep": "<step-id>", "path": "<dot.path.into.output>" } }
-Use this when the user's intent requires the output of one capability as the input to another.
 
 PLANNER CONSTRAINT:
 Every required capability input must be satisfied by: (1) explicit arguments from the user, (2) trusted resolved context already supplied, or (3) a dataRef from an earlier step.
-If a required input is missing:
-  - first, check if another capability in the registry can produce it — if so, add that capability as a prior step;
-  - if no capability can produce it and the user did not provide it, request clarification or return a planner validation failure;
-  - do NOT silently omit the requested action;
-  - do NOT fall back to mode="legacy" — legacy means conversational, not "I could not build a plan";
-  - do NOT fabricate input values.
+Do NOT invent or fabricate input values. Do NOT omit a requested action.
+Each step must use a capability ID from the registry exactly as listed.
 
 Return ONLY valid JSON:
 {
-  "mode": "legacy" | "single" | "chain",
-  "capabilityId": "<id>",          // only when mode="single"
-  "plan": {                         // only when mode="chain"
-    "summary": "one sentence",
-    "hasWrites": boolean,
-    "steps": [
-      {
-        "id": "step-1",
-        "capabilityId": "<id>",
-        "label": "Human-readable label",
-        "args": { /* static args */ },
-        "dataRefs": { /* optional */ },
-        "onFailure": "halt" | "continue"
-      }
-    ]
-  }
+  "summary": "one sentence describing the full chain",
+  "hasWrites": boolean,
+  "steps": [
+    {
+      "id": "step-1",
+      "capabilityId": "<id from registry>",
+      "label": "Human-readable label",
+      "args": { /* static args from user input */ },
+      "dataRefs": { /* optional: { "argKey": { "fromStep": "step-N", "path": "output.field" } } */ },
+      "onFailure": "halt" | "continue"
+    }
+  ]
 }`;
+}
 
+function buildSinglePlanPrompt(catalog: string, businessDate: string): string {
+  return `You are the Madison command planner for a cleaning business operations tool.
+Today's date is ${businessDate}.
+
+The user's message has been pre-classified as requiring a SINGLE STEP.
+Your job is ONLY to identify which capability to invoke and what args to pass.
+If no capability in the registry matches the user's intent, return { "capabilityId": null }.
+
+CAPABILITY REGISTRY:
+${catalog}
+
+Return ONLY valid JSON:
+{
+  "capabilityId": "<id from registry, or null if no match>",
+  "args": { /* static args extracted from the user's message */ }
+}`;
+}
+
+// ── Main planner entry point ──────────────────────────────────────────────────
+
+export async function planChainRouting(
+  message: string,
+  businessDate: string = getTodayET(),
+): Promise<ChainRoutingDecision> {
+  const catalog = buildCapabilityCatalog();
+  const isChain = hasCoordinationSignal(message);
+
+  console.log(`[ChainPlanner] pre-parser: isChain=${isChain} msg=${JSON.stringify(message)}`);
+
+  if (isChain) {
+    return planChain(message, catalog, businessDate);
+  } else {
+    return planSingle(message, catalog, businessDate);
+  }
+}
+
+// ── Chain planner ─────────────────────────────────────────────────────────────
+
+async function planChain(
+  message: string,
+  catalog: string,
+  businessDate: string,
+): Promise<ChainRoutingDecision> {
+  const systemPrompt = buildChainPlanPrompt(catalog, businessDate);
   const userPrompt = `Message: "${message}"`;
 
   try {
@@ -132,51 +180,42 @@ Return ONLY valid JSON:
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "chain_routing",
+          name: "chain_plan",
           strict: false,
           schema: {
             type: "object",
             properties: {
-              mode: { type: "string", enum: ["legacy", "single", "chain"] },
-              capabilityId: { type: "string" },
-              plan: {
-                type: "object",
-                properties: {
-                  summary: { type: "string" },
-                  hasWrites: { type: "boolean" },
-                  steps: {
-                    type: "array",
-                    items: {
+              summary: { type: "string" },
+              hasWrites: { type: "boolean" },
+              steps: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    capabilityId: { type: "string" },
+                    label: { type: "string" },
+                    args: { type: "object", additionalProperties: true },
+                    dataRefs: {
                       type: "object",
-                      properties: {
-                        id: { type: "string" },
-                        capabilityId: { type: "string" },
-                        label: { type: "string" },
-                        args: { type: "object", additionalProperties: true },
-                        dataRefs: {
-                          type: "object",
-                          additionalProperties: {
-                            type: "object",
-                            properties: {
-                              fromStep: { type: "string" },
-                              path: { type: "string" },
-                            },
-                            required: ["fromStep", "path"],
-                            additionalProperties: false,
-                          },
+                      additionalProperties: {
+                        type: "object",
+                        properties: {
+                          fromStep: { type: "string" },
+                          path: { type: "string" },
                         },
-                        onFailure: { type: "string", enum: ["halt", "continue"] },
+                        required: ["fromStep", "path"],
+                        additionalProperties: false,
                       },
-                      required: ["id", "capabilityId", "label", "args"],
-                      additionalProperties: false,
                     },
+                    onFailure: { type: "string", enum: ["halt", "continue"] },
                   },
+                  required: ["id", "capabilityId", "label", "args"],
+                  additionalProperties: false,
                 },
-                required: ["summary", "hasWrites", "steps"],
-                additionalProperties: false,
               },
             },
-            required: ["mode"],
+            required: ["summary", "hasWrites", "steps"],
             additionalProperties: false,
           },
         },
@@ -184,52 +223,48 @@ Return ONLY valid JSON:
     });
 
     const rawContent = response.choices?.[0]?.message?.content;
-    if (!rawContent) return { mode: "legacy" };
+    if (!rawContent) {
+      console.error("[ChainPlanner] chain: empty LLM response");
+      return { mode: "legacy" };
+    }
     const content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
-
-    console.log("[ChainPlanner] raw response:", content.slice(0, 600));
+    console.log("[ChainPlanner] chain raw response:", content.slice(0, 600));
 
     const parsed = JSON.parse(content) as {
-      mode: "legacy" | "single" | "chain";
-      capabilityId?: string;
-      plan?: {
-        summary: string;
-        hasWrites: boolean;
-        steps: Array<{
-          id: string;
-          capabilityId: string;
-          label: string;
-          args: Record<string, unknown>;
-          dataRefs?: Record<string, { fromStep: string; path: string }>;
-          onFailure?: "halt" | "continue";
-        }>;
-      };
+      summary: string;
+      hasWrites: boolean;
+      steps: Array<{
+        id: string;
+        capabilityId: string;
+        label: string;
+        args: Record<string, unknown>;
+        dataRefs?: Record<string, { fromStep: string; path: string }>;
+        onFailure?: "halt" | "continue";
+      }>;
     };
 
-    if (parsed.mode === "single") {
-      return { mode: "single", capabilityId: parsed.capabilityId };
-    }
-
-    if (parsed.mode !== "chain" || !parsed.plan) {
-      return { mode: parsed.mode as "legacy" };
-    }
-
-    // Validate capability IDs — log any unrecognised ones
     const validIds = new Set(getAllCapabilities().map(c => c.id));
-    const validSteps = parsed.plan.steps.filter(s => {
+    const validSteps = parsed.steps.filter(s => {
       const ok = validIds.has(s.capabilityId as CapabilityId);
-      if (!ok) console.warn("[ChainPlanner] unknown capabilityId:", s.capabilityId);
+      if (!ok) console.warn("[ChainPlanner] chain: unknown capabilityId:", s.capabilityId);
       return ok;
     });
 
+    // AUTHORITATIVE: pre-parser forced chain — do NOT silently downgrade.
+    // If the LLM returned fewer than 2 valid steps, that is a planner error.
     if (validSteps.length < 2) {
-      console.warn("[ChainPlanner] not enough valid steps, falling back to legacy. steps:", parsed.plan.steps.map(s => s.capabilityId));
+      console.error(
+        "[ChainPlanner] chain: LLM returned fewer than 2 valid steps for a forced-chain message.",
+        "steps:", parsed.steps.map(s => s.capabilityId),
+      );
+      // Return legacy so the router can fall through to the legacy concierge,
+      // which will surface a natural error to the user rather than silently doing nothing.
       return { mode: "legacy" };
     }
 
     const plan: ExecutionPlan = {
-      summary: parsed.plan.summary,
-      hasWrites: parsed.plan.hasWrites,
+      summary: parsed.summary,
+      hasWrites: parsed.hasWrites,
       steps: validSteps.map(s => ({
         id: s.id,
         capabilityId: s.capabilityId as CapabilityId,
@@ -242,7 +277,71 @@ Return ONLY valid JSON:
 
     return { mode: "chain", plan };
   } catch (err) {
-    console.error("[ChainPlanner] Error:", err);
+    console.error("[ChainPlanner] chain: Error:", err);
+    return { mode: "legacy" };
+  }
+}
+
+// ── Single planner ────────────────────────────────────────────────────────────
+
+async function planSingle(
+  message: string,
+  catalog: string,
+  businessDate: string,
+): Promise<ChainRoutingDecision> {
+  const systemPrompt = buildSinglePlanPrompt(catalog, businessDate);
+  const userPrompt = `Message: "${message}"`;
+
+  try {
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "single_plan",
+          strict: false,
+          schema: {
+            type: "object",
+            properties: {
+              capabilityId: { type: ["string", "null"] },
+              args: { type: "object", additionalProperties: true },
+            },
+            required: ["capabilityId"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+
+    const rawContent = response.choices?.[0]?.message?.content;
+    if (!rawContent) {
+      console.error("[ChainPlanner] single: empty LLM response");
+      return { mode: "legacy" };
+    }
+    const content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+    console.log("[ChainPlanner] single raw response:", content.slice(0, 300));
+
+    const parsed = JSON.parse(content) as {
+      capabilityId: string | null;
+      args?: Record<string, unknown>;
+    };
+
+    if (!parsed.capabilityId) {
+      return { mode: "legacy" };
+    }
+
+    const validIds = new Set(getAllCapabilities().map(c => c.id));
+    if (!validIds.has(parsed.capabilityId as CapabilityId)) {
+      console.warn("[ChainPlanner] single: unknown capabilityId:", parsed.capabilityId);
+      return { mode: "legacy" };
+    }
+
+    return { mode: "single", capabilityId: parsed.capabilityId };
+  } catch (err) {
+    console.error("[ChainPlanner] single: Error:", err);
     return { mode: "legacy" };
   }
 }
