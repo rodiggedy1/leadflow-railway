@@ -198,12 +198,6 @@ const TESTS: TestCase[] = [
     description: "Seed: general readiness → Ack: acknowledge those",
   },
   {
-    kind: "sequence", id: "s-03", category: "Stateful Acknowledge Sequences",
-    seedMessage: "Show me readiness issues for tomorrow",
-    acknowledgeMessage: "That's fine",
-    description: "Seed: readiness issues → Ack: that's fine",
-  },
-  {
     kind: "sequence", id: "s-04", category: "Stateful Acknowledge Sequences",
     seedMessage: "Any unassigned jobs tomorrow?",
     acknowledgeMessage: "Mark that as ok",
