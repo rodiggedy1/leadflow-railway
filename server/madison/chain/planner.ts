@@ -115,7 +115,7 @@ Return ONLY valid JSON matching this schema:
         type: "json_schema",
         json_schema: {
           name: "chain_routing",
-          strict: true,
+          strict: false,
           schema: {
             type: "object",
             properties: {
