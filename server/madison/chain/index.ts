@@ -9,7 +9,7 @@
  */
 
 import type { CapabilityContext, ExecutionPlan, ChainConfirmCard, ChainExecutionResult } from "./types";
-import { planChainRouting, isObviouslyLegacy } from "./planner";
+import { planChainRouting } from "./planner";
 import { executeChain } from "./executor";
 import { getCapabilityHandler } from "./registry";
 import { chainExecutions } from "../../../drizzle/schema";
@@ -39,21 +39,19 @@ export type ChainHandlerResult = ChainConfirmResult | ChainResultOutput | ChainL
 
 export async function handleMadisonChain(
   message: string,
-  ctx: CapabilityContext,
+  ctx: CapabilityContext & { plan?: ExecutionPlan },
 ): Promise<ChainHandlerResult> {
-  // Fast path: skip LLM for obvious single-domain messages
-  if (isObviouslyLegacy(message)) {
-    return { type: "chain_legacy" };
+  // Use pre-computed plan if provided (avoids double LLM call when planner ran upstream)
+  let plan: ExecutionPlan;
+  if (ctx.plan) {
+    plan = ctx.plan;
+  } else {
+    const routing = await planChainRouting(message);
+    if (routing.mode !== "chain" || !routing.plan) {
+      return { type: "chain_legacy" };
+    }
+    plan = routing.plan;
   }
-
-  // Single LLM pass to determine routing and build plan
-  const routing = await planChainRouting(message);
-
-  if (routing.mode !== "chain" || !routing.plan) {
-    return { type: "chain_legacy" };
-  }
-
-  const plan = routing.plan;
 
   // Create chain execution record
   const chainExecutionId = randomUUID();

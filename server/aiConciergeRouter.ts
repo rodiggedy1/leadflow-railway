@@ -2567,16 +2567,23 @@ export const aiConciergeRouter = router({
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
 
-      // ── Madison Chain Engine ───────────────────────────────────────────────
-      // Multi-capability chain: runs before all single-domain gates.
-      // Only fires when the message clearly requests multiple capabilities.
-      // Falls back to legacy routing if the planner returns mode != "chain".
-      if (!input.resolvedClientPhone && !re) {
-        try {
+      // ── Unified Planner Routing ───────────────────────────────────────────
+      // Single LLM pass determines mode for all natural-language messages.
+      // Structured UI actions (resolved pills, disambiguation follow-ups) already
+      // returned above — only free-form natural language reaches this point.
+      // isCommsDomain / isReadinessDomain regex gates are no longer used here.
+      try {
+        const { planChainRouting } = await import("./madison/chain/planner");
+        const routing = await planChainRouting(input.message);
+        console.log(`[Planner] mode=${routing.mode} msg=${JSON.stringify(input.message)}`);
+
+        if (routing.mode === "chain" && routing.plan) {
+          // Multi-capability chain
           const chainResult = await handleMadisonChain(input.message, {
             db,
             agentId: ctx.agent.agentId,
             agentName: ctx.agent.agentName ?? undefined,
+            plan: routing.plan,
           });
           if (chainResult.type === "chain_confirm") {
             return { type: "chain_confirm" as const, chainExecutionId: chainResult.chainExecutionId, card: chainResult.card };
@@ -2584,47 +2591,41 @@ export const aiConciergeRouter = router({
           if (chainResult.type === "chain_result") {
             return { type: "chain_result" as const, chainExecutionId: chainResult.chainExecutionId, result: chainResult.result };
           }
-          // chain_legacy → fall through to existing gates
-        } catch (err) {
-          console.warn("[Chain] Error, falling back to legacy:", err);
         }
-      }
 
-      // ── Madison Communications Domain ─────────────────────────────────────
-      // SMS intent: text/message a named contact, group, or job-scoped customer.
-      // Runs before Readiness so "text Maria about her job" doesn't fall into readiness.
-      // Skip comms gate if entity is already resolved (chip or disambiguation follow-up)
-      if (!input.resolvedClientPhone && !re && isCommsDomain(input.message)) {
-        const rid = crypto.randomUUID().slice(0, 8);
-        console.log(`[Comms] gate matched: msg=${JSON.stringify(input.message)} rid=${rid}`);
-        const commsResult = await handleMadisonComms(db, input.message, rid, ctx.agent.agentId);
-        if (commsResult.handled) {
-          const r = commsResult.response as any;
-          if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
-          if (r.type === "client_disambiguation") return r;
-          // needs_clarification
-          return { type: "error" as const, message: r.message ?? "Could not process SMS request." };
-        }
-        // Planner/validator failed — fall through to legacy concierge
-        console.warn(`[Comms] falling back to legacy: ${commsResult.fallbackReason}`);
-      }
+        if (routing.mode === "single" && routing.plan?.steps?.[0]) {
+          const capId = routing.plan.steps[0].capabilityId;
+          const rid = crypto.randomUUID().slice(0, 8);
 
-      // ── Madison Readiness Domain ──────────────────────────────────────────
-      // No chip context needed for readiness queries — they are date/dimension scoped.
-      console.log(`[Madison] gate check: re=${JSON.stringify(re)} msg=${JSON.stringify(input.message)} gateMatch=${isReadinessDomain(input.message)}`);
-      if (isReadinessDomain(input.message)) {
-        const rid = crypto.randomUUID().slice(0, 8);
-        const madisonResult = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId);
-        if (madisonResult.handled && madisonResult.response) {
-          return {
-            type: "query_result" as const,
-            answer: madisonResult.response,
-            status: "complete" as const,
-            undoActionId: madisonResult.undoActionId ?? null,
-          };
+          // Route to existing single-capability handler by capabilityId
+          if (capId.startsWith("communications.")) {
+            console.log(`[Planner] single → comms: ${capId} rid=${rid}`);
+            const commsResult = await handleMadisonComms(db, input.message, rid, ctx.agent.agentId);
+            if (commsResult.handled) {
+              const r = commsResult.response as any;
+              if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
+              if (r.type === "client_disambiguation") return r;
+              return { type: "error" as const, message: r.message ?? "Could not process SMS request." };
+            }
+            console.warn(`[Planner] comms handler fell back: ${commsResult.fallbackReason}`);
+          } else if (capId.startsWith("readiness.") || capId.startsWith("confirmations.") || capId.startsWith("payments.query")) {
+            console.log(`[Planner] single → readiness: ${capId} rid=${rid}`);
+            const madisonResult = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId);
+            if (madisonResult.handled && madisonResult.response) {
+              return {
+                type: "query_result" as const,
+                answer: madisonResult.response,
+                status: "complete" as const,
+                undoActionId: madisonResult.undoActionId ?? null,
+              };
+            }
+            console.warn("[Planner] readiness handler fell back:", madisonResult.fallbackReason);
+          }
+          // Other single capabilities fall through to legacy concierge
         }
-        // Execution failed — fall through to legacy concierge once
-        console.warn("[Madison] Falling back to legacy concierge:", madisonResult.fallbackReason);
+        // mode === "legacy" or unhandled single → fall through to parseConciergeRequest
+      } catch (err) {
+        console.warn("[Planner] Error, falling back to legacy:", err);
       }
       // ─────────────────────────────────────────────────────────────────────
 

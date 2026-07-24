@@ -217,27 +217,4 @@ Return ONLY valid JSON matching this schema:
   }
 }
 
-// ── Fast-path detector (no LLM) ───────────────────────────────────────────────
-
-/**
- * Cheap heuristic to skip the LLM planning pass for obvious single-domain messages.
- * Returns true if the message is clearly NOT a multi-step chain.
- */
-export function isObviouslyLegacy(message: string): boolean {
-  const lower = message.toLowerCase().trim();
-
-  // Very short messages are almost never chains
-  if (lower.length < 10) return true;
-
-  // Pure questions / lookups — but only if they don't combine with action verbs
-  if (/^(what|who|when|where|how many|show|list|get|find|check|is there|are there|tell me|do we|does|did)\b/.test(lower)) {
-    // If the message contains a conjunction + action verb anywhere, it's a chain candidate
-    const hasChainSignal = /\b(and|also|both|then|plus)\b/.test(lower) &&
-      /\b(send|text|call|charge|release|notify|remind|message|payment|link)\b/.test(lower);
-    if (!hasChainSignal) {
-      return true;
-    }
-  }
-
-  return false;
-}
+// isObviouslyLegacy removed — the planner is the single source of truth for routing.
