@@ -44,6 +44,7 @@ import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { invokeLLM } from "./_core/llm";
 import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
@@ -5035,6 +5036,140 @@ Rules that ALWAYS apply regardless of instruction:
         .set({ metadata: JSON.stringify(meta) })
         .where(eq(opsChatMessages.id, input.messageId));
       return { ok: true };
+    }),
+
+  /**
+   * generateAndPostAsMadison — calls the LLM to rewrite a raw AI result into
+   * a human-sounding Madison team post with stats and a recommended action,
+   * then inserts it into Command Chat.
+   */
+  generateAndPostAsMadison: opsChatProcedure
+    .input(
+      z.object({
+        rawText: z.string().min(1).max(8000),
+        resultType: z.string().max(64).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const systemPrompt = `You are Madison, an AI operations manager for a home cleaning company.
+Your job is to rewrite an AI result into a short, warm, human-sounding team post for the Command Chat channel.
+
+Rules:
+- Start with a friendly greeting like "Hey team 👋" or "Quick heads up 👀" or similar
+- Summarize the key finding in 1-2 plain sentences. Use **bold** for important numbers or names.
+- Extract up to 4 key stats as a stats array (e.g. customers affected, jobs, risk level, best time to act)
+- Recommend ONE clear action if applicable (e.g. send payment links, notify customers, open readiness)
+- Keep the tone warm but professional — like a smart colleague, not a robot
+- Do NOT repeat the raw data verbatim — rewrite it naturally
+
+Return ONLY valid JSON in this exact shape:
+{
+  "body": "Hey team 👋\n\nI noticed **4 customers** on tomorrow's schedule don't have a card on file yet.\nCollecting payment methods tonight will help us avoid headaches tomorrow.",
+  "stats": [
+    { "icon": "customers", "label": "Customers", "value": "4" },
+    { "icon": "jobs", "label": "Jobs affected", "value": "4" },
+    { "icon": "risk", "label": "Risk", "value": "Medium", "color": "orange" },
+    { "icon": "clock", "label": "Best time to act", "value": "Tonight" }
+  ],
+  "action": "send_payment_links",
+  "buttonLabel": "Send Payment Links",
+  "chainCommand": "find customers without cards for today and send them payment links"
+}
+
+If no action is needed, set action, buttonLabel, and chainCommand to null.
+Valid action values: "send_payment_links", "notify_customers", "open_readiness", null`;
+
+      let parsed: {
+        body: string;
+        stats: Array<{ icon: string; label: string; value: string; color?: string }>;
+        action: string | null;
+        buttonLabel: string | null;
+        chainCommand: string | null;
+      };
+
+      try {
+        const llmResult = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Result type: ${input.resultType ?? "general"}\n\nRaw result:\n${input.rawText}` },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "madison_post",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  body: { type: "string" },
+                  stats: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        icon: { type: "string" },
+                        label: { type: "string" },
+                        value: { type: "string" },
+                        color: { type: "string" },
+                      },
+                      required: ["icon", "label", "value"],
+                      additionalProperties: false,
+                    },
+                  },
+                  action: { type: ["string", "null"] },
+                  buttonLabel: { type: ["string", "null"] },
+                  chainCommand: { type: ["string", "null"] },
+                },
+                required: ["body", "stats", "action", "buttonLabel", "chainCommand"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const content = llmResult.choices?.[0]?.message?.content;
+        parsed = typeof content === "string" ? JSON.parse(content) : content;
+      } catch {
+        parsed = {
+          body: input.rawText.slice(0, 2000),
+          stats: [],
+          action: null,
+          buttonLabel: null,
+          chainCommand: null,
+        };
+      }
+
+      const metadata = JSON.stringify({
+        variant: "recommendation",
+        action: parsed.action,
+        buttonLabel: parsed.buttonLabel,
+        chainCommand: parsed.chainCommand,
+        stats: parsed.stats,
+        dismissed: false,
+        executedBy: null,
+        parentMessageId: null,
+      });
+
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "Madison",
+        authorRole: "system",
+        body: parsed.body,
+        mediaUrl: null,
+        quickAction: "madison_post",
+        metadata,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
+
+      const messageId = (insertResult as any).insertId as number;
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true, messageId };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

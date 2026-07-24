@@ -299,7 +299,7 @@ type MessageContent =
   | { type: "prepare_result"; card: PrepareResultCard }
   | { type: "chain_confirm"; card: ChainConfirmCard }
   | { type: "chain_result"; card: ChainResultCard }
-  | { type: "post_to_cc_prompt"; rawText: string };
+  | { type: "post_to_cc_prompt"; rawText: string; resultType: string };
   // customer_profile removed — all informational queries return query_result
 
 interface Message {
@@ -1047,19 +1047,13 @@ function EtaPendingCardView({ card }: { card: EtaPendingCard }) {
  * Calls postAsMadison to push a Madison recommendation card into Command Chat.
  */
 function PostToCommandChatButton({
-  body,
-  action,
-  buttonLabel,
-  chainCommand,
-  stats,
+  rawText,
+  resultType,
 }: {
-  body: string;
-  action?: string | null;
-  buttonLabel?: string | null;
-  chainCommand?: string | null;
-  stats?: Array<{ icon: string; label: string; value: string; color?: string }>;
+  rawText: string;
+  resultType?: string;
 }) {
-  const postMutation = trpc.opsChat.postAsMadison.useMutation({
+  const postMutation = trpc.opsChat.generateAndPostAsMadison.useMutation({
     onSuccess: () => toast.success("Posted to Command Chat"),
     onError: (err) => toast.error("Failed to post", { description: err.message }),
   });
@@ -1067,12 +1061,8 @@ function PostToCommandChatButton({
     <button
       onClick={() =>
         postMutation.mutate({
-          body,
-          variant: "recommendation",
-          action: action ?? null,
-          buttonLabel: buttonLabel ?? null,
-          chainCommand: chainCommand ?? null,
-          stats: stats ?? [],
+          rawText,
+          resultType: resultType ?? "general",
         })
       }
       disabled={postMutation.isPending || postMutation.isSuccess}
@@ -1085,7 +1075,7 @@ function PostToCommandChatButton({
       }}
     >
       {postMutation.isPending ? (
-        <><Loader2 className="w-3 h-3 animate-spin" /> Posting…</>
+        <><Loader2 className="w-3 h-3 animate-spin" /> Generating post…</>
       ) : postMutation.isSuccess ? (
         <><CheckCircle2 className="w-3 h-3" /> Posted to Command Chat</>
       ) : (
@@ -1192,13 +1182,6 @@ function MessageBubble({
         {msg.content.type === "bulk_sms_sent" && (
           <div>
             <BulkSmsSentCardView card={msg.content.card} />
-            <PostToCommandChatButton
-              body={`Hey team 👋\nI just sent a bulk SMS to ${msg.content.card.results.length} recipient${msg.content.card.results.length !== 1 ? "s" : ""}.\n${msg.content.card.results.filter(r => r.success).length} sent successfully, ${msg.content.card.results.filter(r => !r.success).length} failed.`}
-              stats={[
-                { icon: "✅", label: "Sent", value: String(msg.content.card.results.filter(r => r.success).length) },
-                ...(msg.content.card.results.filter(r => !r.success).length > 0 ? [{ icon: "❌", label: "Failed", value: String(msg.content.card.results.filter(r => !r.success).length) }] : []),
-              ]}
-            />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -1234,10 +1217,6 @@ function MessageBubble({
         {msg.content.type === "payment_link_sent" && (
           <div>
             <PaymentLinkSentCardView card={msg.content.card} />
-            <PostToCommandChatButton
-              body={`Hey team 👋\nI sent a payment link to ${msg.content.card.recipientName}.\n${msg.content.card.success ? "Link delivered successfully." : "Delivery failed: " + (msg.content.card.error ?? "unknown error")}`}
-              stats={[{ icon: msg.content.card.success ? "✅" : "❌", label: "Status", value: msg.content.card.success ? "Sent" : "Failed" }]}
-            />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -1275,20 +1254,6 @@ function MessageBubble({
         {msg.content.type === "card_status" && (
           <div>
             <CardStatusCardView card={msg.content.card} />
-            <PostToCommandChatButton
-              body={
-                msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0
-                  ? `Hey team 👋\nI noticed ${msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length} customer${msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length !== 1 ? "s" : ""} on ${msg.content.card.date}'s schedule don't have a card on file yet.\nCollecting payment methods tonight will help us avoid headaches tomorrow.`
-                  : `Hey team 👋\nAll customers on ${msg.content.card.date}'s schedule have cards on file. We're good to go!`
-              }
-              action={msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "send_payment_links" : null}
-              buttonLabel={msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "Send Payment Links" : null}
-              chainCommand={msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "find customers without cards for today and send them payment links" : null}
-              stats={[
-                { icon: "👥", label: "Customers", value: String(msg.content.card.rows.length) },
-                { icon: "⚠️", label: "Missing card", value: String(msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length), color: msg.content.card.rows.filter(r => r.status === "no_card" || r.status === "no_preauth").length > 0 ? "#f97316" : undefined },
-              ]}
-            />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -1313,13 +1278,6 @@ function MessageBubble({
         {msg.content.type === "confirmation_results" && (
           <div>
             <ConfirmationResultsCardView card={msg.content.card} />
-            <PostToCommandChatButton
-              body={`Hey team 👋\nConfirmation status for ${msg.content.card.dateLabel}:\n${msg.content.card.totalConfirmed} confirmed, ${msg.content.card.totalPending} still pending out of ${msg.content.card.totalSent} sent.`}
-              stats={[
-                { icon: "✅", label: "Confirmed", value: String(msg.content.card.totalConfirmed) },
-                { icon: "⏳", label: "Pending", value: String(msg.content.card.totalPending), color: msg.content.card.totalPending > 0 ? "#f97316" : undefined },
-              ]}
-            />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -1350,15 +1308,6 @@ function MessageBubble({
         {msg.content.type === "prepare_result" && (
           <div>
             <PrepareResultCardView card={msg.content.card} onOpen={() => onOpenReadiness(msg.content.type === 'prepare_result' ? msg.content.card.rawDate : undefined)} />
-            <PostToCommandChatButton
-              body={`Hey team 👋\nReadiness for ${msg.content.card.date} is at ${msg.content.card.readinessPct}%.\n${msg.content.card.issueCount > 0 ? `There are ${msg.content.card.issueCount} open issue${msg.content.card.issueCount !== 1 ? "s" : ""} to address.` : "No open issues — looking great!"}`}
-              action={msg.content.card.issueCount > 0 ? "open_readiness" : null}
-              buttonLabel={msg.content.card.issueCount > 0 ? "Open Readiness" : null}
-              stats={[
-                { icon: "📊", label: "Readiness", value: `${msg.content.card.readinessPct}%`, color: msg.content.card.readinessPct < 80 ? "#f97316" : "#22c55e" },
-                { icon: "⚠️", label: "Issues", value: String(msg.content.card.issueCount), color: msg.content.card.issueCount > 0 ? "#f97316" : undefined },
-              ]}
-            />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -1381,29 +1330,14 @@ function MessageBubble({
         {msg.content.type === "chain_result" && (
           <div>
             <ChainResultCardView card={msg.content.card} />
-            <PostToCommandChatButton
-              body={msg.content.card.status === "succeeded"
-                ? `Hey team 👋\nAll done! ${msg.content.card.steps.map(s => s.summary).join(" ")}`
-                : msg.content.card.status === "partial"
-                ? `Hey team 👋\nPartially completed. ${msg.content.card.successCount} succeeded, ${msg.content.card.failCount} failed.`
-                : `Hey team 👋\nSomething went wrong. ${msg.content.card.failCount} step${msg.content.card.failCount !== 1 ? "s" : ""} failed.`
-              }
-              stats={[
-                { icon: "✅", label: "Succeeded", value: String(msg.content.card.successCount) },
-                ...(msg.content.card.failCount > 0 ? [{ icon: "❌", label: "Failed", value: String(msg.content.card.failCount) }] : []),
-              ]}
-            />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
         {msg.content.type === "post_to_cc_prompt" && (
           <div className="flex items-center gap-2 mt-1">
             <PostToCommandChatButton
-              body={msg.content.rawText}
-              action={null}
-              buttonLabel={null}
-              chainCommand={null}
-              stats={[]}
+              rawText={msg.content.rawText}
+              resultType={msg.content.resultType}
             />
           </div>
         )}
@@ -4109,7 +4043,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "payment_link_confirm") {
     return [{
@@ -4146,7 +4080,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "client_disambiguation") {
     return [{
@@ -4184,7 +4118,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "query_result", card: { answer: result.answer, status: result.status, undoActionId: (result as { undoActionId?: string | null }).undoActionId ?? null } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "call_client_pending") {
     return [{
@@ -4201,7 +4135,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "card_status", card: { date: result.date, rows: result.rows } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "rank_teams") {
     const _msg = {
@@ -4210,7 +4144,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "rank_teams", card: { windowDays: result.windowDays, minRatings: result.minRatings, rows: result.rows, excluded: result.excluded } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "list_no_eta") {
     const _msg = {
@@ -4219,7 +4153,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "list_no_eta", card: { date: result.date, rows: result.rows } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "confirmation_texts") {
     const _msg = {
@@ -4228,7 +4162,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "confirmation_texts", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "confirmation_results") {
     const _msg = {
@@ -4237,7 +4171,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "confirmation_results", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows, totalSent: result.totalSent, totalConfirmed: result.totalConfirmed, totalPending: result.totalPending } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "job_status_stream") {
     const _msg = {
@@ -4246,7 +4180,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "job_status_stream", card: { alerts: result.alerts, cleanerStatuses: result.cleanerStatuses } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "unanswered_sms") {
     const _msg = {
@@ -4255,7 +4189,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "unanswered_sms", card: { thresholdMinutes: result.thresholdMinutes, rows: result.rows } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "generate_invoice") {
     const _msg = {
@@ -4264,7 +4198,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "generate_invoice", card: { templates: result.templates, customerHint: result.customerHint } },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "chain_confirm") {
     return [{
@@ -4281,7 +4215,7 @@ function buildAiMessage(result: ServerResult): Message[] {
       content: { type: "chain_result", card: result.result },
       ts,
     };
-    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
   }
   return [];
 }
