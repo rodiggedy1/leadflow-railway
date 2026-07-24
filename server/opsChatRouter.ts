@@ -4922,6 +4922,120 @@ Rules that ALWAYS apply regardless of instruction:
       broadcastOpsUpdate("new_message", { channel: "command" });
       return { ok: true };
     }),
+
+  /**
+   * postAsMadison — inserts a Madison-authored recommendation or result card
+   * into the Command Chat channel.
+   *
+   * Phase 1: called manually from the AI Concierge "Post to Command Chat" button.
+   * Phase 2+: callable from background jobs / heartbeat cron.
+   */
+  postAsMadison: opsChatProcedure
+    .input(
+      z.object({
+        body: z.string().min(1).max(2000),
+        variant: z.enum(["recommendation", "result"]).default("recommendation"),
+        action: z.string().max(64).nullable().optional(),
+        buttonLabel: z.string().max(128).nullable().optional(),
+        chainCommand: z.string().max(500).nullable().optional(),
+        stats: z
+          .array(
+            z.object({
+              icon: z.string().max(16),
+              label: z.string().max(64),
+              value: z.string().max(64),
+              color: z.string().max(32).optional(),
+            })
+          )
+          .optional(),
+        parentMessageId: z.number().int().positive().nullable().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const metadata = JSON.stringify({
+        variant: input.variant,
+        action: input.action ?? null,
+        buttonLabel: input.buttonLabel ?? null,
+        chainCommand: input.chainCommand ?? null,
+        stats: input.stats ?? [],
+        dismissed: false,
+        executedBy: null,
+        parentMessageId: input.parentMessageId ?? null,
+      });
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "Madison",
+        authorRole: "system",
+        body: input.body,
+        mediaUrl: null,
+        quickAction: "madison_post",
+        metadata,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
+      const messageId = (insertResult as any).insertId as number;
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true, messageId };
+    }),
+
+  /**
+   * dismissMadisonPost — marks a recommendation card as dismissed ("Not right now").
+   */
+  dismissMadisonPost: opsChatProcedure
+    .input(z.object({ messageId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const rows = await db
+        .select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.messageId))
+        .limit(1);
+      if (!rows[0]) return { ok: false };
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(rows[0].metadata ?? "{}"); } catch { /* ignore */ }
+      meta.dismissed = true;
+      await db
+        .update(opsChatMessages)
+        .set({ metadata: JSON.stringify(meta) })
+        .where(eq(opsChatMessages.id, input.messageId));
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true };
+    }),
+
+  /**
+   * markMadisonPostExecuted — records who confirmed the action on a recommendation card.
+   */
+  markMadisonPostExecuted: opsChatProcedure
+    .input(
+      z.object({
+        messageId: z.number().int().positive(),
+        executedBy: z.string().min(1).max(128),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const rows = await db
+        .select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.messageId))
+        .limit(1);
+      if (!rows[0]) return { ok: false };
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(rows[0].metadata ?? "{}"); } catch { /* ignore */ }
+      meta.executedBy = input.executedBy;
+      await db
+        .update(opsChatMessages)
+        .set({ metadata: JSON.stringify(meta) })
+        .where(eq(opsChatMessages.id, input.messageId));
+      return { ok: true };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
