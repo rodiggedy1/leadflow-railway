@@ -14,7 +14,7 @@
  */
 
 import type { ExecutionPlan, CapabilityId, ChainRoutingDecision } from "./types";
-import { getAllCapabilities } from "./registry";
+import { getAllCapabilities, getCapabilityHandler } from "./registry";
 import { invokeLLM } from "../../_core/llm";
 import { getTodayET } from "../../conciergeTime";
 
@@ -262,18 +262,27 @@ async function planChain(
       return { mode: "legacy" };
     }
 
+    const assembledSteps = validSteps.map(s => ({
+      id: s.id,
+      capabilityId: s.capabilityId as CapabilityId,
+      label: s.label,
+      args: s.args ?? {},
+      dataRefs: s.dataRefs,
+      onFailure: s.onFailure,
+    }));
+
+    // Compute hasWrites deterministically from the registry — do not trust the LLM's value.
+    const hasWrites = assembledSteps.some(
+      step => getCapabilityHandler(step.capabilityId)?.isWrite === true
+    );
+
     const plan: ExecutionPlan = {
       summary: parsed.summary,
-      hasWrites: parsed.hasWrites,
-      steps: validSteps.map(s => ({
-        id: s.id,
-        capabilityId: s.capabilityId as CapabilityId,
-        label: s.label,
-        args: s.args ?? {},
-        dataRefs: s.dataRefs,
-        onFailure: s.onFailure,
-      })),
+      hasWrites,
+      steps: assembledSteps,
     };
+
+    console.log(`[ChainPlanner] chain: hasWrites=${hasWrites} steps=${assembledSteps.map(s => s.capabilityId).join(" → ")}`);
 
     return { mode: "chain", plan };
   } catch (err) {

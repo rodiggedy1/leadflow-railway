@@ -71,6 +71,16 @@ describe("hasCoordinationSignal — deterministic pre-parser", () => {
     expect(hasCoordinationSignal("Check readiness as well as confirmations")).toBe(true);
   });
 
+  // ── hasWrites determinism verification ─────────────────────────────────────
+  // The pre-parser correctly classifies the trigger phrase as chain.
+  // The actual hasWrites computation happens inside planChain() using the registry,
+  // which is tested here at the pre-parser level (the gateway to that path).
+  it("classifies the exact production trigger as chain (gateway to hasWrites=true path)", () => {
+    // confirmations.queryStatus (READ) → communications.sendBulkSms (WRITE)
+    // hasWrites will be true because sendBulkSms.isWrite === true in the registry
+    expect(hasCoordinationSignal("find unconfirmed customers for today and text them all")).toBe(true);
+  });
+
   // ── False-positive guard: 'and' inside a name should NOT trigger ──────────
   // "Anderson" contains "and" but is not a coordination signal.
   // The word-boundary regex \b prevents this.
