@@ -2568,14 +2568,16 @@ export const aiConciergeRouter = router({
       const re = input.resolvedEntity ?? null;
 
       // ── Unified Planner Routing ───────────────────────────────────────────
-      // Single LLM pass determines mode for all natural-language messages.
-      // Structured UI actions (resolved pills, disambiguation follow-ups) already
-      // returned above — only free-form natural language reaches this point.
-      // isCommsDomain / isReadinessDomain regex gates are no longer used here.
+      // The deterministic pre-parser classifies the message as chain or single
+      // BEFORE any LLM call. If the pre-parser forces chain, the request must
+      // NEVER fall through to parseConciergeRequest — doing so risks dangerous
+      // misclassification by the legacy parser.
+      const { planChainRouting, hasCoordinationSignal } = await import("./madison/chain/planner");
+      const _isForceChain = hasCoordinationSignal(input.message);
+
       try {
-        const { planChainRouting } = await import("./madison/chain/planner");
         const routing = await planChainRouting(input.message);
-        console.log(`[Planner] mode=${routing.mode} msg=${JSON.stringify(input.message)}`);
+        console.log(`[Planner] mode=${routing.mode} isForceChain=${_isForceChain} msg=${JSON.stringify(input.message)}`);
 
         if (routing.mode === "chain" && routing.plan) {
           // Multi-capability chain
@@ -2591,6 +2593,21 @@ export const aiConciergeRouter = router({
           if (chainResult.type === "chain_result") {
             return { type: "chain_result" as const, chainExecutionId: chainResult.chainExecutionId, result: chainResult.result };
           }
+          // chain_legacy returned — for a forced-chain request this is an error
+          if (_isForceChain) {
+            return {
+              type: "error" as const,
+              message: "Chain planner could not build a valid plan for this request. Please try rephrasing.",
+            };
+          }
+        }
+
+        // Forced-chain requests that returned mode !== "chain" are an error
+        if (_isForceChain && routing.mode !== "chain") {
+          return {
+            type: "error" as const,
+            message: `Chain planner returned unexpected mode "${routing.mode}" for a multi-step request. Please try rephrasing.`,
+          };
         }
 
         if (routing.mode === "single" && routing.capabilityId) {
@@ -2625,7 +2642,15 @@ export const aiConciergeRouter = router({
         }
         // mode === "legacy" or unhandled single → fall through to parseConciergeRequest
       } catch (err) {
-        console.warn("[Planner] Error, falling back to legacy:", err);
+        console.warn("[Planner] Error:", err);
+        // Forced-chain requests must not fall through to the legacy parser on error
+        if (_isForceChain) {
+          const stage = err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120);
+          return {
+            type: "error" as const,
+            message: `Chain planner encountered an error and cannot proceed: ${stage}`,
+          };
+        }
       }
       // ─────────────────────────────────────────────────────────────────────
 
