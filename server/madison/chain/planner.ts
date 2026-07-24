@@ -33,8 +33,9 @@ function buildCapabilityCatalog(): string {
       case "confirmations.queryStatus":
         contract = [
           '  inputs:  { date?: "YYYY-MM-DD" }',
-          '  outputs: { notYetConfirmed: [{phone, name, jobId}], unconfirmed: [{phone, name, jobId}], alreadySent: [{phone, name}] }',
-          '  NOTE: notYetConfirmed = unconfirmed + alreadySent (everyone who has not confirmed yet). Use notYetConfirmed as recipients when the goal is to text all unconfirmed customers.',
+          '  outputs: { notYetConfirmed: [{phone, name, jobId}] }',
+          '  notYetConfirmed = everyone who has not confirmed yet (no text sent + text sent but no reply).',
+          '  When texting unconfirmed customers, ALWAYS use path="notYetConfirmed" in dataRefs.',
         ].join("\n");
         break;
       case "payments.queryCardStatus":

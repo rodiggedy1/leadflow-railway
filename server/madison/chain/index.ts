@@ -198,9 +198,10 @@ function buildStepPreview(
     }
     case "confirmations.queryStatus": {
       const r = result as any;
+      const list = r.notYetConfirmed ?? r.unconfirmed ?? [];
       return {
-        preview: `${r.unconfirmed?.length ?? 0} unconfirmed`,
-        entities: r.unconfirmed?.map((e: any) => ({ name: e.name, phone: e.phone })),
+        preview: `${list.length} not yet confirmed`,
+        entities: list.map((e: any) => ({ name: e.name, phone: e.phone })),
       };
     }
     case "readiness.compute": {
