@@ -34,6 +34,7 @@ import { resolveQuery } from "./conciergeResolvers";
 import type { QueryPlan } from "./conciergeQuery";
 import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
 import { isReadinessDomain, handleMadisonReadiness } from "./madison";
+import { isCommsDomain, handleMadisonComms } from "./madison/comms";
 import { computeReadinessSummary } from "./madison/readinessService";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2532,6 +2533,24 @@ export const aiConciergeRouter = router({
       // When the chip type conflicts with the classified intent, fall back to the
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
+
+      // ── Madison Communications Domain ─────────────────────────────────────
+      // SMS intent: text/message a named contact, group, or job-scoped customer.
+      // Runs before Readiness so "text Maria about her job" doesn't fall into readiness.
+      if (isCommsDomain(input.message)) {
+        const rid = crypto.randomUUID().slice(0, 8);
+        console.log(`[Comms] gate matched: msg=${JSON.stringify(input.message)} rid=${rid}`);
+        const commsResult = await handleMadisonComms(db, input.message, rid, ctx.agent.agentId);
+        if (commsResult.handled) {
+          const r = commsResult.response as any;
+          if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
+          if (r.type === "client_disambiguation") return r;
+          // needs_clarification
+          return { type: "error" as const, message: r.message ?? "Could not process SMS request." };
+        }
+        // Planner/validator failed — fall through to legacy concierge
+        console.warn(`[Comms] falling back to legacy: ${commsResult.fallbackReason}`);
+      }
 
       // ── Madison Readiness Domain ──────────────────────────────────────────
       // No chip context needed for readiness queries — they are date/dimension scoped.
