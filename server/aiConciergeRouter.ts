@@ -429,6 +429,17 @@ export interface ChainResultResult {
   result: ChainExecutionResult;
 }
 
+/** TEMPORARY: Returned in debug mode (AI_CONCIERGE_DEBUG=true + admin only) */
+export interface DebugResult {
+  type: "debug";
+  debug: {
+    plannerMode: string;
+    plannerRaw: Record<string, unknown>;
+    selectedRoute: string;
+    steps: Record<string, unknown>[];
+  };
+}
+
 type ConciergeResult =
   | EtaPendingResult
   | CompletedResult
@@ -451,7 +462,8 @@ type ConciergeResult =
   | UnansweredSmsResult
   | GenerateInvoiceResult
   | ChainConfirmResult
-  | ChainResultResult;
+  | ChainResultResult
+  | DebugResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 /** Returned when the concierge shows the live job status stream */
@@ -2572,10 +2584,28 @@ export const aiConciergeRouter = router({
       // Structured UI actions (resolved pills, disambiguation follow-ups) already
       // returned above — only free-form natural language reaches this point.
       // isCommsDomain / isReadinessDomain regex gates are no longer used here.
+      const _debugEnabled = process.env.AI_CONCIERGE_DEBUG === "true" && ctx.agent.isAdmin;
       try {
         const { planChainRouting } = await import("./madison/chain/planner");
         const routing = await planChainRouting(input.message);
         console.log(`[Planner] mode=${routing.mode} msg=${JSON.stringify(input.message)}`);
+        // TEMPORARY debug instrumentation — remove after chain routing is confirmed working
+        if (_debugEnabled) {
+          return {
+            type: "debug" as const,
+            debug: {
+              plannerMode: routing.mode,
+              plannerRaw: routing as unknown as Record<string, unknown>,
+              selectedRoute:
+                routing.mode === "chain" && routing.plan
+                  ? "chain"
+                  : routing.mode === "single" && routing.capabilityId
+                  ? `single:${routing.capabilityId}`
+                  : "legacy",
+              steps: routing.mode === "chain" ? ((routing.plan?.steps ?? []) as unknown as Record<string, unknown>[]): [],
+            },
+          };
+        }
 
         if (routing.mode === "chain" && routing.plan) {
           // Multi-capability chain
