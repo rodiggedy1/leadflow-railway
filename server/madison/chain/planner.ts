@@ -168,6 +168,7 @@ Return ONLY valid JSON matching this schema:
     if (!rawContent) return { mode: "legacy" };
     const content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
 
+    console.log("[ChainPlanner] raw response:", content.slice(0, 500));
     const parsed = JSON.parse(content) as {
       mode: "legacy" | "single" | "chain";
       plan?: {
