@@ -2235,8 +2235,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               <a
                 key={nav.href}
                 href={nav.href}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
               >
                 {/* .rail-item .icon { font-size:21px } */}
@@ -3112,8 +3110,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       <a
                         key={nav.href}
                         href={nav.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="flex flex-col items-center gap-1 w-full py-2.5 px-1 transition-all opacity-65 hover:opacity-100 shrink-0"
                       >
                         <nav.Icon size={18} style={{ color: nav.color }} strokeWidth={1.75} />
@@ -3200,8 +3196,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       <a
                         key={nav.href}
                         href={nav.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
                       >
                         {/* .rail-item .icon { font-size:21px } */}
