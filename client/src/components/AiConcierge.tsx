@@ -3028,10 +3028,10 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
         return;
       }
 
-      // Strategy 2: natural-language query — extract the longest run of capitalised
-      // words (proper-name candidates) from the input, ignoring common stop words.
-      // e.g. "what job is Maria doing today" → "Maria"
-      //      "how many cleans has Anna Maria done" → "Anna Maria"
+      // Strategy 2: natural-language query — extract the longest run of non-stop words.
+      // Case-insensitive, same as how searchCustomers/searchCleaners do LIKE '%query%'.
+      // e.g. "what job is maria doing today" → "maria"
+      //      "how many cleans has anna maria done" → "anna maria"
       const STOP_WORDS = new Set([
         "what","how","when","where","who","why","is","are","was","were","has","have",
         "had","did","do","does","the","a","an","for","of","in","on","at","to","by",
@@ -3047,8 +3047,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       let currentRun = "";
       for (const word of words) {
         const clean = word.replace(/[^a-zA-Z'-]/g, "");
-        const isProper = clean.length >= 2 && /^[A-Z]/.test(clean) && !STOP_WORDS.has(clean.toLowerCase());
-        if (isProper) {
+        const isNameWord = clean.length >= 2 && !STOP_WORDS.has(clean.toLowerCase());
+        if (isNameWord) {
           currentRun = currentRun ? `${currentRun} ${clean}` : clean;
           if (currentRun.length > bestRun.length) bestRun = currentRun;
         } else {
