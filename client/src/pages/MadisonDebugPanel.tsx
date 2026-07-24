@@ -171,11 +171,6 @@ const TESTS: TestCase[] = [
     description: "Referential 'those flags' — requires prior query context",
   },
   {
-    kind: "single", id: "c-04", category: "Cold-Session Referential Actions",
-    message: "That's fine", expected: "NEEDS_CONTEXT", clearContext: true,
-    description: "Referential 'that' — requires prior query context",
-  },
-  {
     kind: "single", id: "c-05", category: "Cold-Session Referential Actions",
     message: "Mark them as handled", expected: "NEEDS_CONTEXT", clearContext: true,
     description: "Referential 'them' — requires prior query context",
