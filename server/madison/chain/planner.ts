@@ -8,52 +8,65 @@
  * It only produces a plan — it does not execute anything.
  */
 
-import type { ExecutionPlan, PlannedStep, CapabilityId, ChainRoutingDecision } from "./types";
+import type { ExecutionPlan, CapabilityId, ChainRoutingDecision } from "./types";
 import { getAllCapabilities } from "./registry";
 import { invokeLLM } from "../../_core/llm";
 import { getTodayET } from "../../conciergeTime";
-import { randomUUID } from "crypto";
 
 // ── Capability catalog for the planner prompt ─────────────────────────────────
 
+/**
+ * Builds a capability catalog that includes both input args AND output schemas,
+ * so the LLM can reason about data flow between steps from contracts alone.
+ */
 function buildCapabilityCatalog(): string {
   const caps = getAllCapabilities();
   return caps.map(c => {
-    let argDocs = "";
+    let contract = "";
     switch (c.id) {
       case "readiness.compute":
-        argDocs = '{ date?: "YYYY-MM-DD" }';
+        contract = [
+          '  inputs:  { date?: "YYYY-MM-DD" }',
+          '  outputs: { overallPct: number, totalIssues: number, summary: string }',
+        ].join("\n");
         break;
       case "confirmations.queryStatus":
-        argDocs = '{ date?: "YYYY-MM-DD" }';
+        contract = [
+          '  inputs:  { date?: "YYYY-MM-DD" }',
+          '  outputs: { unconfirmed: [{phone, name, jobId}], alreadySent: [{phone, name}] }',
+        ].join("\n");
         break;
       case "payments.queryCardStatus":
-        argDocs = '{ date?: "YYYY-MM-DD" }';
+        contract = [
+          '  inputs:  { date?: "YYYY-MM-DD" }',
+          '  outputs: { noCard: [{phone, name, jobId}], onHold: [{phone, name, jobId}], noPreauth: [{phone, name, jobId}] }',
+        ].join("\n");
         break;
       case "payments.sendLink":
-        argDocs = '{ recipients?: [{phone, name, jobId?}], phone?: string, name?: string, date?: "YYYY-MM-DD" }';
+        contract = [
+          '  inputs:  { recipients: [{phone, name, jobId?}] }  — OR —  { phone: string, name: string }',
+          '  outputs: { sent: [{name, success}], failed: [{name, reason}] }',
+        ].join("\n");
         break;
       case "communications.sendSms":
-        argDocs = '{ phone: string, name: string, message: string }';
+        contract = [
+          '  inputs:  { phone: string, name: string, message: string }',
+          '  outputs: { success: boolean, messageId?: string }',
+        ].join("\n");
         break;
       case "communications.sendBulkSms":
-        argDocs = '{ recipients: [{phone, name}], message: string }';
+        contract = [
+          '  inputs:  { recipients: [{phone, name}], message: string }',
+          '  outputs: { results: [{name, success}] }',
+        ].join("\n");
         break;
     }
-    return `- ${c.id} (${c.isWrite ? "WRITE" : "READ"}): ${c.label}\n  args: ${argDocs}`;
-  }).join("\n");
+    return `### ${c.id} (${c.isWrite ? "WRITE" : "READ"})\n${c.label}\n${contract}`;
+  }).join("\n\n");
 }
 
 // ── Routing decision (single LLM pass) ───────────────────────────────────────
 
-/**
- * Determines whether the message is:
- * - "legacy": single-domain, route to existing concierge handler
- * - "single": single capability, route to existing handler (no chain needed)
- * - "chain": multiple capabilities, build an execution plan
- *
- * For "chain" mode, also returns the full ExecutionPlan.
- */
 export async function planChainRouting(
   message: string,
   businessDate: string = getTodayET(),
@@ -63,41 +76,35 @@ export async function planChainRouting(
   const systemPrompt = `You are the Madison command planner for a cleaning business operations tool.
 Today's date is ${businessDate}.
 
-Your job is to analyze a message and decide how to route it:
+Analyze the message and decide how to route it:
 
-1. If the message asks for a SINGLE capability from the registry below, return mode="single".
-2. If the message asks for MULTIPLE capabilities (uses "and", "also", "both", "everyone without", or clearly implies multiple actions), return mode="chain" with a full plan.
-3. If the message is a general question, lookup, or conversational (not a command to execute capabilities), return mode="legacy".
+- mode="legacy"  — general question, lookup, or conversational; not a command to execute capabilities
+- mode="single"  — exactly one capability from the registry is needed
+- mode="chain"   — two or more capabilities are needed, possibly with data flowing between steps
 
 CAPABILITY REGISTRY:
 ${catalog}
 
-DATA REFERENCES: Steps can reference prior step outputs using dataRefs.
-Example: "send payment links to everyone without a card" requires:
-  Step 1: payments.queryCardStatus → produces { noCard: [{phone, name}] }
-  Step 2: payments.sendLink with dataRef: { recipients: { fromStep: "step-1", path: "noCard" } }
+DATA REFERENCES:
+A step can consume the output of a prior step using dataRefs.
+Format: "dataRefs": { "<inputKey>": { "fromStep": "<step-id>", "path": "<dot.path.into.output>" } }
+Use this when the user's intent requires the output of one capability as the input to another.
 
-RULES:
-- Only use capabilities from the registry. Never invent new ones.
-- For "send payment links to no-card jobs", always chain queryCardStatus → sendLink.
-- For "send confirmation reminders to unconfirmed jobs", chain confirmations.queryStatus → communications.sendBulkSms with a dataRef on unconfirmed.
-- For read-only queries (card status, confirmation status, readiness), mode="single" unless combined with writes.
-- If you're unsure, prefer mode="legacy".
-
-Return ONLY valid JSON matching this schema:
+Return ONLY valid JSON:
 {
   "mode": "legacy" | "single" | "chain",
-  "plan": {  // only present when mode="chain"
-    "summary": "string — one sentence describing what will happen",
+  "capabilityId": "<id>",          // only when mode="single"
+  "plan": {                         // only when mode="chain"
+    "summary": "one sentence",
     "hasWrites": boolean,
     "steps": [
       {
         "id": "step-1",
-        "capabilityId": "capability.id",
-        "label": "Human-readable step label",
+        "capabilityId": "<id>",
+        "label": "Human-readable label",
         "args": { /* static args */ },
-        "dataRefs": { /* optional: { argKey: { fromStep: "step-id", path: "dot.path" } } */ },
-        "onFailure": "halt" | "continue"  // optional, defaults to capability default
+        "dataRefs": { /* optional */ },
+        "onFailure": "halt" | "continue"
       }
     ]
   }
@@ -120,6 +127,7 @@ Return ONLY valid JSON matching this schema:
             type: "object",
             properties: {
               mode: { type: "string", enum: ["legacy", "single", "chain"] },
+              capabilityId: { type: "string" },
               plan: {
                 type: "object",
                 properties: {
@@ -168,9 +176,11 @@ Return ONLY valid JSON matching this schema:
     if (!rawContent) return { mode: "legacy" };
     const content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
 
-    console.log("[ChainPlanner] raw response:", content.slice(0, 500));
+    console.log("[ChainPlanner] raw response:", content.slice(0, 600));
+
     const parsed = JSON.parse(content) as {
       mode: "legacy" | "single" | "chain";
+      capabilityId?: string;
       plan?: {
         summary: string;
         hasWrites: boolean;
@@ -185,16 +195,24 @@ Return ONLY valid JSON matching this schema:
       };
     };
 
-    if (parsed.mode !== "chain" || !parsed.plan) {
-      return { mode: parsed.mode };
+    if (parsed.mode === "single") {
+      return { mode: "single", capabilityId: parsed.capabilityId };
     }
 
-    // Validate capability IDs
+    if (parsed.mode !== "chain" || !parsed.plan) {
+      return { mode: parsed.mode as "legacy" };
+    }
+
+    // Validate capability IDs — log any unrecognised ones
     const validIds = new Set(getAllCapabilities().map(c => c.id));
-    const validSteps = parsed.plan.steps.filter(s => validIds.has(s.capabilityId as CapabilityId));
+    const validSteps = parsed.plan.steps.filter(s => {
+      const ok = validIds.has(s.capabilityId as CapabilityId);
+      if (!ok) console.warn("[ChainPlanner] unknown capabilityId:", s.capabilityId);
+      return ok;
+    });
 
     if (validSteps.length < 2) {
-      // Not enough valid steps for a chain — fall back to legacy
+      console.warn("[ChainPlanner] not enough valid steps, falling back to legacy. steps:", parsed.plan.steps.map(s => s.capabilityId));
       return { mode: "legacy" };
     }
 
@@ -217,5 +235,3 @@ Return ONLY valid JSON matching this schema:
     return { mode: "legacy" };
   }
 }
-
-// isObviouslyLegacy removed — the planner is the single source of truth for routing.

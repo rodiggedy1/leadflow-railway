@@ -193,4 +193,5 @@ export type ChainRoutingMode = "legacy" | "single" | "chain";
 export interface ChainRoutingDecision {
   mode: ChainRoutingMode;
   plan?: ExecutionPlan;
+  capabilityId?: string; // present when mode="single"
 }
