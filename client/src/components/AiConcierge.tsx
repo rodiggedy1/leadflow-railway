@@ -298,7 +298,8 @@ type MessageContent =
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
   | { type: "prepare_result"; card: PrepareResultCard }
   | { type: "chain_confirm"; card: ChainConfirmCard }
-  | { type: "chain_result"; card: ChainResultCard };
+  | { type: "chain_result"; card: ChainResultCard }
+  | { type: "post_to_cc_prompt"; rawText: string };
   // customer_profile removed — all informational queries return query_result
 
 interface Message {
@@ -1393,6 +1394,17 @@ function MessageBubble({
               ]}
             />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "post_to_cc_prompt" && (
+          <div className="flex items-center gap-2 mt-1">
+            <PostToCommandChatButton
+              body={msg.content.rawText}
+              action={null}
+              buttonLabel={null}
+              chainCommand={null}
+              stats={[]}
+            />
           </div>
         )}
         {/* customer_profile branch removed — all informational queries return query_result */}
@@ -3430,8 +3442,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       {
         onSuccess: (result) => {
           setIsThinking(false);
-          const aiMsg0 = buildAiMessage(result);
-          if (aiMsg0) setMessages((prev) => [...prev, aiMsg0]);
+          const aiMsgs0 = buildAiMessage(result);
+          if (aiMsgs0.length) setMessages((prev) => [...prev, ...aiMsgs0]);
           // customer_profile removed — all informational queries return query_result
         },
         onError: (err) => {
@@ -3474,8 +3486,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
         {
           onSuccess: (result) => {
             setIsThinking(false);
-            const aiMsg = buildAiMessage(result);
-            if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
+            const aiMsgs = buildAiMessage(result);
+            if (aiMsgs.length) setMessages((prev) => [...prev, ...aiMsgs]);
           },
           onError: (err) => {
             setIsThinking(false);
@@ -3513,8 +3525,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       {
         onSuccess: (result) => {
           setIsThinking(false);
-          const aiMsg = buildAiMessage(result);
-          if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
+          const aiMsgs = buildAiMessage(result);
+          if (aiMsgs.length) setMessages((prev) => [...prev, ...aiMsgs]);
         },
         onError: (err) => {
           setIsThinking(false);
@@ -3548,8 +3560,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       {
         onSuccess: (result) => {
           setIsThinking(false);
-          const aiMsg = buildAiMessage(result);
-          if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
+          const aiMsgs = buildAiMessage(result);
+          if (aiMsgs.length) setMessages((prev) => [...prev, ...aiMsgs]);
         },
         onError: (err) => {
           setIsThinking(false);
@@ -3633,8 +3645,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
         {
           onSuccess: (result) => {
             setIsThinking(false);
-            const aiMsg = buildAiMessage(result);
-            if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
+            const aiMsgs = buildAiMessage(result);
+            if (aiMsgs.length) setMessages((prev) => [...prev, ...aiMsgs]);
           },
           onError: (err) => {
             setIsThinking(false);
@@ -3673,8 +3685,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       {
         onSuccess: (result) => {
           setIsThinking(false);
-          const aiMsg = buildAiMessage(result);
-          if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
+          const aiMsgs = buildAiMessage(result);
+          if (aiMsgs.length) setMessages((prev) => [...prev, ...aiMsgs]);
           // customer_profile removed — all informational queries return query_result
         },
         onError: (err) => {
@@ -4024,38 +4036,38 @@ type ServerResult =
   | { type: "chain_confirm"; chainExecutionId: string; card: ChainConfirmCard }
   | { type: "chain_result"; chainExecutionId: string; result: ChainResultCard };
 
-function buildAiMessage(result: ServerResult): Message | null {
+function buildAiMessage(result: ServerResult): Message[] {
   const ts = nowTime();
 
   if (result.type === "completed") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: { type: "completed", card: { message: result.message, ts } },
       ts,
-    };
+    }];
   }
 
   if (result.type === "error") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: { type: "text", text: result.message },
       ts,
-    };
+    }];
   }
 
   if (result.type === "clarify") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: { type: "clarify", card: { message: result.message, teams: result.teams } },
       ts,
-    };
+    }];
   }
 
   if (result.type === "eta_pending") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: {
@@ -4069,10 +4081,10 @@ function buildAiMessage(result: ServerResult): Message | null {
         },
       },
       ts,
-    };
+    }];
   }
   if (result.type === "bulk_sms_confirm") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: {
@@ -4085,10 +4097,10 @@ function buildAiMessage(result: ServerResult): Message | null {
         },
       },
       ts,
-    };
+    }];
   }
   if (result.type === "bulk_sms_sent") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: {
@@ -4097,9 +4109,10 @@ function buildAiMessage(result: ServerResult): Message | null {
       },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "payment_link_confirm") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: {
@@ -4115,10 +4128,10 @@ function buildAiMessage(result: ServerResult): Message | null {
         },
       },
       ts,
-    };
+    }];
   }
   if (result.type === "payment_link_sent") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: {
@@ -4133,9 +4146,10 @@ function buildAiMessage(result: ServerResult): Message | null {
       },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "client_disambiguation") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: {
@@ -4143,10 +4157,10 @@ function buildAiMessage(result: ServerResult): Message | null {
         card: { messageHint: result.messageHint, matches: result.matches },
       },
       ts,
-    };
+    }];
   }
   if (result.type === "call_client_confirm") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: {
@@ -4161,103 +4175,113 @@ function buildAiMessage(result: ServerResult): Message | null {
         },
       },
       ts,
-    };
+    }];
   }
   if (result.type === "query_result") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "query_result", card: { answer: result.answer, status: result.status, undoActionId: (result as { undoActionId?: string | null }).undoActionId ?? null } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "call_client_pending") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: { type: "call_client_pending", card: { vapiCallId: "", recipientName: result.recipientName, recipientPhone: result.recipientPhone } },
       ts,
-    };
+    }];
   }
   if (result.type === "card_status") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "card_status", card: { date: result.date, rows: result.rows } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "rank_teams") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "rank_teams", card: { windowDays: result.windowDays, minRatings: result.minRatings, rows: result.rows, excluded: result.excluded } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "list_no_eta") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "list_no_eta", card: { date: result.date, rows: result.rows } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "confirmation_texts") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "confirmation_texts", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "confirmation_results") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "confirmation_results", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows, totalSent: result.totalSent, totalConfirmed: result.totalConfirmed, totalPending: result.totalPending } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "job_status_stream") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "job_status_stream", card: { alerts: result.alerts, cleanerStatuses: result.cleanerStatuses } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "unanswered_sms") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "unanswered_sms", card: { thresholdMinutes: result.thresholdMinutes, rows: result.rows } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "generate_invoice") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "generate_invoice", card: { templates: result.templates, customerHint: result.customerHint } },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
   if (result.type === "chain_confirm") {
-    return {
+    return [{
       id: uid(),
       role: "ai",
       content: { type: "chain_confirm", card: result.card },
       ts,
-    };
+    }];
   }
   if (result.type === "chain_result") {
-    return {
+    const _msg = {
       id: uid(),
       role: "ai",
       content: { type: "chain_result", card: result.result },
       ts,
     };
+    return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type }, ts: nowTime() }];
   }
-  return null;
+  return [];
 }
