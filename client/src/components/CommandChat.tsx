@@ -1403,41 +1403,41 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
         {/* V6 card */}
         <div style={{
           width: "100%",
-          maxWidth: 620,
+          maxWidth: 520,
           background: "#fff",
           border: "1px solid #ebe8fb",
-          borderRadius: 28,
-          boxShadow: "0 8px 40px rgba(30,30,60,0.10)",
+          borderRadius: 20,
+          boxShadow: "0 4px 24px rgba(30,30,60,0.08)",
           overflow: "hidden",
           opacity: isDismissed ? 0.55 : 1,
           transition: "opacity 0.2s",
         }}>
 
           {/* ── Header ── */}
-          <div style={{ display: "flex", gap: 16, padding: "24px 26px" }}>
+          <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
             {/* Avatar */}
             <img
               src={MADISON_PHOTO}
               alt="Madison"
-              style={{ width: 54, height: 54, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+              style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
             />
             <div style={{ flex: 1 }}>
               {/* Name + time */}
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
-                <span style={{ font: "700 28px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
-                <span style={{ font: "800 13px Inter,system-ui", color: "#6d5cff" }}>✦ AI</span>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+                <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
+                <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
                 <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
               </div>
               {/* Copy — human summary */}
               {isLoading || isProcessing ? (
-                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, fontSize: 21, color: "#9ca3af", lineHeight: 1.45 }}>
-                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#6d5cff" }} />
+                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 14, color: "#9ca3af", lineHeight: 1.45 }}>
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#6d5cff" }} />
                   <span style={{ fontStyle: "italic" }}>Drafting a reply…</span>
                 </div>
               ) : (
-                <div style={{ marginTop: 8, fontSize: 21, lineHeight: 1.45, color: "#222" }}>
-                  <p style={{ margin: "0.45em 0" }}>I can take this one.</p>
-                  <p style={{ margin: "0.45em 0" }}>
+                <div style={{ marginTop: 4, fontSize: 14, lineHeight: 1.45, color: "#222" }}>
+                  <p style={{ margin: "0.2em 0" }}>I can take this one.</p>
+                  <p style={{ margin: "0.2em 0" }}>
                     {(draft as any)?.intentSummary ?? (observations.length > 0 ? observations[0] : "I drafted a reply for you.")}
                   </p>
                 </div>
@@ -1448,10 +1448,10 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
               marginLeft: "auto",
               background: statusBadge.bg,
               color: statusBadge.color,
-              padding: "8px 12px",
+              padding: "5px 10px",
               borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 800,
+              fontSize: 11,
+              fontWeight: 700,
               height: "max-content",
               whiteSpace: "nowrap" as const,
               flexShrink: 0,
@@ -1461,19 +1461,19 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
           </div>
 
           {/* ── Main body ── */}
-          <div style={{ padding: "0 26px 26px" }}>
-            <div style={{ border: "1px solid #ebe8fb", borderRadius: 20, padding: 18, background: "#fbfbff" }}>
+          <div style={{ padding: "0 16px 16px" }}>
+            <div style={{ border: "1px solid #ebe8fb", borderRadius: 14, padding: 14, background: "#fbfbff" }}>
 
               {/* Latest customer message */}
-              <div style={{ fontSize: 12, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Latest customer message</div>
+              <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8 }}>Latest customer message</div>
               <div style={{ display: "flex" }}>
                 <div style={{
                   display: "inline-block",
-                  padding: "14px 18px",
-                  borderRadius: 18,
-                  fontSize: 18,
+                  padding: "10px 13px",
+                  borderRadius: 14,
+                  fontSize: 13,
                   lineHeight: 1.5,
-                  maxWidth: "78%",
+                  maxWidth: "85%",
                   background: "#ece7ff",
                   color: "#222",
                 }}>
@@ -1483,9 +1483,9 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
 
               {/* Reply section */}
               {(isDraftReady || isSent || isDismissed || isFailed) && (
-                <div style={{ marginTop: 18 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <strong style={{ color: "#6d5cff", fontSize: 14 }}>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong style={{ color: "#6d5cff", fontSize: 12 }}>
                       {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
                     </strong>
                     {/* View conversation toggle */}
@@ -1511,10 +1511,10 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                           border: "1px solid #ddd6ff",
                           borderRadius: 16,
                           padding: 16,
-                          font: "18px/1.5 Inter,system-ui",
+                          font: "13px/1.5 Inter,system-ui",
                           resize: "vertical" as const,
                           outline: "none",
-                          minHeight: 120,
+                          minHeight: 90,
                           color: "#111827",
                           background: "#fff",
                         }}
@@ -1529,10 +1529,10 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                           border: "1px solid #ddd6ff",
                           borderRadius: 16,
                           padding: 16,
-                          font: "18px/1.5 Inter,system-ui",
+                          font: "13px/1.5 Inter,system-ui",
                           resize: "none" as const,
                           outline: "none",
-                          minHeight: 80,
+                          minHeight: 60,
                           color: "#111827",
                           background: "#fff",
                           cursor: "default",
@@ -1548,7 +1548,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                       border: "1px solid #bbf7d0",
                       borderRadius: 16,
                       padding: 16,
-                      font: "18px/1.5 Inter,system-ui",
+                      font: "13px/1.5 Inter,system-ui",
                       color: "#111827",
                       background: "#f0fdf4",
                     }}>
@@ -1576,8 +1576,8 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
             </div>
 
             {/* ── Footer ── */}
-            <div style={{ display: "flex", alignItems: "center", marginTop: 18 }}>
-              <div style={{ color: "#757b90", fontSize: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", marginTop: 12 }}>
+              <div style={{ color: "#757b90", fontSize: 12 }}>
                 {isSent
                   ? `Sent by ${draft?.approvedBy ?? "agent"}${draft?.approvedText && draft.approvedText !== generatedDraft ? " (edited)" : ""}`
                   : isDismissed
@@ -1591,7 +1591,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                   <>
                     <button
                       onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
-                      style={{ padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 14 }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13 }}
                     >
                       Edit
                     </button>
@@ -1599,11 +1599,11 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                       onClick={() => handleApprove(generatedDraft)}
                       disabled={isSending}
                       style={{
-                        padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "none",
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
                         background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
                         color: "#fff", cursor: isSending ? "wait" : "pointer",
                         opacity: isSending ? 0.7 : 1,
-                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
                       }}
                     >
                       {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Looks good
@@ -1614,7 +1614,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                   <>
                     <button
                       onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
-                      style={{ padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 14 }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13 }}
                     >
                       Cancel
                     </button>
@@ -1622,11 +1622,11 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                       onClick={() => handleApprove(editedText)}
                       disabled={isSending || !editedText.trim()}
                       style={{
-                        padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "none",
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
                         background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
                         color: "#fff", cursor: isSending ? "wait" : "pointer",
                         opacity: (isSending || !editedText.trim()) ? 0.7 : 1,
-                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
                       }}
                     >
                       {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Edited
@@ -1636,7 +1636,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                 {isDraftReady && !editMode && (
                   <button
                     onClick={handleDismiss}
-                    style={{ padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 14, color: "#6b7280" }}
+                    style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}
                   >
                     Dismiss
                   </button>
@@ -1645,9 +1645,9 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                   <button
                     onClick={() => meta.draftId && retryMutation.mutate({ draftId: meta.draftId })}
                     style={{
-                      padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "none",
+                      padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
                       background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
-                      color: "#fff", cursor: "pointer", fontSize: 14,
+                      color: "#fff", cursor: "pointer", fontSize: 13,
                     }}
                   >
                     ↺ Retry
