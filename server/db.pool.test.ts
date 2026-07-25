@@ -35,10 +35,10 @@ describe("cold-start: getPool() before getDb()", () => {
 // ── Pool option verification ──────────────────────────────────────────────────
 
 describe("mysql2 pool option recognition (mysql2 3.19.1)", () => {
-  it("all seven Phase 1A1 options are recognized and stored correctly", () => {
+  it("all seven Phase 1A1/1A2 options are recognized and stored correctly", () => {
     const pool = mysql.createPool({
       uri: "mysql://user:pass@localhost:3306/db",
-      connectionLimit:      10,
+      connectionLimit:      20, // Phase 1A2: raised from 10 to 20
       maxIdle:              10,
       idleTimeout:          60_000,
       enableKeepAlive:      true,
@@ -50,7 +50,7 @@ describe("mysql2 pool option recognition (mysql2 3.19.1)", () => {
     const cfg     = (pool as any).pool.config;
     const connCfg = cfg.connectionConfig;
 
-    expect(cfg.connectionLimit).toBe(10);
+    expect(cfg.connectionLimit).toBe(20); // Phase 1A2: raised from 10 to 20
     expect(cfg.maxIdle).toBe(10);
     expect(cfg.idleTimeout).toBe(60_000);
     expect(cfg.queueLimit).toBe(50);

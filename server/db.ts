@@ -152,7 +152,13 @@ export async function getDb() {
         enableKeepAlive: true,
         keepAliveInitialDelay: 10_000,
         // Pool sizing
-        connectionLimit: 10,
+        // Phase 1A2: raised from 10 → 20 after instrumentation confirmed sustained
+        // pool saturation (pool_all: 10, pool_free: 0, pool_queue: 19–21) at normal
+        // operating load. Steady-state demand is ~12–14 connections; burst demand
+        // (cron tick + active users + webhook) is ~18–22. Measure after deploying
+        // lastSeenAt throttle + PREVIEW_MODE=true; increase to 25 only if telemetry
+        // shows sustained queues or acquisition waits > 50–100ms.
+        connectionLimit: 20,
         maxIdle: 10,
         idleTimeout: 60_000,
         waitForConnections: true,

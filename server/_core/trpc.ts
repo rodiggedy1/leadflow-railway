@@ -5,6 +5,28 @@ import type { TrpcContext } from "./context";
 import { getAgentFromRequest } from "./agentAuth";
 import { getCleanerFromRequest } from "./cleanerAuth";
 
+// ── lastSeenAt throttle ───────────────────────────────────────────────────────
+// Prevents a DB write on every opsChatProcedure call.
+// Writes only when: (a) >30s since last write, OR (b) caller was absent for >30s
+// (offline→online transition) — ensures the first activity after reconnect is
+// immediately reflected in the presence indicator.
+//
+// Key: agent email or owner openId. Value: timestamp of last DB write (ms).
+const lastSeenAtCache = new Map<string, number>();
+const LAST_SEEN_THROTTLE_MS = 30_000; // 30 seconds
+
+function shouldWriteLastSeenAt(key: string): boolean {
+  const now = Date.now();
+  const lastWrite = lastSeenAtCache.get(key);
+  // Write if: never written, OR >30s since last write (covers offline→online:
+  // if absent >30s the cache entry is stale and we write immediately).
+  if (lastWrite === undefined || now - lastWrite >= LAST_SEEN_THROTTLE_MS) {
+    lastSeenAtCache.set(key, now);
+    return true;
+  }
+  return false;
+}
+
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
 });
@@ -101,22 +123,25 @@ export const opsChatProcedure = t.procedure.use(
     // First try Manus OAuth (owner)
     if (ctx.user) {
       // Fire-and-forget lastSeenAt heartbeat for owner (non-blocking)
-      // Owner may have a row in agents table — update it so they appear online.
-      // Match by first-name prefix because OAuth name ("Rohan G") may differ from agents name ("Rohan Gilkes").
-      try {
-        const { getDb } = await import("../db");
-        const { agents } = await import("../../drizzle/schema");
-        const { like } = await import("drizzle-orm");
-        const db = await getDb();
-        if (db && ctx.user.name) {
-          const firstName = ctx.user.name.split(/\s+/)[0];
-          db.update(agents)
-            .set({ lastSeenAt: new Date() })
-            .where(like(agents.name, `${firstName}%`))
-            .execute()
-            .catch(() => { /* ignore */ });
-        }
-      } catch { /* ignore */ }
+      // Throttled to once per 30s per caller (shouldWriteLastSeenAt) to avoid a DB
+      // write on every tRPC request. The offline→online transition is covered because
+      // if the owner was absent >30s the cache entry is stale and we write immediately.
+      if (shouldWriteLastSeenAt(ctx.user.openId)) {
+        try {
+          const { getDb } = await import("../db");
+          const { agents } = await import("../../drizzle/schema");
+          const { like } = await import("drizzle-orm");
+          const db = await getDb();
+          if (db && ctx.user.name) {
+            const firstName = ctx.user.name.split(/\s+/)[0];
+            db.update(agents)
+              .set({ lastSeenAt: new Date() })
+              .where(like(agents.name, `${firstName}%`))
+              .execute()
+              .catch(() => { /* ignore */ });
+          }
+        } catch { /* ignore */ }
+      }
       return next({
         ctx: {
           ...ctx,
@@ -133,19 +158,22 @@ export const opsChatProcedure = t.procedure.use(
     const agent = await getAgentFromRequest(ctx.req);
     if (agent) {
       // Fire-and-forget lastSeenAt heartbeat (non-blocking)
-      try {
-        const { getDb } = await import("../db");
-        const { agents } = await import("../../drizzle/schema");
-        const { eq } = await import("drizzle-orm");
-        const db = await getDb();
-        if (db) {
-          db.update(agents)
-            .set({ lastSeenAt: new Date() })
-            .where(eq(agents.email, agent.agentEmail))
-            .execute()
-            .catch(() => { /* ignore */ });
-        }
-      } catch { /* ignore */ }
+      // Throttled to once per 30s per agent email (shouldWriteLastSeenAt).
+      if (shouldWriteLastSeenAt(agent.agentEmail)) {
+        try {
+          const { getDb } = await import("../db");
+          const { agents } = await import("../../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const db = await getDb();
+          if (db) {
+            db.update(agents)
+              .set({ lastSeenAt: new Date() })
+              .where(eq(agents.email, agent.agentEmail))
+              .execute()
+              .catch(() => { /* ignore */ });
+          }
+        } catch { /* ignore */ }
+      }
       return next({
         ctx: {
           ...ctx,
