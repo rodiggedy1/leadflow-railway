@@ -1476,7 +1476,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Typing indicator (keyed to selected job thread) ─────────────────────────
   const jobChannelKey = selectedJobId ? `job:${selectedJobId}` : "";
-  const { typers: jobTypers, onKeyPress: onJobKeyPress, onBlur: onJobBlur } = useTypingIndicator(isAuthenticated ? jobChannelKey : "");
+  const { typers: jobTypers, onKeyPress: onJobKeyPress, onBlur: onJobBlur } = useTypingIndicator(jobChannelKey);
 
   // Auth is still loading
   const authLoading = agentLoading;
