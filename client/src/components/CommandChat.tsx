@@ -1331,7 +1331,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
     onSuccess: () => utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! }),
   });
 
-  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  const MADISON_PHOTO = "/madison-avatar.jpg";
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   const handleApprove = async (text: string) => {
@@ -1386,95 +1386,143 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
 
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
-      {/* Avatar */}
-      <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }} />
+      {/* Avatar — same photo as Madison sidebar header */}
+      <img
+        src={MADISON_PHOTO}
+        alt="Madison"
+        style={{
+          width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0,
+          border: "2px solid #ffffff",
+          boxShadow: "0 0 0 2px #e8e0ff, 0 2px 8px rgba(99,102,241,0.18)",
+        }}
+      />
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Sender meta */}
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
+        {/* Name row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+          <span style={{ fontFamily: "Georgia, serif", fontSize: 14, fontWeight: 500, color: "#202431", letterSpacing: "-0.01em" }}>Madison</span>
           <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦ AI</span>
           <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
           {isProcessing && <span style={{ fontSize: 10, color: "#7c3aed", background: "#ede9fe", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Processing…</span>}
           {isSent && <span style={{ fontSize: 10, color: "#22c55e", background: "#f0fdf4", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>✓ Sent</span>}
-          {isDismissed && <span style={{ fontSize: 10, color: "#9ca3af", background: "#f9fafb", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Dismissed</span>}
+          {isDismissed && <span style={{ fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Dismissed</span>}
           {isFailed && <span style={{ fontSize: 10, color: "#ef4444", background: "#fef2f2", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Failed</span>}
         </div>
-        {/* Card */}
+
+        {/* Card shell */}
         <div style={{
-          background: "#ffffff",
-          border: isSent ? "1.5px solid #bbf7d0" : isFailed ? "1.5px solid #fecaca" : "1.5px solid #e0d9f8",
-          borderRadius: 16, overflow: "hidden", maxWidth: 560,
-          boxShadow: isSent ? "0 2px 16px rgba(34,197,94,0.08)" : "0 2px 16px rgba(99,102,241,0.08)",
-          opacity: isDismissed ? 0.6 : 1,
+          background: "#f7f5ff",
+          border: isSent ? "1.5px solid #bbf7d0" : isFailed ? "1.5px solid #fecaca" : "1.5px solid #e4deff",
+          borderRadius: 18,
+          overflow: "hidden",
+          maxWidth: 580,
+          boxShadow: isSent
+            ? "0 4px 20px rgba(34,197,94,0.07)"
+            : "0 4px 20px rgba(99,102,241,0.07), 0 1px 3px rgba(0,0,0,0.04)",
+          opacity: isDismissed ? 0.55 : 1,
+          transition: "opacity 0.2s",
         }}>
-          <div style={{ padding: "18px 20px 16px", background: "linear-gradient(160deg,#faf9ff 0%,#f5f3ff 100%)" }}>
-            {/* Inbound message context */}
+          <div style={{ padding: "20px 22px 18px" }}>
+
+            {/* ── Hey team header ── */}
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Inbound SMS</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 3 }}>{senderLine}</div>
+              <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 18, fontWeight: 500, fontStyle: "italic", color: "#312e81", marginBottom: 10, lineHeight: 1.2 }}>
+                Hey team 👋
+              </div>
+
+              {/* Inbound SMS context chip */}
               <div style={{
-                fontSize: 13, color: "#4b5563", fontStyle: "italic",
-                background: "#f3f4f6", borderRadius: 8, padding: "8px 12px",
-                borderLeft: "3px solid #c4b5fd", lineHeight: 1.5,
-              }}>{quotedLine}</div>
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: "#ede9fe", borderRadius: 20, padding: "3px 10px 3px 8px",
+                marginBottom: 10,
+              }}>
+                <span style={{ fontSize: 10, color: "#6d28d9", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em" }}>📱 Inbound SMS</span>
+                <span style={{ fontSize: 11, color: "#7c3aed", fontWeight: 600 }}>·</span>
+                <span style={{ fontSize: 12, color: "#4c1d95", fontWeight: 600 }}>{senderLine}</span>
+              </div>
+
+              {/* Quoted message */}
+              <div style={{
+                fontSize: 13.5,
+                color: "#374151",
+                fontStyle: "italic",
+                background: "rgba(255,255,255,0.75)",
+                borderRadius: 10,
+                padding: "10px 14px",
+                borderLeft: "3px solid #a78bfa",
+                lineHeight: 1.55,
+                backdropFilter: "blur(2px)",
+              }}>
+                {quotedLine}
+              </div>
             </div>
+
             {/* Observations */}
             {observations.length > 0 && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>What I found</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 7 }}>What I found</div>
                 {observations.map((obs, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#4b5563", display: "flex", gap: 7, alignItems: "flex-start", marginBottom: 4 }}>
-                    <span style={{ color: "#7c3aed", flexShrink: 0, marginTop: 1 }}>•</span>
-                    <span>{obs}</span>
+                  <div key={i} style={{ fontSize: 13, color: "#374151", display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
+                    <span style={{ color: "#a78bfa", flexShrink: 0, marginTop: 2, fontSize: 10 }}>◆</span>
+                    <span style={{ lineHeight: 1.5 }}>{obs}</span>
                   </div>
                 ))}
               </div>
             )}
+
             {/* Loading state */}
             {isLoading || isProcessing ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#7c3aed", padding: "8px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "#7c3aed", padding: "10px 0 4px" }}>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Madison is drafting a reply…
+                <span style={{ fontStyle: "italic" }}>Madison is drafting a reply…</span>
               </div>
             ) : isDraftReady ? (
               <>
-                {/* Draft separator */}
-                <div style={{ borderTop: "1px solid #e0d9f8", margin: "12px 0" }} />
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>✦ Draft Reply</div>
+                {/* Draft section */}
+                <div style={{ borderTop: "1px solid #ddd6fe", margin: "14px 0 12px" }} />
+                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 13, fontStyle: "italic", fontWeight: 500, color: "#7c3aed", marginBottom: 10 }}>✦ Here's my suggested reply:</div>
                 {editMode ? (
                   <textarea
                     value={editedText}
                     onChange={e => setEditedText(e.target.value)}
                     style={{
-                      width: "100%", minHeight: 80, fontSize: 13, color: "#111827",
-                      border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "10px 12px",
+                      width: "100%", minHeight: 88, fontSize: 13.5, color: "#111827",
+                      border: "1.5px solid #a78bfa", borderRadius: 10, padding: "11px 14px",
                       fontFamily: "inherit", resize: "vertical", outline: "none",
-                      background: "#faf9ff",
+                      background: "#ffffff",
+                      boxShadow: "0 0 0 3px rgba(167,139,250,0.15)",
+                      lineHeight: 1.6,
                     }}
                     autoFocus
                   />
                 ) : (
                   <div style={{
-                    fontSize: 14, color: "#111827", lineHeight: 1.6,
-                    background: "#f5f3ff", borderRadius: 10, padding: "12px 14px",
-                    border: "1px solid #e0d9f8", marginBottom: 14,
+                    fontSize: 14, color: "#1f2937", lineHeight: 1.65,
+                    background: "#ffffff",
+                    borderRadius: 12,
+                    padding: "13px 16px",
+                    border: "1px solid #e4deff",
+                    marginBottom: 16,
+                    boxShadow: "0 1px 4px rgba(99,102,241,0.06)",
                   }}>
                     {generatedDraft}
                   </div>
                 )}
                 {/* Action buttons */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginTop: editMode ? 10 : 0 }}>
+                <div style={{ display: "flex", gap: 9, flexWrap: "wrap" as const, marginTop: editMode ? 12 : 0 }}>
                   {editMode ? (
                     <>
                       <button
                         onClick={() => handleApprove(editedText)}
                         disabled={isSending || !editedText.trim()}
                         style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
+                          display: "inline-flex", alignItems: "center", gap: 7,
                           background: "#4f46e5", color: "#fff", border: "none",
-                          borderRadius: 10, padding: "9px 18px",
-                          fontSize: 13, fontWeight: 700, cursor: isSending ? "wait" : "pointer",
+                          borderRadius: 12, padding: "10px 20px",
+                          fontSize: 13.5, fontWeight: 700,
+                          cursor: isSending ? "wait" : "pointer",
                           opacity: isSending ? 0.7 : 1,
+                          boxShadow: "0 2px 8px rgba(79,70,229,0.35)",
+                          letterSpacing: "-0.01em",
                         }}
                       >
                         {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "✈"} Send Edited
@@ -1482,9 +1530,9 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                       <button
                         onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
                         style={{
-                          background: "transparent", color: "#9ca3af",
-                          border: "1.5px solid #e5e7eb", borderRadius: 10,
-                          padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          background: "#f3f4f6", color: "#6b7280",
+                          border: "1.5px solid #e5e7eb", borderRadius: 12,
+                          padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
                         }}
                       >
                         Cancel
@@ -1496,22 +1544,26 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                         onClick={() => handleApprove(generatedDraft)}
                         disabled={isSending}
                         style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
+                          display: "inline-flex", alignItems: "center", gap: 7,
                           background: "#4f46e5", color: "#fff", border: "none",
-                          borderRadius: 10, padding: "9px 18px",
-                          fontSize: 13, fontWeight: 700, cursor: isSending ? "wait" : "pointer",
+                          borderRadius: 12, padding: "10px 22px",
+                          fontSize: 13.5, fontWeight: 700,
+                          cursor: isSending ? "wait" : "pointer",
                           opacity: isSending ? 0.7 : 1,
+                          boxShadow: "0 2px 10px rgba(79,70,229,0.35)",
+                          letterSpacing: "-0.01em",
                         }}
                       >
-                        {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "✈"} Send
+                        {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "→"} Send
                       </button>
                       <button
                         onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
                         style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
+                          display: "inline-flex", alignItems: "center", gap: 7,
                           background: "#ffffff", color: "#4f46e5",
-                          border: "1.5px solid #c4b5fd", borderRadius: 10,
-                          padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          border: "1.5px solid #c4b5fd", borderRadius: 12,
+                          padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          boxShadow: "0 1px 3px rgba(99,102,241,0.08)",
                         }}
                       >
                         ✏ Edit & Send
@@ -1519,27 +1571,27 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                       <button
                         onClick={handleDismiss}
                         style={{
-                          background: "transparent", color: "#9ca3af",
-                          border: "1.5px solid #e5e7eb", borderRadius: 10,
-                          padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          background: "#f3f4f6", color: "#6b7280",
+                          border: "1.5px solid #e5e7eb", borderRadius: 12,
+                          padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
                         }}
                       >
-                        Dismiss
+                        Not right now
                       </button>
                     </>
                   )}
                 </div>
               </>
             ) : isSent ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, color: "#22c55e", fontWeight: 600 }}>
-                <CheckCircle2 style={{ width: 15, height: 15 }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#16a34a", fontWeight: 600, padding: "4px 0" }}>
+                <CheckCircle2 style={{ width: 16, height: 16 }} />
                 Sent by {draft?.approvedBy ?? "agent"}
                 {draft?.approvedText && draft.approvedText !== generatedDraft && (
                   <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400, marginLeft: 4 }}>(edited)</span>
                 )}
               </div>
             ) : isDismissed ? (
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>Dismissed — no reply sent.</div>
+              <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>No reply sent.</div>
             ) : isFailed ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ fontSize: 12, color: "#ef4444" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
@@ -1547,10 +1599,10 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                   onClick={() => meta.draftId && retryMutation.mutate({ draftId: meta.draftId })}
                   style={{
                     fontSize: 11, color: "#7c3aed", background: "#ede9fe",
-                    border: "none", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontWeight: 600,
+                    border: "none", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontWeight: 700,
                   }}
                 >
-                  Retry
+                  ↺ Retry
                 </button>
               </div>
             ) : null}
