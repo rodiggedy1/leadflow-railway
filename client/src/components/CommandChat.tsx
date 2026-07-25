@@ -4392,6 +4392,7 @@ function KudosModal({
 
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
   onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
+  console.count("[RENDER] CommandChat");
   const [composer, setComposer] = useState("");
   // Message quality check
 
