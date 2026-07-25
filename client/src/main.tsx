@@ -87,6 +87,25 @@ queryClient.getMutationCache().subscribe(event => {
     }
   }
 });
+
+// ── INSTRUMENTATION: log every query fetch + invalidation during freeze ──────
+// Remove this block once the freeze root cause is identified.
+queryClient.getQueryCache().subscribe(event => {
+  if (event.type === 'updated' && event.action.type === 'fetch') {
+    const key = JSON.stringify(event.query.queryKey);
+    console.count('[QUERY FETCH] ' + key);
+  }
+});
+// Patch invalidateQueries to log every call with its filter key
+const _origInvalidate = queryClient.invalidateQueries.bind(queryClient);
+(queryClient as any).invalidateQueries = (...args: any[]) => {
+  const filter = args[0];
+  const key = filter ? JSON.stringify(filter) : '(all)';
+  console.count('[INVALIDATE] ' + key);
+  return (_origInvalidate as any)(...args);
+};
+// ── END INSTRUMENTATION ───────────────────────────────────────────────────────
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
