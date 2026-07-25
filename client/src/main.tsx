@@ -1,6 +1,6 @@
 import "@/lib/i18n"; // initialize i18next singleton
 import { trpc } from "@/lib/trpc";
-import { UNAUTHED_ERR_MSG } from '@shared/const';
+import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
@@ -42,6 +42,7 @@ const EXPECTED_AUTH_ERRORS = new Set([
   "Agent login required",
   "Cleaner login required",
   UNAUTHED_ERR_MSG, // suppress on cleaner/portal routes
+  NOT_ADMIN_ERR_MSG, // suppress 403 from admin-only procedures called without Manus OAuth session
 ]);
 
 const isExpectedAuthError = (error: unknown): boolean => {
