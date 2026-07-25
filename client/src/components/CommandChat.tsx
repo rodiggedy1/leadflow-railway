@@ -4739,7 +4739,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }, [requestOsPermission]);
 
   // ── Typing indicator ───────────────────────────────────────────────────────────
-  const { typers: cmdTypers, onKeyPress: onCmdKeyPress, onBlur: onCmdBlur } = useTypingIndicator("command");
+  // Pass empty channelKey when panel is hidden so getTyping stops polling (enabled: !!channelKey)
+  const { typers: cmdTypers, onKeyPress: onCmdKeyPress, onBlur: onCmdBlur } = useTypingIndicator(isVisible !== false ? "command" : "");
 
   const dismissSystemCardMutation = trpc.opsChat.dismissSystemCard.useMutation({
     onSuccess: () => {
