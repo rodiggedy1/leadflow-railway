@@ -2122,24 +2122,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     setComposer(qa.template);
   }
 
-  // ── Auth gate ───────────────────────────────────────────────────────────────
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <AgentLoginGate onSuccess={() => refetchAgentMe()} />;
-  }
-
   // ── Stable mapped channelMsgs for CommandChat ─────────────────────────────
   // channelMsgs from React Query is reference-stable between refetches.
   // The inline .map() in JSX created a new array every render, making CommandChat's
   // useMemo/useCallback/useEffect dependencies fire on every OpsChat render,
   // which triggered a setState loop via getReactions mutation → infinite re-renders.
+  // MUST be declared before any early returns to satisfy Rules of Hooks.
   const mappedChannelMsgs = useMemo(
     () =>
       channelMsgs.map((m) => ({
@@ -2161,6 +2149,19 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       })),
     [channelMsgs]
   );
+
+  // ── Auth gate ───────────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AgentLoginGate onSuccess={() => refetchAgentMe()} />;
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
