@@ -2135,6 +2135,33 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     return <AgentLoginGate onSuccess={() => refetchAgentMe()} />;
   }
 
+  // ── Stable mapped channelMsgs for CommandChat ─────────────────────────────
+  // channelMsgs from React Query is reference-stable between refetches.
+  // The inline .map() in JSX created a new array every render, making CommandChat's
+  // useMemo/useCallback/useEffect dependencies fire on every OpsChat render,
+  // which triggered a setState loop via getReactions mutation → infinite re-renders.
+  const mappedChannelMsgs = useMemo(
+    () =>
+      channelMsgs.map((m) => ({
+        id: m.id,
+        from: m.from,
+        role: m.role,
+        body: m.body,
+        mediaUrl: m.mediaUrl,
+        quickAction: m.quickAction,
+        metadata: m.metadata ?? null,
+        replyToId: m.replyToId ?? null,
+        replyToBody: m.replyToBody ?? null,
+        replyToAuthor: m.replyToAuthor ?? null,
+        threadParentId: (m as any).threadParentId ?? null,
+        threadParentBody: (m as any).threadParentBody ?? null,
+        threadParentFrom: (m as any).threadParentFrom ?? null,
+        replyCount: (m as any).replyCount ?? 0,
+        createdAt: new Date(m.ts),
+      })),
+    [channelMsgs]
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div ref={rootRef} className="flex flex-col h-full w-full overflow-hidden" style={{background: 'transparent'}}>
@@ -2806,7 +2833,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: Command Chat */}
         <div style={{ display: displayedTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="relative flex-1 flex flex-col overflow-hidden min-h-0">
           <CommandChat
-            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, threadParentId: (m as any).threadParentId ?? null, threadParentBody: (m as any).threadParentBody ?? null, threadParentFrom: (m as any).threadParentFrom ?? null, replyCount: (m as any).replyCount ?? 0, createdAt: new Date(m.ts) }))}
+            channelMsgs={mappedChannelMsgs}
             channelLoading={channelLoading}
             callerName={callerName}
             onSendMessage={(body, mediaUrl, replyTo, quickAction, metadata) => {
