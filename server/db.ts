@@ -1,40 +1,175 @@
 import { and, eq, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import { InsertUser, users, agents, type Agent, cleanerMagicLinkTokens } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { randomBytes } from "crypto";
 
+// ── Pool health tracking ──────────────────────────────────────────────────────
+
+// Acquisition-time error codes that indicate pool-level health problems.
+// PROTOCOL_CONNECTION_LOST is intentionally excluded: it fires during query execution
+// after successful acquisition (on the TCP 'close' event → connection._notifyError →
+// command.onResult) and will never reach the getConnection wrapper.
+const RESTART_WORTHY_CODES = new Set([
+  'ETIMEDOUT',     // TCP timeout during connection establishment
+  'ECONNRESET',    // Connection reset during establishment
+  'ECONNREFUSED',  // Connection refused during establishment
+  'QUEUE_LIMIT',   // Pool queue full (synthetic code — not from mysql2)
+]);
+
+const ACQUISITION_FAILURE_WINDOW_MS = 10 * 60_000; // 10 minutes
+const MAX_ACQUISITION_FAILURES = 200;               // hard cap: ~8KB max
+
+// Tracks restart-worthy connection acquisition failures.
+// Bounded independently of the watchdog: trimmed on every push.
+// Exported for use by dbWatchdog.ts and tests.
+export const dbAcquisitionFailures: Array<{ ts: number; code: string }> = [];
+
+export function recordAcquisitionFailure(code: string): void {
+  const now = Date.now();
+  const cutoff = now - ACQUISITION_FAILURE_WINDOW_MS;
+  // Time-based trim: remove entries older than 10 minutes
+  while (dbAcquisitionFailures.length > 0 && dbAcquisitionFailures[0].ts < cutoff) {
+    dbAcquisitionFailures.shift();
+  }
+  // Hard cap: if still over limit after trim, drop oldest
+  while (dbAcquisitionFailures.length >= MAX_ACQUISITION_FAILURES) {
+    dbAcquisitionFailures.shift();
+  }
+  dbAcquisitionFailures.push({ ts: now, code });
+}
+
+// ── Pool instrumentation ──────────────────────────────────────────────────────
+
+// Version constant: log this at startup so you always know which monitoring
+// implementation is running in production.
+export const DB_POOL_MONITOR_VERSION = 1;
+
+function wrapPoolInstrumentation(pool: mysql.Pool): void {
+  // All query paths — pool.query(), db.execute(), pool.getConnection() — go through
+  // corePool.getConnection (the underlying callback Pool). Verified at runtime against
+  // mysql2 3.19.1: PromisePool.query() and drizzle db.execute() both call
+  // corePool.getConnection, not PromisePool.getConnection.
+  //
+  // This relies on mysql2 PromisePool exposing .pool (the underlying callback Pool).
+  // If a future mysql2 major release changes this internal structure, the guard below
+  // will throw at startup — fail fast rather than silently losing all monitoring.
+  const corePool = (pool as any).pool;
+  if (typeof corePool?.getConnection !== 'function') {
+    throw new Error(
+      `DB Pool instrumentation v${DB_POOL_MONITOR_VERSION}: unsupported mysql2 PromisePool structure — ` +
+      'pool.pool.getConnection is not a function. Update wrapPoolInstrumentation for this mysql2 version.'
+    );
+  }
+
+  const originalGetConnection = corePool.getConnection.bind(corePool);
+
+  corePool.getConnection = function (cb: (err: Error | null, conn: any) => void) {
+    const startedAt = Date.now();
+    originalGetConnection(function (err: any, conn: any) {
+      const durationMs = Date.now() - startedAt;
+      if (err) {
+        const errorCode: string =
+          err.code ??
+          (err.message === 'Queue limit reached.' ? 'QUEUE_LIMIT' : 'UNKNOWN');
+        console.error('[DB Pool] acquisition_failed', {
+          error_code: errorCode,
+          duration_ms: durationMs,
+          pool_all:   corePool._allConnections?.length  ?? -1,
+          pool_free:  corePool._freeConnections?.length ?? -1,
+          pool_queue: corePool._connectionQueue?.length ?? -1,
+        });
+        if (RESTART_WORTHY_CODES.has(errorCode)) {
+          recordAcquisitionFailure(errorCode);
+        }
+      } else {
+        // Sample 10% of successful acquisitions to avoid log noise
+        if (Math.random() < 0.1) {
+          console.log('[DB Pool] acquisition_ok', {
+            duration_ms: durationMs,
+            pool_all:   corePool._allConnections?.length  ?? -1,
+            pool_free:  corePool._freeConnections?.length ?? -1,
+            pool_queue: corePool._connectionQueue?.length ?? -1,
+          });
+        }
+      }
+      cb(err, conn);
+    });
+  };
+
+  // Log mysql2 version for operational clarity
+  let mysql2Version = 'unknown';
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    mysql2Version = require('mysql2/package.json').version;
+  } catch { /* ignore */ }
+  console.log(`[DB Pool] instrumentation v${DB_POOL_MONITOR_VERSION} enabled — mysql2 ${mysql2Version}`);
+}
+
+// ── Pool singleton ────────────────────────────────────────────────────────────
+
 let _db: ReturnType<typeof drizzle> | null = null;
+let _pool: mysql.Pool | null = null;
+
+export function getPool(): mysql.Pool | null {
+  return _pool;
+}
 
 /**
- * Reset the DB singleton so the next call to getDb() creates a fresh connection.
- * Call this whenever a fatal connection error (ECONNRESET, ECONNREFUSED, etc.) is
- * detected so the pool can recover without a server restart.
+ * Reset the DB pool singleton.
+ *
+ * USE ONLY FOR: testing, and catastrophic scenarios where the pool must be
+ * fully destroyed and recreated.
+ *
+ * DO NOT call from query-level error handlers (ETIMEDOUT, ECONNRESET, etc.).
+ * The pool self-heals from individual connection errors — calling resetDb()
+ * destroys all pool connections unnecessarily. The pool removes broken
+ * connections automatically and creates new ones for subsequent requests.
  */
 export function resetDb() {
   _db = null;
+  _pool?.end().catch(() => {});
+  _pool = null;
 }
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // timezone: 'Z' forces mysql2 to serialize JavaScript Date objects as UTC strings,
-      // preventing a 4-hour offset that occurs when the production container's system
-      // timezone (America/New_York) causes mysql2 to format dates as local time strings
-      // which MySQL then stores as-is, making them 4 hours ahead of actual UTC.
-      _db = drizzle(process.env.DATABASE_URL, {
-        connection: {
-          timezone: 'Z',
-          connectTimeout: 10_000,   // 10s to establish connection
-          // mysql2 pool-level query timeout (ms) — aborts any query that hangs
-          // beyond this limit so a single stuck query can't block the event loop
-          queryTimeout: 30_000,    // 30s per query max
-        },
-      } as any);
+      _pool = mysql.createPool({
+        uri: process.env.DATABASE_URL,
+        // Connection establishment timeout
+        connectTimeout: 10_000,
+        // Keep-alive: enabled by default in mysql2 3.x (enableKeepAlive: true).
+        // keepAliveInitialDelay: 10s — defensive hardening against suspected
+        // intermediate-network idle connection termination. TiDB wait_timeout = 8h
+        // (server-side closure ruled out as root cause). Hypothesis: Railway NAT
+        // gateway or load balancer closes idle TCP sockets before mysql2's default
+        // keep-alive fires. Setting 10s ensures keep-alive probes fire well within
+        // any reasonable NAT timeout. Confirmed fix requires observing whether
+        // ETIMEDOUT errors disappear after deployment.
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10_000,
+        // Pool sizing
+        connectionLimit: 10,
+        maxIdle: 10,
+        idleTimeout: 60_000,
+        waitForConnections: true,
+        // Back-pressure: reject new acquisitions when 50 are already queued.
+        // Without this, queueLimit defaults to 0 (unlimited), allowing unbounded
+        // memory growth and indefinite waits during DB outages.
+        // Callers see: Error('Queue limit reached.') — fast-fail instead of hanging.
+        queueLimit: 50,
+        // timezone: preserved as 'local' (mysql2 default = America/New_York = UTC-4).
+        // Changing to 'Z' requires Phase 1A2 audit of 171 timestamp() columns first.
+      });
+      wrapPoolInstrumentation(_pool);
+      _db = drizzle(_pool);
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
+      console.warn("[Database] Failed to create pool:", error);
       _db = null;
+      _pool = null;
     }
   }
   return _db;
@@ -95,13 +230,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
-    // Reset the DB singleton on connection errors so the pool can recover
-    // on the next request without requiring a server restart.
-    const code = (error as NodeJS.ErrnoException)?.code;
-    if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
-      console.warn('[Database] Connection error detected — resetting DB singleton for recovery');
-      resetDb();
-    }
+    // NOTE: resetDb() is intentionally NOT called here.
+    // The pool self-heals from ETIMEDOUT/ECONNRESET — it removes the broken
+    // connection and creates a new one for the next request. Calling resetDb()
+    // would destroy all pool connections for a single query error.
     throw error;
   }
 }
@@ -116,11 +248,8 @@ export async function getUserByOpenId(openId: string) {
     const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
     return result.length > 0 ? result[0] : undefined;
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException)?.code;
-    if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
-      console.warn('[Database] Connection error in getUserByOpenId — resetting DB singleton');
-      resetDb();
-    }
+    // NOTE: resetDb() is intentionally NOT called here.
+    // The pool self-heals from individual connection errors.
     throw error;
   }
 }

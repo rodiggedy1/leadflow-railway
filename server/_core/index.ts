@@ -35,7 +35,8 @@ import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { getAgentByEmail, getDb } from "../db";
+import { getAgentByEmail, getDb, getPool } from "../db";
+import { startDbWatchdog } from "../dbWatchdog";
 import { sql, isNotNull, count } from "drizzle-orm";
 import { gmailThreadMeta } from "../../drizzle/schema";
 
@@ -1012,6 +1013,13 @@ async function startServer() {
         }
       }, 15_000);
       startInternalCron();
+      // Phase 1A1: Start DB watchdog after cron scheduler.
+      // Guard: fail fast if pool was never initialized (missing DATABASE_URL).
+      if (!getPool()) {
+        console.error('[DB Watchdog] FATAL — DB pool not initialized at server start. Check DATABASE_URL.');
+        process.exit(1);
+      }
+      startDbWatchdog();
       // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
       // Always use the production domain so Vapi tool calls reach the live server.
       // VAPI_WEBHOOK_URL env var sets the webhook destination; defaults to production domain.
