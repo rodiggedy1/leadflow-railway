@@ -4676,7 +4676,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.tasks.getDue.invalidate();
       setTaskRefetchTick(t => t + 1);
     },
-  }, { label: "CommandChat", enabled: isVisible !== false });
+  // DIAGNOSTIC: CommandChat useOpsStream disabled — restore after test
+  // Restore: change `enabled: false` back to `enabled: isVisible !== false`
+  }, { label: "CommandChat", enabled: false });
 
   // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
   // MUST be declared here (early) because the message render loop at line ~924 uses superAlertMsgSet
@@ -4906,16 +4908,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const refetchReactions = useCallback(() => {
     if (cmdMsgIds.length > 0) getReactionsMutation.mutate({ messageIds: cmdMsgIds });
   }, [cmdMsgIds]); // eslint-disable-line react-hooks/exhaustive-deps
-  // DIAGNOSTIC: reactions effect completely disabled — do not call mutate, do not start interval
-  // Restore: remove this comment block and uncomment the effect below
-  // useEffect(() => {
-  //   refetchReactions();
-  //   const interval = setInterval(refetchReactions, 10_000);
-  //   return () => clearInterval(interval);
-  // }, [refetchReactions]);
   useEffect(() => {
-    console.log("[DIAGNOSTIC] reactions effect disabled");
-  }, []);
+    refetchReactions();
+    const interval = setInterval(refetchReactions, 10_000);
+    return () => clearInterval(interval);
+  }, [refetchReactions]);
   const reactionsByMsgId = useMemo(() =>
     (reactionsData?.reactions ?? []).reduce<Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>>(
       (acc: Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>, r: { messageId: number; callerId: string; callerName: string; emoji: string }) => {
