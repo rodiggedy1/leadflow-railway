@@ -141,7 +141,7 @@ import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
-import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge } from "@/components/AdminHeader";
+import AdminHeader from "@/components/AdminHeader";
 import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import CallGuide from "@/components/CallGuide";

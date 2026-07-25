@@ -612,9 +612,6 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, page
               Workspace
             </a>
           )}
-          {isAdmin && <WidgetHealthBadge enabled={isAdmin} />}
-          {isAdmin && <WebhookHealthBadge enabled={isAdmin} />}
-          {isAdmin && <SyncHealthBadge enabled={isAdmin} />}
           {onCallGuide && (
             <CallGuideButton />
           )}
