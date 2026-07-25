@@ -126,7 +126,8 @@ export async function triggerMadisonSmsDraft(params: {
     });
 
     if (!insertResult) return;
-    draftId = (insertResult as any).insertId as number;
+    const [insertHeader] = insertResult as any;
+    draftId = insertHeader.insertId as number;
 
     // ── Step 1: Classify ──────────────────────────────────────────────────────
     const classification = await classifyMessage(inboundText);
