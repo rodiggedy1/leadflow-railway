@@ -49,12 +49,16 @@ export default function SuperAlertWatcher() {
 
   const isVisible = usePageVisibility();
 
+  // Don't poll when OpsChat is open — CommandChat handles super alerts internally.
+  // Polling while OpsChat is open causes a 3s invalidation storm that freezes the UI on reopen.
+  const watcherEnabled = isEligible && opsChatState !== "open";
+
   // Poll every 3s; pause when tab is hidden (visibility-aware)
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
     undefined,
     {
-      enabled: isEligible,
-      refetchInterval: isVisible ? 3_000 : false,
+      enabled: watcherEnabled,
+      refetchInterval: watcherEnabled && isVisible ? 3_000 : false,
       refetchIntervalInBackground: false,
       retry: 2,
       staleTime: 0,
