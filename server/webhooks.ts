@@ -2416,6 +2416,19 @@ async function handleCsInboundMessage(msg: any) {
     syncAllOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
       console.warn("[CS] syncAllOutboundMessages error:", err)
     );
+    // Fire Madison SMS Draft Agent async (non-blocking) — generates a draft reply card in Command Chat
+    if (messageId && inboundText.trim()) {
+      import("./madisonSmsAgent").then(({ triggerMadisonSmsDraft }) => {
+        triggerMadisonSmsDraft({
+          inboundOpenPhoneId: messageId,
+          sessionId: resolvedSessionId,
+          fromPhone,
+          senderName: resolvedName ?? undefined,
+          isCleaner,
+          inboundText,
+        }).catch((err: unknown) => console.warn("[MadisonSMS] triggerMadisonSmsDraft error:", err));
+      }).catch((err: unknown) => console.warn("[MadisonSMS] import error:", err));
+    }
   }
 }
 

@@ -3920,3 +3920,102 @@ export const chainStepExecutions = mysqlTable("chain_step_executions", {
 ]);
 export type ChainStepExecution = typeof chainStepExecutions.$inferSelect;
 export type InsertChainStepExecution = typeof chainStepExecutions.$inferInsert;
+
+// ── Madison SMS Draft Agent ───────────────────────────────────────────────────
+/**
+ * madisonSmsDrafts — one row per inbound SMS that Madison processes.
+ * This is the canonical source of truth for the SMS draft lifecycle.
+ * opsChatMessages references this via metadata.draftId and is the presentation layer only.
+ */
+export const madisonSmsDrafts = mysqlTable("madison_sms_drafts", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+
+  // Trigger identity
+  /** OpenPhone message ID — uniqueness constraint prevents duplicate pipeline runs */
+  inboundOpenPhoneId: varchar("inboundOpenPhoneId", { length: 128 }).notNull(),
+  sessionId: bigint("sessionId", { mode: "number" }).notNull(),
+  fromPhone: varchar("fromPhone", { length: 30 }).notNull(),
+  senderName: varchar("senderName", { length: 255 }),
+  senderType: mysqlEnum("senderType", ["customer", "cleaner", "unknown"]).notNull().default("unknown"),
+
+  // Pipeline state
+  status: mysqlEnum("status", [
+    "RECEIVED",
+    "CLASSIFIED",
+    "TOOLS_RUNNING",
+    "DRAFT_READY",
+    "SENDING",
+    "SENT",
+    "DELIVERED",
+    "DISMISSED",
+    "FAILED",
+  ]).notNull().default("RECEIVED"),
+
+  messageType: mysqlEnum("messageType", [
+    "QUESTION",
+    "ACTION",
+    "INFORMATION",
+    "CONVERSATION",
+    "UNKNOWN",
+  ]),
+
+  intent: varchar("intent", { length: 64 }),
+  capability: varchar("capability", { length: 64 }),
+  /** Version of the capability handler used — for audit/regression tracking */
+  capabilityVersion: int("capabilityVersion"),
+
+  // Structured execution data
+  resolvedContext: json("resolvedContext"),
+  capabilityArgs: json("capabilityArgs"),
+  capabilityResult: json("capabilityResult"),
+  /** Structured bullet-point observations for the card UI — string[] */
+  observations: json("observations").notNull().default(sql`('[]')`),
+  /** Suggested action buttons for the card — string[] e.g. ["send","edit","call_team"] */
+  suggestedActions: json("suggestedActions").notNull().default(sql`('[]')`),
+  /** Optional follow-up hints for the agent — string[] */
+  followUps: json("followUps").notNull().default(sql`('[]')`),
+
+  /**
+   * Quality score — computed deterministically from capability result, not LLM self-assessment.
+   * { intentConfidence, draftConfidence, toolGrounded, hasVerification,
+   *   usedKnowledgeBase, usedDatabase, usedPureLLM, hallucinationRisk }
+   */
+  qualityScore: json("qualityScore"),
+
+  // Content
+  originalMessage: text("originalMessage").notNull(),
+  /** LLM-generated draft — never overwritten, even if agent edits before sending */
+  generatedDraft: text("generatedDraft"),
+  /** What was actually sent — may differ from generatedDraft if agent edited */
+  approvedText: text("approvedText"),
+
+  // Human action
+  approvedBy: varchar("approvedBy", { length: 128 }),
+  approvedAt: datetime("approvedAt", { mode: "date", fsp: 3 }),
+  dismissedBy: varchar("dismissedBy", { length: 128 }),
+  dismissedAt: datetime("dismissedAt", { mode: "date", fsp: 3 }),
+
+  // Outbound delivery
+  /** OpenPhone outbound message ID — needed to match delivery callbacks */
+  outboundOpenPhoneId: varchar("outboundOpenPhoneId", { length: 128 }),
+  sentAt: datetime("sentAt", { mode: "date", fsp: 3 }),
+  deliveredAt: datetime("deliveredAt", { mode: "date", fsp: 3 }),
+
+  // Diagnostics
+  errorStage: varchar("errorStage", { length: 64 }),
+  errorCode: varchar("errorCode", { length: 64 }),
+  errorMessage: text("errorMessage"),
+
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_sms_draft_inbound").on(t.inboundOpenPhoneId),
+  index("idx_sms_draft_status").on(t.status),
+  index("idx_sms_draft_session").on(t.sessionId),
+  index("idx_sms_draft_capability").on(t.capability),
+  index("idx_sms_draft_created").on(t.createdAt),
+  index("idx_sms_draft_status_created").on(t.status, t.createdAt),
+  index("idx_sms_draft_outbound").on(t.outboundOpenPhoneId),
+]);
+export type MadisonSmsDraft = typeof madisonSmsDrafts.$inferSelect;
+export type InsertMadisonSmsDraft = typeof madisonSmsDrafts.$inferInsert;
