@@ -2836,7 +2836,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             }}
             senderStatusMap={senderStatusMap}
             agentList={agentStatusData?.agents ?? []}
-            isVisible={activeTab === "channels" && activeChannel === "command"}
+            isVisible={opsChatState === "open" && activeTab === "channels" && activeChannel === "command"}
             myNames={myNames}
             onSendThreadReply={(body, parentId) => {
               sendMsg.mutate({
