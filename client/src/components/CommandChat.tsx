@@ -4390,9 +4390,9 @@ function KudosModal({
   );
 }
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
+const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
   onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
-  console.count("[RENDER] CommandChat");
+  console.count("[RENDER] CommandChat"); console.log("[RENDER-TS] CommandChat", performance.now().toFixed(1));
   const [composer, setComposer] = useState("");
   // Message quality check
 
@@ -4676,9 +4676,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.tasks.getDue.invalidate();
       setTaskRefetchTick(t => t + 1);
     },
-  // DIAGNOSTIC: CommandChat useOpsStream disabled — restore after test
-  // Restore: change `enabled: false` back to `enabled: isVisible !== false`
-  }, { label: "CommandChat", enabled: false });
+  }, { label: "CommandChat", enabled: isVisible !== false });
 
   // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
   // MUST be declared here (early) because the message render loop at line ~924 uses superAlertMsgSet
@@ -9646,4 +9644,5 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       )}
     </div>
   );
-}
+});
+export default CommandChat;
