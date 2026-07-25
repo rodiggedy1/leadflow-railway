@@ -1333,6 +1333,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
 
   const MADISON_PHOTO = "/madison-avatar.jpg";
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const [showConversation, setShowConversation] = useState(false);
 
   const handleApprove = async (text: string) => {
     if (!meta.draftId || isSending) return;
@@ -1360,8 +1361,8 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
         <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦ AI</span>
+            <span style={{ font: "700 28px Georgia,serif", color: "#1a1a2e" }}>Madison</span>
+            <span style={{ font: "800 13px Inter,system-ui", color: "#6d5cff" }}>✦ AI</span>
             <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
           </div>
           <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Draft unavailable.</div>
@@ -1384,228 +1385,278 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
   const observations = draft?.observations ? (() => { try { return JSON.parse(draft.observations as string) as string[]; } catch { return []; } })() : [];
   const generatedDraft = draft?.generatedDraft ?? "";
 
+  // Status badge for header
+  const statusBadge = isSent
+    ? { label: "Sent", bg: "#eef8f2", color: "#157c5a" }
+    : isDismissed
+    ? { label: "Dismissed", bg: "#f3f4f6", color: "#6b7280" }
+    : isFailed
+    ? { label: "Failed", bg: "#fef2f2", color: "#dc2626" }
+    : isProcessing
+    ? { label: "Drafting…", bg: "#ede9fe", color: "#6d5cff" }
+    : { label: "Awaiting approval", bg: "#eef8f2", color: "#157c5a" };
+
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
-      {/* Avatar — same photo as Madison sidebar header */}
-      <img
-        src={MADISON_PHOTO}
-        alt="Madison"
-        style={{
-          width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0,
-          border: "2px solid #ffffff",
-          boxShadow: "0 0 0 2px #e8e0ff, 0 2px 8px rgba(99,102,241,0.18)",
-        }}
-      />
+      {/* Outer wrapper — no card chrome here, just the chat row */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Name row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-          <span style={{ fontFamily: "Georgia, serif", fontSize: 14, fontWeight: 500, color: "#202431", letterSpacing: "-0.01em" }}>Madison</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦ AI</span>
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
-          {isProcessing && <span style={{ fontSize: 10, color: "#7c3aed", background: "#ede9fe", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Processing…</span>}
-          {isSent && <span style={{ fontSize: 10, color: "#22c55e", background: "#f0fdf4", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>✓ Sent</span>}
-          {isDismissed && <span style={{ fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Dismissed</span>}
-          {isFailed && <span style={{ fontSize: 10, color: "#ef4444", background: "#fef2f2", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Failed</span>}
-        </div>
-
-        {/* Card shell */}
+        {/* V6 card */}
         <div style={{
-          background: "#f7f5ff",
-          border: isSent ? "1.5px solid #bbf7d0" : isFailed ? "1.5px solid #fecaca" : "1.5px solid #e4deff",
-          borderRadius: 18,
+          width: "100%",
+          maxWidth: 620,
+          background: "#fff",
+          border: "1px solid #ebe8fb",
+          borderRadius: 28,
+          boxShadow: "0 8px 40px rgba(30,30,60,0.10)",
           overflow: "hidden",
-          maxWidth: 580,
-          boxShadow: isSent
-            ? "0 4px 20px rgba(34,197,94,0.07)"
-            : "0 4px 20px rgba(99,102,241,0.07), 0 1px 3px rgba(0,0,0,0.04)",
           opacity: isDismissed ? 0.55 : 1,
           transition: "opacity 0.2s",
         }}>
-          <div style={{ padding: "20px 22px 18px" }}>
 
-            {/* ── Hey team header ── */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 18, fontWeight: 500, fontStyle: "italic", color: "#312e81", marginBottom: 10, lineHeight: 1.2 }}>
-                Hey team 👋
+          {/* ── Header ── */}
+          <div style={{ display: "flex", gap: 16, padding: "24px 26px" }}>
+            {/* Avatar */}
+            <img
+              src={MADISON_PHOTO}
+              alt="Madison"
+              style={{ width: 54, height: 54, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+            />
+            <div style={{ flex: 1 }}>
+              {/* Name + time */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+                <span style={{ font: "700 28px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
+                <span style={{ font: "800 13px Inter,system-ui", color: "#6d5cff" }}>✦ AI</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
               </div>
-
-              {/* Inbound SMS context chip */}
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: "#ede9fe", borderRadius: 20, padding: "3px 10px 3px 8px",
-                marginBottom: 10,
-              }}>
-                <span style={{ fontSize: 10, color: "#6d28d9", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em" }}>📱 Inbound SMS</span>
-                <span style={{ fontSize: 11, color: "#7c3aed", fontWeight: 600 }}>·</span>
-                <span style={{ fontSize: 12, color: "#4c1d95", fontWeight: 600 }}>{senderLine}</span>
-              </div>
-
-              {/* Quoted message */}
-              <div style={{
-                fontSize: 13.5,
-                color: "#374151",
-                fontStyle: "italic",
-                background: "rgba(255,255,255,0.75)",
-                borderRadius: 10,
-                padding: "10px 14px",
-                borderLeft: "3px solid #a78bfa",
-                lineHeight: 1.55,
-                backdropFilter: "blur(2px)",
-              }}>
-                {quotedLine}
-              </div>
-            </div>
-
-            {/* Observations */}
-            {observations.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 7 }}>What I found</div>
-                {observations.map((obs, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#374151", display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
-                    <span style={{ color: "#a78bfa", flexShrink: 0, marginTop: 2, fontSize: 10 }}>◆</span>
-                    <span style={{ lineHeight: 1.5 }}>{obs}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Loading state */}
-            {isLoading || isProcessing ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "#7c3aed", padding: "10px 0 4px" }}>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span style={{ fontStyle: "italic" }}>Madison is drafting a reply…</span>
-              </div>
-            ) : isDraftReady ? (
-              <>
-                {/* Draft section */}
-                <div style={{ borderTop: "1px solid #ddd6fe", margin: "14px 0 12px" }} />
-                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 13, fontStyle: "italic", fontWeight: 500, color: "#7c3aed", marginBottom: 10 }}>✦ Here's my suggested reply:</div>
-                {editMode ? (
-                  <textarea
-                    value={editedText}
-                    onChange={e => setEditedText(e.target.value)}
-                    style={{
-                      width: "100%", minHeight: 88, fontSize: 13.5, color: "#111827",
-                      border: "1.5px solid #a78bfa", borderRadius: 10, padding: "11px 14px",
-                      fontFamily: "inherit", resize: "vertical", outline: "none",
-                      background: "#ffffff",
-                      boxShadow: "0 0 0 3px rgba(167,139,250,0.15)",
-                      lineHeight: 1.6,
-                    }}
-                    autoFocus
-                  />
-                ) : (
-                  <div style={{
-                    fontSize: 14, color: "#1f2937", lineHeight: 1.65,
-                    background: "#ffffff",
-                    borderRadius: 12,
-                    padding: "13px 16px",
-                    border: "1px solid #e4deff",
-                    marginBottom: 16,
-                    boxShadow: "0 1px 4px rgba(99,102,241,0.06)",
-                  }}>
-                    {generatedDraft}
-                  </div>
-                )}
-                {/* Action buttons */}
-                <div style={{ display: "flex", gap: 9, flexWrap: "wrap" as const, marginTop: editMode ? 12 : 0 }}>
-                  {editMode ? (
-                    <>
-                      <button
-                        onClick={() => handleApprove(editedText)}
-                        disabled={isSending || !editedText.trim()}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 7,
-                          background: "#4f46e5", color: "#fff", border: "none",
-                          borderRadius: 12, padding: "10px 20px",
-                          fontSize: 13.5, fontWeight: 700,
-                          cursor: isSending ? "wait" : "pointer",
-                          opacity: isSending ? 0.7 : 1,
-                          boxShadow: "0 2px 8px rgba(79,70,229,0.35)",
-                          letterSpacing: "-0.01em",
-                        }}
-                      >
-                        {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "✈"} Send Edited
-                      </button>
-                      <button
-                        onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
-                        style={{
-                          background: "#f3f4f6", color: "#6b7280",
-                          border: "1.5px solid #e5e7eb", borderRadius: 12,
-                          padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </>
+              {/* Copy — human summary */}
+              {isLoading || isProcessing ? (
+                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, fontSize: 21, color: "#9ca3af", lineHeight: 1.45 }}>
+                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#6d5cff" }} />
+                  <span style={{ fontStyle: "italic" }}>Drafting a reply…</span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 8, fontSize: 21, lineHeight: 1.45, color: "#222" }}>
+                  <p style={{ margin: "0.45em 0" }}>I can take this one.</p>
+                  {observations.length > 0 ? (
+                    <p style={{ margin: "0.45em 0" }}>{observations[0]}</p>
                   ) : (
-                    <>
-                      <button
-                        onClick={() => handleApprove(generatedDraft)}
-                        disabled={isSending}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 7,
-                          background: "#4f46e5", color: "#fff", border: "none",
-                          borderRadius: 12, padding: "10px 22px",
-                          fontSize: 13.5, fontWeight: 700,
-                          cursor: isSending ? "wait" : "pointer",
-                          opacity: isSending ? 0.7 : 1,
-                          boxShadow: "0 2px 10px rgba(79,70,229,0.35)",
-                          letterSpacing: "-0.01em",
-                        }}
-                      >
-                        {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "→"} Send
-                      </button>
-                      <button
-                        onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 7,
-                          background: "#ffffff", color: "#4f46e5",
-                          border: "1.5px solid #c4b5fd", borderRadius: 12,
-                          padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                          boxShadow: "0 1px 3px rgba(99,102,241,0.08)",
-                        }}
-                      >
-                        ✏ Edit & Send
-                      </button>
-                      <button
-                        onClick={handleDismiss}
-                        style={{
-                          background: "#f3f4f6", color: "#6b7280",
-                          border: "1.5px solid #e5e7eb", borderRadius: 12,
-                          padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                        }}
-                      >
-                        Not right now
-                      </button>
-                    </>
+                    <p style={{ margin: "0.45em 0" }}>I drafted a reply for you.</p>
                   )}
                 </div>
-              </>
-            ) : isSent ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#16a34a", fontWeight: 600, padding: "4px 0" }}>
-                <CheckCircle2 style={{ width: 16, height: 16 }} />
-                Sent by {draft?.approvedBy ?? "agent"}
-                {draft?.approvedText && draft.approvedText !== generatedDraft && (
-                  <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400, marginLeft: 4 }}>(edited)</span>
+              )}
+            </div>
+            {/* Status pill */}
+            <div style={{
+              marginLeft: "auto",
+              background: statusBadge.bg,
+              color: statusBadge.color,
+              padding: "8px 12px",
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 800,
+              height: "max-content",
+              whiteSpace: "nowrap" as const,
+              flexShrink: 0,
+            }}>
+              {statusBadge.label}
+            </div>
+          </div>
+
+          {/* ── Main body ── */}
+          <div style={{ padding: "0 26px 26px" }}>
+            <div style={{ border: "1px solid #ebe8fb", borderRadius: 20, padding: 18, background: "#fbfbff" }}>
+
+              {/* Latest customer message */}
+              <div style={{ fontSize: 12, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Latest customer message</div>
+              <div style={{ display: "flex" }}>
+                <div style={{
+                  display: "inline-block",
+                  padding: "14px 18px",
+                  borderRadius: 18,
+                  fontSize: 18,
+                  lineHeight: 1.5,
+                  maxWidth: "78%",
+                  background: "#ece7ff",
+                  color: "#222",
+                }}>
+                  {quotedLine || senderLine}
+                </div>
+              </div>
+
+              {/* Reply section */}
+              {(isDraftReady || isSent || isDismissed || isFailed) && (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <strong style={{ color: "#6d5cff", fontSize: 14 }}>
+                      {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
+                    </strong>
+                    {/* View conversation toggle */}
+                    {observations.length > 1 && (
+                      <a
+                        href="#"
+                        onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
+                        style={{ color: "#6d5cff", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
+                      >
+                        {showConversation ? "Hide context ↑" : "View context →"}
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Textarea / draft display */}
+                  {isDraftReady && (
+                    editMode ? (
+                      <textarea
+                        value={editedText}
+                        onChange={e => setEditedText(e.target.value)}
+                        style={{
+                          width: "100%",
+                          border: "1px solid #ddd6ff",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "18px/1.5 Inter,system-ui",
+                          resize: "vertical" as const,
+                          outline: "none",
+                          minHeight: 120,
+                          color: "#111827",
+                          background: "#fff",
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <textarea
+                        value={generatedDraft}
+                        readOnly
+                        style={{
+                          width: "100%",
+                          border: "1px solid #ddd6ff",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "18px/1.5 Inter,system-ui",
+                          resize: "none" as const,
+                          outline: "none",
+                          minHeight: 80,
+                          color: "#111827",
+                          background: "#fff",
+                          cursor: "default",
+                        }}
+                      />
+                    )
+                  )}
+
+                  {/* Sent state — show approved text */}
+                  {isSent && (
+                    <div style={{
+                      width: "100%",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: 16,
+                      padding: 16,
+                      font: "18px/1.5 Inter,system-ui",
+                      color: "#111827",
+                      background: "#f0fdf4",
+                    }}>
+                      {draft?.approvedText ?? generatedDraft}
+                    </div>
+                  )}
+
+                  {/* Failed state */}
+                  {isFailed && (
+                    <div style={{ fontSize: 14, color: "#ef4444", padding: "8px 0" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
+                  )}
+
+                  {/* Observations as context (collapsible) */}
+                  {showConversation && observations.length > 1 && (
+                    <div style={{ marginTop: 14, borderTop: "1px solid #ece8fb", paddingTop: 14 }}>
+                      {observations.slice(1).map((obs, i) => (
+                        <div key={i} style={{ margin: "10px 0", textAlign: "left" }}>
+                          <span style={{ display: "inline-block", padding: "10px 14px", borderRadius: 14, fontSize: 15, maxWidth: "70%", background: "#f1efff", color: "#222" }}>{obs}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Footer ── */}
+            <div style={{ display: "flex", alignItems: "center", marginTop: 18 }}>
+              <div style={{ color: "#757b90", fontSize: 14 }}>
+                {isSent
+                  ? `Sent by ${draft?.approvedBy ?? "agent"}${draft?.approvedText && draft.approvedText !== generatedDraft ? " (edited)" : ""}`
+                  : isDismissed
+                  ? "No reply sent."
+                  : isFailed
+                  ? ""
+                  : "Madison won't send anything until you approve it."}
+              </div>
+              <div style={{ display: "flex", gap: 12, marginLeft: "auto" }}>
+                {isDraftReady && !editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
+                      style={{ padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 14 }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleApprove(generatedDraft)}
+                      disabled={isSending}
+                      style={{
+                        padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: isSending ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Looks good
+                    </button>
+                  </>
+                )}
+                {isDraftReady && editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
+                      style={{ padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 14 }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleApprove(editedText)}
+                      disabled={isSending || !editedText.trim()}
+                      style={{
+                        padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: (isSending || !editedText.trim()) ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Edited
+                    </button>
+                  </>
+                )}
+                {isDraftReady && !editMode && (
+                  <button
+                    onClick={handleDismiss}
+                    style={{ padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 14, color: "#6b7280" }}
+                  >
+                    Dismiss
+                  </button>
+                )}
+                {isFailed && (
+                  <button
+                    onClick={() => meta.draftId && retryMutation.mutate({ draftId: meta.draftId })}
+                    style={{
+                      padding: "15px 18px", borderRadius: 15, fontWeight: 700, border: "none",
+                      background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
+                      color: "#fff", cursor: "pointer", fontSize: 14,
+                    }}
+                  >
+                    ↺ Retry
+                  </button>
                 )}
               </div>
-            ) : isDismissed ? (
-              <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>No reply sent.</div>
-            ) : isFailed ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontSize: 12, color: "#ef4444" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
-                <button
-                  onClick={() => meta.draftId && retryMutation.mutate({ draftId: meta.draftId })}
-                  style={{
-                    fontSize: 11, color: "#7c3aed", background: "#ede9fe",
-                    border: "none", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontWeight: 700,
-                  }}
-                >
-                  ↺ Retry
-                </button>
-              </div>
-            ) : null}
+            </div>
           </div>
         </div>
       </div>
