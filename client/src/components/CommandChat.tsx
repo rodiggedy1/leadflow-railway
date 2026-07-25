@@ -4392,7 +4392,8 @@ function KudosModal({
 
 const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
   onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
-  console.count("[RENDER] CommandChat"); console.log("[RENDER-TS] CommandChat", performance.now().toFixed(1));
+  const DEBUG_RENDER = import.meta.env.DEV || localStorage.getItem("debug-renders") === "1";
+  if (DEBUG_RENDER) { console.log("[RENDER] CommandChat", performance.now().toFixed(1)); }
   const [composer, setComposer] = useState("");
   // Message quality check
 
