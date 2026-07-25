@@ -1466,7 +1466,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
 
               {/* Latest customer message */}
               <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8 }}>
-                {senderName ? `Latest message from ${senderName}` : "Latest customer message"}
+                {draft?.senderName ? `Latest message from ${draft.senderName}` : "Latest customer message"}
               </div>
               <div style={{ display: "flex" }}>
                 <div style={{
