@@ -11,22 +11,20 @@ import { useCallback, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 
-export function useTypingIndicator(channelKey: string, options?: { enabled?: boolean }) {
+export function useTypingIndicator(channelKey: string) {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
 
   const setTypingMutation = trpc.opsChat.setTyping.useMutation();
 
   const isVisible = usePageVisibility();
-  const panelEnabled = options?.enabled !== false;
-  const queryEnabled = panelEnabled && !!channelKey;
 
-  // Poll who is typing every 3s; pause when tab is hidden or panel is not visible
+  // Poll who is typing every 3s; pause when tab is hidden
   const { data } = trpc.opsChat.getTyping.useQuery(
     { channelKey },
     {
-      refetchInterval: queryEnabled && isVisible ? 3000 : false,
-      enabled: queryEnabled,
+      refetchInterval: isVisible ? 3000 : false,
+      enabled: !!channelKey,
       // Don't show stale data
       staleTime: 0,
     }
