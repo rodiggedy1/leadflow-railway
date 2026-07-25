@@ -1510,9 +1510,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // Always-on command channel query — used exclusively for new lead sound detection.
   // Runs regardless of activeChannel so lead alerts fire even when viewing another channel.
+  // STAGE-1 DIAGNOSTIC: commandMsgsForSound temporarily disabled to test freeze causation.
+  // Restore: change `enabled: false` back to `enabled: isAuthenticated, refetchInterval: 15_000`
   const { data: commandMsgsForSound = [] } = trpc.opsChat.listChannelMessages.useQuery(
     { channel: "command" },
-    { enabled: isAuthenticated, refetchInterval: 15_000 }
+    { enabled: false }
   );
   // Dedicated lead sound watcher — fires on command channel messages regardless of activeChannel.
   const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
