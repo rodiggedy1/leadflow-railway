@@ -1593,3 +1593,9 @@
 - [ ] Add madison_sms_draft quickAction case to CommandChat.tsx renderer
 - [ ] Write vitest tests for madisonSmsAgent pipeline stages
 - [ ] Deploy to preview and verify end-to-end
+
+## Performance Sprint (post-Madison SMS)
+- [ ] Replace commandMsgsForSound with lightweight sound-notification endpoint — current listChannelMessages pulls ~340 KB per 15s poll just to detect new messages for audio notification; replace with a minimal endpoint returning { hasNew: boolean, latestId: number }
+- [ ] Polling audit — review all refetchInterval values across OpsChat.tsx and CommandChat.tsx for payload size vs. frequency tradeoffs
+- [ ] Payload reduction — investigate reducing listChannelMessages response size (field selection, pagination)
+- [ ] Memoization/profiling — profile CommandChat with React DevTools after Madison SMS ships to identify remaining re-render hotspots
