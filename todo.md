@@ -1567,3 +1567,29 @@
 - [x] End-of-day check-in: tRPC procedures (submitCheckin, getCheckinsForDate)
 - [x] End-of-day check-in: fullscreen modal in cleaner portal (triggers on last job complete)
 - [x] End-of-day check-in: surface availability responses on scheduling page
+
+## Madison Posts — Phase 1
+
+- [ ] Add `opsChat.postAsMadison` tRPC procedure to opsChatRouter
+- [ ] Add `madison_post` quickAction renderer in CommandChat.tsx (recommendation card + inline confirm + result card)
+- [ ] Add "Post to Command Chat" button on all AI Concierge result cards
+- [ ] Wire action button in Command Chat to execute chain immediately and post result card back to Command Chat
+- [ ] Auto-post agent name as reply when action is confirmed
+
+## Madison SMS Draft Agent — Phase 1
+- [ ] Add `madisonSmsDrafts` table to drizzle/schema.ts with all fields and indexes
+- [ ] Run pnpm db:push to migrate schema
+- [ ] Build server/madisonKnowledgeRetrieval.ts — knowledge retrieval layer (separate from registry)
+- [ ] Build server/madisonSmsAgent.ts — full pipeline (classify → intent resolve → context resolve → capability → knowledge retrieval → DraftResponse → quality score → post card)
+- [ ] Add get_eta read-only capability handler to registry.ts
+- [ ] Add card_status read-only capability handler to registry.ts (wraps existing handleCardStatus logic)
+- [ ] Add fire-and-forget triggerMadisonSmsDraft() call in webhooks.ts handleCsInboundMessage()
+- [ ] Add opsChat.getSmsDraft tRPC procedure
+- [ ] Add opsChat.approveSmssDraft tRPC procedure (atomic SENDING lock)
+- [ ] Add opsChat.dismissSmsDraft tRPC procedure
+- [ ] Add opsChat.callTeamForEta tRPC procedure
+- [ ] Add opsChat.retrySmsDraft tRPC procedure (resumable pipeline)
+- [ ] Add MadisonSmsDraftCard component to CommandChat.tsx
+- [ ] Add madison_sms_draft quickAction case to CommandChat.tsx renderer
+- [ ] Write vitest tests for madisonSmsAgent pipeline stages
+- [ ] Deploy to preview and verify end-to-end
