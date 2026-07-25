@@ -106,7 +106,6 @@ export function ConversationViewport({
   onOpenFull,
   title,
 }: ConversationViewportProps) {
-  console.count("[RENDER] ConversationViewport");
   const headerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());

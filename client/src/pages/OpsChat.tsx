@@ -941,7 +941,6 @@ interface OpsChatProps {
 }
 
 export default function OpsChat({ onMinimize, onClose, initialTab: initialTabProp }: OpsChatProps = {}) {
-  console.count("[RENDER] OpsChat");
    // Agent auth (email + password) — single auth source for admin/agent routes.
   // auth.me (Manus OAuth) is NOT called here to avoid doubling the request count on page load.
   const { data: agentMe, isLoading: agentLoading, refetch: refetchAgentMe } = trpc.agents.me.useQuery(undefined, {

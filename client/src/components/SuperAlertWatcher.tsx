@@ -33,7 +33,6 @@ import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 
 export default function SuperAlertWatcher() {
-  console.count("[RENDER] SuperAlertWatcher");
   const utils = trpc.useUtils();
   const { state: opsChatState, open: openOpsChat } = useOpsChatWindow();
 
