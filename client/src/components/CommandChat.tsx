@@ -5318,19 +5318,39 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const container = threadScrollRef.current;
     const msgsDiv = msgsContainerRef.current;
     if (!container || !msgsDiv) return;
-    // Initial scroll to bottom
+
+    let knownChildCount = msgsDiv.childElementCount;
+
     container.scrollTop = container.scrollHeight;
-    // Observe child additions (new messages).
-    // Only auto-scroll if the user is already near the bottom (scroll-lock pattern).
-    const mo = new MutationObserver(() => {
-      const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 250;
+
+    const mo = new MutationObserver((mutations) => {
+      const hasDirectAddition = mutations.some(
+        mutation => mutation.addedNodes.length > 0
+      );
+
+      const previousCount = knownChildCount;
+      const newCount = msgsDiv.childElementCount;
+
+      // Always synchronize the tracked count, including after removals.
+      knownChildCount = newCount;
+
+      if (!hasDirectAddition || newCount <= previousCount) return;
+
+      const nearBottom =
+        container.scrollHeight -
+          container.scrollTop -
+          container.clientHeight <
+        250;
+
       if (nearBottom) {
         container.scrollTop = container.scrollHeight;
       } else {
-        setNewMsgCount(n => n + 1);
+        setNewMsgCount(count => count + 1);
       }
     });
-    mo.observe(msgsDiv, { childList: true, subtree: true });
+
+    mo.observe(msgsDiv, { childList: true });
+
     return () => mo.disconnect();
   }, []);
 
