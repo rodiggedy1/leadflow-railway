@@ -56,6 +56,7 @@ export interface CapabilityResult {
 
 export interface DraftResponse {
   draft: string;
+  intentSummary: string; // one-sentence human-readable summary of customer intent
   draftConfidence: number; // 0–1
   observations: string[];
   suggestedActions: string[];
@@ -195,6 +196,7 @@ export async function triggerMadisonSmsDraft(params: {
         suggestedActions: draftResponse.suggestedActions as any,
         followUps: draftResponse.followUps as any,
         generatedDraft: draftResponse.draft,
+        intentSummary: draftResponse.intentSummary,
         qualityScore: qualityScore as any,
         updatedAt: new Date(),
       })
@@ -638,12 +640,13 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
             type: "object",
             properties: {
               draft: { type: "string" },
+              intentSummary: { type: "string", description: "One sentence describing what the customer wants, e.g. 'This is a thank-you after today's cleaning.' or 'They're asking about their ETA.'" },
               draftConfidence: { type: "number" },
               observations: { type: "array", items: { type: "string" } },
               suggestedActions: { type: "array", items: { type: "string" } },
               followUps: { type: "array", items: { type: "string" } },
             },
-            required: ["draft", "draftConfidence", "observations", "suggestedActions", "followUps"],
+            required: ["draft", "intentSummary", "draftConfidence", "observations", "suggestedActions", "followUps"],
             additionalProperties: false,
           },
         },
@@ -664,6 +667,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
 
     return {
       draft: parsed.draft,
+      intentSummary: parsed.intentSummary ?? "I drafted a reply for you.",
       draftConfidence: Math.min(1, Math.max(0, parsed.draftConfidence ?? 0.7)),
       observations: allObservations,
       suggestedActions: allSuggestedActions,
@@ -674,6 +678,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
     // Fallback draft
     return {
       draft: `Hi! I received your message. Let me check on that and get back to you shortly.`,
+      intentSummary: "I drafted a reply for you.",
       draftConfidence: 0.3,
       observations: ["Draft generation failed — fallback used"],
       suggestedActions: ["edit", "dismiss"],

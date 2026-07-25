@@ -1437,11 +1437,9 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
               ) : (
                 <div style={{ marginTop: 8, fontSize: 21, lineHeight: 1.45, color: "#222" }}>
                   <p style={{ margin: "0.45em 0" }}>I can take this one.</p>
-                  {observations.length > 0 ? (
-                    <p style={{ margin: "0.45em 0" }}>{observations[0]}</p>
-                  ) : (
-                    <p style={{ margin: "0.45em 0" }}>I drafted a reply for you.</p>
-                  )}
+                  <p style={{ margin: "0.45em 0" }}>
+                    {(draft as any)?.intentSummary ?? (observations.length > 0 ? observations[0] : "I drafted a reply for you.")}
+                  </p>
                 </div>
               )}
             </div>

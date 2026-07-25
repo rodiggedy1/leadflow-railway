@@ -608,6 +608,16 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_sms_drafts indexes failed (non-fatal):', err);
   }
+  // ── intentSummary column (added after initial table creation) ───────────────
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE madison_sms_drafts
+      ADD COLUMN IF NOT EXISTS intentSummary TEXT NULL
+    `));
+    console.log('[Migration] madison_sms_drafts intentSummary column: OK');
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts intentSummary column failed (non-fatal):', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB

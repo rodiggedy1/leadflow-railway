@@ -3984,6 +3984,8 @@ export const madisonSmsDrafts = mysqlTable("madison_sms_drafts", {
 
   // Content
   originalMessage: text("originalMessage").notNull(),
+  /** One-sentence human-readable summary of the customer's intent — shown in card copy */
+  intentSummary: text("intentSummary"),
   /** LLM-generated draft — never overwritten, even if agent edits before sending */
   generatedDraft: text("generatedDraft"),
   /** What was actually sent — may differ from generatedDraft if agent edited */
