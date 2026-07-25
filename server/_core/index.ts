@@ -532,6 +532,82 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_action_items ack index failed (non-fatal):', err);
   }
+
+  // ── madison_sms_drafts — Madison SMS Draft Agent ─────────────────────────
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_sms_drafts (
+        id BIGINT AUTO_INCREMENT NOT NULL,
+        inboundOpenPhoneId VARCHAR(128) NOT NULL,
+        sessionId BIGINT NOT NULL,
+        fromPhone VARCHAR(30) NOT NULL,
+        senderName VARCHAR(255),
+        senderType ENUM('customer','cleaner','unknown') NOT NULL DEFAULT 'unknown',
+        status ENUM('RECEIVED','CLASSIFIED','TOOLS_RUNNING','DRAFT_READY','SENDING','SENT','DELIVERED','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED',
+        messageType ENUM('QUESTION','ACTION','INFORMATION','CONVERSATION','UNKNOWN'),
+        intent VARCHAR(64),
+        capability VARCHAR(64),
+        capabilityVersion INT,
+        resolvedContext JSON,
+        capabilityArgs JSON,
+        capabilityResult JSON,
+        observations JSON NOT NULL DEFAULT ('[]'),
+        suggestedActions JSON NOT NULL DEFAULT ('[]'),
+        followUps JSON NOT NULL DEFAULT ('[]'),
+        qualityScore JSON,
+        originalMessage TEXT NOT NULL,
+        generatedDraft TEXT,
+        approvedText TEXT,
+        approvedBy VARCHAR(128),
+        approvedAt DATETIME(3),
+        dismissedBy VARCHAR(128),
+        dismissedAt DATETIME(3),
+        outboundOpenPhoneId VARCHAR(128),
+        sentAt DATETIME(3),
+        deliveredAt DATETIME(3),
+        errorStage VARCHAR(64),
+        errorCode VARCHAR(64),
+        errorMessage TEXT,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        CONSTRAINT madison_sms_drafts_id PRIMARY KEY (id)
+      )
+    `));
+    console.log('[Migration] madison_sms_drafts: OK');
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts failed (non-fatal):', err);
+  }
+  try {
+    const [uqRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_sms_drafts'
+        AND index_name = 'uq_sms_draft_inbound'
+    `)) as any;
+    if (!(Array.isArray(uqRows) && uqRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE UNIQUE INDEX uq_sms_draft_inbound ON madison_sms_drafts (inboundOpenPhoneId)`
+      ));
+      console.log('[Migration] madison_sms_drafts uq index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts uq index failed (non-fatal):', err);
+  }
+  try {
+    const [idxRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_sms_drafts'
+        AND index_name = 'idx_sms_draft_status'
+    `)) as any;
+    if (!(Array.isArray(idxRows) && idxRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_status ON madison_sms_drafts (status)`));
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_session ON madison_sms_drafts (sessionId)`));
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_created ON madison_sms_drafts (createdAt)`));
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_status_created ON madison_sms_drafts (status, createdAt)`));
+      console.log('[Migration] madison_sms_drafts indexes: created');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts indexes failed (non-fatal):', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB
