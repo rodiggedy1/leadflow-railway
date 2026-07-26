@@ -2992,7 +2992,7 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
   /** Current lifecycle status */
   status: mysqlEnum("status", confirmationCallStatuses as unknown as [string, ...string[]]).default("pending").notNull(),
   /** VAPI call ID returned from the VAPI API */
-  vapiCallId: varchar("vapiCallId", { length: 128 }).unique(),
+  vapiCallId: varchar("vapiCallId", { length: 128 }),
   /** URL to the call recording (populated from VAPI end-of-call webhook) */
   recordingUrl: varchar("recordingUrl", { length: 1024 }),
   /** Full call transcript (populated from VAPI end-of-call webhook) */
