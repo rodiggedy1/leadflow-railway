@@ -3889,14 +3889,20 @@ function MadisonCallSummaryCard({
   msg,
   onCallBack,
   onTextBack,
-  onDismiss,
 }: {
   msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
   onCallBack: (name: string, phone: string, msgId: number) => void;
   onTextBack: (name: string, phone: string, msgId: number) => void;
-  onDismiss: (msgId: number) => void;
 }) {
   const [showTranscript, setShowTranscript] = useState(false);
+  const utils = trpc.useUtils();
+  const { user: currentUser } = useAuth();
+  const dismissCallCardMutation = trpc.opsChat.markCallCardActed.useMutation({
+    onSuccess: () => { utils.opsChat.getUnresolvedMadisonCount.invalidate(); },
+  });
+  const handleDismiss = () => {
+    dismissCallCardMutation.mutate({ msgId: msg.id, action: "dismiss", actedBy: currentUser?.name ?? "Agent" });
+  };
   const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
 
   let meta: {
@@ -4082,7 +4088,7 @@ function MadisonCallSummaryCard({
                     💬 Send Text Instead
                   </button>
                   <button
-                    onClick={() => onDismiss(msg.id)}
+                    onClick={handleDismiss}
                     style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}
                   >
                     Dismiss
@@ -7531,9 +7537,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             });
             setVoiceTone("friendly");
             setVoiceCardMinimized(false);
-          }}
-          onDismiss={(msgId) => {
-            markCallCardActedMutation.mutate({ msgId, action: "dismiss", actedBy: currentUser?.name ?? "Agent" });
           }}
         />
         {/* New-message badge — shown when user is scrolled up */}
