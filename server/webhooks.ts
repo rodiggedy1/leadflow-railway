@@ -149,15 +149,18 @@ export function registerWebhookRoutes(app: Express) {
       console.log(`[Webhook] Event type: ${event?.type}, direction: ${msg?.direction}`);
       console.log(`[Webhook] Payload: from=${msg?.from} to=${JSON.stringify(msg?.to)} body=${msg?.body ?? msg?.text}`);
       // ── CS line intercept ──────────────────────────────────────────────────
-      // Messages to the CS line (202-888-5362, phoneNumberId=PN0wVLcpCq) are
-      // stored as cs-inbound sessions and skipped from the main lead AI engine.
+      // Messages to any CS-treated line are stored as cs-inbound sessions and
+      // skipped from the main lead AI engine.
+      // Add new number IDs to csNumberIds to give them the same treatment.
       // NOTE: This must run BEFORE the direction check so outbound agent replies
       // from the OpenPhone app are mirrored into the CS chat (direction=outgoing).
       const csNumberId = ENV.openPhoneCsNumberId;
       if (!csNumberId) {
         console.error("[Webhook] OPENPHONE_CS_PHONE_NUMBER_ID is not set — CS messages will NOT be intercepted and may be silently dropped. Set this env var immediately.");
       }
-      if (csNumberId && msg?.phoneNumberId === csNumberId) {
+      // All number IDs that receive the CS/Command Chat treatment (same handler, different outgoing number)
+      const csNumberIds = [csNumberId, ENV.openPhoneNumberId].filter(Boolean) as string[];
+      if (csNumberIds.includes(msg?.phoneNumberId)) {
         if (msg.direction === "outgoing") {
           // Agent replied directly from OpenPhone app — mirror into CS chat
           await handleCsOutboundMessage(msg);
