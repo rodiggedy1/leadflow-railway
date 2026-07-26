@@ -41,7 +41,7 @@ import {
   madisonSmsDrafts,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
@@ -5308,6 +5308,43 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     .input(z.object({ draftId: z.number().int().positive() }))
     .mutation(async ({ input }) => {
       return retrySmsDraft(input.draftId);
+    }),
+  /**
+   * Count unresolved Madison cards:
+   *   - madison_sms_draft: draft status is not SENT / DISMISSED / DELIVERED
+   *   - madison_call_summary: metadata has no actedBy
+   * Used by the header Madison avatar button to show the correct count.
+   */
+  getUnresolvedMadisonCount: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return { smsDraftCount: 0, callSummaryCount: 0, total: 0 };
+
+      // Count pending SMS drafts
+      const [smsDraftRow] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(madisonSmsDrafts)
+        .where(notInArray(madisonSmsDrafts.status, ["SENT", "DISMISSED", "DELIVERED"]));
+      const smsDraftCount = Number(smsDraftRow?.count ?? 0);
+
+      // Count call summary cards without actedBy in metadata
+      const callSummaryMsgs = await db
+        .select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, "command"),
+          eq(opsChatMessages.quickAction, "madison_call_summary"),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const callSummaryCount = callSummaryMsgs.filter(m => {
+        try {
+          const meta = JSON.parse(m.metadata ?? "{}");
+          return !meta.actedBy;
+        } catch { return true; }
+      }).length;
+
+      return { smsDraftCount, callSummaryCount, total: smsDraftCount + callSummaryCount };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

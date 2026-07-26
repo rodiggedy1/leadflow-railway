@@ -3580,15 +3580,32 @@ const MessageList = memo(function MessageList({
                 // ── Madison Post card ──────────────────────────────────────────────────
                 if (msg.quickAction === "madison_post") { return <MadisonPostCard msg={msg} callerName={callerName} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
-                if (msg.quickAction === "madison_sms_draft") { return <MadisonSmsDraftCard msg={msg} callerName={callerName} />; }
-                // ── Madison Call Summary card ──────────────────────────────────────────────
+                if (msg.quickAction === "madison_sms_draft") {
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
+                    >
+                      <MadisonSmsDraftCard msg={msg} callerName={callerName} />
+                    </div>
+                  );
+                }
+                // ── Madison Call Summary card ──────────────────────────────────────────
                 if (msg.quickAction === "madison_call_summary") {
-                  return <MadisonCallSummaryCard
-                    key={msg.id}
-                    msg={msg}
-                    onCallBack={onCallBack}
-                    onTextBack={onTextBack}
-                  />;
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
+                    >
+                      <MadisonCallSummaryCard
+                        msg={msg}
+                        onCallBack={onCallBack}
+                        onTextBack={onTextBack}
+                      />
+                    </div>
+                  );
                 }
                                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
@@ -5824,30 +5841,34 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }, [channelMsgs, mentionPattern, effectiveNames]);
 
   // ── Unresolved Madison cards (sms draft + call summary) ─────────────────────
-  // Derived purely from channelMsgs — no new queries, no polling.
-  // A card is "unresolved" if it has no actedBy (call summary) or the draft status
-  // is not SENT/DISMISSED (checked via metadata only — avoids per-card queries).
-  const unresolvedMadisonIds = useMemo(() => {
+  // Count comes from the server (accurate — checks draft table status, not just metadata).
+  // IDs for scroll-to come from channelMsgs filtered by quickAction.
+  const { data: madisonCountData, refetch: refetchMadisonCount } = trpc.opsChat.getUnresolvedMadisonCount.useQuery(undefined, {
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  const unresolvedMadisonCount = madisonCountData?.total ?? 0;
+  // IDs of all Madison cards in the feed — used for cycling scroll-to
+  const allMadisonIds = useMemo(() => {
     return channelMsgs
-      .filter(m => {
-        if (m.quickAction !== "madison_sms_draft" && m.quickAction !== "madison_call_summary") return false;
-        try {
-          const meta = JSON.parse(m.metadata ?? "{}");
-          if (m.quickAction === "madison_call_summary") return !meta.actedBy;
-          // For sms_draft: treat as unresolved if metadata has no dismissedBy
-          // (actual SENT/DISMISSED status lives in the draft row, but we avoid a per-card query)
-          return !meta.dismissedBy;
-        } catch { return true; }
-      })
+      .filter(m => m.quickAction === "madison_sms_draft" || m.quickAction === "madison_call_summary")
       .map(m => m.id);
   }, [channelMsgs]);
   const [madisonCardIdx, setMadisonCardIdx] = useState(0);
   function jumpToNextMadisonCard() {
-    if (unresolvedMadisonIds.length === 0) return;
-    const idx = madisonCardIdx % unresolvedMadisonIds.length;
-    scrollToCmdMsg(unresolvedMadisonIds[idx]);
+    if (allMadisonIds.length === 0) return;
+    const idx = madisonCardIdx % allMadisonIds.length;
+    scrollToCmdMsg(allMadisonIds[idx]);
     setMadisonCardIdx(idx + 1);
   }
+  // Refresh count when channelMsgs changes (draft acted on / dismissed)
+  const prevMadisonMsgsLen = useRef(allMadisonIds.length);
+  useEffect(() => {
+    if (allMadisonIds.length !== prevMadisonMsgsLen.current) {
+      void refetchMadisonCount();
+      prevMadisonMsgsLen.current = allMadisonIds.length;
+    }
+  }, [allMadisonIds.length, refetchMadisonCount]);
   // Compute unread tagged messages whenever channelMsgs changes
   useEffect(() => {
     if (!mentionPattern || channelMsgs.length === 0) return;
@@ -7203,20 +7224,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </span>
                 )}
               </button>
-              {/* Madison avatar button — cycles through unresolved Madison cards */}
-              {unresolvedMadisonIds.length > 0 && (
+              {/* Madison avatar button — cycles through all Madison cards, count from server */}
+              {unresolvedMadisonCount > 0 && (
                 <>
                   <span className="text-slate-300 text-xs">|</span>
                   <button
                     onClick={jumpToNextMadisonCard}
                     className="relative flex items-center gap-1.5 rounded-full border border-[#e3e6ef] bg-white hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition whitespace-nowrap"
                     style={{padding:"4px 8px 4px 4px",fontSize:"12px"}}
-                    title={`${unresolvedMadisonIds.length} unresolved Madison card${unresolvedMadisonIds.length === 1 ? "" : "s"} — click to jump`}
+                    title={`${unresolvedMadisonCount} unresolved Madison card${unresolvedMadisonCount === 1 ? "" : "s"} — click to jump`}
                   >
                     <img src="/madison-avatar.jpg" alt="Madison" className="w-5 h-5 rounded-full object-cover shrink-0" />
                     <span className="font-semibold text-[#6f3cff]">Madison</span>
                     <span className="min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-[#6f3cff] text-white">
-                      {unresolvedMadisonIds.length > 99 ? "99+" : unresolvedMadisonIds.length}
+                      {unresolvedMadisonCount > 99 ? "99+" : unresolvedMadisonCount}
                     </span>
                   </button>
                 </>
