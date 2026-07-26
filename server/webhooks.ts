@@ -424,6 +424,15 @@ export function registerWebhookRoutes(app: Express) {
         }
         return; // Do not process as a regular inbound SMS
       }
+      // ── Thumbtack system/carrier messages ────────────────────────────────────
+      // Any message from the Thumbtack alert number (+16505164957) that wasn't
+      // already caught by the opportunity check above is a carrier/system message
+      // (e.g. "Our automated system only responds to HELP, STOP and START").
+      // Drop all of them — they are never real customer messages.
+      if (fromPhone === THUMBTACK_ALERT_NUMBER) {
+        console.log(`[Webhook] Thumbtack system/carrier message from ${fromPhone} — dropping silently`);
+        return;
+      }
 
       // ── Bark SMS lead alert ──────────────────────────────────────────────────
       // Bark sends lead alerts from +16506469270.
@@ -2139,9 +2148,11 @@ async function handleCsInboundMessage(msg: any) {
   // that happens to mention Thumbtack is never accidentally dropped.
   // The pattern is intentionally tight: must start with "Thumbtack:" AND mention
   // "automated system only responds" to avoid false positives.
-  const isThumbTackSystemMsg = /^Thumbtack:\s*Our automated system only responds/i.test(rawInboundTextCs.trim());
-  if (isThumbTackSystemMsg) {
-    console.log(`[CS] Thumbtack system message detected — dropping: "${rawInboundTextCs.slice(0, 80)}"`);
+  // Any message from the Thumbtack alert number that reaches the CS handler
+  // is a carrier/system message — drop it.
+  const THUMBTACK_ALERT_NUMBER_CS = "+16505164957";
+  if (msg.from === THUMBTACK_ALERT_NUMBER_CS || fromPhone === THUMBTACK_ALERT_NUMBER_CS) {
+    console.log(`[CS] Thumbtack system/carrier message — dropping silently`);
     return;
   }
   const messageId: string | undefined = msg.id;
