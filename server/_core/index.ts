@@ -618,6 +618,20 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_sms_drafts intentSummary column failed (non-fatal):', err);
   }
+  // ── Reset stuck 'fired' confirmation_calls rows back to 'pending' ─────────────────────────────────
+  // Rows get stuck in 'fired' when the fire-and-forget SMS async block failed silently.
+  // Now that SMS is sent synchronously, this cleans up any legacy stuck rows on every deploy.
+  try {
+    const [resetResult] = await db.execute(sql.raw(
+      `UPDATE confirmation_calls SET status = 'pending' WHERE status = 'fired'`
+    )) as any;
+    const affected = resetResult?.affectedRows ?? 0;
+    if (affected > 0) {
+      console.log(`[Migration] Reset ${affected} stuck fired confirmation_calls rows to pending`);
+    }
+  } catch (err) {
+    console.error('[Migration] Failed to reset fired confirmation_calls (non-fatal):', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB
