@@ -1471,8 +1471,9 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
             <div style={{ border: "1px solid #ebe8fb", borderRadius: 14, padding: 14, background: "#fbfbff" }}>
 
               {/* Latest customer message */}
-              <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8 }}>
-                {draft?.senderName ? `Latest message from ${draft.senderName}` : "Latest customer message"}
+              <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>{draft?.senderName ? `Latest message from ${draft.senderName}` : "Latest customer message"}</span>
+                {draft?.fromPhone && (() => { const d = draft.fromPhone.replace(/\D/g, ""); const fmt = d.length === 11 && d[0] === "1" ? `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : draft.fromPhone; return <span style={{ fontWeight: 600, color: "#6d5cff", fontSize: 10 }}>{fmt}</span>; })()}
               </div>
               <div style={{ display: "flex" }}>
                 <div style={{
@@ -4004,6 +4005,7 @@ function MadisonCallSummaryCard({
             </div>
             <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>
               <span style={{ fontWeight: 600 }}>{displayName}</span>
+              {callerPhone && callerPhone !== displayName && (() => { const d = callerPhone.replace(/\D/g, ""); const fmt = d.length === 11 && d[0] === "1" ? `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : callerPhone; return <span style={{ color: "#6d5cff", fontWeight: 600, marginLeft: 8 }}>{fmt}</span>; })()}
               {durationDisplay && <span style={{ color: "#9ca3af", marginLeft: 8 }}>· {durationDisplay}</span>}
             </div>
             {showTranscript && (
