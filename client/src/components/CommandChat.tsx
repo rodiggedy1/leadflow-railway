@@ -7413,39 +7413,28 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
           onOpenConcierge={() => { /* concierge always open */ }}
           onCallBack={(name, phone) => {
-            // Open AI concierge confirm panel with editable script — same flow as voice command
+            // Fire call immediately — result card appears via polling flow
             const first = name.split(" ")[0];
-            const script = `Hi ${first}, this is Ava from Maids in Black. I'm following up on the call you just had with us.\n\nI wanted to make sure all your questions were answered and see if there's anything else we can help you with.\n\nWould you like to schedule a cleaning or get a quote?`;
-            setVoiceConfirmMsg(script);
-            setVoiceConfirmAction("call");
-            setVoiceConfirmScenario(`Follow up with ${name} who called in`);
-            setVoiceConfirm({
-              message: script,
-              matches: [{ sessionId: 0, name, phone }],
-              selected: { sessionId: 0, name, phone },
+            const script = `Hi ${first}, this is Ava from Maids in Black. I'm following up on the call you just had with us. I wanted to make sure all your questions were answered and see if there's anything else we can help you with. Would you like to schedule a cleaning or get a quote?`;
+            voiceCallContactNameRef.current = name;
+            voiceCallContactPhoneRef.current = phone;
+            voiceCallScriptRef.current = script;
+            setVoiceCallStatus("firing");
+            voiceStartCallMutation.mutate({
+              cleanerJobId: 1,
+              jobDate: "",
+              personName: name,
+              phone,
+              scenario: `Callback: follow up with ${name} who called in`,
+              script,
+              audience: "customer",
             });
-            setVoiceTone("friendly");
-            setVoiceCallStatus("idle");
-            setVoiceCallVapiId(null);
-            setVoiceCallSummary(null);
-            setVoiceCallTranscript(null);
-            setVoiceCallRecordingUrl(null);
-            setVoiceCardMinimized(false);
           }}
           onTextBack={(name, phone) => {
-            // Open AI concierge text confirm panel with editable draft — same flow as voice command
+            // Send text immediately — posts sms_to_client card in chat
             const first = name.split(" ")[0];
-            const draft = `Hi ${first}, this is the Maids in Black team! We saw you just called us. How can we help you today? Feel free to reply here and we'll get right back to you. 😊`;
-            setVoiceConfirmMsg(draft);
-            setVoiceConfirmAction("text");
-            setVoiceConfirmScenario(null);
-            setVoiceConfirm({
-              message: draft,
-              matches: [{ sessionId: 0, name, phone }],
-              selected: { sessionId: 0, name, phone },
-            });
-            setVoiceTone("friendly");
-            setVoiceCardMinimized(false);
+            const msg = `Hi ${first}, this is the Maids in Black team! We saw you just called us. How can we help you today? Feel free to reply here and we'll get right back to you 😊`;
+            sendClientSmsMutation.mutate({ phone, firstMessage: msg });
           }}
         />
         {/* New-message badge — shown when user is scrolled up */}
@@ -8004,21 +7993,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       if (!voiceConfirm.selected || !voiceConfirmMsg.trim()) return;
                       setVoiceSending(true);
                       try {
-                        // sessionId=0 means we only have a phone number (e.g. from call summary card)
-                        // use startCsConversation which handles session lookup/creation by phone
-                        if (voiceConfirm.selected.sessionId === 0) {
-                          await sendClientSmsMutation.mutateAsync({
-                            phone: voiceConfirm.selected.phone,
-                            firstMessage: voiceConfirmMsg.trim(),
-                          });
-                        } else {
-                          await sendVoiceText.mutateAsync({
-                            sessionId: voiceConfirm.selected.sessionId,
-                            message: voiceConfirmMsg.trim(),
-                            fromNumberId: "PN0wVLcpCq",
-                            isVoiceCommand: true,
-                          });
-                        }
+                        await sendVoiceText.mutateAsync({
+                          sessionId: voiceConfirm.selected.sessionId,
+                          message: voiceConfirmMsg.trim(),
+                          fromNumberId: "PN0wVLcpCq",
+                          isVoiceCommand: true,
+                        });
                         toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
                         setVoiceConfirm(null);
                         setVoiceConfirmMsg("");
