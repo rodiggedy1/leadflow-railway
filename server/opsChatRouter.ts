@@ -5276,7 +5276,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
   markCallCardActed: opsChatProcedure
     .input(z.object({
       msgId: z.number().int().positive(),
-      action: z.enum(["call", "text"]),
+      action: z.enum(["call", "text", "dismiss"]),
       actedBy: z.string(),
     }))
     .mutation(async ({ input }) => {

@@ -3889,10 +3889,12 @@ function MadisonCallSummaryCard({
   msg,
   onCallBack,
   onTextBack,
+  onDismiss,
 }: {
   msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
   onCallBack: (name: string, phone: string, msgId: number) => void;
   onTextBack: (name: string, phone: string, msgId: number) => void;
+  onDismiss: (msgId: number) => void;
 }) {
   const [showTranscript, setShowTranscript] = useState(false);
   const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
@@ -4035,7 +4037,7 @@ function MadisonCallSummaryCard({
                   alignItems: "center",
                   gap: 6,
                 }}>
-                  {actedAction === "call" ? "📞 Called" : "💬 Texted"} by {actedBy}
+                  {actedAction === "call" ? "📞 Called" : actedAction === "text" ? "💬 Texted" : "✕ Dismissed"} {actedAction !== "dismiss" ? `by ${actedBy}` : ""}
                 </div>
               ) : (
                 <>
@@ -4078,6 +4080,27 @@ function MadisonCallSummaryCard({
                     }}
                   >
                     💬 Send Text Instead
+                  </button>
+                  <button
+                    onClick={() => onDismiss(msg.id)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 0",
+                      borderRadius: 12,
+                      border: "1.5px solid #e5e7eb",
+                      background: "#fff",
+                      color: "#9ca3af",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 4,
+                    }}
+                    title="Dismiss — no follow-up needed"
+                  >
+                    ✕
                   </button>
                 </>
               )}
@@ -7523,6 +7546,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             });
             setVoiceTone("friendly");
             setVoiceCardMinimized(false);
+          }}
+          onDismiss={(msgId) => {
+            markCallCardActedMutation.mutate({ msgId, action: "dismiss", actedBy: currentUser?.name ?? "Agent" });
           }}
         />
         {/* New-message badge — shown when user is scrolled up */}
