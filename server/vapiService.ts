@@ -1401,40 +1401,52 @@ Rules:
     }
   }
 
-  // ── Post call summary to MIB Command Chat ──────────────────────────────────
+  // ── Post Madison Call Summary card to Command Chat ──────────────────────────
   // Only post answered calls (not outbound alerts, not missed calls — those return early above)
   try {
-    const outcomeEmoji =
-      outcome === "booked"             ? "📅" :
-      outcome === "quote_given"        ? "💰" :
-      outcome === "faq_answered"       ? "💬" :
-      outcome === "callback_requested" ? "📲" :
-      outcome === "transferred"        ? "🔀" : "📞";
-    const callerDisplay = structuredData?.callerName
-      ? `${structuredData.callerName}${normalizedPhone ? ` (${normalizedPhone})` : ""}`
-      : normalizedPhone ?? "Unknown caller";
+    const cardCallerName = (structuredData as Record<string, unknown> | null)?.callerName as string | null ?? null;
     const durationDisplay = durationSeconds >= 60
       ? `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`
       : `${durationSeconds}s`;
-    const outcomeLabel = outcome.replace(/_/g, " ");
-    const bodyLines = [
-      `${outcomeEmoji} **AI Call Ended** — ${callerDisplay} · ${durationDisplay} · ${outcomeLabel}`,
-      summary ? `📋 ${summary}` : null,
-    ].filter(Boolean).join("\n");
+    // Use the VAPI summary directly as the intent summary (already concise)
+    // If it's very long, truncate to first sentence
+    let intentSummary: string = summary ?? "Called but left no details.";
+    if (intentSummary.length > 200) {
+      const firstSentence = intentSummary.split(/[.!?]/)[0];
+      if (firstSentence && firstSentence.length > 20) intentSummary = firstSentence + ".";
+    }
+    const body = [
+      cardCallerName ? `${cardCallerName}${normalizedPhone ? ` · ${normalizedPhone}` : ""}` : (normalizedPhone ?? "Unknown caller"),
+      `${durationDisplay} · ${outcome.replace(/_/g, " ")}`,
+    ].join("\n");
     const dbForPost = await getDb();
     if (dbForPost) {
       await dbForPost.insert(opsChatMessages).values({
         cleanerJobId: null,
         channel: "command",
-        authorName: "📞 AI Call Summary",
-        authorRole: "office",
-        body: bodyLines,
-        mediaUrl: recordingUrl ?? null,  // stored in mediaUrl so the UI can render an inline audio player
-        quickAction: "call_summary",
+        authorName: "Madison",
+        authorRole: "system",
+        body,
+        mediaUrl: recordingUrl ?? null,
+        quickAction: "madison_call_summary",
+        metadata: JSON.stringify({
+          vapiCallId,
+          sessionId,
+          callerPhone: normalizedPhone ?? null,
+          callerName: cardCallerName,
+          durationSeconds,
+          durationDisplay,
+          outcome,
+          intentSummary,
+          transcript: transcript && transcript.length > 0 ? transcript : null,
+          recordingUrl: recordingUrl ?? null,
+        }),
       });
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("new_message", { channel: "command" });
     }
   } catch (err) {
-    console.error("[Vapi] Failed to post call summary to command channel:", err);
+    console.error("[Vapi] Failed to post Madison call summary card:", err);
   }
 
   // Notify agent/owner of the call

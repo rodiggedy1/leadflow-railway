@@ -3575,6 +3575,30 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_post") { return <MadisonPostCard msg={msg} callerName={callerName} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") { return <MadisonSmsDraftCard msg={msg} callerName={callerName} />; }
+                // ── Madison Call Summary card ──────────────────────────────────────────────
+                if (msg.quickAction === "madison_call_summary") {
+                  return <MadisonCallSummaryCard
+                    msg={msg}
+                    onCallBack={(name, phone) => {
+                      voiceCallContactNameRef.current = name;
+                      voiceCallContactPhoneRef.current = phone;
+                      voiceCallScriptRef.current = `Follow up with ${name} who called in earlier.`;
+                      setVoiceCallStatus("firing");
+                      voiceStartCallMutation.mutate({
+                        cleanerJobId: 1,
+                        jobDate: "",
+                        personName: name,
+                        phone,
+                        scenario: `Follow up with ${name} who called in earlier.`,
+                        script: `Follow up with ${name} who called in earlier.`,
+                        audience: "customer",
+                      });
+                    }}
+                    onTextBack={(name, phone) => {
+                      setSmsTarget({ name, phone });
+                    }}
+                  />;
+                }
                                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
@@ -3849,6 +3873,186 @@ const MessageList = memo(function MessageList({
     </>
   );
 });
+
+// ── MadisonCallSummaryCard ──────────────────────────────────────────────────
+function MadisonCallSummaryCard({
+  msg,
+  onCallBack,
+  onTextBack,
+}: {
+  msg: { id: number; body: string; metadata: string | null; createdAt: string | Date };
+  onCallBack: (name: string, phone: string) => void;
+  onTextBack: (name: string, phone: string) => void;
+}) {
+  const [showTranscript, setShowTranscript] = useState(false);
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+
+  let meta: {
+    vapiCallId?: string;
+    sessionId?: number | null;
+    callerPhone?: string | null;
+    callerName?: string | null;
+    durationSeconds?: number;
+    durationDisplay?: string;
+    outcome?: string;
+    intentSummary?: string;
+    transcript?: string | null;
+    recordingUrl?: string | null;
+  } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+
+  const callerName = meta.callerName ?? null;
+  const callerPhone = meta.callerPhone ?? null;
+  const durationDisplay = meta.durationDisplay ?? "";
+  const outcome = meta.outcome ?? "";
+  const intentSummary = meta.intentSummary ?? "Called but left no details.";
+  const transcript = meta.transcript ?? null;
+  const recordingUrl = meta.recordingUrl ?? null;
+  const msgTime = fmtMsgTime(new Date(msg.createdAt));
+
+  const outcomeBadge = (() => {
+    if (outcome === "booked") return { label: "Booked ✔", bg: "#eef8f2", color: "#157c5a" };
+    if (outcome === "quote_given") return { label: "Quote given", bg: "#eff6ff", color: "#1d4ed8" };
+    if (outcome === "callback_requested") return { label: "Callback requested", bg: "#fef3c7", color: "#92400e" };
+    if (outcome === "faq_answered") return { label: "FAQ answered", bg: "#f0fdf4", color: "#166534" };
+    if (outcome === "transferred") return { label: "Transferred", bg: "#f5f3ff", color: "#6d28d9" };
+    return { label: "Call complete", bg: "#f0fdf4", color: "#166534" };
+  })();
+
+  const displayName = callerName ?? callerPhone ?? "Unknown caller";
+  const callLabel = callerName ? callerName.split(" ")[0] : "Customer";
+
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          width: "100%",
+          maxWidth: 520,
+          background: "#fff",
+          border: "1px solid #ebe8fb",
+          borderRadius: 20,
+          boxShadow: "0 4px 24px rgba(30,30,60,0.08)",
+          overflow: "hidden",
+        }}>
+          {/* Header */}
+          <div style={{ display: "flex", gap: 12, padding: "16px 18px 12px" }}>
+            <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2, flexWrap: "wrap" as const }}>
+                <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
+                <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
+                <span style={{
+                  marginLeft: "auto",
+                  background: outcomeBadge.bg,
+                  color: outcomeBadge.color,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "2px 10px",
+                  borderRadius: 20,
+                  whiteSpace: "nowrap" as const,
+                  flexShrink: 0,
+                }}>{outcomeBadge.label}</span>
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.45, color: "#222", marginTop: 4 }}>
+                <p style={{ margin: "0.2em 0" }}>I answered this call for you.</p>
+                <p style={{ margin: "0.2em 0", color: "#444" }}>{intentSummary}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary box */}
+          <div style={{ margin: "0 18px 14px", background: "#f8f7ff", borderRadius: 14, padding: "12px 14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#6d5cff", textTransform: "uppercase" as const, letterSpacing: 1 }}>Call details</span>
+              {(transcript || recordingUrl) && (
+                <button
+                  onClick={() => setShowTranscript(v => !v)}
+                  style={{ fontSize: 12, color: "#6d5cff", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  {showTranscript ? "Hide transcript ↑" : "View transcript →"}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600 }}>{displayName}</span>
+              {durationDisplay && <span style={{ color: "#9ca3af", marginLeft: 8 }}>· {durationDisplay}</span>}
+            </div>
+            {showTranscript && (
+              <div style={{ marginTop: 12, borderTop: "1px solid #ece8fb", paddingTop: 12 }}>
+                {recordingUrl && (
+                  <audio controls src={recordingUrl} style={{ width: "100%", height: 36, marginBottom: 10, borderRadius: 8 }} />
+                )}
+                {transcript && (
+                  <div style={{
+                    fontSize: 12,
+                    color: "#374151",
+                    lineHeight: 1.6,
+                    maxHeight: 200,
+                    overflowY: "auto" as const,
+                    whiteSpace: "pre-wrap" as const,
+                    background: "#fff",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    border: "1px solid #e5e7eb",
+                  }}>
+                    {transcript}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          {callerPhone && (
+            <div style={{ display: "flex", gap: 8, padding: "0 18px 16px" }}>
+              <button
+                onClick={() => onCallBack(callerName ?? callerPhone, callerPhone)}
+                style={{
+                  flex: 2,
+                  padding: "10px 0",
+                  borderRadius: 12,
+                  border: "none",
+                  background: "linear-gradient(135deg, #6d5cff 0%, #a78bfa 100%)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                📞 Call {callLabel}
+              </button>
+              <button
+                onClick={() => onTextBack(callerName ?? callerPhone, callerPhone)}
+                style={{
+                  flex: 2,
+                  padding: "10px 0",
+                  borderRadius: 12,
+                  border: "1.5px solid #6d5cff",
+                  background: "#fff",
+                  color: "#6d5cff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                💬 Send Text Instead
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── component ─────────────────────────────────────────────────────────────────
 
