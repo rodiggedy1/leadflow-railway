@@ -77,6 +77,14 @@ export interface QualityScore {
 // ─── Pipeline Entry Point ─────────────────────────────────────────────────────
 
 /**
+ * Phone numbers that will never trigger an AI SMS draft card in Command Chat.
+ * Add E.164 formatted numbers here (e.g. "+17259009272").
+ */
+const SMS_DRAFT_EXCLUDED_PHONES = new Set<string>([
+  "+17259009272",
+]);
+
+/**
  * Fire-and-forget entry point. Call from webhooks.ts after storing the inbound message.
  * Never throws — all errors are caught and written to the DB.
  */
@@ -92,6 +100,11 @@ export async function triggerMadisonSmsDraft(params: {
 
   // Skip empty messages
   if (!inboundText?.trim()) return;
+  // Skip excluded phone numbers
+  if (SMS_DRAFT_EXCLUDED_PHONES.has(fromPhone)) {
+    console.log(`[MadisonSMS] Skipping draft for excluded phone: ${fromPhone}`);
+    return;
+  }
 
   const db = await getDb();
   if (!db) {
