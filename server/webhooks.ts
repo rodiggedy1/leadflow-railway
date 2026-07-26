@@ -2131,6 +2131,19 @@ async function handleCsInboundMessage(msg: any) {
     inboundText = ttRelayMatch[2].trim();
     console.log(`[CS] Thumbtack relay detected — sender: ${thumbtackRelaySenderName}, stripped header`);
   }
+  // ── Thumbtack / carrier system message filter ───────────────────────────────
+  // Thumbtack sends automated system messages like:
+  //   "Thumbtack: Our automated system only responds to the words HELP, STOP and START..."
+  // These are NOT real customer messages. Drop them entirely — no storage, no AI draft.
+  // We match on rawInboundTextCs (before any stripping) so a real customer message
+  // that happens to mention Thumbtack is never accidentally dropped.
+  // The pattern is intentionally tight: must start with "Thumbtack:" AND mention
+  // "automated system only responds" to avoid false positives.
+  const isThumbTackSystemMsg = /^Thumbtack:\s*Our automated system only responds/i.test(rawInboundTextCs.trim());
+  if (isThumbTackSystemMsg) {
+    console.log(`[CS] Thumbtack system message detected — dropping: "${rawInboundTextCs.slice(0, 80)}"`);
+    return;
+  }
   const messageId: string | undefined = msg.id;
   const now = Date.now();
   // Extract MMS media URLs — OpenPhone may use 'media', 'attachments', or 'mediaUrls'
