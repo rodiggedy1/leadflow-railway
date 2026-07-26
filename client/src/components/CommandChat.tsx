@@ -999,6 +999,8 @@ type MessageListProps = {
   openCreateIssueModal: (defaultTitle: string) => void;
   openIssueEngine: (issueId: number | null) => void;
   onOpenConcierge: () => void;
+  onCallBack: (name: string, phone: string) => void;
+  onTextBack: (name: string, phone: string) => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1300,7 +1302,7 @@ function EtaCallResultCard({
 
 // ── MadisonSmsDraftCard ─────────────────────────────────────────────────────
 // Self-contained component — fetches draft by draftId, handles approve/dismiss/retry
-function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; createdAt: string | Date }; callerName: string }) {
+function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -1666,7 +1668,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
 
 // ── MadisonPostCard ─────────────────────────────────────────────────────────
 // Self-contained component so it can declare its own hooks (state + mutations)
-function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; createdAt: string | Date }; callerName: string }) {
+function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
 
@@ -1957,6 +1959,8 @@ const MessageList = memo(function MessageList({
   openCreateIssueModal,
   openIssueEngine,
   onOpenConcierge,
+  onCallBack,
+  onTextBack,
 }: MessageListProps) {
   return (
     <>
@@ -3578,25 +3582,10 @@ const MessageList = memo(function MessageList({
                 // ── Madison Call Summary card ──────────────────────────────────────────────
                 if (msg.quickAction === "madison_call_summary") {
                   return <MadisonCallSummaryCard
+                    key={msg.id}
                     msg={msg}
-                    onCallBack={(name, phone) => {
-                      voiceCallContactNameRef.current = name;
-                      voiceCallContactPhoneRef.current = phone;
-                      voiceCallScriptRef.current = `Follow up with ${name} who called in earlier.`;
-                      setVoiceCallStatus("firing");
-                      voiceStartCallMutation.mutate({
-                        cleanerJobId: 1,
-                        jobDate: "",
-                        personName: name,
-                        phone,
-                        scenario: `Follow up with ${name} who called in earlier.`,
-                        script: `Follow up with ${name} who called in earlier.`,
-                        audience: "customer",
-                      });
-                    }}
-                    onTextBack={(name, phone) => {
-                      setSmsTarget({ name, phone });
-                    }}
+                    onCallBack={onCallBack}
+                    onTextBack={onTextBack}
                   />;
                 }
                                 // ── Default bubble ─────────────────────────────────────────────────────
@@ -3880,7 +3869,7 @@ function MadisonCallSummaryCard({
   onCallBack,
   onTextBack,
 }: {
-  msg: { id: number; body: string; metadata: string | null; createdAt: string | Date };
+  msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
   onCallBack: (name: string, phone: string) => void;
   onTextBack: (name: string, phone: string) => void;
 }) {
@@ -3907,7 +3896,7 @@ function MadisonCallSummaryCard({
   const outcome = meta.outcome ?? "";
   const intentSummary = meta.intentSummary ?? "Called but left no details.";
   const transcript = meta.transcript ?? null;
-  const recordingUrl = meta.recordingUrl ?? null;
+  const recordingUrl = meta.recordingUrl ?? msg.mediaUrl ?? null;
   const msgTime = fmtMsgTime(new Date(msg.createdAt));
 
   const outcomeBadge = (() => {
@@ -7423,6 +7412,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           mentionPhoneMap={mentionPhoneMapRef.current}
           openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
           onOpenConcierge={() => { /* concierge always open */ }}
+          onCallBack={(name, phone) => {
+            voiceCallContactNameRef.current = name;
+            voiceCallContactPhoneRef.current = phone;
+            voiceCallScriptRef.current = `Follow up with ${name} who called in earlier.`;
+            setVoiceCallStatus("firing");
+            voiceStartCallMutation.mutate({
+              cleanerJobId: 1,
+              jobDate: "",
+              personName: name,
+              phone,
+              scenario: `Follow up with ${name} who called in earlier.`,
+              script: `Follow up with ${name} who called in earlier.`,
+              audience: "customer",
+            });
+          }}
+          onTextBack={(name, phone) => { setSmsTarget({ name, phone }); }}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
