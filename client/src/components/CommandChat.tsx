@@ -5840,35 +5840,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       .reverse(); // newest first
   }, [channelMsgs, mentionPattern, effectiveNames]);
 
-  // ── Unresolved Madison cards (sms draft + call summary) ─────────────────────
-  // Count comes from the server (accurate — checks draft table status, not just metadata).
-  // IDs for scroll-to come from channelMsgs filtered by quickAction.
+  // ── Unresolved Madison cards (sms draft + call summary) ─────────────────────────
+  // Server returns exact count (DRAFT_READY only for SMS, no-actedBy for calls)
+  // AND the specific channel message IDs that need action — used for scroll-to.
   const { data: madisonCountData, refetch: refetchMadisonCount } = trpc.opsChat.getUnresolvedMadisonCount.useQuery(undefined, {
     refetchInterval: 30_000,
     staleTime: 15_000,
   });
   const unresolvedMadisonCount = madisonCountData?.total ?? 0;
-  // IDs of all Madison cards in the feed — used for cycling scroll-to
-  const allMadisonIds = useMemo(() => {
+  // Ordered list of unresolved msg IDs for cycling scroll-to (drafts first, then calls)
+  const unresolvedMadisonMsgIds = useMemo(() => {
+    const draftSet = new Set(madisonCountData?.unresolvedDraftIds ?? []);
+    const callSet = new Set(madisonCountData?.unresolvedCallMsgIds ?? []);
     return channelMsgs
-      .filter(m => m.quickAction === "madison_sms_draft" || m.quickAction === "madison_call_summary")
+      .filter(m => draftSet.has(m.id) || callSet.has(m.id))
       .map(m => m.id);
-  }, [channelMsgs]);
+  }, [channelMsgs, madisonCountData]);
   const [madisonCardIdx, setMadisonCardIdx] = useState(0);
   function jumpToNextMadisonCard() {
-    if (allMadisonIds.length === 0) return;
-    const idx = madisonCardIdx % allMadisonIds.length;
-    scrollToCmdMsg(allMadisonIds[idx]);
+    if (unresolvedMadisonMsgIds.length === 0) return;
+    const idx = madisonCardIdx % unresolvedMadisonMsgIds.length;
+    scrollToCmdMsg(unresolvedMadisonMsgIds[idx]);
     setMadisonCardIdx(idx + 1);
   }
   // Refresh count when channelMsgs changes (draft acted on / dismissed)
-  const prevMadisonMsgsLen = useRef(allMadisonIds.length);
+  const prevMadisonMsgsLen = useRef(unresolvedMadisonMsgIds.length);
   useEffect(() => {
-    if (allMadisonIds.length !== prevMadisonMsgsLen.current) {
+    if (unresolvedMadisonMsgIds.length !== prevMadisonMsgsLen.current) {
       void refetchMadisonCount();
-      prevMadisonMsgsLen.current = allMadisonIds.length;
+      prevMadisonMsgsLen.current = unresolvedMadisonMsgIds.length;
     }
-  }, [allMadisonIds.length, refetchMadisonCount]);
+  }, [unresolvedMadisonMsgIds.length, refetchMadisonCount]);
   // Compute unread tagged messages whenever channelMsgs changes
   useEffect(() => {
     if (!mentionPattern || channelMsgs.length === 0) return;

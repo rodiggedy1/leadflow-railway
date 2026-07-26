@@ -5318,33 +5318,66 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
   getUnresolvedMadisonCount: opsChatProcedure
     .query(async () => {
       const db = await getDb();
-      if (!db) return { smsDraftCount: 0, callSummaryCount: 0, total: 0 };
+      if (!db) return { smsDraftCount: 0, callSummaryCount: 0, total: 0, unresolvedDraftIds: [] as number[], unresolvedCallMsgIds: [] as number[] };
 
-      // Count pending SMS drafts
-      const [smsDraftRow] = await db
-        .select({ count: sql<number>`COUNT(*)` })
+      // ── SMS drafts: only DRAFT_READY needs human action ──────────────────────
+      // RECEIVED/CLASSIFIED/TOOLS_RUNNING/GENERATING/SENDING = in-flight (not actionable yet)
+      // SENT/DELIVERED/DISMISSED = resolved
+      // FAILED = pipeline error (not a human action item)
+      // Only DRAFT_READY = waiting for approve or dismiss
+      const draftReadyRows = await db
+        .select({ id: madisonSmsDrafts.id })
         .from(madisonSmsDrafts)
-        .where(notInArray(madisonSmsDrafts.status, ["SENT", "DISMISSED", "DELIVERED"]));
-      const smsDraftCount = Number(smsDraftRow?.count ?? 0);
+        .where(eq(madisonSmsDrafts.status, 'DRAFT_READY'));
+      const draftReadyIds = new Set(draftReadyRows.map(r => r.id));
 
-      // Count call summary cards without actedBy in metadata
-      const callSummaryMsgs = await db
-        .select({ metadata: opsChatMessages.metadata })
+      // Find channel message IDs whose draftId maps to a DRAFT_READY row
+      const smsDraftMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
         .from(opsChatMessages)
         .where(and(
-          eq(opsChatMessages.channel, "command"),
-          eq(opsChatMessages.quickAction, "madison_call_summary"),
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction, 'madison_sms_draft'),
         ))
         .orderBy(desc(opsChatMessages.createdAt))
         .limit(200);
-      const callSummaryCount = callSummaryMsgs.filter(m => {
-        try {
-          const meta = JSON.parse(m.metadata ?? "{}");
-          return !meta.actedBy;
-        } catch { return true; }
-      }).length;
+      const unresolvedDraftIds: number[] = smsDraftMsgs
+        .filter(m => {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return draftReadyIds.has(meta.draftId);
+          } catch { return false; }
+        })
+        .map(m => m.id);
+      const smsDraftCount = unresolvedDraftIds.length;
 
-      return { smsDraftCount, callSummaryCount, total: smsDraftCount + callSummaryCount };
+      // ── Call summary cards: unresolved = no actedBy in metadata ──────────────
+      const callSummaryMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction, 'madison_call_summary'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedCallMsgIds: number[] = callSummaryMsgs
+        .filter(m => {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return !meta.actedBy;
+          } catch { return true; }
+        })
+        .map(m => m.id);
+      const callSummaryCount = unresolvedCallMsgIds.length;
+
+      return {
+        smsDraftCount,
+        callSummaryCount,
+        total: smsDraftCount + callSummaryCount,
+        unresolvedDraftIds,
+        unresolvedCallMsgIds,
+      };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
