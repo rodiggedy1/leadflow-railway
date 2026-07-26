@@ -5524,16 +5524,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
               if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current);
               voiceCallPollRef.current = null;
-              // Post voice_call_completed card server-side
-              postVoiceCallCard.mutate({
-                contactName: voiceCallContactNameRef.current ?? "Client",
-                contactPhone: voiceCallContactPhoneRef.current ?? "",
-                triggeredBy: callerName,
-                script: voiceCallScriptRef.current ?? "",
-                outcome: s as "completed" | "voicemail" | "no_answer" | "failed",
-                summary: poll.summary ?? undefined,
-                durationSeconds: poll.durationSeconds ?? undefined,
-              });
+              // No separate result card — status shown inline in the confirm panel
             }
           } catch { /* ignore */ }
         }, 5000);
