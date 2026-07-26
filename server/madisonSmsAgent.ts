@@ -758,7 +758,7 @@ async function postDraftCardToCommandChat(params: {
   // Build the card body — Madison narrates what she found, then presents the draft
   const body = [
     `${senderLabel}: ${displayName}`,
-    `"${inboundText.slice(0, 120)}${inboundText.length > 120 ? "…" : ""}"`,
+    `"${inboundText}"`,
     "",
     ...observations.slice(0, 3),
     "",

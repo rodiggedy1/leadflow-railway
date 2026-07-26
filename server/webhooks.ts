@@ -204,7 +204,20 @@ export function registerWebhookRoutes(app: Express) {
 
       const rawPhone: string = msg.from;
       // OpenPhone uses 'text' field; fall back to 'body' for compatibility
-      const inboundText: string = msg.text ?? msg.body ?? "";
+      const rawInboundText: string = msg.text ?? msg.body ?? "";
+      // ── Thumbtack relay message stripping ────────────────────────────────────
+      // Thumbtack forwards customer replies via SMS with a header like:
+      //   "Toni Rogers replied to you on Thumbtack.\n\nView the full conversation...\n\n---\n\nActual message here"
+      // Strip everything up to and including the "---" separator so only the
+      // customer's actual message is stored and passed to the AI.
+      let thumbtackRelaySenderName: string | null = null;
+      let inboundText: string = rawInboundText;
+      const thumbtackRelayMatch = rawInboundText.match(/^(.+?)\s+replied to you on Thumbtack[\s\S]*?---\s*\n([\s\S]+)$/i);
+      if (thumbtackRelayMatch) {
+        thumbtackRelaySenderName = thumbtackRelayMatch[1].trim();
+        inboundText = thumbtackRelayMatch[2].trim();
+        console.log(`[Webhook] Thumbtack relay detected — sender: ${thumbtackRelaySenderName}, stripped header, actual message: "${inboundText.slice(0, 80)}"`);
+      }
       const mediaUrls: string[] = (msg.media ?? []).map((m: any) => m.url ?? m.src ?? m.mediaUrl).filter(Boolean);
 
       // Idempotency key: OpenPhone has at-least-once delivery semantics and may
@@ -2106,7 +2119,18 @@ async function handleCsInboundMessage(msg: any) {
   }
 
   const fromPhone = msg.from;
-  const inboundText = msg.text ?? msg.body ?? "";
+  const rawInboundTextCs = msg.text ?? msg.body ?? "";
+  // ── Thumbtack relay message stripping ────────────────────────────────────
+  // Strip the Thumbtack header ("Name replied to you on Thumbtack...---") so
+  // only the customer's actual message is stored and shown in Command Chat.
+  let thumbtackRelaySenderName: string | null = null;
+  let inboundText: string = rawInboundTextCs;
+  const ttRelayMatch = rawInboundTextCs.match(/^(.+?)\s+replied to you on Thumbtack[\s\S]*?---\s*\n([\s\S]+)$/i);
+  if (ttRelayMatch) {
+    thumbtackRelaySenderName = ttRelayMatch[1].trim();
+    inboundText = ttRelayMatch[2].trim();
+    console.log(`[CS] Thumbtack relay detected — sender: ${thumbtackRelaySenderName}, stripped header`);
+  }
   const messageId: string | undefined = msg.id;
   const now = Date.now();
   // Extract MMS media URLs — OpenPhone may use 'media', 'attachments', or 'mediaUrls'
@@ -2223,6 +2247,13 @@ async function handleCsInboundMessage(msg: any) {
     }
   }
 
+  // ── Thumbtack relay sender name fallback ────────────────────────────────────
+  // If all DB lookups failed but we extracted a sender name from the Thumbtack
+  // relay header (e.g. "Toni Rogers replied to you on Thumbtack"), use that.
+  if (!resolvedName && thumbtackRelaySenderName) {
+    resolvedName = thumbtackRelaySenderName;
+    console.log(`[CS] Using Thumbtack relay sender name as resolvedName: ${resolvedName}`);
+  }
   // ── Running-late SMS detection (cleaner bypassed the app) ─────────────────
   // If a known cleaner texts the ops line with an ETA / running-late message,
   // post the same Command Chat card that the app would have posted so staff
@@ -2426,7 +2457,7 @@ async function handleCsInboundMessage(msg: any) {
           inboundOpenPhoneId: messageId,
           sessionId: resolvedSessionId,
           fromPhone,
-          senderName: resolvedName ?? undefined,
+          senderName: resolvedName ?? existingSession?.leadName ?? undefined,
           isCleaner,
           inboundText,
         }).catch((err: unknown) => console.warn("[MadisonSMS] triggerMadisonSmsDraft error:", err));
