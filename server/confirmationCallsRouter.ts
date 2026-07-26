@@ -163,6 +163,7 @@ export const confirmationCallsRouter = router({
           if (smsResult.success) {
             await db.update(confirmationCalls)
               .set({
+                status: "completed",
                 smsFollowupSent: 1,
                 smsFollowupAt: Date.now(),
                 smsFollowupBody: smsBody,
@@ -170,6 +171,7 @@ export const confirmationCallsRouter = router({
               .where(eq(confirmationCalls.id, confirmationCallId));
             console.log(`[ConfirmationCalls] SMS sent to ${normalizedPhone} for job ${confirmationCallId}`);
           } else {
+            await db.update(confirmationCalls).set({ status: "failed" }).where(eq(confirmationCalls.id, confirmationCallId));
             console.error(`[ConfirmationCalls] SMS failed for job ${confirmationCallId}: ${smsResult.error}`);
           }
         } catch (smsErr) {
