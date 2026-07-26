@@ -225,6 +225,8 @@ interface CommandChatProps {
   isVisible?: boolean;
   /** All possible names for the current user (handles OAuth name vs DB name mismatch). Used for @mention detection. */
   myNames?: Set<string>;
+  /** Increment this number from the parent to open the Tasks panel (e.g. from left nav profile picture click). */
+  openTasksSignal?: number;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -4613,7 +4615,7 @@ function KudosModal({
 }
 
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
-  onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
+  onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp, openTasksSignal }: CommandChatProps) {
   const DEBUG_RENDER = import.meta.env.DEV || localStorage.getItem("debug-renders") === "1";
   if (DEBUG_RENDER) { console.log("[RENDER] CommandChat", performance.now().toFixed(1)); }
   const [composer, setComposer] = useState("");
@@ -5821,6 +5823,31 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       .reverse(); // newest first
   }, [channelMsgs, mentionPattern, effectiveNames]);
 
+  // ── Unresolved Madison cards (sms draft + call summary) ─────────────────────
+  // Derived purely from channelMsgs — no new queries, no polling.
+  // A card is "unresolved" if it has no actedBy (call summary) or the draft status
+  // is not SENT/DISMISSED (checked via metadata only — avoids per-card queries).
+  const unresolvedMadisonIds = useMemo(() => {
+    return channelMsgs
+      .filter(m => {
+        if (m.quickAction !== "madison_sms_draft" && m.quickAction !== "madison_call_summary") return false;
+        try {
+          const meta = JSON.parse(m.metadata ?? "{}");
+          if (m.quickAction === "madison_call_summary") return !meta.actedBy;
+          // For sms_draft: treat as unresolved if metadata has no dismissedBy
+          // (actual SENT/DISMISSED status lives in the draft row, but we avoid a per-card query)
+          return !meta.dismissedBy;
+        } catch { return true; }
+      })
+      .map(m => m.id);
+  }, [channelMsgs]);
+  const [madisonCardIdx, setMadisonCardIdx] = useState(0);
+  function jumpToNextMadisonCard() {
+    if (unresolvedMadisonIds.length === 0) return;
+    const idx = madisonCardIdx % unresolvedMadisonIds.length;
+    scrollToCmdMsg(unresolvedMadisonIds[idx]);
+    setMadisonCardIdx(idx + 1);
+  }
   // Compute unread tagged messages whenever channelMsgs changes
   useEffect(() => {
     if (!mentionPattern || channelMsgs.length === 0) return;
@@ -5883,6 +5910,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     wasVisible.current = isVisible;
   }, [isVisible, unreadTagIds.length]);
 
+  // Open Tasks panel when parent fires openTasksSignal (e.g. left nav profile picture click)
+  useEffect(() => {
+    if (openTasksSignal && openTasksSignal > 0) setTasksOpen(true);
+  }, [openTasksSignal]); // eslint-disable-line react-hooks/exhaustive-deps
   // Returns true if the scroll container is within 250px of the bottom.
   // 250px threshold (vs old 150px) ensures we catch cases where the compose
   // box is tall or the last message is partially visible.
@@ -7172,27 +7203,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </span>
                 )}
               </button>
-              {/* Tasks pill */}
-              <span className="text-slate-300 text-xs">|</span>
-              <button
-                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailsOpen) setEmailsOpen(false); }}
-                className={cn(
-                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
-                  tasksOpen
-                    ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
-                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
-                )}
-                style={{padding:"7px 10px",fontSize:"12px"}}
-                title="Tasks"
-              >
-                <ClipboardList className="h-3.5 w-3.5" />
-                Tasks
-                {visibleDueTasks.length > 0 && (
-                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-indigo-500 text-white animate-pulse">
-                    {visibleDueTasks.length > 99 ? "99+" : visibleDueTasks.length}
-                  </span>
-                )}
-              </button>
+              {/* Madison avatar button — cycles through unresolved Madison cards */}
+              {unresolvedMadisonIds.length > 0 && (
+                <>
+                  <span className="text-slate-300 text-xs">|</span>
+                  <button
+                    onClick={jumpToNextMadisonCard}
+                    className="relative flex items-center gap-1.5 rounded-full border border-[#e3e6ef] bg-white hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition whitespace-nowrap"
+                    style={{padding:"4px 8px 4px 4px",fontSize:"12px"}}
+                    title={`${unresolvedMadisonIds.length} unresolved Madison card${unresolvedMadisonIds.length === 1 ? "" : "s"} — click to jump`}
+                  >
+                    <img src="/madison-avatar.jpg" alt="Madison" className="w-5 h-5 rounded-full object-cover shrink-0" />
+                    <span className="font-semibold text-[#6f3cff]">Madison</span>
+                    <span className="min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-[#6f3cff] text-white">
+                      {unresolvedMadisonIds.length > 99 ? "99+" : unresolvedMadisonIds.length}
+                    </span>
+                  </button>
+                </>
+              )}
               {/* Payment Link button */}
               <button
                 onClick={() => setShowPaymentModal(true)}

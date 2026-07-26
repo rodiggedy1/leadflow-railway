@@ -1287,6 +1287,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // Profile photo state
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
+  // Signal to open the Tasks panel inside CommandChat (incremented on each profile picture click)
+  const [openTasksSignal, setOpenTasksSignal] = useState(0);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [agentStatusOpen, setAgentStatusOpen] = useState(false);
   // DM panels: list of open DM recipients (name + email key + photoUrl)
@@ -2253,7 +2255,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           {/* Profile photo avatar */}
           <div className="mt-auto pt-4 pb-6 shrink-0">
             <button
-              onClick={() => setProfilePhotoOpen(true)}
+              onClick={() => { setProfilePhotoOpen(true); setOpenTasksSignal(s => s + 1); }}
               className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block"
               title={`${callerName} — edit profile photo`}
             >
@@ -2446,7 +2448,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
         {/* Signed-in-as footer with profile photo */}
         <button
-          onClick={() => setProfilePhotoOpen(true)}
+          onClick={() => { setProfilePhotoOpen(true); setOpenTasksSignal(s => s + 1); }}
           className="px-4 py-3 border-t border-slate-100 bg-white flex items-center gap-2.5 hover:bg-slate-50 transition w-full text-left"
           title="View/edit profile photo"
         >
@@ -2841,6 +2843,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             agentList={agentStatusData?.agents ?? []}
             isVisible={activeTab === "channels" && activeChannel === "command"}
             myNames={myNames}
+            openTasksSignal={openTasksSignal}
             onSendThreadReply={(body, parentId) => {
               sendMsg.mutate({
                 body,
@@ -3124,7 +3127,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     ))}
                   </div>
                   <div className="mt-auto pt-3 pb-5 shrink-0">
-                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
+                    <button onClick={() => { setProfilePhotoOpen(true); setOpenTasksSignal(s => s + 1); }} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
                       {profilePhotoUrl ? (
                         <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
                       ) : (
@@ -3211,7 +3214,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     ))}
                   </div>
                   <div className="mt-auto pt-4 pb-6 shrink-0">
-                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
+                    <button onClick={() => { setProfilePhotoOpen(true); setOpenTasksSignal(s => s + 1); }} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
                       {profilePhotoUrl ? (
                         <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
                       ) : (
