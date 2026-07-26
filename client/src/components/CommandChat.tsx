@@ -1323,12 +1323,14 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
     onSuccess: () => {
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
     },
   });
   const dismissMutation = trpc.opsChat.dismissSmsDraft.useMutation({
     onSuccess: () => {
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
     },
   });
   const retryMutation = trpc.opsChat.retrySmsDraft.useMutation({
@@ -5550,7 +5552,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const voiceCallScriptRef = useRef<string | null>(null);
   const voiceCallUtils = trpc.useUtils();
   // markCallCardActed — lock the call summary card after one agent acts
-  const markCallCardActedMutation = trpc.opsChat.markCallCardActed.useMutation();
+  const markCallCardActedMutation = trpc.opsChat.markCallCardActed.useMutation({
+    onSuccess: () => { utils.opsChat.getUnresolvedMadisonCount.invalidate(); },
+  });
   // startCall mutation — verbatim from AICallPanel
   const voiceStartCallMutation = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
