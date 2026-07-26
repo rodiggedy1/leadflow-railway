@@ -2474,6 +2474,7 @@ async function handleCsInboundMessage(msg: any) {
     syncAllOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
       console.warn("[CS] syncAllOutboundMessages error:", err)
     );
+    console.log(`[CS] Madison trigger check — messageId=${messageId ?? "MISSING"}, inboundText=${inboundText.trim() ? "present("+inboundText.length+")" : "EMPTY"}, resolvedSessionId=${resolvedSessionId}`);
     // Fire Madison SMS Draft Agent async (non-blocking) — generates a draft reply card in Command Chat
     if (messageId && inboundText.trim()) {
       import("./madisonSmsAgent").then(({ triggerMadisonSmsDraft }) => {
