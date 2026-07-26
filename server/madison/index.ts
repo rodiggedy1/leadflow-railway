@@ -431,7 +431,7 @@ export async function handleMadisonReadiness(
     plannerFailed: false,
     executorInvoked: true,
     responseType: "query_result",
-    seedItemCount: projection?.totalIssues ?? 0,
+    seedItemCount: projection?.filteredJobs ?? 0,
     durationMs: Date.now() - startedAt,
   } : undefined;
   return {
