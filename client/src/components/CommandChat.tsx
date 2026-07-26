@@ -3898,7 +3898,10 @@ function MadisonCallSummaryCard({
   const utils = trpc.useUtils();
   const { user: currentUser } = useAuth();
   const dismissCallCardMutation = trpc.opsChat.markCallCardActed.useMutation({
-    onSuccess: () => { utils.opsChat.getUnresolvedMadisonCount.invalidate(); },
+    onSuccess: () => {
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+    },
   });
   const handleDismiss = () => {
     dismissCallCardMutation.mutate({ msgId: msg.id, action: "dismiss", actedBy: currentUser?.name ?? "Agent" });
@@ -3956,6 +3959,8 @@ function MadisonCallSummaryCard({
           borderRadius: 20,
           boxShadow: "0 4px 24px rgba(30,30,60,0.08)",
           overflow: "hidden",
+          opacity: actedBy ? 0.55 : 1,
+          transition: "opacity 0.2s",
         }}>
           {/* Header */}
           <div style={{ display: "flex", gap: 12, padding: "16px 18px 12px" }}>
