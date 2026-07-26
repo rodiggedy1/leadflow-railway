@@ -4083,24 +4083,9 @@ function MadisonCallSummaryCard({
                   </button>
                   <button
                     onClick={() => onDismiss(msg.id)}
-                    style={{
-                      flex: 1,
-                      padding: "10px 0",
-                      borderRadius: 12,
-                      border: "1.5px solid #e5e7eb",
-                      background: "#fff",
-                      color: "#9ca3af",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 4,
-                    }}
-                    title="Dismiss — no follow-up needed"
+                    style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}
                   >
-                    ✕
+                    Dismiss
                   </button>
                 </>
               )}
