@@ -999,8 +999,8 @@ type MessageListProps = {
   openCreateIssueModal: (defaultTitle: string) => void;
   openIssueEngine: (issueId: number | null) => void;
   onOpenConcierge: () => void;
-  onCallBack: (name: string, phone: string) => void;
-  onTextBack: (name: string, phone: string) => void;
+  onCallBack: (name: string, phone: string, msgId: number) => void;
+  onTextBack: (name: string, phone: string, msgId: number) => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -3870,8 +3870,8 @@ function MadisonCallSummaryCard({
   onTextBack,
 }: {
   msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
-  onCallBack: (name: string, phone: string) => void;
-  onTextBack: (name: string, phone: string) => void;
+  onCallBack: (name: string, phone: string, msgId: number) => void;
+  onTextBack: (name: string, phone: string, msgId: number) => void;
 }) {
   const [showTranscript, setShowTranscript] = useState(false);
   const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
@@ -3887,6 +3887,9 @@ function MadisonCallSummaryCard({
     intentSummary?: string;
     transcript?: string | null;
     recordingUrl?: string | null;
+    actedBy?: string | null;
+    actedAction?: "call" | "text" | null;
+    actedAt?: string | null;
   } = {};
   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
 
@@ -3894,6 +3897,8 @@ function MadisonCallSummaryCard({
   const callerPhone = meta.callerPhone ?? null;
   const durationDisplay = meta.durationDisplay ?? "";
   const outcome = meta.outcome ?? "";
+  const actedBy = meta.actedBy ?? null;
+  const actedAction = meta.actedAction ?? null;
   const intentSummary = meta.intentSummary ?? "Called but left no details.";
   const transcript = meta.transcript ?? null;
   const recordingUrl = meta.recordingUrl ?? msg.mediaUrl ?? null;
@@ -3995,46 +4000,66 @@ function MadisonCallSummaryCard({
           {/* Actions */}
           {callerPhone && (
             <div style={{ display: "flex", gap: 8, padding: "0 18px 16px" }}>
-              <button
-                onClick={() => onCallBack(callerName ?? callerPhone, callerPhone)}
-                style={{
-                  flex: 2,
-                  padding: "10px 0",
+              {actedBy ? (
+                // Locked state — someone already acted
+                <div style={{
+                  flex: 1,
+                  padding: "10px 14px",
                   borderRadius: 12,
-                  border: "none",
-                  background: "linear-gradient(135deg, #6d5cff 0%, #a78bfa 100%)",
-                  color: "#fff",
-                  fontWeight: 700,
+                  background: "#f3f4f6",
+                  color: "#6b7280",
                   fontSize: 13,
-                  cursor: "pointer",
+                  fontWeight: 600,
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
                   gap: 6,
-                }}
-              >
-                📞 Call {callLabel}
-              </button>
-              <button
-                onClick={() => onTextBack(callerName ?? callerPhone, callerPhone)}
-                style={{
-                  flex: 2,
-                  padding: "10px 0",
-                  borderRadius: 12,
-                  border: "1.5px solid #6d5cff",
-                  background: "#fff",
-                  color: "#6d5cff",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                💬 Send Text Instead
-              </button>
+                }}>
+                  {actedAction === "call" ? "📞 Called" : "💬 Texted"} by {actedBy}
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onCallBack(callerName ?? callerPhone, callerPhone, msg.id)}
+                    style={{
+                      flex: 2,
+                      padding: "10px 0",
+                      borderRadius: 12,
+                      border: "none",
+                      background: "linear-gradient(135deg, #6d5cff 0%, #a78bfa 100%)",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    📞 Call {callLabel}
+                  </button>
+                  <button
+                    onClick={() => onTextBack(callerName ?? callerPhone, callerPhone, msg.id)}
+                    style={{
+                      flex: 2,
+                      padding: "10px 0",
+                      borderRadius: 12,
+                      border: "1.5px solid #6d5cff",
+                      background: "#fff",
+                      color: "#6d5cff",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    💬 Send Text Instead
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -5505,6 +5530,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const voiceCallContactPhoneRef = useRef<string | null>(null);
   const voiceCallScriptRef = useRef<string | null>(null);
   const voiceCallUtils = trpc.useUtils();
+  // markCallCardActed — lock the call summary card after one agent acts
+  const markCallCardActedMutation = trpc.opsChat.markCallCardActed.useMutation();
   // startCall mutation — verbatim from AICallPanel
   const voiceStartCallMutation = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
@@ -7403,7 +7430,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           mentionPhoneMap={mentionPhoneMapRef.current}
           openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
           onOpenConcierge={() => { /* concierge always open */ }}
-          onCallBack={(name, phone) => {
+          onCallBack={(name, phone, msgId) => {
+            // Lock the card immediately so other agents see it's been acted on
+            markCallCardActedMutation.mutate({ msgId, action: "call", actedBy: currentUser?.name ?? "Agent" });
             // Open AI concierge confirm panel with editable script — same flow as voice command
             const first = name.split(" ")[0];
             const script = `Hi ${first}, this is Ava from Maids in Black. I'm following up on the call you just had with us.\n\nI wanted to make sure all your questions were answered and see if there's anything else we can help you with.\n\nWould you like to schedule a cleaning or get a quote?`;
@@ -7423,7 +7452,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             setVoiceCallRecordingUrl(null);
             setVoiceCardMinimized(false);
           }}
-          onTextBack={(name, phone) => {
+          onTextBack={(name, phone, msgId) => {
+            // Lock the card immediately so other agents see it's been acted on
+            markCallCardActedMutation.mutate({ msgId, action: "text", actedBy: currentUser?.name ?? "Agent" });
             // Open AI concierge text confirm panel with editable draft — same flow as voice command
             const first = name.split(" ")[0];
             const draft = `Hi ${first}, this is the Maids in Black team! We saw you just called us. How can we help you today? Feel free to reply here and we'll get right back to you. 😊`;

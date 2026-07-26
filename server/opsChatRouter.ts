@@ -5269,6 +5269,39 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+   * Mark a madison_call_summary card as acted on (called or texted).
+   * Stores actedBy, actedAction, actedAt in the message metadata so all
+   * connected clients see the locked state and don't double-act.
+   */
+  markCallCardActed: opsChatProcedure
+    .input(z.object({
+      msgId: z.number().int().positive(),
+      action: z.enum(["call", "text"]),
+      actedBy: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false, reason: "no_db" };
+      // Read current metadata, merge in acted fields
+      const rows = await db.select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.msgId))
+        .limit(1);
+      if (!rows.length) return { ok: false, reason: "not_found" };
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(rows[0].metadata ?? "{}"); } catch { /* ignore */ }
+      // Only lock if not already acted on (first-writer wins)
+      if (meta.actedBy) return { ok: true, alreadyActed: true, actedBy: meta.actedBy, actedAction: meta.actedAction };
+      meta.actedBy = input.actedBy;
+      meta.actedAction = input.action;
+      meta.actedAt = new Date().toISOString();
+      await db.update(opsChatMessages)
+        .set({ metadata: JSON.stringify(meta) })
+        .where(eq(opsChatMessages.id, input.msgId));
+      broadcastOpsUpdate("call_card_acted", { msgId: input.msgId, actedBy: input.actedBy, actedAction: input.action });
+      return { ok: true };
+    }),
+  /**
    * Retry a FAILED draft from scratch.
    */
   retrySmsDraft: opsChatProcedure
