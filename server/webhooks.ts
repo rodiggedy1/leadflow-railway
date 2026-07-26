@@ -2155,7 +2155,7 @@ async function handleCsInboundMessage(msg: any) {
     console.log(`[CS] Thumbtack system/carrier message — dropping silently`);
     return;
   }
-  const messageId: string | undefined = msg.id;
+  const messageId: string = msg.id ?? `cs-fallback-${msg.from ?? "unknown"}-${Date.now()}`;
   const now = Date.now();
   // Extract MMS media URLs — OpenPhone may use 'media', 'attachments', or 'mediaUrls'
   const rawMediaArray: any[] = msg.media ?? msg.attachments ?? msg.mediaUrls ?? [];
