@@ -9,7 +9,7 @@ import { router, agentProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents, gmailSenderPolicies } from "../drizzle/schema";
+import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents, gmailSenderPolicies, madisonEmailDrafts } from "../drizzle/schema";
 import { eq, or, inArray, desc, isNotNull, isNull, and, like, sql } from "drizzle-orm";
 import { processThread, enqueueThread, GLANCE_CATEGORY_META, type GlanceCategory, resolveIsActionable } from "./gmailGlanceWorker";
 import {
@@ -167,6 +167,32 @@ export const gmailRouter = router({
       console.log(
         `[InboxDB] totalInboxRows=${totalInboxRows} hydratedRows=${hydratedRows} rowsReturned=${threads.length} duration=${durationMs}ms gmailCalls=0 staleRows=${staleRows} syncing=${syncing}`
       );
+
+      // ── Fire-and-forget: trigger Madison email draft for actionable unread threads
+      // that don't already have a draft row. Same data path as the sidebar.
+      if (!isSearch && input.unreadOnly && pageRows.length > 0) {
+        const threadIds = pageRows.map((r) => r.threadId);
+        db.select({ threadId: madisonEmailDrafts.threadId })
+          .from(madisonEmailDrafts)
+          .where(inArray(madisonEmailDrafts.threadId, threadIds))
+          .then((existingDrafts) => {
+            const draftedSet = new Set(existingDrafts.map((d) => d.threadId));
+            const undrafted = pageRows.filter((r) => !draftedSet.has(r.threadId) && r.senderEmail && r.snippet);
+            if (undrafted.length === 0) return;
+            import("./madisonEmailAgent").then(({ triggerMadisonEmailDraft }) => {
+              for (const row of undrafted) {
+                triggerMadisonEmailDraft({
+                  threadId: row.threadId,
+                  inboundMessageId: row.threadId,
+                  fromEmail: row.senderEmail!,
+                  senderName: row.senderName ?? undefined,
+                  subject: row.subject ?? undefined,
+                  inboundText: row.snippet!,
+                }).catch((e) => console.error("[listThreads] MadisonEmailAgent error:", e));
+              }
+            }).catch((e) => console.error("[listThreads] import madisonEmailAgent error:", e));
+          }).catch((e) => console.error("[listThreads] draft check error:", e));
+      }
 
       return { threads, nextPageToken, syncing };
     }),
