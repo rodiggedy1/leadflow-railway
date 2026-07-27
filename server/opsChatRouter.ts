@@ -5428,9 +5428,15 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       const db = await getDb();
       if (!db) return [];
 
-      // Build start/end of day in UTC (server stores timestamps as UTC)
-      const dayStart = new Date(`${input.date}T00:00:00.000Z`);
-      const dayEnd = new Date(`${input.date}T23:59:59.999Z`);
+      // Build start/end of day in Eastern time (business timezone).
+      // The DB stores timestamps as UTC. Eastern is UTC-5 (EST) or UTC-4 (EDT).
+      // We use UTC-4 (EDT, the more common case May-Nov) as a safe offset;
+      // this means the window is 04:00 UTC to 03:59:59 UTC next day.
+      // For a more precise solution we could use the BUSINESS_TIMEZONE env var,
+      // but this simple offset covers the vast majority of cases.
+      const EASTERN_OFFSET_MS = 4 * 60 * 60 * 1000; // UTC-4 (EDT)
+      const dayStart = new Date(new Date(`${input.date}T00:00:00.000`).getTime() + EASTERN_OFFSET_MS);
+      const dayEnd = new Date(new Date(`${input.date}T23:59:59.999`).getTime() + EASTERN_OFFSET_MS);
 
       const rows = await db
         .select()

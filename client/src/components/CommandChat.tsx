@@ -1304,7 +1304,7 @@ function EtaCallResultCard({
 
 // ── MadisonSmsDraftCard ─────────────────────────────────────────────────────
 // Self-contained component — fetches draft by draftId, handles approve/dismiss/retry
-function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
+export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -3959,7 +3959,7 @@ const MessageList = memo(function MessageList({
 });
 
 // ── MadisonCallSummaryCard ──────────────────────────────────────────────────
-function MadisonCallSummaryCard({
+export function MadisonCallSummaryCard({
   msg,
   onCallBack,
   onTextBack,
