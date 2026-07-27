@@ -5197,6 +5197,44 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+   * Fetch the last N messages from the conversation session linked to a draft.
+   * Returns messages in chronological order (oldest first).
+   * Each message: { role: 'user'|'assistant', content: string, ts: number, senderName?: string }
+   */
+  getSmsDraftConversation: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive(), limit: z.number().int().min(1).max(20).default(5) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      // Fetch the draft to get sessionId
+      const [draft] = await db
+        .select({ sessionId: madisonSmsDrafts.sessionId })
+        .from(madisonSmsDrafts)
+        .where(eq(madisonSmsDrafts.id, input.draftId))
+        .limit(1);
+      if (!draft) return [];
+      // Fetch the conversation session
+      const [session] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, draft.sessionId))
+        .limit(1);
+      if (!session) return [];
+      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+      try {
+        const parsed = JSON.parse((session.messageHistory as string) ?? "[]");
+        if (Array.isArray(parsed)) history = parsed;
+      } catch { /* ignore */ }
+      // Return last N messages in chronological order
+      return history.slice(-input.limit).map(m => ({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+        ts: m.ts ?? 0,
+        senderName: m.senderName ?? undefined,
+      }));
+    }),
+
+  /**
    * Approve a draft and send the SMS.
    * Atomic: transitions DRAFT_READY → SENDING → SENT.
    * If two agents click simultaneously, only one wins.

@@ -1341,6 +1341,12 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const [showConversation, setShowConversation] = useState(false);
 
+  // Conversation history — only fetched when the toggle is opened
+  const { data: conversationMessages, isLoading: convLoading } = trpc.opsChat.getSmsDraftConversation.useQuery(
+    { draftId: meta.draftId!, limit: 5 },
+    { enabled: !!meta.draftId && showConversation, refetchOnWindowFocus: false, staleTime: 60_000 }
+  );
+
   const handleApprove = async (text: string) => {
     if (!meta.draftId || isSending) return;
     setIsSending(true);
@@ -1490,6 +1496,47 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                 </div>
               </div>
 
+              {/* View conversation link when still processing */}
+              {isProcessing && (
+                <div style={{ marginTop: 10 }}>
+                  <a
+                    href="#"
+                    onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
+                    style={{ color: "#6d5cff", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
+                  >
+                    {showConversation ? "Hide conversation ↑" : "View conversation →"}
+                  </a>
+                  {showConversation && (
+                    <div style={{ marginTop: 10, borderTop: "1px solid #ece8fb", paddingTop: 10 }}>
+                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Last 5 messages</div>
+                      {convLoading ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#9ca3af" }}>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Loading…</span>
+                        </div>
+                      ) : !conversationMessages || conversationMessages.length === 0 ? (
+                        <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>No conversation history found.</div>
+                      ) : (
+                        conversationMessages.map((m, i) => {
+                          const isCustomer = m.role === "user";
+                          const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                          return (
+                            <div key={i} style={{ marginBottom: 8, display: "flex", flexDirection: "column" as const, alignItems: isCustomer ? "flex-start" : "flex-end" }}>
+                              <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3, paddingLeft: isCustomer ? 2 : 0, paddingRight: isCustomer ? 0 : 2 }}>
+                                {isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}
+                              </div>
+                              <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222" }}>
+                                {m.content}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Reply section */}
               {(isDraftReady || isSent || isDismissed || isFailed) && (
                 <div style={{ marginTop: 12 }}>
@@ -1497,16 +1544,14 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                     <strong style={{ color: "#6d5cff", fontSize: 12 }}>
                       {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
                     </strong>
-                    {/* View conversation toggle */}
-                    {observations.length > 1 && (
-                      <a
-                        href="#"
-                        onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
-                        style={{ color: "#6d5cff", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
-                      >
-                        {showConversation ? "Hide context ↑" : "View context →"}
-                      </a>
-                    )}
+                    {/* View conversation toggle — always shown */}
+                    <a
+                      href="#"
+                      onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
+                      style={{ color: "#6d5cff", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
+                    >
+                      {showConversation ? "Hide conversation ↑" : "View conversation →"}
+                    </a>
                   </div>
 
                   {/* Textarea / draft display */}
@@ -1570,14 +1615,42 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
                     <div style={{ fontSize: 14, color: "#ef4444", padding: "8px 0" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
                   )}
 
-                  {/* Observations as context (collapsible) */}
-                  {showConversation && observations.length > 1 && (
+                  {/* Conversation history (collapsible) */}
+                  {showConversation && (
                     <div style={{ marginTop: 14, borderTop: "1px solid #ece8fb", paddingTop: 14 }}>
-                      {observations.slice(1).map((obs, i) => (
-                        <div key={i} style={{ margin: "10px 0", textAlign: "left" }}>
-                          <span style={{ display: "inline-block", padding: "10px 14px", borderRadius: 14, fontSize: 15, maxWidth: "70%", background: "#f1efff", color: "#222" }}>{obs}</span>
+                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Last 5 messages</div>
+                      {convLoading ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#9ca3af" }}>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Loading…</span>
                         </div>
-                      ))}
+                      ) : !conversationMessages || conversationMessages.length === 0 ? (
+                        <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>No conversation history found.</div>
+                      ) : (
+                        conversationMessages.map((m, i) => {
+                          const isCustomer = m.role === "user";
+                          const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                          return (
+                            <div key={i} style={{ marginBottom: 8, display: "flex", flexDirection: "column" as const, alignItems: isCustomer ? "flex-start" : "flex-end" }}>
+                              <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3, paddingLeft: isCustomer ? 2 : 0, paddingRight: isCustomer ? 0 : 2 }}>
+                                {isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}
+                              </div>
+                              <div style={{
+                                display: "inline-block",
+                                padding: "8px 12px",
+                                borderRadius: 12,
+                                fontSize: 13,
+                                lineHeight: 1.45,
+                                maxWidth: "80%",
+                                background: isCustomer ? "#ece7ff" : "#f0f0f0",
+                                color: "#222",
+                              }}>
+                                {m.content}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   )}
                 </div>
