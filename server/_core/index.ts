@@ -625,34 +625,75 @@ async function runStartupMigrations() {
         id BIGINT AUTO_INCREMENT NOT NULL,
         threadId VARCHAR(255) NOT NULL,
         inboundMessageId VARCHAR(255) NOT NULL,
-        status ENUM('RECEIVED','CLASSIFIED','DRAFT_READY','SENDING','SENT','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED',
-        fromEmail VARCHAR(255) NOT NULL,
+        sessionId BIGINT,
+        fromEmail VARCHAR(320) NOT NULL,
         senderName VARCHAR(255),
-        subject VARCHAR(512),
-        inboundText TEXT,
-        messageType VARCHAR(64),
+        subject VARCHAR(998),
+        status ENUM('RECEIVED','CLASSIFIED','TOOLS_RUNNING','DRAFT_READY','SENDING','SENT','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED',
+        messageType ENUM('QUESTION','ACTION','INFORMATION','CONVERSATION','UNKNOWN'),
+        intent VARCHAR(64),
+        capability VARCHAR(64),
+        capabilityVersion INT,
+        resolvedContext JSON,
+        capabilityArgs JSON,
+        capabilityResult JSON,
+        observations JSON NOT NULL DEFAULT ('[]'),
+        suggestedActions JSON NOT NULL DEFAULT ('[]'),
+        followUps JSON NOT NULL DEFAULT ('[]'),
+        qualityScore JSON,
+        originalMessage TEXT NOT NULL DEFAULT '',
         intentSummary TEXT,
-        observations JSON,
-        suggestedActions JSON,
-        followUps JSON,
         generatedDraft TEXT,
         approvedText TEXT,
         approvedBy VARCHAR(128),
         approvedAt DATETIME(3),
         dismissedBy VARCHAR(128),
         dismissedAt DATETIME(3),
+        outboundMessageId VARCHAR(255),
         sentAt DATETIME(3),
         errorStage VARCHAR(64),
         errorCode VARCHAR(64),
         errorMessage TEXT,
         createdAt DATETIME(3) NOT NULL DEFAULT NOW(3),
         updatedAt DATETIME(3) NOT NULL DEFAULT NOW(3) ON UPDATE NOW(3),
-        CONSTRAINT madison_email_drafts_id PRIMARY KEY (id)
+        CONSTRAINT madison_email_drafts_id PRIMARY KEY (id),
+        UNIQUE KEY uq_email_draft_inbound (inboundMessageId)
       )
     `));
     console.log('[Migration] madison_email_drafts: OK');
   } catch (err) {
     console.error('[Migration] madison_email_drafts failed (non-fatal):', err);
+  }
+  // Fix existing madison_email_drafts table — rename inboundText → originalMessage if needed
+  try {
+    const [cols] = await db.execute(sql.raw(`
+      SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'madison_email_drafts' AND COLUMN_NAME = 'inboundText'
+    `)) as any;
+    if (Array.isArray(cols) && cols.length > 0) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts CHANGE inboundText originalMessage TEXT NOT NULL DEFAULT ''`));
+      console.log('[Migration] madison_email_drafts: renamed inboundText → originalMessage');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts column rename failed (non-fatal):', err);
+  }
+  // Add missing columns to madison_email_drafts if they don't exist
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE madison_email_drafts
+        ADD COLUMN IF NOT EXISTS sessionId BIGINT,
+        ADD COLUMN IF NOT EXISTS intent VARCHAR(64),
+        ADD COLUMN IF NOT EXISTS capability VARCHAR(64),
+        ADD COLUMN IF NOT EXISTS capabilityVersion INT,
+        ADD COLUMN IF NOT EXISTS resolvedContext JSON,
+        ADD COLUMN IF NOT EXISTS capabilityArgs JSON,
+        ADD COLUMN IF NOT EXISTS capabilityResult JSON,
+        ADD COLUMN IF NOT EXISTS qualityScore JSON,
+        ADD COLUMN IF NOT EXISTS outboundMessageId VARCHAR(255)
+    `));
+    console.log('[Migration] madison_email_drafts extra columns: OK');
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts extra columns failed (non-fatal):', err);
   }
 
   // ── Reset stuck 'fired' confirmation_calls rows back to 'pending' ─────────────────────────────────
