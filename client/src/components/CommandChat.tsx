@@ -1813,8 +1813,12 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
 
   const MADISON_PHOTO = "/madison-avatar.jpg";
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const [showConversation, setShowConversation] = useState(false);
-
+    const [showConversation, setShowConversation] = useState(false);
+  const threadId = (draft as any)?.threadId as string | undefined;
+  const { data: threadData, isLoading: threadLoading } = trpc.gmail.getThread.useQuery(
+    { threadId: threadId! },
+    { enabled: showConversation && !!threadId, staleTime: 60_000, refetchOnWindowFocus: false }
+  );
   const handleApprove = async (text: string) => {
     if (!meta.draftId || isSending) return;
     setIsSending(true);
@@ -2005,14 +2009,12 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
                       {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
                     </strong>
                     {draft?.threadId && (
-                      <a
-                        href={`https://mail.google.com/mail/u/0/#inbox/${(draft as any).threadId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#2563eb", fontWeight: 700, textDecoration: "none", fontSize: 13 }}
+                      <button
+                        onClick={() => setShowConversation(v => !v)}
+                        style={{ color: "#2563eb", fontWeight: 700, background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0 }}
                       >
-                        View thread ↗
-                      </a>
+                        {showConversation ? "Hide thread ↑" : "View thread ↓"}
+                      </button>
                     )}
                   </div>
 
@@ -2070,11 +2072,31 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
                     </div>
                   )}
 
-                  {isFailed && (
+                                    {isFailed && (
                     <div style={{ fontSize: 14, color: "#ef4444", padding: "8px 0" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
                   )}
-
-
+                  {/* Inline thread */}
+                  {showConversation && (
+                    <div style={{ marginTop: 14, borderTop: "1px solid #bfdbfe", paddingTop: 14 }}>
+                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Email thread</div>
+                      {threadLoading && <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Loading thread…</div>}
+                      {!threadLoading && threadData?.messages && threadData.messages.map((m: any, i: number) => {
+                        const isUs = threadData.inboxEmail && m.fromEmail === threadData.inboxEmail;
+                        return (
+                          <div key={m.id ?? i} style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 12, background: isUs ? "#eff6ff" : "#f9fafb", border: `1px solid ${isUs ? "#bfdbfe" : "#e5e7eb"}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                              <span style={{ fontWeight: 700, fontSize: 12, color: isUs ? "#1d4ed8" : "#111827" }}>{isUs ? "Maids in Black" : (m.from || m.fromEmail || "Unknown")}</span>
+                              <span style={{ fontSize: 11, color: "#9ca3af" }}>{m.date ? new Date(m.date).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5, whiteSpace: "pre-wrap" as const }}>{m.bodyText || m.snippet || ""}</div>
+                          </div>
+                        );
+                      })}
+                      {!threadLoading && (!threadData?.messages || threadData.messages.length === 0) && (
+                        <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>No messages found.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
