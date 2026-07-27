@@ -4066,9 +4066,9 @@ export const madisonEmailDrafts = mysqlTable("madison_email_drafts", {
   resolvedContext: json("resolvedContext"),
   capabilityArgs: json("capabilityArgs"),
   capabilityResult: json("capabilityResult"),
-  observations: json("observations").notNull().default(sql`('[]')`),
-  suggestedActions: json("suggestedActions").notNull().default(sql`('[]')`),
-  followUps: json("followUps").notNull().default(sql`('[]')`),
+  observations: json("observations"),
+  suggestedActions: json("suggestedActions"),
+  followUps: json("followUps"),
   qualityScore: json("qualityScore"),
 
   // Content

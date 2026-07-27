@@ -637,9 +637,9 @@ async function runStartupMigrations() {
         resolvedContext JSON,
         capabilityArgs JSON,
         capabilityResult JSON,
-        observations JSON NOT NULL DEFAULT ('[]'),
-        suggestedActions JSON NOT NULL DEFAULT ('[]'),
-        followUps JSON NOT NULL DEFAULT ('[]'),
+        observations JSON,
+        suggestedActions JSON,
+        followUps JSON,
         qualityScore JSON,
         originalMessage TEXT NOT NULL DEFAULT '',
         intentSummary TEXT,
@@ -656,7 +656,7 @@ async function runStartupMigrations() {
         errorMessage TEXT,
         createdAt DATETIME(3) NOT NULL DEFAULT NOW(3),
         updatedAt DATETIME(3) NOT NULL DEFAULT NOW(3) ON UPDATE NOW(3),
-        CONSTRAINT madison_email_drafts_id PRIMARY KEY (id),
+        PRIMARY KEY (id),
         UNIQUE KEY uq_email_draft_inbound (inboundMessageId)
       )
     `));
