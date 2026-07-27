@@ -1964,10 +1964,23 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
                 <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8, fontWeight: 600 }}>Subject: {draft.subject}</div>
               )}
 
-              {/* Latest email message */}
-              <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span>{draft?.senderName ? `Latest email from ${draft.senderName}` : "Latest customer email"}</span>
-                {draft?.fromEmail && <span style={{ fontWeight: 600, color: "#2563eb", fontSize: 10 }}>{draft.fromEmail}</span>}
+              {/* Sender info */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div>
+                  {draft?.senderName && <div style={{ fontWeight: 700, fontSize: 13, color: "#111827", lineHeight: 1.3 }}>{draft.senderName}</div>}
+                  {draft?.fromEmail && <div style={{ fontSize: 11, color: "#2563eb", fontWeight: 600 }}>{draft.fromEmail}</div>}
+                  {!draft?.senderName && !draft?.fromEmail && <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>Latest customer email</div>}
+                </div>
+                {draft?.threadId && (
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#inbox/${(draft as any).threadId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 11, color: "#2563eb", fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" as const, flexShrink: 0 }}
+                  >
+                    Open in Gmail ↗
+                  </a>
+                )}
               </div>
               <div style={{ display: "flex" }}>
                 <div style={{
@@ -1991,13 +2004,16 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
                     <strong style={{ color: "#2563eb", fontSize: 12 }}>
                       {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
                     </strong>
-                    <a
-                      href="#"
-                      onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
-                      style={{ color: "#2563eb", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
-                    >
-                      {showConversation ? "Hide thread ↑" : "View thread →"}
-                    </a>
+                    {draft?.threadId && (
+                      <a
+                        href={`https://mail.google.com/mail/u/0/#inbox/${(draft as any).threadId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#2563eb", fontWeight: 700, textDecoration: "none", fontSize: 13 }}
+                      >
+                        View thread ↗
+                      </a>
+                    )}
                   </div>
 
                   {isDraftReady && (
@@ -2058,13 +2074,7 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
                     <div style={{ fontSize: 14, color: "#ef4444", padding: "8px 0" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
                   )}
 
-                  {/* Thread history (collapsible) */}
-                  {showConversation && (
-                    <div style={{ marginTop: 14, borderTop: "1px solid #bfdbfe", paddingTop: 14 }}>
-                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Email thread</div>
-                      <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Full thread available in Gmail.</div>
-                    </div>
-                  )}
+
                 </div>
               )}
             </div>
