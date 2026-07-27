@@ -36,7 +36,7 @@ import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
 import { isReadinessDomain, handleMadisonReadiness } from "./madison";
 import { isCommsDomain, handleMadisonComms } from "./madison/comms";
 import { computeReadinessSummary } from "./madison/readinessService";
-import { handleMadisonChain, executeConfirmedChain } from "./madison/chain";
+import { executeConfirmedChain } from "./madison/chain";
 import type { ChainConfirmCard, ChainExecutionResult, ExecutionPlan } from "./madison/chain/types";
 import { chainExecutions } from "../drizzle/schema";
 
@@ -2567,95 +2567,6 @@ export const aiConciergeRouter = router({
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
 
-      // ── Unified Planner Routing ───────────────────────────────────────────
-      // The deterministic pre-parser classifies the message as chain or single
-      // BEFORE any LLM call. If the pre-parser forces chain, the request must
-      // NEVER fall through to parseConciergeRequest — doing so risks dangerous
-      // misclassification by the legacy parser.
-      const { planChainRouting, hasCoordinationSignal } = await import("./madison/chain/planner");
-      const _isForceChain = hasCoordinationSignal(input.message);
-
-      try {
-        const routing = await planChainRouting(input.message);
-        console.log(`[Planner] mode=${routing.mode} isForceChain=${_isForceChain} msg=${JSON.stringify(input.message)}`);
-
-        if (routing.mode === "chain" && routing.plan) {
-          // Multi-capability chain
-          const chainResult = await handleMadisonChain(input.message, {
-            db,
-            agentId: ctx.agent.agentId,
-            agentName: ctx.agent.agentName ?? undefined,
-            plan: routing.plan,
-          });
-          if (chainResult.type === "chain_confirm") {
-            return { type: "chain_confirm" as const, chainExecutionId: chainResult.chainExecutionId, card: chainResult.card };
-          }
-          if (chainResult.type === "chain_result") {
-            return { type: "chain_result" as const, chainExecutionId: chainResult.chainExecutionId, result: chainResult.result };
-          }
-          // bulk_sms_confirm shortcut — chain resolved to existing SMS confirm card
-          if (chainResult.type === "bulk_sms_confirm") {
-            return { ...chainResult.card, command: input.message };
-          }
-          // chain_legacy returned — for a forced-chain request this is an error
-          if (_isForceChain) {
-            return {
-              type: "error" as const,
-              message: "Chain planner could not build a valid plan for this request. Please try rephrasing.",
-            };
-          }
-        }
-
-        // Forced-chain requests that returned mode !== "chain" are an error
-        if (_isForceChain && routing.mode !== "chain") {
-          return {
-            type: "error" as const,
-            message: `Chain planner returned unexpected mode "${routing.mode}" for a multi-step request. Please try rephrasing.`,
-          };
-        }
-
-        if (routing.mode === "single" && routing.capabilityId) {
-          const capId = routing.capabilityId;
-          const rid = crypto.randomUUID().slice(0, 8);
-
-          // Route to existing single-capability handler by capabilityId
-          if (capId.startsWith("communications.")) {
-            console.log(`[Planner] single → comms: ${capId} rid=${rid}`);
-            const commsResult = await handleMadisonComms(db, input.message, rid, ctx.agent.agentId);
-            if (commsResult.handled) {
-              const r = commsResult.response as any;
-              if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
-              if (r.type === "client_disambiguation") return r;
-              return { type: "error" as const, message: r.message ?? "Could not process SMS request." };
-            }
-            console.warn(`[Planner] comms handler fell back: ${commsResult.fallbackReason}`);
-          } else if (capId.startsWith("readiness.") || capId.startsWith("confirmations.") || capId.startsWith("payments.query")) {
-            console.log(`[Planner] single → readiness: ${capId} rid=${rid}`);
-            const madisonResult = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId);
-            if (madisonResult.handled && madisonResult.response) {
-              return {
-                type: "query_result" as const,
-                answer: madisonResult.response,
-                status: "complete" as const,
-                undoActionId: madisonResult.undoActionId ?? null,
-              };
-            }
-            console.warn("[Planner] readiness handler fell back:", madisonResult.fallbackReason);
-          }
-          // Other single capabilities fall through to legacy concierge
-        }
-        // mode === "legacy" or unhandled single → fall through to parseConciergeRequest
-      } catch (err) {
-        console.warn("[Planner] Error:", err);
-        // Forced-chain requests must not fall through to the legacy parser on error
-        if (_isForceChain) {
-          const stage = err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120);
-          return {
-            type: "error" as const,
-            message: `Chain planner encountered an error and cannot proceed: ${stage}`,
-          };
-        }
-      }
       // ─────────────────────────────────────────────────────────────────────
 
       // Use new unified parser — replaces classifyIntent for all intents
