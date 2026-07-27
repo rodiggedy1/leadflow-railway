@@ -920,6 +920,52 @@ async function startServer() {
     }
   });
 
+  // TEMPORARY: madison_email_drafts schema + update diagnostic — remove after issue resolved
+  app.get("/api/diag/email-drafts", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    const db = await getDb();
+    if (!db) return res.status(500).json({ error: 'no db' });
+    const result: Record<string, unknown> = {};
+    // 1. SHOW CREATE TABLE
+    try {
+      const [rows] = await db.execute(sql.raw(`SHOW CREATE TABLE madison_email_drafts`)) as any;
+      result.showCreateTable = rows?.[0]?.['Create Table'] ?? rows;
+    } catch (e: any) { result.showCreateTableError = { message: e.message, cause: e.cause?.message }; }
+    // 2. INFORMATION_SCHEMA.COLUMNS
+    try {
+      const [cols] = await db.execute(sql.raw(`SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'madison_email_drafts' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION`)) as any;
+      result.columns = cols;
+    } catch (e: any) { result.columnsError = { message: e.message, cause: e.cause?.message }; }
+    // 3. Pick an existing row
+    let knownId: number | null = null;
+    try {
+      const [rows] = await db.execute(sql.raw(`SELECT id, status FROM madison_email_drafts LIMIT 1`)) as any;
+      result.existingRow = rows?.[0] ?? null;
+      knownId = rows?.[0]?.id ?? null;
+    } catch (e: any) { result.existingRowError = { message: e.message, cause: e.cause?.message }; }
+    if (knownId !== null) {
+      // 4. Raw SQL status update
+      try {
+        const [upd] = await db.execute(sql.raw(`UPDATE madison_email_drafts SET status='TOOLS_RUNNING' WHERE id=${knownId}`)) as any;
+        result.rawSqlStatusUpdate = { affectedRows: upd?.affectedRows, ok: true };
+      } catch (e: any) { result.rawSqlStatusUpdateError = { message: e.message, code: (e as any).code, errno: (e as any).errno, sqlState: (e as any).sqlState, sqlMessage: (e as any).sqlMessage, cause: { message: e.cause?.message, code: e.cause?.code, errno: e.cause?.errno, sqlState: e.cause?.sqlState } }; }
+      // 5. Drizzle status update with full error logging
+      try {
+        const { madisonEmailDrafts } = await import('../../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        await db.update(madisonEmailDrafts).set({ status: 'TOOLS_RUNNING' }).where(eq(madisonEmailDrafts.id, knownId));
+        result.drizzleStatusUpdate = { ok: true };
+      } catch (e: any) { result.drizzleStatusUpdateError = { name: e?.name, message: e?.message, code: e?.code, errno: e?.errno, sqlState: e?.sqlState, sqlMessage: e?.sqlMessage, cause: { message: e?.cause?.message, code: e?.cause?.code, errno: e?.cause?.errno, sqlState: e?.cause?.sqlState } }; }
+      // 6. Raw SQL updatedAt update (non-enum)
+      try {
+        const [upd2] = await db.execute(sql.raw(`UPDATE madison_email_drafts SET updatedAt=NOW() WHERE id=${knownId}`)) as any;
+        result.rawSqlUpdatedAtUpdate = { affectedRows: upd2?.affectedRows, ok: true };
+      } catch (e: any) { result.rawSqlUpdatedAtUpdateError = { message: e.message, code: (e as any).code, errno: (e as any).errno, sqlState: (e as any).sqlState, cause: { message: e.cause?.message, code: e.cause?.code } }; }
+    } else {
+      result.noRowsFound = true;
+    }
+    return res.json(result);
+  });
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
     try {
