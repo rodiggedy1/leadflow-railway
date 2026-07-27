@@ -4035,10 +4035,11 @@ export const madisonEmailDrafts = mysqlTable("madison_email_drafts", {
   /** Gmail message ID of the inbound message that triggered this draft */
   inboundMessageId: varchar("inboundMessageId", { length: 255 }).notNull(),
   sessionId: bigint("sessionId", { mode: "number" }),
-  fromEmail: varchar("fromEmail", { length: 320 }).notNull(),
+    fromEmail: varchar("fromEmail", { length: 320 }).notNull(),
+  /** Reply-To email address from the inbound message — used as the actual send-to address */
+  replyToEmail: varchar("replyToEmail", { length: 320 }),
   senderName: varchar("senderName", { length: 255 }),
   subject: varchar("subject", { length: 998 }),
-
   // Pipeline state — same enum as SMS drafts
   status: mysqlEnum("status", [
     "RECEIVED",

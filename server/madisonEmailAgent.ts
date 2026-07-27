@@ -39,11 +39,12 @@ export async function triggerMadisonEmailDraft(params: {
   threadId: string;
   inboundMessageId: string;
   fromEmail: string;
+  replyToEmail?: string | null;
   senderName?: string;
   subject?: string;
   inboundText: string;
 }): Promise<void> {
-  const { threadId, inboundMessageId, fromEmail, senderName, subject, inboundText } = params;
+  const { threadId, inboundMessageId, fromEmail, replyToEmail, senderName, subject, inboundText } = params;
   const pipelineStart = Date.now();
 
   // Skip empty messages
@@ -68,6 +69,7 @@ export async function triggerMadisonEmailDraft(params: {
       threadId,
       inboundMessageId,
       fromEmail,
+      replyToEmail: replyToEmail ?? null,
       senderName,
       subject,
       status: "RECEIVED",

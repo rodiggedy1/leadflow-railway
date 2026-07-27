@@ -725,10 +725,25 @@ async function runStartupMigrations() {
     } else {
       console.log('[Migration] madison_email_drafts uq_email_draft_thread: already exists');
     }
-  } catch (err) {
+    } catch (err) {
     console.error('[Migration] madison_email_drafts threadId unique index failed (non-fatal):', err);
   }
-
+  // ── madison_email_drafts: add replyToEmail column ─────────────────────────────────────────────────
+  try {
+    const [replyToColRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = 'madison_email_drafts' AND column_name = 'replyToEmail'
+    `)) as any;
+    const replyToColExists = Array.isArray(replyToColRows) && replyToColRows[0]?.cnt > 0;
+    if (!replyToColExists) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts ADD COLUMN replyToEmail VARCHAR(320) NULL AFTER fromEmail`));
+      console.log('[Migration] madison_email_drafts replyToEmail: added');
+    } else {
+      console.log('[Migration] madison_email_drafts replyToEmail: already exists');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts replyToEmail failed (non-fatal):', err);
+  }
   // ── Reset stuck 'fired' confirmation_calls rows back to 'pending' ─────────────────────────────────
   // Rows get stuck in 'fired' when the fire-and-forget SMS async block failed silently.
   // Now that SMS is sent synchronously, this cleans up any legacy stuck rows on every deploy.

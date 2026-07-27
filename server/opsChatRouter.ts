@@ -5464,9 +5464,11 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       if (!draft) return { ok: false, reason: "not_found" };
 
       try {
+        const resolvedTo = draft.replyToEmail ?? draft.fromEmail;
+        console.log(`[email-draft] approve draftId=${input.draftId} fromEmail=${draft.fromEmail} replyToEmail=${draft.replyToEmail ?? 'none'} resolvedTo=${resolvedTo}`);
         const result = await sendGmailReply({
           threadId: draft.threadId,
-          to: draft.fromEmail,
+          to: resolvedTo,
           subject: draft.subject ? `Re: ${draft.subject}` : "Re: Your message",
           bodyHtml: input.approvedText.replace(/\n/g, "<br>"),
           inReplyToMessageId: draft.inboundMessageId,
