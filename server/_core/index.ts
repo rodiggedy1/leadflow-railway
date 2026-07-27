@@ -641,7 +641,7 @@ async function runStartupMigrations() {
         suggestedActions JSON,
         followUps JSON,
         qualityScore JSON,
-        originalMessage TEXT NOT NULL DEFAULT '',
+        originalMessage TEXT NOT NULL,
         intentSummary TEXT,
         generatedDraft TEXT,
         approvedText TEXT,
@@ -671,7 +671,7 @@ async function runStartupMigrations() {
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'madison_email_drafts' AND COLUMN_NAME = 'inboundText'
     `)) as any;
     if (Array.isArray(cols) && cols.length > 0) {
-      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts CHANGE inboundText originalMessage TEXT NOT NULL DEFAULT ''`));
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts CHANGE inboundText originalMessage TEXT NOT NULL`));
       console.log('[Migration] madison_email_drafts: renamed inboundText → originalMessage');
     }
   } catch (err) {
