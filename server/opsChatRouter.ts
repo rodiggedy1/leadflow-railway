@@ -5417,6 +5417,44 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         unresolvedCallMsgIds,
       };
     }),
+
+  /**
+   * Fetch all madison_call_summary and madison_sms_draft cards for a given date (YYYY-MM-DD).
+   * Used by the Madison Debrief page to review the day's interactions.
+   */
+  getDebriefCards: opsChatProcedure
+    .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      // Build start/end of day in UTC (server stores timestamps as UTC)
+      const dayStart = new Date(`${input.date}T00:00:00.000Z`);
+      const dayEnd = new Date(`${input.date}T23:59:59.999Z`);
+
+      const rows = await db
+        .select()
+        .from(opsChatMessages)
+        .where(
+          and(
+            eq(opsChatMessages.channel, 'command'),
+            inArray(opsChatMessages.quickAction as any, ['madison_call_summary', 'madison_sms_draft']),
+            gte(opsChatMessages.createdAt, dayStart),
+            lte(opsChatMessages.createdAt, dayEnd),
+          )
+        )
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+
+      return rows.map(m => ({
+        id: m.id,
+        ts: m.createdAt.getTime(),
+        quickAction: m.quickAction,
+        body: m.body,
+        metadata: m.metadata ?? null,
+        mediaUrl: m.mediaUrl ?? null,
+      }));
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
