@@ -5491,6 +5491,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { staleTime: 30_000, refetchInterval: 60_000, retry: false, enabled: emailsOpen }
   );
   const emailThreadsList = emailThreadsData?.threads ?? [];
+  // ── Always-on poll: triggers Madison email draft cards even when sidebar is closed
+  trpc.gmail.listThreads.useQuery(
+    { maxResults: 20, unreadOnly: true },
+    { staleTime: 60_000, refetchInterval: 60_000, retry: false }
+  );
   // ── Missed Calls today count (pending only) ─────────────────────────────────
   const { data: missedCallsTodayData, refetch: refetchMissedCallsToday } = trpc.missedCalls.getPendingCount.useQuery(
     { todayOnly: true },
