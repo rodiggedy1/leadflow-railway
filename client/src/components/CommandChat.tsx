@@ -1775,6 +1775,375 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
   );
 }
 
+// ── MadisonEmailDraftCard ──────────────────────────────────────────────────
+// Exact clone of MadisonSmsDraftCard — same behavior, same flow.
+// Differences: blue accent, mail icon label, uses approveEmailDraft/dismissEmailDraft.
+export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
+  const [editMode, setEditMode] = useState(false);
+  const [editedText, setEditedText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [justActed, setJustActed] = useState<"sent" | "dismissed" | null>(null);
+
+  const utils = trpc.useUtils();
+
+  let meta: { draftId?: number; quickActionVersion?: number } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+
+  const { data: draft, isLoading } = trpc.opsChat.getEmailDraft.useQuery(
+    { draftId: meta.draftId! },
+    { enabled: !!meta.draftId, refetchOnWindowFocus: false }
+  );
+
+  const approveMutation = trpc.opsChat.approveEmailDraft.useMutation({
+    onSuccess: () => {
+      setJustActed("sent");
+      utils.opsChat.getEmailDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+    },
+  });
+  const dismissMutation = trpc.opsChat.dismissEmailDraft.useMutation({
+    onSuccess: () => {
+      setJustActed("dismissed");
+      utils.opsChat.getEmailDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+    },
+  });
+
+  const MADISON_PHOTO = "/madison-avatar.jpg";
+  const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const [showConversation, setShowConversation] = useState(false);
+
+  const handleApprove = async (text: string) => {
+    if (!meta.draftId || isSending) return;
+    setIsSending(true);
+    try {
+      const result = await approveMutation.mutateAsync({ draftId: meta.draftId, approvedText: text, approvedBy: callerName });
+      if (!result.ok) console.error("[MadisonEmailDraft] approve failed:", result.reason);
+    } finally {
+      setIsSending(false);
+      setEditMode(false);
+    }
+  };
+
+  const handleDismiss = () => {
+    if (!meta.draftId) return;
+    dismissMutation.mutate({ draftId: meta.draftId, dismissedBy: callerName });
+  };
+
+  if (!meta.draftId) {
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
+            <span style={{ font: "700 28px Georgia,serif", color: "#1a1a2e" }}>Madison</span>
+            <span style={{ font: "800 13px Inter,system-ui", color: "#2563eb" }}>✦ AI</span>
+            <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
+          </div>
+          <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Email draft unavailable.</div>
+        </div>
+      </div>
+    );
+  }
+
+  const status = draft?.status ?? "RECEIVED";
+  const isSent = status === "SENT";
+  const isDismissed = status === "DISMISSED";
+  const isFailed = status === "FAILED";
+  const isDraftReady = status === "DRAFT_READY";
+  const isProcessing = ["RECEIVED", "CLASSIFIED", "INTENT_RESOLVED", "CONTEXT_RESOLVED", "TOOLS_RUNNING", "GENERATING", "SENDING"].includes(status);
+
+  const bodyLines = msg.body.split("\n");
+  const senderLine = bodyLines[0] ?? "";
+  const quotedLine = bodyLines[1] ?? "";
+  const observations = draft?.observations ? (() => { try { return JSON.parse(draft.observations as string) as string[]; } catch { return []; } })() : [];
+  const generatedDraft = draft?.generatedDraft ?? "";
+
+  const statusBadge = isSent
+    ? { label: "Sent", bg: "#eff6ff", color: "#1d4ed8" }
+    : isDismissed
+    ? { label: "Dismissed", bg: "#f3f4f6", color: "#6b7280" }
+    : isFailed
+    ? { label: "Failed", bg: "#fef2f2", color: "#dc2626" }
+    : isProcessing
+    ? { label: "Drafting…", bg: "#dbeafe", color: "#2563eb" }
+    : { label: "Awaiting approval", bg: "#eff6ff", color: "#1d4ed8" };
+
+  // Confirmation flash before card disappears
+  if (justActed) {
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            background: justActed === "sent" ? "#eff6ff" : "#fafafa",
+            border: `1px solid ${justActed === "sent" ? "#bfdbfe" : "#e5e7eb"}`,
+            borderRadius: 20,
+            padding: "18px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            transition: "all 0.3s",
+          }}>
+            <span style={{ fontSize: 22 }}>{justActed === "sent" ? "✅" : "✕"}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: justActed === "sent" ? "#1d4ed8" : "#6b7280" }}>
+                {justActed === "sent" ? "Email sent — Madison is handling it" : "Draft dismissed"}
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>This card will clear in a moment…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          width: "100%",
+          background: "#fff",
+          border: "1px solid #bfdbfe",
+          borderRadius: 20,
+          boxShadow: "0 4px 24px rgba(30,60,120,0.08)",
+          overflow: "hidden",
+          opacity: isDismissed ? 0.55 : 1,
+          transition: "opacity 0.2s",
+        }}>
+
+          {/* Header */}
+          <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
+            <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+                <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
+                <span style={{ font: "800 11px Inter,system-ui", color: "#2563eb" }}>✶ AI</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
+                {/* Email badge */}
+                <span style={{ fontSize: 10, background: "#dbeafe", color: "#1d4ed8", borderRadius: 6, padding: "2px 7px", fontWeight: 700, marginLeft: 4 }}>✉ Email</span>
+              </div>
+              {isLoading || isProcessing ? (
+                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 14, color: "#9ca3af", lineHeight: 1.45 }}>
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#2563eb" }} />
+                  <span style={{ fontStyle: "italic" }}>Drafting an email reply…</span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 4, fontSize: 14, lineHeight: 1.45, color: "#222" }}>
+                  <p style={{ margin: "0.2em 0" }}>I can take this one.</p>
+                  <p style={{ margin: "0.2em 0" }}>
+                    {(draft as any)?.intentSummary ?? (observations.length > 0 ? observations[0] : "I drafted an email reply for you.")}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div style={{
+              marginLeft: "auto",
+              background: statusBadge.bg,
+              color: statusBadge.color,
+              padding: "5px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              height: "max-content",
+              whiteSpace: "nowrap" as const,
+              flexShrink: 0,
+            }}>
+              {statusBadge.label}
+            </div>
+          </div>
+
+          {/* Main body */}
+          <div style={{ padding: "0 16px 16px" }}>
+            <div style={{ border: "1px solid #bfdbfe", borderRadius: 14, padding: 14, background: "#f8fbff" }}>
+
+              {/* Subject line */}
+              {draft?.subject && (
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8, fontWeight: 600 }}>Subject: {draft.subject}</div>
+              )}
+
+              {/* Latest email message */}
+              <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>{draft?.senderName ? `Latest email from ${draft.senderName}` : "Latest customer email"}</span>
+                {draft?.fromEmail && <span style={{ fontWeight: 600, color: "#2563eb", fontSize: 10 }}>{draft.fromEmail}</span>}
+              </div>
+              <div style={{ display: "flex" }}>
+                <div style={{
+                  display: "inline-block",
+                  padding: "10px 13px",
+                  borderRadius: 14,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  maxWidth: "85%",
+                  background: "#dbeafe",
+                  color: "#222",
+                }}>
+                  {quotedLine || senderLine}
+                </div>
+              </div>
+
+              {/* Reply section */}
+              {(isDraftReady || isSent || isDismissed || isFailed) && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong style={{ color: "#2563eb", fontSize: 12 }}>
+                      {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
+                    </strong>
+                    <a
+                      href="#"
+                      onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
+                      style={{ color: "#2563eb", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
+                    >
+                      {showConversation ? "Hide thread ↑" : "View thread →"}
+                    </a>
+                  </div>
+
+                  {isDraftReady && (
+                    editMode ? (
+                      <textarea
+                        value={editedText}
+                        onChange={e => setEditedText(e.target.value)}
+                        style={{
+                          width: "100%",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "13px/1.5 Inter,system-ui",
+                          resize: "vertical" as const,
+                          outline: "none",
+                          minHeight: 90,
+                          color: "#111827",
+                          background: "#fff",
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <textarea
+                        value={generatedDraft}
+                        readOnly
+                        style={{
+                          width: "100%",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "13px/1.5 Inter,system-ui",
+                          resize: "none" as const,
+                          outline: "none",
+                          minHeight: 60,
+                          color: "#111827",
+                          background: "#fff",
+                          cursor: "default",
+                        }}
+                      />
+                    )
+                  )}
+
+                  {isSent && (
+                    <div style={{
+                      width: "100%",
+                      border: "1px solid #bfdbfe",
+                      borderRadius: 16,
+                      padding: 16,
+                      font: "13px/1.5 Inter,system-ui",
+                      color: "#111827",
+                      background: "#eff6ff",
+                    }}>
+                      {draft?.approvedText ?? generatedDraft}
+                    </div>
+                  )}
+
+                  {isFailed && (
+                    <div style={{ fontSize: 14, color: "#ef4444", padding: "8px 0" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
+                  )}
+
+                  {/* Thread history (collapsible) */}
+                  {showConversation && (
+                    <div style={{ marginTop: 14, borderTop: "1px solid #bfdbfe", paddingTop: 14 }}>
+                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Email thread</div>
+                      <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Full thread available in Gmail.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: "flex", alignItems: "center", marginTop: 12 }}>
+              <div style={{ color: "#757b90", fontSize: 12 }}>
+                {isSent
+                  ? `Sent by ${draft?.approvedBy ?? "agent"}${draft?.approvedText && draft.approvedText !== generatedDraft ? " (edited)" : ""}`
+                  : isDismissed
+                  ? "No reply sent."
+                  : isFailed
+                  ? ""
+                  : "Madison won't send anything until you approve it."}
+              </div>
+              <div style={{ display: "flex", gap: 12, marginLeft: "auto" }}>
+                {isDraftReady && !editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #bfdbfe", background: "#fff", cursor: "pointer", fontSize: 13 }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleApprove(generatedDraft)}
+                      disabled={isSending}
+                      style={{
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: isSending ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Email
+                    </button>
+                  </>
+                )}
+                {isDraftReady && editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #bfdbfe", background: "#fff", cursor: "pointer", fontSize: 13 }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleApprove(editedText)}
+                      disabled={isSending || !editedText.trim()}
+                      style={{
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: (isSending || !editedText.trim()) ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Edited
+                    </button>
+                  </>
+                )}
+                {isDraftReady && !editMode && (
+                  <button
+                    onClick={handleDismiss}
+                    style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #bfdbfe", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}
+                  >
+                    Dismiss
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MadisonPostCard ─────────────────────────────────────────────────────────
 // Self-contained component so it can declare its own hooks (state + mutations)
 function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
@@ -3695,6 +4064,18 @@ const MessageList = memo(function MessageList({
                       className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
                     >
                       <MadisonSmsDraftCard msg={msg} callerName={callerName} />
+                    </div>
+                  );
+                }
+                // ── Madison Email Draft card
+                if (msg.quickAction === "madison_email_draft") {
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-blue-50 rounded-2xl" : "")}
+                    >
+                      <MadisonEmailDraftCard msg={msg} callerName={callerName} />
                     </div>
                   );
                 }

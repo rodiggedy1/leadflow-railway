@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
-import { MadisonSmsDraftCard, MadisonCallSummaryCard } from "@/components/CommandChat";
+import { MadisonSmsDraftCard, MadisonCallSummaryCard, MadisonEmailDraftCard } from "@/components/CommandChat";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -46,6 +46,7 @@ export default function MadisonDebrief() {
 
   const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
+  const emailCount = cards.filter(c => c.quickAction === "madison_email_draft").length;
 
   const startReview = () => {
     if (cards.length === 0) return;
@@ -202,6 +203,8 @@ export default function MadisonDebrief() {
         <div style={{ background: "#fff", borderRadius: 20, boxShadow: "0 8px 32px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 20 }}>
           {currentCard.quickAction === "madison_sms_draft" ? (
             <MadisonSmsDraftCard msg={msgObj} callerName="" />
+          ) : currentCard.quickAction === "madison_email_draft" ? (
+            <MadisonEmailDraftCard msg={msgObj} callerName="" />
           ) : (
             <MadisonCallSummaryCard
               msg={msgObj}
