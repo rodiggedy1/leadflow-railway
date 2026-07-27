@@ -633,7 +633,44 @@ export const opsChatRouter = router({
         for (const p of parents) parentMap.set(p.id, { body: p.body, authorName: p.authorName });
       }
 
-      return msgs.reverse().map((m) => ({
+      // ── Filter out completed Madison cards ─────────────────────────────────
+      // SMS draft cards: hide if the draft has been SENT or DISMISSED
+      // Call summary cards: hide if actedBy is set in metadata (dismissed/called/texted)
+      // Both card types remain fully visible in the Debrief page (getDebriefCards).
+      const smsCardMsgs = msgs.filter(m => m.quickAction === 'madison_sms_draft');
+      const smsCardDraftIds: number[] = [];
+      for (const m of smsCardMsgs) {
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+      }
+      const completedDraftIds = new Set<number>();
+      if (smsCardDraftIds.length > 0) {
+        const draftRows = await db
+          .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
+          .from(madisonSmsDrafts)
+          .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
+        for (const d of draftRows) {
+          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') {
+            completedDraftIds.add(d.id);
+          }
+        }
+      }
+      const filteredMsgs = msgs.filter(m => {
+        if (m.quickAction === 'madison_sms_draft') {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return !completedDraftIds.has(meta.draftId);
+          } catch { return true; }
+        }
+        if (m.quickAction === 'madison_call_summary') {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return !meta.actedBy; // hide once acted on (called, texted, or dismissed)
+          } catch { return true; }
+        }
+        return true;
+      });
+
+      return filteredMsgs.reverse().map((m) => ({
         id: m.id,
         ts: m.createdAt.getTime(),
         from: m.authorName,
