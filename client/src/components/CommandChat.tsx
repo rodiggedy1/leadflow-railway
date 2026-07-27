@@ -6603,7 +6603,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   function jumpToNextMadisonCard() {
     if (unresolvedMadisonMsgIds.length === 0) return;
     const idx = madisonCardIdx % unresolvedMadisonMsgIds.length;
-    scrollToCmdMsg(unresolvedMadisonMsgIds[idx]);
+    const targetId = unresolvedMadisonMsgIds[idx];
+    const hasRef = cmdMsgRefMap.current.has(targetId);
+    console.log('[Madison Jump] idx:', idx, 'targetId:', targetId, 'hasRef:', hasRef, 'allIds:', unresolvedMadisonMsgIds, 'refMapSize:', cmdMsgRefMap.current.size, 'channelMsgsLen:', channelMsgs.length);
+    scrollToCmdMsg(targetId);
     setMadisonCardIdx(idx + 1);
   }
   // Refresh count when channelMsgs changes (draft acted on / dismissed)

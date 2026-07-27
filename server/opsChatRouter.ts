@@ -5515,7 +5515,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
   getUnresolvedMadisonCount: opsChatProcedure
     .query(async () => {
       const db = await getDb();
-      if (!db) return { smsDraftCount: 0, callSummaryCount: 0, total: 0, unresolvedDraftIds: [] as number[], unresolvedCallMsgIds: [] as number[] };
+      if (!db) return { smsDraftCount: 0, callSummaryCount: 0, emailDraftCount: 0, total: 0, unresolvedDraftIds: [] as number[], unresolvedCallMsgIds: [] as number[], unresolvedEmailDraftIds: [] as number[] };
 
       // ── SMS drafts: only DRAFT_READY needs human action ──────────────────────
       // RECEIVED/CLASSIFIED/TOOLS_RUNNING/GENERATING/SENDING = in-flight (not actionable yet)
