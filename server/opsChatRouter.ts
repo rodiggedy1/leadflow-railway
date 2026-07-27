@@ -5567,13 +5567,39 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         })
         .map(m => m.id);
       const callSummaryCount = unresolvedCallMsgIds.length;
+      // ── Email drafts: only DRAFT_READY needs human action ──────────────────
+      const emailDraftReadyRows = await db
+        .select({ id: madisonEmailDrafts.id })
+        .from(madisonEmailDrafts)
+        .where(eq(madisonEmailDrafts.status, 'DRAFT_READY'));
+      const emailDraftReadyIds = new Set(emailDraftReadyRows.map(r => r.id));
+      const emailDraftMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction, 'madison_email_draft'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedEmailDraftIds: number[] = emailDraftMsgs
+        .filter(m => {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return emailDraftReadyIds.has(meta.draftId);
+          } catch { return false; }
+        })
+        .map(m => m.id);
+      const emailDraftCount = unresolvedEmailDraftIds.length;
 
       return {
         smsDraftCount,
         callSummaryCount,
-        total: smsDraftCount + callSummaryCount,
+        emailDraftCount,
+        total: smsDraftCount + callSummaryCount + emailDraftCount,
         unresolvedDraftIds,
         unresolvedCallMsgIds,
+        unresolvedEmailDraftIds,
       };
     }),
 
