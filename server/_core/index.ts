@@ -995,6 +995,11 @@ async function startServer() {
     } else {
       result.noRowsFound = true;
     }
+    // 7. Recent 20 drafts
+    try {
+      const [recentRows] = await db.execute(sql.raw(`SELECT id, threadId, fromEmail, senderName, subject, status, createdAt FROM madison_email_drafts ORDER BY id DESC LIMIT 20`)) as any;
+      result.recentDrafts = recentRows;
+    } catch (e: any) { result.recentDraftsError = { message: e.message }; }
     return res.json(result);
   });
   // TEMPORARY debug endpoint — remove after login is confirmed working
