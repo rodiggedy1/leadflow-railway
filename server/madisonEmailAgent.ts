@@ -4,8 +4,7 @@
  * Pipeline: Inbound Email → Generate Draft Reply → Insert madison_email_drafts
  *           → Post madison_email_draft card to Command Chat for human approval
  *
- * Entry point: triggerMadisonEmailDraft() — fire-and-forget from processThread()
- * in gmailGlanceWorker.ts after AI classification completes.
+ * Entry point: triggerMadisonEmailDraft() — fire-and-forget from gmailRouter.ts listThreads
  *
  * Architecture rules (mirrors madisonSmsAgent.ts):
  * - This file NEVER throws — all errors are caught and written to madisonEmailDrafts.status=FAILED
@@ -14,7 +13,7 @@
  */
 import { getDb } from "./db";
 import { madisonEmailDrafts, opsChatMessages } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
@@ -33,7 +32,7 @@ export interface EmailDraftResponse {
 // ─── Pipeline Entry Point ─────────────────────────────────────────────────────
 
 /**
- * Fire-and-forget entry point. Call from processThread() after AI classification.
+ * Fire-and-forget entry point. Call from listThreads after fetching unread actionable threads.
  * Never throws — all errors are caught and written to the DB.
  */
 export async function triggerMadisonEmailDraft(params: {
@@ -45,21 +44,26 @@ export async function triggerMadisonEmailDraft(params: {
   inboundText: string;
 }): Promise<void> {
   const { threadId, inboundMessageId, fromEmail, senderName, subject, inboundText } = params;
+  const pipelineStart = Date.now();
 
   // Skip empty messages
-  if (!inboundText?.trim()) return;
-
-  const db = await getDb();
-  if (!db) {
-    console.error("[MadisonEmail] No DB connection");
+  if (!inboundText?.trim()) {
+    console.log(`[email-draft] skipped threadId=${threadId} reason=empty_body`);
     return;
   }
 
-  const now = new Date();
+  const db = await getDb();
+  if (!db) {
+    console.error(`[email-draft] error threadId=${threadId} reason=no_db_connection`);
+    return;
+  }
+
   let draftId: number | undefined;
 
   try {
-    // ── Step 0: Create draft record (RECEIVED) ────────────────────────────────
+    // ── Step 0: Claim thread (insert RECEIVED row) ────────────────────────────
+    console.log(`[email-draft] candidate threadId=${threadId} fromEmail=${fromEmail}`);
+
     const insertResult = await db.insert(madisonEmailDrafts).values({
       threadId,
       inboundMessageId,
@@ -68,15 +72,12 @@ export async function triggerMadisonEmailDraft(params: {
       subject,
       status: "RECEIVED",
       originalMessage: inboundText,
-      observations: [],
-      suggestedActions: [],
-      followUps: [],
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     }).catch((err) => {
-      // Duplicate inboundMessageId — already processed
+      // Duplicate threadId or inboundMessageId — already claimed
       if (err.message?.includes("Duplicate") || err.code === "ER_DUP_ENTRY") {
-        console.log(`[MadisonEmail] Duplicate inboundMessageId ${inboundMessageId} — skipping`);
+        console.log(`[email-draft] already_claimed threadId=${threadId} inboundMessageId=${inboundMessageId}`);
         return null;
       }
       throw err;
@@ -85,13 +86,14 @@ export async function triggerMadisonEmailDraft(params: {
     if (!insertResult) return;
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
+    console.log(`[email-draft] claim_inserted threadId=${threadId} draftId=${draftId} elapsed=${Date.now() - pipelineStart}ms`);
 
-    // ── Step 1: Classify (reuse SMS message type — same categories apply) ────
+    // ── Step 1: Mark CLASSIFIED ───────────────────────────────────────────────
     await db.update(madisonEmailDrafts)
       .set({ status: "CLASSIFIED", messageType: "QUESTION", updatedAt: new Date() })
       .where(eq(madisonEmailDrafts.id, draftId));
 
-    // ── Step 2: Knowledge retrieval (emails are almost always questions) ──────
+    // ── Step 2: Knowledge retrieval ───────────────────────────────────────────
     await db.update(madisonEmailDrafts)
       .set({ status: "TOOLS_RUNNING", updatedAt: new Date() })
       .where(eq(madisonEmailDrafts.id, draftId));
@@ -103,7 +105,8 @@ export async function triggerMadisonEmailDraft(params: {
       // Non-fatal — continue without KB context
     }
 
-    // ── Step 3: Generate Draft Reply ─────────────────────────────────────────
+    // ── Step 3: Generate Draft Reply ──────────────────────────────────────────
+    console.log(`[email-draft] llm_started threadId=${threadId} draftId=${draftId} elapsed=${Date.now() - pipelineStart}ms`);
     const draftResponse = await generateEmailDraftResponse({
       inboundText,
       senderName,
@@ -123,9 +126,10 @@ export async function triggerMadisonEmailDraft(params: {
         updatedAt: new Date(),
       })
       .where(eq(madisonEmailDrafts.id, draftId));
+    console.log(`[email-draft] draft_ready threadId=${threadId} draftId=${draftId} elapsed=${Date.now() - pipelineStart}ms`);
 
-    // ── Step 5: Post Draft Card to Command Chat ───────────────────────────────
-    await postEmailDraftCardToCommandChat({
+    // ── Step 5: Post Draft Card to Command Chat (idempotent) ──────────────────
+    const opsChatId = await postEmailDraftCardToCommandChat({
       draftId,
       threadId,
       fromEmail,
@@ -136,11 +140,12 @@ export async function triggerMadisonEmailDraft(params: {
       observations: draftResponse.observations,
       db,
     });
+    console.log(`[email-draft] ops_chat_inserted threadId=${threadId} draftId=${draftId} opsChatMessageId=${opsChatId} elapsed=${Date.now() - pipelineStart}ms`);
 
-    console.log(`[MadisonEmail] Draft ${draftId} posted for ${fromEmail} (thread=${threadId})`);
+    console.log(`[email-draft] complete threadId=${threadId} draftId=${draftId} total=${Date.now() - pipelineStart}ms`);
 
   } catch (err: any) {
-    console.error("[MadisonEmail] Pipeline error:", err);
+    console.error(`[email-draft] pipeline_error threadId=${threadId} draftId=${draftId ?? 'none'} elapsed=${Date.now() - pipelineStart}ms error_code=${err.code ?? 'UNKNOWN'} error=${err.message ?? String(err)}`);
     if (draftId) {
       const db2 = await getDb();
       if (db2) {
@@ -236,7 +241,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
       followUps: parsed.followUps ?? [],
     };
   } catch (err) {
-    console.warn("[MadisonEmail] Draft generation failed:", err);
+    console.warn("[email-draft] draft_generation_failed:", err);
     return {
       draft: `Hi ${firstName},\n\nThank you for reaching out! I'll look into this and get back to you shortly.\n\nMadison | Maids in Black`,
       intentSummary: "I drafted an email reply for you.",
@@ -248,8 +253,13 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
   }
 }
 
-// ─── Post Draft Card to Command Chat ─────────────────────────────────────────
+// ─── Post Draft Card to Command Chat (idempotent) ─────────────────────────────
 
+/**
+ * Inserts an opsChatMessages row for this draft.
+ * Idempotent: checks for an existing row with the same draftId before inserting.
+ * Returns the opsChatMessages row id (existing or newly created).
+ */
 async function postEmailDraftCardToCommandChat(params: {
   draftId: number;
   threadId: string;
@@ -260,8 +270,30 @@ async function postEmailDraftCardToCommandChat(params: {
   draft: string;
   observations: string[];
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
-}): Promise<void> {
+}): Promise<number> {
   const { draftId, threadId, fromEmail, senderName, subject, inboundText, draft, observations, db } = params;
+
+  // Idempotency check — don't insert a second card for the same draftId
+  const existing = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+    .from(opsChatMessages)
+    .where(
+      and(
+        eq(opsChatMessages.channel, "command"),
+        eq(opsChatMessages.quickAction, "madison_email_draft")
+      )
+    )
+    .limit(50);
+
+  for (const row of existing) {
+    try {
+      const meta = JSON.parse(row.metadata ?? "{}");
+      if (meta.draftId === draftId) {
+        console.log(`[email-draft] ops_chat_already_exists threadId=${threadId} draftId=${draftId} opsChatMessageId=${row.id}`);
+        return row.id;
+      }
+    } catch { /* ignore */ }
+  }
 
   const displayName = senderName ?? fromEmail;
 
@@ -275,7 +307,7 @@ async function postEmailDraftCardToCommandChat(params: {
     `Draft: ${draft}`,
   ].filter(Boolean).join("\n").trim();
 
-  await db.insert(opsChatMessages).values({
+  const insertResult = await db.insert(opsChatMessages).values({
     channel: "command",
     authorName: "Madison",
     authorRole: "system",
@@ -288,7 +320,13 @@ async function postEmailDraftCardToCommandChat(params: {
     threadParentId: null,
   });
 
+  const [header] = insertResult as any;
+  const newId = header.insertId as number;
+
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("new_message", { channel: "command" });
+  console.log(`[email-draft] sse_broadcast_sent threadId=${threadId} draftId=${draftId}`);
+
+  return newId;
 }

@@ -695,6 +695,23 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_email_drafts extra columns failed (non-fatal):', err);
   }
+  // ── madison_email_drafts: unique index on threadId (prevents duplicate drafts from race) ──
+  try {
+    const [idxRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_email_drafts'
+        AND index_name = 'uq_email_draft_thread'
+    `)) as any;
+    const exists = Array.isArray(idxRows) && idxRows[0]?.cnt > 0;
+    if (!exists) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts ADD UNIQUE KEY uq_email_draft_thread (threadId)`));
+      console.log('[Migration] madison_email_drafts uq_email_draft_thread: created');
+    } else {
+      console.log('[Migration] madison_email_drafts uq_email_draft_thread: already exists');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts threadId unique index failed (non-fatal):', err);
+  }
 
   // ── Reset stuck 'fired' confirmation_calls rows back to 'pending' ─────────────────────────────────
   // Rows get stuck in 'fired' when the fire-and-forget SMS async block failed silently.
