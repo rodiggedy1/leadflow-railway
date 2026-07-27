@@ -7342,6 +7342,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </button>
                 </>
               )}
+              {/* Debrief button */}
+              <button
+                onClick={() => window.open("/admin/madison-debrief", "_blank")}
+                className="flex items-center gap-1 rounded-full border border-[#e3e6ef] bg-white hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition whitespace-nowrap"
+                style={{ padding: "4px 10px", fontSize: "12px" }}
+                title="Open Madison Debrief"
+              >
+                <span style={{ fontSize: 12 }}>✦</span>
+                <span className="font-semibold text-[#6f3cff]">Debrief</span>
+              </button>
               {/* Payment Link button */}
               <button
                 onClick={() => setShowPaymentModal(true)}

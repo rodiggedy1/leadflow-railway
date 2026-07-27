@@ -5449,7 +5449,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
             lte(opsChatMessages.createdAt, dayEnd),
           )
         )
-        .orderBy(desc(opsChatMessages.createdAt))
+        .orderBy(opsChatMessages.createdAt)  // oldest first for chronological review
         .limit(200);
 
       return rows.map(m => ({
