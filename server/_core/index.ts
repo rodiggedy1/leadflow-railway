@@ -618,6 +618,43 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_sms_drafts intentSummary column failed (non-fatal):', err);
   }
+  // ── madison_email_drafts table ────────────────────────────────────────────
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_email_drafts (
+        id BIGINT AUTO_INCREMENT NOT NULL,
+        threadId VARCHAR(255) NOT NULL,
+        inboundMessageId VARCHAR(255) NOT NULL,
+        status ENUM('RECEIVED','CLASSIFIED','DRAFT_READY','SENDING','SENT','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED',
+        fromEmail VARCHAR(255) NOT NULL,
+        senderName VARCHAR(255),
+        subject VARCHAR(512),
+        inboundText TEXT,
+        messageType VARCHAR(64),
+        intentSummary TEXT,
+        observations JSON,
+        suggestedActions JSON,
+        followUps JSON,
+        generatedDraft TEXT,
+        approvedText TEXT,
+        approvedBy VARCHAR(128),
+        approvedAt DATETIME(3),
+        dismissedBy VARCHAR(128),
+        dismissedAt DATETIME(3),
+        sentAt DATETIME(3),
+        errorStage VARCHAR(64),
+        errorCode VARCHAR(64),
+        errorMessage TEXT,
+        createdAt DATETIME(3) NOT NULL DEFAULT NOW(3),
+        updatedAt DATETIME(3) NOT NULL DEFAULT NOW(3) ON UPDATE NOW(3),
+        CONSTRAINT madison_email_drafts_id PRIMARY KEY (id)
+      )
+    `));
+    console.log('[Migration] madison_email_drafts: OK');
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts failed (non-fatal):', err);
+  }
+
   // ── Reset stuck 'fired' confirmation_calls rows back to 'pending' ─────────────────────────────────
   // Rows get stuck in 'fired' when the fire-and-forget SMS async block failed silently.
   // Now that SMS is sent synchronously, this cleans up any legacy stuck rows on every deploy.
