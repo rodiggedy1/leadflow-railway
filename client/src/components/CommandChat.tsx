@@ -1415,7 +1415,6 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
         {/* V6 card */}
         <div style={{
           width: "100%",
-          maxWidth: 520,
           background: "#fff",
           border: "1px solid #ebe8fb",
           borderRadius: 20,
@@ -4027,7 +4026,6 @@ export function MadisonCallSummaryCard({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           width: "100%",
-          maxWidth: 520,
           background: "#fff",
           border: "1px solid #ebe8fb",
           borderRadius: 20,
