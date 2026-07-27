@@ -6594,8 +6594,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const unresolvedMadisonMsgIds = useMemo(() => {
     const draftSet = new Set(madisonCountData?.unresolvedDraftIds ?? []);
     const callSet = new Set(madisonCountData?.unresolvedCallMsgIds ?? []);
+    const emailDraftSet = new Set(madisonCountData?.unresolvedEmailDraftIds ?? []);
     return channelMsgs
-      .filter(m => draftSet.has(m.id) || callSet.has(m.id))
+      .filter(m => draftSet.has(m.id) || callSet.has(m.id) || emailDraftSet.has(m.id))
       .map(m => m.id);
   }, [channelMsgs, madisonCountData]);
   const [madisonCardIdx, setMadisonCardIdx] = useState(0);
