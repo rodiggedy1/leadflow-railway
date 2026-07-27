@@ -695,6 +695,22 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_email_drafts extra columns failed (non-fatal):', err);
   }
+  // ── madison_email_drafts: add TOOLS_RUNNING to status ENUM if missing ──
+  try {
+    const [enumRows] = await db.execute(sql.raw(`
+      SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'madison_email_drafts' AND COLUMN_NAME = 'status'
+    `)) as any;
+    const colType: string = (Array.isArray(enumRows) && enumRows[0]?.COLUMN_TYPE) ?? '';
+    if (colType && !colType.includes('TOOLS_RUNNING')) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts MODIFY COLUMN status ENUM('RECEIVED','CLASSIFIED','TOOLS_RUNNING','DRAFT_READY','SENDING','SENT','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED'`));
+      console.log('[Migration] madison_email_drafts status ENUM: added TOOLS_RUNNING');
+    } else {
+      console.log('[Migration] madison_email_drafts status ENUM: TOOLS_RUNNING already present');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts status ENUM update failed (non-fatal):', err);
+  }
   // ── madison_email_drafts: unique index on threadId (prevents duplicate drafts from race) ──
   try {
     const [idxRows] = await db.execute(sql.raw(`
