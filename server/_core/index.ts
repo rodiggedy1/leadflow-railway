@@ -744,6 +744,13 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_email_drafts replyToEmail failed (non-fatal):', err);
   }
+  // u2500u2500 conversation_sessions: change aiMode default to 0 (AI off by default) u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500
+  try {
+    await db.execute(sql.raw(`ALTER TABLE conversation_sessions MODIFY COLUMN aiMode INT NOT NULL DEFAULT 0`));
+    console.log('[Migration] conversation_sessions aiMode default: set to 0');
+  } catch (err) {
+    console.error('[Migration] conversation_sessions aiMode default failed (non-fatal):', err);
+  }
   // ── Reset stuck 'fired' confirmation_calls rows back to 'pending' ─────────────────────────────────
   // Rows get stuck in 'fired' when the fire-and-forget SMS async block failed silently.
   // Now that SMS is sent synchronously, this cleans up any legacy stuck rows on every deploy.

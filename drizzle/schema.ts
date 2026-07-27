@@ -225,7 +225,7 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * AI mode: 1 = AI auto-replies to inbound SMS (default), 0 = manual/agent takes over.
    * When an agent takes over, the AI stops responding and the agent replies from the app.
    */
-  aiMode: int("aiMode").default(1).notNull(),
+  aiMode: int("aiMode").default(0).notNull(),
   /**
    * Actual booked/invoiced amount in dollars (integer cents-free).
    * If set, this overrides quotedPrice + extras for revenue calculations.
