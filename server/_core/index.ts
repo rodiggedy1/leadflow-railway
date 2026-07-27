@@ -1000,6 +1000,16 @@ async function startServer() {
       const [recentRows] = await db.execute(sql.raw(`SELECT id, threadId, fromEmail, senderName, subject, status, createdAt FROM madison_email_drafts ORDER BY id DESC LIMIT 20`)) as any;
       result.recentDrafts = recentRows;
     } catch (e: any) { result.recentDraftsError = { message: e.message }; }
+    // 8. opsChatMessages rows for madison_email_draft cards (last 20)
+    try {
+      const [opsRows] = await db.execute(sql.raw(`SELECT id, quickAction, metadata, channel, createdAt FROM ops_chat_messages WHERE quickAction = 'madison_email_draft' ORDER BY id DESC LIMIT 20`)) as any;
+      result.opsChatDraftCards = opsRows;
+    } catch (e: any) { result.opsChatDraftCardsError = { message: e.message }; }
+    // 9. Check specifically for draft 30015 (Ashley Bloom Kenny)
+    try {
+      const [ashleyRows] = await db.execute(sql.raw(`SELECT id, quickAction, metadata, channel, createdAt FROM ops_chat_messages WHERE quickAction = 'madison_email_draft' AND metadata LIKE '%30015%'`)) as any;
+      result.ashleyCard = ashleyRows;
+    } catch (e: any) { result.ashleyCardError = { message: e.message }; }
     return res.json(result);
   });
   // TEMPORARY debug endpoint — remove after login is confirmed working
