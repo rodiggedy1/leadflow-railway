@@ -1325,7 +1325,7 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
       setJustActed("sent");
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
-      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
     },
   });
   const dismissMutation = trpc.opsChat.dismissSmsDraft.useMutation({
@@ -1333,7 +1333,7 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
       setJustActed("dismissed");
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
-      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
     },
   });
   const retryMutation = trpc.opsChat.retrySmsDraft.useMutation({
@@ -4008,7 +4008,7 @@ export function MadisonCallSummaryCard({
       const action = vars.action as string;
       setJustActed(action === "call" ? "called" : action === "text" ? "texted" : "dismissed");
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
-      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
     },
   });
   const handleDismiss = () => {
@@ -5871,7 +5871,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const markCallCardActedMutation = trpc.opsChat.markCallCardActed.useMutation({
     onSuccess: () => {
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
-      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
     },
   });
   // startCall mutation — verbatim from AICallPanel
