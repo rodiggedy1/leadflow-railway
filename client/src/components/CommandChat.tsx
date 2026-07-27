@@ -1308,6 +1308,7 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [justActed, setJustActed] = useState<"sent" | "dismissed" | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -1321,16 +1322,18 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
 
   const approveMutation = trpc.opsChat.approveSmsDraft.useMutation({
     onSuccess: () => {
-      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      setJustActed("sent");
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
     },
   });
   const dismissMutation = trpc.opsChat.dismissSmsDraft.useMutation({
     onSuccess: () => {
-      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      setJustActed("dismissed");
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
     },
   });
   const retryMutation = trpc.opsChat.retrySmsDraft.useMutation({
@@ -1407,6 +1410,35 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
     : isProcessing
     ? { label: "Drafting…", bg: "#ede9fe", color: "#6d5cff" }
     : { label: "Awaiting approval", bg: "#eef8f2", color: "#157c5a" };
+
+  // ── Confirmation flash before card disappears ──
+  if (justActed) {
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            background: justActed === "sent" ? "#f0fdf4" : "#fafafa",
+            border: `1px solid ${justActed === "sent" ? "#bbf7d0" : "#e5e7eb"}`,
+            borderRadius: 20,
+            padding: "18px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            transition: "all 0.3s",
+          }}>
+            <span style={{ fontSize: 22 }}>{justActed === "sent" ? "✅" : "✕"}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: justActed === "sent" ? "#15803d" : "#6b7280" }}>
+                {justActed === "sent" ? "Sent — Madison is handling it" : "Draft dismissed"}
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>This card will clear in a moment…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
@@ -3968,12 +4000,15 @@ export function MadisonCallSummaryCard({
   onTextBack: (name: string, phone: string, msgId: number) => void;
 }) {
   const [showTranscript, setShowTranscript] = useState(false);
+  const [justActed, setJustActed] = useState<"called" | "texted" | "dismissed" | null>(null);
   const utils = trpc.useUtils();
   const { user: currentUser } = useAuth();
   const dismissCallCardMutation = trpc.opsChat.markCallCardActed.useMutation({
-    onSuccess: () => {
-      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    onSuccess: (_data, vars) => {
+      const action = vars.action as string;
+      setJustActed(action === "call" ? "called" : action === "text" ? "texted" : "dismissed");
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
     },
   });
   const handleDismiss = () => {
@@ -4020,6 +4055,36 @@ export function MadisonCallSummaryCard({
 
   const displayName = callerName ?? callerPhone ?? "Unknown caller";
   const callLabel = callerName ? callerName.split(" ")[0] : "Customer";
+
+  // ── Confirmation flash before card disappears ──
+  if (justActed) {
+    const label = justActed === "called" ? "📞 Called — Madison is following up"
+      : justActed === "texted" ? "💬 Texted — Madison is following up"
+      : "Dismissed";
+    const isPositive = justActed !== "dismissed";
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            background: isPositive ? "#f0fdf4" : "#fafafa",
+            border: `1px solid ${isPositive ? "#bbf7d0" : "#e5e7eb"}`,
+            borderRadius: 20,
+            padding: "18px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 22 }}>{isPositive ? "✅" : "✕"}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: isPositive ? "#15803d" : "#6b7280" }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>This card will clear in a moment…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
@@ -5804,7 +5869,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const voiceCallUtils = trpc.useUtils();
   // markCallCardActed — lock the call summary card after one agent acts
   const markCallCardActedMutation = trpc.opsChat.markCallCardActed.useMutation({
-    onSuccess: () => { utils.opsChat.getUnresolvedMadisonCount.invalidate(); },
+    onSuccess: () => {
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 1800);
+    },
   });
   // startCall mutation — verbatim from AICallPanel
   const voiceStartCallMutation = trpc.callMatrix.startCall.useMutation({
