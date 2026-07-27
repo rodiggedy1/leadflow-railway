@@ -170,17 +170,21 @@ export const gmailRouter = router({
 
       // ── Fire-and-forget: trigger Madison email draft for actionable unread threads
       // that don't already have a draft row. Same data path as the sidebar.
+      console.log(`[listThreads] draft trigger check: isSearch=${isSearch} unreadOnly=${input.unreadOnly} pageRows=${pageRows.length}`);
       if (!isSearch && input.unreadOnly && pageRows.length > 0) {
         const threadIds = pageRows.map((r) => r.threadId);
+        console.log(`[listThreads] checking ${threadIds.length} threads for existing drafts`);
         db.select({ threadId: madisonEmailDrafts.threadId })
           .from(madisonEmailDrafts)
           .where(inArray(madisonEmailDrafts.threadId, threadIds))
           .then((existingDrafts) => {
             const draftedSet = new Set(existingDrafts.map((d) => d.threadId));
             const undrafted = pageRows.filter((r) => !draftedSet.has(r.threadId) && r.senderEmail && r.snippet);
+            console.log(`[listThreads] existingDrafts=${existingDrafts.length} undrafted=${undrafted.length}`);
             if (undrafted.length === 0) return;
             import("./madisonEmailAgent").then(({ triggerMadisonEmailDraft }) => {
               for (const row of undrafted) {
+                console.log(`[listThreads] firing draft for threadId=${row.threadId} from=${row.senderEmail}`);
                 triggerMadisonEmailDraft({
                   threadId: row.threadId,
                   inboundMessageId: row.threadId,
