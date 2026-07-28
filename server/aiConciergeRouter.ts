@@ -1215,6 +1215,7 @@ Just write what the AI will say when the call connects.`,
   } as CallClientConfirmResult;
 }
 async function draftClientMessage(messageHint: string | null, clientName: string): Promise<string> {
+  console.log("[draftClientMessage] messageHint:", JSON.stringify(messageHint), "clientName:", clientName);
   const firstName = clientName.split(" ")[0];
   const userParts: string[] = [];
   userParts.push(`Customer's first name: ${firstName}`);
