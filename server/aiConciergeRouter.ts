@@ -1216,18 +1216,17 @@ Just write what the AI will say when the call connects.`,
 }
 async function draftClientMessage(messageHint: string | null, clientName: string): Promise<string> {
   const firstName = clientName.split(" ")[0];
+  const userParts: string[] = [];
+  userParts.push(`Customer's first name: ${firstName}`);
+  if (messageHint) {
+    userParts.push(`Customer service scenario: ${messageHint}`);
+  } else {
+    userParts.push("Based on the context, write the best SMS to send to this customer now.");
+  }
   const result = await invokeLLM({
     messages: [
-      {
-        role: "system",
-        content: buildSystemPrompt(),
-      },
-      {
-        role: "user",
-        content: messageHint
-          ? `Draft an SMS to client ${firstName}. The message MUST communicate this specific thing: "${messageHint}". Do NOT change the topic, do NOT write something different, do NOT add unrelated content. Write the exact message to send — warm, personal, on-brand, addressed by first name. Stay on topic.`
-          : `Draft a warm, personal check-in SMS to client ${firstName}. Address them by first name. Keep it brief and genuine.`,
-      },
+      { role: "system", content: buildSystemPrompt() },
+      { role: "user", content: userParts.join("\n\n") },
     ],
   });
   return (result.choices[0].message.content as string).trim();
