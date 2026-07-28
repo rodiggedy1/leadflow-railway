@@ -676,6 +676,9 @@ export function registerWebhookRoutes(app: Express) {
             body: inboundText.length > 120 ? inboundText.slice(0, 120) + '…' : inboundText,
             meta: { leadPhone: fromPhone, sessionId: newSessionId, source: 'inbound-sms' },
           }).catch(() => {});
+          // Broadcast so SSE-driven lead list invalidation picks up the new lead immediately
+          const { broadcastOpsUpdate: bcastNewLead } = await import('./sseBroadcast');
+          bcastNewLead('lead_update');
         } catch (createErr) {
           console.error('[Webhook] Failed to create inbound-sms session:', createErr);
         }
