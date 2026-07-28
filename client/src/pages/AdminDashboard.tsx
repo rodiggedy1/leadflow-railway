@@ -3431,6 +3431,7 @@ function AgentManagement() {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
+  const utils = trpc.useUtils();
   // ── Auth state (must come before all other hooks) ────────────────────────────────────
   const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, staleTime: 5 * 60 * 1000 });
   const isAdmin = meQuery.data?.isAdmin === true;
@@ -3498,7 +3499,7 @@ export default function AdminDashboard() {
       toast.success("Lead added and claimed!");
       setAddLeadOpen(false);
       setAddLeadForm({ name: "", phone: "", email: "", serviceType: "Standard Cleaning", notes: "", amount: "", status: "QUOTE_SENT", source: "phone" });
-      trpcUtils.leads.list.invalidate();
+      utils.leads.list.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -3537,12 +3538,13 @@ export default function AdminDashboard() {
     isLoading: sessionsLoading,
     refetch,
     isFetching,
-  } = trpc.leads.list.useQuery({}, { refetchInterval: 30000, enabled: hasSession });
+  } = trpc.leads.list.useQuery({}, { refetchInterval: 5 * 60_000, enabled: hasSession });
 
   // Global new-reply chime — fires for ANY session that gets a new customer reply,
   // regardless of whether a conversation drawer is open.
   useLeadReplyNotifier(sessions);
   useOpsStream({
+    onLeadUpdate: () => { utils.leads.list.invalidate(); },
     onPhoneUpdate: (leadName, newPhone) => {
       toast.success(`Updated ${leadName}'s phone to ${newPhone}`, { duration: 8000 });
     },
@@ -3685,23 +3687,23 @@ export default function AdminDashboard() {
   });
 
   // ── Activity feed → open drawer by session ID ────────────────────────────────
-  const trpcUtils = trpc.useUtils();
+  // trpcUtils alias removed — use `utils` declared at top of component
   const bulkDeleteMutation = trpc.leads.bulkDeleteLeads.useMutation({
     onSuccess: (data) => {
       toast.success(`${data.deleted} lead${data.deleted === 1 ? '' : 's'} deleted`);
       setSelectedIds(new Set());
       setBulkDeleteConfirmOpen(false);
-      trpcUtils.leads.list.invalidate();
-      trpcUtils.leads.stats.invalidate();
-      trpcUtils.leads.attentionItems.invalidate();
-      trpcUtils.opsChat.getCommandChatData.invalidate();
+      utils.leads.list.invalidate();
+      utils.leads.stats.invalidate();
+      utils.leads.attentionItems.invalidate();
+      utils.opsChat.getCommandChatData.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });
   const bookLeadMutation = trpc.leads.agentUpdateStage.useMutation({
     onSuccess: () => {
-      trpcUtils.leads.list.invalidate();
-      trpcUtils.leads.stats.invalidate();
+      utils.leads.list.invalidate();
+      utils.leads.stats.invalidate();
       toast.success("Lead booked");
     },
     onError: (e) => toast.error(e.message),
@@ -3715,7 +3717,7 @@ export default function AdminDashboard() {
     }
     // Otherwise fetch it directly
     try {
-      const session = await trpcUtils.leads.getById.fetch({ id: sessionId });
+      const session = await utils.leads.getById.fetch({ id: sessionId });
       if (session) {
         setSelectedSession(session as unknown as DrawerSession);
       }
@@ -3840,8 +3842,8 @@ export default function AdminDashboard() {
   // Mark lead as read when the side panel opens — clears the unread badge immediately
   const panelMarkReadMutation = trpc.leads.markRead.useMutation({
     onSuccess: () => {
-      trpcUtils.leads.list.invalidate();
-      trpcUtils.leads.getLeadReplies.invalidate();
+      utils.leads.list.invalidate();
+      utils.leads.getLeadReplies.invalidate();
     },
   });
   useEffect(() => {

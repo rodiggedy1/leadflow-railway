@@ -1857,18 +1857,18 @@ export default function AgentDashboard() {
   );
 
   // Leads
-  const { data: allSessions = [], isLoading, refetch, isFetching } = trpc.leads.list.useQuery(
+    const { data: allSessions = [], isLoading, refetch, isFetching } = trpc.leads.list.useQuery(
     { dateFrom, dateTo },
     {
       enabled: !!agentMe,
-      refetchInterval: 30_000,
+      refetchInterval: 5 * 60_000, // 5-min safety-net fallback; SSE invalidation handles real-time updates
     }
   );
-
   // Global new-reply chime — fires for ANY session that gets a new customer reply,
   // regardless of whether a conversation drawer is open.
   useLeadReplyNotifier(allSessions);
   useOpsStream({
+    onLeadUpdate: () => { utils.leads.list.invalidate(); },
     onPhoneUpdate: (leadName, newPhone) => {
       toast.success(`Updated ${leadName}'s phone to ${newPhone}`, { duration: 8000 });
     },
