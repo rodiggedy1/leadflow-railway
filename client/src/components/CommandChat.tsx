@@ -2405,6 +2405,70 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
 }
 
 // ── MadisonCommandPaymentCard — ephemeral confirm card shown above composer after @madison send payment link ──
+// ── MadisonDisambiguationCard — shown when @madison finds multiple customers ──
+interface MadisonDisambigMatch {
+  phone: string;
+  name: string;
+  city: string | null;
+  totalCleans: number;
+  ltv?: number;
+  lastJobDate: string | null;
+  entityType?: "customer" | "cleaner";
+  cleanerProfileId?: number;
+}
+interface MadisonDisambigCard {
+  messageHint: string | null;
+  matches: MadisonDisambigMatch[];
+}
+function MadisonCommandDisambigCard({ card, onPick, onDismiss }: { card: MadisonDisambigCard; onPick: (phone: string, name: string) => void; onDismiss: () => void }) {
+  const customers = card.matches.filter((m) => m.entityType !== "cleaner");
+  const cleaners = card.matches.filter((m) => m.entityType === "cleaner");
+  const hasBothSections = customers.length > 0 && cleaners.length > 0;
+
+  function renderMatch(m: MadisonDisambigMatch) {
+    return (
+      <button
+        key={m.phone + (m.cleanerProfileId ?? "")}
+        onClick={() => onPick(m.phone, m.name)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, borderRadius: 12, padding: "10px 12px", textAlign: "left", background: "rgba(255,255,255,0.7)", border: "1px solid #e5d9ea", cursor: "pointer", marginBottom: 6, transition: "background .15s" }}
+        onMouseEnter={e => (e.currentTarget.style.background = "#f3eeff")}
+        onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.7)")}
+      >
+        <span style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: "rgba(116,71,245,0.12)" }}>
+          {m.entityType === "cleaner" ? <Users className="w-4 h-4" style={{ color: "#7447f5" }} /> : <User className="w-4 h-4" style={{ color: "#7447f5" }} />}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#202431", margin: 0 }}>{m.name}</p>
+          <p style={{ fontSize: 12, color: "#8a8a9a", margin: 0, marginTop: 2 }}>{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 420, marginBottom: 8, marginLeft: 2, marginRight: 2 }}>
+      <div style={{ background: "linear-gradient(135deg,#fffdf9,#f7f0ff)", border: "1px solid #e5d9ea", borderRadius: 20, overflow: "hidden", boxShadow: "0 12px 30px rgba(24,32,51,.08)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #e5d9ea" }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#202431", margin: 0 }}>Multiple matches — choose one</p>
+          <button onClick={onDismiss} style={{ background: "#f0f2f7", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#667085", fontSize: 14 }}>✕</button>
+        </div>
+        <div style={{ padding: "12px 16px" }}>
+          {hasBothSections ? (
+            <>
+              <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a8a9a", marginBottom: 8 }}>Customers</p>
+              {customers.map(renderMatch)}
+              <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a8a9a", marginBottom: 8, marginTop: 12 }}>Teams / Cleaners</p>
+              {cleaners.map(renderMatch)}
+            </>
+          ) : (
+            card.matches.map(renderMatch)
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type MadisonPaymentConfirm = {
   type: "payment_link_confirm";
   recipientName: string;
@@ -6417,7 +6481,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceCardMinimized, setVoiceCardMinimized] = useState(false);
   // ── @madison command state ─────────────────────────────────────────────────────────────────────────────
   const [madisonPendingCard, setMadisonPendingCard] = useState<MadisonPaymentConfirm | null>(null);
+  const [madisonDisambigCard, setMadisonDisambigCard] = useState<MadisonDisambigCard | null>(null);
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
+  const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
@@ -7035,7 +7101,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Post the user's @madison message to the feed
       onSendMessage(text);
       setComposer("");
+      originalMadisonMessageRef.current = message;
       setMadisonChatLoading(true);
+      setMadisonDisambigCard(null);
       madisonChatMutation.mutate(
         { message },
         {
@@ -7044,11 +7112,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             if (result.type === "payment_link_confirm") {
               setMadisonPendingCard(result as MadisonPaymentConfirm);
             } else if (result.type === "client_disambiguation") {
-              toast.info(`Multiple matches found for that customer. Please use the Madison tab to disambiguate.`);
+              setMadisonDisambigCard(result as MadisonDisambigCard);
             } else if (result.type === "not_found") {
               toast.error(`Madison: Customer not found.`);
             } else {
-              // For other result types, show a brief toast
               toast.info(`Madison: ${(result as any).answer ?? (result as any).message ?? "Done."}`);
             }
           },
@@ -9132,6 +9199,40 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#7447f5" }} />
               <span style={{ fontSize: 13, color: "#7447f5", fontWeight: 600 }}>Madison is thinking…</span>
             </div>
+          )}
+          {madisonDisambigCard && (
+            <MadisonCommandDisambigCard
+              card={madisonDisambigCard}
+              onDismiss={() => setMadisonDisambigCard(null)}
+              onPick={(phone, name) => {
+                setMadisonDisambigCard(null);
+                setMadisonChatLoading(true);
+                madisonChatMutation.mutate(
+                  {
+                    message: originalMadisonMessageRef.current,
+                    resolvedClientPhone: phone,
+                    resolvedClientName: name,
+                    resolvedPaymentLink: true,
+                  },
+                  {
+                    onSuccess: (result) => {
+                      setMadisonChatLoading(false);
+                      if (result.type === "payment_link_confirm") {
+                        setMadisonPendingCard(result as MadisonPaymentConfirm);
+                      } else if (result.type === "client_disambiguation") {
+                        setMadisonDisambigCard(result as MadisonDisambigCard);
+                      } else {
+                        toast.info(`Madison: ${(result as any).answer ?? (result as any).message ?? "Done."}`);
+                      }
+                    },
+                    onError: (err) => {
+                      setMadisonChatLoading(false);
+                      toast.error(`Madison error: ${err.message}`);
+                    },
+                  }
+                );
+              }}
+            />
           )}
           {madisonPendingCard && (
             <MadisonCommandPaymentCard
