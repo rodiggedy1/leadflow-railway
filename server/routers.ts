@@ -3369,13 +3369,12 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // Async LLM status scoring — fires after response is sent, never blocks.
         // Uses messageCount from summary column for staleness check.
         // scoreAndCacheStatusById fetches messageHistory itself only when scoring is needed.
-        import("./csStatusScorer").then(({ scoreAndCacheStatusById }) => {
+        import("./csStatusScorer").then(({ enqueueScoring }) => {
           for (const s of result) {
             const msgLen = s.messageCount ?? 0;
             const isTeam = s.leadSource === "cs-inbound-cleaner";
             if (s.csStatusMsgLen !== msgLen) {
-              scoreAndCacheStatusById(s.id, isTeam)
-                .catch(() => { /* silent — scoring is best-effort */ });
+              enqueueScoring(s.id, isTeam); // concurrency-limited, deduped, fire-and-forget
             }
           }
         }).catch(() => { /* silent */ });

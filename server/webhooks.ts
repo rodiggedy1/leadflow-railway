@@ -49,7 +49,7 @@ import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
 import { getSetting } from "./settingsRouter";
 import { pauseEnrollment, endEnrollment } from "./nurtureSequence";
 import { ENV } from "./_core/env";
-import { scoreAndCacheStatusById } from "./csStatusScorer";
+import { enqueueScoring } from "./csStatusScorer";
 import { computeSessionSummary } from "./sessionSummary";
 
 export function registerWebhookRoutes(app: Express) {
@@ -2483,9 +2483,7 @@ async function handleCsInboundMessage(msg: any) {
   })());
   if (resolvedSessionId) {
     // Fire LLM status scoring async (non-blocking) — updates csStatusTier in real-time on new message
-    scoreAndCacheStatusById(resolvedSessionId, isCleaner).catch(err =>
-      console.warn("[CS] scoreAndCacheStatusById error:", err)
-    );
+    enqueueScoring(resolvedSessionId, isCleaner); // concurrency-limited, deduped, fire-and-forget
     syncAllOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
       console.warn("[CS] syncAllOutboundMessages error:", err)
     );
