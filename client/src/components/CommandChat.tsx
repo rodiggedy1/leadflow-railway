@@ -2992,6 +2992,143 @@ function MadisonCallResultCard({ msg }: { msg: { id: number; metadata: string | 
   );
 }
 
+// ── MadisonEmailResultCard — persistent feed card posted after @madison email is sent ──
+function MadisonEmailResultCard({ msg }: { msg: { id: number; metadata: string | null; createdAt: string | Date } }) {
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  let meta: { recipientName?: string; recipientEmail?: string; subject?: string; sentTime?: string } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+  const name = meta.recipientName ?? "Customer";
+  const msgTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="flex gap-3 items-start px-4 py-2">
+      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✶ AI</span>
+          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
+        </div>
+        <div style={{ maxWidth: 540, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #eee" }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: "#eff6ff", display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 }}>✉️</div>
+            <div style={{ marginLeft: 14, flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>Email Sent</div>
+              <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>Madison completed this action successfully.</div>
+            </div>
+            <div style={{ marginLeft: "auto", background: "#ecfdf3", color: "#087443", padding: "6px 10px", borderRadius: 999, fontWeight: 700, fontSize: 12, flexShrink: 0 }}>Completed</div>
+          </div>
+          <div style={{ padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Customer</span>
+              <b style={{ color: "#111827" }}>{name}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Email</span>
+              <b style={{ color: "#111827" }}>{meta.recipientEmail ?? ""}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: meta.subject ? "1px solid #f3f4f6" : "none", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Sent</span>
+              <b style={{ color: "#111827" }}>Email • {meta.sentTime || msgTime}</b>
+            </div>
+            {meta.subject && (
+              <div style={{ marginTop: 18, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, fontStyle: "italic", color: "#555", fontSize: 13, lineHeight: 1.55, wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                Subject: "{meta.subject}"
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ── MadisonCommandEmailCard — ephemeral confirm card for @madison email [customer] ──
+type MadisonEmailConfirm = {
+  type: "email_confirm";
+  recipientName: string;
+  recipientFirstName: string;
+  recipientEmail: string;
+  subject: string;
+  draftBody: string;
+  command?: string;
+};
+function MadisonCommandEmailCard({ card, onDismiss }: { card: MadisonEmailConfirm; onDismiss: () => void }) {
+  const [subject, setSubject] = useState(card.subject);
+  const [body, setBody] = useState(card.draftBody);
+  const [sent, setSent] = useState(false);
+  const sendMutation = trpc.gmail.composeNew.useMutation();
+  const postResultMutation = trpc.opsChat.postEmailResult.useMutation();
+  const utils = trpc.useUtils();
+  const name = card.recipientName;
+  const firstName = card.recipientFirstName;
+  function handleSend() {
+    if (sent || sendMutation.isPending) return;
+    const bodyHtml = body.replace(/\n/g, "<br/>");
+    sendMutation.mutate(
+      { to: card.recipientEmail, subject, bodyHtml },
+      {
+        onSuccess: () => {
+          setSent(true);
+          const sentTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          postResultMutation.mutate(
+            { recipientName: name, recipientEmail: card.recipientEmail, subject, sentTime },
+            { onSuccess: () => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }) }
+          );
+          setTimeout(() => onDismiss(), 2000);
+        },
+        onError: (err) => toast.error(`Failed to send email: ${err.message}`),
+      }
+    );
+  }
+  return (
+    <div style={{ maxWidth: 480, marginBottom: 8, marginLeft: 2, marginRight: 2 }}>
+      <div style={{ background: "#fff", border: "1px solid #e7eaf0", borderRadius: 20, overflow: "hidden", boxShadow: "0 12px 30px rgba(24,32,51,.08)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #e7eaf0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: "#eff6ff", display: "grid", placeItems: "center", fontSize: 22 }}>✉️</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#172033" }}>Send Email</div>
+              <div style={{ fontSize: 12, color: "#667085", marginTop: 2 }}>Communication · {name}</div>
+            </div>
+          </div>
+          <button onClick={onDismiss} style={{ background: "#f0f2f7", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#667085", fontSize: 14 }}>✕</button>
+        </div>
+        <div style={{ border: "1px solid #e7eaf0", borderRadius: 14, margin: "14px 16px 0", overflow: "hidden" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", borderBottom: "1px solid #e7eaf0", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>To</span>
+            <b style={{ color: "#172033" }}>{name} &lt;{card.recipientEmail}&gt;</b>
+          </div>
+          <div style={{ display: "flex", gap: 16, padding: "10px 12px", fontSize: 13, alignItems: "center" }}>
+            <span style={{ color: "#667085", flexShrink: 0 }}>Subject</span>
+            <input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              disabled={sent || sendMutation.isPending}
+              style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, color: "#172033", fontWeight: 600 }}
+            />
+          </div>
+        </div>
+        <div style={{ padding: "14px 16px 0" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Email body</div>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            disabled={sent || sendMutation.isPending}
+            rows={6}
+            style={{ width: "100%", background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "11px 12px", fontSize: 13, color: "#172033", fontFamily: "inherit", resize: "vertical", outline: "none", wordBreak: "break-word", overflowWrap: "anywhere" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: "14px 16px 16px" }}>
+          <button onClick={handleSend} disabled={sent || sendMutation.isPending} style={{ flex: 1, background: "#2563eb", color: "#fff", border: "none", borderRadius: 11, padding: "10px 13px", fontWeight: 800, cursor: "pointer", fontSize: 13, opacity: (sent || sendMutation.isPending) ? 0.6 : 1 }}>
+            {sent ? "✓ Sent" : sendMutation.isPending ? "Sending…" : `Send Email to ${firstName}`}
+          </button>
+          <button onClick={onDismiss} style={{ background: "#f0f2f7", color: "#4c556b", border: "none", borderRadius: 11, padding: "10px 13px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 // ── MadisonCallConfirmCard — ephemeral confirm card for @madison call [customer] ──
 type MadisonCallConfirm = {
   type: "call_client_confirm";
@@ -4899,6 +5036,7 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_payment_result") { return <MadisonPaymentResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_sms_result") { return <MadisonSmsResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_call_result") { return <MadisonCallResultCard key={msg.id} msg={msg} />; }
+                if (msg.quickAction === "madison_email_result") { return <MadisonEmailResultCard key={msg.id} msg={msg} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
@@ -7098,6 +7236,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonCallConfirmCard, setMadisonCallConfirmCard] = useState<MadisonCallConfirm | null>(null);
   const [madisonCallPendingCard, setMadisonCallPendingCard] = useState<MadisonCallPending | null>(null);
   const [madisonDisambigCard, setMadisonDisambigCard] = useState<MadisonDisambigCard | null>(null);
+  const [madisonEmailConfirmCard, setMadisonEmailConfirmCard] = useState<MadisonEmailConfirm | null>(null);
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
@@ -7724,6 +7863,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonSmsPendingCard(null);
       setMadisonCallConfirmCard(null);
       setMadisonCallPendingCard(null);
+      setMadisonEmailConfirmCard(null);
       madisonChatMutation.mutate(
         { message },
         {
@@ -7735,6 +7875,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setMadisonSmsPendingCard(result as MadisonSmsConfirm);
             } else if (result.type === "call_client_confirm") {
               setMadisonCallConfirmCard(result as MadisonCallConfirm);
+            } else if (result.type === "email_confirm") {
+              setMadisonEmailConfirmCard(result as MadisonEmailConfirm);
             } else if (result.type === "client_disambiguation") {
               setMadisonDisambigCard(result as MadisonDisambigCard);
             } else if (result.type === "not_found") {
@@ -9836,17 +9978,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 const disambigHint = madisonDisambigCard?.messageHint ?? null;
                 const isPaymentCmd = disambigHint === "__payment_link__";
                 const isCallCmd = (disambigHint ?? "").startsWith("__call_client__");
+                const isEmailCmd = (disambigHint ?? "").startsWith("__email_client__");
                 const callQuestionHint = isCallCmd ? (disambigHint ?? "").replace("__call_client__:", "") || null : null;
+                const emailMessageHint = isEmailCmd ? (disambigHint ?? "").replace("__email_client__:", "") || null : null;
                 madisonChatMutation.mutate(
                   {
-                    message: isPaymentCmd ? `Send payment link to ${name}` : isCallCmd ? `Call ${name}` : originalMadisonMessageRef.current,
+                    message: isPaymentCmd ? `Send payment link to ${name}` : isCallCmd ? `Call ${name}` : isEmailCmd ? `Email ${name}` : originalMadisonMessageRef.current,
                     resolvedClientPhone: phone,
-                    resolvedClientMessageHint: (isPaymentCmd || isCallCmd) ? null : disambigHint,
+                    resolvedClientMessageHint: (isPaymentCmd || isCallCmd || isEmailCmd) ? null : disambigHint,
                     resolvedPaymentLink: isPaymentCmd,
-                    resolvedClientName: (isPaymentCmd || isCallCmd) ? name : undefined,
+                    resolvedClientName: (isPaymentCmd || isCallCmd || isEmailCmd) ? name : undefined,
                     resolvedCallClient: isCallCmd,
                     resolvedCallPersonName: isCallCmd ? name : undefined,
                     resolvedCallQuestionHint: callQuestionHint,
+                    resolvedEmailClient: isEmailCmd,
+                    resolvedEmailMessageHint: emailMessageHint,
                   },
                   {
                     onSuccess: (result) => {
@@ -9857,6 +10003,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         setMadisonSmsPendingCard(result as MadisonSmsConfirm);
                       } else if (result.type === "call_client_confirm") {
                         setMadisonCallConfirmCard(result as MadisonCallConfirm);
+                      } else if (result.type === "email_confirm") {
+                        setMadisonEmailConfirmCard(result as MadisonEmailConfirm);
                       } else if (result.type === "client_disambiguation") {
                         setMadisonDisambigCard(result as MadisonDisambigCard);
                       } else {
@@ -9892,6 +10040,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 setMadisonCallConfirmCard(null);
                 setMadisonCallPendingCard(pending);
               }}
+            />
+          )}
+          {madisonEmailConfirmCard && (
+            <MadisonCommandEmailCard
+              card={madisonEmailConfirmCard}
+              onDismiss={() => setMadisonEmailConfirmCard(null)}
             />
           )}
           {madisonCallPendingCard && (

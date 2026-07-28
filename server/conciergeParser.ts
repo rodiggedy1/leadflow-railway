@@ -65,7 +65,7 @@ interface ParsedResponse {
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
   "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta",
-  "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "unknown",
+  "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "email_client", "unknown",
 ] as const;
 
 const VALID_FIELDS: RequestedField[] = [
@@ -107,6 +107,7 @@ const ACTION_ALLOWED_TARGET_TYPES: Partial<Record<QueryPlan["action"], TargetTyp
   text_client:      ["customer"],
   send_payment_link:["customer"],
   call_client:      ["customer", "cleaner"],   // could call a cleaner too
+  email_client:     ["customer"],
   text_cleaners:    ["cleaner", "team"],
   eta_update:       ["cleaner", "team"],
   get_eta_for_customer: ["customer"],
@@ -256,6 +257,7 @@ Choose ONE of:
 - "text_client" — user wants to send an SMS to a specific customer
 - "send_payment_link" — user wants to send a Stripe card-on-file link to a customer
 - "call_client" — user wants to place an outbound call to a customer
+- "email_client" — user wants to send an email to a specific customer (e.g. "email Rohan Gilkes and say...", "send an email to Mary about...")
 - "eta_update" — user wants to trigger an ETA call to a team
 - "get_eta_for_customer" — user wants the ETA for a specific customer's job
 - "card_status" — user wants to see credit card / payment hold status for jobs on a specific date (e.g. "show cards on hold for tomorrow", "card status for July 21", "which customers have pre-auth today")
@@ -308,8 +310,8 @@ Rules:
 ## Action-specific hints (only for non-query actions)
 - teamHint: team or cleaner name for eta_update
 - targetHint: who to text for text_cleaners (exact name or group like "all", "DC", "team 5")
-- clientName: exact customer full name for text_client, send_payment_link, call_client
-- messageHint: message content or topic for text_client or text_cleaners
+- clientName: exact customer full name for text_client, send_payment_link, call_client, email_client
+- messageHint: message content or topic for text_client, text_cleaners, or email_client
 - questionHint: topic/question to ask for call_client; for unanswered_sms, the wait threshold in minutes as a plain number string (e.g. "30", "60")
 
 ## targetType
@@ -333,6 +335,9 @@ Classify who the action targets:
 "Call Rohan Gilkes" → action: "call_client", clientName: "Rohan Gilkes", questionHint: null, targetType: "customer", requestedFields: []
 "Call James and ask about his upcoming appointment" → action: "call_client", clientName: "James", questionHint: "upcoming appointment", targetType: "customer", requestedFields: []
 "Phone Mary Jones" → action: "call_client", clientName: "Mary Jones", questionHint: null, targetType: "customer", requestedFields: []
+"Email Rohan Gilkes and say the team is running late" → action: "email_client", clientName: "Rohan Gilkes", messageHint: "running late", targetType: "customer", requestedFields: []
+"Email James Jones that we need to reschedule" → action: "email_client", clientName: "James Jones", messageHint: "need to reschedule", targetType: "customer", requestedFields: []
+"Send an email to Cindy about her appointment" → action: "email_client", clientName: "Cindy", messageHint: "appointment", targetType: "customer", requestedFields: []
 "Show me cards on hold for tomorrow" → action: "card_status", timeScope: {type: "tomorrow"}, requestedFields: []
 "Card status for today" → action: "card_status", timeScope: {type: "today"}, requestedFields: []
 "Rank teams by rating" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
@@ -379,7 +384,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "email_client", "unknown"],
             },
             entities: {
               type: "object",
@@ -489,7 +494,7 @@ function fallbackPlan(message: string): QueryPlan {
 // every handler in this PR.
 
 export interface LegacyIntent {
-  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unanswered_sms" | "generate_invoice" | "unknown";
+  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unanswered_sms" | "generate_invoice" | "email_client" | "unknown";
   teamHint?: string | null;
   targetHint?: string | null;
   clientName?: string | null;

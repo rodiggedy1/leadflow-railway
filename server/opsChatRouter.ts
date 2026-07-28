@@ -5187,6 +5187,46 @@ Rules that ALWAYS apply regardless of instruction:
     }),
 
   /**
+   * postEmailResult — posts a persistent email-sent result card to the command feed.
+   * Called by the client after gmail.composeNew succeeds via @madison email command.
+   */
+  postEmailResult: opsChatProcedure
+    .input(
+      z.object({
+        recipientName: z.string().max(128),
+        recipientEmail: z.string().max(320),
+        subject: z.string().max(500),
+        sentTime: z.string().max(32),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const metadata = JSON.stringify({
+        recipientName: input.recipientName,
+        recipientEmail: input.recipientEmail,
+        subject: input.subject,
+        sentTime: input.sentTime,
+      });
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "Madison",
+        authorRole: "system",
+        body: `Email sent to ${input.recipientName}`,
+        mediaUrl: null,
+        quickAction: "madison_email_result",
+        metadata,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
+      const messageId = (insertResult as any).insertId as number;
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true, messageId };
+    }),
+  /**
    * dismissMadisonPost — marks a recommendation card as dismissed ("Not right now").
    */
   dismissMadisonPost: opsChatProcedure
