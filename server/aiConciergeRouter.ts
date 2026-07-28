@@ -1264,31 +1264,47 @@ async function handleEmailClient(
 
   if (resolvedClientPhone) {
     const q = `%${resolvedClientPhone}%`;
+    // Fetch multiple rows so we can coalesce email across bookings (old rows may have null email)
     const rows = await db.select({ name: completedJobs.name, email: completedJobs.email, phone: completedJobs.phone })
       .from(completedJobs)
       .where(like(completedJobs.phone, q))
-      .limit(1);
+      .orderBy(desc(completedJobs.id))
+      .limit(10);
     if (rows.length > 0) {
       recipientName = rows[0].name ?? recipientName;
-      recipientEmail = rows[0].email ?? null;
+      // Take first non-null email across all rows for this customer
+      recipientEmail = rows.find(r => r.email)?.email ?? null;
     }
   } else if (clientName) {
-    // Search by name
+    // Search by name — fetch more rows so we can deduplicate by phone
     const nameParts = clientName.trim().split(/\s+/);
     const conditions = nameParts.map(p => like(completedJobs.name, `%${p}%`));
     const rows = await db.select({ name: completedJobs.name, email: completedJobs.email, phone: completedJobs.phone })
       .from(completedJobs)
       .where(and(...conditions))
       .orderBy(desc(completedJobs.id))
-      .limit(5);
+      .limit(30);
     if (rows.length === 0) {
       return { type: "error", message: `I couldn't find a customer named "${clientName}" in the system.` };
     }
-    if (rows.length > 1) {
-      // Multiple matches — return disambiguation with __email_client__ sentinel
-      const matches = rows.map(r => ({
-        phone: r.phone ?? "",
-        name: r.name ?? clientName,
+    // Deduplicate by phone — same customer can have many bookings
+    const byPhone = new Map<string, { name: string; email: string | null; phone: string }>();
+    for (const r of rows) {
+      const key = r.phone ?? "";
+      const existing = byPhone.get(key);
+      if (existing) {
+        // Coalesce email: keep first non-null
+        if (!existing.email && r.email) existing.email = r.email;
+      } else {
+        byPhone.set(key, { name: r.name ?? clientName, email: r.email ?? null, phone: key });
+      }
+    }
+    const uniqueCustomers = Array.from(byPhone.values());
+    if (uniqueCustomers.length > 1) {
+      // Multiple distinct customers — return disambiguation with __email_client__ sentinel
+      const matches = uniqueCustomers.map(r => ({
+        phone: r.phone,
+        name: r.name,
         city: null as string | null,
         totalCleans: 0,
         ltv: 0,
@@ -1297,9 +1313,10 @@ async function handleEmailClient(
       }));
       return { type: "client_disambiguation", query: clientName, messageHint: `__email_client__:${messageHint ?? ""}`, matches };
     }
-    recipientName = rows[0].name ?? clientName;
-    recipientEmail = rows[0].email ?? null;
-    recipientPhone = rows[0].phone ?? null;
+    const customer = uniqueCustomers[0];
+    recipientName = customer.name;
+    recipientEmail = customer.email;
+    recipientPhone = customer.phone;
   }
 
   if (!recipientEmail) {
