@@ -2418,9 +2418,8 @@ type MadisonPaymentConfirm = {
 function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentConfirm; onDismiss: () => void }) {
   const [smsText, setSmsText] = useState(card.smsText);
   const [sent, setSent] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const sendMutation = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
-  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  const expiryDate = new Date(card.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   function handleSend() {
     if (sent || sendMutation.isPending) return;
@@ -2445,87 +2444,94 @@ function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentCo
   }
 
   return (
-    <div className="mb-2 mx-1" style={{ maxWidth: 520 }}>
-      {/* Madison header row */}
-      <div className="flex items-center gap-2 mb-2 px-1">
-        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
-          <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
-        </div>
-        <span className="font-bold text-[13px]" style={{ color: "#312e81" }}>Madison</span>
-        <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
-        <span className="ml-auto text-[11px] px-2.5 py-0.5 rounded-full font-semibold" style={{ background: sent ? "#ecfdf5" : "#e8f8ee", color: sent ? "#15803d" : "#15803d" }}>
-          {sent ? "Completed" : "Awaiting approval"}
-        </span>
-      </div>
-      {/* Card shell */}
-      <div style={{ background: "#fff", border: "1.5px solid #e0d9f8", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 16px rgba(99,102,241,0.08)" }}>
-        {/* Header */}
-        <div style={{ background: "linear-gradient(135deg,#7447f5,#9b6ff5)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <CreditCard className="w-4 h-4" style={{ color: "#fff" }} />
-            <span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>Send Payment Link</span>
+    <div style={{ maxWidth: 420, marginBottom: 8, marginLeft: 2, marginRight: 2 }}>
+      {/* Card shell — design system vibe */}
+      <div style={{ background: "#fff", border: "1px solid #e7eaf0", borderRadius: 20, padding: 18, boxShadow: "0 12px 30px rgba(24,32,51,.08)", transition: ".2s transform,.2s box-shadow" }}>
+
+        {/* Card top: icon + title + dismiss */}
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+          <div style={{ width: 44, height: 44, background: "#efeefe", borderRadius: 13, display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 }}>💳</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#172033" }}>Send Payment Link</div>
+            <div style={{ fontSize: 12, color: "#667085", marginTop: 3 }}>Payments · {card.recipientFirstName}</div>
           </div>
           {!sent && (
-            <button onClick={onDismiss} style={{ background: "rgba(255,255,255,0.18)", border: "none", borderRadius: 8, padding: "3px 8px", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+            <button
+              onClick={onDismiss}
+              style={{ background: "#f0f2f7", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#667085", fontSize: 14, flexShrink: 0 }}
+              title="Dismiss"
+            >
+              ✕
+            </button>
           )}
         </div>
-        {/* Info rows */}
-        <div style={{ padding: "12px 16px 0" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f1f1f1" }}>
-            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> Customer</span>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>{card.recipientName}</span>
+
+        {/* Data rows */}
+        <div style={{ border: "1px solid #e7eaf0", borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", borderBottom: "1px solid #e7eaf0", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Customer</span>
+            <b style={{ textAlign: "right", color: "#172033" }}>{card.recipientName}</b>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f1f1f1" }}>
-            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> Payment link</span>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>Generated</span>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", borderBottom: "1px solid #e7eaf0", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Phone</span>
+            <b style={{ textAlign: "right", color: "#172033" }}>{card.recipientPhone}</b>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0" }}>
-            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> SMS prepared</span>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>Ready</span>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", borderBottom: "1px solid #e7eaf0", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Payment link</span>
+            <a href={card.paymentLinkUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#6d5dfc", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>View ↗</a>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Expires</span>
+            <b style={{ textAlign: "right", color: "#172033" }}>{expiryDate}</b>
           </div>
         </div>
-        {/* SMS preview */}
-        <div style={{ padding: "10px 16px 0" }}>
-          <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Message preview</div>
-          {editMode ? (
-            <textarea
-              value={smsText}
-              onChange={(e) => setSmsText(e.target.value)}
-              rows={4}
-              style={{ width: "100%", background: "#fafafa", border: "1px solid #ddd7ff", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: "#2d3039", resize: "vertical", outline: "none", boxSizing: "border-box" }}
-            />
-          ) : (
-            <div style={{ background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: "#2d3039", lineHeight: 1.5 }}>
-              {smsText}
-            </div>
-          )}
+
+        {/* SMS text — always visible, always editable */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6d5dfc", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Message going out</div>
+          <textarea
+            value={smsText}
+            onChange={(e) => setSmsText(e.target.value)}
+            disabled={sent || sendMutation.isPending}
+            rows={5}
+            style={{
+              width: "100%",
+              background: sent ? "#f9fafb" : "#f7f5ff",
+              border: "1px solid #ebe7ff",
+              borderRadius: 12,
+              padding: "11px 12px",
+              fontSize: 13,
+              color: "#172033",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              resize: "vertical",
+              outline: "none",
+              boxSizing: "border-box",
+              lineHeight: 1.55,
+              opacity: sent ? 0.6 : 1,
+            }}
+          />
         </div>
+
         {/* Actions */}
         {!sent ? (
-          <div style={{ padding: "12px 16px 14px", display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={handleSend}
               disabled={sendMutation.isPending || !smsText.trim()}
-              style={{ flex: 1, background: "#5d49f3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: sendMutation.isPending ? 0.7 : 1 }}
+              style={{ flex: 1, background: "#6d5dfc", color: "#fff", border: 0, borderRadius: 11, padding: "10px 13px", fontWeight: 800, fontSize: 13, cursor: sendMutation.isPending ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: sendMutation.isPending ? 0.65 : 1 }}
             >
-              {sendMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <>✓ Send Payment Link</>}
+              {sendMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <>Send Link to {card.recipientFirstName}</>}
             </button>
             <button
-              onClick={() => setEditMode(e => !e)}
-              style={{ background: "#eef1ff", color: "#5d49f3", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              onClick={onDismiss}
+              style={{ background: "#f0f2f7", color: "#4c556b", border: 0, borderRadius: 11, padding: "10px 13px", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
             >
-              {editMode ? "Done" : "Edit"}
+              Cancel
             </button>
           </div>
         ) : (
-          <div style={{ padding: "12px 16px 14px" }}>
-            <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 18 }}>✅</span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: "#15803d" }}>Payment link sent!</div>
-                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Sent to {card.recipientName}. This card will clear shortly.</div>
-              </div>
-            </div>
+          <div style={{ background: "#ecfdf3", border: "1px solid #b7ebce", color: "#087a4b", padding: "11px 12px", borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
+            ✓ Payment link sent — Madison updated the conversation.
           </div>
         )}
       </div>
