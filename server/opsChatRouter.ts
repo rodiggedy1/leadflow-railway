@@ -853,14 +853,20 @@ export const opsChatRouter = router({
     if (!db) return { urgent: 0, dispatch: 0, general: 0, cleaners: 0 };
 
     const channels = ["urgent", "dispatch", "general", "cleaners"] as const;
-    const result: Record<string, number> = {};
 
-    for (const ch of channels) {
-      const rows = await db
-        .select({ id: opsChatMessages.id })
-        .from(opsChatMessages)
-        .where(eq(opsChatMessages.channel, ch));
-      result[ch] = rows.length;
+    // Single indexed GROUP BY query instead of 4 separate full-table scans
+    const rows = await db
+      .select({
+        channel: opsChatMessages.channel,
+        cnt: sql<number>`COUNT(*)`,
+      })
+      .from(opsChatMessages)
+      .where(inArray(opsChatMessages.channel, channels as unknown as string[]))
+      .groupBy(opsChatMessages.channel);
+
+    const result: Record<string, number> = { urgent: 0, dispatch: 0, general: 0, cleaners: 0 };
+    for (const row of rows) {
+      if (row.channel) result[row.channel] = Number(row.cnt);
     }
 
     return result as { urgent: number; dispatch: number; general: number; cleaners: number };
