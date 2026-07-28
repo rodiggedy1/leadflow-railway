@@ -2404,6 +2404,135 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
   );
 }
 
+// ── MadisonCommandPaymentCard — ephemeral confirm card shown above composer after @madison send payment link ──
+type MadisonPaymentConfirm = {
+  type: "payment_link_confirm";
+  recipientName: string;
+  recipientFirstName: string;
+  recipientPhone: string;
+  paymentLinkUrl: string;
+  expiresAt: number;
+  smsText: string;
+  command?: string;
+};
+function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentConfirm; onDismiss: () => void }) {
+  const [smsText, setSmsText] = useState(card.smsText);
+  const [sent, setSent] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const sendMutation = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+
+  function handleSend() {
+    if (sent || sendMutation.isPending) return;
+    sendMutation.mutate(
+      {
+        recipientPhone: card.recipientPhone,
+        recipientName: card.recipientName,
+        smsText,
+        paymentLinkUrl: card.paymentLinkUrl,
+        ...(card.command ? { command: card.command } : {}),
+      },
+      {
+        onSuccess: () => {
+          setSent(true);
+          setTimeout(() => onDismiss(), 3500);
+        },
+        onError: (err) => {
+          toast.error(`Failed to send: ${err.message}`);
+        },
+      }
+    );
+  }
+
+  return (
+    <div className="mb-2 mx-1" style={{ maxWidth: 520 }}>
+      {/* Madison header row */}
+      <div className="flex items-center gap-2 mb-2 px-1">
+        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+          <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+        </div>
+        <span className="font-bold text-[13px]" style={{ color: "#312e81" }}>Madison</span>
+        <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+        <span className="ml-auto text-[11px] px-2.5 py-0.5 rounded-full font-semibold" style={{ background: sent ? "#ecfdf5" : "#e8f8ee", color: sent ? "#15803d" : "#15803d" }}>
+          {sent ? "Completed" : "Awaiting approval"}
+        </span>
+      </div>
+      {/* Card shell */}
+      <div style={{ background: "#fff", border: "1.5px solid #e0d9f8", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 16px rgba(99,102,241,0.08)" }}>
+        {/* Header */}
+        <div style={{ background: "linear-gradient(135deg,#7447f5,#9b6ff5)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <CreditCard className="w-4 h-4" style={{ color: "#fff" }} />
+            <span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>Send Payment Link</span>
+          </div>
+          {!sent && (
+            <button onClick={onDismiss} style={{ background: "rgba(255,255,255,0.18)", border: "none", borderRadius: 8, padding: "3px 8px", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+          )}
+        </div>
+        {/* Info rows */}
+        <div style={{ padding: "12px 16px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f1f1f1" }}>
+            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> Customer</span>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{card.recipientName}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f1f1f1" }}>
+            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> Payment link</span>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Generated</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0" }}>
+            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> SMS prepared</span>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Ready</span>
+          </div>
+        </div>
+        {/* SMS preview */}
+        <div style={{ padding: "10px 16px 0" }}>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Message preview</div>
+          {editMode ? (
+            <textarea
+              value={smsText}
+              onChange={(e) => setSmsText(e.target.value)}
+              rows={4}
+              style={{ width: "100%", background: "#fafafa", border: "1px solid #ddd7ff", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: "#2d3039", resize: "vertical", outline: "none", boxSizing: "border-box" }}
+            />
+          ) : (
+            <div style={{ background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: "#2d3039", lineHeight: 1.5 }}>
+              {smsText}
+            </div>
+          )}
+        </div>
+        {/* Actions */}
+        {!sent ? (
+          <div style={{ padding: "12px 16px 14px", display: "flex", gap: 8 }}>
+            <button
+              onClick={handleSend}
+              disabled={sendMutation.isPending || !smsText.trim()}
+              style={{ flex: 1, background: "#5d49f3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: sendMutation.isPending ? 0.7 : 1 }}
+            >
+              {sendMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <>✓ Send Payment Link</>}
+            </button>
+            <button
+              onClick={() => setEditMode(e => !e)}
+              style={{ background: "#eef1ff", color: "#5d49f3", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              {editMode ? "Done" : "Edit"}
+            </button>
+          </div>
+        ) : (
+          <div style={{ padding: "12px 16px 14px" }}>
+            <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 18 }}>✅</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "#15803d" }}>Payment link sent!</div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Sent to {card.recipientName}. This card will clear shortly.</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const MessageList = memo(function MessageList({
   channelMsgs,
   channelLoading,
@@ -6280,6 +6409,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceCallRecordingUrl, setVoiceCallRecordingUrl] = useState<string | null>(null);
   const [voiceCallShowTranscript, setVoiceCallShowTranscript] = useState(false);
   const [voiceCardMinimized, setVoiceCardMinimized] = useState(false);
+  // ── @madison command state ─────────────────────────────────────────────────────────────────────────────
+  const [madisonPendingCard, setMadisonPendingCard] = useState<MadisonPaymentConfirm | null>(null);
+  const [madisonChatLoading, setMadisonChatLoading] = useState(false);
+  const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
   const voiceCallContactPhoneRef = useRef<string | null>(null);
@@ -6885,6 +7018,40 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     if (!hasText && donePhotos.length === 0) { return; }
     if (uploadingPhotos.length > 0) {
       toast.error("Please wait for photos to finish uploading");
+      return;
+    }
+    // ── @madison command detection ─────────────────────────────────────────────────────────────────────────────
+    if (/^@madison\b/i.test(composer.trim())) {
+      const text = composer.trim();
+      const message = text.replace(/^@madison\s*/i, "").trim();
+      if (!message) { toast.error("Tell Madison what to do after @madison"); return; }
+      if (madisonChatLoading) return;
+      // Post the user's @madison message to the feed
+      onSendMessage(text);
+      setComposer("");
+      setMadisonChatLoading(true);
+      madisonChatMutation.mutate(
+        { message },
+        {
+          onSuccess: (result) => {
+            setMadisonChatLoading(false);
+            if (result.type === "payment_link_confirm") {
+              setMadisonPendingCard(result as MadisonPaymentConfirm);
+            } else if (result.type === "client_disambiguation") {
+              toast.info(`Multiple matches found for that customer. Please use the Madison tab to disambiguate.`);
+            } else if (result.type === "not_found") {
+              toast.error(`Madison: Customer not found.`);
+            } else {
+              // For other result types, show a brief toast
+              toast.info(`Madison: ${(result as any).answer ?? (result as any).message ?? "Done."}`);
+            }
+          },
+          onError: (err) => {
+            setMadisonChatLoading(false);
+            toast.error(`Madison error: ${err.message}`);
+          },
+        }
+      );
       return;
     }
     doSend();
@@ -8953,6 +9120,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
           )}
 
+          {/* ── @madison pending card ── */}
+          {madisonChatLoading && (
+            <div className="mb-2 mx-1 flex items-center gap-2 px-3 py-2.5 rounded-2xl" style={{ background: "#f5f3ff", border: "1px solid #ddd7ff" }}>
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#7447f5" }} />
+              <span style={{ fontSize: 13, color: "#7447f5", fontWeight: 600 }}>Madison is thinking…</span>
+            </div>
+          )}
+          {madisonPendingCard && (
+            <MadisonCommandPaymentCard
+              card={madisonPendingCard}
+              onDismiss={() => setMadisonPendingCard(null)}
+            />
+          )}
           {/* Composer box with drag-drop */}
           <div className="relative">
 
