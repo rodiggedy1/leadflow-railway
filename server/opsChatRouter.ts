@@ -5227,6 +5227,50 @@ Rules that ALWAYS apply regardless of instruction:
       return { ok: true, messageId };
     }),
   /**
+   * postInvoiceResult — posts a persistent invoice-generated result card to the command feed.
+   * Called by the client after invoice.generateInvoice succeeds via @madison invoice command.
+   */
+  postInvoiceResult: opsChatProcedure
+    .input(
+      z.object({
+        customerName: z.string().max(128),
+        invoiceNumber: z.number().int(),
+        totalCents: z.number().int(),
+        serviceDate: z.string().max(64),
+        pdfUrl: z.string().max(1000),
+        emailSentTo: z.string().max(320).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const metadata = JSON.stringify({
+        customerName: input.customerName,
+        invoiceNumber: input.invoiceNumber,
+        totalCents: input.totalCents,
+        serviceDate: input.serviceDate,
+        pdfUrl: input.pdfUrl,
+        emailSentTo: input.emailSentTo ?? null,
+      });
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "Madison",
+        authorRole: "system",
+        body: `Invoice #${input.invoiceNumber} generated for ${input.customerName}`,
+        mediaUrl: null,
+        quickAction: "madison_invoice_result",
+        metadata,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
+      const messageId = (insertResult as any).insertId as number;
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true, messageId };
+    }),
+  /**
    * dismissMadisonPost — marks a recommendation card as dismissed ("Not right now").
    */
   dismissMadisonPost: opsChatProcedure

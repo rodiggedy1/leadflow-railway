@@ -3133,6 +3133,266 @@ function MadisonCommandEmailCard({ card, onDismiss }: { card: MadisonEmailConfir
     </div>
   );
 }
+// ── MadisonInvoiceResultCard — persistent feed card for @madison invoice ──
+function MadisonInvoiceResultCard({ msg }: { msg: { id: number; metadata: string | null; createdAt: string | Date } }) {
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  let meta: { customerName?: string; invoiceNumber?: number; totalCents?: number; serviceDate?: string; pdfUrl?: string; emailSentTo?: string | null } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+  const name = meta.customerName ?? "Customer";
+  const total = meta.totalCents != null ? `$${(meta.totalCents / 100).toFixed(2)}` : "";
+  const msgTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="flex gap-3 items-start px-4 py-2">
+      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✶ AI</span>
+          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
+        </div>
+        <div style={{ maxWidth: 540, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #eee" }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: "#fff7ed", display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 }}>🧾</div>
+            <div style={{ marginLeft: 14, flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>Invoice Generated</div>
+              <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>Madison completed this action successfully.</div>
+            </div>
+            <div style={{ marginLeft: "auto", background: "#ecfdf3", color: "#087443", padding: "6px 10px", borderRadius: 999, fontWeight: 700, fontSize: 12, flexShrink: 0 }}>Completed</div>
+          </div>
+          <div style={{ padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Customer</span>
+              <b style={{ color: "#111827" }}>{name}</b>
+            </div>
+            {meta.invoiceNumber != null && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+                <span style={{ color: "#6b7280" }}>✓ Invoice #</span>
+                <b style={{ color: "#111827" }}>#{meta.invoiceNumber}</b>
+              </div>
+            )}
+            {total && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+                <span style={{ color: "#6b7280" }}>✓ Total</span>
+                <b style={{ color: "#111827" }}>{total}</b>
+              </div>
+            )}
+            {meta.serviceDate && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: (meta.pdfUrl || meta.emailSentTo) ? "1px solid #f3f4f6" : "none", fontSize: 14 }}>
+                <span style={{ color: "#6b7280" }}>✓ Service Date</span>
+                <b style={{ color: "#111827" }}>{meta.serviceDate}</b>
+              </div>
+            )}
+            {meta.emailSentTo && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: meta.pdfUrl ? "1px solid #f3f4f6" : "none", fontSize: 14 }}>
+                <span style={{ color: "#6b7280" }}>✓ Emailed to</span>
+                <b style={{ color: "#111827" }}>{meta.emailSentTo}</b>
+              </div>
+            )}
+            {meta.pdfUrl && (
+              <div style={{ marginTop: 16 }}>
+                <a href={meta.pdfUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: "#f97316", color: "#fff", borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
+                  📄 Download PDF
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ── MadisonCommandInvoiceCard — ephemeral confirm card for @madison invoice [customer] ──
+type MadisonInvoiceCard = {
+  type: "generate_invoice";
+  templates: Array<{ id: number; customerName: string; serviceAddress: string; stripeLink: string; lineItems: unknown }>;
+  customerHint?: string;
+};
+function MadisonCommandInvoiceCard({ card, onDismiss }: { card: MadisonInvoiceCard; onDismiss: () => void }) {
+  const utils = trpc.useUtils();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(() => {
+    if (card.customerHint && card.templates.length > 0) {
+      const hint = card.customerHint.toLowerCase();
+      const match = card.templates.find(t => t.customerName.toLowerCase().includes(hint));
+      return match?.id ?? card.templates[0]?.id ?? null;
+    }
+    return card.templates[0]?.id ?? null;
+  });
+  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const [serviceDate, setServiceDate] = useState(today);
+  const [result, setResult] = useState<{ id: number; invoiceNumber: number; pdfUrl: string; customerName: string; serviceDate: string; totalCents: number; customerEmail: string | null } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [toEmail, setToEmail] = useState("");
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [subject, setSubject] = useState("");
+  const [bodyText, setBodyText] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const postResultMutation = trpc.opsChat.postInvoiceResult.useMutation();
+  const generateMutation = trpc.invoice.generateInvoice.useMutation({
+    onSuccess: (data) => {
+      const customerEmail = (data as any).customerEmail ?? null;
+      setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName, serviceDate: data.serviceDate, totalCents: data.totalCents, customerEmail });
+      if (customerEmail) setToEmail(customerEmail);
+      const total = (data.totalCents / 100).toFixed(2);
+      const firstName = data.customerName.split(" ")[0];
+      setSubject(`Your Invoice from Maids In Black`);
+      setBodyText([
+        `Hi ${firstName},`,
+        ``,
+        `Please find your invoice attached for cleaning services on ${data.serviceDate}.`,
+        ``,
+        `Invoice #${data.invoiceNumber} — Total Due: $${total}`,
+        ``,
+        `Thank you for choosing Maids In Black!`,
+        ``,
+        `Maids In Black • Support@maidsinblacksupport.com • 202-888-5362 • MaidsInBlack.com`,
+      ].join("\n"));
+      setError(null);
+    },
+    onError: (e) => setError(e.message),
+  });
+  const sendEmailMutation = trpc.invoice.sendByEmail.useMutation({
+    onSuccess: () => {
+      setEmailSent(true);
+      setEmailError(null);
+      if (result) {
+        postResultMutation.mutate(
+          { customerName: result.customerName, invoiceNumber: result.invoiceNumber, totalCents: result.totalCents, serviceDate: result.serviceDate, pdfUrl: result.pdfUrl, emailSentTo: toEmail },
+          { onSuccess: () => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }) }
+        );
+      }
+    },
+    onError: (e) => setEmailError(e.message),
+  });
+  const handleSendEmail = (invoiceId: number) => {
+    sendEmailMutation.mutate({ invoiceId, toEmail: toEmail.trim() || undefined, subject: subject.trim() || undefined, bodyText: bodyText.trim() || undefined });
+  };
+  const selectedTemplate = card.templates.find(t => t.id === selectedTemplateId);
+  const lineItems = (selectedTemplate?.lineItems as Array<{ price: number }> | null) ?? [];
+  const total = lineItems.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  if (result) {
+    return (
+      <div style={{ maxWidth: 480, marginBottom: 8, marginLeft: 2, marginRight: 2 }}>
+        <div style={{ background: "#fff", border: "1px solid #e7eaf0", borderRadius: 20, overflow: "hidden", boxShadow: "0 12px 30px rgba(24,32,51,.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #e7eaf0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fff7ed", display: "grid", placeItems: "center", fontSize: 22 }}>🧾</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "#172033" }}>Invoice #{result.invoiceNumber} — {result.customerName}</div>
+                <div style={{ fontSize: 12, color: "#667085", marginTop: 2 }}>Total: ${(result.totalCents / 100).toFixed(2)} · {result.serviceDate}</div>
+              </div>
+            </div>
+            <button onClick={onDismiss} style={{ background: "#f0f2f7", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#667085", fontSize: 14 }}>✕</button>
+          </div>
+          <div style={{ padding: "14px 16px" }}>
+            <a href={result.pdfUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: "#f97316", color: "#fff", borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 14 }}>
+              📄 Download PDF
+            </a>
+            {emailSent ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <span style={{ fontSize: 13, color: "#22c55e", fontWeight: 700 }}>✓ Sent</span>
+                <span style={{ fontSize: 12, color: "#6b7280" }}>to {toEmail}</span>
+              </div>
+            ) : (
+              <div>
+                {toEmail && !editingEmail ? (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", border: "1px solid #e7eaf0", borderRadius: 10, padding: "8px 12px", marginBottom: 8 }}>
+                      <span style={{ fontSize: 13 }}>📧</span>
+                      <span style={{ flex: 1, fontSize: 12, color: "#172033", fontWeight: 500 }}>{toEmail}</span>
+                      <button onClick={() => { setEmailDraft(toEmail); setEditingEmail(true); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#667085", fontSize: 11, padding: "0 4px" }} title="Change email">✏️</button>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: 10, color: "#6b7280", display: "block", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" }}>Subject</label>
+                      <input type="text" value={subject} onChange={e => setSubject(e.target.value)} style={{ width: "100%", background: "#f8fafc", border: "1px solid #e7eaf0", borderRadius: 8, color: "#172033", fontSize: 12, padding: "6px 8px", outline: "none", boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                        <label style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Message</label>
+                        <button onClick={() => setShowPreview(p => !p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10, color: "#2563eb" }}>{showPreview ? "Edit" : "Preview"}</button>
+                      </div>
+                      {showPreview ? (
+                        <div style={{ background: "#f8fafc", border: "1px solid #e7eaf0", borderRadius: 8, padding: "8px 10px", fontSize: 12, color: "#172033", whiteSpace: "pre-wrap", lineHeight: 1.6, maxHeight: 160, overflowY: "auto" }}>{bodyText}</div>
+                      ) : (
+                        <textarea value={bodyText} onChange={e => setBodyText(e.target.value)} rows={5} style={{ width: "100%", background: "#f8fafc", border: "1px solid #e7eaf0", borderRadius: 8, color: "#172033", fontSize: 12, padding: "6px 8px", outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5 }} />
+                      )}
+                    </div>
+                    <button onClick={() => handleSendEmail(result.id)} disabled={sendEmailMutation.isPending} style={{ width: "100%", padding: "9px 0", background: sendEmailMutation.isPending ? "#9ca3af" : "#2563eb", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer" }}>
+                      {sendEmailMutation.isPending ? "Sending…" : "Send Invoice Email"}
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>SEND TO EMAIL</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input type="email" value={editingEmail ? emailDraft : toEmail} onChange={e => editingEmail ? setEmailDraft(e.target.value) : setToEmail(e.target.value)} placeholder="customer@email.com" autoFocus style={{ flex: 1, background: "#f8fafc", border: "1px solid #e7eaf0", borderRadius: 8, color: "#172033", fontSize: 12, padding: "6px 8px", outline: "none" }} />
+                      <button onClick={() => { const val = editingEmail ? emailDraft : toEmail; if (!val.trim()) return; if (editingEmail) { setToEmail(emailDraft); setEditingEmail(false); } else handleSendEmail(result.id); }} disabled={sendEmailMutation.isPending} style={{ padding: "6px 14px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        {editingEmail ? "Save" : (sendEmailMutation.isPending ? "Sending…" : "Send")}
+                      </button>
+                      {editingEmail && <button onClick={() => setEditingEmail(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: 12 }}>✕</button>}
+                    </div>
+                  </div>
+                )}
+                {emailError && <p style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>{emailError}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ maxWidth: 480, marginBottom: 8, marginLeft: 2, marginRight: 2 }}>
+      <div style={{ background: "#fff", border: "1px solid #e7eaf0", borderRadius: 20, overflow: "hidden", boxShadow: "0 12px 30px rgba(24,32,51,.08)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #e7eaf0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fff7ed", display: "grid", placeItems: "center", fontSize: 22 }}>🧾</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#172033" }}>Create Invoice</div>
+              <div style={{ fontSize: 12, color: "#667085", marginTop: 2 }}>Invoice · Madison</div>
+            </div>
+          </div>
+          <button onClick={onDismiss} style={{ background: "#f0f2f7", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#667085", fontSize: 14 }}>✕</button>
+        </div>
+        <div style={{ padding: "14px 16px 16px" }}>
+          {card.templates.length === 0 ? (
+            <p style={{ fontSize: 13, color: "#f97316", margin: 0 }}>No templates found. <a href="/admin/invoices" style={{ color: "#f97316", textDecoration: "underline" }}>Create one first.</a></p>
+          ) : (
+            <>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Customer</label>
+                <select value={selectedTemplateId ?? ""} onChange={e => setSelectedTemplateId(Number(e.target.value))} style={{ width: "100%", background: "#f8fafc", border: "1px solid #e7eaf0", borderRadius: 8, color: "#172033", fontSize: 13, padding: "7px 10px", outline: "none" }}>
+                  {card.templates.map(t => <option key={t.id} value={t.id}>{t.customerName}</option>)}
+                </select>
+              </div>
+              {selectedTemplate && (
+                <div style={{ marginBottom: 12, fontSize: 12, color: "#6b7280" }}>{selectedTemplate.serviceAddress}</div>
+              )}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Service Date</label>
+                <input type="text" value={serviceDate} onChange={e => setServiceDate(e.target.value)} placeholder="e.g. June 29, 2026" style={{ width: "100%", background: "#f8fafc", border: "1px solid #e7eaf0", borderRadius: 8, color: "#172033", fontSize: 13, padding: "7px 10px", outline: "none", boxSizing: "border-box" }} />
+              </div>
+              {total > 0 && (
+                <div style={{ marginBottom: 12, fontSize: 13, color: "#6b7280" }}>Total: <b style={{ color: "#172033" }}>${total.toFixed(2)}</b></div>
+              )}
+              {error && <p style={{ fontSize: 12, color: "#ef4444", marginBottom: 8 }}>{error}</p>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => { if (!selectedTemplateId || !serviceDate.trim()) return; generateMutation.mutate({ templateId: selectedTemplateId, serviceDate: serviceDate.trim() }); }} disabled={generateMutation.isPending || !selectedTemplateId || !serviceDate.trim()} style={{ flex: 1, padding: "9px 0", background: generateMutation.isPending ? "#9ca3af" : "#f97316", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: generateMutation.isPending ? "not-allowed" : "pointer" }}>
+                  {generateMutation.isPending ? "Generating…" : "Generate PDF"}
+                </button>
+                <button onClick={onDismiss} style={{ background: "#f0f2f7", color: "#4c556b", border: "none", borderRadius: 10, padding: "9px 13px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 // ── MadisonCallConfirmCard — ephemeral confirm card for @madison call [customer] ──
 type MadisonCallConfirm = {
   type: "call_client_confirm";
@@ -5041,6 +5301,7 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_sms_result") { return <MadisonSmsResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_call_result") { return <MadisonCallResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_email_result") { return <MadisonEmailResultCard key={msg.id} msg={msg} />; }
+                if (msg.quickAction === "madison_invoice_result") { return <MadisonInvoiceResultCard key={msg.id} msg={msg} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
@@ -7241,6 +7502,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonCallPendingCard, setMadisonCallPendingCard] = useState<MadisonCallPending | null>(null);
   const [madisonDisambigCard, setMadisonDisambigCard] = useState<MadisonDisambigCard | null>(null);
   const [madisonEmailConfirmCard, setMadisonEmailConfirmCard] = useState<MadisonEmailConfirm | null>(null);
+  const [madisonInvoiceCard, setMadisonInvoiceCard] = useState<MadisonInvoiceCard | null>(null);
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
@@ -7868,6 +8130,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonCallConfirmCard(null);
       setMadisonCallPendingCard(null);
       setMadisonEmailConfirmCard(null);
+      setMadisonInvoiceCard(null);
       madisonChatMutation.mutate(
         { message },
         {
@@ -7881,6 +8144,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setMadisonCallConfirmCard(result as MadisonCallConfirm);
             } else if (result.type === "email_confirm") {
               setMadisonEmailConfirmCard(result as MadisonEmailConfirm);
+            } else if (result.type === "generate_invoice") {
+              setMadisonInvoiceCard(result as MadisonInvoiceCard);
             } else if (result.type === "client_disambiguation") {
               setMadisonDisambigCard(result as MadisonDisambigCard);
             } else if (result.type === "not_found") {
@@ -10009,6 +10274,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         setMadisonCallConfirmCard(result as MadisonCallConfirm);
                       } else if (result.type === "email_confirm") {
                         setMadisonEmailConfirmCard(result as MadisonEmailConfirm);
+                      } else if (result.type === "generate_invoice") {
+                        setMadisonInvoiceCard(result as MadisonInvoiceCard);
                       } else if (result.type === "client_disambiguation") {
                         setMadisonDisambigCard(result as MadisonDisambigCard);
                       } else {
@@ -10050,6 +10317,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <MadisonCommandEmailCard
               card={madisonEmailConfirmCard}
               onDismiss={() => setMadisonEmailConfirmCard(null)}
+            />
+          )}
+          {madisonInvoiceCard && (
+            <MadisonCommandInvoiceCard
+              card={madisonInvoiceCard}
+              onDismiss={() => setMadisonInvoiceCard(null)}
             />
           )}
           {madisonCallPendingCard && (
