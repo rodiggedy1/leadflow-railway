@@ -2456,7 +2456,7 @@ function MadisonPaymentResultCard({ msg }: { msg: { id: number; metadata: string
             </div>
             {/* SMS text */}
             {smsText && (
-              <div style={{ marginTop: 18, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, fontStyle: "italic", color: "#555", fontSize: 13, lineHeight: 1.55 }}>
+              <div style={{ marginTop: 18, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, fontStyle: "italic", color: "#555", fontSize: 13, lineHeight: 1.55, wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 “{smsText}”
               </div>
             )}
