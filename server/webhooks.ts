@@ -2248,7 +2248,7 @@ async function handleCsInboundMessage(msg: any) {
         let found = false;
         do {
           const url = `https://api.openphone.com/v1/contacts?pageSize=100${pageToken ? `&pageToken=${pageToken}` : ""}`;
-          const opRes = await fetch(url, { headers: { Authorization: opApiKey, "Content-Type": "application/json" }, signal: AbortSignal.timeout(5000) });
+          const opRes = await fetch(url, { headers: { Authorization: opApiKey, "Content-Type": "application/json" } });
           if (!opRes.ok) break;
           const opData = await opRes.json() as any;
           const contacts: any[] = opData?.data ?? [];
@@ -2278,7 +2278,6 @@ async function handleCsInboundMessage(msg: any) {
     resolvedName = thumbtackRelaySenderName;
     console.log(`[CS] Using Thumbtack relay sender name as resolvedName: ${resolvedName}`);
   }
-  console.log(`[CS-TRACE] name resolved: ${resolvedName ?? 'null'}, isCleaner=${isCleaner}, fromPhone=${fromPhone}`);
   // ── Running-late SMS detection (cleaner bypassed the app) ─────────────────
   // If a known cleaner texts the ops line with an ETA / running-late message,
   // post the same Command Chat card that the app would have posted so staff
@@ -2385,7 +2384,6 @@ async function handleCsInboundMessage(msg: any) {
       .where(eq(conversationSessions.id, existingSession.id));
 
     console.log(`[CS] Appended to session ${existingSession.id} for ${fromPhone}${resolvedName && !existingSession.leadName ? ` (backfilled name: ${resolvedName})` : ""}`);
-    console.log(`[CS-TRACE] Post-append, about to resolve sessionId. existingSession.id=${existingSession.id}`);
   } else {
     // Before creating a new cs-inbound session, check if there's an active hiring_interview
     // or hiring session for this phone. If so, append the inbound message there — this prevents
@@ -2468,7 +2466,6 @@ async function handleCsInboundMessage(msg: any) {
       .limit(1);
     return s?.id;
   })());
-  console.log(`[CS-TRACE] resolvedSessionId=${resolvedSessionId ?? 'undefined'}`);
   if (resolvedSessionId) {
     // Fire LLM status scoring async (non-blocking) — updates csStatusTier in real-time on new message
     scoreAndCacheStatusById(resolvedSessionId, isCleaner).catch(err =>
