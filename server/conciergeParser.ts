@@ -18,6 +18,19 @@ import type {
   TimeScope,
   TimeScopeType,
 } from "./conciergeQuery";
+import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
+
+export interface ConversationTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ConciergeContext {
+  /** Last N conversation turns (user + assistant) */
+  history?: ConversationTurn[];
+  /** Rolling summary of the conversation so far */
+  summary?: string;
+}
 
 // ── Target type ───────────────────────────────────────────────────────────────
 
@@ -208,14 +221,31 @@ export function validateAndNormalizePlan(
   return { plan, corrected: false };
 }
 
+// ── Context builder ─────────────────────────────────────────────────────────
+
+function buildContextBlock(ctx?: ConciergeContext): string {
+  const parts: string[] = [];
+
+  if (ctx?.summary) {
+    parts.push(`\n\n=== CONVERSATION SUMMARY ===\n${ctx.summary}`);
+  }
+
+  parts.push(`\n\n=== MAIDS IN BLACK BUSINESS CONTEXT ===\n${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`);
+
+  return parts.join("");
+}
+
 // ── Main parser ───────────────────────────────────────────────────────────────
 
-export async function parseConciergeRequest(message: string): Promise<QueryPlan> {
+export async function parseConciergeRequest(message: string, ctx?: ConciergeContext): Promise<QueryPlan> {
+  // Build context block to prepend to the system prompt
+  const contextBlock = buildContextBlock(ctx);
+
   const result = await invokeLLM({
     messages: [
       {
         role: "system",
-        content: `You are the intent parser for an AI operations concierge at a home cleaning company.
+        content: `You are the intent parser for an AI operations concierge at a home cleaning company.${contextBlock}
 
 Parse the dispatcher's message and return a JSON object with the following fields.
 
@@ -332,6 +362,8 @@ Classify who the action targets:
 "How has Team 3 been rated recently?" → action: "query", entities: {teamName: "Team 3"}, timeScope: {type: null, originalPhrase: "recently"}, requestedFields: ["rating"]
 "Ratings for Pilar this month" → action: "query", entities: {cleanerName: "Pilar"}, timeScope: {type: "this_month"}, requestedFields: ["rating"]`,
       },
+      // Inject prior conversation turns so the parser understands context (e.g. "her" refers to the customer mentioned earlier)
+      ...(ctx?.history?.slice(-14) ?? []).map(t => ({ role: t.role as "user" | "assistant", content: t.content })),
       { role: "user", content: message },
     ],
     response_format: {

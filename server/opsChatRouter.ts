@@ -39,11 +39,13 @@ import {
   issueEngineTable,
   issueEngineTimeline,
   madisonSmsDrafts,
+  madisonEmailDrafts,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
+import { sendGmailReply } from "./gmailService";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { invokeLLM } from "./_core/llm";
@@ -633,7 +635,73 @@ export const opsChatRouter = router({
         for (const p of parents) parentMap.set(p.id, { body: p.body, authorName: p.authorName });
       }
 
-      return msgs.reverse().map((m) => ({
+      // ── Filter out completed Madison cards ─────────────────────────────────
+      // SMS draft cards: hide if the draft has been SENT or DISMISSED
+      // Email draft cards: same filter against madisonEmailDrafts
+      // Call summary cards: hide if actedBy is set in metadata (dismissed/called/texted)
+      // All card types remain fully visible in the Debrief page (getDebriefCards).
+
+      // SMS drafts
+      const smsCardMsgs = msgs.filter(m => m.quickAction === 'madison_sms_draft');
+      const smsCardDraftIds: number[] = [];
+      for (const m of smsCardMsgs) {
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+      }
+      const completedSmsDraftIds = new Set<number>();
+      if (smsCardDraftIds.length > 0) {
+        const draftRows = await db
+          .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
+          .from(madisonSmsDrafts)
+          .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
+        for (const d of draftRows) {
+          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') {
+            completedSmsDraftIds.add(d.id);
+          }
+        }
+      }
+
+      // Email drafts
+      const emailCardMsgs = msgs.filter(m => m.quickAction === 'madison_email_draft');
+      const emailCardDraftIds: number[] = [];
+      for (const m of emailCardMsgs) {
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) emailCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+      }
+      const completedEmailDraftIds = new Set<number>();
+      if (emailCardDraftIds.length > 0) {
+        const emailDraftRows = await db
+          .select({ id: madisonEmailDrafts.id, status: madisonEmailDrafts.status })
+          .from(madisonEmailDrafts)
+          .where(inArray(madisonEmailDrafts.id, emailCardDraftIds));
+        for (const d of emailDraftRows) {
+          if (d.status === 'SENT' || d.status === 'DISMISSED') {
+            completedEmailDraftIds.add(d.id);
+          }
+        }
+      }
+
+      const filteredMsgs = msgs.filter(m => {
+        if (m.quickAction === 'madison_sms_draft') {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return !completedSmsDraftIds.has(meta.draftId);
+          } catch { return true; }
+        }
+        if (m.quickAction === 'madison_email_draft') {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return !completedEmailDraftIds.has(meta.draftId);
+          } catch { return true; }
+        }
+        if (m.quickAction === 'madison_call_summary') {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return !meta.actedBy; // hide once acted on (called, texted, or dismissed)
+          } catch { return true; }
+        }
+        return true;
+      });
+
+      return filteredMsgs.reverse().map((m) => ({
         id: m.id,
         ts: m.createdAt.getTime(),
         from: m.authorName,
@@ -5197,6 +5265,44 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+   * Fetch the last N messages from the conversation session linked to a draft.
+   * Returns messages in chronological order (oldest first).
+   * Each message: { role: 'user'|'assistant', content: string, ts: number, senderName?: string }
+   */
+  getSmsDraftConversation: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive(), limit: z.number().int().min(1).max(20).default(5) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      // Fetch the draft to get sessionId
+      const [draft] = await db
+        .select({ sessionId: madisonSmsDrafts.sessionId })
+        .from(madisonSmsDrafts)
+        .where(eq(madisonSmsDrafts.id, input.draftId))
+        .limit(1);
+      if (!draft) return [];
+      // Fetch the conversation session
+      const [session] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, draft.sessionId))
+        .limit(1);
+      if (!session) return [];
+      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+      try {
+        const parsed = JSON.parse((session.messageHistory as string) ?? "[]");
+        if (Array.isArray(parsed)) history = parsed;
+      } catch { /* ignore */ }
+      // Return last N messages in chronological order
+      return history.slice(-input.limit).map(m => ({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+        ts: m.ts ?? 0,
+        senderName: m.senderName ?? undefined,
+      }));
+    }),
+
+  /**
    * Approve a draft and send the SMS.
    * Atomic: transitions DRAFT_READY → SENDING → SENT.
    * If two agents click simultaneously, only one wins.
@@ -5269,12 +5375,276 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+   * Mark a madison_call_summary card as acted on (called or texted).
+   * Stores actedBy, actedAction, actedAt in the message metadata so all
+   * connected clients see the locked state and don't double-act.
+   */
+  markCallCardActed: opsChatProcedure
+    .input(z.object({
+      msgId: z.number().int().positive(),
+      action: z.enum(["call", "text", "dismiss"]),
+      actedBy: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false, reason: "no_db" };
+      // Read current metadata, merge in acted fields
+      const rows = await db.select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.msgId))
+        .limit(1);
+      if (!rows.length) return { ok: false, reason: "not_found" };
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(rows[0].metadata ?? "{}"); } catch { /* ignore */ }
+      // Only lock if not already acted on (first-writer wins)
+      if (meta.actedBy) return { ok: true, alreadyActed: true, actedBy: meta.actedBy, actedAction: meta.actedAction };
+      meta.actedBy = input.actedBy;
+      meta.actedAction = input.action;
+      meta.actedAt = new Date().toISOString();
+      await db.update(opsChatMessages)
+        .set({ metadata: JSON.stringify(meta) })
+        .where(eq(opsChatMessages.id, input.msgId));
+      broadcastOpsUpdate("call_card_acted", { msgId: input.msgId, actedBy: input.actedBy, actedAction: input.action });
+      return { ok: true };
+    }),
+  /**
    * Retry a FAILED draft from scratch.
    */
   retrySmsDraft: opsChatProcedure
     .input(z.object({ draftId: z.number().int().positive() }))
     .mutation(async ({ input }) => {
       return retrySmsDraft(input.draftId);
+    }),
+
+  // ── Email draft procedures (mirrors SMS draft procedures exactly) ─────────
+
+  /**
+   * Fetch a single email draft by ID.
+   */
+  getEmailDraft: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [draft] = await db
+        .select()
+        .from(madisonEmailDrafts)
+        .where(eq(madisonEmailDrafts.id, input.draftId))
+        .limit(1);
+      return draft ?? null;
+    }),
+
+  /**
+   * Approve an email draft and send it via Gmail reply.
+   * Atomic: transitions DRAFT_READY → SENDING → SENT.
+   */
+  approveEmailDraft: opsChatProcedure
+    .input(z.object({
+      draftId: z.number().int().positive(),
+      approvedText: z.string().min(1),
+      approvedBy: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false, reason: "no_db" };
+
+      // Atomic transition: only succeed if status is still DRAFT_READY
+      const [updateResult] = await db
+        .update(madisonEmailDrafts)
+        .set({ status: "SENDING", approvedText: input.approvedText, approvedBy: input.approvedBy, approvedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(madisonEmailDrafts.id, input.draftId), eq(madisonEmailDrafts.status, "DRAFT_READY")));
+
+      const affected = (updateResult as any).affectedRows ?? 0;
+      if (affected === 0) {
+        const [existing] = await db.select({ status: madisonEmailDrafts.status }).from(madisonEmailDrafts).where(eq(madisonEmailDrafts.id, input.draftId)).limit(1);
+        return { ok: false, reason: existing?.status === "SENT" ? "already_sent" : "already_sending" };
+      }
+
+      const [draft] = await db.select().from(madisonEmailDrafts).where(eq(madisonEmailDrafts.id, input.draftId)).limit(1);
+      if (!draft) return { ok: false, reason: "not_found" };
+
+      try {
+        const resolvedTo = draft.replyToEmail ?? draft.fromEmail;
+        console.log(`[email-draft] approve draftId=${input.draftId} fromEmail=${draft.fromEmail} replyToEmail=${draft.replyToEmail ?? 'none'} resolvedTo=${resolvedTo}`);
+        const result = await sendGmailReply({
+          threadId: draft.threadId,
+          to: resolvedTo,
+          subject: draft.subject ? `Re: ${draft.subject}` : "Re: Your message",
+          bodyHtml: input.approvedText.replace(/\n/g, "<br>"),
+          inReplyToMessageId: draft.inboundMessageId,
+        });
+        const outboundId = (result as any)?.messageId ?? null;
+        await db.update(madisonEmailDrafts)
+          .set({ status: "SENT", outboundMessageId: outboundId, sentAt: new Date(), updatedAt: new Date() })
+          .where(eq(madisonEmailDrafts.id, input.draftId));
+        broadcastOpsUpdate("email_draft_sent", { draftId: input.draftId });
+        return { ok: true };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await db.update(madisonEmailDrafts)
+          .set({ status: "FAILED", errorStage: "SEND", errorCode: "send_failed", errorMessage: msg, updatedAt: new Date() })
+          .where(eq(madisonEmailDrafts.id, input.draftId));
+        return { ok: false, reason: "send_failed" };
+      }
+    }),
+
+  /**
+   * Dismiss an email draft without sending.
+   */
+  dismissEmailDraft: opsChatProcedure
+    .input(z.object({
+      draftId: z.number().int().positive(),
+      dismissedBy: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false, reason: "no_db" };
+      await db.update(madisonEmailDrafts)
+        .set({ status: "DISMISSED", dismissedBy: input.dismissedBy, dismissedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(madisonEmailDrafts.id, input.draftId), eq(madisonEmailDrafts.status, "DRAFT_READY")));
+      broadcastOpsUpdate("email_draft_dismissed", { draftId: input.draftId });
+      return { ok: true };
+    }),
+
+  /**
+   * Count unresolved Madison cards:
+   *   - madison_sms_draft: draft status is not SENT / DISMISSED / DELIVERED
+   *   - madison_call_summary: metadata has no actedBy
+   * Used by the header Madison avatar button to show the correct count.
+   */
+  getUnresolvedMadisonCount: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return { smsDraftCount: 0, callSummaryCount: 0, emailDraftCount: 0, total: 0, unresolvedDraftIds: [] as number[], unresolvedCallMsgIds: [] as number[], unresolvedEmailDraftIds: [] as number[] };
+
+      // ── SMS drafts: only DRAFT_READY needs human action ──────────────────────
+      // RECEIVED/CLASSIFIED/TOOLS_RUNNING/GENERATING/SENDING = in-flight (not actionable yet)
+      // SENT/DELIVERED/DISMISSED = resolved
+      // FAILED = pipeline error (not a human action item)
+      // Only DRAFT_READY = waiting for approve or dismiss
+      const draftReadyRows = await db
+        .select({ id: madisonSmsDrafts.id })
+        .from(madisonSmsDrafts)
+        .where(eq(madisonSmsDrafts.status, 'DRAFT_READY'));
+      const draftReadyIds = new Set(draftReadyRows.map(r => r.id));
+
+      // Find channel message IDs whose draftId maps to a DRAFT_READY row
+      const smsDraftMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction, 'madison_sms_draft'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedDraftIds: number[] = smsDraftMsgs
+        .filter(m => {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return draftReadyIds.has(meta.draftId);
+          } catch { return false; }
+        })
+        .map(m => m.id);
+      const smsDraftCount = unresolvedDraftIds.length;
+
+      // ── Call summary cards: unresolved = no actedBy in metadata ──────────────
+      const callSummaryMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction, 'madison_call_summary'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedCallMsgIds: number[] = callSummaryMsgs
+        .filter(m => {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return !meta.actedBy;
+          } catch { return true; }
+        })
+        .map(m => m.id);
+      const callSummaryCount = unresolvedCallMsgIds.length;
+      // ── Email drafts: only DRAFT_READY needs human action ──────────────────
+      const emailDraftReadyRows = await db
+        .select({ id: madisonEmailDrafts.id })
+        .from(madisonEmailDrafts)
+        .where(eq(madisonEmailDrafts.status, 'DRAFT_READY'));
+      const emailDraftReadyIds = new Set(emailDraftReadyRows.map(r => r.id));
+      const emailDraftMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction, 'madison_email_draft'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedEmailDraftIds: number[] = emailDraftMsgs
+        .filter(m => {
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return emailDraftReadyIds.has(meta.draftId);
+          } catch { return false; }
+        })
+        .map(m => m.id);
+      const emailDraftCount = unresolvedEmailDraftIds.length;
+
+      return {
+        smsDraftCount,
+        callSummaryCount,
+        emailDraftCount,
+        total: smsDraftCount + callSummaryCount + emailDraftCount,
+        unresolvedDraftIds,
+        unresolvedCallMsgIds,
+        unresolvedEmailDraftIds,
+      };
+    }),
+
+  /**
+   * Fetch all madison_call_summary and madison_sms_draft cards for a given date (YYYY-MM-DD).
+   * Used by the Madison Debrief page to review the day's interactions.
+   */
+  getDebriefCards: opsChatProcedure
+    .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      // Build start/end of day in Eastern time (business timezone).
+      // The DB stores timestamps as UTC. Eastern is UTC-5 (EST) or UTC-4 (EDT).
+      // We use UTC-4 (EDT, the more common case May-Nov) as a safe offset;
+      // this means the window is 04:00 UTC to 03:59:59 UTC next day.
+      // For a more precise solution we could use the BUSINESS_TIMEZONE env var,
+      // but this simple offset covers the vast majority of cases.
+      const EASTERN_OFFSET_MS = 4 * 60 * 60 * 1000; // UTC-4 (EDT)
+      const dayStart = new Date(new Date(`${input.date}T00:00:00.000`).getTime() + EASTERN_OFFSET_MS);
+      const dayEnd = new Date(new Date(`${input.date}T23:59:59.999`).getTime() + EASTERN_OFFSET_MS);
+
+      const rows = await db
+        .select()
+        .from(opsChatMessages)
+        .where(
+          and(
+            eq(opsChatMessages.channel, 'command'),
+            inArray(opsChatMessages.quickAction as any, ['madison_call_summary', 'madison_sms_draft', 'madison_email_draft']),
+            gte(opsChatMessages.createdAt, dayStart),
+            lte(opsChatMessages.createdAt, dayEnd),
+          )
+        )
+        .orderBy(opsChatMessages.createdAt)  // oldest first for chronological review
+        .limit(200);
+
+      return rows.map(m => ({
+        id: m.id,
+        ts: m.createdAt.getTime(),
+        quickAction: m.quickAction,
+        body: m.body,
+        metadata: m.metadata ?? null,
+        mediaUrl: m.mediaUrl ?? null,
+      }));
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

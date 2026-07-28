@@ -225,7 +225,7 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * AI mode: 1 = AI auto-replies to inbound SMS (default), 0 = manual/agent takes over.
    * When an agent takes over, the AI stops responding and the agent replies from the app.
    */
-  aiMode: int("aiMode").default(1).notNull(),
+  aiMode: int("aiMode").default(0).notNull(),
   /**
    * Actual booked/invoiced amount in dollars (integer cents-free).
    * If set, this overrides quotedPrice + extras for revenue calculations.
@@ -2992,7 +2992,7 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
   /** Current lifecycle status */
   status: mysqlEnum("status", confirmationCallStatuses as unknown as [string, ...string[]]).default("pending").notNull(),
   /** VAPI call ID returned from the VAPI API */
-  vapiCallId: varchar("vapiCallId", { length: 128 }).unique(),
+  vapiCallId: varchar("vapiCallId", { length: 128 }),
   /** URL to the call recording (populated from VAPI end-of-call webhook) */
   recordingUrl: varchar("recordingUrl", { length: 1024 }),
   /** Full call transcript (populated from VAPI end-of-call webhook) */
@@ -3984,6 +3984,8 @@ export const madisonSmsDrafts = mysqlTable("madison_sms_drafts", {
 
   // Content
   originalMessage: text("originalMessage").notNull(),
+  /** One-sentence human-readable summary of the customer's intent — shown in card copy */
+  intentSummary: text("intentSummary"),
   /** LLM-generated draft — never overwritten, even if agent edits before sending */
   generatedDraft: text("generatedDraft"),
   /** What was actually sent — may differ from generatedDraft if agent edited */
@@ -4019,3 +4021,87 @@ export const madisonSmsDrafts = mysqlTable("madison_sms_drafts", {
 ]);
 export type MadisonSmsDraft = typeof madisonSmsDrafts.$inferSelect;
 export type InsertMadisonSmsDraft = typeof madisonSmsDrafts.$inferInsert;
+
+/**
+ * madisonEmailDrafts — one row per inbound email thread that Madison processes.
+ * Mirrors madisonSmsDrafts exactly; sending uses gmail.sendReply instead of OpenPhone.
+ */
+export const madisonEmailDrafts = mysqlTable("madison_email_drafts", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+
+  // Trigger identity
+  /** Gmail thread ID — uniqueness constraint prevents duplicate pipeline runs */
+  threadId: varchar("threadId", { length: 255 }).notNull(),
+  /** Gmail message ID of the inbound message that triggered this draft */
+  inboundMessageId: varchar("inboundMessageId", { length: 255 }).notNull(),
+  sessionId: bigint("sessionId", { mode: "number" }),
+    fromEmail: varchar("fromEmail", { length: 320 }).notNull(),
+  /** Reply-To email address from the inbound message — used as the actual send-to address */
+  replyToEmail: varchar("replyToEmail", { length: 320 }),
+  senderName: varchar("senderName", { length: 255 }),
+  subject: varchar("subject", { length: 998 }),
+  // Pipeline state — same enum as SMS drafts
+  status: mysqlEnum("status", [
+    "RECEIVED",
+    "CLASSIFIED",
+    "TOOLS_RUNNING",
+    "DRAFT_READY",
+    "SENDING",
+    "SENT",
+    "DISMISSED",
+    "FAILED",
+  ]).notNull().default("RECEIVED"),
+
+  messageType: mysqlEnum("messageType", [
+    "QUESTION",
+    "ACTION",
+    "INFORMATION",
+    "CONVERSATION",
+    "UNKNOWN",
+  ]),
+
+  intent: varchar("intent", { length: 64 }),
+  capability: varchar("capability", { length: 64 }),
+  capabilityVersion: int("capabilityVersion"),
+
+  resolvedContext: json("resolvedContext"),
+  capabilityArgs: json("capabilityArgs"),
+  capabilityResult: json("capabilityResult"),
+  observations: json("observations"),
+  suggestedActions: json("suggestedActions"),
+  followUps: json("followUps"),
+  qualityScore: json("qualityScore"),
+
+  // Content
+  originalMessage: text("originalMessage").notNull(),
+  intentSummary: text("intentSummary"),
+  generatedDraft: text("generatedDraft"),
+  /** What was actually sent — may differ from generatedDraft if agent edited */
+  approvedText: text("approvedText"),
+
+  // Human action
+  approvedBy: varchar("approvedBy", { length: 128 }),
+  approvedAt: datetime("approvedAt", { mode: "date", fsp: 3 }),
+  dismissedBy: varchar("dismissedBy", { length: 128 }),
+  dismissedAt: datetime("dismissedAt", { mode: "date", fsp: 3 }),
+
+  // Outbound delivery
+  outboundMessageId: varchar("outboundMessageId", { length: 255 }),
+  sentAt: datetime("sentAt", { mode: "date", fsp: 3 }),
+
+  // Diagnostics
+  errorStage: varchar("errorStage", { length: 64 }),
+  errorCode: varchar("errorCode", { length: 64 }),
+  errorMessage: text("errorMessage"),
+
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_email_draft_inbound").on(t.inboundMessageId),
+  index("idx_email_draft_status").on(t.status),
+  index("idx_email_draft_thread").on(t.threadId),
+  index("idx_email_draft_created").on(t.createdAt),
+  index("idx_email_draft_status_created").on(t.status, t.createdAt),
+]);
+export type MadisonEmailDraft = typeof madisonEmailDrafts.$inferSelect;
+export type InsertMadisonEmailDraft = typeof madisonEmailDrafts.$inferInsert;

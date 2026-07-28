@@ -983,6 +983,47 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   // FieldMgmt/LeadAlert calls have a pre-inserted record. Real inbound forwarded calls do not.
   // ROLLBACK: old VAPI-bought number: f2f1c044-c70a-4d73-a755-051f8a2a96e4
   const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed
+
+  // ── Secondary guard: check assistant name and metadata step for outbound team calls ──
+  // Race condition: for very short calls (< 5s), the end-of-call webhook can fire before
+  // the fieldMgmtCalls guard row is inserted. We catch these by inspecting the assistant
+  // name and metadata.step set by the outbound call producers.
+  // Known outbound assistant names: "ScheduleEscalation", "FieldMgmtAlert", "LeadAlert", "Ava"
+  // Known outbound steps (in metadata): "schedule_escalation", "eta_call_1", "eta_call_2",
+  //   "noshow_call", "checkin_reminder", "client_status_inquiry", "ai_matrix_cleaner",
+  //   "ai_matrix_customer", "schedule_confirmation"
+  const OUTBOUND_ASSISTANT_NAMES = new Set(["ScheduleEscalation", "FieldMgmtAlert", "LeadAlert"]);
+  const OUTBOUND_METADATA_STEPS = new Set([
+    "schedule_escalation", "eta_call_1", "eta_call_2", "noshow_call",
+    "checkin_reminder", "client_status_inquiry", "ai_matrix_cleaner",
+    "ai_matrix_customer", "schedule_confirmation",
+  ]);
+  const assistantName = (call as unknown as Record<string, unknown>)?.assistant?.name as string | undefined
+    ?? (call as unknown as Record<string, unknown>)?.assistantOverrides?.name as string | undefined;
+  const assistantMetadataStep = (
+    (call as unknown as Record<string, unknown>)?.assistant?.metadata as Record<string, unknown> | undefined
+  )?.step as string | undefined;
+  if (
+    call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID &&
+    (OUTBOUND_ASSISTANT_NAMES.has(assistantName ?? "") || OUTBOUND_METADATA_STEPS.has(assistantMetadataStep ?? ""))
+  ) {
+    console.log(`[Vapi] Secondary guard: skipping outbound team call (assistantName=${assistantName}, step=${assistantMetadataStep}, vapiCallId=${vapiCallId})`);
+    // Still try to update the fieldMgmtCalls row if it exists
+    const dbSecondary = await getDb();
+    if (dbSecondary && vapiCallId) {
+      const transcript = artifact?.transcript ?? null;
+      const summary = analysis?.summary ?? null;
+      const durationSeconds = call.startedAt && call.endedAt
+        ? Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
+        : 0;
+      await dbSecondary.update(fieldMgmtCalls)
+        .set({ outcome: endedReason === "customer-ended-call" || endedReason === "assistant-ended-call" ? "answered" : "no_answer", durationSeconds, transcript, summary, endedReason, recordingUrl: artifact?.recordingUrl ?? null })
+        .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId))
+        .catch(() => {});
+    }
+    return;
+  }
+
   if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
     // Check if this is a real FieldMgmt outbound call (has a pre-inserted record)
     const dbCheck = await getDb();
@@ -1401,40 +1442,52 @@ Rules:
     }
   }
 
-  // ── Post call summary to MIB Command Chat ──────────────────────────────────
+  // ── Post Madison Call Summary card to Command Chat ──────────────────────────
   // Only post answered calls (not outbound alerts, not missed calls — those return early above)
   try {
-    const outcomeEmoji =
-      outcome === "booked"             ? "📅" :
-      outcome === "quote_given"        ? "💰" :
-      outcome === "faq_answered"       ? "💬" :
-      outcome === "callback_requested" ? "📲" :
-      outcome === "transferred"        ? "🔀" : "📞";
-    const callerDisplay = structuredData?.callerName
-      ? `${structuredData.callerName}${normalizedPhone ? ` (${normalizedPhone})` : ""}`
-      : normalizedPhone ?? "Unknown caller";
+    const cardCallerName = (structuredData as Record<string, unknown> | null)?.callerName as string | null ?? null;
     const durationDisplay = durationSeconds >= 60
       ? `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`
       : `${durationSeconds}s`;
-    const outcomeLabel = outcome.replace(/_/g, " ");
-    const bodyLines = [
-      `${outcomeEmoji} **AI Call Ended** — ${callerDisplay} · ${durationDisplay} · ${outcomeLabel}`,
-      summary ? `📋 ${summary}` : null,
-    ].filter(Boolean).join("\n");
+    // Use the VAPI summary directly as the intent summary (already concise)
+    // If it's very long, truncate to first sentence
+    let intentSummary: string = summary ?? "Called but left no details.";
+    if (intentSummary.length > 200) {
+      const firstSentence = intentSummary.split(/[.!?]/)[0];
+      if (firstSentence && firstSentence.length > 20) intentSummary = firstSentence + ".";
+    }
+    const body = [
+      cardCallerName ? `${cardCallerName}${normalizedPhone ? ` · ${normalizedPhone}` : ""}` : (normalizedPhone ?? "Unknown caller"),
+      `${durationDisplay} · ${outcome.replace(/_/g, " ")}`,
+    ].join("\n");
     const dbForPost = await getDb();
     if (dbForPost) {
       await dbForPost.insert(opsChatMessages).values({
         cleanerJobId: null,
         channel: "command",
-        authorName: "📞 AI Call Summary",
-        authorRole: "office",
-        body: bodyLines,
-        mediaUrl: recordingUrl ?? null,  // stored in mediaUrl so the UI can render an inline audio player
-        quickAction: "call_summary",
+        authorName: "Madison",
+        authorRole: "system",
+        body,
+        mediaUrl: recordingUrl ?? null,
+        quickAction: "madison_call_summary",
+        metadata: JSON.stringify({
+          vapiCallId,
+          sessionId,
+          callerPhone: normalizedPhone ?? null,
+          callerName: cardCallerName,
+          durationSeconds,
+          durationDisplay,
+          outcome,
+          intentSummary,
+          transcript: transcript && transcript.length > 0 ? transcript : null,
+          recordingUrl: recordingUrl ?? null,
+        }),
       });
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("new_message", { channel: "command" });
     }
   } catch (err) {
-    console.error("[Vapi] Failed to post call summary to command channel:", err);
+    console.error("[Vapi] Failed to post Madison call summary card:", err);
   }
 
   // Notify agent/owner of the call

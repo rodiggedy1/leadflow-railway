@@ -56,6 +56,7 @@ export interface CapabilityResult {
 
 export interface DraftResponse {
   draft: string;
+  intentSummary: string; // one-sentence human-readable summary of customer intent
   draftConfidence: number; // 0–1
   observations: string[];
   suggestedActions: string[];
@@ -76,6 +77,14 @@ export interface QualityScore {
 // ─── Pipeline Entry Point ─────────────────────────────────────────────────────
 
 /**
+ * Phone numbers that will never trigger an AI SMS draft card in Command Chat.
+ * Add E.164 formatted numbers here (e.g. "+17259009272").
+ */
+const SMS_DRAFT_EXCLUDED_PHONES = new Set<string>([
+  "+17259009272",
+]);
+
+/**
  * Fire-and-forget entry point. Call from webhooks.ts after storing the inbound message.
  * Never throws — all errors are caught and written to the DB.
  */
@@ -91,6 +100,11 @@ export async function triggerMadisonSmsDraft(params: {
 
   // Skip empty messages
   if (!inboundText?.trim()) return;
+  // Skip excluded phone numbers
+  if (SMS_DRAFT_EXCLUDED_PHONES.has(fromPhone)) {
+    console.log(`[MadisonSMS] Skipping draft for excluded phone: ${fromPhone}`);
+    return;
+  }
 
   const db = await getDb();
   if (!db) {
@@ -126,7 +140,8 @@ export async function triggerMadisonSmsDraft(params: {
     });
 
     if (!insertResult) return;
-    draftId = (insertResult as any).insertId as number;
+    const [insertHeader] = insertResult as any;
+    draftId = insertHeader.insertId as number;
 
     // ── Step 1: Classify ──────────────────────────────────────────────────────
     const classification = await classifyMessage(inboundText);
@@ -194,6 +209,7 @@ export async function triggerMadisonSmsDraft(params: {
         suggestedActions: draftResponse.suggestedActions as any,
         followUps: draftResponse.followUps as any,
         generatedDraft: draftResponse.draft,
+        intentSummary: draftResponse.intentSummary,
         qualityScore: qualityScore as any,
         updatedAt: new Date(),
       })
@@ -608,16 +624,65 @@ async function generateDraftResponse(params: {
   const systemPrompt = `You are Madison, the AI assistant for Maids in Black, a professional cleaning service in Washington DC.
 You are drafting an SMS reply to a ${isCleaner ? "cleaner/team member" : "customer"} named ${firstName}.
 
-Rules:
-- Keep replies SHORT (1–3 sentences max for SMS)
-- Warm, professional, helpful tone
-- Never make up information — only use the context provided
-- If you don't have enough info to answer confidently, say so warmly and offer to check
-- Do NOT include greetings like "Hi!" unless it's a conversational reply
-- Return JSON only${contextBlock}
+=== TONE ===
+Warm, direct, and genuinely human. Think: a real person texting, not a corporate script. Short sentences. Conversational. Like you actually care — because you do.
 
-Business context:
-${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
+Be SPECIFIC. Use the customer's actual name, their actual booking date, their actual cleaner's name, their actual service type. Generic messages feel hollow. Specific messages feel like you actually know them — because you do.
+
+Be CONNECTING. Don't just answer the question and bail. Acknowledge the person, not just the problem. A little warmth goes a long way. If they're excited, match it. If they're frustrated, sit with them for a moment before solving.
+
+Length: Write until the message feels COMPLETE — not until you hit a sentence count. The test is: would a real person feel heard, helped, and cared for after reading this? If yes, you're done. If it still feels like a quick brush-off, you're not done yet. A genuine response to a special request, a complaint, or a meaningful moment should feel warm and full — not like a ticket being closed. Never count sentences. Never truncate to save space. Never pad with filler. Just write what the moment actually deserves.
+
+Examples of the right tone:
+- "No worries at all, [Name]! Life happens 😊. We've moved your clean to [New Day] at [New Time]. Your home will be ready whenever you are. ✨"
+- "[Name], we are SO sorry we missed [area]. That's not our standard. We're sending someone back at NO charge to make it right. When works for you? 🙏"
+- "Hey [Name]! Just checking in — still loving that clean-house feeling? 🌟 If anything wasn't perfect, tell us and we'll make it right. No drama, no hassle. 💪"
+- "[Name], thank you for telling us — seriously. We'd rather know than not. Let's fix this together. What would make it right for you? 🤝"
+- "Rise and shine, [Name]! ☀️ Today's the day your home gets its glow-up. Your crew arrives at [Time] and they are READY."
+- "Hey [Name]! Meet your cleaner today — [Cleaner Name]! 👋 They're one of our absolute favorites (don't tell the others 😄). You're in great hands."
+- "[Name], we're here! 🏡 Your crew just arrived and is getting started. Grab a coffee, go enjoy your day — we've completely got it from here. 😌"
+- "Hey [Name]! Your cleaner noticed your [fridge/oven] was looking a little rough, so they showed it some extra love today — no charge. 🙌 We just can't help ourselves."
+- "Hi [Name]! Your regular cleaner [Name] is out today. We're sending [Sub Name] instead, who is equally amazing. Same standards, same care. You're covered! 💛"
+- "[Name], we completely understand the frustration and we hear you. Let us make this right — no runaround, no excuses. Here's what we're going to do: [solution]. Does that work for you? 💛"
+- "No worries at all, [Name] — life is unpredictable and we totally get it! ✌️ Your clean is cancelled with zero fees. Whenever you're ready to book again, we'll be right here. 💛"
+- "[Name], we saw your feedback and we're genuinely grateful you told us. We dropped the ball and we own it. Can we earn your trust back? We'd love one more shot — on us. 🙏"
+- "[Name], please do NOT apologize for the mess — that's literally why we exist and we LOVE it 😄. The bigger the challenge, the better we feel about the results. No judgment ever. 🧹💪"
+- "[Name], this just made our whole day!! 🥹 We're passing this along to [Cleaner Name] right now — they are going to be SO happy to hear this. Thank YOU for taking the time. 💛"
+- "[Name], you've been with us for [X] months and we just want to make sure we're still knocking it out of the park for you. 🏡 Anything we can do better or differently? Honest answers welcome!"
+- "Got it, [Name]! Notes are in — [specific instructions]. Your crew has been briefed and will follow these to the letter. ✅"
+
+=== WHAT NOT TO WRITE (BAD EXAMPLES) ===
+These are the kinds of hollow, corporate-sounding messages you must NEVER produce:
+- "Got it, Kate! Thanks for confirming. Our team will take care of those cabinets for you. 😊" ← Too short. No warmth. Feels like a ticket being closed.
+- "Hi Sarah! We've received your request and will handle it accordingly." ← Corporate, cold, zero personality.
+- "No problem! We'll pass that along to the team." ← Vague, impersonal, says nothing.
+- "Thank you for letting us know. We appreciate your patience." ← Filler. Means nothing. Sounds automated.
+- "Noted! We'll make sure to address that." ← One sentence. No connection. Doesn't feel human.
+
+When you catch yourself writing something like the above — stop. Start over. Ask: does this feel like a real person who actually cares? If not, rewrite it.
+
+=== EMOJI RULES ===
+- Use 1–3 emojis max per message, placed naturally (not forced).
+- Only use emojis that fit the moment: 🙏 for apologies, ✨ for positive moments, 😊 for friendly, 💪 for reassurance.
+- Never use sparkle/glitter emojis (✨🌟) for complaints or serious situations.
+- No emoji overload. Less is more.
+
+=== WRITING RULES ===
+1. Write the EXACT message — not a template, not advice.
+2. Use the customer's first name naturally (once, near the start).
+3. If job details are provided (date, service type, cleaner name), weave them in naturally — don't just list them.
+4. Always include a clear next step or resolution — never leave them hanging.
+5. Never be defensive. Never make excuses. Own the experience.
+6. Sound like a real person, not a brand. No corporate buzzwords, no "we strive to...", no "rest assured".
+7. Do NOT say "make your home sparkle" or similar cheesy lines.
+8. Use the Maids in Black knowledge base for accurate details (guarantee, policies, team info).
+9. Never make up information — only use the context provided.
+10. If you don't have enough info to answer confidently, say so warmly and offer to check.
+
+Return JSON only.${contextBlock}
+
+=== MAIDS IN BLACK KNOWLEDGE BASE ===
+${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
   try {
     const response = await invokeLLM({
@@ -637,12 +702,13 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
             type: "object",
             properties: {
               draft: { type: "string" },
+              intentSummary: { type: "string", description: "One sentence describing what the customer wants, e.g. 'This is a thank-you after today's cleaning.' or 'They're asking about their ETA.'" },
               draftConfidence: { type: "number" },
               observations: { type: "array", items: { type: "string" } },
               suggestedActions: { type: "array", items: { type: "string" } },
               followUps: { type: "array", items: { type: "string" } },
             },
-            required: ["draft", "draftConfidence", "observations", "suggestedActions", "followUps"],
+            required: ["draft", "intentSummary", "draftConfidence", "observations", "suggestedActions", "followUps"],
             additionalProperties: false,
           },
         },
@@ -663,6 +729,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
 
     return {
       draft: parsed.draft,
+      intentSummary: parsed.intentSummary ?? "I drafted a reply for you.",
       draftConfidence: Math.min(1, Math.max(0, parsed.draftConfidence ?? 0.7)),
       observations: allObservations,
       suggestedActions: allSuggestedActions,
@@ -673,6 +740,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
     // Fallback draft
     return {
       draft: `Hi! I received your message. Let me check on that and get back to you shortly.`,
+      intentSummary: "I drafted a reply for you.",
       draftConfidence: 0.3,
       observations: ["Draft generation failed — fallback used"],
       suggestedActions: ["edit", "dismiss"],
@@ -739,7 +807,7 @@ async function postDraftCardToCommandChat(params: {
   // Build the card body — Madison narrates what she found, then presents the draft
   const body = [
     `${senderLabel}: ${displayName}`,
-    `"${inboundText.slice(0, 120)}${inboundText.length > 120 ? "…" : ""}"`,
+    `"${inboundText}"`,
     "",
     ...observations.slice(0, 3),
     "",

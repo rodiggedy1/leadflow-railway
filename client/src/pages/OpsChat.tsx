@@ -1288,6 +1288,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // Profile photo state
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
+  // Signal to open the Tasks panel inside CommandChat (incremented on each profile picture click)
+  const [openTasksSignal, setOpenTasksSignal] = useState(0);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [agentStatusOpen, setAgentStatusOpen] = useState(false);
   // DM panels: list of open DM recipients (name + email key + photoUrl)
@@ -2870,6 +2872,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             agentList={agentStatusData?.agents ?? []}
             isVisible={opsChatState === "open" && activeTab === "channels" && activeChannel === "command"}
             myNames={myNames}
+            openTasksSignal={openTasksSignal}
             onSendThreadReply={(body, parentId) => {
               sendMsg.mutate({
                 body,
@@ -3686,6 +3689,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         myDmKey={myDmKey}
         totalDmUnread={totalDmUnread}
         onOpenDm={openDm}
+        onOpenTasks={() => { setProfilePhotoOpen(false); setOpenTasksSignal(s => s + 1); }}
       />
 
       {/* ── Floating DM Panels ─────────────────────────────────────────────────── */}

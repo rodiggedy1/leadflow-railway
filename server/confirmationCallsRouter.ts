@@ -144,39 +144,39 @@ export const confirmationCallsRouter = router({
       });
       const confirmationCallId = (ccInsert as any).insertId as number;
 
-      // ── 2. Send SMS (fire-and-forget) ────────────────────────────────────────────────────────────────
-      ;(async () => {
-        try {
-          const firstName = input.clientName?.split(" ")[0] ?? "there";
-          const smsBody =
-            `Hi ${firstName}, this is Maids in Black! \u{1F5A4} Confirming your cleaning appointment tomorrow.\n\n` +
-            `\u2705 Reply YES to confirm\n` +
-            `\u{1F504} Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\n` +
-            `Quick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\n` +
-            `Thanks so much, looking forward to seeing you tomorrow! \u{1F60A}`;
-          const csNumberId = ENV.openPhoneCsNumberId;
-          const smsResult = await sendSms({
-            to: normalizedPhone,
-            content: smsBody,
-            ...(csNumberId ? { fromNumberId: csNumberId } : {}),
-          });
-          if (smsResult.success) {
-            await db.update(confirmationCalls)
-              .set({
-                smsFollowupSent: 1,
-                smsFollowupAt: Date.now(),
-                smsFollowupBody: smsBody,
-              })
-              .where(eq(confirmationCalls.id, confirmationCallId));
-            console.log(`[ConfirmationCalls] SMS sent to ${normalizedPhone} for job ${confirmationCallId}`);
-          } else {
-            console.error(`[ConfirmationCalls] SMS failed for job ${confirmationCallId}: ${smsResult.error}`);
-          }
-        } catch (smsErr) {
-          console.error(`[ConfirmationCalls] SMS error for job ${confirmationCallId}:`, smsErr);
+      // ── 2. Send SMS (synchronous — wait for result before returning) ──────────────────────────────────────────────────
+      try {
+        const firstName = input.clientName?.split(" ")[0] ?? "there";
+        const smsBody =
+          `Hi ${firstName}, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n` +
+          `✅ Reply YES to confirm\n` +
+          `🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\n` +
+          `Quick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\n` +
+          `Thanks so much, looking forward to seeing you tomorrow! 😊`;
+        const csNumberId = ENV.openPhoneCsNumberId;
+        const smsResult = await sendSms({
+          to: normalizedPhone,
+          content: smsBody,
+          ...(csNumberId ? { fromNumberId: csNumberId } : {}),
+        });
+        if (smsResult.success) {
+          await db.update(confirmationCalls)
+            .set({
+              status: "completed",
+              smsFollowupSent: 1,
+              smsFollowupAt: Date.now(),
+              smsFollowupBody: smsBody,
+            })
+            .where(eq(confirmationCalls.id, confirmationCallId));
+          console.log(`[ConfirmationCalls] SMS sent to ${normalizedPhone} for job ${confirmationCallId}`);
+        } else {
+          await db.update(confirmationCalls).set({ status: "failed" }).where(eq(confirmationCalls.id, confirmationCallId));
+          console.error(`[ConfirmationCalls] SMS failed for job ${confirmationCallId}: ${smsResult.error}`);
         }
-      })();
-
+      } catch (smsErr) {
+        await db.update(confirmationCalls).set({ status: "failed" }).where(eq(confirmationCalls.id, confirmationCallId));
+        console.error(`[ConfirmationCalls] SMS error for job ${confirmationCallId}:`, smsErr);
+      }
       return { confirmationCallId };
     }),
 

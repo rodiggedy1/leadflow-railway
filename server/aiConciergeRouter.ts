@@ -36,7 +36,7 @@ import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
 import { isReadinessDomain, handleMadisonReadiness } from "./madison";
 import { isCommsDomain, handleMadisonComms } from "./madison/comms";
 import { computeReadinessSummary } from "./madison/readinessService";
-import { handleMadisonChain, executeConfirmedChain } from "./madison/chain";
+import { executeConfirmedChain } from "./madison/chain";
 import type { ChainConfirmCard, ChainExecutionResult, ExecutionPlan } from "./madison/chain/types";
 import { chainExecutions } from "../drizzle/schema";
 
@@ -799,7 +799,7 @@ async function handleTextClient(
   resolvedClientPhone?: string
 ): Promise<ConciergeResult> {
   if (!clientName && !resolvedClientPhone) {
-    return { type: "error", message: "Please specify a client name to text." };
+    return { type: "error", message: "Who do you want to text? Just give me the client's name." };
   }
 
   // If agent already picked from disambiguation, resolve directly
@@ -811,7 +811,7 @@ async function handleTextClient(
       .where(like(completedJobs.phone, q))
       .limit(1);
     const client = rows[0];
-    if (!client) return { type: "error", message: "Client not found." };
+    if (!client) return { type: "error", message: "Hmm, I couldn't find that client. Double-check the name and try again." };
     const draft = await draftClientMessage(messageHint, client.name ?? clientName ?? "the client");
     return {
       type: "bulk_sms_confirm",
@@ -860,7 +860,7 @@ async function handleTextClient(
   const matches = Array.from(byPhone.values()).sort((a, b) => b.totalCleans - a.totalCleans).slice(0, 6);
 
   if (matches.length === 0) {
-    return { type: "error", message: `No client found matching "${clientName}". Check the spelling or try a partial name.` };
+    return { type: "error", message: `I couldn't find anyone matching "${clientName}" — try a partial name or check the spelling.` };
   }
 
   if (matches.length === 1) {
@@ -908,7 +908,7 @@ async function handleSendPaymentLink(
   resolvedClientName?: string
 ): Promise<ConciergeResult> {
   if (!clientName && !resolvedClientPhone) {
-    return { type: "error", message: "Please specify a client name to send the payment link to." };
+    return { type: "error", message: "Who should I send the payment link to? Just give me the client's name." };
   }
 
   let recipientPhone: string;
@@ -949,7 +949,7 @@ async function handleSendPaymentLink(
     }
 
     if (!recipientAddress) {
-      return { type: "error", message: "I found the customer but couldn't locate a service address to generate a payment link." };
+      return { type: "error", message: "Found the customer, but there's no service address on file — can't generate the link without it." };
     }
   } else {
     // Search by name — same dual-table logic as searchCustomers (@ mentions)
@@ -1026,7 +1026,7 @@ async function handleSendPaymentLink(
     const matches = Array.from(byPhone.values()).sort((a, b) => b.totalCleans - a.totalCleans).slice(0, 6);
 
     if (matches.length === 0) {
-      return { type: "error", message: `No client found matching "${clientName}". Check the spelling or try a partial name.` };
+      return { type: "error", message: `I couldn't find anyone matching "${clientName}" — try a partial name or check the spelling.` };
     }
 
     if (matches.length > 1) {
@@ -1107,7 +1107,7 @@ async function handleCallPerson(
   resolvedName?: string,
 ): Promise<ConciergeResult> {
   if (!personName && !resolvedPhone) {
-    return { type: "error", message: "Please specify who you want to call." };
+    return { type: "error", message: "Who do you want me to call? Just give me a name." };
   }
   let recipientPhone: string;
   let recipientName: string;
@@ -1162,7 +1162,7 @@ async function handleCallPerson(
       ...clientMatches.map(c => ({ phone: c.phone, name: c.name, audience: "customer" as const })),
     ];
     if (allMatches.length === 0) {
-      return { type: "error", message: `No client or cleaner found matching "${personName}". Check the spelling or try a partial name.` };
+      return { type: "error", message: `I couldn't find anyone matching "${personName}" — try a different spelling or a partial name.` };
     }
     if (allMatches.length > 1) {
       // Disambiguation — reuse client_disambiguation card with __call_client__ sentinel
@@ -1472,7 +1472,7 @@ async function handleCustomerProfile(
     }
   }
   if (!phone) {
-    return { type: "error", message: `No customer found matching "${name}". Try their full name.` };
+    return { type: "error", message: `Couldn't find a customer matching "${name}" — try their full name or check the spelling.` };
   }
 
   const phone10 = digits10(phone);
@@ -1560,7 +1560,7 @@ async function handleTextCleaners(
   const { recipients, targetDescription } = await resolveTextTargets(plan, db);
 
   if (recipients.length === 0) {
-    return { type: "error", message: `No cleaners found matching "${plan.targetHint ?? "your request"}". Try "working today" or a specific name.` };
+    return { type: "error", message: `No cleaners found matching "${plan.targetHint ?? "your request"}" — try "working today" or a specific name.` };
   }
 
   const draftMessage = await draftCleanerMessage(messageHint, targetDescription, recipients);
@@ -1579,7 +1579,7 @@ async function handleGetEtaForCustomer(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
   if (!clientName) {
-    return { type: "error", message: "Please include the customer's name. Example: \"Get ETA for Mary Jones\"" };
+    return { type: "error", message: "Which customer? Just add their name — e.g. \"Get ETA for Mary Jones\"." };
   }
   const today = getTodayET();
   // Find today's cleanerJobs row for this customer
@@ -1656,7 +1656,7 @@ async function handleEtaUpdate(
   const today = getTodayET();
 
   if (teams.length === 0) {
-    return { type: "error", message: "No active jobs found for today." };
+    return { type: "error", message: "No active jobs on the schedule for today." };
   }
 
   let matched = teams.find(t => {
@@ -1691,11 +1691,11 @@ async function handleEtaUpdate(
   }
 
   if (!matched.currentJobId) {
-    return { type: "error", message: `No active job found for ${matched.teamName} today.` };
+    return { type: "error", message: `I don't see an active job for ${matched.teamName} today.` };
   }
 
   if (!matched.cleanerPhone) {
-    return { type: "error", message: `No phone number on file for ${matched.cleanerName}.` };
+    return { type: "error", message: `No phone number on file for ${matched.cleanerName} — can't place the call.` };
   }
 
   const [row] = await db
@@ -1711,7 +1711,7 @@ async function handleEtaUpdate(
     .where(eq(cleanerJobs.id, matched.currentJobId))
     .limit(1);
 
-  if (!row) return { type: "error", message: "Job not found." };
+  if (!row) return { type: "error", message: "Couldn't find that job." };
 
   const cleanerFirstName = (row.cleanerName ?? "there").split(" ")[0];
   const customerFirstName = (row.customerName ?? "your customer").split(" ")[0];
@@ -1773,12 +1773,12 @@ async function handleEtaUpdateByJobId(
     .where(eq(cleanerJobs.id, jobId))
     .limit(1);
 
-  if (!row) return { type: "error", message: "Job not found." };
+  if (!row) return { type: "error", message: "Couldn't find that job." };
   if (!row.cleanerPhone) return { type: "error", message: `No phone number on file for ${row.cleanerName}.` };
-  if (!row.serviceDateTime) return { type: "error", message: "Job has no service time set." };
+  if (!row.serviceDateTime) return { type: "error", message: "That job doesn't have a service time set yet." };
 
   const serviceTime = parseServiceDateTime(row.serviceDateTime);
-  if (!serviceTime) return { type: "error", message: "Could not parse service date/time." };
+  if (!serviceTime) return { type: "error", message: "Something's off with the service date/time format — couldn't parse it." };
 
   const cleanerFirstName = (row.cleanerName ?? "there").split(" ")[0];
   const customerFirstName = (row.customerName ?? "your customer").split(" ")[0];
@@ -2511,6 +2511,9 @@ export const aiConciergeRouter = router({
     .input(
       z.object({
         message: z.string().min(1).max(2000),
+        // Conversation context
+        history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).max(20).optional(),
+        summary: z.string().max(1000).optional(),
         resolvedJobId: z.number().optional(),
         resolvedClientPhone: z.string().optional(),
         resolvedClientMessageHint: z.string().nullable().optional(),
@@ -2567,99 +2570,13 @@ export const aiConciergeRouter = router({
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
 
-      // ── Unified Planner Routing ───────────────────────────────────────────
-      // The deterministic pre-parser classifies the message as chain or single
-      // BEFORE any LLM call. If the pre-parser forces chain, the request must
-      // NEVER fall through to parseConciergeRequest — doing so risks dangerous
-      // misclassification by the legacy parser.
-      const { planChainRouting, hasCoordinationSignal } = await import("./madison/chain/planner");
-      const _isForceChain = hasCoordinationSignal(input.message);
-
-      try {
-        const routing = await planChainRouting(input.message);
-        console.log(`[Planner] mode=${routing.mode} isForceChain=${_isForceChain} msg=${JSON.stringify(input.message)}`);
-
-        if (routing.mode === "chain" && routing.plan) {
-          // Multi-capability chain
-          const chainResult = await handleMadisonChain(input.message, {
-            db,
-            agentId: ctx.agent.agentId,
-            agentName: ctx.agent.agentName ?? undefined,
-            plan: routing.plan,
-          });
-          if (chainResult.type === "chain_confirm") {
-            return { type: "chain_confirm" as const, chainExecutionId: chainResult.chainExecutionId, card: chainResult.card };
-          }
-          if (chainResult.type === "chain_result") {
-            return { type: "chain_result" as const, chainExecutionId: chainResult.chainExecutionId, result: chainResult.result };
-          }
-          // bulk_sms_confirm shortcut — chain resolved to existing SMS confirm card
-          if (chainResult.type === "bulk_sms_confirm") {
-            return { ...chainResult.card, command: input.message };
-          }
-          // chain_legacy returned — for a forced-chain request this is an error
-          if (_isForceChain) {
-            return {
-              type: "error" as const,
-              message: "Chain planner could not build a valid plan for this request. Please try rephrasing.",
-            };
-          }
-        }
-
-        // Forced-chain requests that returned mode !== "chain" are an error
-        if (_isForceChain && routing.mode !== "chain") {
-          return {
-            type: "error" as const,
-            message: `Chain planner returned unexpected mode "${routing.mode}" for a multi-step request. Please try rephrasing.`,
-          };
-        }
-
-        if (routing.mode === "single" && routing.capabilityId) {
-          const capId = routing.capabilityId;
-          const rid = crypto.randomUUID().slice(0, 8);
-
-          // Route to existing single-capability handler by capabilityId
-          if (capId.startsWith("communications.")) {
-            console.log(`[Planner] single → comms: ${capId} rid=${rid}`);
-            const commsResult = await handleMadisonComms(db, input.message, rid, ctx.agent.agentId);
-            if (commsResult.handled) {
-              const r = commsResult.response as any;
-              if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
-              if (r.type === "client_disambiguation") return r;
-              return { type: "error" as const, message: r.message ?? "Could not process SMS request." };
-            }
-            console.warn(`[Planner] comms handler fell back: ${commsResult.fallbackReason}`);
-          } else if (capId.startsWith("readiness.") || capId.startsWith("confirmations.") || capId.startsWith("payments.query")) {
-            console.log(`[Planner] single → readiness: ${capId} rid=${rid}`);
-            const madisonResult = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId);
-            if (madisonResult.handled && madisonResult.response) {
-              return {
-                type: "query_result" as const,
-                answer: madisonResult.response,
-                status: "complete" as const,
-                undoActionId: madisonResult.undoActionId ?? null,
-              };
-            }
-            console.warn("[Planner] readiness handler fell back:", madisonResult.fallbackReason);
-          }
-          // Other single capabilities fall through to legacy concierge
-        }
-        // mode === "legacy" or unhandled single → fall through to parseConciergeRequest
-      } catch (err) {
-        console.warn("[Planner] Error:", err);
-        // Forced-chain requests must not fall through to the legacy parser on error
-        if (_isForceChain) {
-          const stage = err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120);
-          return {
-            type: "error" as const,
-            message: `Chain planner encountered an error and cannot proceed: ${stage}`,
-          };
-        }
-      }
       // ─────────────────────────────────────────────────────────────────────
 
       // Use new unified parser — replaces classifyIntent for all intents
-      const rawPlan = await parseConciergeRequest(input.message);
+      const rawPlan = await parseConciergeRequest(input.message, {
+        history: input.history,
+        summary: input.summary,
+      });
       // Validate and normalize: resolve contradictions before dispatch
       const { plan, corrected, correction } = validateAndNormalizePlan(rawPlan, re);
       if (corrected && correction) {
@@ -2760,7 +2677,10 @@ export const aiConciergeRouter = router({
           : re?.type === "cleaner"
             ? { type: "cleaner" as const, name: re.name, cleanerProfileId: re.cleanerProfileId }
             : undefined;
-        const queryResult = await resolveQuery(plan, db, input.message, chipEntity);
+        const queryResult = await resolveQuery(plan, db, input.message, chipEntity, {
+          history: input.history,
+          summary: input.summary,
+        });
         if (queryResult.type === "clarification") {
           return {
             type: "error" as const,
@@ -2775,7 +2695,7 @@ export const aiConciergeRouter = router({
       }
       return {
         type: "error" as const,
-        message: "I can handle ETA updates, texting cleaners, texting clients, sending payment links, calling clients or cleaners, answering questions about today's jobs, and pulling up customer profiles. Try: \"Tell me about Mary Jones\", \"List all jobs today\", \"Send ETA for Team 8\", \"Text Abigail Avrick\", or \"Call Rohan Gilkes\".",
+        message: "Not sure what you need there — I can look up customers, check job status, send ETAs, text cleaners or clients, pull ratings, send payment links, or place calls. Try something like \"Tell me about Sarah Jones\", \"What's Team 3's ETA?\", or \"Text Abigail Avrick\".",
       };
     }),
 

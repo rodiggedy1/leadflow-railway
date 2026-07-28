@@ -504,6 +504,26 @@ Return ONLY valid JSON. No markdown, no explanation.`,
       } else {
         console.log(`[GlanceWorker] Metadata repaired ${threadId}`);
       }
+
+      // ── Madison Email Draft Agent ─────────────────────────────────────────────
+      // Fire-and-forget: only on new messages (historyChanged) from actionable senders.
+      // Never blocks the worker loop — errors are caught inside triggerMadisonEmailDraft.
+      if (historyChanged && isActionable === 1) {
+        const latestMsgForAgent = messages[messages.length - 1];
+        const latestBodyForAgent = latestMsgForAgent ? findTextBody(latestMsgForAgent.payload) : "";
+        const latestMsgIdForAgent = latestMsgForAgent?.id ?? "";
+        if (latestBodyForAgent.trim() && latestMsgIdForAgent) {
+          const { triggerMadisonEmailDraft } = await import("./madisonEmailAgent");
+          triggerMadisonEmailDraft({
+            threadId,
+            inboundMessageId: latestMsgIdForAgent,
+            fromEmail: senderEmail,
+            senderName,
+            subject,
+            inboundText: latestBodyForAgent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2000),
+          }).catch((e) => console.error("[GlanceWorker] MadisonEmailAgent error:", e));
+        }
+      }
     } catch (aiErr: any) {
       // AI failed — inbox write already committed, just mark for retry
       const msg = aiErr?.message ?? String(aiErr);

@@ -533,6 +533,239 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] madison_action_items ack index failed (non-fatal):', err);
   }
+
+  // ── madison_sms_drafts — Madison SMS Draft Agent ─────────────────────────
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_sms_drafts (
+        id BIGINT AUTO_INCREMENT NOT NULL,
+        inboundOpenPhoneId VARCHAR(128) NOT NULL,
+        sessionId BIGINT NOT NULL,
+        fromPhone VARCHAR(30) NOT NULL,
+        senderName VARCHAR(255),
+        senderType ENUM('customer','cleaner','unknown') NOT NULL DEFAULT 'unknown',
+        status ENUM('RECEIVED','CLASSIFIED','TOOLS_RUNNING','DRAFT_READY','SENDING','SENT','DELIVERED','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED',
+        messageType ENUM('QUESTION','ACTION','INFORMATION','CONVERSATION','UNKNOWN'),
+        intent VARCHAR(64),
+        capability VARCHAR(64),
+        capabilityVersion INT,
+        resolvedContext JSON,
+        capabilityArgs JSON,
+        capabilityResult JSON,
+        observations JSON NOT NULL DEFAULT ('[]'),
+        suggestedActions JSON NOT NULL DEFAULT ('[]'),
+        followUps JSON NOT NULL DEFAULT ('[]'),
+        qualityScore JSON,
+        originalMessage TEXT NOT NULL,
+        generatedDraft TEXT,
+        approvedText TEXT,
+        approvedBy VARCHAR(128),
+        approvedAt DATETIME(3),
+        dismissedBy VARCHAR(128),
+        dismissedAt DATETIME(3),
+        outboundOpenPhoneId VARCHAR(128),
+        sentAt DATETIME(3),
+        deliveredAt DATETIME(3),
+        errorStage VARCHAR(64),
+        errorCode VARCHAR(64),
+        errorMessage TEXT,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        CONSTRAINT madison_sms_drafts_id PRIMARY KEY (id)
+      )
+    `));
+    console.log('[Migration] madison_sms_drafts: OK');
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts failed (non-fatal):', err);
+  }
+  try {
+    const [uqRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_sms_drafts'
+        AND index_name = 'uq_sms_draft_inbound'
+    `)) as any;
+    if (!(Array.isArray(uqRows) && uqRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(
+        `CREATE UNIQUE INDEX uq_sms_draft_inbound ON madison_sms_drafts (inboundOpenPhoneId)`
+      ));
+      console.log('[Migration] madison_sms_drafts uq index: created');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts uq index failed (non-fatal):', err);
+  }
+  try {
+    const [idxRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_sms_drafts'
+        AND index_name = 'idx_sms_draft_status'
+    `)) as any;
+    if (!(Array.isArray(idxRows) && idxRows[0]?.cnt > 0)) {
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_status ON madison_sms_drafts (status)`));
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_session ON madison_sms_drafts (sessionId)`));
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_created ON madison_sms_drafts (createdAt)`));
+      await db.execute(sql.raw(`CREATE INDEX idx_sms_draft_status_created ON madison_sms_drafts (status, createdAt)`));
+      console.log('[Migration] madison_sms_drafts indexes: created');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts indexes failed (non-fatal):', err);
+  }
+  // ── intentSummary column (added after initial table creation) ───────────────
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE madison_sms_drafts
+      ADD COLUMN IF NOT EXISTS intentSummary TEXT NULL
+    `));
+    console.log('[Migration] madison_sms_drafts intentSummary column: OK');
+  } catch (err) {
+    console.error('[Migration] madison_sms_drafts intentSummary column failed (non-fatal):', err);
+  }
+  // ── madison_email_drafts table ────────────────────────────────────────────
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_email_drafts (
+        id BIGINT AUTO_INCREMENT NOT NULL,
+        threadId VARCHAR(255) NOT NULL,
+        inboundMessageId VARCHAR(255) NOT NULL,
+        sessionId BIGINT,
+        fromEmail VARCHAR(320) NOT NULL,
+        senderName VARCHAR(255),
+        subject VARCHAR(998),
+        status ENUM('RECEIVED','CLASSIFIED','TOOLS_RUNNING','DRAFT_READY','SENDING','SENT','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED',
+        messageType ENUM('QUESTION','ACTION','INFORMATION','CONVERSATION','UNKNOWN'),
+        intent VARCHAR(64),
+        capability VARCHAR(64),
+        capabilityVersion INT,
+        resolvedContext JSON,
+        capabilityArgs JSON,
+        capabilityResult JSON,
+        observations JSON,
+        suggestedActions JSON,
+        followUps JSON,
+        qualityScore JSON,
+        originalMessage TEXT NOT NULL,
+        intentSummary TEXT,
+        generatedDraft TEXT,
+        approvedText TEXT,
+        approvedBy VARCHAR(128),
+        approvedAt DATETIME(3),
+        dismissedBy VARCHAR(128),
+        dismissedAt DATETIME(3),
+        outboundMessageId VARCHAR(255),
+        sentAt DATETIME(3),
+        errorStage VARCHAR(64),
+        errorCode VARCHAR(64),
+        errorMessage TEXT,
+        createdAt DATETIME(3) NOT NULL DEFAULT NOW(3),
+        updatedAt DATETIME(3) NOT NULL DEFAULT NOW(3) ON UPDATE NOW(3),
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_email_draft_inbound (inboundMessageId)
+      )
+    `));
+    console.log('[Migration] madison_email_drafts: OK');
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts failed (non-fatal):', err);
+  }
+  // Fix existing madison_email_drafts table — rename inboundText → originalMessage if needed
+  try {
+    const [cols] = await db.execute(sql.raw(`
+      SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'madison_email_drafts' AND COLUMN_NAME = 'inboundText'
+    `)) as any;
+    if (Array.isArray(cols) && cols.length > 0) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts CHANGE inboundText originalMessage TEXT NOT NULL`));
+      console.log('[Migration] madison_email_drafts: renamed inboundText → originalMessage');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts column rename failed (non-fatal):', err);
+  }
+  // Add missing columns to madison_email_drafts if they don't exist
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE madison_email_drafts
+        ADD COLUMN IF NOT EXISTS sessionId BIGINT,
+        ADD COLUMN IF NOT EXISTS intent VARCHAR(64),
+        ADD COLUMN IF NOT EXISTS capability VARCHAR(64),
+        ADD COLUMN IF NOT EXISTS capabilityVersion INT,
+        ADD COLUMN IF NOT EXISTS resolvedContext JSON,
+        ADD COLUMN IF NOT EXISTS capabilityArgs JSON,
+        ADD COLUMN IF NOT EXISTS capabilityResult JSON,
+        ADD COLUMN IF NOT EXISTS qualityScore JSON,
+        ADD COLUMN IF NOT EXISTS outboundMessageId VARCHAR(255)
+    `));
+    console.log('[Migration] madison_email_drafts extra columns: OK');
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts extra columns failed (non-fatal):', err);
+  }
+  // ── madison_email_drafts: add TOOLS_RUNNING to status ENUM if missing ──
+  try {
+    const [enumRows] = await db.execute(sql.raw(`
+      SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'madison_email_drafts' AND COLUMN_NAME = 'status'
+    `)) as any;
+    const colType: string = (Array.isArray(enumRows) && enumRows[0]?.COLUMN_TYPE) ?? '';
+    if (colType && !colType.includes('TOOLS_RUNNING')) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts MODIFY COLUMN status ENUM('RECEIVED','CLASSIFIED','TOOLS_RUNNING','DRAFT_READY','SENDING','SENT','DISMISSED','FAILED') NOT NULL DEFAULT 'RECEIVED'`));
+      console.log('[Migration] madison_email_drafts status ENUM: added TOOLS_RUNNING');
+    } else {
+      console.log('[Migration] madison_email_drafts status ENUM: TOOLS_RUNNING already present');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts status ENUM update failed (non-fatal):', err);
+  }
+  // ── madison_email_drafts: unique index on threadId (prevents duplicate drafts from race) ──
+  try {
+    const [idxRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'madison_email_drafts'
+        AND index_name = 'uq_email_draft_thread'
+    `)) as any;
+    const exists = Array.isArray(idxRows) && idxRows[0]?.cnt > 0;
+    if (!exists) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts ADD UNIQUE KEY uq_email_draft_thread (threadId)`));
+      console.log('[Migration] madison_email_drafts uq_email_draft_thread: created');
+    } else {
+      console.log('[Migration] madison_email_drafts uq_email_draft_thread: already exists');
+    }
+    } catch (err) {
+    console.error('[Migration] madison_email_drafts threadId unique index failed (non-fatal):', err);
+  }
+  // ── madison_email_drafts: add replyToEmail column ─────────────────────────────────────────────────
+  try {
+    const [replyToColRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = 'madison_email_drafts' AND column_name = 'replyToEmail'
+    `)) as any;
+    const replyToColExists = Array.isArray(replyToColRows) && replyToColRows[0]?.cnt > 0;
+    if (!replyToColExists) {
+      await db.execute(sql.raw(`ALTER TABLE madison_email_drafts ADD COLUMN replyToEmail VARCHAR(320) NULL AFTER fromEmail`));
+      console.log('[Migration] madison_email_drafts replyToEmail: added');
+    } else {
+      console.log('[Migration] madison_email_drafts replyToEmail: already exists');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_email_drafts replyToEmail failed (non-fatal):', err);
+  }
+  // u2500u2500 conversation_sessions: change aiMode default to 0 (AI off by default) u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500
+  try {
+    await db.execute(sql.raw(`ALTER TABLE conversation_sessions MODIFY COLUMN aiMode INT NOT NULL DEFAULT 0`));
+    console.log('[Migration] conversation_sessions aiMode default: set to 0');
+  } catch (err) {
+    console.error('[Migration] conversation_sessions aiMode default failed (non-fatal):', err);
+  }
+  // ── Reset stuck 'fired' confirmation_calls rows back to 'pending' ─────────────────────────────────
+  // Rows get stuck in 'fired' when the fire-and-forget SMS async block failed silently.
+  // Now that SMS is sent synchronously, this cleans up any legacy stuck rows on every deploy.
+  try {
+    const [resetResult] = await db.execute(sql.raw(
+      `UPDATE confirmation_calls SET status = 'pending' WHERE status = 'fired'`
+    )) as any;
+    const affected = resetResult?.affectedRows ?? 0;
+    if (affected > 0) {
+      console.log(`[Migration] Reset ${affected} stuck fired confirmation_calls rows to pending`);
+    }
+  } catch (err) {
+    console.error('[Migration] Failed to reset fired confirmation_calls (non-fatal):', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB
@@ -726,6 +959,67 @@ async function startServer() {
     }
   });
 
+  // TEMPORARY: madison_email_drafts schema + update diagnostic — remove after issue resolved
+  app.get("/api/diag/email-drafts", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    const db = await getDb();
+    if (!db) return res.status(500).json({ error: 'no db' });
+    const result: Record<string, unknown> = {};
+    // 1. SHOW CREATE TABLE
+    try {
+      const [rows] = await db.execute(sql.raw(`SHOW CREATE TABLE madison_email_drafts`)) as any;
+      result.showCreateTable = rows?.[0]?.['Create Table'] ?? rows;
+    } catch (e: any) { result.showCreateTableError = { message: e.message, cause: e.cause?.message }; }
+    // 2. INFORMATION_SCHEMA.COLUMNS
+    try {
+      const [cols] = await db.execute(sql.raw(`SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'madison_email_drafts' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION`)) as any;
+      result.columns = cols;
+    } catch (e: any) { result.columnsError = { message: e.message, cause: e.cause?.message }; }
+    // 3. Pick an existing row
+    let knownId: number | null = null;
+    try {
+      const [rows] = await db.execute(sql.raw(`SELECT id, status FROM madison_email_drafts LIMIT 1`)) as any;
+      result.existingRow = rows?.[0] ?? null;
+      knownId = rows?.[0]?.id ?? null;
+    } catch (e: any) { result.existingRowError = { message: e.message, cause: e.cause?.message }; }
+    if (knownId !== null) {
+      // 4. Raw SQL status update
+      try {
+        const [upd] = await db.execute(sql.raw(`UPDATE madison_email_drafts SET status='TOOLS_RUNNING' WHERE id=${knownId}`)) as any;
+        result.rawSqlStatusUpdate = { affectedRows: upd?.affectedRows, ok: true };
+      } catch (e: any) { result.rawSqlStatusUpdateError = { message: e.message, code: (e as any).code, errno: (e as any).errno, sqlState: (e as any).sqlState, sqlMessage: (e as any).sqlMessage, cause: { message: e.cause?.message, code: e.cause?.code, errno: e.cause?.errno, sqlState: e.cause?.sqlState } }; }
+      // 5. Drizzle status update with full error logging
+      try {
+        const { madisonEmailDrafts } = await import('../../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        await db.update(madisonEmailDrafts).set({ status: 'TOOLS_RUNNING' }).where(eq(madisonEmailDrafts.id, knownId));
+        result.drizzleStatusUpdate = { ok: true };
+      } catch (e: any) { result.drizzleStatusUpdateError = { name: e?.name, message: e?.message, code: e?.code, errno: e?.errno, sqlState: e?.sqlState, sqlMessage: e?.sqlMessage, cause: { message: e?.cause?.message, code: e?.cause?.code, errno: e?.cause?.errno, sqlState: e?.cause?.sqlState } }; }
+      // 6. Raw SQL updatedAt update (non-enum)
+      try {
+        const [upd2] = await db.execute(sql.raw(`UPDATE madison_email_drafts SET updatedAt=NOW() WHERE id=${knownId}`)) as any;
+        result.rawSqlUpdatedAtUpdate = { affectedRows: upd2?.affectedRows, ok: true };
+      } catch (e: any) { result.rawSqlUpdatedAtUpdateError = { message: e.message, code: (e as any).code, errno: (e as any).errno, sqlState: (e as any).sqlState, cause: { message: e.cause?.message, code: e.cause?.code } }; }
+    } else {
+      result.noRowsFound = true;
+    }
+    // 7. Recent 20 drafts
+    try {
+      const [recentRows] = await db.execute(sql.raw(`SELECT id, threadId, fromEmail, senderName, subject, status, createdAt FROM madison_email_drafts ORDER BY id DESC LIMIT 20`)) as any;
+      result.recentDrafts = recentRows;
+    } catch (e: any) { result.recentDraftsError = { message: e.message }; }
+    // 8. opsChatMessages rows for madison_email_draft cards (last 20)
+    try {
+      const [opsRows] = await db.execute(sql.raw(`SELECT id, quickAction, metadata, channel, createdAt FROM ops_chat_messages WHERE quickAction = 'madison_email_draft' ORDER BY id DESC LIMIT 20`)) as any;
+      result.opsChatDraftCards = opsRows;
+    } catch (e: any) { result.opsChatDraftCardsError = { message: e.message }; }
+    // 9. Check specifically for draft 30015 (Ashley Bloom Kenny)
+    try {
+      const [ashleyRows] = await db.execute(sql.raw(`SELECT id, quickAction, metadata, channel, createdAt FROM ops_chat_messages WHERE quickAction = 'madison_email_draft' AND metadata LIKE '%30015%'`)) as any;
+      result.ashleyCard = ashleyRows;
+    } catch (e: any) { result.ashleyCardError = { message: e.message }; }
+    return res.json(result);
+  });
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
     try {

@@ -107,6 +107,24 @@ export function registerGmailRoutes(app: Express) {
       // Update historyId
       await db.update(gmailState).set({ historyId: newHistoryId }).where(eq(gmailState.id, 1));
 
+      // ── Fallback: if history API returned 0 new messages (stale historyId / gap),
+      // fetch the most recent inbox thread directly and enqueue it.
+      if (events.newMessages.length === 0) {
+        try {
+          const { listInboxThreads } = await import("./gmailService");
+          const { threads } = await listInboxThreads({ maxResults: 1 });
+          if (threads.length > 0) {
+            const tid = threads[0].id;
+            if (tid) {
+              console.log(`[Webhook] history gap fallback — enqueuing latest thread ${tid}`);
+              enqueueThread(tid, "pubsub" as EnqueueSource);
+            }
+          }
+        } catch (fbErr: any) {
+          console.error(`[Webhook] fallback listInboxThreads failed:`, fbErr?.message);
+        }
+      }
+
       // ── Handle new messages ────────────────────────────────────────────────
       if (events.newMessages.length > 0) {
         const affectedThreadIds = Array.from(new Set(events.newMessages.map((m) => m.threadId).filter(Boolean) as string[]));

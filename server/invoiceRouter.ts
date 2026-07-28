@@ -269,8 +269,8 @@ export async function generateInvoicePdf(params: {
     // Row height: at least 28 pts
     const rowH = Math.max(28, descLines.length * 12 + 8);
 
-    // Date
-    page.drawText(item.date, {
+    // Date — always use the invoice-level serviceDate, not the template's stored item.date
+    page.drawText(params.serviceDate, {
       x: MARGIN + 6, y: rowY - 12, size: 9, font: fontReg, color: DARK,
     });
 

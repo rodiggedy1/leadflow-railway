@@ -3027,7 +3027,26 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
   const [isThinking, setIsThinking] = useState(false);
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [readinessDate, setReadinessDate] = useState<string | undefined>(undefined);
+  // Rolling conversation summary — updated after each AI response
+  const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Build the last-N turns + summary to send with every request
+  const buildChatContext = useCallback((currentMessages: Message[]) => {
+    // Extract up to 15 recent turns (user + ai text only)
+    const history: Array<{ role: "user" | "assistant"; content: string }> = [];
+    for (const m of currentMessages.slice(-20)) {
+      if (m.role === "user" && m.content.type === "text") {
+        history.push({ role: "user", content: m.content.text });
+      } else if (m.role === "ai" && m.content.type === "text") {
+        history.push({ role: "assistant", content: m.content.text });
+      } else if (m.role === "ai" && m.content.type === "query_result") {
+        history.push({ role: "assistant", content: m.content.card.answer });
+      }
+      if (history.length >= 15) break;
+    }
+    return { history, summary: conversationSummary };
+  }, [conversationSummary]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // ── Voice / PTT ──────────────────────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -3369,10 +3388,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       content: { type: "text", text },
       ts: nowTime(),
     };
+    const ctxForSuggestion = buildChatContext(messages);
     setMessages((prev) => [...prev, userMsg]);
     setIsThinking(true);
     chatMutation.mutate(
-      { message: text },
+      { message: text, ...ctxForSuggestion },
       {
         onSuccess: (result) => {
           setIsThinking(false);
@@ -3607,9 +3627,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
         : ({ type: "cleaner" as const, cleanerProfileId: focusedCustomer.cleanerProfileId, name: focusedCustomer.name })
       : undefined;
 
+    // Capture messages snapshot BEFORE setMessages to build context from current history
+    const chatCtx = buildChatContext(messages);
+
     chatMutation.mutate(
       {
         message: text,
+        // Conversation context — last 15 turns + rolling summary
+        ...chatCtx,
         // Pass resolvedEntity for pill-selected entities (customer or cleaner)
         ...(resolvedEntityPayload ? { resolvedEntity: resolvedEntityPayload } : {}),
         // Legacy resolvedClientPhone kept for non-pill flows (disambiguation cards, etc.)
@@ -3620,7 +3645,26 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
         onSuccess: (result) => {
           setIsThinking(false);
           const aiMsgs = buildAiMessage(result);
-          if (aiMsgs.length) setMessages((prev) => [...prev, ...aiMsgs]);
+          if (aiMsgs.length) {
+            setMessages((prev) => {
+              const updated = [...prev, ...aiMsgs];
+              // Update rolling summary every 6 turns (3 exchanges)
+              if (updated.filter(m => m.role === "user").length % 6 === 0) {
+                // Build a compact summary from the last 12 messages
+                const recent = updated.slice(-12)
+                  .filter(m => m.content.type === "text" || m.content.type === "query_result")
+                  .map(m => {
+                    if (m.content.type === "text") return `${m.role === "user" ? "Dispatcher" : "Madison"}: ${m.content.text}`;
+                    if (m.content.type === "query_result") return `Madison: ${m.content.card.answer}`;
+                    return "";
+                  })
+                  .filter(Boolean)
+                  .join("\n");
+                if (recent) setConversationSummary(recent.slice(0, 800));
+              }
+              return updated;
+            });
+          }
           // customer_profile removed — all informational queries return query_result
         },
         onError: (err) => {
@@ -3637,7 +3681,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
         },
       }
     );
-  }, [input, isThinking, chatMutation, focusedCustomer]);
+  }, [input, isThinking, chatMutation, focusedCustomer, messages, buildChatContext]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

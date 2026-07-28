@@ -225,6 +225,8 @@ interface CommandChatProps {
   isVisible?: boolean;
   /** All possible names for the current user (handles OAuth name vs DB name mismatch). Used for @mention detection. */
   myNames?: Set<string>;
+  /** Increment this number from the parent to open the Tasks panel (e.g. from left nav profile picture click). */
+  openTasksSignal?: number;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -999,6 +1001,8 @@ type MessageListProps = {
   openCreateIssueModal: (defaultTitle: string) => void;
   openIssueEngine: (issueId: number | null) => void;
   onOpenConcierge: () => void;
+  onCallBack: (name: string, phone: string, msgId: number) => void;
+  onTextBack: (name: string, phone: string, msgId: number) => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1300,10 +1304,11 @@ function EtaCallResultCard({
 
 // ── MadisonSmsDraftCard ─────────────────────────────────────────────────────
 // Self-contained component — fetches draft by draftId, handles approve/dismiss/retry
-function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; createdAt: string | Date }; callerName: string }) {
+export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [justActed, setJustActed] = useState<"sent" | "dismissed" | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -1317,22 +1322,33 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
 
   const approveMutation = trpc.opsChat.approveSmsDraft.useMutation({
     onSuccess: () => {
-      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      setJustActed("sent");
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
     },
   });
   const dismissMutation = trpc.opsChat.dismissSmsDraft.useMutation({
     onSuccess: () => {
-      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      setJustActed("dismissed");
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
     },
   });
   const retryMutation = trpc.opsChat.retrySmsDraft.useMutation({
     onSuccess: () => utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! }),
   });
 
-  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  const MADISON_PHOTO = "/madison-avatar.jpg";
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const [showConversation, setShowConversation] = useState(false);
+
+  // Conversation history — only fetched when the toggle is opened
+  const { data: conversationMessages, isLoading: convLoading } = trpc.opsChat.getSmsDraftConversation.useQuery(
+    { draftId: meta.draftId!, limit: 5 },
+    { enabled: !!meta.draftId && showConversation, refetchOnWindowFocus: false, staleTime: 60_000 }
+  );
 
   const handleApprove = async (text: string) => {
     if (!meta.draftId || isSending) return;
@@ -1360,8 +1376,8 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
         <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦ AI</span>
+            <span style={{ font: "700 28px Georgia,serif", color: "#1a1a2e" }}>Madison</span>
+            <span style={{ font: "800 13px Inter,system-ui", color: "#6d5cff" }}>✦ AI</span>
             <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
           </div>
           <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Draft unavailable.</div>
@@ -1384,176 +1400,775 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
   const observations = draft?.observations ? (() => { try { return JSON.parse(draft.observations as string) as string[]; } catch { return []; } })() : [];
   const generatedDraft = draft?.generatedDraft ?? "";
 
+  // Status badge for header
+  const statusBadge = isSent
+    ? { label: "Sent", bg: "#eef8f2", color: "#157c5a" }
+    : isDismissed
+    ? { label: "Dismissed", bg: "#f3f4f6", color: "#6b7280" }
+    : isFailed
+    ? { label: "Failed", bg: "#fef2f2", color: "#dc2626" }
+    : isProcessing
+    ? { label: "Drafting…", bg: "#ede9fe", color: "#6d5cff" }
+    : { label: "Awaiting approval", bg: "#eef8f2", color: "#157c5a" };
+
+  // ── Confirmation flash before card disappears ──
+  if (justActed) {
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            background: justActed === "sent" ? "#f0fdf4" : "#fafafa",
+            border: `1px solid ${justActed === "sent" ? "#bbf7d0" : "#e5e7eb"}`,
+            borderRadius: 20,
+            padding: "18px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            transition: "all 0.3s",
+          }}>
+            <span style={{ fontSize: 22 }}>{justActed === "sent" ? "✅" : "✕"}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: justActed === "sent" ? "#15803d" : "#6b7280" }}>
+                {justActed === "sent" ? "Sent — Madison is handling it" : "Draft dismissed"}
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>This card will clear in a moment…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
-      {/* Avatar */}
-      <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }} />
+      {/* Outer wrapper — no card chrome here, just the chat row */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Sender meta */}
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦ AI</span>
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
-          {isProcessing && <span style={{ fontSize: 10, color: "#7c3aed", background: "#ede9fe", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Processing…</span>}
-          {isSent && <span style={{ fontSize: 10, color: "#22c55e", background: "#f0fdf4", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>✓ Sent</span>}
-          {isDismissed && <span style={{ fontSize: 10, color: "#9ca3af", background: "#f9fafb", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Dismissed</span>}
-          {isFailed && <span style={{ fontSize: 10, color: "#ef4444", background: "#fef2f2", borderRadius: 6, padding: "2px 7px", fontWeight: 600 }}>Failed</span>}
-        </div>
-        {/* Card */}
+        {/* V6 card */}
         <div style={{
-          background: "#ffffff",
-          border: isSent ? "1.5px solid #bbf7d0" : isFailed ? "1.5px solid #fecaca" : "1.5px solid #e0d9f8",
-          borderRadius: 16, overflow: "hidden", maxWidth: 560,
-          boxShadow: isSent ? "0 2px 16px rgba(34,197,94,0.08)" : "0 2px 16px rgba(99,102,241,0.08)",
-          opacity: isDismissed ? 0.6 : 1,
+          width: "100%",
+          background: "#fff",
+          border: "1px solid #ebe8fb",
+          borderRadius: 20,
+          boxShadow: "0 4px 24px rgba(30,30,60,0.08)",
+          overflow: "hidden",
+          opacity: isDismissed ? 0.55 : 1,
+          transition: "opacity 0.2s",
         }}>
-          <div style={{ padding: "18px 20px 16px", background: "linear-gradient(160deg,#faf9ff 0%,#f5f3ff 100%)" }}>
-            {/* Inbound message context */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Inbound SMS</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 3 }}>{senderLine}</div>
-              <div style={{
-                fontSize: 13, color: "#4b5563", fontStyle: "italic",
-                background: "#f3f4f6", borderRadius: 8, padding: "8px 12px",
-                borderLeft: "3px solid #c4b5fd", lineHeight: 1.5,
-              }}>{quotedLine}</div>
+
+          {/* ── Header ── */}
+          <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
+            {/* Avatar */}
+            <img
+              src={MADISON_PHOTO}
+              alt="Madison"
+              style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+            />
+            <div style={{ flex: 1 }}>
+              {/* Name + time */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+                <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
+                <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
+              </div>
+              {/* Copy — human summary */}
+              {isLoading || isProcessing ? (
+                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 14, color: "#9ca3af", lineHeight: 1.45 }}>
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#6d5cff" }} />
+                  <span style={{ fontStyle: "italic" }}>Drafting a reply…</span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 4, fontSize: 14, lineHeight: 1.45, color: "#222" }}>
+                  <p style={{ margin: "0.2em 0" }}>I can take this one.</p>
+                  <p style={{ margin: "0.2em 0" }}>
+                    {(draft as any)?.intentSummary ?? (observations.length > 0 ? observations[0] : "I drafted a reply for you.")}
+                  </p>
+                </div>
+              )}
             </div>
-            {/* Observations */}
-            {observations.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>What I found</div>
-                {observations.map((obs, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#4b5563", display: "flex", gap: 7, alignItems: "flex-start", marginBottom: 4 }}>
-                    <span style={{ color: "#7c3aed", flexShrink: 0, marginTop: 1 }}>•</span>
-                    <span>{obs}</span>
-                  </div>
-                ))}
+            {/* Status pill */}
+            <div style={{
+              marginLeft: "auto",
+              background: statusBadge.bg,
+              color: statusBadge.color,
+              padding: "5px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              height: "max-content",
+              whiteSpace: "nowrap" as const,
+              flexShrink: 0,
+            }}>
+              {statusBadge.label}
+            </div>
+          </div>
+
+          {/* ── Main body ── */}
+          <div style={{ padding: "0 16px 16px" }}>
+            <div style={{ border: "1px solid #ebe8fb", borderRadius: 14, padding: 14, background: "#fbfbff" }}>
+
+              {/* Latest customer message */}
+              <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>{draft?.senderName ? `Latest message from ${draft.senderName}` : "Latest customer message"}</span>
+                {draft?.fromPhone && (() => { const d = draft.fromPhone.replace(/\D/g, ""); const fmt = d.length === 11 && d[0] === "1" ? `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : draft.fromPhone; return <span style={{ fontWeight: 600, color: "#6d5cff", fontSize: 10 }}>{fmt}</span>; })()}
               </div>
-            )}
-            {/* Loading state */}
-            {isLoading || isProcessing ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#7c3aed", padding: "8px 0" }}>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Madison is drafting a reply…
+              <div style={{ display: "flex" }}>
+                <div style={{
+                  display: "inline-block",
+                  padding: "10px 13px",
+                  borderRadius: 14,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  maxWidth: "85%",
+                  background: "#ece7ff",
+                  color: "#222",
+                }}>
+                  {quotedLine || senderLine}
+                </div>
               </div>
-            ) : isDraftReady ? (
-              <>
-                {/* Draft separator */}
-                <div style={{ borderTop: "1px solid #e0d9f8", margin: "12px 0" }} />
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>✦ Draft Reply</div>
-                {editMode ? (
-                  <textarea
-                    value={editedText}
-                    onChange={e => setEditedText(e.target.value)}
-                    style={{
-                      width: "100%", minHeight: 80, fontSize: 13, color: "#111827",
-                      border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "10px 12px",
-                      fontFamily: "inherit", resize: "vertical", outline: "none",
-                      background: "#faf9ff",
-                    }}
-                    autoFocus
-                  />
-                ) : (
-                  <div style={{
-                    fontSize: 14, color: "#111827", lineHeight: 1.6,
-                    background: "#f5f3ff", borderRadius: 10, padding: "12px 14px",
-                    border: "1px solid #e0d9f8", marginBottom: 14,
-                  }}>
-                    {generatedDraft}
-                  </div>
-                )}
-                {/* Action buttons */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginTop: editMode ? 10 : 0 }}>
-                  {editMode ? (
-                    <>
-                      <button
-                        onClick={() => handleApprove(editedText)}
-                        disabled={isSending || !editedText.trim()}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
-                          background: "#4f46e5", color: "#fff", border: "none",
-                          borderRadius: 10, padding: "9px 18px",
-                          fontSize: 13, fontWeight: 700, cursor: isSending ? "wait" : "pointer",
-                          opacity: isSending ? 0.7 : 1,
-                        }}
-                      >
-                        {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "✈"} Send Edited
-                      </button>
-                      <button
-                        onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
-                        style={{
-                          background: "transparent", color: "#9ca3af",
-                          border: "1.5px solid #e5e7eb", borderRadius: 10,
-                          padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => handleApprove(generatedDraft)}
-                        disabled={isSending}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
-                          background: "#4f46e5", color: "#fff", border: "none",
-                          borderRadius: 10, padding: "9px 18px",
-                          fontSize: 13, fontWeight: 700, cursor: isSending ? "wait" : "pointer",
-                          opacity: isSending ? 0.7 : 1,
-                        }}
-                      >
-                        {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "✈"} Send
-                      </button>
-                      <button
-                        onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
-                          background: "#ffffff", color: "#4f46e5",
-                          border: "1.5px solid #c4b5fd", borderRadius: 10,
-                          padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                        }}
-                      >
-                        ✏ Edit & Send
-                      </button>
-                      <button
-                        onClick={handleDismiss}
-                        style={{
-                          background: "transparent", color: "#9ca3af",
-                          border: "1.5px solid #e5e7eb", borderRadius: 10,
-                          padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                        }}
-                      >
-                        Dismiss
-                      </button>
-                    </>
+
+              {/* View conversation link when still processing */}
+              {isProcessing && (
+                <div style={{ marginTop: 10 }}>
+                  <a
+                    href="#"
+                    onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
+                    style={{ color: "#6d5cff", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
+                  >
+                    {showConversation ? "Hide conversation ↑" : "View conversation →"}
+                  </a>
+                  {showConversation && (
+                    <div style={{ marginTop: 10, borderTop: "1px solid #ece8fb", paddingTop: 10 }}>
+                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Last 5 messages</div>
+                      {convLoading ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#9ca3af" }}>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Loading…</span>
+                        </div>
+                      ) : !conversationMessages || conversationMessages.length === 0 ? (
+                        <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>No conversation history found.</div>
+                      ) : (
+                        conversationMessages.map((m, i) => {
+                          const isCustomer = m.role === "user";
+                          const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                          return (
+                            <div key={i} style={{ marginBottom: 8, display: "flex", flexDirection: "column" as const, alignItems: isCustomer ? "flex-start" : "flex-end" }}>
+                              <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3, paddingLeft: isCustomer ? 2 : 0, paddingRight: isCustomer ? 0 : 2 }}>
+                                {isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}
+                              </div>
+                              <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222" }}>
+                                {m.content}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   )}
                 </div>
-              </>
-            ) : isSent ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, color: "#22c55e", fontWeight: 600 }}>
-                <CheckCircle2 style={{ width: 15, height: 15 }} />
-                Sent by {draft?.approvedBy ?? "agent"}
-                {draft?.approvedText && draft.approvedText !== generatedDraft && (
-                  <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400, marginLeft: 4 }}>(edited)</span>
+              )}
+
+              {/* Reply section */}
+              {(isDraftReady || isSent || isDismissed || isFailed) && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong style={{ color: "#6d5cff", fontSize: 12 }}>
+                      {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
+                    </strong>
+                    {/* View conversation toggle — always shown */}
+                    <a
+                      href="#"
+                      onClick={e => { e.preventDefault(); setShowConversation(v => !v); }}
+                      style={{ color: "#6d5cff", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}
+                    >
+                      {showConversation ? "Hide conversation ↑" : "View conversation →"}
+                    </a>
+                  </div>
+
+                  {/* Textarea / draft display */}
+                  {isDraftReady && (
+                    editMode ? (
+                      <textarea
+                        value={editedText}
+                        onChange={e => setEditedText(e.target.value)}
+                        style={{
+                          width: "100%",
+                          border: "1px solid #ddd6ff",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "13px/1.5 Inter,system-ui",
+                          resize: "vertical" as const,
+                          outline: "none",
+                          minHeight: 90,
+                          color: "#111827",
+                          background: "#fff",
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <textarea
+                        value={generatedDraft}
+                        readOnly
+                        style={{
+                          width: "100%",
+                          border: "1px solid #ddd6ff",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "13px/1.5 Inter,system-ui",
+                          resize: "none" as const,
+                          outline: "none",
+                          minHeight: 60,
+                          color: "#111827",
+                          background: "#fff",
+                          cursor: "default",
+                        }}
+                      />
+                    )
+                  )}
+
+                  {/* Sent state — show approved text */}
+                  {isSent && (
+                    <div style={{
+                      width: "100%",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: 16,
+                      padding: 16,
+                      font: "13px/1.5 Inter,system-ui",
+                      color: "#111827",
+                      background: "#f0fdf4",
+                    }}>
+                      {draft?.approvedText ?? generatedDraft}
+                    </div>
+                  )}
+
+                  {/* Failed state */}
+                  {isFailed && (
+                    <div style={{ fontSize: 14, color: "#ef4444", padding: "8px 0" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
+                  )}
+
+                  {/* Conversation history (collapsible) */}
+                  {showConversation && (
+                    <div style={{ marginTop: 14, borderTop: "1px solid #ece8fb", paddingTop: 14 }}>
+                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Last 5 messages</div>
+                      {convLoading ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#9ca3af" }}>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Loading…</span>
+                        </div>
+                      ) : !conversationMessages || conversationMessages.length === 0 ? (
+                        <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>No conversation history found.</div>
+                      ) : (
+                        conversationMessages.map((m, i) => {
+                          const isCustomer = m.role === "user";
+                          const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                          return (
+                            <div key={i} style={{ marginBottom: 8, display: "flex", flexDirection: "column" as const, alignItems: isCustomer ? "flex-start" : "flex-end" }}>
+                              <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3, paddingLeft: isCustomer ? 2 : 0, paddingRight: isCustomer ? 0 : 2 }}>
+                                {isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}
+                              </div>
+                              <div style={{
+                                display: "inline-block",
+                                padding: "8px 12px",
+                                borderRadius: 12,
+                                fontSize: 13,
+                                lineHeight: 1.45,
+                                maxWidth: "80%",
+                                background: isCustomer ? "#ece7ff" : "#f0f0f0",
+                                color: "#222",
+                              }}>
+                                {m.content}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Footer ── */}
+            <div style={{ display: "flex", alignItems: "center", marginTop: 12 }}>
+              <div style={{ color: "#757b90", fontSize: 12 }}>
+                {isSent
+                  ? `Sent by ${draft?.approvedBy ?? "agent"}${draft?.approvedText && draft.approvedText !== generatedDraft ? " (edited)" : ""}`
+                  : isDismissed
+                  ? "No reply sent."
+                  : isFailed
+                  ? ""
+                  : "Madison won't send anything until you approve it."}
+              </div>
+              <div style={{ display: "flex", gap: 12, marginLeft: "auto" }}>
+                {isDraftReady && !editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13 }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleApprove(generatedDraft)}
+                      disabled={isSending}
+                      style={{
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: isSending ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Looks good
+                    </button>
+                  </>
+                )}
+                {isDraftReady && editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13 }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleApprove(editedText)}
+                      disabled={isSending || !editedText.trim()}
+                      style={{
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: (isSending || !editedText.trim()) ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Edited
+                    </button>
+                  </>
+                )}
+                {isDraftReady && !editMode && (
+                  <button
+                    onClick={handleDismiss}
+                    style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}
+                  >
+                    Dismiss
+                  </button>
+                )}
+                {isFailed && (
+                  <button
+                    onClick={() => meta.draftId && retryMutation.mutate({ draftId: meta.draftId })}
+                    style={{
+                      padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
+                      background: "linear-gradient(135deg,#5d49f3,#7d66ff)",
+                      color: "#fff", cursor: "pointer", fontSize: 13,
+                    }}
+                  >
+                    ↺ Retry
+                  </button>
                 )}
               </div>
-            ) : isDismissed ? (
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>Dismissed — no reply sent.</div>
-            ) : isFailed ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontSize: 12, color: "#ef4444" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
-                <button
-                  onClick={() => meta.draftId && retryMutation.mutate({ draftId: meta.draftId })}
-                  style={{
-                    fontSize: 11, color: "#7c3aed", background: "#ede9fe",
-                    border: "none", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontWeight: 600,
-                  }}
-                >
-                  Retry
-                </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MadisonEmailDraftCard ──────────────────────────────────────────────────
+// Exact clone of MadisonSmsDraftCard — same behavior, same flow.
+// Differences: blue accent, mail icon label, uses approveEmailDraft/dismissEmailDraft.
+export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
+  const [editMode, setEditMode] = useState(false);
+  const [editedText, setEditedText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [justActed, setJustActed] = useState<"sent" | "dismissed" | null>(null);
+
+  const utils = trpc.useUtils();
+
+  let meta: { draftId?: number; quickActionVersion?: number } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+
+  const { data: draft, isLoading } = trpc.opsChat.getEmailDraft.useQuery(
+    { draftId: meta.draftId! },
+    { enabled: !!meta.draftId, refetchOnWindowFocus: false }
+  );
+
+  const approveMutation = trpc.opsChat.approveEmailDraft.useMutation({
+    onSuccess: () => {
+      setJustActed("sent");
+      utils.opsChat.getEmailDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+    },
+  });
+  const dismissMutation = trpc.opsChat.dismissEmailDraft.useMutation({
+    onSuccess: () => {
+      setJustActed("dismissed");
+      utils.opsChat.getEmailDraft.invalidate({ draftId: meta.draftId! });
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+    },
+  });
+
+  const MADISON_PHOTO = "/madison-avatar.jpg";
+  const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const [showConversation, setShowConversation] = useState(false);
+  const threadId = (draft as any)?.threadId as string | undefined;
+  const { data: threadData, isLoading: threadLoading } = trpc.gmail.getThread.useQuery(
+    { threadId: threadId! },
+    { enabled: showConversation && !!threadId, staleTime: 60_000, refetchOnWindowFocus: false }
+  );
+  const handleApprove = async (text: string) => {
+    if (!meta.draftId || isSending) return;
+    setIsSending(true);
+    try {
+      const result = await approveMutation.mutateAsync({ draftId: meta.draftId, approvedText: text, approvedBy: callerName });
+      if (!result.ok) console.error("[MadisonEmailDraft] approve failed:", result.reason);
+    } finally {
+      setIsSending(false);
+      setEditMode(false);
+    }
+  };
+
+  const handleDismiss = () => {
+    if (!meta.draftId) return;
+    dismissMutation.mutate({ draftId: meta.draftId, dismissedBy: callerName });
+  };
+
+  if (!meta.draftId) {
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
+            <span style={{ font: "700 28px Georgia,serif", color: "#1a1a2e" }}>Madison</span>
+            <span style={{ font: "800 13px Inter,system-ui", color: "#2563eb" }}>✦ AI</span>
+            <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
+          </div>
+          <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Email draft unavailable.</div>
+        </div>
+      </div>
+    );
+  }
+
+  const status = draft?.status ?? "RECEIVED";
+  const isSent = status === "SENT";
+  const isDismissed = status === "DISMISSED";
+  const isFailed = status === "FAILED";
+  const isDraftReady = status === "DRAFT_READY";
+  const isProcessing = ["RECEIVED", "CLASSIFIED", "INTENT_RESOLVED", "CONTEXT_RESOLVED", "TOOLS_RUNNING", "GENERATING", "SENDING"].includes(status);
+
+  const bodyLines = msg.body.split("\n");
+  const senderLine = bodyLines[0] ?? "";
+  const quotedLine = bodyLines[1] ?? "";
+  const observations = draft?.observations ? (() => { try { return JSON.parse(draft.observations as string) as string[]; } catch { return []; } })() : [];
+  const generatedDraft = draft?.generatedDraft ?? "";
+
+  const statusBadge = isSent
+    ? { label: "Sent", bg: "#eff6ff", color: "#1d4ed8" }
+    : isDismissed
+    ? { label: "Dismissed", bg: "#f3f4f6", color: "#6b7280" }
+    : isFailed
+    ? { label: "Failed", bg: "#fef2f2", color: "#dc2626" }
+    : isProcessing
+    ? { label: "Drafting…", bg: "#dbeafe", color: "#2563eb" }
+    : { label: "Awaiting approval", bg: "#eff6ff", color: "#1d4ed8" };
+
+  // Confirmation flash before card disappears
+  if (justActed) {
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            background: justActed === "sent" ? "#eff6ff" : "#fafafa",
+            border: `1px solid ${justActed === "sent" ? "#bfdbfe" : "#e5e7eb"}`,
+            borderRadius: 20,
+            padding: "18px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            transition: "all 0.3s",
+          }}>
+            <span style={{ fontSize: 22 }}>{justActed === "sent" ? "✅" : "✕"}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: justActed === "sent" ? "#1d4ed8" : "#6b7280" }}>
+                {justActed === "sent" ? "Email sent — Madison is handling it" : "Draft dismissed"}
               </div>
-            ) : null}
+              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>This card will clear in a moment…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          width: "100%",
+          background: "#fff",
+          border: "1px solid #bfdbfe",
+          borderRadius: 20,
+          boxShadow: "0 4px 24px rgba(30,60,120,0.08)",
+          overflow: "hidden",
+          opacity: isDismissed ? 0.55 : 1,
+          transition: "opacity 0.2s",
+        }}>
+
+          {/* Header */}
+          <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
+            <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+                <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
+                <span style={{ font: "800 11px Inter,system-ui", color: "#2563eb" }}>✶ AI</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
+                {/* Email badge */}
+                <span style={{ fontSize: 10, background: "#dbeafe", color: "#1d4ed8", borderRadius: 6, padding: "2px 7px", fontWeight: 700, marginLeft: 4 }}>✉ Email</span>
+              </div>
+              {isLoading || isProcessing ? (
+                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 14, color: "#9ca3af", lineHeight: 1.45 }}>
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#2563eb" }} />
+                  <span style={{ fontStyle: "italic" }}>Drafting an email reply…</span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 4, fontSize: 14, lineHeight: 1.45, color: "#222" }}>
+                  <p style={{ margin: "0.2em 0" }}>I can take this one.</p>
+                  <p style={{ margin: "0.2em 0" }}>
+                    {(draft as any)?.intentSummary ?? (observations.length > 0 ? observations[0] : "I drafted an email reply for you.")}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div style={{
+              marginLeft: "auto",
+              background: statusBadge.bg,
+              color: statusBadge.color,
+              padding: "5px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              height: "max-content",
+              whiteSpace: "nowrap" as const,
+              flexShrink: 0,
+            }}>
+              {statusBadge.label}
+            </div>
+          </div>
+
+          {/* Main body */}
+          <div style={{ padding: "0 16px 16px" }}>
+            <div style={{ border: "1px solid #bfdbfe", borderRadius: 14, padding: 14, background: "#f8fbff" }}>
+
+              {/* Subject line */}
+              {draft?.subject && (
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8, fontWeight: 600 }}>Subject: {draft.subject}</div>
+              )}
+
+              {/* Sender info */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div>
+                  {draft?.senderName && <div style={{ fontWeight: 700, fontSize: 13, color: "#111827", lineHeight: 1.3 }}>{draft.senderName}</div>}
+                  {draft?.fromEmail && <div style={{ fontSize: 11, color: "#2563eb", fontWeight: 600 }}>{draft.fromEmail}</div>}
+                  {!draft?.senderName && !draft?.fromEmail && <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>Latest customer email</div>}
+                </div>
+                {draft?.threadId && (
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#inbox/${(draft as any).threadId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 11, color: "#2563eb", fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" as const, flexShrink: 0 }}
+                  >
+                    Open in Gmail ↗
+                  </a>
+                )}
+              </div>
+              <div style={{ display: "flex" }}>
+                <div style={{
+                  display: "inline-block",
+                  padding: "10px 13px",
+                  borderRadius: 14,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  maxWidth: "85%",
+                  background: "#dbeafe",
+                  color: "#222",
+                }}>
+                  {quotedLine || senderLine}
+                </div>
+              </div>
+
+              {/* Reply section */}
+              {(isDraftReady || isSent || isDismissed || isFailed) && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong style={{ color: "#2563eb", fontSize: 12 }}>
+                      {isSent ? "Sent reply" : isDismissed ? "Draft dismissed" : isFailed ? "Draft failed" : "I'll send this"}
+                    </strong>
+                    {draft?.threadId && (
+                      <button
+                        onClick={() => setShowConversation(v => !v)}
+                        style={{ color: "#2563eb", fontWeight: 700, background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0 }}
+                      >
+                        {showConversation ? "Hide thread ↑" : "View thread ↓"}
+                      </button>
+                    )}
+                  </div>
+
+                  {isDraftReady && (
+                    editMode ? (
+                      <textarea
+                        value={editedText}
+                        onChange={e => setEditedText(e.target.value)}
+                        style={{
+                          width: "100%",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "13px/1.5 Inter,system-ui",
+                          resize: "vertical" as const,
+                          outline: "none",
+                          minHeight: 90,
+                          color: "#111827",
+                          background: "#fff",
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <textarea
+                        value={generatedDraft}
+                        readOnly
+                        style={{
+                          width: "100%",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: 16,
+                          padding: 16,
+                          font: "13px/1.5 Inter,system-ui",
+                          resize: "none" as const,
+                          outline: "none",
+                          minHeight: 60,
+                          color: "#111827",
+                          background: "#fff",
+                          cursor: "default",
+                        }}
+                      />
+                    )
+                  )}
+
+                  {isSent && (
+                    <div style={{
+                      width: "100%",
+                      border: "1px solid #bfdbfe",
+                      borderRadius: 16,
+                      padding: 16,
+                      font: "13px/1.5 Inter,system-ui",
+                      color: "#111827",
+                      background: "#eff6ff",
+                    }}>
+                      {draft?.approvedText ?? generatedDraft}
+                    </div>
+                  )}
+
+                                    {isFailed && (
+                    <div style={{ fontSize: 14, color: "#ef4444", padding: "8px 0" }}>Pipeline failed: {draft?.errorCode ?? "unknown"}</div>
+                  )}
+                  {/* Inline thread */}
+                  {showConversation && (
+                    <div style={{ marginTop: 14, borderTop: "1px solid #bfdbfe", paddingTop: 14 }}>
+                      <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Email thread</div>
+                      {threadLoading && <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Loading thread…</div>}
+                      {!threadLoading && threadData?.messages && threadData.messages.map((m: any, i: number) => {
+                        const isUs = threadData.inboxEmail && m.fromEmail === threadData.inboxEmail;
+                        return (
+                          <div key={m.id ?? i} style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 12, background: isUs ? "#eff6ff" : "#f9fafb", border: `1px solid ${isUs ? "#bfdbfe" : "#e5e7eb"}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                              <span style={{ fontWeight: 700, fontSize: 12, color: isUs ? "#1d4ed8" : "#111827" }}>{isUs ? "Maids in Black" : (m.from || m.fromEmail || "Unknown")}</span>
+                              <span style={{ fontSize: 11, color: "#9ca3af" }}>{m.date ? new Date(m.date).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5, whiteSpace: "pre-wrap" as const }}>{m.bodyText || m.snippet || ""}</div>
+                          </div>
+                        );
+                      })}
+                      {!threadLoading && (!threadData?.messages || threadData.messages.length === 0) && (
+                        <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>No messages found.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: "flex", alignItems: "center", marginTop: 12 }}>
+              <div style={{ color: "#757b90", fontSize: 12 }}>
+                {isSent
+                  ? `Sent by ${draft?.approvedBy ?? "agent"}${draft?.approvedText && draft.approvedText !== generatedDraft ? " (edited)" : ""}`
+                  : isDismissed
+                  ? "No reply sent."
+                  : isFailed
+                  ? ""
+                  : "Madison won't send anything until you approve it."}
+              </div>
+              <div style={{ display: "flex", gap: 12, marginLeft: "auto" }}>
+                {isDraftReady && !editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(true); setEditedText(generatedDraft); }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #bfdbfe", background: "#fff", cursor: "pointer", fontSize: 13 }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleApprove(generatedDraft)}
+                      disabled={isSending}
+                      style={{
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: isSending ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Email
+                    </button>
+                  </>
+                )}
+                {isDraftReady && editMode && (
+                  <>
+                    <button
+                      onClick={() => { setEditMode(false); setEditedText(generatedDraft); }}
+                      style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #bfdbfe", background: "#fff", cursor: "pointer", fontSize: 13 }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleApprove(editedText)}
+                      disabled={isSending || !editedText.trim()}
+                      style={{
+                        padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none",
+                        background: "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+                        color: "#fff", cursor: isSending ? "wait" : "pointer",
+                        opacity: (isSending || !editedText.trim()) ? 0.7 : 1,
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13,
+                      }}
+                    >
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Edited
+                    </button>
+                  </>
+                )}
+                {isDraftReady && !editMode && (
+                  <button
+                    onClick={handleDismiss}
+                    style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #bfdbfe", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}
+                  >
+                    Dismiss
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1563,7 +2178,7 @@ function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: str
 
 // ── MadisonPostCard ─────────────────────────────────────────────────────────
 // Self-contained component so it can declare its own hooks (state + mutations)
-function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; createdAt: string | Date }; callerName: string }) {
+function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
 
@@ -1633,256 +2248,286 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
 
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  // Parse body: first non-empty line = greeting, rest = body text
-  const rawLines = msg.body.split("\n");
-  const greetingLine = rawLines[0]?.trim() ?? "";
-  const bodyText = rawLines.slice(1).join("\n").trim();
+  // Split body: first line is the greeting, rest is the body text
+  const bodyLines = msg.body.split("\n");
+  const greetingLine = bodyLines[0] ?? "";
+  const bodyText = bodyLines.slice(1).join("\n").trim();
 
-  // ── RECOMMENDATION CARD (matches v2 mockup exactly) ──────────────────────
-  if (!isResult) {
-    return (
-      <div key={msg.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
-        {/* Avatar */}
-        <img
-          src={MADISON_PHOTO}
-          alt="Madison"
-          style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Sender meta */}
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦</span>
-            <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400 }}>{msgTime}</span>
-          </div>
-          {/* Card */}
-          <div style={{
-            background: "#ffffff",
-            border: "1.5px solid #e0d9f8",
+  return (
+    <div key={msg.id} className="flex gap-3 items-start px-4 py-2">
+      {/* Madison avatar */}
+      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        {/* Sender meta row */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
+        </div>
+        {/* ── Card shell ── */}
+        <div
+          style={{
+            maxWidth: 540,
+            background: isResult ? "#ffffff" : "#ffffff",
+            border: isResult ? "1.5px solid #bbf7d0" : "1.5px solid #e0d9f8",
             borderRadius: 16,
             overflow: "hidden",
-            maxWidth: 540,
-            boxShadow: "0 2px 16px rgba(99,102,241,0.08)",
+            boxShadow: isResult ? "0 2px 16px rgba(16,185,129,0.08)" : "0 2px 16px rgba(99,102,241,0.08)",
             opacity: isDismissed ? 0.55 : 1,
-          }}>
-            {/* Card body */}
-            <div style={{ padding: "20px 22px 18px", background: "linear-gradient(160deg,#faf9ff 0%,#f5f3ff 100%)" }}>
-              {/* Greeting — italic Georgia serif purple, exactly as mockup */}
-              <div style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: "#4f46e5",
-                marginBottom: 10,
-                fontStyle: "italic",
-                fontFamily: "Georgia, 'Times New Roman', serif",
-                letterSpacing: "-0.01em",
-              }}>
+          }}
+        >
+          {/* Card body */}
+          <div
+            style={{
+              padding: "20px 22px 18px",
+              background: isResult ? "linear-gradient(160deg,#f0fdf4 0%,#f7fffe 100%)" : "linear-gradient(160deg,#faf9ff 0%,#f5f3ff 100%)",
+            }}
+          >
+            {/* Greeting / result header */}
+            {isResult ? (
+              <div className="flex items-center gap-3 mb-3">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
+                  style={{ background: "#22c55e", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}
+                >✅</div>
+                <div className="font-bold text-[17px]" style={{ color: "#15803d" }}>{greetingLine}</div>
+              </div>
+            ) : (
+              <div className="font-bold text-[18px] mb-2" style={{ color: "#4f46e5" }}>
                 {greetingLine}
               </div>
-              {/* Body text */}
-              {bodyText.length > 0 && (
-                <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, marginBottom: 16, whiteSpace: "pre-wrap" }}
-                  dangerouslySetInnerHTML={{ __html: bodyText.replace(/\*\*(.+?)\*\*/g, "<strong style='color:#111827;font-weight:700'>$1</strong>") }}
-                />
-              )}
-              {/* Stats row */}
-              {meta.stats && meta.stats.length > 0 && (
-                <div style={{
-                  display: "flex",
-                  border: "1px solid #e0d9f8",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  marginBottom: 18,
-                  background: "#ffffff",
-                }}>
-                  {meta.stats.map((s, i) => (
-                    <div key={i} style={{
-                      flex: 1,
-                      padding: "10px 12px",
-                      borderRight: i < (meta.stats?.length ?? 0) - 1 ? "1px solid #e0d9f8" : "none",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 9,
-                    }}>
-                      <div style={{
-                        width: 30, height: 30, borderRadius: "50%",
-                        background: s.color === "orange" ? "#fff7ed" : s.color === "blue" ? "#eff6ff" : "#ede9fe",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 14, flexShrink: 0,
-                      }}>{s.icon}</div>
-                      <div>
-                        <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{s.label}</div>
-                        <div style={{
-                          fontSize: s.value.length > 6 ? 13 : 16,
-                          fontWeight: 800,
-                          color: s.color === "orange" ? "#ea580c" : "#111827",
-                          lineHeight: 1,
-                        }}>{s.value}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* CTA section */}
-              {!isDismissed && !executedBy && meta.action && (
-                <>
-                  {!isConfirming && !isExecuting && (
-                    <>
-                      <div style={{
-                        fontSize: 14, fontWeight: 600, color: "#7c3aed",
-                        marginBottom: 12, fontStyle: "italic", fontFamily: "Georgia, serif",
-                      }}>Want me to take care of it?</div>
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" as const }}>
-                        <button
-                          onClick={handleActionClick}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 7,
-                            background: "#4f46e5", color: "#fff", border: "none",
-                            borderRadius: 10, padding: "10px 20px",
-                            fontSize: 13, fontWeight: 700, cursor: "pointer",
-                          }}
-                        >
-                          ✈ {meta.buttonLabel ?? "Take Action"}
-                        </button>
-                        <button
-                          onClick={() => dismissMutation.mutate({ messageId: msg.id })}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 7,
-                            background: "#ffffff", color: "#6b7280",
-                            border: "1.5px solid #d1d5db", borderRadius: 10,
-                            padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                          }}
-                        >
-                          Not right now
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {isConfirming && (
-                    <div style={{ background: "#f5f3ff", borderTop: "1.5px solid #e0d9f8", padding: "16px 0 0" }}>
-                      <div style={{ fontSize: 13, color: "#4b5563", marginBottom: 12, lineHeight: 1.55 }}>
-                        ⚡ Ready to proceed? This action will be executed immediately.
-                      </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          onClick={handleConfirmExecute}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            background: "#4f46e5", color: "#fff", border: "none",
-                            borderRadius: 8, padding: "9px 18px",
-                            fontSize: 13, fontWeight: 700, cursor: "pointer",
-                          }}
-                        >
-                          ✓ Yes, send now
-                        </button>
-                        <button
-                          onClick={handleCancelConfirm}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            background: "transparent", color: "#9ca3af",
-                            border: "1.5px solid #e5e7eb", borderRadius: 8,
-                            padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {isExecuting && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#7c3aed" }}>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Madison is working on it…
-                    </div>
-                  )}
-                </>
-              )}
-              {/* Executed badge */}
-              {executedBy && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#22c55e" }}>
-                  <CheckCircle2 style={{ width: 14, height: 14 }} />
-                  Action confirmed by {executedBy}
-                </div>
-              )}
-              {/* Dismissed badge */}
-              {isDismissed && (
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>Dismissed — no action taken.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── RESULT CARD ───────────────────────────────────────────────────────────
-  return (
-    <div key={msg.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
-      <img
-        src={MADISON_PHOTO}
-        alt="Madison"
-        style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}
-      />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#312e81" }}>Madison</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>✦</span>
-          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400 }}>{msgTime}</span>
-        </div>
-        <div style={{
-          background: "#ffffff",
-          border: "1.5px solid #bbf7d0",
-          borderRadius: 16,
-          overflow: "hidden",
-          maxWidth: 540,
-          boxShadow: "0 2px 16px rgba(16,185,129,0.08)",
-        }}>
-          <div style={{ padding: "20px 22px 18px", background: "linear-gradient(160deg,#f0fdf4 0%,#f7fffe 100%)" }}>
-            {/* Result header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 14 }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: "50%",
-                background: "#22c55e", display: "flex", alignItems: "center",
-                justifyContent: "center", fontSize: 18, flexShrink: 0,
-                boxShadow: "0 2px 8px rgba(34,197,94,0.3)",
-              }}>✅</div>
-              <div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: "#15803d", fontStyle: "italic", fontFamily: "Georgia, serif" }}>
-                  {greetingLine}
-                </div>
-                {bodyText.length > 0 && (
-                  <div style={{ fontSize: 13, color: "#4b5563", marginTop: 2 }}>{bodyText}</div>
-                )}
+            )}
+            {/* Body text */}
+            {bodyText.length > 0 && (
+              <div className="text-[14px] leading-relaxed mb-4" style={{ color: "#374151", whiteSpace: "pre-wrap" }}>
+                {bodyText}
               </div>
-            </div>
-            {/* Result stats */}
+            )}
+            {/* Stats row */}
             {meta.stats && meta.stats.length > 0 && (
-              <div style={{
-                display: "flex", border: "1px solid #bbf7d0",
-                borderRadius: 10, overflow: "hidden", marginBottom: 16, background: "#ffffff",
-              }}>
+              <div
+                className="flex mb-4 rounded-[10px] overflow-hidden"
+                style={{ border: isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8", background: "#ffffff" }}
+              >
                 {meta.stats.map((s, i) => (
-                  <div key={i} style={{
-                    flex: 1, padding: "10px 12px",
-                    borderRight: i < (meta.stats?.length ?? 0) - 1 ? "1px solid #bbf7d0" : "none",
-                    display: "flex", alignItems: "center", gap: 9,
-                  }}>
-                    <div style={{
-                      width: 30, height: 30, borderRadius: "50%",
-                      background: s.color === "blue" ? "#dbeafe" : s.color === "amber" ? "#fef3c7" : "#dcfce7",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 14, flexShrink: 0,
-                    }}>{s.icon}</div>
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2.5 flex-1"
+                    style={{ borderRight: i < (meta.stats?.length ?? 0) - 1 ? (isResult ? "1px solid #bbf7d0" : "1px solid #e0d9f8") : "none" }}
+                  >
+                    <div
+                      className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[14px] flex-shrink-0"
+                      style={{ background: isResult ? "#dcfce7" : "#ede9fe" }}
+                    >
+                      {s.icon}
+                    </div>
                     <div>
-                      <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{s.label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: "#111827", lineHeight: 1 }}>{s.value}</div>
+                      <div className="text-[10px] font-medium" style={{ color: "#9ca3af" }}>{s.label}</div>
+                      <div className="text-[16px] font-extrabold leading-none" style={{ color: s.color ?? "#111827" }}>{s.value}</div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+            {/* Action buttons — recommendation card only */}
+            {!isResult && !isDismissed && !executedBy && meta.action && (
+              <>
+                {!isConfirming && !isExecuting && (
+                  <div>
+                    <div className="text-[14px] font-semibold mb-3" style={{ color: "#7c3aed" }}>Want me to take care of it?</div>
+                    <div className="flex gap-2.5 flex-wrap">
+                      <button
+                        onClick={handleActionClick}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-bold text-white"
+                        style={{ background: "#4f46e5" }}
+                      >
+                        ✈ {meta.buttonLabel ?? "Take Action"}
+                      </button>
+                      <button
+                        onClick={() => dismissMutation.mutate({ messageId: msg.id })}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold"
+                        style={{ background: "#ffffff", border: "1.5px solid #d1d5db", color: "#6b7280" }}
+                      >
+                        Not right now
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isConfirming && (
+                  <div className="rounded-xl px-4 py-3" style={{ background: "#f5f3ff", border: "1.5px solid #e0d9f8" }}>
+                    <div className="text-[13px] mb-3" style={{ color: "#4b5563", lineHeight: 1.55 }}>
+                      ⚡ Ready to proceed? This action will be executed immediately.
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleConfirmExecute}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-bold text-white"
+                        style={{ background: "#4f46e5" }}
+                      >
+                        ✓ Yes, go ahead
+                      </button>
+                      <button
+                        onClick={handleCancelConfirm}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
+                        style={{ background: "transparent", border: "1.5px solid #e5e7eb", color: "#9ca3af" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isExecuting && (
+                  <div className="flex items-center gap-2 text-[13px]" style={{ color: "#7c3aed" }}>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Madison is working on it…
+                  </div>
+                )}
+              </>
+            )}
+            {/* Executed badge */}
+            {executedBy && !isResult && (
+              <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "#22c55e" }}>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Action confirmed by {executedBy}
+              </div>
+            )}
+            {/* Dismissed badge */}
+            {isDismissed && (
+              <div className="text-[12px]" style={{ color: "#9ca3af" }}>Dismissed — no action taken.</div>
+            )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MadisonCommandPaymentCard — ephemeral confirm card shown above composer after @madison send payment link ──
+type MadisonPaymentConfirm = {
+  type: "payment_link_confirm";
+  recipientName: string;
+  recipientFirstName: string;
+  recipientPhone: string;
+  paymentLinkUrl: string;
+  expiresAt: number;
+  smsText: string;
+  command?: string;
+};
+function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentConfirm; onDismiss: () => void }) {
+  const [smsText, setSmsText] = useState(card.smsText);
+  const [sent, setSent] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const sendMutation = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+
+  function handleSend() {
+    if (sent || sendMutation.isPending) return;
+    sendMutation.mutate(
+      {
+        recipientPhone: card.recipientPhone,
+        recipientName: card.recipientName,
+        smsText,
+        paymentLinkUrl: card.paymentLinkUrl,
+        ...(card.command ? { command: card.command } : {}),
+      },
+      {
+        onSuccess: () => {
+          setSent(true);
+          setTimeout(() => onDismiss(), 3500);
+        },
+        onError: (err) => {
+          toast.error(`Failed to send: ${err.message}`);
+        },
+      }
+    );
+  }
+
+  return (
+    <div className="mb-2 mx-1" style={{ maxWidth: 520 }}>
+      {/* Madison header row */}
+      <div className="flex items-center gap-2 mb-2 px-1">
+        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+          <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+        </div>
+        <span className="font-bold text-[13px]" style={{ color: "#312e81" }}>Madison</span>
+        <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+        <span className="ml-auto text-[11px] px-2.5 py-0.5 rounded-full font-semibold" style={{ background: sent ? "#ecfdf5" : "#e8f8ee", color: sent ? "#15803d" : "#15803d" }}>
+          {sent ? "Completed" : "Awaiting approval"}
+        </span>
+      </div>
+      {/* Card shell */}
+      <div style={{ background: "#fff", border: "1.5px solid #e0d9f8", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 16px rgba(99,102,241,0.08)" }}>
+        {/* Header */}
+        <div style={{ background: "linear-gradient(135deg,#7447f5,#9b6ff5)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <CreditCard className="w-4 h-4" style={{ color: "#fff" }} />
+            <span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>Send Payment Link</span>
+          </div>
+          {!sent && (
+            <button onClick={onDismiss} style={{ background: "rgba(255,255,255,0.18)", border: "none", borderRadius: 8, padding: "3px 8px", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+          )}
+        </div>
+        {/* Info rows */}
+        <div style={{ padding: "12px 16px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f1f1f1" }}>
+            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> Customer</span>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{card.recipientName}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f1f1f1" }}>
+            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> Payment link</span>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Generated</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0" }}>
+            <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>✓</span> SMS prepared</span>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Ready</span>
+          </div>
+        </div>
+        {/* SMS preview */}
+        <div style={{ padding: "10px 16px 0" }}>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Message preview</div>
+          {editMode ? (
+            <textarea
+              value={smsText}
+              onChange={(e) => setSmsText(e.target.value)}
+              rows={4}
+              style={{ width: "100%", background: "#fafafa", border: "1px solid #ddd7ff", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: "#2d3039", resize: "vertical", outline: "none", boxSizing: "border-box" }}
+            />
+          ) : (
+            <div style={{ background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: "#2d3039", lineHeight: 1.5 }}>
+              {smsText}
+            </div>
+          )}
+        </div>
+        {/* Actions */}
+        {!sent ? (
+          <div style={{ padding: "12px 16px 14px", display: "flex", gap: 8 }}>
+            <button
+              onClick={handleSend}
+              disabled={sendMutation.isPending || !smsText.trim()}
+              style={{ flex: 1, background: "#5d49f3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: sendMutation.isPending ? 0.7 : 1 }}
+            >
+              {sendMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <>✓ Send Payment Link</>}
+            </button>
+            <button
+              onClick={() => setEditMode(e => !e)}
+              style={{ background: "#eef1ff", color: "#5d49f3", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              {editMode ? "Done" : "Edit"}
+            </button>
+          </div>
+        ) : (
+          <div style={{ padding: "12px 16px 14px" }}>
+            <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 18 }}>✅</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "#15803d" }}>Payment link sent!</div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Sent to {card.recipientName}. This card will clear shortly.</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1953,6 +2598,8 @@ const MessageList = memo(function MessageList({
   openCreateIssueModal,
   openIssueEngine,
   onOpenConcierge,
+  onCallBack,
+  onTextBack,
 }: MessageListProps) {
   return (
     <>
@@ -3570,7 +4217,45 @@ const MessageList = memo(function MessageList({
                 // ── Madison Post card ──────────────────────────────────────────────────
                 if (msg.quickAction === "madison_post") { return <MadisonPostCard msg={msg} callerName={callerName} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
-                if (msg.quickAction === "madison_sms_draft") { return <MadisonSmsDraftCard msg={msg} callerName={callerName} />; }
+                if (msg.quickAction === "madison_sms_draft") {
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
+                    >
+                      <MadisonSmsDraftCard msg={msg} callerName={callerName} />
+                    </div>
+                  );
+                }
+                // ── Madison Email Draft card
+                if (msg.quickAction === "madison_email_draft") {
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-blue-50 rounded-2xl" : "")}
+                    >
+                      <MadisonEmailDraftCard msg={msg} callerName={callerName} />
+                    </div>
+                  );
+                }
+                // ── Madison Call Summary card ──────────────────────────────────────────
+                if (msg.quickAction === "madison_call_summary") {
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
+                    >
+                      <MadisonCallSummaryCard
+                        msg={msg}
+                        onCallBack={onCallBack}
+                        onTextBack={onTextBack}
+                      />
+                    </div>
+                  );
+                }
                                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
@@ -3845,6 +4530,263 @@ const MessageList = memo(function MessageList({
     </>
   );
 });
+
+// ── MadisonCallSummaryCard ──────────────────────────────────────────────────
+export function MadisonCallSummaryCard({
+  msg,
+  onCallBack,
+  onTextBack,
+}: {
+  msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
+  onCallBack: (name: string, phone: string, msgId: number) => void;
+  onTextBack: (name: string, phone: string, msgId: number) => void;
+}) {
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [justActed, setJustActed] = useState<"called" | "texted" | "dismissed" | null>(null);
+  const utils = trpc.useUtils();
+  const { user: currentUser } = useAuth();
+  const dismissCallCardMutation = trpc.opsChat.markCallCardActed.useMutation({
+    onSuccess: (_data, vars) => {
+      const action = vars.action as string;
+      setJustActed(action === "call" ? "called" : action === "text" ? "texted" : "dismissed");
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+    },
+  });
+  const handleDismiss = () => {
+    dismissCallCardMutation.mutate({ msgId: msg.id, action: "dismiss", actedBy: currentUser?.name ?? "Agent" });
+  };
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+
+  let meta: {
+    vapiCallId?: string;
+    sessionId?: number | null;
+    callerPhone?: string | null;
+    callerName?: string | null;
+    durationSeconds?: number;
+    durationDisplay?: string;
+    outcome?: string;
+    intentSummary?: string;
+    transcript?: string | null;
+    recordingUrl?: string | null;
+    actedBy?: string | null;
+    actedAction?: "call" | "text" | null;
+    actedAt?: string | null;
+  } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+
+  const callerName = meta.callerName ?? null;
+  const callerPhone = meta.callerPhone ?? null;
+  const durationDisplay = meta.durationDisplay ?? "";
+  const outcome = meta.outcome ?? "";
+  const actedBy = meta.actedBy ?? null;
+  const actedAction = meta.actedAction ?? null;
+  const intentSummary = meta.intentSummary ?? "Called but left no details.";
+  const transcript = meta.transcript ?? null;
+  const recordingUrl = meta.recordingUrl ?? msg.mediaUrl ?? null;
+  const msgTime = fmtMsgTime(new Date(msg.createdAt));
+
+  const outcomeBadge = (() => {
+    if (outcome === "booked") return { label: "Booked ✔", bg: "#eef8f2", color: "#157c5a" };
+    if (outcome === "quote_given") return { label: "Quote given", bg: "#eff6ff", color: "#1d4ed8" };
+    if (outcome === "callback_requested") return { label: "Callback requested", bg: "#fef3c7", color: "#92400e" };
+    if (outcome === "faq_answered") return { label: "FAQ answered", bg: "#f0fdf4", color: "#166534" };
+    if (outcome === "transferred") return { label: "Transferred", bg: "#f5f3ff", color: "#6d28d9" };
+    return { label: "Call complete", bg: "#f0fdf4", color: "#166534" };
+  })();
+
+  const displayName = callerName ?? callerPhone ?? "Unknown caller";
+  const callLabel = callerName ? callerName.split(" ")[0] : "Customer";
+
+  // ── Confirmation flash before card disappears ──
+  if (justActed) {
+    const label = justActed === "called" ? "📞 Called — Madison is following up"
+      : justActed === "texted" ? "💬 Texted — Madison is following up"
+      : "Dismissed";
+    const isPositive = justActed !== "dismissed";
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            background: isPositive ? "#f0fdf4" : "#fafafa",
+            border: `1px solid ${isPositive ? "#bbf7d0" : "#e5e7eb"}`,
+            borderRadius: 20,
+            padding: "18px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 22 }}>{isPositive ? "✅" : "✕"}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: isPositive ? "#15803d" : "#6b7280" }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>This card will clear in a moment…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          width: "100%",
+          background: "#fff",
+          border: "1px solid #ebe8fb",
+          borderRadius: 20,
+          boxShadow: "0 4px 24px rgba(30,30,60,0.08)",
+          overflow: "hidden",
+          opacity: actedBy ? 0.55 : 1,
+          transition: "opacity 0.2s",
+        }}>
+          {/* Header */}
+          <div style={{ display: "flex", gap: 12, padding: "16px 18px 12px" }}>
+            <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2, flexWrap: "wrap" as const }}>
+                <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
+                <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
+                <span style={{
+                  marginLeft: "auto",
+                  background: outcomeBadge.bg,
+                  color: outcomeBadge.color,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "2px 10px",
+                  borderRadius: 20,
+                  whiteSpace: "nowrap" as const,
+                  flexShrink: 0,
+                }}>{outcomeBadge.label}</span>
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.45, color: "#222", marginTop: 4 }}>
+                <p style={{ margin: "0.2em 0" }}>I answered this call for you.</p>
+                <p style={{ margin: "0.2em 0", color: "#444" }}>{intentSummary}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary box */}
+          <div style={{ margin: "0 18px 14px", background: "#f8f7ff", borderRadius: 14, padding: "12px 14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#6d5cff", textTransform: "uppercase" as const, letterSpacing: 1 }}>Call details</span>
+              {(transcript || recordingUrl) && (
+                <button
+                  onClick={() => setShowTranscript(v => !v)}
+                  style={{ fontSize: 12, color: "#6d5cff", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  {showTranscript ? "Hide transcript ↑" : "View transcript →"}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600 }}>{displayName}</span>
+              {callerPhone && callerPhone !== displayName && (() => { const d = callerPhone.replace(/\D/g, ""); const fmt = d.length === 11 && d[0] === "1" ? `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : callerPhone; return <span style={{ color: "#6d5cff", fontWeight: 600, marginLeft: 8 }}>{fmt}</span>; })()}
+              {durationDisplay && <span style={{ color: "#9ca3af", marginLeft: 8 }}>· {durationDisplay}</span>}
+            </div>
+            {showTranscript && (
+              <div style={{ marginTop: 12, borderTop: "1px solid #ece8fb", paddingTop: 12 }}>
+                {recordingUrl && (
+                  <audio controls src={proxyRecordingUrl(recordingUrl)!} style={{ width: "100%", height: 36, marginBottom: 10, borderRadius: 8 }} />
+                )}
+                {transcript && (
+                  <div style={{
+                    fontSize: 12,
+                    color: "#374151",
+                    lineHeight: 1.6,
+                    maxHeight: 200,
+                    overflowY: "auto" as const,
+                    whiteSpace: "pre-wrap" as const,
+                    background: "#fff",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    border: "1px solid #e5e7eb",
+                  }}>
+                    {transcript}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          {callerPhone && (
+            <div style={{ display: "flex", gap: 8, padding: "0 18px 16px" }}>
+              {actedBy ? (
+                // Locked state — someone already acted
+                <div style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  background: "#f3f4f6",
+                  color: "#6b7280",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}>
+                  {actedAction === "call" ? "📞 Called" : actedAction === "text" ? "💬 Texted" : "✕ Dismissed"} {actedAction !== "dismiss" ? `by ${actedBy}` : ""}
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onCallBack(callerName ?? callerPhone, callerPhone, msg.id)}
+                    style={{
+                      flex: 2,
+                      padding: "10px 0",
+                      borderRadius: 12,
+                      border: "none",
+                      background: "linear-gradient(135deg, #6d5cff 0%, #a78bfa 100%)",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    📞 Call {callLabel}
+                  </button>
+                  <button
+                    onClick={() => onTextBack(callerName ?? callerPhone, callerPhone, msg.id)}
+                    style={{
+                      flex: 2,
+                      padding: "10px 0",
+                      borderRadius: 12,
+                      border: "1.5px solid #6d5cff",
+                      background: "#fff",
+                      color: "#6d5cff",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    💬 Send Text Instead
+                  </button>
+                  <button
+                    onClick={handleDismiss}
+                    style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── component ─────────────────────────────────────────────────────────────────
 
@@ -4390,8 +5332,167 @@ function KudosModal({
   );
 }
 
-const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
-  onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
+// ── DebriefModal helpers ─────────────────────────────────────────────────────
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function fmtDebriefDate(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00`);
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
+// ── DebriefModal ─────────────────────────────────────────────────────────────
+// Full-screen modal overlay that embeds the Madison Debrief review flow.
+function DebriefModal({ onClose }: { onClose: () => void }) {
+  const [selectedDate, setSelectedDate] = useState(todayLocal);
+  const [view, setView] = useState<"hero" | "review" | "done">("hero");
+  const [cardIndex, setCardIndex] = useState(0);
+
+  const { data: cards = [], isLoading } = trpc.opsChat.getDebriefCards.useQuery(
+    { date: selectedDate },
+    { staleTime: 30_000 }
+  );
+
+  const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
+  const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
+  const currentCard = cards[cardIndex];
+  const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
+
+  const startReview = () => { if (cards.length > 0) { setCardIndex(0); setView("review"); } };
+  const goNext = () => { if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done"); };
+  const goPrev = () => { if (cardIndex > 0) setCardIndex(i => i - 1); };
+  const backToHero = () => { setView("hero"); setCardIndex(0); };
+
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="relative flex flex-col bg-[#f4f6fb] rounded-2xl shadow-2xl overflow-hidden"
+        style={{ width: "min(760px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}
+      >
+        {/* Close X */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow text-slate-500 hover:text-slate-800 transition"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {view === "hero" && (
+          <div>
+            {/* Hero gradient */}
+            <div style={{ padding: "32px 32px 28px", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+                <img src={MADISON_PHOTO} alt="Madison" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0 }} />
+                <div>
+                  <div style={{ font: "700 24px Georgia, serif", lineHeight: 1 }}>Daily Debrief ✦</div>
+                  <div style={{ fontSize: 13, opacity: 0.8, marginTop: 3 }}>Madison's interaction history</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, opacity: 0.85, whiteSpace: "nowrap" }}>Reviewing:</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={todayLocal()}
+                  onChange={e => { setSelectedDate(e.target.value); setView("hero"); setCardIndex(0); }}
+                  style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 10, padding: "6px 12px", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", outline: "none" }}
+                />
+              </div>
+              {isLoading ? (
+                <div style={{ fontSize: 16, opacity: 0.8 }}>Loading…</div>
+              ) : cards.length === 0 ? (
+                <div style={{ fontSize: 17, lineHeight: 1.6 }}>No interactions recorded for <b>{fmtDebriefDate(selectedDate)}</b>.</div>
+              ) : (
+                <div style={{ fontSize: 17, lineHeight: 1.6 }}>
+                  On <b>{fmtDebriefDate(selectedDate)}</b>, I handled <b>{cards.length} interaction{cards.length !== 1 ? "s" : ""}</b>
+                  {callCount > 0 && smsCount > 0 ? ` — ${callCount} call${callCount !== 1 ? "s" : ""} and ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}.`
+                    : callCount > 0 ? ` — ${callCount} inbound call${callCount !== 1 ? "s" : ""}.`
+                    : ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}.`}
+                </div>
+              )}
+            </div>
+            {!isLoading && cards.length > 0 && (
+              <div style={{ display: "flex", borderBottom: "1px solid #f0eeff" }}>
+                <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: "#5d49f3" }}>{callCount}</div>
+                  <div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div>
+                </div>
+                <div style={{ flex: 1, padding: "18px 24px" }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: "#5d49f3" }}>{smsCount}</div>
+                  <div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div>
+                </div>
+              </div>
+            )}
+            {!isLoading && cards.length > 0 && (
+              <div style={{ padding: "20px 24px" }}>
+                <button
+                  onClick={startReview}
+                  style={{ width: "100%", padding: "14px 0", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 16, cursor: "pointer" }}
+                >
+                  Start Review →
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === "done" && (
+          <div style={{ padding: "60px 40px", textAlign: "center" }}>
+            <div style={{ fontSize: 48, marginBottom: 14 }}>✅</div>
+            <div style={{ font: "700 24px Georgia, serif", color: "#1a1a2e", marginBottom: 10 }}>You're all caught up</div>
+            <div style={{ fontSize: 15, color: "#6b7280", marginBottom: 24 }}>That's all {cards.length} interaction{cards.length !== 1 ? "s" : ""} for {fmtDebriefDate(selectedDate)}.</div>
+            <button onClick={backToHero} style={{ padding: "12px 28px", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>← Back to Brief</button>
+          </div>
+        )}
+
+        {view === "review" && currentCard && (() => {
+          const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
+          return (
+            <div style={{ padding: "24px 24px 32px" }}>
+              {/* Top bar */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <button onClick={backToHero} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#6b7280", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}>
+                  <X style={{ width: 13, height: 13 }} /> Exit
+                </button>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{cardIndex + 1} of {cards.length}</span>
+                <span style={{ fontSize: 12, color: "#9ca3af" }}>{fmtDebriefDate(selectedDate)}</span>
+              </div>
+              {/* Progress bar */}
+              <div style={{ height: 6, background: "#ececf8", borderRadius: 999, marginBottom: 20, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, #5d49f3, #7a63ff)", borderRadius: 999, transition: "width 0.3s ease" }} />
+              </div>
+              {/* Card */}
+              <div style={{ background: "#fff", borderRadius: 18, boxShadow: "0 6px 24px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 18 }}>
+                {currentCard.quickAction === "madison_sms_draft"
+                  ? <MadisonSmsDraftCard msg={msgObj} callerName="" />
+                  : <MadisonCallSummaryCard msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} />}
+              </div>
+              {/* Nav */}
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={goPrev} disabled={cardIndex === 0} style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 18px", borderRadius: 12, border: "1.5px solid #ddd5ff", background: "#fff", color: cardIndex === 0 ? "#d1d5db" : "#5d49f3", fontWeight: 700, fontSize: 14, cursor: cardIndex === 0 ? "not-allowed" : "pointer" }}>
+                  <ChevronLeft style={{ width: 16, height: 16 }} /> Prev
+                </button>
+                <button onClick={goNext} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 18px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  {cardIndex < cards.length - 1 ? <><ChevronRight style={{ width: 16, height: 16 }} /> Next</> : <>Done ✓</>}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
+  onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp, openTasksSignal }: CommandChatProps) {
   const DEBUG_RENDER = import.meta.env.DEV || localStorage.getItem("debug-renders") === "1";
   if (DEBUG_RENDER) { console.log("[RENDER] CommandChat", performance.now().toFixed(1)); }
   const [composer, setComposer] = useState("");
@@ -4551,6 +5652,11 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
     { staleTime: 30_000, refetchInterval: 60_000, retry: false, enabled: emailsOpen }
   );
   const emailThreadsList = emailThreadsData?.threads ?? [];
+  // ── Always-on poll: triggers Madison email draft cards even when sidebar is closed
+  trpc.gmail.listThreads.useQuery(
+    { maxResults: 20, unreadOnly: true },
+    { staleTime: 60_000, refetchInterval: 60_000, retry: false }
+  );
   // ── Missed Calls today count (pending only) ─────────────────────────────────
   const { data: missedCallsTodayData, refetch: refetchMissedCallsToday } = trpc.missedCalls.getPendingCount.useQuery(
     { todayOnly: true },
@@ -4677,7 +5783,7 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
       utils.tasks.getDue.invalidate();
       setTaskRefetchTick(t => t + 1);
     },
-  }, { label: "CommandChat", enabled: isVisible !== false });
+  }, { label: "CommandChat" });
 
   // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
   // MUST be declared here (early) because the message render loop at line ~924 uses superAlertMsgSet
@@ -5303,11 +6409,22 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
   const [voiceCallRecordingUrl, setVoiceCallRecordingUrl] = useState<string | null>(null);
   const [voiceCallShowTranscript, setVoiceCallShowTranscript] = useState(false);
   const [voiceCardMinimized, setVoiceCardMinimized] = useState(false);
+  // ── @madison command state ─────────────────────────────────────────────────────────────────────────────
+  const [madisonPendingCard, setMadisonPendingCard] = useState<MadisonPaymentConfirm | null>(null);
+  const [madisonChatLoading, setMadisonChatLoading] = useState(false);
+  const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
   const voiceCallContactPhoneRef = useRef<string | null>(null);
   const voiceCallScriptRef = useRef<string | null>(null);
   const voiceCallUtils = trpc.useUtils();
+  // markCallCardActed — lock the call summary card after one agent acts
+  const markCallCardActedMutation = trpc.opsChat.markCallCardActed.useMutation({
+    onSuccess: () => {
+      utils.opsChat.getUnresolvedMadisonCount.invalidate();
+      setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+    },
+  });
   // startCall mutation — verbatim from AICallPanel
   const voiceStartCallMutation = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
@@ -5327,16 +6444,7 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
             if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
               if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current);
               voiceCallPollRef.current = null;
-              // Post voice_call_completed card server-side
-              postVoiceCallCard.mutate({
-                contactName: voiceCallContactNameRef.current ?? "Client",
-                contactPhone: voiceCallContactPhoneRef.current ?? "",
-                triggeredBy: callerName,
-                script: voiceCallScriptRef.current ?? "",
-                outcome: s as "completed" | "voicemail" | "no_answer" | "failed",
-                summary: poll.summary ?? undefined,
-                durationSeconds: poll.durationSeconds ?? undefined,
-              });
+              // No separate result card — status shown inline in the confirm panel
             }
           } catch { /* ignore */ }
         }, 5000);
@@ -5576,6 +6684,7 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
   const [showMentionHistory, setShowMentionHistory] = useState(false);
   const [showCallPanel, setShowCallPanel] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDebrief, setShowDebrief] = useState(false);
   // Live floating pill: shown when a new @mention arrives while the panel IS visible
   const [livePill, setLivePill] = useState<{ from: string; body: string } | null>(null);
   const livePillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -5606,6 +6715,40 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
       .reverse(); // newest first
   }, [channelMsgs, mentionPattern, effectiveNames]);
 
+  // ── Unresolved Madison cards (sms draft + call summary) ─────────────────────────
+  // Server returns exact count (DRAFT_READY only for SMS, no-actedBy for calls)
+  // AND the specific channel message IDs that need action — used for scroll-to.
+  const { data: madisonCountData, refetch: refetchMadisonCount } = trpc.opsChat.getUnresolvedMadisonCount.useQuery(undefined, {
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  // Ordered list of unresolved msg IDs for cycling scroll-to (drafts first, then calls)
+  const unresolvedMadisonMsgIds = useMemo(() => {
+    const draftSet = new Set(madisonCountData?.unresolvedDraftIds ?? []);
+    const callSet = new Set(madisonCountData?.unresolvedCallMsgIds ?? []);
+    const emailDraftSet = new Set(madisonCountData?.unresolvedEmailDraftIds ?? []);
+    return channelMsgs
+      .filter(m => draftSet.has(m.id) || callSet.has(m.id) || emailDraftSet.has(m.id))
+      .map(m => m.id);
+  }, [channelMsgs, madisonCountData]);
+  // Badge count = only cards actually visible in the feed (not ghost rows outside the window)
+  const unresolvedMadisonCount = unresolvedMadisonMsgIds.length;
+  const madisonCardIdxRef = useRef(0);
+  function jumpToNextMadisonCard() {
+    if (unresolvedMadisonMsgIds.length === 0) return;
+    const idx = madisonCardIdxRef.current % unresolvedMadisonMsgIds.length;
+    madisonCardIdxRef.current = idx + 1;
+    const targetId = unresolvedMadisonMsgIds[idx];
+    scrollToCmdMsg(targetId);
+  }
+  // Refresh count when channelMsgs changes (draft acted on / dismissed)
+  const prevMadisonMsgsLen = useRef(unresolvedMadisonMsgIds.length);
+  useEffect(() => {
+    if (unresolvedMadisonMsgIds.length !== prevMadisonMsgsLen.current) {
+      void refetchMadisonCount();
+      prevMadisonMsgsLen.current = unresolvedMadisonMsgIds.length;
+    }
+  }, [unresolvedMadisonMsgIds.length, refetchMadisonCount]);
   // Compute unread tagged messages whenever channelMsgs changes
   useEffect(() => {
     if (!mentionPattern || channelMsgs.length === 0) return;
@@ -5668,6 +6811,10 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
     wasVisible.current = isVisible;
   }, [isVisible, unreadTagIds.length]);
 
+  // Open Tasks panel when parent fires openTasksSignal (e.g. left nav profile picture click)
+  useEffect(() => {
+    if (openTasksSignal && openTasksSignal > 0) setTasksOpen(true);
+  }, [openTasksSignal]); // eslint-disable-line react-hooks/exhaustive-deps
   // Returns true if the scroll container is within 250px of the bottom.
   // 250px threshold (vs old 150px) ensures we catch cases where the compose
   // box is tall or the last message is partially visible.
@@ -5871,6 +7018,40 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
     if (!hasText && donePhotos.length === 0) { return; }
     if (uploadingPhotos.length > 0) {
       toast.error("Please wait for photos to finish uploading");
+      return;
+    }
+    // ── @madison command detection ─────────────────────────────────────────────────────────────────────────────
+    if (/^@madison\b/i.test(composer.trim())) {
+      const text = composer.trim();
+      const message = text.replace(/^@madison\s*/i, "").trim();
+      if (!message) { toast.error("Tell Madison what to do after @madison"); return; }
+      if (madisonChatLoading) return;
+      // Post the user's @madison message to the feed
+      onSendMessage(text);
+      setComposer("");
+      setMadisonChatLoading(true);
+      madisonChatMutation.mutate(
+        { message },
+        {
+          onSuccess: (result) => {
+            setMadisonChatLoading(false);
+            if (result.type === "payment_link_confirm") {
+              setMadisonPendingCard(result as MadisonPaymentConfirm);
+            } else if (result.type === "client_disambiguation") {
+              toast.info(`Multiple matches found for that customer. Please use the Madison tab to disambiguate.`);
+            } else if (result.type === "not_found") {
+              toast.error(`Madison: Customer not found.`);
+            } else {
+              // For other result types, show a brief toast
+              toast.info(`Madison: ${(result as any).answer ?? (result as any).message ?? "Done."}`);
+            }
+          },
+          onError: (err) => {
+            setMadisonChatLoading(false);
+            toast.error(`Madison error: ${err.message}`);
+          },
+        }
+      );
       return;
     }
     doSend();
@@ -6957,26 +8138,33 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
                   </span>
                 )}
               </button>
-              {/* Tasks pill */}
-              <span className="text-slate-300 text-xs">|</span>
+              {/* Madison avatar button — cycles through all Madison cards, count from server */}
+              {unresolvedMadisonCount > 0 && (
+                <>
+                  <span className="text-slate-300 text-xs">|</span>
+                  <button
+                    onClick={jumpToNextMadisonCard}
+                    className="relative flex items-center gap-1.5 rounded-full border border-[#e3e6ef] bg-white hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition whitespace-nowrap"
+                    style={{padding:"4px 8px 4px 4px",fontSize:"12px"}}
+                    title={`${unresolvedMadisonCount} unresolved Madison card${unresolvedMadisonCount === 1 ? "" : "s"} — click to jump`}
+                  >
+                    <img src="/madison-avatar.jpg" alt="Madison" className="w-5 h-5 rounded-full object-cover shrink-0" />
+                    <span className="font-semibold text-[#6f3cff]">Madison</span>
+                    <span className="min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-[#6f3cff] text-white">
+                      {unresolvedMadisonCount > 99 ? "99+" : unresolvedMadisonCount}
+                    </span>
+                  </button>
+                </>
+              )}
+              {/* Debrief button */}
               <button
-                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailsOpen) setEmailsOpen(false); }}
-                className={cn(
-                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
-                  tasksOpen
-                    ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
-                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
-                )}
-                style={{padding:"7px 10px",fontSize:"12px"}}
-                title="Tasks"
+                onClick={() => setShowDebrief(true)}
+                className="flex items-center gap-1 rounded-full border border-[#e3e6ef] bg-white hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition whitespace-nowrap"
+                style={{ padding: "4px 10px", fontSize: "12px" }}
+                title="Open Madison Debrief"
               >
-                <ClipboardList className="h-3.5 w-3.5" />
-                Tasks
-                {visibleDueTasks.length > 0 && (
-                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-indigo-500 text-white animate-pulse">
-                    {visibleDueTasks.length > 99 ? "99+" : visibleDueTasks.length}
-                  </span>
-                )}
+                <span style={{ fontSize: 12 }}>✦</span>
+                <span className="font-semibold text-[#6f3cff]">Debrief</span>
               </button>
               {/* Payment Link button */}
               <button
@@ -6993,6 +8181,8 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
           {/* AI Call Panel — slide-in from right */}
           <AICallPanel open={showCallPanel} onClose={() => setShowCallPanel(false)} />
           <PaymentLinkModal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} />
+          {/* Madison Debrief modal */}
+          {showDebrief && <DebriefModal onClose={() => setShowDebrief(false)} />}
 
           {/* Mention History Drawer — slide-in from right */}
           {showMentionHistory && (
@@ -7215,6 +8405,45 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
           mentionPhoneMap={mentionPhoneMapRef.current}
           openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
           onOpenConcierge={() => { /* concierge always open */ }}
+          onCallBack={(name, phone, msgId) => {
+            // Lock the card immediately so other agents see it's been acted on
+            markCallCardActedMutation.mutate({ msgId, action: "call", actedBy: currentUser?.name ?? "Agent" });
+            // Open AI concierge confirm panel with editable script — same flow as voice command
+            const first = name.split(" ")[0];
+            const script = `Hi ${first}, this is Ava from Maids in Black. I'm following up on the call you just had with us.\n\nI wanted to make sure all your questions were answered and see if there's anything else we can help you with.\n\nWould you like to schedule a cleaning or get a quote?`;
+            setVoiceConfirmMsg(script);
+            setVoiceConfirmAction("call");
+            setVoiceConfirmScenario(`Follow up with ${name} who called in`);
+            setVoiceConfirm({
+              message: script,
+              matches: [{ sessionId: 0, name, phone }],
+              selected: { sessionId: 0, name, phone },
+            });
+            setVoiceTone("friendly");
+            setVoiceCallStatus("idle");
+            setVoiceCallVapiId(null);
+            setVoiceCallSummary(null);
+            setVoiceCallTranscript(null);
+            setVoiceCallRecordingUrl(null);
+            setVoiceCardMinimized(false);
+          }}
+          onTextBack={(name, phone, msgId) => {
+            // Lock the card immediately so other agents see it's been acted on
+            markCallCardActedMutation.mutate({ msgId, action: "text", actedBy: currentUser?.name ?? "Agent" });
+            // Open AI concierge text confirm panel with editable draft — same flow as voice command
+            const first = name.split(" ")[0];
+            const draft = `Hi ${first}, this is the Maids in Black team! We saw you just called us. How can we help you today? Feel free to reply here and we'll get right back to you. 😊`;
+            setVoiceConfirmMsg(draft);
+            setVoiceConfirmAction("text");
+            setVoiceConfirmScenario(null);
+            setVoiceConfirm({
+              message: draft,
+              matches: [{ sessionId: 0, name, phone }],
+              selected: { sessionId: 0, name, phone },
+            });
+            setVoiceTone("friendly");
+            setVoiceCardMinimized(false);
+          }}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
@@ -7772,12 +9001,21 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
                       if (!voiceConfirm.selected || !voiceConfirmMsg.trim()) return;
                       setVoiceSending(true);
                       try {
-                        await sendVoiceText.mutateAsync({
-                          sessionId: voiceConfirm.selected.sessionId,
-                          message: voiceConfirmMsg.trim(),
-                          fromNumberId: "PN0wVLcpCq",
-                          isVoiceCommand: true,
-                        });
+                        // sessionId=0 means we only have a phone number (e.g. from call summary card)
+                        // use startCsConversation which handles session lookup/creation by phone
+                        if (voiceConfirm.selected.sessionId === 0) {
+                          await sendClientSmsMutation.mutateAsync({
+                            phone: voiceConfirm.selected.phone,
+                            firstMessage: voiceConfirmMsg.trim(),
+                          });
+                        } else {
+                          await sendVoiceText.mutateAsync({
+                            sessionId: voiceConfirm.selected.sessionId,
+                            message: voiceConfirmMsg.trim(),
+                            fromNumberId: "PN0wVLcpCq",
+                            isVoiceCommand: true,
+                          });
+                        }
                         toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
                         setVoiceConfirm(null);
                         setVoiceConfirmMsg("");
@@ -7882,6 +9120,19 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
             </div>
           )}
 
+          {/* ── @madison pending card ── */}
+          {madisonChatLoading && (
+            <div className="mb-2 mx-1 flex items-center gap-2 px-3 py-2.5 rounded-2xl" style={{ background: "#f5f3ff", border: "1px solid #ddd7ff" }}>
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#7447f5" }} />
+              <span style={{ fontSize: 13, color: "#7447f5", fontWeight: 600 }}>Madison is thinking…</span>
+            </div>
+          )}
+          {madisonPendingCard && (
+            <MadisonCommandPaymentCard
+              card={madisonPendingCard}
+              onDismiss={() => setMadisonPendingCard(null)}
+            />
+          )}
           {/* Composer box with drag-drop */}
           <div className="relative">
 
@@ -9665,5 +10916,4 @@ const CommandChat = memo(function CommandChat({ channelMsgs, channelLoading, cal
       )}
     </div>
   );
-});
-export default CommandChat;
+}

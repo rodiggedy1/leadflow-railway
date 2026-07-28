@@ -149,15 +149,18 @@ export function registerWebhookRoutes(app: Express) {
       console.log(`[Webhook] Event type: ${event?.type}, direction: ${msg?.direction}`);
       console.log(`[Webhook] Payload: from=${msg?.from} to=${JSON.stringify(msg?.to)} body=${msg?.body ?? msg?.text}`);
       // ── CS line intercept ──────────────────────────────────────────────────
-      // Messages to the CS line (202-888-5362, phoneNumberId=PN0wVLcpCq) are
-      // stored as cs-inbound sessions and skipped from the main lead AI engine.
+      // Messages to any CS-treated line are stored as cs-inbound sessions and
+      // skipped from the main lead AI engine.
+      // Add new number IDs to csNumberIds to give them the same treatment.
       // NOTE: This must run BEFORE the direction check so outbound agent replies
       // from the OpenPhone app are mirrored into the CS chat (direction=outgoing).
       const csNumberId = ENV.openPhoneCsNumberId;
       if (!csNumberId) {
         console.error("[Webhook] OPENPHONE_CS_PHONE_NUMBER_ID is not set — CS messages will NOT be intercepted and may be silently dropped. Set this env var immediately.");
       }
-      if (csNumberId && msg?.phoneNumberId === csNumberId) {
+      // All number IDs that receive the CS/Command Chat treatment (same handler, different outgoing number)
+      const csNumberIds = [csNumberId, ENV.openPhoneNumberId].filter(Boolean) as string[];
+      if (csNumberIds.includes(msg?.phoneNumberId)) {
         if (msg.direction === "outgoing") {
           // Agent replied directly from OpenPhone app — mirror into CS chat
           await handleCsOutboundMessage(msg);
@@ -201,7 +204,20 @@ export function registerWebhookRoutes(app: Express) {
 
       const rawPhone: string = msg.from;
       // OpenPhone uses 'text' field; fall back to 'body' for compatibility
-      const inboundText: string = msg.text ?? msg.body ?? "";
+      const rawInboundText: string = msg.text ?? msg.body ?? "";
+      // ── Thumbtack relay message stripping ────────────────────────────────────
+      // Thumbtack forwards customer replies via SMS with a header like:
+      //   "Toni Rogers replied to you on Thumbtack.\n\nView the full conversation...\n\n---\n\nActual message here"
+      // Strip everything up to and including the "---" separator so only the
+      // customer's actual message is stored and passed to the AI.
+      let thumbtackRelaySenderName: string | null = null;
+      let inboundText: string = rawInboundText;
+      const thumbtackRelayMatch = rawInboundText.match(/^(.+?)\s+replied to you on Thumbtack[\s\S]*?---\s*\n([\s\S]+)$/i);
+      if (thumbtackRelayMatch) {
+        thumbtackRelaySenderName = thumbtackRelayMatch[1].trim();
+        inboundText = thumbtackRelayMatch[2].trim();
+        console.log(`[Webhook] Thumbtack relay detected — sender: ${thumbtackRelaySenderName}, stripped header, actual message: "${inboundText.slice(0, 80)}"`);
+      }
       const mediaUrls: string[] = (msg.media ?? []).map((m: any) => m.url ?? m.src ?? m.mediaUrl).filter(Boolean);
 
       // Idempotency key: OpenPhone has at-least-once delivery semantics and may
@@ -407,6 +423,15 @@ export function registerWebhookRoutes(app: Express) {
           }).catch(() => {});
         }
         return; // Do not process as a regular inbound SMS
+      }
+      // ── Thumbtack system/carrier messages ────────────────────────────────────
+      // Any message from the Thumbtack alert number (+16505164957) that wasn't
+      // already caught by the opportunity check above is a carrier/system message
+      // (e.g. "Our automated system only responds to HELP, STOP and START").
+      // Drop all of them — they are never real customer messages.
+      if (fromPhone === THUMBTACK_ALERT_NUMBER) {
+        console.log(`[Webhook] Thumbtack system/carrier message from ${fromPhone} — dropping silently`);
+        return;
       }
 
       // ── Bark SMS lead alert ──────────────────────────────────────────────────
@@ -2103,8 +2128,34 @@ async function handleCsInboundMessage(msg: any) {
   }
 
   const fromPhone = msg.from;
-  const inboundText = msg.text ?? msg.body ?? "";
-  const messageId: string | undefined = msg.id;
+  const rawInboundTextCs = msg.text ?? msg.body ?? "";
+  // ── Thumbtack relay message stripping ────────────────────────────────────
+  // Strip the Thumbtack header ("Name replied to you on Thumbtack...---") so
+  // only the customer's actual message is stored and shown in Command Chat.
+  let thumbtackRelaySenderName: string | null = null;
+  let inboundText: string = rawInboundTextCs;
+  const ttRelayMatch = rawInboundTextCs.match(/^(.+?)\s+replied to you on Thumbtack[\s\S]*?---\s*\n([\s\S]+)$/i);
+  if (ttRelayMatch) {
+    thumbtackRelaySenderName = ttRelayMatch[1].trim();
+    inboundText = ttRelayMatch[2].trim();
+    console.log(`[CS] Thumbtack relay detected — sender: ${thumbtackRelaySenderName}, stripped header`);
+  }
+  // ── Thumbtack / carrier system message filter ───────────────────────────────
+  // Thumbtack sends automated system messages like:
+  //   "Thumbtack: Our automated system only responds to the words HELP, STOP and START..."
+  // These are NOT real customer messages. Drop them entirely — no storage, no AI draft.
+  // We match on rawInboundTextCs (before any stripping) so a real customer message
+  // that happens to mention Thumbtack is never accidentally dropped.
+  // The pattern is intentionally tight: must start with "Thumbtack:" AND mention
+  // "automated system only responds" to avoid false positives.
+  // Any message from the Thumbtack alert number that reaches the CS handler
+  // is a carrier/system message — drop it.
+  const THUMBTACK_ALERT_NUMBER_CS = "+16505164957";
+  if (msg.from === THUMBTACK_ALERT_NUMBER_CS || fromPhone === THUMBTACK_ALERT_NUMBER_CS) {
+    console.log(`[CS] Thumbtack system/carrier message — dropping silently`);
+    return;
+  }
+  const messageId: string = msg.id ?? `cs-fallback-${msg.from ?? "unknown"}-${Date.now()}`;
   const now = Date.now();
   // Extract MMS media URLs — OpenPhone may use 'media', 'attachments', or 'mediaUrls'
   const rawMediaArray: any[] = msg.media ?? msg.attachments ?? msg.mediaUrls ?? [];
@@ -2220,6 +2271,13 @@ async function handleCsInboundMessage(msg: any) {
     }
   }
 
+  // ── Thumbtack relay sender name fallback ────────────────────────────────────
+  // If all DB lookups failed but we extracted a sender name from the Thumbtack
+  // relay header (e.g. "Toni Rogers replied to you on Thumbtack"), use that.
+  if (!resolvedName && thumbtackRelaySenderName) {
+    resolvedName = thumbtackRelaySenderName;
+    console.log(`[CS] Using Thumbtack relay sender name as resolvedName: ${resolvedName}`);
+  }
   // ── Running-late SMS detection (cleaner bypassed the app) ─────────────────
   // If a known cleaner texts the ops line with an ETA / running-late message,
   // post the same Command Chat card that the app would have posted so staff
@@ -2416,6 +2474,7 @@ async function handleCsInboundMessage(msg: any) {
     syncAllOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
       console.warn("[CS] syncAllOutboundMessages error:", err)
     );
+    console.log(`[CS] Madison trigger check — messageId=${messageId ?? "MISSING"}, inboundText=${inboundText.trim() ? "present("+inboundText.length+")" : "EMPTY"}, resolvedSessionId=${resolvedSessionId}`);
     // Fire Madison SMS Draft Agent async (non-blocking) — generates a draft reply card in Command Chat
     if (messageId && inboundText.trim()) {
       import("./madisonSmsAgent").then(({ triggerMadisonSmsDraft }) => {
@@ -2423,7 +2482,7 @@ async function handleCsInboundMessage(msg: any) {
           inboundOpenPhoneId: messageId,
           sessionId: resolvedSessionId,
           fromPhone,
-          senderName: resolvedName ?? undefined,
+          senderName: resolvedName ?? existingSession?.leadName ?? undefined,
           isCleaner,
           inboundText,
         }).catch((err: unknown) => console.warn("[MadisonSMS] triggerMadisonSmsDraft error:", err));

@@ -117,11 +117,17 @@ export async function handleMadisonReadiness(
   }
 
   // ── Load existing context (best-effort, non-blocking) ─────────────────────
+  // Skip getContext when clearContext=true: the DELETE may not be visible yet on the
+  // same connection pool (TiDB read-after-write lag), which causes saveQueryContext to
+  // take the stale-version UPDATE path and silently fail. Forcing null here ensures
+  // saveQueryContext always uses the INSERT/upsert path after a clear.
   let existingContext = null;
-  try {
-    existingContext = await getContext(db, effectiveAgentId);
-  } catch {
-    // Context load failure is non-fatal
+  if (!clearContext) {
+    try {
+      existingContext = await getContext(db, effectiveAgentId);
+    } catch {
+      // Context load failure is non-fatal
+    }
   }
 
   let plan;
@@ -425,7 +431,7 @@ export async function handleMadisonReadiness(
     plannerFailed: false,
     executorInvoked: true,
     responseType: "query_result",
-    seedItemCount: projection?.totalIssues ?? 0,
+    seedItemCount: projection?.filteredJobs ?? 0,
     durationMs: Date.now() - startedAt,
   } : undefined;
   return {

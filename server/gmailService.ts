@@ -157,6 +157,7 @@ export interface GmailMessage {
   threadId: string;
   from: string;
   fromEmail: string;
+  replyToEmail: string | null;
   to: string;
   subject: string;
   snippet: string;
@@ -205,6 +206,9 @@ function parseMessage(msg: any): GmailMessage {
   const fromEmailMatch = from.match(/<(.+?)>/) ?? from.match(/(\S+@\S+)/);
   const fromEmail = fromEmailMatch?.[1] ?? from;
   const fromName = from.replace(/<.+?>/, "").trim() || fromEmail;
+  const replyToRaw = headers["reply-to"] ?? "";
+  const replyToMatch = replyToRaw.match(/<(.+?)>/) ?? replyToRaw.match(/(\S+@\S+)/);
+  const replyToEmail: string | null = replyToMatch?.[1] ?? (replyToRaw.includes("@") ? replyToRaw.trim() : null);
   const { html, text } = extractBody(msg.payload);
   const attachments: GmailMessage["attachments"] = [];
   function findAttachments(part: any) {
@@ -216,7 +220,7 @@ function parseMessage(msg: any): GmailMessage {
   }
   findAttachments(msg.payload);
   return {
-    id: msg.id, threadId: msg.threadId, from: fromName, fromEmail,
+    id: msg.id, threadId: msg.threadId, from: fromName, fromEmail, replyToEmail,
     to: headers["to"] ?? "", subject: headers["subject"] ?? "(no subject)",
     snippet: msg.snippet ?? "", bodyHtml: html, bodyText: text,
     date: parseInt(msg.internalDate ?? "0"),
