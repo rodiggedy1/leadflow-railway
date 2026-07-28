@@ -1224,7 +1224,9 @@ async function draftClientMessage(messageHint: string | null, clientName: string
       },
       {
         role: "user",
-        content: `Draft an SMS to client ${firstName}. The dispatcher wants to: ${messageHint ?? "send a general message"}. Write the exact message to send — warm, personal, and on-brand. Address them by first name.`,
+        content: messageHint
+          ? `Draft an SMS to client ${firstName}. The message MUST communicate this specific thing: "${messageHint}". Do NOT change the topic, do NOT write something different, do NOT add unrelated content. Write the exact message to send — warm, personal, on-brand, addressed by first name. Stay on topic.`
+          : `Draft a warm, personal check-in SMS to client ${firstName}. Address them by first name. Keep it brief and genuine.`,
       },
     ],
   });
