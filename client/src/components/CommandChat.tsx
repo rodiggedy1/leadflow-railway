@@ -9832,16 +9832,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 setMadisonDisambigCard(null);
                 setMadisonChatLoading(true);
                 // Determine command type
-                const isPaymentCmd = /payment.link|send.link|pay/i.test(originalMadisonMessageRef.current);
-                const isCallCmd = /^call\b|^phone\b/i.test(originalMadisonMessageRef.current);
-                // Pass the messageHint from the disambiguation card — same as right panel does
+                // Exact copy of AiConcierge handlePickClient (lines 3457-3477)
                 const disambigHint = madisonDisambigCard?.messageHint ?? null;
+                const isPaymentCmd = disambigHint === "__payment_link__";
+                const isCallCmd = (disambigHint ?? "").startsWith("__call_client__");
+                const callQuestionHint = isCallCmd ? (disambigHint ?? "").replace("__call_client__:", "") || null : null;
                 madisonChatMutation.mutate(
                   {
-                    message: originalMadisonMessageRef.current,
+                    message: isPaymentCmd ? `Send payment link to ${name}` : isCallCmd ? `Call ${name}` : originalMadisonMessageRef.current,
                     resolvedClientPhone: phone,
-                    resolvedClientName: name,
-                    ...(isPaymentCmd ? { resolvedPaymentLink: true } : isCallCmd ? {} : { resolvedClientMessageHint: disambigHint }),
+                    resolvedClientMessageHint: (isPaymentCmd || isCallCmd) ? null : disambigHint,
+                    resolvedPaymentLink: isPaymentCmd,
+                    resolvedClientName: (isPaymentCmd || isCallCmd) ? name : undefined,
+                    resolvedCallClient: isCallCmd,
+                    resolvedCallPersonName: isCallCmd ? name : undefined,
+                    resolvedCallQuestionHint: callQuestionHint,
                   },
                   {
                     onSuccess: (result) => {
