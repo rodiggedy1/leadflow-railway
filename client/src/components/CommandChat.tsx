@@ -2492,6 +2492,147 @@ function MadisonPaymentResultCard({ msg }: { msg: { id: number; metadata: string
   );
 }
 
+// ── MadisonSmsResultCard — persistent feed card posted after @madison SMS is sent ──
+function MadisonSmsResultCard({ msg }: { msg: { id: number; metadata: string | null; createdAt: string | Date } }) {
+  const [showMonitor, setShowMonitor] = React.useState(false);
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  let meta: { recipientName?: string; recipientPhone?: string; smsText?: string; sentTime?: string } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+  const name = meta.recipientName ?? "Customer";
+  const firstName = name.split(" ")[0];
+  const msgTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="flex gap-3 items-start px-4 py-2">
+      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
+        </div>
+        <div style={{ maxWidth: 540, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #eee" }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: "#ecfdf3", display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 }}>📱</div>
+            <div style={{ marginLeft: 14, flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>SMS Sent</div>
+              <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>Madison completed this action successfully.</div>
+            </div>
+            <div style={{ marginLeft: "auto", background: "#ecfdf3", color: "#087443", padding: "6px 10px", borderRadius: 999, fontWeight: 700, fontSize: 12, flexShrink: 0 }}>Completed</div>
+          </div>
+          <div style={{ padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Customer</span>
+              <b style={{ color: "#111827" }}>{name}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Phone</span>
+              <b style={{ color: "#111827" }}>{meta.recipientPhone ?? ""}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Delivery</span>
+              <b style={{ color: "#111827" }}>SMS • {meta.sentTime || msgTime}</b>
+            </div>
+            {meta.smsText && (
+              <div style={{ marginTop: 18, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, fontStyle: "italic", color: "#555", fontSize: 13, lineHeight: 1.55, wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                “{meta.smsText}”
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+              <button onClick={() => setShowMonitor(true)} style={{ background: "#5b4ff7", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>View Conversation</button>
+            </div>
+            {showMonitor && (
+              <div style={{ marginTop: 16, background: "#ecfdf3", border: "1px solid #b7ebce", padding: 14, borderRadius: 12, color: "#087443", fontSize: 13 }}>
+                👀 Madison is monitoring this conversation and will notify you if {firstName} replies.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MadisonCommandSmsCard — ephemeral confirm card for @madison text [customer] ──
+type MadisonSmsConfirm = {
+  type: "bulk_sms_confirm";
+  targetDescription: string;
+  recipients: Array<{ name: string; phone: string; cleanerProfileId?: number }>;
+  draftMessage: string;
+  command?: string;
+};
+function MadisonCommandSmsCard({ card, onDismiss }: { card: MadisonSmsConfirm; onDismiss: () => void }) {
+  const [smsText, setSmsText] = useState(card.draftMessage);
+  const [sent, setSent] = useState(false);
+  const sendMutation = trpc.aiConcierge.sendBulkSms.useMutation();
+  const postResultMutation = trpc.opsChat.postSmsResult.useMutation();
+  const utils = trpc.useUtils();
+  const recipient = card.recipients[0];
+  const name = recipient?.name ?? card.targetDescription;
+  const firstName = name.split(" ")[0];
+  function handleSend() {
+    if (sent || sendMutation.isPending) return;
+    sendMutation.mutate(
+      { recipients: card.recipients, message: smsText, ...(card.command ? { command: card.command } : {}) },
+      {
+        onSuccess: () => {
+          setSent(true);
+          const sentTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          postResultMutation.mutate(
+            { recipientName: name, recipientPhone: recipient?.phone ?? "", smsText, sentTime },
+            { onSuccess: () => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }) }
+          );
+          setTimeout(() => onDismiss(), 2000);
+        },
+        onError: (err) => toast.error(`Failed to send SMS: ${err.message}`),
+      }
+    );
+  }
+  return (
+    <div style={{ maxWidth: 420, marginBottom: 8, marginLeft: 2, marginRight: 2 }}>
+      <div style={{ background: "#fff", border: "1px solid #e7eaf0", borderRadius: 20, overflow: "hidden", boxShadow: "0 12px 30px rgba(24,32,51,.08)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #e7eaf0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: "#efeefe", display: "grid", placeItems: "center", fontSize: 22 }}>📱</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#172033" }}>Send SMS</div>
+              <div style={{ fontSize: 12, color: "#667085", marginTop: 2 }}>Communication · {name}</div>
+            </div>
+          </div>
+          <button onClick={onDismiss} style={{ background: "#f0f2f7", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#667085", fontSize: 14 }}>✕</button>
+        </div>
+        <div style={{ border: "1px solid #e7eaf0", borderRadius: 14, margin: "14px 16px 0", overflow: "hidden" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", borderBottom: "1px solid #e7eaf0", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Customer</span>
+            <b style={{ color: "#172033" }}>{name}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Phone</span>
+            <b style={{ color: "#172033" }}>{recipient?.phone ?? ""}</b>
+          </div>
+        </div>
+        <div style={{ padding: "14px 16px 0" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6d5dfc", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Message going out</div>
+          <textarea
+            value={smsText}
+            onChange={(e) => setSmsText(e.target.value)}
+            disabled={sent || sendMutation.isPending}
+            rows={4}
+            style={{ width: "100%", background: "#f7f5ff", border: "1px solid #ebe7ff", borderRadius: 12, padding: "11px 12px", fontSize: 13, color: "#172033", fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace", resize: "vertical", outline: "none", wordBreak: "break-word", overflowWrap: "anywhere" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: "14px 16px 16px" }}>
+          <button onClick={handleSend} disabled={sent || sendMutation.isPending} style={{ flex: 1, background: "#6d5dfc", color: "#fff", border: "none", borderRadius: 11, padding: "10px 13px", fontWeight: 800, cursor: "pointer", fontSize: 13, opacity: (sent || sendMutation.isPending) ? 0.6 : 1 }}>
+            {sent ? "✓ Sent" : sendMutation.isPending ? "Sending…" : `Send SMS to ${firstName}`}
+          </button>
+          <button onClick={onDismiss} style={{ background: "#f0f2f7", color: "#4c556b", border: "none", borderRadius: 11, padding: "10px 13px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MadisonCommandPaymentCard — ephemeral confirm card shown above composer after @madison send payment link ──
 // ── MadisonDisambiguationCard — shown when @madison finds multiple customers ──
 interface MadisonDisambigMatch {
@@ -4394,6 +4535,7 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_post") { return <MadisonPostCard msg={msg} callerName={callerName} />; }
                 // ── Madison Payment Result card
                 if (msg.quickAction === "madison_payment_result") { return <MadisonPaymentResultCard key={msg.id} msg={msg} />; }
+                if (msg.quickAction === "madison_sms_result") { return <MadisonSmsResultCard key={msg.id} msg={msg} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
@@ -6589,6 +6731,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceCardMinimized, setVoiceCardMinimized] = useState(false);
   // ── @madison command state ─────────────────────────────────────────────────────────────────────────────
   const [madisonPendingCard, setMadisonPendingCard] = useState<MadisonPaymentConfirm | null>(null);
+  const [madisonSmsPendingCard, setMadisonSmsPendingCard] = useState<MadisonSmsConfirm | null>(null);
   const [madisonDisambigCard, setMadisonDisambigCard] = useState<MadisonDisambigCard | null>(null);
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
@@ -7212,6 +7355,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       originalMadisonMessageRef.current = message;
       setMadisonChatLoading(true);
       setMadisonDisambigCard(null);
+      setMadisonPendingCard(null);
+      setMadisonSmsPendingCard(null);
       madisonChatMutation.mutate(
         { message },
         {
@@ -7219,6 +7364,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             setMadisonChatLoading(false);
             if (result.type === "payment_link_confirm") {
               setMadisonPendingCard(result as MadisonPaymentConfirm);
+            } else if (result.type === "bulk_sms_confirm") {
+              setMadisonSmsPendingCard(result as MadisonSmsConfirm);
             } else if (result.type === "client_disambiguation") {
               setMadisonDisambigCard(result as MadisonDisambigCard);
             } else if (result.type === "not_found") {
@@ -9315,18 +9462,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               onPick={(phone, name) => {
                 setMadisonDisambigCard(null);
                 setMadisonChatLoading(true);
+                // Determine if this was a payment link command or SMS command
+                const isPaymentCmd = /payment.link|send.link|pay/i.test(originalMadisonMessageRef.current);
                 madisonChatMutation.mutate(
                   {
                     message: originalMadisonMessageRef.current,
                     resolvedClientPhone: phone,
                     resolvedClientName: name,
-                    resolvedPaymentLink: true,
+                    ...(isPaymentCmd ? { resolvedPaymentLink: true } : {}),
                   },
                   {
                     onSuccess: (result) => {
                       setMadisonChatLoading(false);
                       if (result.type === "payment_link_confirm") {
                         setMadisonPendingCard(result as MadisonPaymentConfirm);
+                      } else if (result.type === "bulk_sms_confirm") {
+                        setMadisonSmsPendingCard(result as MadisonSmsConfirm);
                       } else if (result.type === "client_disambiguation") {
                         setMadisonDisambigCard(result as MadisonDisambigCard);
                       } else {
@@ -9346,6 +9497,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <MadisonCommandPaymentCard
               card={madisonPendingCard}
               onDismiss={() => setMadisonPendingCard(null)}
+            />
+          )}
+          {madisonSmsPendingCard && (
+            <MadisonCommandSmsCard
+              card={madisonSmsPendingCard}
+              onDismiss={() => setMadisonSmsPendingCard(null)}
             />
           )}
           {/* Composer box with drag-drop */}
