@@ -1236,9 +1236,9 @@ function ConversationDrawer({
     { sessionId: session.id },
     { staleTime: 5 * 60 * 1000, retry: 1 }
   );
-  // Auto-refresh conversation every 5s when drawer is open
+  // Auto-refresh conversation every 30s when drawer is open (reduced from 5s to prevent DB pool exhaustion)
   const { data: freshSession } = trpc.leads.list.useQuery(undefined, {
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
     select: (sessions) => sessions.find(s => s.id === session.id),
   });
 

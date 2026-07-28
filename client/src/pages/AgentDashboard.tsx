@@ -490,9 +490,9 @@ export function ConversationDrawer({
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-refresh conversation every 5s
+  // Auto-refresh conversation every 30s (reduced from 5s to prevent DB pool exhaustion)
   const { data: freshSession } = trpc.leads.list.useQuery(undefined, {
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
     select: (sessions) => sessions.find(s => s.id === session.id),
   });
 
