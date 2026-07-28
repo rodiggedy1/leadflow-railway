@@ -192,12 +192,91 @@ Choose the single most accurate status. When the last message is a simple acknow
   }
 }
 
+// ── Concurrency-limited background scoring queue ──────────────────────────────
+// All scoring — both bulk inbox and webhook paths — runs through this queue.
+// Caps backlog at SCORER_MAX_BACKLOG; new tasks are rejected when full.
+// Deduplicates by sessionId: sessions already queued or running are skipped.
+
+const SCORER_CONCURRENCY = 3;
+const SCORER_MAX_BACKLOG = 500;
+
+let _active = 0;
+let _queued = 0;
+let _completed = 0;
+let _failed = 0;
+const _inFlight = new Set<number>(); // sessionIds currently queued or running
+const _queue: Array<() => Promise<void>> = [];
+
+function _drain(): void {
+  while (_active < SCORER_CONCURRENCY && _queue.length > 0) {
+    const task = _queue.shift()!;
+    _queued--;
+    _active++;
+    task().finally(() => {
+      _active--;
+      _drain();
+    });
+  }
+}
+
+/**
+ * Enqueue a session for background scoring.
+ *
+ * Guarantees:
+ *   - At most SCORER_CONCURRENCY (3) concurrent DB-touching scorer tasks process-wide.
+ *   - Sessions already queued or running are skipped (shared dedup covers both
+ *     bulk inbox loads and direct webhook calls).
+ *   - Backlog capped at SCORER_MAX_BACKLOG; new tasks are rejected when full.
+ *   - Each task failure is isolated — one error does not stop the queue.
+ *   - Never throws; safe to call fire-and-forget.
+ */
+export function enqueueScoring(sessionId: number, isTeam: boolean): void {
+  if (_inFlight.has(sessionId)) return; // already queued or running
+  if (_queued >= SCORER_MAX_BACKLOG) {
+    console.warn(`[csStatusScorer] Backlog full (${SCORER_MAX_BACKLOG}) — dropping session ${sessionId}`);
+    return;
+  }
+  _inFlight.add(sessionId);
+  _queued++;
+  const enqueuedAt = Date.now();
+  console.log(`[csStatusScorer] Enqueued session ${sessionId}`, { active: _active, queued: _queued });
+  _queue.push(async () => {
+    const startedAt = Date.now();
+    try {
+      await scoreAndCacheStatusById(sessionId, isTeam);
+      _completed++;
+      console.log(`[csStatusScorer] Done session ${sessionId}`, {
+        queue_wait_ms: startedAt - enqueuedAt,
+        execution_ms: Date.now() - startedAt,
+        active: _active,
+        queued: _queued,
+        completed: _completed,
+      });
+    } catch (err) {
+      _failed++;
+      console.error(`[csStatusScorer] Failed session ${sessionId}`, {
+        queue_wait_ms: startedAt - enqueuedAt,
+        execution_ms: Date.now() - startedAt,
+        active: _active,
+        queued: _queued,
+        failed: _failed,
+        err,
+      });
+    } finally {
+      _inFlight.delete(sessionId);
+    }
+  });
+  _drain();
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
  * Convenience wrapper — fetches the session from DB then scores it.
  * Use this from the webhook where only sessionId is available.
  * Safe to call fire-and-forget (never throws).
+ * NOTE: Prefer enqueueScoring() for fire-and-forget callers — it enforces
+ * process-wide concurrency limits and deduplication.
  */
 export async function scoreAndCacheStatusById(
   sessionId: number,
