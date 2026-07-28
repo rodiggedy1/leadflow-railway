@@ -397,6 +397,11 @@ export function registerWebhookRoutes(app: Express) {
           } catch (err) {
             console.error("[Webhook] Failed to post Thumbtack SMS card:", err);
           }
+          // Broadcast so SSE-driven command channel refetches immediately (for sound detection)
+          void (async () => {
+            const { broadcastOpsUpdate: bcastTT } = await import('./sseBroadcast');
+            bcastTT('new_message', { channel: 'command' });
+          })();
 
           // Alert CS team
           const alertMsg = `📌 Thumbtack Opportunity: ${ttName} needs ${ttService}${ttCity ? ` in ${ttCity}` : ""}${ttUrl ? ` — ${ttUrl}` : ""}`;
@@ -523,6 +528,11 @@ export function registerWebhookRoutes(app: Express) {
           } catch (err) {
             console.error("[Webhook] Failed to post Bark SMS card:", err);
           }
+          // Broadcast so SSE-driven command channel refetches immediately (for sound detection)
+          void (async () => {
+            const { broadcastOpsUpdate: bcastBark } = await import('./sseBroadcast');
+            bcastBark('new_message', { channel: 'command' });
+          })();
 
           logActivity({
             eventType: "new_lead",
@@ -679,6 +689,8 @@ export function registerWebhookRoutes(app: Express) {
           // Broadcast so SSE-driven lead list invalidation picks up the new lead immediately
           const { broadcastOpsUpdate: bcastNewLead } = await import('./sseBroadcast');
           bcastNewLead('lead_update');
+          // Also broadcast new_message so Command Chat refreshes immediately (sound detection)
+          bcastNewLead('new_message', { channel: 'command' });
         } catch (createErr) {
           console.error('[Webhook] Failed to create inbound-sms session:', createErr);
         }
