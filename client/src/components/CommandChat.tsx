@@ -2483,6 +2483,8 @@ function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentCo
   const [smsText, setSmsText] = useState(card.smsText);
   const [sent, setSent] = useState(false);
   const sendMutation = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
+  const postResultMutation = trpc.opsChat.postAsMadison.useMutation();
+  const utils = trpc.useUtils();
   const expiryDate = new Date(card.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   function handleSend() {
@@ -2498,7 +2500,25 @@ function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentCo
       {
         onSuccess: () => {
           setSent(true);
-          setTimeout(() => onDismiss(), 3500);
+          const sentTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          // Post a persistent result card to the feed
+          postResultMutation.mutate(
+            {
+              body: `Payment Link Sent\nMadison sent a secure payment link to ${card.recipientName} via SMS at ${sentTime}.\n\n“${smsText}”`,
+              variant: "result",
+              stats: [
+                { icon: "👤", label: "Customer", value: card.recipientName },
+                { icon: "📱", label: "Delivery", value: `SMS • ${sentTime}` },
+                { icon: "🔗", label: "Link", value: "Sent" },
+              ],
+            },
+            {
+              onSuccess: () => {
+                utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+              },
+            }
+          );
+          setTimeout(() => onDismiss(), 2000);
         },
         onError: (err) => {
           toast.error(`Failed to send: ${err.message}`);
