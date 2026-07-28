@@ -6599,15 +6599,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       .filter(m => draftSet.has(m.id) || callSet.has(m.id) || emailDraftSet.has(m.id))
       .map(m => m.id);
   }, [channelMsgs, madisonCountData]);
-  const [madisonCardIdx, setMadisonCardIdx] = useState(0);
+  const madisonCardIdxRef = useRef(0);
   function jumpToNextMadisonCard() {
     if (unresolvedMadisonMsgIds.length === 0) return;
-    const idx = madisonCardIdx % unresolvedMadisonMsgIds.length;
+    const idx = madisonCardIdxRef.current % unresolvedMadisonMsgIds.length;
+    madisonCardIdxRef.current = idx + 1;
     const targetId = unresolvedMadisonMsgIds[idx];
-    const hasRef = cmdMsgRefMap.current.has(targetId);
-    console.log('[Madison Jump] idx:', idx, 'targetId:', targetId, 'hasRef:', hasRef, 'allIds:', unresolvedMadisonMsgIds, 'refMapSize:', cmdMsgRefMap.current.size, 'channelMsgsLen:', channelMsgs.length);
     scrollToCmdMsg(targetId);
-    setMadisonCardIdx(idx + 1);
   }
   // Refresh count when channelMsgs changes (draft acted on / dismissed)
   const prevMadisonMsgsLen = useRef(unresolvedMadisonMsgIds.length);
