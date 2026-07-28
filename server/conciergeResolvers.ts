@@ -816,12 +816,17 @@ function projectForAnswerLLM(resolvedFields: ResolvedField[]): Record<string, un
 async function generateAnswer(
   question: string,
   resolvedFields: ResolvedField[],
-  projection: Record<string, unknown>
+  projection: Record<string, unknown>,
+  convCtx?: { history?: Array<{ role: string; content: string }>; summary?: string }
 ): Promise<string> {
   const fieldNames = resolvedFields.map(f => f.field).join(", ");
   const today = getTodayET();
 
-  const systemPrompt = `You are an operations assistant for a home cleaning company. Answer the dispatcher's question using only the provided data.
+  const summaryBlock = convCtx?.summary
+    ? `\n\n=== CONVERSATION SUMMARY ===\n${convCtx.summary}`
+    : "";
+
+  const systemPrompt = `You are an operations assistant for a home cleaning company. Answer the dispatcher's question using only the provided data.${summaryBlock}
 
 Rules:
 - Answer ONLY the specific question asked
@@ -840,9 +845,16 @@ Rules:
 - Today is ${today}
 - IMPORTANT: All timestamps in the data are UTC ISO strings (e.g. "2026-07-22T16:30:00Z"). Always convert them to Eastern Time (ET) and display as human-readable 12-hour time (e.g. "12:30 PM"). Never show raw ISO timestamps or UTC labels to the user.`;
 
+  // Include recent conversation turns so the answer can reference prior context
+  const historyMessages = (convCtx?.history ?? []).slice(-6).map(t => ({
+    role: t.role as "user" | "assistant",
+    content: t.content,
+  }));
+
   const llmResult = await invokeLLM({
     messages: [
       { role: "system", content: systemPrompt },
+      ...historyMessages,
       { role: "user", content: `Data:\n${JSON.stringify(projection, null, 2)}\n\nQuestion: ${question}` },
     ],
   });
@@ -859,7 +871,9 @@ export async function resolveQuery(
   db: Db,
   question: string,
   /** Pre-resolved entity from a UI chip (optional) */
-  chipEntity?: { type: "customer"; name: string; phone: string; phone10: string } | { type: "cleaner"; name: string; cleanerProfileId: number }
+  chipEntity?: { type: "customer"; name: string; phone: string; phone10: string } | { type: "cleaner"; name: string; cleanerProfileId: number },
+  /** Optional conversation context for richer answers */
+  convCtx?: { history?: Array<{ role: string; content: string }>; summary?: string }
 ): Promise<QueryResult | ClarificationResult> {
   // 1. Resolve entities
   console.log("[resolveQuery] plan entities:", JSON.stringify(plan.entities), "fields:", plan.requestedFields, "timeScope:", JSON.stringify(plan.timeScope));
@@ -931,7 +945,7 @@ export async function resolveQuery(
 
   // 7. Project and generate answer
   const projection = projectForAnswerLLM(resolvedFields);
-  const answer = await generateAnswer(question, resolvedFields, projection);
+  const answer = await generateAnswer(question, resolvedFields, projection, convCtx);
 
   console.log("[resolveQuery] fields:", resolvedFields.map(f => `${f.field}:${f.status}`).join(", "), "status:", overallStatus);
 

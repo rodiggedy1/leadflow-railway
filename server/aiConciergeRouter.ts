@@ -2511,6 +2511,9 @@ export const aiConciergeRouter = router({
     .input(
       z.object({
         message: z.string().min(1).max(2000),
+        // Conversation context
+        history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).max(20).optional(),
+        summary: z.string().max(1000).optional(),
         resolvedJobId: z.number().optional(),
         resolvedClientPhone: z.string().optional(),
         resolvedClientMessageHint: z.string().nullable().optional(),
@@ -2570,7 +2573,10 @@ export const aiConciergeRouter = router({
       // ─────────────────────────────────────────────────────────────────────
 
       // Use new unified parser — replaces classifyIntent for all intents
-      const rawPlan = await parseConciergeRequest(input.message);
+      const rawPlan = await parseConciergeRequest(input.message, {
+        history: input.history,
+        summary: input.summary,
+      });
       // Validate and normalize: resolve contradictions before dispatch
       const { plan, corrected, correction } = validateAndNormalizePlan(rawPlan, re);
       if (corrected && correction) {
@@ -2671,7 +2677,10 @@ export const aiConciergeRouter = router({
           : re?.type === "cleaner"
             ? { type: "cleaner" as const, name: re.name, cleanerProfileId: re.cleanerProfileId }
             : undefined;
-        const queryResult = await resolveQuery(plan, db, input.message, chipEntity);
+        const queryResult = await resolveQuery(plan, db, input.message, chipEntity, {
+          history: input.history,
+          summary: input.summary,
+        });
         if (queryResult.type === "clarification") {
           return {
             type: "error" as const,
