@@ -6589,18 +6589,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     refetchInterval: 30_000,
     staleTime: 15_000,
   });
-  const unresolvedMadisonCount = madisonCountData?.total ?? 0;
   // Ordered list of unresolved msg IDs for cycling scroll-to (drafts first, then calls)
   const unresolvedMadisonMsgIds = useMemo(() => {
     const draftSet = new Set(madisonCountData?.unresolvedDraftIds ?? []);
     const callSet = new Set(madisonCountData?.unresolvedCallMsgIds ?? []);
     const emailDraftSet = new Set(madisonCountData?.unresolvedEmailDraftIds ?? []);
-    const allServerIds = [...draftSet, ...callSet, ...emailDraftSet];
-    const matched = channelMsgs.filter(m => draftSet.has(m.id) || callSet.has(m.id) || emailDraftSet.has(m.id)).map(m => m.id);
-    const missing = allServerIds.filter(id => !matched.includes(id));
-    if (missing.length > 0) console.log('[Madison] server IDs not in channelMsgs:', missing, 'sms:', [...draftSet], 'calls:', [...callSet], 'email:', [...emailDraftSet], 'channelMsgs count:', channelMsgs.length);
-    return matched;
+    return channelMsgs
+      .filter(m => draftSet.has(m.id) || callSet.has(m.id) || emailDraftSet.has(m.id))
+      .map(m => m.id);
   }, [channelMsgs, madisonCountData]);
+  // Badge count = only cards actually visible in the feed (not ghost rows outside the window)
+  const unresolvedMadisonCount = unresolvedMadisonMsgIds.length;
   const madisonCardIdxRef = useRef(0);
   function jumpToNextMadisonCard() {
     if (unresolvedMadisonMsgIds.length === 0) return;
