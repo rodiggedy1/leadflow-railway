@@ -9391,7 +9391,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 const pos = e.target.selectionStart ?? val.length;
                 const before = val.slice(0, pos);
                 const atMatch = before.match(/@([\w\s]*)$/);
-                if (atMatch) {
+                // Suppress autocomplete when the whole message starts with @madison (command mode)
+                const isMadisonCmd = /^@madison\b/i.test(val.trim());
+                if (atMatch && !isMadisonCmd) {
                   const q = atMatch[1];
                   setMentionStart(pos - atMatch[0].length);
                   setMentionIndex(0);
