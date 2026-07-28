@@ -9464,12 +9464,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 setMadisonChatLoading(true);
                 // Determine if this was a payment link command or SMS command
                 const isPaymentCmd = /payment.link|send.link|pay/i.test(originalMadisonMessageRef.current);
+                // Pass the messageHint from the disambiguation card — same as right panel does
+                const disambigHint = madisonDisambigCard?.messageHint ?? null;
                 madisonChatMutation.mutate(
                   {
                     message: originalMadisonMessageRef.current,
                     resolvedClientPhone: phone,
                     resolvedClientName: name,
-                    ...(isPaymentCmd ? { resolvedPaymentLink: true } : {}),
+                    ...(isPaymentCmd ? { resolvedPaymentLink: true } : { resolvedClientMessageHint: disambigHint }),
                   },
                   {
                     onSuccess: (result) => {
