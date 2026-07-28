@@ -5139,6 +5139,54 @@ Rules that ALWAYS apply regardless of instruction:
     }),
 
   /**
+   * postCallResult — posts a persistent call-completed result card to the command feed.
+   * Called by the client after callMatrix.pollCall resolves via @madison call command.
+   */
+  postCallResult: opsChatProcedure
+    .input(
+      z.object({
+        channelId: z.string().max(64).optional(),
+        recipientName: z.string().max(128),
+        recipientPhone: z.string().max(32),
+        summary: z.string().max(2000).optional(),
+        transcript: z.string().max(20000).optional(),
+        recordingUrl: z.string().max(2048).optional(),
+        durationSeconds: z.number().int().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const sentTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const metadata = JSON.stringify({
+        recipientName: input.recipientName,
+        recipientPhone: input.recipientPhone,
+        summary: input.summary ?? null,
+        transcript: input.transcript ?? null,
+        recordingUrl: input.recordingUrl ?? null,
+        durationSeconds: input.durationSeconds ?? null,
+        sentTime,
+      });
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "Madison",
+        authorRole: "system",
+        body: `Call completed with ${input.recipientName}`,
+        mediaUrl: null,
+        quickAction: "madison_call_result",
+        metadata,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
+      const messageId = (insertResult as any).insertId as number;
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true, messageId };
+    }),
+
+  /**
    * dismissMadisonPost — marks a recommendation card as dismissed ("Not right now").
    */
   dismissMadisonPost: opsChatProcedure

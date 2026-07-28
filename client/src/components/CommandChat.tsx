@@ -30,7 +30,7 @@ import {
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
   ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone, RotateCcw,
-  DollarSign, Check, User, Calendar, CreditCard, Play, Pause, ChevronUp, Users } from "lucide-react";
+  DollarSign, Check, User, Calendar, CreditCard, Play, Pause, ChevronUp, Users, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2850,6 +2850,368 @@ function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentCo
   );
 }
 
+// ── AudioPlayerCC — copied verbatim from AiConcierge AudioPlayer ──────────────
+function AudioPlayerCC({ url }: { url: string | null }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onloadedmetadata = null;
+      audioRef.current = null;
+    }
+    setPlaying(false);
+    setDuration(null);
+  }, [url]);
+  function toggle() {
+    if (!url) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio(url);
+      audioRef.current.onended = () => setPlaying(false);
+      audioRef.current.onloadedmetadata = () => {
+        if (audioRef.current) setDuration(audioRef.current.duration);
+      };
+    }
+    if (playing) { audioRef.current.pause(); setPlaying(false); }
+    else { void audioRef.current.play(); setPlaying(true); }
+  }
+  function fmtDur(s: number) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+  if (!url) {
+    return (
+      <div className="flex items-center gap-3 rounded-[18px] px-3 py-3" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}>
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-indigo-500" style={{background:"rgba(116,71,245,0.12)"}}>
+          <Play className="ml-0.5 h-5 w-5 fill-current" />
+        </div>
+        <span className="text-xs text-indigo-400 italic">Audio loading…</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3 rounded-[18px] px-3 py-3" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}>
+      <button onClick={toggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-900/40">
+        {playing
+          ? <span className="flex gap-[3px]"><span className="h-4 w-[3px] rounded-full bg-white" /><span className="h-4 w-[3px] rounded-full bg-white" /></span>
+          : <Play className="ml-0.5 h-5 w-5 fill-current" />}
+      </button>
+      <div className="flex h-10 flex-1 items-center gap-[3px]">
+        {[5,11,17,10,20,26,18,31,22,14,27,34,20,12,25,18,30,13,22,10].map((h,i)=>(
+          <span key={i} className="w-[3px] rounded-full bg-gradient-to-t from-indigo-600 to-indigo-400" style={{height:h, transformOrigin:"bottom", animation: playing ? `audioWaveCC ${0.6 + (i % 5) * 0.1}s ease-in-out ${(i * 0.05).toFixed(2)}s infinite` : "none"}} />
+        ))}
+      </div>
+      {duration !== null && <span className="text-xs font-bold text-gray-400">{fmtDur(duration)}</span>}
+      <style>{`@keyframes audioWaveCC{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1.0)}}`}</style>
+    </div>
+  );
+}
+
+// ── MadisonCallResultCard — persistent feed card posted after @madison call ──
+function MadisonCallResultCard({ msg }: { msg: { id: number; metadata: string | null; createdAt: string | Date } }) {
+  const [transcriptOpen, setTranscriptOpen] = React.useState(false);
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  let meta: { recipientName?: string; recipientPhone?: string; summary?: string; durationSeconds?: number; recordingUrl?: string; transcript?: string; sentTime?: string } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+  const name = meta.recipientName ?? "Customer";
+  const msgTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const durationStr = meta.durationSeconds ? `${Math.floor(meta.durationSeconds / 60)}m ${meta.durationSeconds % 60}s` : null;
+  const hasTranscript = !!meta.transcript && meta.transcript.trim().length > 5;
+  const recordingUrl = meta.recordingUrl ? proxyRecordingUrl(meta.recordingUrl) : null;
+  return (
+    <div className="flex gap-3 items-start px-4 py-2">
+      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
+        </div>
+        <div style={{ maxWidth: 540, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #eee" }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: "#ecfdf3", display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 }}>📞</div>
+            <div style={{ marginLeft: 14, flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>Call Completed</div>
+              <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>Madison completed this action successfully.</div>
+            </div>
+            <div style={{ marginLeft: "auto", background: "#ecfdf3", color: "#087443", padding: "6px 10px", borderRadius: 999, fontWeight: 700, fontSize: 12, flexShrink: 0 }}>Completed</div>
+          </div>
+          <div style={{ padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Customer</span>
+              <b style={{ color: "#111827" }}>{name}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Phone</span>
+              <b style={{ color: "#111827" }}>{meta.recipientPhone ?? ""}</b>
+            </div>
+            {durationStr && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+                <span style={{ color: "#6b7280" }}>✓ Duration</span>
+                <b style={{ color: "#111827" }}>{durationStr}</b>
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: meta.summary ? "1px solid #f3f4f6" : "none", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Time</span>
+              <b style={{ color: "#111827" }}>Called • {meta.sentTime || msgTime}</b>
+            </div>
+            {meta.summary && (
+              <div style={{ marginTop: 18, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, fontStyle: "italic", color: "#555", fontSize: 13, lineHeight: 1.55 }}>
+                "{meta.summary}"
+              </div>
+            )}
+            {(recordingUrl || hasTranscript) && (
+              <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+                {recordingUrl && <AudioPlayerCC url={recordingUrl} />}
+                {hasTranscript && (
+                  <div>
+                    <button
+                      onClick={() => setTranscriptOpen(v => !v)}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors"
+                      style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #e5d9ea", color: "#7447f5" }}
+                    >
+                      <span>Call transcript</span>
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {transcriptOpen && (
+                      <div className="mt-1.5 rounded-xl px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #e5d9ea", color: "#4a4a5a" }}>{meta.transcript}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MadisonCallConfirmCard — ephemeral confirm card for @madison call [customer] ──
+type MadisonCallConfirm = {
+  type: "call_client_confirm";
+  recipientName: string;
+  recipientFirstName: string;
+  recipientPhone: string;
+  script: string;
+  audience: "customer" | "cleaner";
+  cleanerJobId: number;
+};
+type MadisonCallPending = {
+  vapiCallId: string;
+  recipientName: string;
+  recipientPhone: string;
+  script: string;
+};
+function todayETcc(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+function MadisonCallConfirmCard({ card, onFired, onDismiss }: { card: MadisonCallConfirm; onFired: (pending: MadisonCallPending) => void; onDismiss: () => void }) {
+  const [script, setScript] = useState(card.script);
+  const [fired, setFired] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  const startCall = trpc.callMatrix.startCall.useMutation({
+    onSuccess: (result) => {
+      setFired(true);
+      const vapiCallId = result.vapiCallId ?? "";
+      onFired({ vapiCallId, recipientName: card.recipientName, recipientPhone: card.recipientPhone, script });
+    },
+    onError: (err) => { setCallError(err.message); },
+  });
+  function handleCall() {
+    if (fired || startCall.isPending) return;
+    setCallError(null);
+    startCall.mutate({
+      cleanerJobId: card.cleanerJobId || 1,
+      jobDate: todayETcc(),
+      personName: card.recipientName,
+      phone: card.recipientPhone,
+      scenario: "Concierge call",
+      script: script.trim(),
+      audience: card.audience,
+    });
+  }
+  return (
+    <div className="mb-2 mx-1 rounded-2xl overflow-hidden" style={{ background: "#fff", border: "1px solid #e0d9f8", boxShadow: "0 4px 16px rgba(109,93,252,0.10)" }}>
+      <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderBottom: "1px solid #e0d9f8" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-7 h-7 rounded-full flex-shrink-0 object-cover" />
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <span className="font-bold text-[13px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[10px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+          <span className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#f5f3ff", color: "#7c3aed" }}>Awaiting approval</span>
+        </div>
+        <button onClick={onDismiss} className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#f3f4f6", color: "#6b7280" }}>
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="px-3 py-3">
+        <div style={{ border: "1px solid #e7eaf0", borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", borderBottom: "1px solid #e7eaf0", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Customer</span>
+            <b style={{ textAlign: "right", color: "#172033" }}>{card.recipientName}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 12px", fontSize: 13 }}>
+            <span style={{ color: "#667085" }}>Phone</span>
+            <b style={{ textAlign: "right", color: "#172033" }}>{card.recipientPhone}</b>
+          </div>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+            <Edit3 className="w-3 h-3" style={{ color: "#7447f5" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#6d5dfc", textTransform: "uppercase", letterSpacing: "0.08em" }}>Script</span>
+          </div>
+          <textarea
+            value={script}
+            onChange={(e) => setScript(e.target.value)}
+            disabled={fired || startCall.isPending}
+            rows={8}
+            style={{
+              width: "100%",
+              background: fired ? "#f9fafb" : "#f7f5ff",
+              border: "1px solid #ebe7ff",
+              borderRadius: 12,
+              padding: "11px 12px",
+              fontSize: 13,
+              color: "#172033",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              resize: "vertical",
+              outline: "none",
+              boxSizing: "border-box",
+              lineHeight: 1.55,
+              opacity: fired ? 0.6 : 1,
+            }}
+          />
+        </div>
+        {callError && <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>{callError}</div>}
+        {!fired ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleCall}
+              disabled={startCall.isPending || !script.trim()}
+              style={{ flex: 1, background: "#6d5dfc", color: "#fff", border: 0, borderRadius: 11, padding: "10px 13px", fontWeight: 800, fontSize: 13, cursor: startCall.isPending ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: startCall.isPending ? 0.65 : 1 }}
+            >
+              {startCall.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Calling…</> : <><Phone className="w-4 h-4" /> Call {card.recipientFirstName}</>}
+            </button>
+            <button
+              onClick={onDismiss}
+              style={{ background: "#f0f2f7", color: "#4c556b", border: 0, borderRadius: 11, padding: "10px 13px", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div style={{ background: "#f5f3ff", border: "1px solid #ddd7ff", color: "#5b4ff7", padding: "11px 12px", borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
+            📞 Call placed — monitoring for result…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── MadisonCallPendingCard — polls callMatrix.pollCall every 5s ──────────────
+function MadisonCallPendingCard({ pending, onDone }: { pending: MadisonCallPending; onDone: (result: { status: string; summary: string | null; transcript: string | null; recordingUrl: string | null; durationSeconds: number | null }) => void }) {
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+  const { data: pollResult } = trpc.callMatrix.pollCall.useQuery(
+    { vapiCallId: pending.vapiCallId },
+    {
+      enabled: !!pending.vapiCallId,
+      refetchInterval: (query) => {
+        const s = query.state.data?.status;
+        return (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") ? false : 5000;
+      },
+    }
+  );
+  const callDone = pollResult !== undefined && (pollResult.status === "completed" || pollResult.status === "voicemail" || pollResult.status === "no_answer" || pollResult.status === "failed");
+  const noAnswer = pollResult?.status === "no_answer" || pollResult?.status === "failed";
+  const transcript = pollResult?.transcript ?? null;
+  const hasTranscript = !!transcript && transcript.trim().length > 5;
+  const recordingUrl = pollResult?.recordingUrl ? proxyRecordingUrl(pollResult.recordingUrl) : null;
+  // Fire onDone once when call completes
+  const firedRef = useRef(false);
+  useEffect(() => {
+    if (callDone && !firedRef.current) {
+      firedRef.current = true;
+      onDoneRef.current({
+        status: pollResult?.status ?? "completed",
+        summary: pollResult?.summary ?? null,
+        transcript: pollResult?.transcript ?? null,
+        recordingUrl: pollResult?.recordingUrl ?? null,
+        durationSeconds: pollResult?.durationSeconds ?? null,
+      });
+    }
+  }, [callDone, pollResult]);
+  let step2Label = "Waiting for call to complete…";
+  let step2Done = false;
+  let step2Failed = false;
+  if (callDone) {
+    if (noAnswer) { step2Failed = true; step2Label = "No answer"; }
+    else if (pollResult?.status === "voicemail") { step2Done = true; step2Label = "Left voicemail"; }
+    else { step2Done = true; step2Label = pollResult?.summary ? `Completed — "${pollResult.summary}"` : "Call completed"; }
+  }
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  return (
+    <div className="mb-2 mx-1 rounded-2xl overflow-hidden" style={{ background: "#fff", border: "1px solid #e0d9f8", boxShadow: "0 4px 16px rgba(109,93,252,0.10)" }}>
+      <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderBottom: "1px solid #e0d9f8" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-7 h-7 rounded-full flex-shrink-0 object-cover" />
+        <span className="font-bold text-[13px]" style={{ color: "#312e81" }}>Madison</span>
+        <span className="text-[10px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+        <span className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#f5f3ff", color: "#7c3aed" }}>Calling…</span>
+      </div>
+      <div className="px-3 py-3 space-y-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#ecfdf3" }}><Check className="w-3 h-3" style={{ color: "#087443" }} /></span>
+          <span className="text-sm" style={{ color: "#4a4a5a" }}>Call placed to <b>{pending.recipientName}</b></span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          {step2Done ? (
+            <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#ecfdf3" }}><Check className="w-3 h-3" style={{ color: "#087443" }} /></span>
+          ) : step2Failed ? (
+            <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#fef2f2" }}><X className="w-3 h-3" style={{ color: "#ef4444" }} /></span>
+          ) : (
+            <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" style={{ color: "#7447f5" }} />
+          )}
+          <span className={`text-sm ${step2Failed ? "text-red-500" : ""}`} style={{ color: step2Failed ? undefined : "#4a4a5a" }}>{step2Label}</span>
+        </div>
+        {callDone && (
+          <div className="pt-2 space-y-2.5" style={{ borderTop: "1px solid #e0d9f8" }}>
+            {noAnswer ? (
+              <div className="flex items-center gap-2 text-sm text-red-400">
+                <PhoneMissed className="h-4 w-4 flex-shrink-0" /> No answer — no recording available
+              </div>
+            ) : (
+              <AudioPlayerCC url={recordingUrl} />
+            )}
+            {hasTranscript && (
+              <div>
+                <button
+                  onClick={() => setTranscriptOpen(v => !v)}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors"
+                  style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #e5d9ea", color: "#7447f5" }}
+                >
+                  <span>Call transcript</span>
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
+                </button>
+                {transcriptOpen && (
+                  <div className="mt-1.5 rounded-xl px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #e5d9ea", color: "#4a4a5a" }}>{transcript}</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const MessageList = memo(function MessageList({
   channelMsgs,
   channelLoading,
@@ -4536,6 +4898,7 @@ const MessageList = memo(function MessageList({
                 // ── Madison Payment Result card
                 if (msg.quickAction === "madison_payment_result") { return <MadisonPaymentResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_sms_result") { return <MadisonSmsResultCard key={msg.id} msg={msg} />; }
+                if (msg.quickAction === "madison_call_result") { return <MadisonCallResultCard key={msg.id} msg={msg} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
@@ -6732,6 +7095,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── @madison command state ─────────────────────────────────────────────────────────────────────────────
   const [madisonPendingCard, setMadisonPendingCard] = useState<MadisonPaymentConfirm | null>(null);
   const [madisonSmsPendingCard, setMadisonSmsPendingCard] = useState<MadisonSmsConfirm | null>(null);
+  const [madisonCallConfirmCard, setMadisonCallConfirmCard] = useState<MadisonCallConfirm | null>(null);
+  const [madisonCallPendingCard, setMadisonCallPendingCard] = useState<MadisonCallPending | null>(null);
   const [madisonDisambigCard, setMadisonDisambigCard] = useState<MadisonDisambigCard | null>(null);
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
@@ -7357,6 +7722,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonDisambigCard(null);
       setMadisonPendingCard(null);
       setMadisonSmsPendingCard(null);
+      setMadisonCallConfirmCard(null);
+      setMadisonCallPendingCard(null);
       madisonChatMutation.mutate(
         { message },
         {
@@ -7366,6 +7733,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setMadisonPendingCard(result as MadisonPaymentConfirm);
             } else if (result.type === "bulk_sms_confirm") {
               setMadisonSmsPendingCard(result as MadisonSmsConfirm);
+            } else if (result.type === "call_client_confirm") {
+              setMadisonCallConfirmCard(result as MadisonCallConfirm);
             } else if (result.type === "client_disambiguation") {
               setMadisonDisambigCard(result as MadisonDisambigCard);
             } else if (result.type === "not_found") {
@@ -9462,8 +9831,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               onPick={(phone, name) => {
                 setMadisonDisambigCard(null);
                 setMadisonChatLoading(true);
-                // Determine if this was a payment link command or SMS command
+                // Determine command type
                 const isPaymentCmd = /payment.link|send.link|pay/i.test(originalMadisonMessageRef.current);
+                const isCallCmd = /^call\b|^phone\b/i.test(originalMadisonMessageRef.current);
                 // Pass the messageHint from the disambiguation card — same as right panel does
                 const disambigHint = madisonDisambigCard?.messageHint ?? null;
                 madisonChatMutation.mutate(
@@ -9471,7 +9841,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     message: originalMadisonMessageRef.current,
                     resolvedClientPhone: phone,
                     resolvedClientName: name,
-                    ...(isPaymentCmd ? { resolvedPaymentLink: true } : { resolvedClientMessageHint: disambigHint }),
+                    ...(isPaymentCmd ? { resolvedPaymentLink: true } : isCallCmd ? {} : { resolvedClientMessageHint: disambigHint }),
                   },
                   {
                     onSuccess: (result) => {
@@ -9480,6 +9850,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         setMadisonPendingCard(result as MadisonPaymentConfirm);
                       } else if (result.type === "bulk_sms_confirm") {
                         setMadisonSmsPendingCard(result as MadisonSmsConfirm);
+                      } else if (result.type === "call_client_confirm") {
+                        setMadisonCallConfirmCard(result as MadisonCallConfirm);
                       } else if (result.type === "client_disambiguation") {
                         setMadisonDisambigCard(result as MadisonDisambigCard);
                       } else {
@@ -9505,6 +9877,34 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <MadisonCommandSmsCard
               card={madisonSmsPendingCard}
               onDismiss={() => setMadisonSmsPendingCard(null)}
+            />
+          )}
+          {madisonCallConfirmCard && !madisonCallPendingCard && (
+            <MadisonCallConfirmCard
+              card={madisonCallConfirmCard}
+              onDismiss={() => setMadisonCallConfirmCard(null)}
+              onFired={(pending) => {
+                setMadisonCallConfirmCard(null);
+                setMadisonCallPendingCard(pending);
+              }}
+            />
+          )}
+          {madisonCallPendingCard && (
+            <MadisonCallPendingCard
+              pending={madisonCallPendingCard}
+              onDone={(result) => {
+                // Post the persistent result card to the feed (fire-and-forget)
+                void utils.client.opsChat.postCallResult.mutate({
+                  recipientName: madisonCallPendingCard.recipientName,
+                  recipientPhone: madisonCallPendingCard.recipientPhone,
+                  summary: result.summary ?? undefined,
+                  transcript: result.transcript ?? undefined,
+                  recordingUrl: result.recordingUrl ?? undefined,
+                  durationSeconds: result.durationSeconds ?? undefined,
+                }).catch(() => { /* non-critical */ });
+                // Auto-dismiss pending card after 4s
+                setTimeout(() => setMadisonCallPendingCard(null), 4000);
+              }}
             />
           )}
           {/* Composer box with drag-drop */}
