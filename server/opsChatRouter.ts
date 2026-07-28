@@ -5055,6 +5055,49 @@ Rules that ALWAYS apply regardless of instruction:
     }),
 
   /**
+   * postPaymentLinkResult — posts a persistent payment-link-sent result card to the command feed.
+   * Called by the client after sendPaymentLinkSms succeeds.
+   */
+  postPaymentLinkResult: opsChatProcedure
+    .input(
+      z.object({
+        recipientName: z.string().max(128),
+        recipientPhone: z.string().max(32),
+        smsText: z.string().max(2000),
+        paymentLinkUrl: z.string().max(2000),
+        sentTime: z.string().max(32),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const metadata = JSON.stringify({
+        recipientName: input.recipientName,
+        recipientPhone: input.recipientPhone,
+        smsText: input.smsText,
+        paymentLinkUrl: input.paymentLinkUrl,
+        sentTime: input.sentTime,
+      });
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "Madison",
+        authorRole: "system",
+        body: `Payment link sent to ${input.recipientName}`,
+        mediaUrl: null,
+        quickAction: "madison_payment_result",
+        metadata,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
+      const messageId = (insertResult as any).insertId as number;
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true, messageId };
+    }),
+
+  /**
    * dismissMadisonPost — marks a recommendation card as dismissed ("Not right now").
    */
   dismissMadisonPost: opsChatProcedure

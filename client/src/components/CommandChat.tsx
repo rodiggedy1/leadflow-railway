@@ -2404,6 +2404,94 @@ function MadisonPostCard({ msg, callerName }: { msg: { id: number; body: string;
   );
 }
 
+// ── MadisonPaymentResultCard — persistent feed card posted after payment link is sent ──
+function MadisonPaymentResultCard({ msg }: { msg: { id: number; metadata: string | null; createdAt: string | Date } }) {
+  const [showMonitor, setShowMonitor] = React.useState(false);
+  const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+
+  let meta: { recipientName?: string; recipientPhone?: string; smsText?: string; paymentLinkUrl?: string; sentTime?: string } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+
+  const name = meta.recipientName ?? "Customer";
+  const firstName = name.split(" ")[0];
+  const phone = meta.recipientPhone ?? "";
+  const smsText = meta.smsText ?? "";
+  const sentTime = meta.sentTime ?? "";
+  const msgTime = typeof msg.createdAt === "string" ? new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div className="flex gap-3 items-start px-4 py-2">
+      <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: "0 2px 8px rgba(99,102,241,0.18)" }}>
+        <img src={MADISON_PHOTO} alt="Madison" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-bold text-[14px]" style={{ color: "#312e81" }}>Madison</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#7c3aed" }}>✦ AI</span>
+          <span className="text-[11px]" style={{ color: "#9ca3af" }}>{msgTime}</span>
+        </div>
+        <div style={{ maxWidth: 540, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,.08)" }}>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #eee" }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: "#ecfdf3", display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 }}>💳</div>
+            <div style={{ marginLeft: 14, flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>Payment Link Sent</div>
+              <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>Madison completed this action successfully.</div>
+            </div>
+            <div style={{ marginLeft: "auto", background: "#ecfdf3", color: "#087443", padding: "6px 10px", borderRadius: 999, fontWeight: 700, fontSize: 12, flexShrink: 0 }}>Completed</div>
+          </div>
+          {/* Body */}
+          <div style={{ padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Customer</span>
+              <b style={{ color: "#111827" }}>{name}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Phone</span>
+              <b style={{ color: "#111827" }}>{phone}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
+              <span style={{ color: "#6b7280" }}>✓ Delivery</span>
+              <b style={{ color: "#111827" }}>SMS • {sentTime || msgTime}</b>
+            </div>
+            {/* SMS text */}
+            {smsText && (
+              <div style={{ marginTop: 18, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, fontStyle: "italic", color: "#555", fontSize: 13, lineHeight: 1.55 }}>
+                “{smsText}”
+              </div>
+            )}
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+              <button
+                onClick={() => setShowMonitor(true)}
+                style={{ background: "#5b4ff7", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, cursor: "pointer", fontSize: 13 }}
+              >
+                View Conversation
+              </button>
+              {meta.paymentLinkUrl && (
+                <a
+                  href={meta.paymentLinkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ background: "#eef2ff", color: "#5b4ff7", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, cursor: "pointer", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                >
+                  Open Payment Link
+                </a>
+              )}
+            </div>
+            {/* Monitor status banner */}
+            {showMonitor && (
+              <div style={{ marginTop: 16, background: "#ecfdf3", border: "1px solid #b7ebce", padding: 14, borderRadius: 12, color: "#087443", fontSize: 13 }}>
+                👀 Madison is monitoring this payment and will notify you if {firstName} replies or completes payment.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MadisonCommandPaymentCard — ephemeral confirm card shown above composer after @madison send payment link ──
 // ── MadisonDisambiguationCard — shown when @madison finds multiple customers ──
 interface MadisonDisambigMatch {
@@ -2483,7 +2571,7 @@ function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentCo
   const [smsText, setSmsText] = useState(card.smsText);
   const [sent, setSent] = useState(false);
   const sendMutation = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
-  const postResultMutation = trpc.opsChat.postAsMadison.useMutation();
+  const postResultMutation = trpc.opsChat.postPaymentLinkResult.useMutation();
   const utils = trpc.useUtils();
   const expiryDate = new Date(card.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -2501,16 +2589,14 @@ function MadisonCommandPaymentCard({ card, onDismiss }: { card: MadisonPaymentCo
         onSuccess: () => {
           setSent(true);
           const sentTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          // Post a persistent result card to the feed
+          // Post the dedicated payment result card to the feed
           postResultMutation.mutate(
             {
-              body: `Payment Link Sent\nMadison sent a secure payment link to ${card.recipientName} via SMS at ${sentTime}.\n\n“${smsText}”`,
-              variant: "result",
-              stats: [
-                { icon: "👤", label: "Customer", value: card.recipientName },
-                { icon: "📱", label: "Delivery", value: `SMS • ${sentTime}` },
-                { icon: "🔗", label: "Link", value: "Sent" },
-              ],
+              recipientName: card.recipientName,
+              recipientPhone: card.recipientPhone,
+              smsText,
+              paymentLinkUrl: card.paymentLinkUrl,
+              sentTime,
             },
             {
               onSuccess: () => {
@@ -4306,6 +4392,8 @@ const MessageList = memo(function MessageList({
                 }
                 // ── Madison Post card ──────────────────────────────────────────────────
                 if (msg.quickAction === "madison_post") { return <MadisonPostCard msg={msg} callerName={callerName} />; }
+                // ── Madison Payment Result card
+                if (msg.quickAction === "madison_payment_result") { return <MadisonPaymentResultCard key={msg.id} msg={msg} />; }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
