@@ -2644,6 +2644,7 @@ interface MadisonDisambigMatch {
   lastJobDate: string | null;
   entityType?: "customer" | "cleaner";
   cleanerProfileId?: number;
+  email?: string | null;
 }
 interface MadisonDisambigCard {
   messageHint: string | null;
@@ -2653,8 +2654,11 @@ function MadisonCommandDisambigCard({ card, onPick, onDismiss }: { card: Madison
   const customers = card.matches.filter((m) => m.entityType !== "cleaner");
   const cleaners = card.matches.filter((m) => m.entityType === "cleaner");
   const hasBothSections = customers.length > 0 && cleaners.length > 0;
-
+  const isEmailAction = card.messageHint?.startsWith("__email_client__") ?? false;
   function renderMatch(m: MadisonDisambigMatch) {
+    const subtitle = isEmailAction
+      ? (m.email || m.phone)
+      : (m.city || m.phone);
     return (
       <button
         key={m.phone + (m.cleanerProfileId ?? "")}
@@ -2668,7 +2672,7 @@ function MadisonCommandDisambigCard({ card, onPick, onDismiss }: { card: Madison
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: "#202431", margin: 0 }}>{m.name}</p>
-          <p style={{ fontSize: 12, color: "#8a8a9a", margin: 0, marginTop: 2 }}>{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
+          <p style={{ fontSize: 12, color: "#8a8a9a", margin: 0, marginTop: 2 }}>{subtitle}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
         </div>
       </button>
     );

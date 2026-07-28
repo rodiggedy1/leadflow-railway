@@ -1305,6 +1305,7 @@ async function handleEmailClient(
       const matches = uniqueCustomers.map(r => ({
         phone: r.phone,
         name: r.name,
+        email: r.email ?? null,
         city: null as string | null,
         totalCleans: 0,
         ltv: 0,
