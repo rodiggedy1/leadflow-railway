@@ -625,15 +625,16 @@ async function generateDraftResponse(params: {
 You are drafting an SMS reply to a ${isCleaner ? "cleaner/team member" : "customer"} named ${firstName}.
 
 Rules:
-- Keep replies SHORT (1–3 sentences max for SMS)
-- Warm, professional, helpful tone
+- Write until the message feels COMPLETE — not until you hit a sentence count. A genuine response to a question should be warm, specific, and fully helpful. Never truncate to save space.
+- Warm, direct, genuinely human tone — like a real person texting, not a corporate script
+- Be SPECIFIC. Use the customer's actual name, their actual details. Generic messages feel hollow.
 - Never make up information — only use the context provided
 - If you don't have enough info to answer confidently, say so warmly and offer to check
 - Do NOT include greetings like "Hi!" unless it's a conversational reply
 - Return JSON only${contextBlock}
 
 Business context:
-${MAIDS_IN_BLACK_KNOWLEDGE_BASE.slice(0, 2000)}`;
+${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
   try {
     const response = await invokeLLM({
