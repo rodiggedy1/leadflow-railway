@@ -32,7 +32,35 @@ const t = initTRPC.context<TrpcContext>().create({
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure;
+
+// ── Per-procedure timing instrumentation ──────────────────────────────────────
+// Logs every procedure call that takes > 250ms, with DB pool queue depth.
+// Stays in place until QUEUE_LIMIT failures are gone and we have a ranked
+// list of the heaviest DB consumers.
+const timingMiddleware = t.middleware(async (opts) => {
+  const start = Date.now();
+  const result = await opts.next();
+  const durationMs = Date.now() - start;
+  if (durationMs > 250) {
+    try {
+      const { getPool } = await import('../db');
+      const pool = getPool();
+      const corePool = (pool as any)?.pool;
+      console.warn('[tRPC Slow]', {
+        path: opts.path,
+        duration_ms: durationMs,
+        pool_all:   corePool?._allConnections?.length  ?? -1,
+        pool_free:  corePool?._freeConnections?.length ?? -1,
+        pool_queue: corePool?._connectionQueue?.length ?? -1,
+      });
+    } catch {
+      console.warn('[tRPC Slow]', { path: opts.path, duration_ms: durationMs });
+    }
+  }
+  return result;
+});
+
+export const publicProcedure = t.procedure.use(timingMiddleware);
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
