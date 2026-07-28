@@ -6595,9 +6595,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const draftSet = new Set(madisonCountData?.unresolvedDraftIds ?? []);
     const callSet = new Set(madisonCountData?.unresolvedCallMsgIds ?? []);
     const emailDraftSet = new Set(madisonCountData?.unresolvedEmailDraftIds ?? []);
-    return channelMsgs
-      .filter(m => draftSet.has(m.id) || callSet.has(m.id) || emailDraftSet.has(m.id))
-      .map(m => m.id);
+    const allServerIds = [...draftSet, ...callSet, ...emailDraftSet];
+    const matched = channelMsgs.filter(m => draftSet.has(m.id) || callSet.has(m.id) || emailDraftSet.has(m.id)).map(m => m.id);
+    const missing = allServerIds.filter(id => !matched.includes(id));
+    if (missing.length > 0) console.log('[Madison] server IDs not in channelMsgs:', missing, 'sms:', [...draftSet], 'calls:', [...callSet], 'email:', [...emailDraftSet], 'channelMsgs count:', channelMsgs.length);
+    return matched;
   }, [channelMsgs, madisonCountData]);
   const madisonCardIdxRef = useRef(0);
   function jumpToNextMadisonCard() {
