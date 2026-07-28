@@ -269,6 +269,16 @@ export interface CallClientPendingResult {
   recipientName: string;
   recipientPhone: string;
 }
+/** Returned when concierge is about to email a client — agent must confirm before sending */
+export interface EmailClientConfirmResult {
+  type: "email_confirm";
+  recipientName: string;
+  recipientFirstName: string;
+  recipientEmail: string;
+  subject: string;
+  draftBody: string;
+  command?: string;
+}
 /** Returned after payment link SMS is sent */
 export interface PaymentLinkSentResult {
   type: "payment_link_sent";
@@ -441,6 +451,7 @@ type ConciergeResult =
   | PaymentLinkSentResult
   | CallClientConfirmResult
   | CallClientPendingResult
+  | EmailClientConfirmResult
   | QueryResultResult
   | CardStatusResult
   | TeamRatingsResult
@@ -1215,20 +1226,107 @@ Just write what the AI will say when the call connects.`,
   } as CallClientConfirmResult;
 }
 async function draftClientMessage(messageHint: string | null, clientName: string): Promise<string> {
+  console.log("[draftClientMessage] messageHint:", JSON.stringify(messageHint), "clientName:", clientName);
   const firstName = clientName.split(" ")[0];
+  const userParts: string[] = [];
+  userParts.push(`Customer's first name: ${firstName}`);
+  if (messageHint) {
+    userParts.push(`Customer service scenario: ${messageHint}`);
+  } else {
+    userParts.push("Based on the context, write the best SMS to send to this customer now.");
+  }
   const result = await invokeLLM({
     messages: [
-      {
-        role: "system",
-        content: buildSystemPrompt(),
-      },
-      {
-        role: "user",
-        content: `Draft an SMS to client ${firstName}. The dispatcher wants to: ${messageHint ?? "send a general message"}. Write the exact message to send — warm, personal, and on-brand. Address them by first name.`,
-      },
+      { role: "system", content: buildSystemPrompt() },
+      { role: "user", content: userParts.join("\n\n") },
     ],
   });
   return (result.choices[0].message.content as string).trim();
+}
+
+// ── Email client handler ──────────────────────────────────────────────────
+/**
+ * Looks up the customer's email from completedJobs, drafts an email body,
+ * and returns an email_confirm card for the agent to review before sending.
+ */
+async function handleEmailClient(
+  clientName: string | null,
+  messageHint: string | null,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  resolvedClientPhone?: string,
+): Promise<ConciergeResult> {
+  if (!clientName && !resolvedClientPhone) {
+    return { type: "error", message: "I need a customer name to send an email." };
+  }
+  let recipientEmail: string | null = null;
+  let recipientName: string = clientName ?? "the client";
+  let recipientPhone: string | null = resolvedClientPhone ?? null;
+
+  if (resolvedClientPhone) {
+    const q = `%${resolvedClientPhone}%`;
+    const rows = await db.select({ name: completedJobs.name, email: completedJobs.email, phone: completedJobs.phone })
+      .from(completedJobs)
+      .where(like(completedJobs.phone, q))
+      .limit(1);
+    if (rows.length > 0) {
+      recipientName = rows[0].name ?? recipientName;
+      recipientEmail = rows[0].email ?? null;
+    }
+  } else if (clientName) {
+    // Search by name
+    const nameParts = clientName.trim().split(/\s+/);
+    const conditions = nameParts.map(p => like(completedJobs.name, `%${p}%`));
+    const rows = await db.select({ name: completedJobs.name, email: completedJobs.email, phone: completedJobs.phone })
+      .from(completedJobs)
+      .where(and(...conditions))
+      .orderBy(desc(completedJobs.id))
+      .limit(5);
+    if (rows.length === 0) {
+      return { type: "error", message: `I couldn't find a customer named "${clientName}" in the system.` };
+    }
+    if (rows.length > 1) {
+      // Multiple matches — return disambiguation with __email_client__ sentinel
+      const matches = rows.map(r => ({
+        phone: r.phone ?? "",
+        name: r.name ?? clientName,
+        city: null as string | null,
+        totalCleans: 0,
+        ltv: 0,
+        lastJobDate: null as string | null,
+        entityType: "customer" as const,
+      }));
+      return { type: "client_disambiguation", query: clientName, messageHint: `__email_client__:${messageHint ?? ""}`, matches };
+    }
+    recipientName = rows[0].name ?? clientName;
+    recipientEmail = rows[0].email ?? null;
+    recipientPhone = rows[0].phone ?? null;
+  }
+
+  if (!recipientEmail) {
+    return { type: "error", message: `No email address on file for ${recipientName}. Please add their email in Launch27 first.` };
+  }
+
+  const firstName = recipientName.split(" ")[0];
+  // Draft email subject + body
+  const draftResult = await invokeLLM({
+    messages: [
+      { role: "system", content: buildSystemPrompt() + `\n\nYou are drafting a professional customer service EMAIL (not SMS) from Maids in Black.\nWrite a short, warm, professional email.\nFormat: first line is the SUBJECT (no label), then a blank line, then the BODY.\nSign off as "The Maids in Black Team".\nDo NOT include any JSON or markdown.` },
+      { role: "user", content: `Customer first name: ${firstName}\n${messageHint ? `Topic: ${messageHint}` : "Write a helpful follow-up email."}` },
+    ],
+  });
+  const raw = (draftResult.choices[0].message.content as string).trim();
+  const lines = raw.split("\n");
+  const subject = lines[0].replace(/^subject:/i, "").trim() || `A note from Maids in Black`;
+  const draftBody = lines.slice(lines[1] === "" ? 2 : 1).join("\n").trim();
+
+  return {
+    type: "email_confirm",
+    recipientName,
+    recipientFirstName: firstName,
+    recipientEmail,
+    subject,
+    draftBody,
+  } as EmailClientConfirmResult;
 }
 
 // ── Query data handler ──────────────────────────────────────────────────────
@@ -2522,6 +2620,8 @@ export const aiConciergeRouter = router({
         resolvedCallClient: z.boolean().optional(),
         resolvedCallPersonName: z.string().optional(),
         resolvedCallQuestionHint: z.string().nullable().optional(),
+        resolvedEmailClient: z.boolean().optional(),
+        resolvedEmailMessageHint: z.string().nullable().optional(),
         resolvedCleanerPhone: z.string().optional(),
         resolvedCleanerName: z.string().optional(),
         resolvedCleanerMessageHint: z.string().nullable().optional(),
@@ -2557,6 +2657,11 @@ export const aiConciergeRouter = router({
         }
         if (input.resolvedCallClient) {
           return await handleCallPerson(null, input.resolvedCallQuestionHint ?? null, db, input.resolvedClientPhone, input.resolvedCallPersonName);
+        }
+        if (input.resolvedEmailClient) {
+          const emailResult = await handleEmailClient(null, input.resolvedEmailMessageHint ?? null, db, input.resolvedClientPhone);
+          if (emailResult.type === "email_confirm") return { ...emailResult, command: input.message };
+          return emailResult;
         }
         const textClientResult = await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
         if (textClientResult.type === "bulk_sms_confirm") return { ...textClientResult, command: input.message };
@@ -2639,13 +2744,19 @@ export const aiConciergeRouter = router({
         return paymentLinkResult;
       }
 
-      if (intent.action === "call_client") {
+            if (intent.action === "call_client") {
         // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
         return re?.type === "customer"
           ? await handleCallPerson(null, intent.questionHint, db, re.phone, re.name)
           : await handleCallPerson(intent.clientName, intent.questionHint, db);
       }
-
+      if (intent.action === "email_client") {
+        const emailResult = re?.type === "customer"
+          ? await handleEmailClient(null, intent.messageHint, db, re.phone)
+          : await handleEmailClient(intent.clientName, intent.messageHint, db);
+        if (emailResult.type === "email_confirm") return { ...emailResult, command: input.message };
+        return emailResult;
+      }
       if (plan.action === "card_status") {
         return await handleCardStatus(plan, db);
       }

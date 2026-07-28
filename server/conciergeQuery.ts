@@ -111,6 +111,7 @@ export interface QueryPlan {
   | "job_status_stream"
   | "unanswered_sms"
   | "generate_invoice"
+  | "email_client"
   | "unknown";
 
   entities: QueryPlanEntities;
