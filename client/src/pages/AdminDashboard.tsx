@@ -3724,7 +3724,7 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error("[ActivityFeed] Failed to load session", sessionId, err);
     }
-  }, [sessions, trpcUtils]);
+  }, [sessions, utils]);
 
   // Track which tab to open when auto-opening the drawer from a URL param
   const [drawerInitialTab, setDrawerInitialTab] = useState<"conversation" | "flow" | "performance" | undefined>(undefined);
