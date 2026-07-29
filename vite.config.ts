@@ -216,6 +216,10 @@ export default defineConfig({
           if (id.includes("node_modules/emoji-picker-react")) {
             return "vendor-emoji";
           }
+          // CommandChat — very large component, split into its own chunk
+          if (id.includes("components/CommandChat")) {
+            return "CommandChat";
+          }
           // Remaining node_modules go into a shared vendor chunk
           if (id.includes("node_modules/")) {
             return "vendor-misc";
