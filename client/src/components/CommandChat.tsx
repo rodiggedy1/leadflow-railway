@@ -7593,6 +7593,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── @madison inline name picker (shows while typing, before submit) ──────────
   const [madisonInlineQuery, setMadisonInlineQuery] = useState<string | null>(null);
   const [madisonInlineLockedName, setMadisonInlineLockedName] = useState<string | null>(null);
+  const [madisonInlineLockedPhone, setMadisonInlineLockedPhone] = useState<string | null>(null);
   const madisonInlineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
@@ -8211,7 +8212,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       onSendMessage(text);
       setComposer("");
       setMadisonInlineQuery(null);
+      const lockedPhone = madisonInlineLockedPhone;
       setMadisonInlineLockedName(null);
+      setMadisonInlineLockedPhone(null);
       originalMadisonMessageRef.current = message;
       setMadisonChatLoading(true);
       setMadisonDisambigCard(null);
@@ -8222,7 +8225,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonEmailConfirmCard(null);
       setMadisonInvoiceCard(null);
       madisonChatMutation.mutate(
-        { message },
+        { message, ...(lockedPhone ? { resolvedClientPhone: lockedPhone } : {}) },
         {
           onSuccess: (result) => {
             setMadisonChatLoading(false);
@@ -10350,6 +10353,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       );
                       setComposer(replaced);
                       setMadisonInlineLockedName(m.name);
+                      setMadisonInlineLockedPhone(m.phone);
                       setMadisonInlineQuery(null);
                       setTimeout(() => composerRef.current?.focus(), 0);
                     }}
