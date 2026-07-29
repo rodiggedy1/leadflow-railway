@@ -8,7 +8,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import LeadAssignmentWatcher from "./components/LeadAssignmentWatcher";
 import SuperAlertWatcher from "./components/SuperAlertWatcher";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
-import OpsChat from "./pages/OpsChat";
+const OpsChat = lazy(() => import("./pages/OpsChat"));
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "./hooks/useOpsStream";
 import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
@@ -205,7 +205,9 @@ function GlobalOpsChat() {
           className="fixed inset-0 z-50 overflow-hidden"
           style={{ background: 'radial-gradient(900px 700px at 10% 10%, rgba(255,90,31,.14), transparent 60%), radial-gradient(700px 500px at 90% 8%, rgba(99,91,255,.10), transparent 55%), radial-gradient(900px 700px at 50% 100%, rgba(16,185,129,.06), transparent 65%), linear-gradient(135deg, #F4F6FB 0%, #EEF2F7 100%)', display: state === "open" ? "flex" : "none" }}
         >
-          <OpsChat onMinimize={minimize} onClose={close} />
+          <Suspense fallback={null}>
+            <OpsChat onMinimize={minimize} onClose={close} />
+          </Suspense>
         </div>
       )}
 
