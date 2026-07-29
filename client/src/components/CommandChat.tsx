@@ -789,7 +789,13 @@ function HotLeadCard({
       {/* Card body — clickable to open SMS */}
       <div
         className={cn(sessionId && "cursor-pointer")}
-        onClick={() => { if (sessionId) { window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); onSelectSession?.(sessionId, leadName ?? ""); } }}
+        onClick={() => {
+          console.log("[Operations] HotLeadCard clicked — sessionId:", sessionId, "leadName:", leadName);
+          if (sessionId) {
+            window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank");
+          }
+          onSelectSession?.(sessionId ?? 0, leadName ?? "");
+        }}
       >
         {/* Status pill — exact prototype .lead-status */}
         <span style={{display:"inline-flex",alignItems:"center",gap:"5px",padding:"5px 8px",borderRadius:"999px",fontSize:"10px",fontWeight:800,...(isBooked?{background:"#eff6ff",color:"#1d4ed8"}:isLost||isCold?{background:"#f1f5f9",color:"#64748b"}:isFollowUp?{background:"#fff6e8",color:"#df7e00"}:isClaimed?{background:"#eafaf4",color:"#0da875"}:{background:"#fff0f2",color:"#ff475f"})}}>
