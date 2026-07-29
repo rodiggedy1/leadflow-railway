@@ -6600,6 +6600,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { query: customerMentionQuery ?? "" },
     { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
+  // @madison inline name picker — fires while typing @madison text {name}
+  const { data: madisonInlineCustomers = [] } = trpc.opsChat.searchCustomers.useQuery(
+    { query: madisonInlineQuery ?? "" },
+    { enabled: (madisonInlineQuery?.length ?? 0) >= 2, staleTime: 15_000 }
+  );
+  const { data: madisonInlineCleaners = [] } = trpc.opsChat.searchCleaners.useQuery(
+    { query: madisonInlineQuery ?? "" },
+    { enabled: (madisonInlineQuery?.length ?? 0) >= 2, staleTime: 15_000 }
+  );
+  const madisonInlineMatches = useMemo(() => {
+    const customers = (madisonInlineCustomers as Array<{ name: string; phone: string; city?: string | null; teamName?: string | null }>).map(c => ({ name: c.name, phone: c.phone, subtitle: c.city ?? c.teamName ?? "", isCleaner: false }));
+    const cleaners = (madisonInlineCleaners as Array<{ name: string; phone: string; teamName?: string | null }>).map(c => ({ name: c.name, phone: c.phone, subtitle: c.teamName ?? "", isCleaner: true }));
+    return [...customers, ...cleaners].slice(0, 5);
+  }, [madisonInlineCustomers, madisonInlineCleaners]);
     // Map of name → phone for @[Name] token format (populated on mention selection)
   const mentionPhoneMapRef = useRef<Record<string, string>>({});
   // ── SMS mode (triggered by @customer selection) ──────────────────────────
@@ -7506,6 +7520,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
+  // ── @madison inline name picker (shows while typing, before submit) ──────────
+  const [madisonInlineQuery, setMadisonInlineQuery] = useState<string | null>(null);
+  const [madisonInlineLockedName, setMadisonInlineLockedName] = useState<string | null>(null);
+  const madisonInlineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
   const voiceCallContactPhoneRef = useRef<string | null>(null);
@@ -8122,6 +8140,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Post the user's @madison message to the feed
       onSendMessage(text);
       setComposer("");
+      setMadisonInlineQuery(null);
+      setMadisonInlineLockedName(null);
       originalMadisonMessageRef.current = message;
       setMadisonChatLoading(true);
       setMadisonDisambigCard(null);
@@ -10228,6 +10248,44 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
           )}
 
+          {/* ── @madison inline name picker — shown while typing before submit ── */}
+          {!madisonChatLoading && !madisonDisambigCard && madisonInlineQuery && madisonInlineMatches.length > 0 && (
+            <div className="mb-2 rounded-xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #c4b5fd",boxShadow:"0 4px 16px rgba(116,71,245,0.12)"}}>
+              <div className="px-3 py-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+                <p className="text-xs font-semibold" style={{color:"#7447f5"}}>{madisonInlineMatches.length} {madisonInlineMatches.length === 1 ? "person" : "people"} found — who did you mean?</p>
+              </div>
+              <div className="flex flex-col">
+                {madisonInlineMatches.map((m) => (
+                  <button
+                    key={m.phone}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      // Replace the name fragment in the composer with the resolved name
+                      const trimmed = composer.trim();
+                      const replaced = trimmed.replace(
+                        /^(@madison\s+(?:text|call|email|send\s+payment\s+(?:link\s+)?to|send\s+payment\s+to|pay(?:ment)?\s+link\s+to|remind|notify|tell|ask)\s+).+/i,
+                        (_, prefix) => prefix + m.name + " "
+                      );
+                      setComposer(replaced);
+                      setMadisonInlineLockedName(m.name);
+                      setMadisonInlineQuery(null);
+                      setTimeout(() => composerRef.current?.focus(), 0);
+                    }}
+                    className="flex items-center gap-2.5 px-3 py-2.5 transition-all text-left last:border-0 hover:bg-purple-50" style={{borderBottom:"1px solid #f0e8fa"}}
+                  >
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.12)",color:"#7447f5"}}>
+                      {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate" style={{color:"#202431"}}>{m.name}</p>
+                      <p className="text-[11px] truncate" style={{color:"#8a8a9a"}}>{m.subtitle}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* ── @madison pending card ── */}
           {madisonChatLoading && (
             <div className="mb-2 mx-1 flex items-center gap-2 px-3 py-2.5 rounded-2xl" style={{ background: "#f5f3ff", border: "1px solid #ddd7ff" }}>
@@ -10597,6 +10655,31 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 const atMatch = before.match(/@([\w\s]*)$/);
                 // Suppress autocomplete when the whole message starts with @madison (command mode)
                 const isMadisonCmd = /^@madison\b/i.test(val.trim());
+                // ── @madison inline name picker: detect name fragment while typing ────────
+                if (isMadisonCmd) {
+                  const trimmed = val.trim();
+                  // Match: @madison {verb} {name fragment...}
+                  const madisonNameMatch = trimmed.match(/^@madison\s+(?:text|call|email|send\s+payment\s+(?:link\s+)?to|send\s+payment\s+to|pay(?:ment)?\s+link\s+to|remind|notify|tell|ask)\s+(.+)/i);
+                  if (madisonNameMatch) {
+                    const nameFragment = madisonNameMatch[1].trim();
+                    // If the name is already locked (user picked from picker), don't re-trigger
+                    if (madisonInlineLockedName && nameFragment.toLowerCase().startsWith(madisonInlineLockedName.toLowerCase())) {
+                      // keep locked
+                    } else {
+                      setMadisonInlineLockedName(null);
+                      if (madisonInlineDebounceRef.current) clearTimeout(madisonInlineDebounceRef.current);
+                      madisonInlineDebounceRef.current = setTimeout(() => {
+                        setMadisonInlineQuery(nameFragment.length >= 2 ? nameFragment : null);
+                      }, 200);
+                    }
+                  } else {
+                    setMadisonInlineQuery(null);
+                    setMadisonInlineLockedName(null);
+                  }
+                } else {
+                  setMadisonInlineQuery(null);
+                  setMadisonInlineLockedName(null);
+                }
                 if (atMatch && !isMadisonCmd) {
                   const q = atMatch[1];
                   setMentionStart(pos - atMatch[0].length);
