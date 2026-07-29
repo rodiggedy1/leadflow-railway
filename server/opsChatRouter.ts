@@ -99,7 +99,7 @@ async function deactivateOpsSmsCard(draftId: number): Promise<void> {
     if (!db) return;
     await db.execute(
       sql`UPDATE ops_chat_messages
-          SET cardStatus = 'dismissed'
+          SET cardStatus = 'dismissed', activeDedupKey = NULL
           WHERE quickAction = 'madison_sms_draft'
             AND JSON_EXTRACT(metadata, '$.draftId') = ${draftId}
             AND cardStatus = 'active'`

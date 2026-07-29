@@ -808,24 +808,15 @@ async function runStartupMigrations() {
     // Step 4: Backfill cardStatus for existing rows
     await db.execute(sql.raw(`UPDATE ops_chat_messages SET cardStatus = 'active' WHERE cardStatus IS NULL OR cardStatus = ''`));
 
-    // Step 5: Add activeDedupKey generated column
+    // Step 5: Add activeDedupKey plain column (app-managed, not generated)
+    // Value = 'madison_sms_draft:{sessionId}' when card is active, NULL when dismissed.
+    // Unique index enforces one active card per session.
     const [dedupKeyCols] = await db.execute(sql.raw(`
       SELECT COLUMN_NAME FROM information_schema.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'activeDedupKey'
     `)) as any;
     if (!dedupKeyCols || dedupKeyCols.length === 0) {
-      await db.execute(sql.raw(`
-        ALTER TABLE ops_chat_messages ADD COLUMN activeDedupKey VARCHAR(320)
-          GENERATED ALWAYS AS (
-            CASE
-              WHEN quickAction = 'madison_sms_draft'
-                AND sessionId IS NOT NULL
-                AND cardStatus = 'active'
-              THEN CONCAT(quickAction, ':', sessionId)
-              ELSE NULL
-            END
-          ) STORED
-      `));
+      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN activeDedupKey VARCHAR(320) NULL`));
       console.log('[Migration] ops_chat_messages.activeDedupKey: added');
     } else {
       console.log('[Migration] ops_chat_messages.activeDedupKey: already exists');
@@ -851,6 +842,17 @@ async function runStartupMigrations() {
       }
       console.log('[Migration] Duplicate SMS cards resolved');
     }
+
+    // Step 6b: Backfill activeDedupKey for existing active SMS cards that have sessionId
+    await db.execute(sql.raw(`
+      UPDATE ops_chat_messages
+      SET activeDedupKey = CONCAT('madison_sms_draft:', sessionId)
+      WHERE quickAction = 'madison_sms_draft'
+        AND sessionId IS NOT NULL
+        AND cardStatus = 'active'
+        AND activeDedupKey IS NULL
+    `));
+    console.log('[Migration] ops_chat_messages.activeDedupKey: backfilled for existing active cards');
 
     // Step 7: Add unique index on activeDedupKey
     const [dedupIdx] = await db.execute(sql.raw(`

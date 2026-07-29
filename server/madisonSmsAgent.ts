@@ -818,18 +818,20 @@ async function postDraftCardToCommandChat(params: {
   // update its body/metadata/lastActivityAt so it resurfaces at the bottom of the feed.
   // Uses ON DUPLICATE KEY UPDATE against the activeDedupKey unique index.
   const eventTs = Date.now();
+  const dedupKey = 'madison_sms_draft:' + sessionId;
   const bodyEscaped = body.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const metadataEscaped = JSON.stringify({ draftId, quickActionVersion: 1, sessionId }).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   await db.execute(sql.raw(`
     INSERT INTO ops_chat_messages
-      (channel, authorName, authorRole, body, quickAction, metadata, sessionId, lastActivityAt, cardStatus, createdAt)
+      (channel, authorName, authorRole, body, quickAction, metadata, sessionId, lastActivityAt, cardStatus, activeDedupKey, createdAt)
     VALUES
-      ('command', 'Madison', 'system', '${bodyEscaped}', 'madison_sms_draft', '${metadataEscaped}', ${sessionId}, ${eventTs}, 'active', NOW())
+      ('command', 'Madison', 'system', '${bodyEscaped}', 'madison_sms_draft', '${metadataEscaped}', ${sessionId}, ${eventTs}, 'active', '${dedupKey}', NOW())
     ON DUPLICATE KEY UPDATE
       body            = VALUES(body),
       metadata        = VALUES(metadata),
       lastActivityAt  = GREATEST(COALESCE(lastActivityAt, 0), VALUES(lastActivityAt)),
-      cardStatus      = 'active'
+      cardStatus      = 'active',
+      activeDedupKey  = VALUES(activeDedupKey)
   `));
 
   // Broadcast SSE so Command Chat updates instantly
