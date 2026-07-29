@@ -842,23 +842,12 @@ async function runStartupMigrations() {
       HAVING COUNT(*) > 1
     `)) as any;
     if (dupRows && dupRows.length > 0) {
-      console.log(\`[Migration] Found \${dupRows.length} sessions with duplicate active SMS cards — deduplicating...\`);
+      console.log('[Migration] Found ' + dupRows.length + ' sessions with duplicate active SMS cards - deduplicating...');
       for (const row of dupRows) {
-        await db.execute(sql.raw(\`
-          UPDATE ops_chat_messages
-          SET cardStatus = 'dismissed'
-          WHERE quickAction = 'madison_sms_draft'
-            AND sessionId = \${row.sessionId}
-            AND cardStatus = 'active'
-            AND id NOT IN (
-              SELECT id FROM (
-                SELECT MAX(id) AS id FROM ops_chat_messages
-                WHERE quickAction = 'madison_sms_draft'
-                  AND sessionId = \${row.sessionId}
-                  AND cardStatus = 'active'
-              ) AS newest
-            )
-        \`));
+        const sid = Number(row.sessionId);
+        await db.execute(sql.raw(
+          'UPDATE ops_chat_messages SET cardStatus = \'dismissed\' WHERE quickAction = \'madison_sms_draft\' AND sessionId = ' + sid + ' AND cardStatus = \'active\' AND id NOT IN (SELECT id FROM (SELECT MAX(id) AS id FROM ops_chat_messages WHERE quickAction = \'madison_sms_draft\' AND sessionId = ' + sid + ' AND cardStatus = \'active\') AS newest)'
+        ));
       }
       console.log('[Migration] Duplicate SMS cards resolved');
     }
