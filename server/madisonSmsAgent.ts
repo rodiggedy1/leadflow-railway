@@ -177,6 +177,33 @@ export async function triggerMadisonSmsDraft(params: {
     }
     // INFORMATION, CONVERSATION, UNKNOWN → no tool needed
 
+    // ── Step 4.5: Fetch conversation history for LLM context ─────────────────
+    let conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+    try {
+      const [sessionRow] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, sessionId))
+        .limit(1);
+      const parsed = JSON.parse((sessionRow?.messageHistory as string) ?? "[]");
+      if (Array.isArray(parsed)) {
+        conversationMessages = parsed
+          .map((m: any) => {
+            const role =
+              m.role === "assistant" ? "assistant" as const
+              : m.role === "user" ? "user" as const
+              : null;
+            return role && m.content?.trim()
+              ? { role, content: m.content.trim() }
+              : null;
+          })
+          .filter((m): m is { role: "user" | "assistant"; content: string } => m !== null)
+          .slice(-8);
+      }
+    } catch (err) {
+      console.warn("[MadisonSMS] Failed to fetch conversation history:", err);
+    }
+
     // ── Step 5: Generate DraftResponse ────────────────────────────────────────
     const draftResponse = await generateDraftResponse({
       inboundText,
@@ -187,6 +214,7 @@ export async function triggerMadisonSmsDraft(params: {
       context,
       capabilityResult,
       knowledgeContext,
+      conversationMessages,
     });
 
     // ── Step 6: Compute Quality Score ─────────────────────────────────────────
@@ -608,8 +636,9 @@ async function generateDraftResponse(params: {
   context: ResolvedContext;
   capabilityResult: CapabilityResult | null;
   knowledgeContext: string | null;
+  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<DraftResponse> {
-  const { inboundText, senderName, isCleaner, classification, intent, context, capabilityResult, knowledgeContext } = params;
+  const { inboundText, senderName, isCleaner, classification, intent, context, capabilityResult, knowledgeContext, conversationMessages } = params;
 
   const firstName = senderName?.split(" ")[0] ?? (isCleaner ? "there" : "there");
 
@@ -681,6 +710,11 @@ When you catch yourself writing something like the above — stop. Start over. A
 
 Return JSON only.${contextBlock}
 
+Additional context:
+- The customer's intent has been classified as "${intent ?? classification.type}".
+- Use that classification when drafting the reply.
+- Do not ask questions already answered in the conversation history above.
+
 === MAIDS IN BLACK KNOWLEDGE BASE ===
 ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
@@ -688,10 +722,8 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
     const response = await invokeLLM({
       messages: [
         { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Draft a reply to this inbound SMS: "${inboundText}"\n\nIntent: ${intent ?? classification.type}`,
-        },
+        ...conversationMessages,
+        { role: "user", content: inboundText },
       ],
       response_format: {
         type: "json_schema",
