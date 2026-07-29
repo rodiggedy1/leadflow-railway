@@ -88,8 +88,28 @@ function formatTime(serviceDateTime: string | null | undefined): string {
   }
 }
 
-// ── router ────────────────────────────────────────────────────────────────────
+/**
+ * Deactivate the active ops_chat_messages card for a madison_sms_draft.
+ * Sets cardStatus = 'dismissed' so the activeDedupKey generated column becomes NULL,
+ * freeing the unique index slot for the next inbound message from the same session.
+ */
+async function deactivateOpsSmsCard(draftId: number): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(
+      sql`UPDATE ops_chat_messages
+          SET cardStatus = 'dismissed'
+          WHERE quickAction = 'madison_sms_draft'
+            AND JSON_EXTRACT(metadata, '$.draftId') = ${draftId}
+            AND cardStatus = 'active'`
+    );
+  } catch (err) {
+    console.error('[deactivateOpsSmsCard] failed for draftId', draftId, err);
+  }
+}
 
+// ── router ────────────────────────────────────────────────────────────────────
 // In-memory typing presence store (ephemeral, no DB needed)
 const typingStore = new Map<string, Map<string, { name: string; expiresAt: number }>>();
 
@@ -600,7 +620,7 @@ export const opsChatRouter = router({
         .select()
         .from(opsChatMessages)
         .where(eq(opsChatMessages.channel, input.channel))
-        .orderBy(desc(opsChatMessages.createdAt))
+        .orderBy(desc(sql`COALESCE(lastActivityAt, UNIX_TIMESTAMP(createdAt)*1000)`))
         .limit(500);
 
       // Count thread replies per parent message
@@ -718,6 +738,7 @@ export const opsChatRouter = router({
         threadParentBody: m.threadParentId ? (parentMap.get(m.threadParentId)?.body ?? null) : null,
         threadParentFrom: m.threadParentId ? (parentMap.get(m.threadParentId)?.authorName ?? null) : null,
         replyCount: m.threadParentId ? 0 : (replyCounts[m.id] ?? 0),
+        lastActivityAt: (m as any).lastActivityAt ?? null,
       }));
     }),
 
@@ -5567,6 +5588,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         await db.update(madisonSmsDrafts)
           .set({ status: "SENT", outboundOpenPhoneId: outboundId, sentAt: new Date(), updatedAt: new Date() })
           .where(eq(madisonSmsDrafts.id, input.draftId));
+        await deactivateOpsSmsCard(input.draftId);
         broadcastOpsUpdate("sms_draft_sent", { draftId: input.draftId });
         return { ok: true };
       } catch (err: unknown) {
@@ -5592,6 +5614,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       await db.update(madisonSmsDrafts)
         .set({ status: "DISMISSED", dismissedBy: input.dismissedBy, dismissedAt: new Date(), updatedAt: new Date() })
         .where(and(eq(madisonSmsDrafts.id, input.draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
+      await deactivateOpsSmsCard(input.draftId);
       broadcastOpsUpdate("sms_draft_dismissed", { draftId: input.draftId });
       return { ok: true };
     }),

@@ -766,6 +766,132 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] Failed to reset fired confirmation_calls (non-fatal):', err);
   }
+
+  // ── ops_chat_messages deduplication columns ────────────────────────────────
+  try {
+    // Step 1: Add sessionId column
+    const [sessionIdCols] = await db.execute(sql.raw(`
+      SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'sessionId'
+    `)) as any;
+    if (!sessionIdCols || sessionIdCols.length === 0) {
+      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN sessionId BIGINT NULL`));
+      console.log('[Migration] ops_chat_messages.sessionId: added');
+    } else {
+      console.log('[Migration] ops_chat_messages.sessionId: already exists');
+    }
+
+    // Step 2: Add lastActivityAt column
+    const [lastActivityCols] = await db.execute(sql.raw(`
+      SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'lastActivityAt'
+    `)) as any;
+    if (!lastActivityCols || lastActivityCols.length === 0) {
+      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN lastActivityAt BIGINT NULL`));
+      console.log('[Migration] ops_chat_messages.lastActivityAt: added');
+    } else {
+      console.log('[Migration] ops_chat_messages.lastActivityAt: already exists');
+    }
+
+    // Step 3: Add cardStatus column
+    const [cardStatusCols] = await db.execute(sql.raw(`
+      SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'cardStatus'
+    `)) as any;
+    if (!cardStatusCols || cardStatusCols.length === 0) {
+      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN cardStatus VARCHAR(16) NOT NULL DEFAULT 'active'`));
+      console.log('[Migration] ops_chat_messages.cardStatus: added');
+    } else {
+      console.log('[Migration] ops_chat_messages.cardStatus: already exists');
+    }
+
+    // Step 4: Backfill cardStatus for existing rows
+    await db.execute(sql.raw(`UPDATE ops_chat_messages SET cardStatus = 'active' WHERE cardStatus IS NULL OR cardStatus = ''`));
+
+    // Step 5: Add activeDedupKey generated column
+    const [dedupKeyCols] = await db.execute(sql.raw(`
+      SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'activeDedupKey'
+    `)) as any;
+    if (!dedupKeyCols || dedupKeyCols.length === 0) {
+      await db.execute(sql.raw(`
+        ALTER TABLE ops_chat_messages ADD COLUMN activeDedupKey VARCHAR(320)
+          GENERATED ALWAYS AS (
+            CASE
+              WHEN quickAction = 'madison_sms_draft'
+                AND sessionId IS NOT NULL
+                AND cardStatus = 'active'
+              THEN CONCAT(quickAction, ':', sessionId)
+              ELSE NULL
+            END
+          ) STORED
+      `));
+      console.log('[Migration] ops_chat_messages.activeDedupKey: added');
+    } else {
+      console.log('[Migration] ops_chat_messages.activeDedupKey: already exists');
+    }
+
+    // Step 6: Detect and resolve existing duplicate active SMS cards per session
+    const [dupRows] = await db.execute(sql.raw(`
+      SELECT sessionId, COUNT(*) AS cnt
+      FROM ops_chat_messages
+      WHERE quickAction = 'madison_sms_draft'
+        AND sessionId IS NOT NULL
+        AND cardStatus = 'active'
+      GROUP BY sessionId
+      HAVING COUNT(*) > 1
+    `)) as any;
+    if (dupRows && dupRows.length > 0) {
+      console.log(\`[Migration] Found \${dupRows.length} sessions with duplicate active SMS cards — deduplicating...\`);
+      for (const row of dupRows) {
+        await db.execute(sql.raw(\`
+          UPDATE ops_chat_messages
+          SET cardStatus = 'dismissed'
+          WHERE quickAction = 'madison_sms_draft'
+            AND sessionId = \${row.sessionId}
+            AND cardStatus = 'active'
+            AND id NOT IN (
+              SELECT id FROM (
+                SELECT MAX(id) AS id FROM ops_chat_messages
+                WHERE quickAction = 'madison_sms_draft'
+                  AND sessionId = \${row.sessionId}
+                  AND cardStatus = 'active'
+              ) AS newest
+            )
+        \`));
+      }
+      console.log('[Migration] Duplicate SMS cards resolved');
+    }
+
+    // Step 7: Add unique index on activeDedupKey
+    const [dedupIdx] = await db.execute(sql.raw(`
+      SELECT INDEX_NAME FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND INDEX_NAME = 'uq_ops_active_sms_card'
+    `)) as any;
+    if (!dedupIdx || dedupIdx.length === 0) {
+      await db.execute(sql.raw(`CREATE UNIQUE INDEX uq_ops_active_sms_card ON ops_chat_messages (activeDedupKey)`));
+      console.log('[Migration] ops_chat_messages uq_ops_active_sms_card index: created');
+    } else {
+      console.log('[Migration] ops_chat_messages uq_ops_active_sms_card index: already exists');
+    }
+
+    // Step 8: Add feed activity index
+    const [activityIdx] = await db.execute(sql.raw(`
+      SELECT INDEX_NAME FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND INDEX_NAME = 'idx_ocm_channel_activity'
+    `)) as any;
+    if (!activityIdx || activityIdx.length === 0) {
+      await db.execute(sql.raw(`CREATE INDEX idx_ocm_channel_activity ON ops_chat_messages (channel, lastActivityAt)`));
+      console.log('[Migration] ops_chat_messages idx_ocm_channel_activity index: created');
+    } else {
+      console.log('[Migration] ops_chat_messages idx_ocm_channel_activity index: already exists');
+    }
+
+    console.log('[Migration] ops_chat_messages dedup columns: OK');
+  } catch (err) {
+    console.error('[Migration] ops_chat_messages dedup columns failed:', err);
+  }
+
   // ── cs_missions table ────────────────────────────────────────────────────────
   try {
     await db.execute(sql.raw(`

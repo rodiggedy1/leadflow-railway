@@ -196,6 +196,7 @@ interface CommandChatProps {
     threadParentFrom?: string | null;
     replyCount?: number;
     createdAt: Date;
+    lastActivityAt?: number | null;
   }>;
   channelLoading: boolean;
   callerName: string;
@@ -5341,7 +5342,7 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
                     <div
-                      key={msg.id}
+                      key={`${msg.id}:${msg.lastActivityAt ?? 0}`}
                       ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
                       className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
                     >

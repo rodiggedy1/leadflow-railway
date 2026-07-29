@@ -18,7 +18,7 @@
 
 import { getDb } from "./db";
 import { madisonSmsDrafts, conversationSessions, opsChatMessages } from "../drizzle/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
@@ -814,18 +814,23 @@ async function postDraftCardToCommandChat(params: {
     `Draft: ${draft}`,
   ].join("\n").trim();
 
-  await db.insert(opsChatMessages).values({
-    channel: "command",
-    authorName: "Madison",
-    authorRole: "system",
-    body,
-    quickAction: "madison_sms_draft",
-    metadata: JSON.stringify({ draftId, quickActionVersion: 1, sessionId }),
-    replyToId: null,
-    replyToBody: null,
-    replyToAuthor: null,
-    threadParentId: null,
-  });
+  // Upsert: one active card per session — if a card already exists for this session,
+  // update its body/metadata/lastActivityAt so it resurfaces at the bottom of the feed.
+  // Uses ON DUPLICATE KEY UPDATE against the activeDedupKey unique index.
+  const eventTs = Date.now();
+  const bodyEscaped = body.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const metadataEscaped = JSON.stringify({ draftId, quickActionVersion: 1, sessionId }).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  await db.execute(sql.raw(`
+    INSERT INTO ops_chat_messages
+      (channel, authorName, authorRole, body, quickAction, metadata, sessionId, lastActivityAt, cardStatus, createdAt)
+    VALUES
+      ('command', 'Madison', 'system', '${bodyEscaped}', 'madison_sms_draft', '${metadataEscaped}', ${sessionId}, ${eventTs}, 'active', NOW())
+    ON DUPLICATE KEY UPDATE
+      body            = VALUES(body),
+      metadata        = VALUES(metadata),
+      lastActivityAt  = GREATEST(COALESCE(lastActivityAt, 0), VALUES(lastActivityAt)),
+      cardStatus      = 'active'
+  `));
 
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
