@@ -42,6 +42,7 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
 import AiConcierge from "@/components/AiConcierge";
+import { OperationsPanel } from "@/components/OperationsPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -1372,7 +1373,7 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
   // ── No draftId in metadata — render minimal fallback ──
   if (!meta.draftId) {
     return (
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px", cursor: meta.sessionId ? "pointer" : "default" }} onClick={handleCardClick}>
         <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
@@ -5338,6 +5339,10 @@ const MessageList = memo(function MessageList({
                         msg={msg}
                         onCallBack={onCallBack}
                         onTextBack={onTextBack}
+                        onSelectSession={(sid, name) => {
+                          const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+                          setActiveOpsSession({ sessionId: sid, customerName: name, initials });
+                        }}
                       />
                     </div>
                   );
@@ -5622,10 +5627,12 @@ export function MadisonCallSummaryCard({
   msg,
   onCallBack,
   onTextBack,
+  onSelectSession,
 }: {
   msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
   onCallBack: (name: string, phone: string, msgId: number) => void;
   onTextBack: (name: string, phone: string, msgId: number) => void;
+  onSelectSession?: (sessionId: number, customerName: string) => void;
 }) {
   const [showTranscript, setShowTranscript] = useState(false);
   const [justActed, setJustActed] = useState<"called" | "texted" | "dismissed" | null>(null);
@@ -5665,6 +5672,12 @@ export function MadisonCallSummaryCard({
   const callerPhone = meta.callerPhone ?? null;
   const durationDisplay = meta.durationDisplay ?? "";
   const outcome = meta.outcome ?? "";
+  // Notify parent when this card is clicked so Operations panel can show missions for this session
+  const handleCardClick = () => {
+    if (meta.sessionId && onSelectSession) {
+      onSelectSession(meta.sessionId as number, callerName ?? callerPhone ?? "Unknown");
+    }
+  };
   const actedBy = meta.actedBy ?? null;
   const actedAction = meta.actedAction ?? null;
   const intentSummary = meta.intentSummary ?? "Called but left no details.";
@@ -6705,6 +6718,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [quickReplyTarget, setQuickReplyTarget] = useState<{ customer: CustomerData; view: "sms" | "email"; lastMessage?: string; emailSubject?: string; isLeadChat?: boolean; sessionId?: number } | null>(null);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [taskRefetchTick, setTaskRefetchTick] = useState(0);
+  // ── Operations Center — active lead/session context for right panel ────────
+  const [activeOpsSession, setActiveOpsSession] = useState<{ sessionId: number; customerName: string; initials: string } | null>(null);
+  const [missionRefetchKey, setMissionRefetchKey] = useState(0);
   const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
   const { data: dueTasks = [] } = trpc.tasks.getDue.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -6868,6 +6884,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.tasks.listMine.invalidate();
       utils.tasks.getDue.invalidate();
       setTaskRefetchTick(t => t + 1);
+    },
+    onCsMissionUpdate: (sessionId) => {
+      // Only bump refetch key if the update is for the currently active session
+      setActiveOpsSession(prev => {
+        if (prev && prev.sessionId === sessionId) {
+          setMissionRefetchKey(k => k + 1);
+        }
+        return prev;
+      });
     },
   }, { label: "CommandChat" });
 
@@ -10845,12 +10870,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className="w-[4px] h-full" />
       </div>
 
-      {/* ── RIGHT PANEL: AI Concierge (always open) ── */}
+      {/* ── RIGHT PANEL: Operations Center ── */}
+      {/* AiConcierge preserved in AiConcierge.tsx — available for middle window when needed */}
       <div
-        className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200"
-        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
+        className="shrink-0 flex flex-col transition-[width] duration-200"
+        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined }}
       >
-        <AiConcierge compact onSwitchToCSSession={onSwitchToCSSession} />
+        <OperationsPanel
+          sessionId={activeOpsSession?.sessionId ?? null}
+          customerName={activeOpsSession?.customerName ?? ""}
+          initials={activeOpsSession?.initials ?? ""}
+          agentId={agentList?.find(a => a.name === callerName)?.id ?? 0}
+          agentName={callerName}
+          sseRefetchKey={missionRefetchKey}
+        />
         {/* end right panel */}
       </div>
 
