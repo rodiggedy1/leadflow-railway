@@ -8142,7 +8142,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setComposer("");
       setMadisonInlineQuery(null);
       const lockedPhone = madisonInlineLockedPhone;
-      const lockedName = madisonInlineLockedName;
       setMadisonInlineLockedName(null);
       setMadisonInlineLockedPhone(null);
       originalMadisonMessageRef.current = message;
@@ -8154,16 +8153,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonCallPendingCard(null);
       setMadisonEmailConfirmCard(null);
       setMadisonInvoiceCard(null);
-      // Extract the message hint (everything after the locked name) so the intent is preserved
-      // e.g. "text Rohan Gilkes I'm running late" → messageHint = "I'm running late"
-      let inlineMessageHint: string | null = null;
-      if (lockedPhone && lockedName) {
-        const afterVerb = message.replace(/^(?:text|call|email|send\s+payment\s+(?:link\s+)?to|send\s+payment\s+to|pay(?:ment)?\s+link\s+to|remind|notify|tell|ask)\s+/i, "");
-        const afterName = afterVerb.replace(new RegExp("^" + lockedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*", "i"), "").trim();
-        inlineMessageHint = afterName || null;
-      }
+      // Pass the full message as resolvedClientMessageHint so the server's parseConciergeRequest
+      // can extract the correct intent via LLM — same pattern as AiConcierge focusedMessageHint.
       madisonChatMutation.mutate(
-        { message, ...(lockedPhone ? { resolvedClientPhone: lockedPhone, ...(inlineMessageHint ? { resolvedClientMessageHint: inlineMessageHint } : {}) } : {}) },
+        { message, ...(lockedPhone ? { resolvedClientPhone: lockedPhone, resolvedClientMessageHint: message } : {}) },
         {
           onSuccess: (result) => {
             setMadisonChatLoading(false);
