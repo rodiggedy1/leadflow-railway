@@ -1,0 +1,206 @@
+/**
+ * csMissionsRouter.ts
+ * CRUD procedures for the Operations Center panel in the CS Inbox.
+ *
+ * Each cs_mission belongs to one conversation session and represents a live
+ * piece of work (e.g. "Get ETA", "Send Gate Code") with a stage pipeline.
+ *
+ * Design principle: no assumed logic — only the exact operations the client asks for.
+ * No auto-creating, auto-completing, or auto-cascading side effects.
+ */
+import { z } from "zod";
+import { router, agentProcedure } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
+import { getDb } from "./db";
+import { csMissions } from "../drizzle/schema";
+import type { CsMissionStage } from "../drizzle/schema";
+import { eq, and, inArray, asc, desc } from "drizzle-orm";
+import { broadcastOpsUpdate } from "./sseBroadcast";
+
+const stageSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: z.enum(["done", "waiting", "ready", "pending"]),
+  content: z.string().optional(),
+  suggestedReply: z.string().optional(),
+  ts: z.number().optional(),
+});
+
+export const csMissionsRouter = router({
+  /**
+   * listBySession — returns all non-cancelled missions for a conversation session.
+   * Ordered by sortOrder ASC, then createdAt ASC.
+   * Returns completed missions too so the panel can show history.
+   */
+  listBySession: agentProcedure
+    .input(z.object({ sessionId: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const rows = await db
+        .select()
+        .from(csMissions)
+        .where(
+          and(
+            eq(csMissions.sessionId, input.sessionId),
+            // Return all except cancelled — let the UI decide what to show
+            inArray(csMissions.status, ["active", "waiting", "ready", "completed"])
+          )
+        )
+        .orderBy(asc(csMissions.sortOrder), asc(csMissions.createdAt));
+      return rows.map(r => ({
+        id: r.id,
+        sessionId: r.sessionId,
+        agentId: r.agentId,
+        agentName: r.agentName,
+        title: r.title,
+        emoji: r.emoji,
+        status: r.status,
+        stages: r.stages as CsMissionStage[],
+        sortOrder: r.sortOrder,
+        createdAt: r.createdAt ? r.createdAt.getTime() : null,
+        updatedAt: r.updatedAt ? r.updatedAt.getTime() : null,
+        completedAt: r.completedAt ? r.completedAt.getTime() : null,
+      }));
+    }),
+
+  /**
+   * create — creates a new mission for a conversation session.
+   * agentId is taken from ctx.agent — never from client input.
+   */
+  create: agentProcedure
+    .input(z.object({
+      sessionId: z.number().int(),
+      title: z.string().min(1).max(255),
+      emoji: z.string().max(16).optional(),
+      stages: z.array(stageSchema).optional(),
+      sortOrder: z.number().int().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const now = new Date();
+      const initialStages: CsMissionStage[] = input.stages ?? [];
+      const [result] = await db.insert(csMissions).values({
+        sessionId: input.sessionId,
+        agentId: ctx.agent.agentId,
+        agentName: ctx.agent.agentName,
+        title: input.title,
+        emoji: input.emoji ?? null,
+        status: "active",
+        stages: initialStages,
+        sortOrder: input.sortOrder ?? 0,
+        createdAt: now,
+        updatedAt: now,
+      } as any);
+      const newId = (result as any).insertId as number;
+      broadcastOpsUpdate("cs_mission_update", { sessionId: input.sessionId });
+      return { id: newId };
+    }),
+
+  /**
+   * updateStages — updates the stages array and status of a mission.
+   * Used when a stage progresses (e.g. waiting → ready after Maria replies).
+   */
+  updateStages: agentProcedure
+    .input(z.object({
+      missionId: z.number().int(),
+      stages: z.array(stageSchema),
+      status: z.enum(["active", "waiting", "ready", "completed", "cancelled"]),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Verify ownership — agent must own the session (or be admin)
+      const [existing] = await db
+        .select({ sessionId: csMissions.sessionId, agentId: csMissions.agentId })
+        .from(csMissions)
+        .where(eq(csMissions.id, input.missionId))
+        .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Mission not found" });
+      const now = new Date();
+      await db
+        .update(csMissions)
+        .set({
+          stages: input.stages,
+          status: input.status,
+          updatedAt: now,
+          completedAt: input.status === "completed" ? now : undefined,
+        } as any)
+        .where(eq(csMissions.id, input.missionId));
+      broadcastOpsUpdate("cs_mission_update", { sessionId: existing.sessionId });
+      return { ok: true };
+    }),
+
+  /**
+   * complete — marks a mission as completed.
+   */
+  complete: agentProcedure
+    .input(z.object({ missionId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [existing] = await db
+        .select({ sessionId: csMissions.sessionId })
+        .from(csMissions)
+        .where(eq(csMissions.id, input.missionId))
+        .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Mission not found" });
+      const now = new Date();
+      await db
+        .update(csMissions)
+        .set({ status: "completed", completedAt: now, updatedAt: now } as any)
+        .where(eq(csMissions.id, input.missionId));
+      broadcastOpsUpdate("cs_mission_update", { sessionId: existing.sessionId });
+      return { ok: true };
+    }),
+
+  /**
+   * cancel — removes a mission from the active list.
+   */
+  cancel: agentProcedure
+    .input(z.object({ missionId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [existing] = await db
+        .select({ sessionId: csMissions.sessionId })
+        .from(csMissions)
+        .where(eq(csMissions.id, input.missionId))
+        .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Mission not found" });
+      const now = new Date();
+      await db
+        .update(csMissions)
+        .set({ status: "cancelled", updatedAt: now } as any)
+        .where(eq(csMissions.id, input.missionId));
+      broadcastOpsUpdate("cs_mission_update", { sessionId: existing.sessionId });
+      return { ok: true };
+    }),
+
+  /**
+   * updateTitle — edits the title/emoji of a mission.
+   */
+  updateTitle: agentProcedure
+    .input(z.object({
+      missionId: z.number().int(),
+      title: z.string().min(1).max(255),
+      emoji: z.string().max(16).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [existing] = await db
+        .select({ sessionId: csMissions.sessionId })
+        .from(csMissions)
+        .where(eq(csMissions.id, input.missionId))
+        .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Mission not found" });
+      await db
+        .update(csMissions)
+        .set({ title: input.title, emoji: input.emoji ?? null, updatedAt: new Date() } as any)
+        .where(eq(csMissions.id, input.missionId));
+      broadcastOpsUpdate("cs_mission_update", { sessionId: existing.sessionId });
+      return { ok: true };
+    }),
+});

@@ -44,6 +44,8 @@ export type OpsStreamCallbacks = {
   onGmailNewMessages?: () => void;
   /** Called when a task is created, updated, or completed */
   onTaskUpdate?: () => void;
+  /** Called when a cs_mission is created, updated, or completed for a session */
+  onCsMissionUpdate?: (sessionId: number) => void;
 };
 
 // Minimum 5s before first reconnect attempt — prevents thundering herd when
@@ -94,6 +96,9 @@ export function useOpsStream(
             assignmentId?: number;
             targetAgentId?: number;
             targetAgentNames?: string[];
+            sessionId?: number;
+            callerPhone?: string;
+            phoneNumberLabel?: string;
           };
 
           switch (event.type) {
@@ -138,6 +143,9 @@ export function useOpsStream(
               break;
             case "task_update":
               cbRef.current.onTaskUpdate?.();
+              break;
+            case "cs_mission_update":
+              cbRef.current.onCsMissionUpdate?.(event.sessionId ?? 0);
               break;
             case "ping":
               // keepalive — no action needed

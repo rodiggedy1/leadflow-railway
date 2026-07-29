@@ -56,6 +56,7 @@ import { NON_LEAD_SOURCES } from '../shared/leadSources';
 import { computeSessionSummary } from './sessionSummary';
 import { responseTemplatesRouter } from './responseTemplatesRouter';
 import { aiConciergeRouter } from './aiConciergeRouter';
+import { csMissionsRouter } from './csMissionsRouter';
 import { normalizePhoneLegacy as normalizePhone, isValidUSPhone, extractUSDigits } from './utils/phone';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -7118,6 +7119,7 @@ Return JSON with exactly these fields:
   metrics: metricsRouter,
   fieldMgmt: fieldMgmtRouter,
   aiConcierge: aiConciergeRouter,
+  csMissions: csMissionsRouter,
   scheduling: schedulingRouter,
   opsChat: opsChatRouter,
   followUps: followUpsRouter,
