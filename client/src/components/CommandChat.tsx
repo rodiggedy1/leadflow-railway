@@ -835,12 +835,14 @@ function HotLeadsTray({
   onCollapse,
   onOpenFirstMsg,
   searchQuery = "",
+  onSelectSession,
 }: {
   channelMsgs: LeadMsg[];
   claimLeadMutation: ClaimMutation;
   onCollapse: () => void;
   onOpenFirstMsg?: (details: string) => void;
   searchQuery?: string;
+  onSelectSession?: (sessionId: number | null | undefined, customerName: string | null | undefined) => void;
 }) {
   // Derive lead cards from channelMsgs — only new_lead quickAction, last 8h
   const cutoff = Date.now() - 8 * 60 * 60 * 1000;
@@ -926,9 +928,8 @@ function HotLeadsTray({
               claimLeadMutation={claimLeadMutation}
               onOpenFirstMsg={onOpenFirstMsg}
               onSelectSession={(sid, name) => {
-                const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
-                console.log("[Operations] HotLeadCard selected", { sessionId: sid, customerName: name });
-                setActiveOpsSession({ sessionId: sid, customerName: name, initials });
+                console.log("[Operations] HotLeadCard onSelectSession fired", { sid, name });
+                onSelectSession?.(sid, name);
               }}
               sessionStatus={(() => {
                 try {
@@ -8516,6 +8517,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setFirstMsgResult("");
               setFirstMsgCopied(false);
               setFirstMsgOpen(true);
+            }}
+            onSelectSession={(sid, name) => {
+              if (!sid) return;
+              const safeName = name?.trim() || "Unknown Customer";
+              const initials = safeName.split(/\s+/).slice(0,2).map((w: string) => w[0]).join("").toUpperCase();
+              console.log("[Operations] Setting activeOpsSession from HotLeadsTray", { sid, safeName, initials });
+              setActiveOpsSession({ sessionId: sid, customerName: safeName, initials });
             }}
           />
           )}
