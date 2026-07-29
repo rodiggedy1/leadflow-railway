@@ -1319,7 +1319,7 @@ function EtaCallResultCard({
 
 // ── MadisonSmsDraftCard ─────────────────────────────────────────────────────
 // Self-contained component — fetches draft by draftId, handles approve/dismiss/retry
-export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
+export function MadisonSmsDraftCard({ msg, callerName, onSelectSession }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string; onSelectSession?: (sessionId: number, customerName: string) => void }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -1384,6 +1384,21 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
     dismissMutation.mutate({ draftId: meta.draftId, dismissedBy: callerName });
   };
 
+  // ── Auto-activate Operations panel when draft loads ──
+  const prevSessionRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (meta.sessionId && draft?.senderName && prevSessionRef.current !== meta.sessionId) {
+      prevSessionRef.current = meta.sessionId;
+      onSelectSession?.(meta.sessionId, draft.senderName);
+    }
+  }, [meta.sessionId, draft?.senderName, onSelectSession]);
+  const handleCardClick = () => {
+    if (meta.sessionId) {
+      const name = draft?.senderName ?? "Customer";
+      console.log("[Operations] MadisonSmsDraftCard click", { sessionId: meta.sessionId, name });
+      onSelectSession?.(meta.sessionId, name);
+    }
+  };
   // ── No draftId in metadata — render minimal fallback ──
   if (!meta.draftId) {
     return (
@@ -5325,7 +5340,15 @@ const MessageList = memo(function MessageList({
                       ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
                       className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
                     >
-                      <MadisonSmsDraftCard msg={msg} callerName={callerName} />
+                      <MadisonSmsDraftCard
+                        msg={msg}
+                        callerName={callerName}
+                        onSelectSession={(sid, name) => {
+                          const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+                          console.log("[Operations] MadisonSmsDraftCard onSelectSession fired", { sessionId: sid, customerName: name });
+                          setActiveOpsSession({ sessionId: sid, customerName: name, initials });
+                        }}
+                      />
                     </div>
                   );
                 }
