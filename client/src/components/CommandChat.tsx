@@ -602,12 +602,14 @@ function HotLeadCard({
   claimLeadMutation,
   sessionStatus,
   onOpenFirstMsg,
+  onSelectSession,
 }: {
   msg: LeadMsg;
   isFirst?: boolean;
   claimLeadMutation: ClaimMutation;
   sessionStatus?: SessionStatus | null;
   onOpenFirstMsg?: (details: string) => void;
+  onSelectSession?: (sessionId: number, customerName: string) => void;
 }) {
   // Shake state: fires every 8 seconds while unclaimed
   const [shaking, setShaking] = useState(false);
@@ -787,7 +789,7 @@ function HotLeadCard({
       {/* Card body — clickable to open SMS */}
       <div
         className={cn(sessionId && "cursor-pointer")}
-        onClick={() => { if (sessionId) window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); }}
+        onClick={() => { if (sessionId) { window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); onSelectSession?.(sessionId, leadName ?? ""); } }}
       >
         {/* Status pill — exact prototype .lead-status */}
         <span style={{display:"inline-flex",alignItems:"center",gap:"5px",padding:"5px 8px",borderRadius:"999px",fontSize:"10px",fontWeight:800,...(isBooked?{background:"#eff6ff",color:"#1d4ed8"}:isLost||isCold?{background:"#f1f5f9",color:"#64748b"}:isFollowUp?{background:"#fff6e8",color:"#df7e00"}:isClaimed?{background:"#eafaf4",color:"#0da875"}:{background:"#fff0f2",color:"#ff475f"})}}>
@@ -917,6 +919,10 @@ function HotLeadsTray({
               isFirst={idx === 0}
               claimLeadMutation={claimLeadMutation}
               onOpenFirstMsg={onOpenFirstMsg}
+              onSelectSession={(sid, name) => {
+                const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+                setActiveOpsSession({ sessionId: sid, customerName: name, initials });
+              }}
               sessionStatus={(() => {
                 try {
                   const meta = JSON.parse(msg.metadata ?? "{}");
@@ -5728,7 +5734,10 @@ export function MadisonCallSummaryCard({
   }
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+    <div
+      style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px", cursor: meta.sessionId ? "pointer" : "default" }}
+      onClick={handleCardClick}
+    >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           width: "100%",
