@@ -81,18 +81,24 @@ export const csMissionsRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const now = new Date();
       const initialStages: CsMissionStage[] = input.stages ?? [];
-      const [result] = await db.insert(csMissions).values({
-        sessionId: input.sessionId,
-        agentId: ctx.agent.agentId,
-        agentName: ctx.agent.agentName,
-        title: input.title,
-        emoji: input.emoji ?? null,
-        status: "active",
-        stages: initialStages,
-        sortOrder: input.sortOrder ?? 0,
-        createdAt: now,
-        updatedAt: now,
-      } as any);
+      let result: any;
+      try {
+        [result] = await db.insert(csMissions).values({
+          sessionId: input.sessionId,
+          agentId: ctx.agent.agentId,
+          agentName: ctx.agent.agentName,
+          title: input.title,
+          emoji: input.emoji ?? null,
+          status: "active",
+          stages: initialStages,
+          sortOrder: input.sortOrder ?? 0,
+          createdAt: now,
+          updatedAt: now,
+        } as any);
+      } catch (dbErr: any) {
+        console.error("[csMissions.create] DB INSERT FAILED:", dbErr?.message ?? dbErr, "| code:", dbErr?.code, "| sqlMessage:", dbErr?.sqlMessage);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: dbErr?.sqlMessage ?? dbErr?.message ?? "DB insert failed" });
+      }
       const newId = (result as any).insertId as number;
       broadcastOpsUpdate("cs_mission_update", { sessionId: input.sessionId });
       return { id: newId };
