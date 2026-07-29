@@ -6604,19 +6604,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
   // @madison inline name picker — fires while typing @madison text {name}
-  const { data: madisonInlineCustomers = [] } = trpc.opsChat.searchCustomers.useQuery(
+  const { data: madisonInlineCustomerData } = trpc.opsChat.searchCustomers.useQuery(
     { query: madisonInlineQuery ?? "" },
     { enabled: (madisonInlineQuery?.length ?? 0) >= 2, staleTime: 15_000 }
   );
-  const { data: madisonInlineCleaners = [] } = trpc.opsChat.searchCleaners.useQuery(
+  const { data: madisonInlineCleanerData } = trpc.opsChat.searchCleaners.useQuery(
     { query: madisonInlineQuery ?? "" },
     { enabled: (madisonInlineQuery?.length ?? 0) >= 2, staleTime: 15_000 }
   );
   const madisonInlineMatches = useMemo(() => {
-    const customers = (madisonInlineCustomers as Array<{ name: string; phone: string; city?: string | null; teamName?: string | null }>).map(c => ({ name: c.name, phone: c.phone, subtitle: c.city ?? c.teamName ?? "", isCleaner: false }));
-    const cleaners = (madisonInlineCleaners as Array<{ name: string; phone: string; teamName?: string | null }>).map(c => ({ name: c.name, phone: c.phone, subtitle: c.teamName ?? "", isCleaner: true }));
+    const customers = (madisonInlineCustomerData?.customers ?? []).map((c: { name: string; phone: string; city?: string | null; teamName?: string | null }) => ({ name: c.name, phone: c.phone, subtitle: c.city ?? c.teamName ?? "", isCleaner: false }));
+    const cleaners = (madisonInlineCleanerData?.cleaners ?? []).map((c: { name: string; phone: string; teamName?: string | null }) => ({ name: c.name, phone: c.phone, subtitle: c.teamName ?? "", isCleaner: true }));
     return [...customers, ...cleaners].slice(0, 5);
-  }, [madisonInlineCustomers, madisonInlineCleaners]);
+  }, [madisonInlineCustomerData, madisonInlineCleanerData]);
     // Map of name → phone for @[Name] token format (populated on mention selection)
   const mentionPhoneMapRef = useRef<Record<string, string>>({});
   // ── SMS mode (triggered by @customer selection) ──────────────────────────
