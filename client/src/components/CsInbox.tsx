@@ -94,7 +94,6 @@ import ObjectionsPanel from "@/components/ObjectionsPanel";
 import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
 import InsertResponseModal from "@/components/InsertResponseModal";
 import { CustomerMentionChip } from "@/components/CustomerMentionChip";
-import { OperationsPanel } from "@/components/OperationsPanel";
 
 type Queue = "Priority" | "New" | "Active" | "Resolved" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
@@ -302,8 +301,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [complaintDialogMsg, setComplaintDialogMsg] = useState<{ text: string; cleanerJobId: number | null } | null>(null);
   const [complaintApplyCharge, setComplaintApplyCharge] = useState(true);
   const flagAsComplaintMutation = trpc.quality.flagAsComplaint.useMutation();
-  // Operations Center — SSE refetch key: incremented whenever a cs_mission_update arrives for the open session
-  const [missionRefetchKey, setMissionRefetchKey] = useState(0);
 
   // Sync showResolved when filter is driven externally (from sidebar)
   useEffect(() => {
@@ -313,11 +310,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   }, [activeFilter]);
 
   useOpsStream({
-    onCsMissionUpdate: (sessionId) => {
-      if (sessionId === effectiveSelectedIdRef.current) {
-        setMissionRefetchKey(k => k + 1);
-      }
-    },
     onLeadUpdate: () => {
       utils.leads.listCsInbox.invalidate();
       // Also refresh the open conversation's detail cache so new inbound messages appear immediately
@@ -3440,23 +3432,719 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
             </CardContent>
           </Card>
 
-          {/* ── RIGHT: Operations Center ── */}
-          <OperationsPanel
-            sessionId={selected.id > 0 ? selected.id : null}
-            customerName={selected.name}
-            initials={selected.initials}
-            agentId={agentMe?.id ?? 0}
-            agentName={agentMe?.name ?? "Agent"}
-            isTeams={selected.queue === "Teams"}
-            sseRefetchKey={missionRefetchKey}
-            onCallClick={() => setShowAICall(v => !v)}
-            onShareLinkClick={() => {
-              const link = `${window.location.origin}/book`;
-              navigator.clipboard.writeText(link).then(() => {
-                toast.success("Booking link copied to clipboard");
-              });
-            }}
-          />
+          {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
+          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FBFBFC', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
+            {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
+            {selected.queue === "Teams" ? (
+              <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
+                  <div style={{width:'56px',height:'56px',borderRadius:'18px',background:'linear-gradient(135deg,#14b8a6,#10b981)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 20px rgba(16,185,129,.22)'}}>
+                    {selected.initials}
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+                    <div style={{fontSize:'20px',fontWeight:900,color:'#101828',lineHeight:1.15,letterSpacing:'-0.03em'}}>{selected.name}</div>
+                    <div style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>Team Member</div>
+                    <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
+                      <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
+                      <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
+                {(() => {
+                  const gradientPalette = [
+                    "from-violet-500 to-fuchsia-500",
+                    "from-rose-500 to-orange-400",
+                    "from-emerald-500 to-teal-500",
+                    "from-sky-500 to-cyan-500",
+                    "from-amber-500 to-yellow-400",
+                    "from-pink-500 to-rose-400",
+                    "from-indigo-500 to-blue-500",
+                    "from-teal-500 to-green-500",
+                  ];
+                  const ini = selected.initials || "?";
+                  const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
+                  const gradClass = gradientPalette[idx];
+                  const name = clientProfile?.name ?? selected.name;
+                  const since = clientProfile?.createdAt ? new Date(clientProfile.createdAt).getFullYear() : null;
+                  return (
+                    <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
+                      <div className={`bg-gradient-to-br ${gradClass}`} style={{width:'56px',height:'56px',borderRadius:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 20px rgba(0,0,0,.10)'}}>
+                        {ini}
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+                        <div style={{fontSize:'20px',fontWeight:900,color:'#101828',lineHeight:1.15,letterSpacing:'-0.03em'}}>{name}</div>
+                        <div style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>{since ? `Customer since ${since}` : 'Customer'}</div>
+                        <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
+                          <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
+                          <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            <div className="cs-inbox-scroll overflow-y-auto flex-1">
+            {selected.queue === "Teams" ? (
+              /* ── TEAMS PANEL ── */
+              <>
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
+                  <CardContent className="p-0">
+
+                    {/* Today's jobs */}
+                    <div className="p-5 bg-white space-y-3">
+                      <div className="flex items-center gap-2" style={{fontSize:'10px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3'}}>
+                        <Briefcase className="h-3.5 w-3.5" /> Today's jobs
+                      </div>
+                      {!cleanerTodayJobs ? (
+                        <div className="text-sm text-slate-400 py-2">Loading jobs...</div>
+                      ) : cleanerTodayJobs.length === 0 ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                          No jobs scheduled today
+                        </div>
+                      ) : (
+                        cleanerTodayJobs.map((job) => {
+                          const time = job.serviceDateTime
+                            ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : "—";
+                          const launch27Url = job.bookingId
+                            ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
+                            : null;
+                          const clientPhone10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+                          const callHref = clientPhone10 ? `openphone://call?to=+1${clientPhone10}` : null;
+                          const smsHref = clientPhone10 ? `sms:+1${clientPhone10}` : null;
+                          return (
+                            <div
+                              key={job.id}
+                              className="rounded-[20px] border border-slate-200 bg-white shadow-sm overflow-hidden"
+                            >
+                              {/* Clickable main body */}
+                              <button
+                                type="button"
+                                className="w-full text-left p-4 space-y-3 hover:bg-slate-50 transition-colors"
+                                onClick={() => setSelectedJobDrawer(job)}
+                              >
+                                {/* Time + status row */}
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                                    <Clock3 className="h-4 w-4 text-slate-400" />
+                                    {time}
+                                  </div>
+                                  <Badge
+                                    className={`rounded-full border text-xs font-medium hover:bg-transparent ${
+                                      jobStatusStyle(job.jobStatus as JobStatus)
+                                    }`}
+                                  >
+                                    {jobStatusLabel(job.jobStatus as JobStatus)}
+                                  </Badge>
+                                </div>
+
+                                {/* Client name */}
+                                <div className="flex items-start gap-2 text-sm text-slate-700">
+                                  <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                                  <span className="font-medium">{job.customerName || "—"}</span>
+                                </div>
+
+                                {/* Address */}
+                                {job.jobAddress && (
+                                  <div className="flex items-start gap-2 text-sm text-slate-500">
+                                    <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                                    <span className="leading-5 text-left">{job.jobAddress}</span>
+                                  </div>
+                                )}
+
+                                {/* Service type */}
+                                {job.serviceType && (
+                                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-1.5 text-xs text-slate-600">
+                                    {job.serviceType}
+                                  </div>
+                                )}
+
+                                {/* Issue note */}
+                                {job.jobStatus === "issue_at_property" && job.issueNote && (
+                                  <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-800 flex items-start gap-2">
+                                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                                    {job.issueNote}
+                                  </div>
+                                )}
+
+                                {/* Running late note */}
+                                {job.jobStatus === "running_late" && job.delayMinutes && (
+                                  <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                                    Running {job.delayMinutes} min late
+                                  </div>
+                                )}
+
+                                {/* Hint to open details */}
+                                <div className="flex items-center gap-1 text-xs text-slate-400 pt-0.5">
+                                  <FileText className="h-3 w-3" />
+                                  Tap to view details
+                                </div>
+                              </button>
+
+                              {/* Action bar */}
+                              <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-100 bg-slate-50">
+                                {callHref && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={callHref}
+                                        className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                                      >
+                                        <Phone className="h-3.5 w-3.5" />
+                                        Call client
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Call {job.customerName}</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {clientPhone10 && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setNewConvPhone(job.customerPhone ?? "");
+                                          setNewConvMsg("");
+                                          setNewConvOpen(true);
+                                        }}
+                                      >
+                                        <MessageSquarePlus className="h-3.5 w-3.5" />
+                                        SMS client
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Text {job.customerName} via CS chat</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {launch27Url && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={launch27Url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="ml-auto flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                        L27
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Open in Launch27</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Team Actions — magic link */}
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-4">Team actions</div>
+                    <div className="space-y-3">
+                      {/* Send magic link via SMS */}
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl justify-start h-12 w-full border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800 transition-colors"
+                        onClick={() => handleMagicLink("send")}
+                        disabled={getMagicLink.isPending || !cleanerProfile?.id}
+                        title={cleanerProfile?.id ? "Send one-tap login link via SMS" : "No cleaner profile linked to this conversation"}
+                      >
+                        {getMagicLink.isPending && magicLinkAction === "send"
+                          ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          : <Link2 className="h-4 w-4 mr-2" />
+                        }
+                        Send magic link
+                      </Button>
+                      {/* Copy magic link to clipboard */}
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl justify-start h-12 w-full border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+                        onClick={() => handleMagicLink("copy")}
+                        disabled={getMagicLink.isPending || !cleanerProfile?.id}
+                        title={cleanerProfile?.id ? "Copy one-tap login link to clipboard" : "No cleaner profile linked to this conversation"}
+                      >
+                        {getMagicLink.isPending && magicLinkAction === "copy"
+                          ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          : <Copy className="h-4 w-4 mr-2" />
+                        }
+                        Copy magic link
+                      </Button>
+                      {!cleanerProfile?.id && (
+                        <p className="text-xs text-slate-400 text-center">
+                          No cleaner profile found for this number
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Thread status for Teams */}
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
+                    <div className="mt-4 space-y-3">
+                      {[
+                        { label: "Teams", icon: AlertTriangle },
+                        { label: selected.status, icon: CircleDot },
+                        { label: `${selected.wait} since last message`, icon: Clock3 },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-2 text-sm">
+                            <item.icon className="h-4 w-4 text-slate-400" />
+                            {item.label}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              /* ── CLIENT PANEL (enriched with real data) ── */
+              <>
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="p-6 space-y-0 bg-white">
+                      {/* CLIENT PROFILE label + metrics */}
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
+                        {/* Snapshot grid — 2 cols, label above value */}
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0', marginTop:'16px', borderTop:'1px solid rgba(17,24,39,.06)', borderBottom:'1px solid rgba(17,24,39,.06)'}}>
+                          {[
+                            { label: 'Frequency',      value: clientProfile?.frequency ?? selected.service ?? '—' },
+                            { label: 'Avg price',      value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
+                            { label: 'Total bookings', value: String(clientProfile ? clientProfile.totalBookings : selected.stats.bookings) },
+                            { label: 'Last booking',   value: (() => {
+                              const raw = clientProfile?.lastBookingDate;
+                              if (!raw) return '—';
+                              const d = new Date(raw);
+                              if (isNaN(d.getTime())) return raw;
+                              return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                            })() },
+                          ].map(({ label, value }, i) => (
+                            <div key={label} style={{
+                              padding: '14px 12px',
+                              borderRight: i % 2 === 0 ? '1px solid rgba(17,24,39,.06)' : 'none',
+                              borderTop: i >= 2 ? '1px solid rgba(17,24,39,.06)' : 'none',
+                              minWidth: 0,
+                              overflow: 'hidden',
+                            }}>
+                              <div style={{fontSize:'11px', fontWeight:400, color:'#b0b8c4', marginBottom:'3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{label}</div>
+                              <div style={{fontSize:'13px', fontWeight:500, color:'#374151', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>{/* end CLIENT PROFILE wrapper */}
+
+                      {/* Today's job if any */}
+                      {clientProfile?.todayJob && (() => {
+                        const tj = clientProfile.todayJob;
+                        const tjUrl = tj.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${tj.bookingId}` : null;
+                        const TjCard = tjUrl ? "a" : "div";
+                        return (
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Today's job</div>
+                            <TjCard
+                              {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
+                              className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="font-semibold text-sm text-emerald-900">
+                                  {new Date(tj.serviceDateTime!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {tj.serviceType}
+                                </div>
+                                {tjUrl && <ExternalLink className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
+                              </div>
+                              <div className="text-xs text-emerald-700 flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />{tj.jobAddress}
+                              </div>
+                              {(tj as any).teamName && (
+                                <div className="text-xs text-emerald-700 flex items-center gap-1">
+                                  <Users className="h-3 w-3" />{(tj as any).teamName}
+                                </div>
+                              )}
+                              <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-800 border-emerald-200">
+                                {jobStatusLabel((tj.jobStatus ?? tj.bookingStatus ?? "assigned") as JobStatus)}
+                              </Badge>
+                            </TjCard>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Recent job history */}
+                      {clientProfile && clientProfile.recentJobs.length > 0 && (
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Recent history</div>
+                          <div className="space-y-2">
+                            {clientProfile.recentJobs.map((job: { date: string | null; address: string | null; serviceType: string | null; status: string; price: number | null; bookingId: string | null }, i: number) => {
+                              const l27Url = job.bookingId
+                                ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
+                                : null;
+                              const CardEl = l27Url ? "a" : "div";
+                              return (
+                                <CardEl
+                                  key={i}
+                                  {...(l27Url ? { href: l27Url, target: "_blank", rel: "noopener noreferrer" } : {})}
+                                  className={`rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2 ${l27Url ? "hover:border-slate-400 hover:bg-slate-100 cursor-pointer transition" : ""}`}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-slate-800 truncate">
+                                      {job.date} {job.serviceType ? `· ${job.serviceType}` : ""}
+                                    </div>
+                                    {job.address && (
+                                      <div className="text-xs text-slate-500 truncate">{job.address}</div>
+                                    )}
+                                  </div>
+                                  <div className="shrink-0 text-right flex flex-col items-end gap-1">
+                                    {job.price != null && (
+                                      <div className="text-sm font-semibold text-slate-700">${job.price}</div>
+                                    )}
+                                    <Badge className="text-xs rounded-full bg-slate-100 text-slate-600 border-slate-200">
+                                      {job.status}
+                                    </Badge>
+                                    {l27Url && <ExternalLink className="w-3 h-3 text-slate-400" />}
+                                  </div>
+                                </CardEl>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Context flags */}
+                      {!clientProfile && (
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100">Context flags</div>
+                          <div className="mt-4 space-y-3">
+                            {[
+                              selected.stats.bookings === 0
+                                ? "First-time customer"
+                                : `${selected.stats.bookings} prior bookings`,
+                              selected.stats.complaints > 0
+                                ? `${selected.stats.complaints} prior complaint`
+                                : "No complaint history",
+                              selected.queue === "New"
+                                ? "High-intent lead"
+                                : selected.queue === "Resolved" ? "Good review moment"
+                                : "Needs active handling",
+                            ].map((flag) => (
+                              <div
+                                key={flag}
+                                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
+                              >
+                                <Tag className="h-4 w-4 text-slate-400" />
+                                {flag}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ─── Customer Memory Card ───────────────────────── */}
+                      {customerMemory && (() => {
+                        const isHighRisk = (selected?.stats.complaints ?? 0) >= 2;
+                        return (
+                          <div className={`rounded-[24px] border p-4 ${
+                            isHighRisk
+                              ? "border-rose-300 bg-rose-50 ring-1 ring-rose-200"
+                              : "border-amber-200 bg-amber-50"
+                          }`}>
+                            <div className={`flex items-center gap-2 text-sm font-medium mb-3 ${
+                              isHighRisk ? "text-rose-800" : "text-amber-800"
+                            }`}>
+                              {isHighRisk
+                                ? <AlertTriangle className="h-4 w-4 text-rose-500" />
+                                : <Brain className="h-4 w-4" />
+                              }
+                              Know before you reply
+                              {isHighRisk && (
+                                <span className="ml-auto text-xs font-semibold bg-rose-100 text-rose-700 border border-rose-200 rounded-full px-2 py-0.5">
+                                  Escalate to senior rep
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
+                                  isHighRisk ? "text-rose-400" : "text-amber-500"
+                                }`}>Last job</span>
+                                <span className={`text-xs leading-4 ${
+                                  isHighRisk ? "text-rose-900" : "text-amber-900"
+                                }`}>{customerMemory.lastBooking}</span>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
+                                  isHighRisk ? "text-rose-400" : "text-amber-500"
+                                }`}>History</span>
+                                <span className={`text-xs leading-4 font-medium ${
+                                  isHighRisk ? "text-rose-800" : "text-amber-900"
+                                }`}>{customerMemory.complaintHistory}</span>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
+                                  isHighRisk ? "text-rose-400" : "text-amber-500"
+                                }`}>Profile</span>
+                                <span className={`text-xs leading-4 ${
+                                  isHighRisk ? "text-rose-900" : "text-amber-900"
+                                }`}>{customerMemory.careAbout}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      <div style={{marginTop:'24px',paddingTop:'20px',borderTop:'1px solid rgba(16,24,40,.06)',borderRadius:'20px',border:'1px solid rgba(139,92,246,.12)',background:'rgba(139,92,246,.04)',padding:'16px'}}>
+                        <div className="flex items-center gap-2 text-sm font-medium" style={{color:'#6D28D9'}}>
+                          <Bot className="h-4 w-4" /> AI insight
+                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA'}} />}
+                        </div>
+                        {insightLoading && !insightData?.insight ? (
+                          <div className="mt-2 space-y-1.5">
+                            <div className="h-3 w-full rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                            <div className="h-3 w-4/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                            <div className="h-3 w-3/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                          </div>
+                        ) : insightData?.insight ? (
+                          <div className="mt-2 text-sm leading-6" style={{color:'#4C1D95'}}>{insightData.insight}</div>
+                        ) : (
+                          <div className="mt-2 text-xs italic" style={{color:'#A78BFA'}}>Select a conversation with messages to generate insight.</div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* ─── AI Upsell Opportunity card ─────────────────── */}
+                {showUpsellCard && (
+                  <Card className="rounded-xl border border-emerald-200 bg-emerald-50 shadow-none mx-4 mb-4">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+                        <TrendingUp className="h-4 w-4" /> Upsell opportunity
+                        {upsellLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-emerald-400" />}
+                        {showUpsell && (
+                          <button
+                            className="ml-auto text-emerald-400 hover:text-emerald-600 transition-colors"
+                            onClick={() => setUpsellDismissed(selected?.id ?? null)}
+                            title="Dismiss"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {upsellLoading && !upsellData?.upsell ? (
+                        <div className="mt-2 space-y-1.5">
+                          <div className="h-3 w-full rounded bg-emerald-200/60 animate-pulse" />
+                          <div className="h-3 w-4/5 rounded bg-emerald-200/60 animate-pulse" />
+                        </div>
+                      ) : showUpsell && upsellData?.upsell ? (
+                        <div className="mt-2 space-y-2">
+                          <div className="text-xs text-emerald-600 font-medium">{upsellData.upsell.upsellType}</div>
+                          <div className="text-xs text-emerald-700 italic">{upsellData.upsell.signal}</div>
+                          <div className="rounded-xl bg-white border border-emerald-200 px-3 py-2 text-sm text-emerald-900 leading-5">
+                            &ldquo;{upsellData.upsell.pitch}&rdquo;
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
+                            onClick={() => {
+                              setCompose(upsellData.upsell!.pitch);
+                              toast.success("Upsell pitch copied to compose box");
+                            }}
+                          >
+                            Use this pitch
+                          </Button>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* ─── Post-call AI Debrief card ───────────────────── */}
+                {showDebrief && (() => {
+                  const grade = callDebrief!.grade;
+                  const gradeColors: Record<string, string> = {
+                    A: 'bg-green-100 text-green-700 border-green-300',
+                    B: 'bg-blue-100 text-blue-700 border-blue-300',
+                    C: 'bg-amber-100 text-amber-700 border-amber-300',
+                    D: 'bg-orange-100 text-orange-700 border-orange-300',
+                    F: 'bg-red-100 text-red-700 border-red-300',
+                  };
+                  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
+                  return (
+                    <Card className="rounded-xl border border-purple-200 bg-purple-50 shadow-none mx-4 mb-4">
+                      <CardContent className="p-5">
+                        {/* Header row */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-purple-100 border border-purple-200">
+                              <Phone className="h-3.5 w-3.5 text-purple-600" />
+                            </div>
+                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {grade && (
+                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full border-2 text-sm font-bold ${gradeColor}`}>
+                                {grade}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
+                              className="flex items-center justify-center w-6 h-6 rounded-full text-purple-300 hover:text-purple-600 hover:bg-purple-100 transition-colors text-base leading-none"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Audio player */}
+                        {callDebrief!.audioUrl && (
+                          <div className="mb-4">
+                            <audio
+                              controls
+                              src={callDebrief!.audioUrl}
+                              className="w-full h-8 rounded-xl"
+                              style={{ accentColor: '#7c3aed' }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Divider */}
+                        <div className="border-t border-purple-200/70 mb-4" />
+
+                        {/* Went well */}
+                        <div className="mb-3">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <span className="text-green-500 text-xs">✔</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
+                          </div>
+                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.wentWell}</p>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="border-t border-purple-200/50 mb-3" />
+
+                        {/* Improve */}
+                        <div className="mb-4">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <span className="text-amber-500 text-xs">▲</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
+                          </div>
+                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.improve}</p>
+                        </div>
+
+                        {/* Next line suggestion */}
+                        <div className="rounded-2xl bg-white border border-purple-200 px-4 py-3">
+                          <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1.5">Next time, say:</p>
+                          <p className="text-sm text-purple-900 italic leading-relaxed">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                {/* ─── Actions card (merged: follow-up + call + share link) ─── */}
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
+                  <CardContent className="p-6">
+                    <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-4">Actions</div>
+                    <div className="flex flex-col gap-3">
+
+                      {/* Call client */}
+                      <button
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-violet-300 hover:bg-violet-50 transition-all duration-150"
+                        onClick={() => {
+                          const phone = selected?.phone?.replace(/\D/g, "").slice(-10);
+                          if (phone) window.location.href = `openphone://call?to=+1${phone}`;
+                        }}
+                      >
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-violet-100 group-hover:bg-violet-200 transition-colors shrink-0">
+                          <Phone className="h-4 w-4 text-violet-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Call client</div>
+                          <div className="text-[11px] text-slate-400">Open in OpenPhone</div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-violet-400 transition-colors" />
+                      </button>
+
+                      {/* Share booking link */}
+                      <button
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-blue-300 hover:bg-blue-50 transition-all duration-150"
+                        onClick={() => {
+                          const link = `${window.location.origin}/book`;
+                          navigator.clipboard.writeText(link).then(() => {
+                            const btn = document.activeElement as HTMLButtonElement;
+                            if (btn) { const orig = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = orig; }, 1500); }
+                          });
+                        }}
+                      >
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-blue-100 group-hover:bg-blue-200 transition-colors shrink-0">
+                          <Mail className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Share booking link</div>
+                          <div className="text-[11px] text-slate-400">Copy to clipboard</div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-blue-400 transition-colors" />
+                      </button>
+
+                      {/* Add follow-up */}
+                      <button
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-amber-300 hover:bg-amber-50 transition-all duration-150"
+                        onClick={() => setAddFollowUpOpen(true)}
+                      >
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-amber-100 group-hover:bg-amber-200 transition-colors shrink-0">
+                          <ClipboardList className="h-4 w-4 text-amber-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Add follow-up</div>
+                          <div className="text-[11px] text-slate-400">Schedule a reminder</div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-amber-400 transition-colors" />
+                      </button>
+
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
+                  <CardContent className="p-6">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
+                    <div className="mt-4 space-y-3">
+                      {[
+                        { label: selected.queue, icon: AlertTriangle },
+                        { label: selected.status, icon: CircleDot },
+                        { label: `${selected.wait} since last client message`, icon: Clock3 },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-2 text-sm">
+                            <item.icon className="h-4 w-4 text-slate-400" />
+                            {item.label}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </div></div>
         </div>
       </div>
     </div>
