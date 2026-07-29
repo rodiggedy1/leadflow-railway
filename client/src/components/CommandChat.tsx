@@ -6584,11 +6584,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [composer, setComposer] = useState("");
   // Message quality check
 
-  // @mention autocomplete
+    // @mention autocomplete
   const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = closed
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(0); // cursor pos of the '@'
-
+  // @madison inline name picker state (must be declared before the useQuery calls below)
+  const [madisonInlineQuery, setMadisonInlineQuery] = useState<string | null>(null);
+  const [madisonInlineLockedName, setMadisonInlineLockedName] = useState<string | null>(null);
+  const madisonInlineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Customer @mention — separate query for customer search
   const [customerMentionQuery, setCustomerMentionQuery] = useState<string | null>(null);
   const { data: customerMentionResults } = trpc.opsChat.searchCustomers.useQuery(
@@ -7520,10 +7523,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
-  // ── @madison inline name picker (shows while typing, before submit) ──────────
-  const [madisonInlineQuery, setMadisonInlineQuery] = useState<string | null>(null);
-  const [madisonInlineLockedName, setMadisonInlineLockedName] = useState<string | null>(null);
-  const madisonInlineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
   const voiceCallContactPhoneRef = useRef<string | null>(null);
