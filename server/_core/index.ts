@@ -766,18 +766,30 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] Failed to reset fired confirmation_calls (non-fatal):', err);
   }
-  // ── cs_missions table existence check ────────────────────────────────────────
+  // ── cs_missions table ────────────────────────────────────────────────────────
   try {
-    const [rows] = await db.execute(sql.raw(`SHOW TABLES LIKE 'cs_missions'`)) as any;
-    if (rows.length > 0) {
-      const [cols] = await db.execute(sql.raw(`DESCRIBE cs_missions`)) as any;
-      const colNames = cols.map((c: any) => c.Field).join(', ');
-      console.log(`[Startup] cs_missions table EXISTS — columns: ${colNames}`);
-    } else {
-      console.error('[Startup] cs_missions table MISSING — migration 0091 has not run yet');
-    }
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS cs_missions (
+        id INT AUTO_INCREMENT NOT NULL,
+        sessionId INT NOT NULL,
+        agentId INT NOT NULL,
+        agentName VARCHAR(128),
+        title VARCHAR(255) NOT NULL,
+        emoji VARCHAR(16),
+        status ENUM('active','waiting','ready','completed','cancelled') NOT NULL DEFAULT 'active',
+        stages JSON NOT NULL,
+        sortOrder INT NOT NULL DEFAULT 0,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        completedAt DATETIME(3),
+        CONSTRAINT cs_missions_id PRIMARY KEY (id)
+      )
+    `));
+    await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS idx_cs_missions_session ON cs_missions (sessionId)`));
+    await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS idx_cs_missions_session_status ON cs_missions (sessionId, status)`));
+    console.log('[Migration] cs_missions table: OK');
   } catch (err) {
-    console.error('[Startup] cs_missions check failed:', err);
+    console.error('[Migration] cs_missions table failed:', err);
   }
 }
 async function startServer() {
