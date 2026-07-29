@@ -8142,6 +8142,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setComposer("");
       setMadisonInlineQuery(null);
       const lockedPhone = madisonInlineLockedPhone;
+      const lockedName = madisonInlineLockedName;
       setMadisonInlineLockedName(null);
       setMadisonInlineLockedPhone(null);
       originalMadisonMessageRef.current = message;
@@ -8153,10 +8154,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonCallPendingCard(null);
       setMadisonEmailConfirmCard(null);
       setMadisonInvoiceCard(null);
-      // Pass the full message as resolvedClientMessageHint so the server's parseConciergeRequest
-      // can extract the correct intent via LLM — same pattern as AiConcierge focusedMessageHint.
+      // Use resolvedEntity (same as AiConcierge chip path) so the server runs parseConciergeRequest
+      // and correctly routes call/email/SMS/payment based on intent — not the legacy resolvedClientPhone
+      // path which always falls through to SMS.
       madisonChatMutation.mutate(
-        { message, ...(lockedPhone ? { resolvedClientPhone: lockedPhone, resolvedClientMessageHint: message } : {}) },
+        { message, ...(lockedPhone && lockedName ? { resolvedEntity: { type: "customer" as const, phone: lockedPhone, name: lockedName } } : {}) },
         {
           onSuccess: (result) => {
             setMadisonChatLoading(false);
