@@ -3393,6 +3393,59 @@ function MadisonCommandInvoiceCard({ card, onDismiss }: { card: MadisonInvoiceCa
     </div>
   );
 }
+// ── MadisonCommandQueryResultCard — shows query results (schedule, customer info, etc.) ──
+function MadisonCommandQueryResultCard({ card, onDismiss }: { card: { answer: string; status: string; undoActionId?: string | null }; onDismiss: () => void }) {
+  const statusColor: Record<string, string> = {
+    complete: "#34d399",
+    partial: "#fbbf24",
+    not_found: "#6b7280",
+    ambiguous: "#a78bfa",
+    error: "#f87171",
+  };
+  const color = statusColor[card.status] ?? "#6b7280";
+  const undoMutation = trpc.aiConcierge.undoMadisonAcknowledgement.useMutation();
+  const [undoState, setUndoState] = React.useState<"idle" | "loading" | "done" | "error">("idle");
+  const handleUndo = async () => {
+    if (!card.undoActionId || undoState !== "idle") return;
+    setUndoState("loading");
+    try {
+      const result = await undoMutation.mutateAsync({ actionId: card.undoActionId });
+      if (result.status === "reversed") { setUndoState("done"); } else { setUndoState("error"); }
+    } catch { setUndoState("error"); }
+  };
+  return (
+    <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #4f6ef7, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Calendar className="w-3 h-3 text-white" />
+        </div>
+        <p style={{ flex: 1, fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>Operations Query</p>
+        <span style={{ fontSize: 10, fontWeight: 600, color, background: `${color}22`, padding: "2px 8px", borderRadius: 10, textTransform: "capitalize", whiteSpace: "nowrap" }}>
+          {card.status.replace("_", " ")}
+        </span>
+        <button onClick={onDismiss} style={{ marginLeft: 4, color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        {card.answer.split("\n").filter(Boolean).map((line, i) => (
+          <p key={i} style={{ fontSize: 13, color: "#c8cde8", lineHeight: 1.6, marginBottom: 4 }}>{line}</p>
+        ))}
+      </div>
+      {card.undoActionId && (
+        <div style={{ padding: "8px 14px 12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          {undoState === "done" ? (
+            <span style={{ fontSize: 12, color: "#34d399" }}>Acknowledgement reversed.</span>
+          ) : undoState === "error" ? (
+            <span style={{ fontSize: 12, color: "#f87171" }}>Undo failed — the window may have expired.</span>
+          ) : (
+            <button onClick={handleUndo} disabled={undoState === "loading"} style={{ fontSize: 12, fontWeight: 600, color: undoState === "loading" ? "#6b7280" : "#a78bfa", background: "transparent", border: "1px solid rgba(167,139,250,0.3)", borderRadius: 8, padding: "4px 12px", cursor: undoState === "loading" ? "not-allowed" : "pointer" }}>
+              {undoState === "loading" ? "Undoing…" : "↩ Undo"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 // ── MadisonCallConfirmCard — ephemeral confirm card for @madison call [customer] ──
 type MadisonCallConfirm = {
   type: "call_client_confirm";
@@ -7521,6 +7574,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonDisambigCard, setMadisonDisambigCard] = useState<MadisonDisambigCard | null>(null);
   const [madisonEmailConfirmCard, setMadisonEmailConfirmCard] = useState<MadisonEmailConfirm | null>(null);
   const [madisonInvoiceCard, setMadisonInvoiceCard] = useState<MadisonInvoiceCard | null>(null);
+  const [madisonQueryResultCard, setMadisonQueryResultCard] = useState<{ answer: string; status: string; undoActionId?: string | null } | null>(null);
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
@@ -8154,6 +8208,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonCallPendingCard(null);
       setMadisonEmailConfirmCard(null);
       setMadisonInvoiceCard(null);
+      setMadisonQueryResultCard(null);
       // Use resolvedEntity (same as AiConcierge chip path) so the server runs parseConciergeRequest
       // and correctly routes call/email/SMS/payment based on intent — not the legacy resolvedClientPhone
       // path which always falls through to SMS.
@@ -8172,6 +8227,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setMadisonEmailConfirmCard(result as MadisonEmailConfirm);
             } else if (result.type === "generate_invoice") {
               setMadisonInvoiceCard(result as MadisonInvoiceCard);
+            } else if (result.type === "query_result") {
+              setMadisonQueryResultCard({ answer: (result as any).answer, status: (result as any).status, undoActionId: (result as any).undoActionId ?? null });
             } else if (result.type === "client_disambiguation") {
               setMadisonDisambigCard(result as MadisonDisambigCard);
             } else if (result.type === "not_found") {
@@ -10388,6 +10445,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <MadisonCommandInvoiceCard
               card={madisonInvoiceCard}
               onDismiss={() => setMadisonInvoiceCard(null)}
+            />
+          )}
+          {madisonQueryResultCard && (
+            <MadisonCommandQueryResultCard
+              card={madisonQueryResultCard}
+              onDismiss={() => setMadisonQueryResultCard(null)}
             />
           )}
           {madisonCallPendingCard && (
