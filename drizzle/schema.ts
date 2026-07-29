@@ -4127,7 +4127,7 @@ export const csMissions = mysqlTable("cs_missions", {
   agentName: varchar("agentName", { length: 128 }),
   title: varchar("title", { length: 255 }).notNull(),
   emoji: varchar("emoji", { length: 16 }),
-  status: mysqlEnum("status_cs_mission", ["active", "waiting", "ready", "completed", "cancelled"]).default("active").notNull(),
+  status: mysqlEnum("status", ["active", "waiting", "ready", "completed", "cancelled"]).default("active").notNull(),
   stages: json("stages").notNull(),
   sortOrder: int("sortOrder").default(0).notNull(),
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
