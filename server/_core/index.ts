@@ -1171,6 +1171,26 @@ async function startServer() {
     } catch (e: any) { result.ashleyCardError = { message: e.message }; }
     return res.json(result);
   });
+  // TEMPORARY: ops_chat_messages dedup column check
+  app.get("/api/diag/sms-dedup", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    const db = await getDb();
+    if (!db) return res.status(500).json({ error: 'no db' });
+    const result: Record<string, unknown> = {};
+    try {
+      const [cols] = await db.execute(sql.raw(`SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ops_chat_messages' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION`)) as any;
+      result.columns = cols;
+    } catch (e: any) { result.columnsError = e.message; }
+    try {
+      const [idx] = await db.execute(sql.raw(`SELECT INDEX_NAME, NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_NAME = 'ops_chat_messages' AND TABLE_SCHEMA = DATABASE() GROUP BY INDEX_NAME, NON_UNIQUE`)) as any;
+      result.indexes = idx;
+    } catch (e: any) { result.indexesError = e.message; }
+    try {
+      const [cards] = await db.execute(sql.raw(`SELECT id, quickAction, sessionId, cardStatus, lastActivityAt, metadata FROM ops_chat_messages WHERE quickAction = 'madison_sms_draft' ORDER BY id DESC LIMIT 20`)) as any;
+      result.recentSmsCards = cards;
+    } catch (e: any) { result.recentSmsCardsError = e.message; }
+    return res.json(result);
+  });
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
     try {
