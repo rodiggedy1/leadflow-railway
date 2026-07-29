@@ -20,6 +20,7 @@
  *   "lead_assignment"   — a lead was assigned to an agent from Lead Ops
  *   "ping"              — keepalive (sent every 25s to prevent proxy timeouts)
  *   "task_update"       — a task was created, updated, or completed
+ *   "cs_mission_update" — a cs_mission was created, updated, or completed
  */
 
 import type { Response } from "express";
@@ -39,7 +40,8 @@ export type OpsEventType =
   | "gmail_new_messages"
   | "missed_call"
   | "missed_call_resolved"
-  | "task_update";
+  | "task_update"
+  | "cs_mission_update";
 
 export interface OpsEvent {
   type: OpsEventType;
@@ -58,6 +60,8 @@ export interface OpsEvent {
   targetAgentNames?: string[];
   /** For thread reply events — ID of the parent message */
   threadParentId?: number;
+  /** For cs_mission_update events — the conversation session that changed */
+  sessionId?: number;
   ts: number;
 }
 

@@ -4105,3 +4105,37 @@ export const madisonEmailDrafts = mysqlTable("madison_email_drafts", {
 ]);
 export type MadisonEmailDraft = typeof madisonEmailDrafts.$inferSelect;
 export type InsertMadisonEmailDraft = typeof madisonEmailDrafts.$inferInsert;
+
+// ── CS Operations Missions ────────────────────────────────────────────────────
+/**
+ * csMissions — live, per-conversation operation cards in the Operations Center panel.
+ * Each row represents one active piece of work for a specific CS conversation.
+ * Stages are stored as JSON (CsMissionStage[]) and updated as the operation progresses.
+ */
+export interface CsMissionStage {
+  id: string;
+  label: string;
+  status: "done" | "waiting" | "ready" | "pending";
+  content?: string;
+  suggestedReply?: string;
+  ts?: number;
+}
+export const csMissions = mysqlTable("cs_missions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  agentId: int("agentId").notNull(),
+  agentName: varchar("agentName", { length: 128 }),
+  title: varchar("title", { length: 255 }).notNull(),
+  emoji: varchar("emoji", { length: 16 }),
+  status: mysqlEnum("status_cs_mission", ["active", "waiting", "ready", "completed", "cancelled"]).default("active").notNull(),
+  stages: json("stages").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+  completedAt: datetime("completedAt", { mode: "date", fsp: 3 }),
+}, (t) => [
+  index("idx_cs_missions_session").on(t.sessionId),
+  index("idx_cs_missions_session_status").on(t.sessionId, t.status),
+]);
+export type CsMission = typeof csMissions.$inferSelect;
+export type InsertCsMission = typeof csMissions.$inferInsert;
