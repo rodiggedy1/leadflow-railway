@@ -12,9 +12,9 @@ import { z } from "zod";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { csMissions } from "../drizzle/schema";
+import { csMissions, conversationSessions, cleanerJobs } from "../drizzle/schema";
 import type { CsMissionStage } from "../drizzle/schema";
-import { eq, and, inArray, asc, desc } from "drizzle-orm";
+import { eq, and, inArray, asc, desc, sql } from "drizzle-orm";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const stageSchema = z.object({
@@ -208,5 +208,47 @@ export const csMissionsRouter = router({
         .where(eq(csMissions.id, input.missionId));
       broadcastOpsUpdate("cs_mission_update", { sessionId: existing.sessionId });
       return { ok: true };
+    }),
+
+  /**
+   * getSessionContext — returns the assigned team name for a session.
+   * Looks up the session's leadPhone, then finds the next upcoming cleanerJob
+   * to get the teamName (or cleanerName as fallback).
+   */
+  getSessionContext: agentProcedure
+    .input(z.object({ sessionId: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { teamName: null, leadPhone: null };
+      // 1. Get the session's phone number
+      const [session] = await db
+        .select({ leadPhone: conversationSessions.leadPhone })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session?.leadPhone) return { teamName: null, leadPhone: null };
+      // Normalize to 10 digits
+      const phone10 = session.leadPhone.replace(/[^\d]/g, "").slice(-10);
+      if (phone10.length < 10) return { teamName: null, leadPhone: session.leadPhone };
+      // 2. Find today's or next upcoming cleaner job for this customer
+      const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+      const todayET = nowET.toISOString().slice(0, 10);
+      const [job] = await db
+        .select({
+          teamName: cleanerJobs.teamName,
+          cleanerName: cleanerJobs.cleanerName,
+          jobDate: cleanerJobs.jobDate,
+        })
+        .from(cleanerJobs)
+        .where(
+          and(
+            sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phone10}`,
+            sql`${cleanerJobs.jobDate} >= ${todayET}`
+          )
+        )
+        .orderBy(asc(cleanerJobs.jobDate))
+        .limit(1);
+      const teamName = job?.teamName ?? job?.cleanerName ?? null;
+      return { teamName, leadPhone: session.leadPhone };
     }),
 });

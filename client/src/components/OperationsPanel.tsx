@@ -1,20 +1,6 @@
 /**
  * OperationsPanel.tsx
  * The Operations Center — right panel of the CS Inbox.
- *
- * Layout:
- *   ┌─────────────────────────────┐
- *   │  Header: Customer name      │  ← pinned, always shows selected conversation
- *   │  "Operations" · N Active    │
- *   ├─────────────────────────────┤
- *   │  Mission cards (scrollable) │  ← animated, live-updating via SSE
- *   │  [+ New Mission] button     │
- *   ├─────────────────────────────┤
- *   │  Reference footer           │  ← Notes · Timeline · Quick actions
- *   └─────────────────────────────┘
- *
- * Design: matches the existing CsInbox aesthetic (white cards, soft shadows,
- * #7C5CFF accent, Inter font, rounded-[28px] outer shell).
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -56,29 +42,17 @@ interface CsMissionRow {
 }
 
 interface OperationsPanelProps {
-  /** The currently selected conversation session id */
   sessionId: number | null;
-  /** Customer display name */
   customerName: string;
-  /** Customer initials (for avatar) */
   initials: string;
-  /** Agent id from agents.me */
   agentId: number;
-  /** Agent name from agents.me */
   agentName: string;
-  /** Whether this is a Teams conversation (cleaner) */
   isTeams?: boolean;
-  /** Called when user clicks the Call quick action */
   onCallClick?: () => void;
-  /** Called when user clicks the Share link quick action */
   onShareLinkClick?: () => void;
-  /** Called when user clicks the Notes reference link */
   onNotesClick?: () => void;
-  /** Called when user clicks the Timeline reference link */
   onTimelineClick?: () => void;
-  /** Notes count to display in the footer */
   notesCount?: number;
-  /** Invalidation trigger from SSE — increment to force refetch */
   sseRefetchKey?: number;
 }
 
@@ -123,6 +97,51 @@ const STATUS_BADGE: Record<CsMissionRow["status"], { label: string; className: s
   completed: { label: "Done",      className: "bg-slate-100 text-slate-500" },
   cancelled: { label: "Cancelled", className: "bg-slate-100 text-slate-400" },
 };
+
+// ── Stage templates keyed by mission title ─────────────────────────────────────
+
+function buildStages(title: string, teamName: string | null): CsMissionStage[] {
+  const team = teamName ?? "the team";
+  const now = Date.now();
+  switch (title) {
+    case "Get ETA":
+      return [
+        { id: `${now}-1`, label: `Text ${team} for ETA`, status: "pending" },
+        { id: `${now}-2`, label: `Waiting on ${team}`, status: "pending" },
+        { id: `${now}-3`, label: "Reply to customer with ETA", status: "pending" },
+      ];
+    case "Send Gate Code":
+      return [
+        { id: `${now}-1`, label: `Get gate code from ${team}`, status: "pending" },
+        { id: `${now}-2`, label: "Send gate code to customer", status: "pending" },
+      ];
+    case "Follow-up Needed":
+      return [
+        { id: `${now}-1`, label: "Review customer message", status: "pending" },
+        { id: `${now}-2`, label: "Follow up with customer", status: "pending" },
+      ];
+    case "Payment Question":
+      return [
+        { id: `${now}-1`, label: "Review payment issue", status: "pending" },
+        { id: `${now}-2`, label: "Resolve with customer", status: "pending" },
+      ];
+    case "Room Change Request":
+      return [
+        { id: `${now}-1`, label: `Notify ${team} of room change`, status: "pending" },
+        { id: `${now}-2`, label: "Confirm change with customer", status: "pending" },
+      ];
+    case "Special Instructions":
+      return [
+        { id: `${now}-1`, label: `Forward instructions to ${team}`, status: "pending" },
+        { id: `${now}-2`, label: "Confirm receipt with customer", status: "pending" },
+      ];
+    default:
+      return [
+        { id: `${now}-1`, label: "Action needed", status: "pending" },
+        { id: `${now}-2`, label: "Follow up", status: "pending" },
+      ];
+  }
+}
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -295,10 +314,12 @@ function NewMissionForm({
   onSubmit,
   onCancel,
   isLoading,
+  teamName,
 }: {
   onSubmit: (title: string, emoji: string) => void;
   onCancel: () => void;
   isLoading: boolean;
+  teamName: string | null;
 }) {
   const [title, setTitle] = useState("");
   const [emoji, setEmoji] = useState("📌");
@@ -316,7 +337,14 @@ function NewMissionForm({
       className="rounded-2xl p-4 flex flex-col gap-3"
       style={{ background: "#F8F6FF", border: "1.5px solid rgba(124,92,255,.25)" }}
     >
-      <p className="text-xs font-bold text-violet-700 uppercase tracking-wide">New Mission</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-violet-700 uppercase tracking-wide">New Mission</p>
+        {teamName && (
+          <span className="text-[10px] text-slate-400 font-medium">
+            Team: <span className="text-slate-600 font-semibold">{teamName}</span>
+          </span>
+        )}
+      </div>
 
       {/* Quick templates */}
       <div className="flex flex-wrap gap-1.5">
@@ -403,6 +431,17 @@ export function OperationsPanel({
     }
   );
 
+  // Session context — team name for stage templates
+  const { data: sessionContext } = trpc.csMissions.getSessionContext.useQuery(
+    { sessionId: sessionId! },
+    {
+      enabled: !!sessionId,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
+  );
+  const teamName = sessionContext?.teamName ?? null;
+
   // Refetch when SSE fires a cs_mission_update for this session
   const prevRefetchKey = useRef(sseRefetchKey);
   useEffect(() => {
@@ -415,22 +454,18 @@ export function OperationsPanel({
   // ── Mutations ─────────────────────────────────────────────────────────────
   const createMission = trpc.csMissions.create.useMutation({
     onSuccess: (data) => {
-      console.log("[Operations] mission created", data);
       setShowNewForm(false);
       if (sessionId) utils.csMissions.listBySession.invalidate({ sessionId });
     },
     onError: (err) => {
-      console.error("[Operations] create failed", err);
       toast.error(err.message || "Could not create mission");
     },
   });
-
   const completeMission = trpc.csMissions.complete.useMutation({
     onSuccess: () => {
       if (sessionId) utils.csMissions.listBySession.invalidate({ sessionId });
     },
   });
-
   const cancelMission = trpc.csMissions.cancel.useMutation({
     onSuccess: () => {
       if (sessionId) utils.csMissions.listBySession.invalidate({ sessionId });
@@ -443,24 +478,20 @@ export function OperationsPanel({
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleCreate(title: string, emoji: string) {
-    if (!hasValidContext || !sessionId) {
+    if (!sessionId) {
       toast.error("Select a customer conversation before creating a mission");
       return;
     }
-    createMission.mutate({ sessionId, title, emoji });
+    const stages = buildStages(title, teamName);
+    createMission.mutate({ sessionId, title, emoji, stages });
   }
 
   function handleSendReply(text: string, missionId: number) {
-    // Bubble up to CsInbox to pre-fill the composer
-    // For now, copy to clipboard as a fallback
     navigator.clipboard?.writeText(text).catch(() => {});
-    // TODO: wire to CsInbox composer via callback prop
   }
 
   // ── Empty state ───────────────────────────────────────────────────────────
   const isEmpty = !isLoading && activeMissions.length === 0 && !showNewForm;
-  // ── Context validity ─────────────────────────────────────────────────────
-  // agentId is resolved server-side from ctx.agent — only sessionId is required client-side
   const hasValidContext = !!sessionId;
 
   return (
@@ -521,10 +552,11 @@ export function OperationsPanel({
                     {activeMissions.length}
                   </span>
                 )}
-                {/* DIAGNOSTIC — remove after verification */}
-                <span className="text-[9px] text-slate-400 font-mono ml-1">
-                  sid={sessionId ?? "∅"} aid={agentId || "∅"}
-                </span>
+                {teamName && (
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    · {teamName}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -548,7 +580,7 @@ export function OperationsPanel({
 
       {/* ── Mission list (scrollable) ────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
-        {/* No session selected — show empty state and block all creation */}
+        {/* No session selected */}
         {!hasValidContext && (
           <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
             <div
@@ -565,6 +597,7 @@ export function OperationsPanel({
             </div>
           </div>
         )}
+
         {/* New mission form */}
         <AnimatePresence>
           {showNewForm && (
@@ -573,6 +606,7 @@ export function OperationsPanel({
               onSubmit={handleCreate}
               onCancel={() => setShowNewForm(false)}
               isLoading={createMission.isPending}
+              teamName={teamName}
             />
           )}
         </AnimatePresence>
@@ -591,7 +625,7 @@ export function OperationsPanel({
         )}
 
         {/* Empty state */}
-        {isEmpty && (
+        {isEmpty && hasValidContext && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -635,7 +669,7 @@ export function OperationsPanel({
           ))}
         </AnimatePresence>
 
-        {/* Completed missions (collapsed by default) */}
+        {/* Completed missions */}
         {completedMissions.length > 0 && (
           <details className="group">
             <summary className="text-xs font-semibold text-slate-400 cursor-pointer select-none hover:text-slate-600 transition-colors list-none flex items-center gap-1.5 py-1">
@@ -668,7 +702,6 @@ export function OperationsPanel({
           background: "#FFFFFF",
         }}
       >
-        {/* Reference links */}
         <div className="flex divide-x divide-slate-100">
           <button
             type="button"
@@ -688,7 +721,6 @@ export function OperationsPanel({
           </button>
         </div>
 
-        {/* Quick actions */}
         <div
           className="flex divide-x"
           style={{ borderTop: "1px solid rgba(16,24,40,.06)", divideColor: "rgba(16,24,40,.06)" }}
