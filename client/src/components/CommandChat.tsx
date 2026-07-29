@@ -1018,6 +1018,7 @@ type MessageListProps = {
   onOpenConcierge: () => void;
   onCallBack: (name: string, phone: string, msgId: number) => void;
   onTextBack: (name: string, phone: string, msgId: number) => void;
+  onSelectOpsSession?: (sessionId: number, customerName: string) => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -3713,6 +3714,7 @@ const MessageList = memo(function MessageList({
   onOpenConcierge,
   onCallBack,
   onTextBack,
+  onSelectOpsSession,
 }: MessageListProps) {
   return (
     <>
@@ -5347,9 +5349,8 @@ const MessageList = memo(function MessageList({
                         msg={msg}
                         callerName={callerName}
                         onSelectSession={(sid, name) => {
-                          const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
                           console.log("[Operations] MadisonSmsDraftCard onSelectSession fired", { sessionId: sid, customerName: name });
-                          setActiveOpsSession({ sessionId: sid, customerName: name, initials });
+                          onSelectOpsSession?.(sid, name);
                         }}
                       />
                     </div>
@@ -5380,9 +5381,8 @@ const MessageList = memo(function MessageList({
                         onCallBack={onCallBack}
                         onTextBack={onTextBack}
                         onSelectSession={(sid, name) => {
-                          const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
                           console.log("[Operations] MadisonCallSummaryCard selected", { sessionId: sid, customerName: name });
-                          setActiveOpsSession({ sessionId: sid, customerName: name, initials });
+                          onSelectOpsSession?.(sid, name);
                         }}
                       />
                     </div>
@@ -9627,6 +9627,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             });
             setVoiceTone("friendly");
             setVoiceCardMinimized(false);
+          }}
+          onSelectOpsSession={(sid, name) => {
+            const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+            setActiveOpsSession({ sessionId: sid, customerName: name, initials });
           }}
         />
         {/* New-message badge — shown when user is scrolled up */}
