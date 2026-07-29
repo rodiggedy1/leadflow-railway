@@ -822,6 +822,17 @@ async function runStartupMigrations() {
       console.log('[Migration] ops_chat_messages.activeDedupKey: already exists');
     }
 
+    // Step 5b: Backfill sessionId from metadata JSON for existing SMS draft cards
+    await db.execute(sql.raw(`
+      UPDATE ops_chat_messages
+      SET sessionId = CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.sessionId')) AS UNSIGNED)
+      WHERE quickAction = 'madison_sms_draft'
+        AND sessionId IS NULL
+        AND metadata IS NOT NULL
+        AND JSON_EXTRACT(metadata, '$.sessionId') IS NOT NULL
+    `));
+    console.log('[Migration] ops_chat_messages.sessionId: backfilled from metadata');
+
     // Step 6: Detect and resolve existing duplicate active SMS cards per session
     const [dupRows] = await db.execute(sql.raw(`
       SELECT sessionId, COUNT(*) AS cnt
