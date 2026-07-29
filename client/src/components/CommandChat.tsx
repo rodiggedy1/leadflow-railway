@@ -1387,9 +1387,12 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession }: { msg:
   // ── Auto-activate Operations panel when draft loads ──
   const prevSessionRef = React.useRef<number | null>(null);
   React.useEffect(() => {
-    if (meta.sessionId && draft?.senderName && prevSessionRef.current !== meta.sessionId) {
+    // Fire as soon as we have a sessionId — use senderName if available, else "Customer"
+    if (meta.sessionId && prevSessionRef.current !== meta.sessionId) {
       prevSessionRef.current = meta.sessionId;
-      onSelectSession?.(meta.sessionId, draft.senderName);
+      const name = draft?.senderName ?? "Customer";
+      console.log("[Operations] MadisonSmsDraftCard auto-activate", { sessionId: meta.sessionId, name });
+      onSelectSession?.(meta.sessionId, name);
     }
   }, [meta.sessionId, draft?.senderName, onSelectSession]);
   const handleCardClick = () => {
@@ -1471,7 +1474,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession }: { msg:
   }
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }} onClick={handleCardClick}>
       {/* Outer wrapper — no card chrome here, just the chat row */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* V6 card */}

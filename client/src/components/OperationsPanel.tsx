@@ -460,7 +460,8 @@ export function OperationsPanel({
   // ── Empty state ───────────────────────────────────────────────────────────
   const isEmpty = !isLoading && activeMissions.length === 0 && !showNewForm;
   // ── Context validity ─────────────────────────────────────────────────────
-  const hasValidContext = !!sessionId && !!agentId && customerName.trim() !== "";
+  // agentId is resolved server-side from ctx.agent — only sessionId is required client-side
+  const hasValidContext = !!sessionId;
 
   return (
     <div
