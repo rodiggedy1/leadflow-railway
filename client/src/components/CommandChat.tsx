@@ -921,6 +921,7 @@ function HotLeadsTray({
               onOpenFirstMsg={onOpenFirstMsg}
               onSelectSession={(sid, name) => {
                 const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+                console.log("[Operations] HotLeadCard selected", { sessionId: sid, customerName: name });
                 setActiveOpsSession({ sessionId: sid, customerName: name, initials });
               }}
               sessionStatus={(() => {
@@ -5347,6 +5348,7 @@ const MessageList = memo(function MessageList({
                         onTextBack={onTextBack}
                         onSelectSession={(sid, name) => {
                           const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+                          console.log("[Operations] MadisonCallSummaryCard selected", { sessionId: sid, customerName: name });
                           setActiveOpsSession({ sessionId: sid, customerName: name, initials });
                         }}
                       />

@@ -18,6 +18,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import type { CsMissionStage } from "../../../drizzle/schema";
@@ -413,9 +414,14 @@ export function OperationsPanel({
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const createMission = trpc.csMissions.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("[Operations] mission created", data);
       setShowNewForm(false);
       if (sessionId) utils.csMissions.listBySession.invalidate({ sessionId });
+    },
+    onError: (err) => {
+      console.error("[Operations] create failed", err);
+      toast.error(err.message || "Could not create mission");
     },
   });
 
@@ -437,7 +443,10 @@ export function OperationsPanel({
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleCreate(title: string, emoji: string) {
-    if (!sessionId) return;
+    if (!hasValidContext || !sessionId) {
+      toast.error("Select a customer conversation before creating a mission");
+      return;
+    }
     createMission.mutate({ sessionId, title, emoji });
   }
 
@@ -450,6 +459,8 @@ export function OperationsPanel({
 
   // ── Empty state ───────────────────────────────────────────────────────────
   const isEmpty = !isLoading && activeMissions.length === 0 && !showNewForm;
+  // ── Context validity ─────────────────────────────────────────────────────
+  const hasValidContext = !!sessionId && !!agentId && customerName.trim() !== "";
 
   return (
     <div
@@ -509,6 +520,10 @@ export function OperationsPanel({
                     {activeMissions.length}
                   </span>
                 )}
+                {/* DIAGNOSTIC — remove after verification */}
+                <span className="text-[9px] text-slate-400 font-mono ml-1">
+                  sid={sessionId ?? "∅"} aid={agentId || "∅"}
+                </span>
               </div>
             </div>
           </div>
@@ -517,9 +532,11 @@ export function OperationsPanel({
           {!showNewForm && (
             <button
               type="button"
-              onClick={() => setShowNewForm(true)}
-              className="flex-shrink-0 flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl text-white transition-all hover:opacity-90 active:scale-95"
+              disabled={!hasValidContext}
+              onClick={() => hasValidContext && setShowNewForm(true)}
+              className="flex-shrink-0 flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ background: "linear-gradient(135deg,#7C5CFF,#6B4FE0)" }}
+              title={!hasValidContext ? "Select a customer conversation first" : undefined}
             >
               <Plus className="w-3 h-3" />
               New
@@ -530,6 +547,23 @@ export function OperationsPanel({
 
       {/* ── Mission list (scrollable) ────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+        {/* No session selected — show empty state and block all creation */}
+        {!hasValidContext && (
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
+              style={{ background: "rgba(124,92,255,.08)" }}
+            >
+              💬
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-700">No conversation selected</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Select a customer conversation to view and create missions
+              </p>
+            </div>
+          </div>
+        )}
         {/* New mission form */}
         <AnimatePresence>
           {showNewForm && (

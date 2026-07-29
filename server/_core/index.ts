@@ -766,6 +766,19 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] Failed to reset fired confirmation_calls (non-fatal):', err);
   }
+  // ── cs_missions table existence check ────────────────────────────────────────
+  try {
+    const [rows] = await db.execute(sql.raw(`SHOW TABLES LIKE 'cs_missions'`)) as any;
+    if (rows.length > 0) {
+      const [cols] = await db.execute(sql.raw(`DESCRIBE cs_missions`)) as any;
+      const colNames = cols.map((c: any) => c.Field).join(', ');
+      console.log(`[Startup] cs_missions table EXISTS — columns: ${colNames}`);
+    } else {
+      console.error('[Startup] cs_missions table MISSING — migration 0091 has not run yet');
+    }
+  } catch (err) {
+    console.error('[Startup] cs_missions check failed:', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB
