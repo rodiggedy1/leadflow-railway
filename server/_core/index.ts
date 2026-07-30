@@ -1142,6 +1142,25 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] cs_missions table failed:', err);
   }
+
+  // sms_card_diag — lightweight diagnostic table for insert verification
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS sms_card_diag (
+        id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        sessionId  BIGINT,
+        draftId    BIGINT,
+        insertId   BIGINT,
+        affectedRows INT,
+        dedupKey   VARCHAR(320),
+        diagPayload TEXT,
+        createdAt  DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `));
+    console.log('[Migration] sms_card_diag table: OK');
+  } catch (err) {
+    console.error('[Migration] sms_card_diag table failed:', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB

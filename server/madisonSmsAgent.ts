@@ -895,6 +895,34 @@ async function postDraftCardToCommandChat(params: {
     console.log('[SMS CARD INSERT] ON DUPLICATE KEY UPDATE fired (no new insertId), affectedRows=%s', affectedRows);
   }
 
+  // Persist diagnostic record to DB so it's queryable after the fact
+  // (not reliant on Railway log buffer)
+  try {
+    const storedRowCheck = await db.execute(sql.raw(`
+      SELECT id, sessionId, activeDedupKey, cardStatus, lastActivityAt,
+             JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.sessionId')) AS metaSessionId
+      FROM ops_chat_messages
+      WHERE id = (SELECT MAX(id) FROM ops_chat_messages WHERE quickAction = 'madison_sms_draft' AND channel = 'command')
+    `)) as any;
+    const storedRow = (storedRowCheck?.[0] ?? storedRowCheck)?.[0] ?? null;
+    const diagJson = JSON.stringify({
+      sessionId,
+      draftId,
+      dedupKey,
+      insertId,
+      affectedRows,
+      storedRow,
+      ts: new Date().toISOString(),
+    }).replace(/'/g, "\\'");
+    await db.execute(sql.raw(`
+      INSERT INTO sms_card_diag (sessionId, draftId, insertId, affectedRows, dedupKey, diagPayload, createdAt)
+      VALUES (${sessionId}, ${draftId}, ${insertId}, ${affectedRows}, '${dedupKey}', '${diagJson}', NOW())
+    `));
+  } catch (_diagErr: any) {
+    // diag table may not exist yet — ignore silently
+    console.log('[SMS CARD DIAG] write skipped:', _diagErr?.message);
+  }
+
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("new_message", { channel: "command" });
