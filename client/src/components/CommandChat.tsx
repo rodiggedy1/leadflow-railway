@@ -3679,8 +3679,10 @@ function MadisonUnansweredSmsCard({ card, onDismiss }: { card: CmdUnansweredSmsC
   const fmtWait = (ms: number) => {
     const m = Math.floor(ms / 60000);
     if (m < 60) return `${m}m`;
-    const h = Math.floor(m / 60); const rm = m % 60;
-    return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+    const h = Math.floor(m / 60);
+    if (h < 24) { const rm = m % 60; return rm > 0 ? `${h}h ${rm}m` : `${h}h`; }
+    const d = Math.floor(h / 24); const rh = h % 24;
+    return rh > 0 ? `${d}d ${rh}h` : `${d}d`;
   };
   const waitColor = (ms: number) => {
     const m = ms / 60000;
@@ -3688,7 +3690,7 @@ function MadisonUnansweredSmsCard({ card, onDismiss }: { card: CmdUnansweredSmsC
     if (m >= 30) return { color: "#f59e0b", bg: "#f59e0b22" };
     return { color: "#6b7280", bg: "#6b728022" };
   };
-  const sorted = [...card.rows].filter(r => !resolved.has(r.sessionId)).sort((a, b) => b.waitMs - a.waitMs);
+  const sorted = [...card.rows].filter(r => !resolved.has(r.sessionId)).sort((a, b) => a.waitMs - b.waitMs);
   if (sorted.length === 0) {
     return (
       <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -3718,7 +3720,7 @@ function MadisonUnansweredSmsCard({ card, onDismiss }: { card: CmdUnansweredSmsC
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#2a2e47", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}><User className="w-3.5 h-3.5" style={{ color: "#6b7280" }} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 2 }}>{displayName}</p>
-              {row.lastMessagePreview && <p style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.lastMessagePreview}</p>}
+              {row.lastMessagePreview && <p style={{ fontSize: 12, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.lastMessagePreview}</p>}
             </div>
             <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtWait(row.waitMs)}</span>
             <button title="Resolve" onClick={e => { e.stopPropagation(); resolveSession.mutate({ sessionId: row.sessionId }); }} style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px 4px", flexShrink: 0, opacity: 0.5 }} onMouseEnter={e => { e.currentTarget.style.opacity = "1"; }} onMouseLeave={e => { e.currentTarget.style.opacity = "0.5"; }}>
