@@ -2678,7 +2678,7 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
 // ─── Command chip ─────────────────────────────────────────────────────────────
 
-const EXAMPLES = [
+export const EXAMPLES = [
   { emoji: "🚗", label: "ETA update", example: "Update ETA for Maria's team" },
   { emoji: "📞", label: "Call client", example: "Call Sarah about her upcoming clean" },
   { emoji: "💬", label: "Text client", example: "Text Jennifer I'll be 15 min late" },
@@ -2706,7 +2706,7 @@ const HINT_EXAMPLES = [
   'Try: "Call Sarah about her upcoming clean"',
 ];
 
-function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
+export function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
   return (
     <div className="mb-2 rounded-xl overflow-hidden" style={{background:"#fffdf9",border:"1px solid #e8dff0",boxShadow:"0 4px 24px rgba(120,80,160,0.08)"}}>
       <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #ede6f5"}}>

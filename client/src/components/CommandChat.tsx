@@ -39,6 +39,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { BulkSmsConfirmCard } from "./BulkSmsConfirmCard";
+import { CommandPicker } from "./AiConcierge";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
@@ -7857,6 +7858,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── @madison command state ─────────────────────────────────────────────────────────────────────────────
   const [madisonPendingCard, setMadisonPendingCard] = useState<MadisonPaymentConfirm | null>(null);
   const [madisonSmsPendingCard, setMadisonSmsPendingCard] = useState<MadisonSmsConfirm | null>(null);
+  const [showMadisonCommands, setShowMadisonCommands] = useState(false);
   const [madisonCallConfirmCard, setMadisonCallConfirmCard] = useState<MadisonCallConfirm | null>(null);
   const [madisonCallPendingCard, setMadisonCallPendingCard] = useState<MadisonCallPending | null>(null);
   const [madisonDisambigCard, setMadisonDisambigCard] = useState<MadisonDisambigCard | null>(null);
@@ -11188,6 +11190,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               onBlur={onCmdBlur}
             />
             {/* WhatsApp-style bottom bar: + menu | emoji */}
+              {/* Commands button — opens CommandPicker panel */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMadisonCommands(v => !v)}
+                  title="Madison commands"
+                  style={{ border: 0, background: showMadisonCommands ? "linear-gradient(145deg,#7447f5,#9b6ff5)" : "#f0ecff", color: showMadisonCommands ? "#fff" : "#7447f5", padding: "10px 14px", borderRadius: 999, fontSize: 11, fontWeight: 800, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <Zap style={{ width: 12, height: 12 }} />
+                  Commands
+                </button>
+                {showMadisonCommands && (
+                  <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, zIndex: 50, width: 380, maxHeight: "60vh", overflowY: "auto" }}>
+                    <CommandPicker
+                      onSelect={(cmd) => {
+                        // Prepend @madison if not already present
+                        const prefixed = /^@madison/i.test(cmd) ? cmd : `@madison ${cmd}`;
+                        // Set the composer value — find the composerRef setter
+                        setComposer(prefixed);
+                        setShowMadisonCommands(false);
+                        composerRef.current?.focus();
+                      }}
+                      onClose={() => setShowMadisonCommands(false)}
+                    />
+                  </div>
+                )}
+              </div>
               {/* PTT mic button — hold to talk, release to send */}
               <button
                 style={{ width: 42, height: 42, borderRadius: 14, border: isPttActive ? "1px solid #ef4444" : "1px solid #e0e4ef", background: isPttActive ? "#ef4444" : isTranscribing ? "#f5f3ff" : "#fff", color: isPttActive ? "#fff" : isTranscribing ? "#a78bfa" : "#6e7890", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, lineHeight: 1, flexShrink: 0, cursor: isTranscribing ? "wait" : "pointer", transition: "background .15s", userSelect: "none" }}
