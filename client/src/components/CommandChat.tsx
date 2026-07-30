@@ -6649,6 +6649,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // @madison inline name picker state (must be declared before the useQuery calls below)
   const [madisonInlineQuery, setMadisonInlineQuery] = useState<string | null>(null);
   const [madisonInlineLockedName, setMadisonInlineLockedName] = useState<string | null>(null);
+  const [madisonInlineLockedPhone, setMadisonInlineLockedPhone] = useState<string | null>(null);
   const madisonInlineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Customer @mention — separate query for customer search
   const [customerMentionQuery, setCustomerMentionQuery] = useState<string | null>(null);
@@ -7593,11 +7594,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
-  // ── @madison inline name picker (shows while typing, before submit) ──────────
-  const [madisonInlineQuery, setMadisonInlineQuery] = useState<string | null>(null);
-  const [madisonInlineLockedName, setMadisonInlineLockedName] = useState<string | null>(null);
-  const [madisonInlineLockedPhone, setMadisonInlineLockedPhone] = useState<string | null>(null);
-  const madisonInlineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
   const voiceCallContactPhoneRef = useRef<string | null>(null);
