@@ -925,6 +925,7 @@ async function handleSendPaymentLink(
   let recipientPhone: string;
   let recipientName: string;
   let recipientAddress: string | null = null;
+  console.log("[PaymentLink] entry — resolvedClientPhone:", resolvedClientPhone ?? "none", "clientName:", clientName ?? "none");
 
   if (resolvedClientPhone) {
     // TODO: Consolidate phone-based resolution into a shared resolveCustomerContext()
@@ -947,6 +948,7 @@ async function handleSendPaymentLink(
       .orderBy(desc(completedJobs.jobDate))
       .limit(1);
     recipientAddress = completedRow[0]?.address ?? null;
+    console.log("[PaymentLink] phone path — completedJobs address:", recipientAddress ?? "null");
 
     // 2. Fall back to cleanerJobs if completedJobs had no address
     if (!recipientAddress) {
@@ -957,6 +959,7 @@ async function handleSendPaymentLink(
         .orderBy(desc(cleanerJobs.jobDate))
         .limit(1);
       recipientAddress = liveRow[0]?.jobAddress ?? null;
+      console.log("[PaymentLink] phone path — cleanerJobs address:", recipientAddress ?? "null");
     }
 
     if (!recipientAddress) {
@@ -965,6 +968,7 @@ async function handleSendPaymentLink(
   } else {
     // Search by name — same dual-table logic as searchCustomers (@ mentions)
     const q = `%${(clientName ?? "").trim()}%`;
+    console.log("[PaymentLink] name path — query:", q);
     // 1. completedJobs (historical bookings)
     const completedRows = await db
       .select({
@@ -1037,6 +1041,7 @@ async function handleSendPaymentLink(
     const matches = Array.from(byPhone.values()).sort((a, b) => b.totalCleans - a.totalCleans).slice(0, 6);
 
     if (matches.length === 0) {
+    console.log("[PaymentLink] name path — matches:", matches.length, JSON.stringify(matches.map(m => ({ name: m.name, phone: m.phone, address: m.address }))));
       return { type: "error", message: `I couldn't find anyone matching "${clientName}" — try a partial name or check the spelling.` };
     }
 
@@ -1062,6 +1067,7 @@ async function handleSendPaymentLink(
     recipientPhone = client.phone;
     recipientName = client.name;
     recipientAddress = client.address;
+    console.log("[PaymentLink] name path — resolved:", JSON.stringify({ name: recipientName, phone: recipientPhone, address: recipientAddress }));
   }
 
   // Normalise phone for Stripe
