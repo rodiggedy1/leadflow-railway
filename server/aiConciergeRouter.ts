@@ -961,8 +961,10 @@ async function handleSendPaymentLink(
       recipientAddress = liveRow[0]?.jobAddress ?? null;
       console.log("[PaymentLink] phone path — cleanerJobs address:", recipientAddress ?? "null");
     }
-
     if (!recipientAddress) {
+      // DIAG: search by name to see what is actually stored
+      const diagRows = await db.select({ customerPhone: cleanerJobs.customerPhone, customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress }).from(cleanerJobs).where(like(cleanerJobs.customerName, `%${recipientName.split(" ")[0]}%`)).orderBy(desc(cleanerJobs.jobDate)).limit(5);
+      console.log("[PaymentLink] DIAG — cleanerJobs by first name:", JSON.stringify(diagRows));
       return { type: "error", message: "Found the customer, but there's no service address on file — can't generate the link without it." };
     }
   } else {
