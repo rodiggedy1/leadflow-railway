@@ -3425,7 +3425,7 @@ function MadisonCommandQueryResultCard({ card, onDismiss }: { card: { answer: st
         </span>
         <button onClick={onDismiss} style={{ marginLeft: 4, color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
       </div>
-      <div style={{ padding: "12px 14px" }}>
+      <div style={{ padding: "12px 14px", maxHeight: 280, overflowY: "auto" }}>
         {card.answer.split("\n").filter(Boolean).map((line, i) => (
           <p key={i} style={{ fontSize: 13, color: "#c8cde8", lineHeight: 1.6, marginBottom: 4 }}>{line}</p>
         ))}
@@ -3498,9 +3498,9 @@ function MadisonCardStatusCard({ card, onDismiss }: { card: CmdCardStatusCard; o
         </div>
         <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
       </div>
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 280 }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr style={{ borderBottom: "1px solid #2a2e47" }}>{["Customer", "Card", "Status"].map(h => <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>)}</tr></thead>
+          <thead><tr style={{ borderBottom: "1px solid #2a2e47" }}>{["Customer", "Card", "Status"].map(h => <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", position: "sticky", top: 0, background: "#1a1d30", zIndex: 1 }}>{h}</th>)}</tr></thead>
           <tbody>{card.rows.map((row, i) => <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}><td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.customerName}</td><td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa", fontFamily: "monospace" }}>{formatCard(row.cardBrand, row.last4)}</td><td style={{ padding: "9px 14px" }}>{statusBadge(row)}</td></tr>)}</tbody>
         </table>
       </div>
@@ -3531,7 +3531,7 @@ function MadisonTeamRatingsCard({ card, onDismiss }: { card: CmdTeamRatingsCard;
         <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{card.rows.length} teams</span>
         <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
       </div>
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 280 }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr style={{ borderBottom: "1px solid #2a2e47" }}>{["#", "Team", "Rating", "Jobs Rated"].map(h => <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>)}</tr></thead>
           <tbody>{card.rows.map((row, i) => <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}><td style={{ padding: "9px 14px", fontSize: 13, fontWeight: 700, color: medalColor(row.rank) }}>{row.rank}</td><td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.cleanerName}</td><td style={{ padding: "9px 14px", fontSize: 13, color: "#fbbf24", fontWeight: 600, whiteSpace: "nowrap" }}>{row.avgRating.toFixed(1)} <span style={{ fontSize: 11, color: "#6b7280" }}>{stars(row.avgRating)}</span></td><td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa" }}>{row.ratedJobs} / {row.totalJobs}</td></tr>)}</tbody>
@@ -3572,7 +3572,7 @@ function MadisonNoEtaCard({ card, onDismiss }: { card: CmdNoEtaCard; onDismiss: 
         {card.rows.some(r => r.isPastScheduled) && <span style={{ fontSize: 10, fontWeight: 700, color: "#ef4444", background: "#ef444422", padding: "2px 7px", borderRadius: 8, whiteSpace: "nowrap" }}>{card.rows.filter(r => r.isPastScheduled).length} OVERDUE</span>}
         <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
       </div>
-      <div>{card.rows.map((row, i) => {
+      <div style={{ maxHeight: 280, overflowY: "auto" }}>{card.rows.map((row, i) => {
         const { label, color, bg } = etaStatusLabel(row.etaStatus);
         return (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
@@ -3710,7 +3710,7 @@ function MadisonUnansweredSmsCard({ card, onDismiss }: { card: CmdUnansweredSmsC
         </div>
         <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
       </div>
-      <div>{sorted.map((row, i) => {
+      <div style={{ maxHeight: 280, overflowY: "auto" }}>{sorted.map((row, i) => {
         const { color, bg } = waitColor(row.waitMs);
         const displayName = row.leadName || row.leadPhone;
         return (
