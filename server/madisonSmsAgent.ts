@@ -853,7 +853,7 @@ async function postDraftCardToCommandChat(params: {
   const dedupKey = 'madison_sms_draft:' + sessionId;
   const bodyEscaped = body.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const metadataEscaped = JSON.stringify({ draftId, quickActionVersion: 1, sessionId }).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  await db.execute(sql.raw(`
+  const insertSql = `
     INSERT INTO ops_chat_messages
       (channel, authorName, authorRole, body, quickAction, metadata, sessionId, lastActivityAt, cardStatus, activeDedupKey, createdAt)
     VALUES
@@ -864,7 +864,36 @@ async function postDraftCardToCommandChat(params: {
       lastActivityAt  = GREATEST(COALESCE(lastActivityAt, 0), VALUES(lastActivityAt)),
       cardStatus      = 'active',
       activeDedupKey  = VALUES(activeDedupKey)
-  `));
+  `;
+  // Verify the SQL string contains the expected columns before executing
+  const sqlHasSessionId    = insertSql.includes('sessionId');
+  const sqlHasDedupKey     = insertSql.includes('activeDedupKey');
+  const sqlHasCardStatus   = insertSql.includes('cardStatus');
+  const sqlHasLastActivity = insertSql.includes('lastActivityAt');
+  console.log('[SMS CARD INSERT] SQL column presence: sessionId=%s activeDedupKey=%s cardStatus=%s lastActivityAt=%s',
+    sqlHasSessionId, sqlHasDedupKey, sqlHasCardStatus, sqlHasLastActivity);
+  console.log('[SMS CARD INSERT] params: sessionId=%s eventTs=%s dedupKey=%s', sessionId, eventTs, dedupKey);
+
+  console.log('[SMS CARD INSERT] postDraftCardToCommandChat');
+  const insertResult = await db.execute(sql.raw(insertSql)) as any;
+  const resultMeta = insertResult?.[0] ?? insertResult;
+  const insertId = Number(resultMeta?.insertId ?? 0);
+  const affectedRows = Number(resultMeta?.affectedRows ?? -1);
+  console.log('[SMS CARD INSERT] result: insertId=%s affectedRows=%s (1=insert, 2=dup-key-update)', insertId, affectedRows);
+
+  // Query the stored row by insertId (connection-safe, no LAST_INSERT_ID() ambiguity)
+  if (insertId > 0) {
+    const storedCheck = await db.execute(sql.raw(`
+      SELECT id, sessionId, activeDedupKey, cardStatus, lastActivityAt
+      FROM ops_chat_messages
+      WHERE id = ${insertId}
+    `)) as any;
+    const storedRows = storedCheck?.[0] ?? storedCheck;
+    console.log('[SMS CARD INSERT STORED ROW]', JSON.stringify(storedRows));
+  } else {
+    // affectedRows=2 means ON DUPLICATE KEY UPDATE fired — no new insertId
+    console.log('[SMS CARD INSERT] ON DUPLICATE KEY UPDATE fired (no new insertId), affectedRows=%s', affectedRows);
+  }
 
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
