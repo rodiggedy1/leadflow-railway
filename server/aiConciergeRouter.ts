@@ -951,11 +951,12 @@ async function handleSendPaymentLink(
     console.log("[PaymentLink] phone path — completedJobs address:", recipientAddress ?? "null");
 
     // 2. Fall back to cleanerJobs if completedJobs had no address
+    // Use REGEXP_REPLACE to strip formatting — cleanerJobs stores phones as "(412) 613-6015"
     if (!recipientAddress) {
       const liveRow = await db
         .select({ jobAddress: cleanerJobs.jobAddress })
         .from(cleanerJobs)
-        .where(like(cleanerJobs.customerPhone, `%${phone10}%`))
+        .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${`%${phone10}%`}`)
         .orderBy(desc(cleanerJobs.jobDate))
         .limit(1);
       recipientAddress = liveRow[0]?.jobAddress ?? null;
