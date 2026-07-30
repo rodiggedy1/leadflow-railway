@@ -2638,7 +2638,6 @@ export async function handleConciergeRequest({
   db: Awaited<ReturnType<typeof getDb>>;
 }): Promise<ConciergeResult> {
   const re = resolvedEntity ?? null;
-  console.log("[TRACE:handleConciergeRequest] entry", JSON.stringify({
     message,
     resolvedEntity: re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : null,
     historyLen: context?.history?.length ?? 0,
@@ -2647,9 +2646,7 @@ export async function handleConciergeRequest({
     history: context?.history,
     summary: context?.summary,
   });
-  console.log("[TRACE:parseConciergeRequest] rawPlan", JSON.stringify({ action: rawPlan.action, targetHint: rawPlan.targetHint, targetType: rawPlan.targetType, clientName: rawPlan.clientName, messageHint: rawPlan.messageHint }));
   const { plan, corrected, correction } = validateAndNormalizePlan(rawPlan, re);
-  console.log("[TRACE:validateAndNormalizePlan] plan", JSON.stringify({ action: plan.action, targetHint: plan.targetHint, targetType: plan.targetType, clientName: plan.clientName, corrected }));
   if (corrected && correction) {
     console.log(`[Concierge] Plan corrected: ${correction.originalAction} → ${correction.correctedAction} (${correction.reason}) [evidence: ${correction.evidenceSource}]`);
   }
@@ -2671,7 +2668,6 @@ export async function handleConciergeRequest({
     return await handleGetEtaForCustomer(intent.clientName, db);
   }
   if (intent.action === "text_cleaners") {
-    console.log("[TRACE:dispatch] → handleTextCleaners", JSON.stringify({ targetHint: plan.targetHint, re: re ? re.type : null }));
     const textCleanersResult = re?.type === "cleaner"
       ? await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db)
       : await handleTextCleaners(plan, intent.messageHint, db);
@@ -2803,7 +2799,6 @@ export const aiConciergeRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      console.log("[TRACE:chat] entry", JSON.stringify({ message: input.message, hasResolvedJobId: !!input.resolvedJobId, hasResolvedCleanerPhone: !!input.resolvedCleanerPhone, hasResolvedClientPhone: !!input.resolvedClientPhone, resolvedEntity: input.resolvedEntity ?? null, historyLen: input.history?.length ?? 0 }));
 
       if (input.resolvedJobId) {
         return await handleEtaUpdateByJobId(input.resolvedJobId, db);

@@ -38,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { BulkSmsConfirmCard } from "./BulkSmsConfirmCard";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
@@ -10744,10 +10745,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             />
           )}
           {madisonSmsPendingCard && (
-            <MadisonCommandSmsCard
-              card={madisonSmsPendingCard}
-              onDismiss={() => setMadisonSmsPendingCard(null)}
-            />
+            madisonSmsPendingCard.recipients.length > 1 ? (
+              <BulkSmsConfirmCard
+                card={{
+                  targetDescription: madisonSmsPendingCard.targetDescription,
+                  recipients: madisonSmsPendingCard.recipients as any,
+                  draftMessage: madisonSmsPendingCard.draftMessage,
+                  command: madisonSmsPendingCard.command,
+                }}
+                onSent={() => setMadisonSmsPendingCard(null)}
+                onDismiss={() => setMadisonSmsPendingCard(null)}
+              />
+            ) : (
+              <MadisonCommandSmsCard
+                card={madisonSmsPendingCard}
+                onDismiss={() => setMadisonSmsPendingCard(null)}
+              />
+            )
           )}
           {madisonCallConfirmCard && !madisonCallPendingCard && (
             <MadisonCallConfirmCard
