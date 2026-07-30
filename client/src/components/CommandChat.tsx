@@ -3446,6 +3446,291 @@ function MadisonCommandQueryResultCard({ card, onDismiss }: { card: { answer: st
     </div>
   );
 }
+// ── Group 1 read-only cards — copied from AiConcierge card views ──
+
+// card_status
+type CmdCardStatusCard = { date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card"; amountCents: number }> };
+function MadisonCardStatusCard({ card, onDismiss }: { card: CmdCardStatusCard; onDismiss: () => void }) {
+  const onHold = card.rows.filter(r => r.status === "on_hold");
+  const noPreauth = card.rows.filter(r => r.status === "no_preauth");
+  const noCard = card.rows.filter(r => r.status === "no_card");
+  const lfOnHold = card.rows.filter(r => r.status === "lf_on_hold");
+  const lfCard = card.rows.filter(r => r.status === "lf_card");
+  function formatAmount(cents: number) { return `$${(cents / 100).toFixed(2)}`; }
+  function formatCard(brand: string | null, last4: string | null) {
+    if (!last4) return "—";
+    const b = brand ? brand.charAt(0).toUpperCase() + brand.slice(1) : "Card";
+    return `${b} ···· ${last4}`;
+  }
+  function downloadCsv() {
+    const header = "Customer,Card,Status,Amount";
+    const lines = card.rows.map(r => {
+      const status = r.status === "on_hold" ? `On Hold ${formatAmount(r.amountCents)}` : r.status === "no_preauth" ? "No Pre-Auth" : "No Card";
+      return `"${r.customerName}","${formatCard(r.cardBrand, r.last4)}","${status}","${r.status === "on_hold" ? formatAmount(r.amountCents) : ""}"`;
+    });
+    const csv = [header, ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `card-status-${card.date}.csv`; a.click(); URL.revokeObjectURL(url);
+  }
+  const statusBadge = (row: CmdCardStatusCard["rows"][0]) => {
+    if (row.status === "on_hold") return <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>On Hold · {formatAmount(row.amountCents)}</span>;
+    if (row.status === "no_preauth") return <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>No Pre-Auth</span>;
+    if (row.status === "lf_on_hold") return <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>LF Hold · {formatAmount(row.amountCents)}</span>;
+    if (row.status === "lf_card") return <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>LF Card</span>;
+    return <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>No Card</span>;
+  };
+  return (
+    <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #4f6ef7, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><CreditCard className="w-3 h-3 text-white" /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Card Status</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8", marginBottom: 6 }}>{card.date} · {card.rows.length} job{card.rows.length !== 1 ? "s" : ""}</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {onHold.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{onHold.length} on hold</span>}
+            {lfOnHold.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{lfOnHold.length} LF hold</span>}
+            {noPreauth.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{noPreauth.length} no pre-auth</span>}
+            {lfCard.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{lfCard.length} LF card</span>}
+            {noCard.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>{noCard.length} no card</span>}
+          </div>
+        </div>
+        <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: "1px solid #2a2e47" }}>{["Customer", "Card", "Status"].map(h => <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>)}</tr></thead>
+          <tbody>{card.rows.map((row, i) => <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}><td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.customerName}</td><td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa", fontFamily: "monospace" }}>{formatCard(row.cardBrand, row.last4)}</td><td style={{ padding: "9px 14px" }}>{statusBadge(row)}</td></tr>)}</tbody>
+        </table>
+      </div>
+      <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47" }}>
+        <button onClick={downloadCsv} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7447f5", background: "none", border: "none", cursor: "pointer", padding: 0 }}><ExternalLink className="w-3 h-3" /> Download CSV</button>
+      </div>
+    </div>
+  );
+}
+
+// rank_teams
+type CmdTeamRatingsCard = { windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number };
+function MadisonTeamRatingsCard({ card, onDismiss }: { card: CmdTeamRatingsCard; onDismiss: () => void }) {
+  function stars(rating: number) {
+    const full = Math.floor(rating);
+    const half = rating - full >= 0.5;
+    return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(5 - full - (half ? 1 : 0));
+  }
+  const medalColor = (rank: number) => rank === 1 ? "#fbbf24" : rank === 2 ? "#9ca3af" : rank === 3 ? "#cd7c3f" : "#6b7280";
+  return (
+    <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #fbbf24, #f59e0b)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Users className="w-3 h-3 text-white" /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Team Rankings</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>Last {card.windowDays} days · min {card.minRatings} ratings</p>
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{card.rows.length} teams</span>
+        <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: "1px solid #2a2e47" }}>{["#", "Team", "Rating", "Jobs Rated"].map(h => <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>)}</tr></thead>
+          <tbody>{card.rows.map((row, i) => <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}><td style={{ padding: "9px 14px", fontSize: 13, fontWeight: 700, color: medalColor(row.rank) }}>{row.rank}</td><td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.cleanerName}</td><td style={{ padding: "9px 14px", fontSize: 13, color: "#fbbf24", fontWeight: 600, whiteSpace: "nowrap" }}>{row.avgRating.toFixed(1)} <span style={{ fontSize: 11, color: "#6b7280" }}>{stars(row.avgRating)}</span></td><td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa" }}>{row.ratedJobs} / {row.totalJobs}</td></tr>)}</tbody>
+        </table>
+      </div>
+      {card.excluded > 0 && <div style={{ padding: "8px 14px", borderTop: "1px solid #2a2e47", fontSize: 11, color: "#6b7280" }}>{card.excluded} team{card.excluded !== 1 ? "s" : ""} excluded (fewer than {card.minRatings} rated jobs)</div>}
+    </div>
+  );
+}
+
+// list_no_eta
+type CmdNoEtaCard = { date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> };
+function MadisonNoEtaCard({ card, onDismiss }: { card: CmdNoEtaCard; onDismiss: () => void }) {
+  const etaStatusLabel = (s: string) => {
+    if (s === "no_answer") return { label: "No Answer", color: "#ef4444", bg: "#ef444422" };
+    if (s === "unclear") return { label: "Unclear", color: "#f59e0b", bg: "#f59e0b22" };
+    return { label: "Pending", color: "#6b7280", bg: "#6b728022" };
+  };
+  if (card.rows.length === 0) {
+    return (
+      <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><CheckCircle2 className="w-3 h-3 text-white" /></div>
+          <p style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>All teams have confirmed ETAs — you're good to go!</p>
+          <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #f59e0b, #ef4444)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Clock className="w-3 h-3 text-white" /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Missing ETAs</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{card.rows.length} team{card.rows.length !== 1 ? "s" : ""} without confirmed ETA</p>
+        </div>
+        {card.rows.some(r => r.isPastScheduled) && <span style={{ fontSize: 10, fontWeight: 700, color: "#ef4444", background: "#ef444422", padding: "2px 7px", borderRadius: 8, whiteSpace: "nowrap" }}>{card.rows.filter(r => r.isPastScheduled).length} OVERDUE</span>}
+        <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+      </div>
+      <div>{card.rows.map((row, i) => {
+        const { label, color, bg } = etaStatusLabel(row.etaStatus);
+        return (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+            {row.isPastScheduled ? <span style={{ fontSize: 16, flexShrink: 0 }}>🔥</span> : <Clock className="w-4 h-4 flex-shrink-0" style={{ color: "#6b7280" }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: row.isPastScheduled ? "#fca5a5" : "#c8cde8", marginBottom: 1 }}>{row.teamName}</p>
+              <p style={{ fontSize: 11, color: "#6b7280" }}>{row.scheduledTime}{row.isPastScheduled ? " · past scheduled time" : ""}</p>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
+          </div>
+        );
+      })}</div>
+    </div>
+  );
+}
+
+// job_status_stream
+type CmdJobStatusStreamCard = { alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> };
+function MadisonJobStatusCard({ card, onDismiss }: { card: CmdJobStatusStreamCard; onDismiss: () => void }) {
+  const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const ALERT_STYLE: Record<string, { borderColor: string; badgeText: string; badgeColor: string; icon: string }> = {
+    stale_eta:    { borderColor: "#d97706", badgeText: "ETA PASSED",  badgeColor: "#d97706", icon: "🚗" },
+    noshow_alert: { borderColor: "#ef4444", badgeText: "NO CHECK-IN", badgeColor: "#ef4444", icon: "🚨" },
+    late_start:   { borderColor: "#f59e0b", badgeText: "LATE START",  badgeColor: "#f59e0b", icon: "⏰" },
+    issue_flag:   { borderColor: "#a78bfa", badgeText: "ISSUE",       badgeColor: "#a78bfa", icon: "⚠️" },
+  };
+  const STATUS_COLOR: Record<string, string> = { en_route: "#34d399", arrived: "#60a5fa", in_progress: "#a78bfa", completed: "#6b7280", issue: "#f87171" };
+  const hasAlerts = card.alerts.length > 0;
+  const hasStatuses = card.cleanerStatuses.length > 0;
+  if (!hasAlerts && !hasStatuses) {
+    return (
+      <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <p style={{ flex: 1, fontSize: 13, color: "#6b7280", textAlign: "center" }}>No job activity yet today.</p>
+          <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-2" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}><button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button></div>
+      {hasAlerts && (
+        <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "9px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", flex: 1 }}>Live Alerts</p>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", background: "#ef444422", padding: "1px 7px", borderRadius: 8 }}>{card.alerts.length}</span>
+          </div>
+          {card.alerts.map((alert, i) => {
+            const s = ALERT_STYLE[alert.alertType] ?? ALERT_STYLE.noshow_alert;
+            return (
+              <div key={i} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: i < card.alerts.length - 1 ? "1px solid #2a2e4744" : undefined, borderLeft: `3px solid ${s.borderColor}` }}>
+                <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>{s.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", lineHeight: 1.3 }}>{alert.title}</p>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: s.badgeColor, background: `${s.badgeColor}22`, padding: "1px 6px", borderRadius: 6, flexShrink: 0 }}>{s.badgeText}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{alert.body}</p>
+                </div>
+                <span style={{ fontSize: 11, color: "#6b7280", flexShrink: 0, alignSelf: "flex-start", marginTop: 2 }}>{fmtTime(alert.ts)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {hasStatuses && (
+        <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "9px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", flex: 1 }}>Team Status</p>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6b7280" }}>{card.cleanerStatuses.length} updates</span>
+          </div>
+          {card.cleanerStatuses.map((row, i) => {
+            const dotColor = STATUS_COLOR[row.status] ?? "#6b7280";
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < card.cleanerStatuses.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{row.emoji}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>{row.cleanerName}</p>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: dotColor, background: `${dotColor}22`, padding: "1px 6px", borderRadius: 6, textTransform: "uppercase", letterSpacing: "0.05em", flexShrink: 0 }}>{row.label}</span>
+                  </div>
+                  {row.customerName && <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{row.customerName}{row.etaLabel ? ` · ETA ${row.etaLabel}` : ""}</p>}
+                  {row.issueNote && <p style={{ fontSize: 11, color: "#ef4444", marginTop: 1 }}>{row.issueNote}</p>}
+                </div>
+                <span style={{ fontSize: 11, color: "#6b7280", flexShrink: 0 }}>{fmtTime(row.ts)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// unanswered_sms
+type CmdUnansweredSmsCard = { thresholdMinutes: number; rows: Array<{ sessionId: number; leadName: string | null; leadPhone: string; lastMessagePreview: string; waitMs: number }> };
+function MadisonUnansweredSmsCard({ card, onDismiss }: { card: CmdUnansweredSmsCard; onDismiss: () => void }) {
+  const [resolved, setResolved] = React.useState<Set<number>>(new Set());
+  const resolveSession = trpc.leads.resolveSession.useMutation({
+    onMutate: ({ sessionId }) => setResolved(prev => new Set(prev).add(sessionId)),
+    onError: (_err, { sessionId }) => setResolved(prev => { const s = new Set(prev); s.delete(sessionId); return s; }),
+  });
+  const fmtWait = (ms: number) => {
+    const m = Math.floor(ms / 60000);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60); const rm = m % 60;
+    return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+  };
+  const waitColor = (ms: number) => {
+    const m = ms / 60000;
+    if (m >= 60) return { color: "#ef4444", bg: "#ef444422" };
+    if (m >= 30) return { color: "#f59e0b", bg: "#f59e0b22" };
+    return { color: "#6b7280", bg: "#6b728022" };
+  };
+  const sorted = [...card.rows].filter(r => !resolved.has(r.sessionId)).sort((a, b) => b.waitMs - a.waitMs);
+  if (sorted.length === 0) {
+    return (
+      <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><CheckCircle2 className="w-3 h-3 text-white" /></div>
+          <p style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>All resolved — nice work!</p>
+          <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-2" style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #f97316, #ef4444)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><MessageSquare className="w-3 h-3 text-white" /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Unanswered SMS</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{sorted.length} conversation{sorted.length !== 1 ? "s" : ""} waiting over {card.thresholdMinutes} min</p>
+        </div>
+        <button onClick={onDismiss} style={{ color: "#6b7280", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+      </div>
+      <div>{sorted.map((row, i) => {
+        const { color, bg } = waitColor(row.waitMs);
+        const displayName = row.leadName || row.leadPhone;
+        return (
+          <div key={row.sessionId} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderBottom: i < sorted.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#2a2e47", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}><User className="w-3.5 h-3.5" style={{ color: "#6b7280" }} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 2 }}>{displayName}</p>
+              {row.lastMessagePreview && <p style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.lastMessagePreview}</p>}
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtWait(row.waitMs)}</span>
+            <button title="Resolve" onClick={e => { e.stopPropagation(); resolveSession.mutate({ sessionId: row.sessionId }); }} style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px 4px", flexShrink: 0, opacity: 0.5 }} onMouseEnter={e => { e.currentTarget.style.opacity = "1"; }} onMouseLeave={e => { e.currentTarget.style.opacity = "0.5"; }}>
+              <XCircle className="w-4 h-4" style={{ color: "#6b7280" }} />
+            </button>
+          </div>
+        );
+      })}</div>
+    </div>
+  );
+}
+
 // ── MadisonCallConfirmCard — ephemeral confirm card for @madison call [customer] ──
 type MadisonCallConfirm = {
   type: "call_client_confirm";
@@ -7575,6 +7860,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonEmailConfirmCard, setMadisonEmailConfirmCard] = useState<MadisonEmailConfirm | null>(null);
   const [madisonInvoiceCard, setMadisonInvoiceCard] = useState<MadisonInvoiceCard | null>(null);
   const [madisonQueryResultCard, setMadisonQueryResultCard] = useState<{ answer: string; status: string; undoActionId?: string | null } | null>(null);
+  const [madisonCardStatusCard, setMadisonCardStatusCard] = useState<CmdCardStatusCard | null>(null);
+  const [madisonTeamRatingsCard, setMadisonTeamRatingsCard] = useState<CmdTeamRatingsCard | null>(null);
+  const [madisonNoEtaCard, setMadisonNoEtaCard] = useState<CmdNoEtaCard | null>(null);
+  const [madisonJobStatusCard, setMadisonJobStatusCard] = useState<CmdJobStatusStreamCard | null>(null);
+  const [madisonUnansweredSmsCard, setMadisonUnansweredSmsCard] = useState<CmdUnansweredSmsCard | null>(null);
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
@@ -8209,6 +8499,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setMadisonEmailConfirmCard(null);
       setMadisonInvoiceCard(null);
       setMadisonQueryResultCard(null);
+      setMadisonCardStatusCard(null);
+      setMadisonTeamRatingsCard(null);
+      setMadisonNoEtaCard(null);
+      setMadisonJobStatusCard(null);
+      setMadisonUnansweredSmsCard(null);
       // Use resolvedEntity (same as AiConcierge chip path) so the server runs parseConciergeRequest
       // and correctly routes call/email/SMS/payment based on intent — not the legacy resolvedClientPhone
       // path which always falls through to SMS.
@@ -8229,6 +8524,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setMadisonInvoiceCard(result as MadisonInvoiceCard);
             } else if (result.type === "query_result") {
               setMadisonQueryResultCard({ answer: (result as any).answer, status: (result as any).status, undoActionId: (result as any).undoActionId ?? null });
+            } else if (result.type === "card_status") {
+              setMadisonCardStatusCard(result as any);
+            } else if (result.type === "rank_teams") {
+              setMadisonTeamRatingsCard(result as any);
+            } else if (result.type === "list_no_eta") {
+              setMadisonNoEtaCard(result as any);
+            } else if (result.type === "job_status_stream") {
+              setMadisonJobStatusCard(result as any);
+            } else if (result.type === "unanswered_sms") {
+              setMadisonUnansweredSmsCard(result as any);
             } else if (result.type === "client_disambiguation") {
               setMadisonDisambigCard(result as MadisonDisambigCard);
             } else if (result.type === "not_found") {
@@ -10451,6 +10756,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <MadisonCommandQueryResultCard
               card={madisonQueryResultCard}
               onDismiss={() => setMadisonQueryResultCard(null)}
+            />
+          )}
+          {madisonCardStatusCard && (
+            <MadisonCardStatusCard
+              card={madisonCardStatusCard}
+              onDismiss={() => setMadisonCardStatusCard(null)}
+            />
+          )}
+          {madisonTeamRatingsCard && (
+            <MadisonTeamRatingsCard
+              card={madisonTeamRatingsCard}
+              onDismiss={() => setMadisonTeamRatingsCard(null)}
+            />
+          )}
+          {madisonNoEtaCard && (
+            <MadisonNoEtaCard
+              card={madisonNoEtaCard}
+              onDismiss={() => setMadisonNoEtaCard(null)}
+            />
+          )}
+          {madisonJobStatusCard && (
+            <MadisonJobStatusCard
+              card={madisonJobStatusCard}
+              onDismiss={() => setMadisonJobStatusCard(null)}
+            />
+          )}
+          {madisonUnansweredSmsCard && (
+            <MadisonUnansweredSmsCard
+              card={madisonUnansweredSmsCard}
+              onDismiss={() => setMadisonUnansweredSmsCard(null)}
             />
           )}
           {madisonCallPendingCard && (
