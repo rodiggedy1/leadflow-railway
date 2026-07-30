@@ -844,6 +844,18 @@ async function runStartupMigrations() {
         await conn.beginTransaction();
         console.log('[Migration] dedup: beginTransaction OK');
 
+        // Stage 0: Clear activeDedupKey from all dismissed madison_sms_draft rows.
+        // Dismissed rows must not retain the key — it blocks the unique index from
+        // being assigned to the active orphan for the same session.
+        const [stage0Result] = await conn.execute(`
+          UPDATE ops_chat_messages
+          SET activeDedupKey = NULL
+          WHERE quickAction    = 'madison_sms_draft'
+            AND cardStatus     != 'active'
+            AND activeDedupKey IS NOT NULL
+        `) as any;
+        console.log('[Migration] dedup stage 0: cleared stale keys from dismissed rows, affectedRows=' + (stage0Result?.affectedRows ?? 'unknown'));
+
         // Stage 1a: For sessions with BOTH a keyed row AND null-key orphan(s):
         // pick the single freshest orphan per session (ranked by draftId DESC,
         // lastActivityAt DESC, id DESC). If that orphan has a higher draftId than
@@ -900,7 +912,7 @@ async function runStartupMigrations() {
               AND cardStatus     = 'active'
               AND activeDedupKey = CONCAT('madison_sms_draft:', sessionId)
           ) AS has_keyed ON orphan.sessionId = has_keyed.sessionId
-          SET orphan.cardStatus = 'dismissed'
+          SET orphan.cardStatus = 'dismissed', orphan.activeDedupKey = NULL
           WHERE orphan.quickAction    = 'madison_sms_draft'
             AND orphan.cardStatus     = 'active'
             AND orphan.activeDedupKey IS NULL
@@ -965,7 +977,7 @@ async function runStartupMigrations() {
             ) AS ranked
             WHERE rn > 1
           ) AS losers ON loser.id = losers.id
-          SET loser.cardStatus = 'dismissed'
+          SET loser.cardStatus = 'dismissed', loser.activeDedupKey = NULL
         `) as any;
         console.log('[Migration] dedup stage 2: null-only duplicate dismissal done, affectedRows=' + (stage2Result?.affectedRows ?? 'unknown'));
 
