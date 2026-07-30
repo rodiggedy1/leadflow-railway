@@ -7870,6 +7870,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [madisonChatLoading, setMadisonChatLoading] = useState(false);
   const originalMadisonMessageRef = useRef<string>("");
   const madisonChatMutation = trpc.aiConcierge.chat.useMutation();
+  // Conversation history for @madison — mirrors AiConcierge's buildChatContext exactly
+  const [madisonHistory, setMadisonHistory] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [madisonSummary, setMadisonSummary] = useState<string | undefined>(undefined);
+  const buildMadisonContext = React.useCallback(() => {
+    return { history: madisonHistory.slice(-15), summary: madisonSummary };
+  }, [madisonHistory, madisonSummary]);
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallContactNameRef = useRef<string | null>(null);
   const voiceCallContactPhoneRef = useRef<string | null>(null);
@@ -8509,11 +8515,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Use resolvedEntity (same as AiConcierge chip path) so the server runs parseConciergeRequest
       // and correctly routes call/email/SMS/payment based on intent — not the legacy resolvedClientPhone
       // path which always falls through to SMS.
+      const madisonCtx = buildMadisonContext();
+      setMadisonHistory(prev => [...prev, { role: "user", content: message }].slice(-20));
       madisonChatMutation.mutate(
-        { message, ...(lockedPhone && lockedName ? { resolvedEntity: { type: "customer" as const, phone: lockedPhone, name: lockedName } } : {}) },
+        { message, ...madisonCtx, ...(lockedPhone && lockedName ? { resolvedEntity: { type: "customer" as const, phone: lockedPhone, name: lockedName } } : {}) },
         {
           onSuccess: (result) => {
             setMadisonChatLoading(false);
+            // Record AI result in history (text results only — same as AiConcierge)
+            if (result.type === "query_result") {
+              setMadisonHistory(prev => [...prev, { role: "assistant", content: (result as any).answer }].slice(-20));
+              const recent = [...madisonHistory, { role: "user", content: message }, { role: "assistant", content: (result as any).answer }]
+                .map(m => `${m.role === "user" ? "Dispatcher" : "Madison"}: ${m.content}`).join("\n");
+              if (recent) setMadisonSummary(recent.slice(0, 800));
+            } else if (result.type === "completed") {
+              setMadisonHistory(prev => [...prev, { role: "assistant", content: (result as any).message }].slice(-20));
+            }
             if (result.type === "payment_link_confirm") {
               setMadisonPendingCard(result as MadisonPaymentConfirm);
             } else if (result.type === "bulk_sms_confirm") {
