@@ -969,6 +969,42 @@ async function runStartupMigrations() {
         `) as any;
         console.log('[Migration] dedup stage 2: null-only duplicate dismissal done, affectedRows=' + (stage2Result?.affectedRows ?? 'unknown'));
 
+        // Pre-Stage-3 diagnostics: identify every row that already owns a key
+        // that Stage 3 would try to assign to an orphan — regardless of cardStatus.
+        const [collisionRows] = await conn.execute(`
+          SELECT
+            orphan.id               AS orphan_id,
+            orphan.sessionId        AS orphan_session_id,
+            owner.id                AS owner_id,
+            owner.sessionId         AS owner_session_id,
+            owner.cardStatus        AS owner_status,
+            owner.quickAction       AS owner_quick_action,
+            owner.activeDedupKey    AS existing_key,
+            owner.lastActivityAt    AS owner_last_activity
+          FROM ops_chat_messages AS orphan
+          JOIN ops_chat_messages AS owner
+            ON owner.activeDedupKey =
+               CONCAT('madison_sms_draft:', orphan.sessionId)
+           AND owner.id <> orphan.id
+          WHERE orphan.quickAction    = 'madison_sms_draft'
+            AND orphan.cardStatus     = 'active'
+            AND orphan.activeDedupKey IS NULL
+            AND orphan.sessionId      IS NOT NULL
+          ORDER BY orphan.sessionId, owner.id
+        `) as any;
+        const [keyOwnershipRows] = await conn.execute(`
+          SELECT
+            cardStatus,
+            quickAction,
+            COUNT(*) AS row_count
+          FROM ops_chat_messages
+          WHERE activeDedupKey IS NOT NULL
+          GROUP BY cardStatus, quickAction
+          ORDER BY row_count DESC
+        `) as any;
+        console.log('[Migration] dedup pre-stage3 collisions:', JSON.stringify(Array.isArray(collisionRows) ? collisionRows : []));
+        console.log('[Migration] dedup pre-stage3 key ownership:', JSON.stringify(Array.isArray(keyOwnershipRows) ? keyOwnershipRows : []));
+
         // Stage 3: Backfill activeDedupKey on all remaining sole active rows with NULL.
         // Each session now has at most one active row — no duplicate key errors expected.
         let stage3AffectedRows: number | string = 'unknown';
