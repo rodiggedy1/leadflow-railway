@@ -18,7 +18,7 @@
 
 import { getDb } from "./db";
 import { madisonSmsDrafts, conversationSessions, opsChatMessages } from "../drizzle/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
@@ -846,18 +846,37 @@ async function postDraftCardToCommandChat(params: {
     `Draft: ${draft}`,
   ].join("\n").trim();
 
-  await db.insert(opsChatMessages).values({
-    channel: "command",
-    authorName: "Madison",
-    authorRole: "system",
-    body,
-    quickAction: "madison_sms_draft",
-    metadata: JSON.stringify({ draftId, quickActionVersion: 1, sessionId }),
-    replyToId: null,
-    replyToBody: null,
-    replyToAuthor: null,
-    threadParentId: null,
-  });
+  // Upsert: one active card per session — if a card already exists for this session,
+  // update its body/metadata/lastActivityAt so it resurfaces at the top of the feed.
+  // Uses Drizzle's onDuplicateKeyUpdate() which produces a fully parameterized query;
+  // no customer-controlled string is ever concatenated into SQL text.
+  const eventTs = Date.now();
+  const dedupKey = `madison_sms_draft:${sessionId}`;
+  const metadataJson = JSON.stringify({ draftId, quickActionVersion: 1, sessionId });
+  await db
+    .insert(opsChatMessages)
+    .values({
+      channel: "command",
+      authorName: "Madison",
+      authorRole: "system",
+      body,
+      quickAction: "madison_sms_draft",
+      metadata: metadataJson,
+      sessionId,
+      lastActivityAt: eventTs,
+      cardStatus: "active",
+      activeDedupKey: dedupKey,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        body,
+        metadata: metadataJson,
+        // Keep the later timestamp; GREATEST guards against clock skew on retry
+        lastActivityAt: sql`GREATEST(COALESCE(${opsChatMessages.lastActivityAt}, 0), ${eventTs})`,
+        cardStatus: "active",
+        activeDedupKey: dedupKey,
+      },
+    });
 
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
