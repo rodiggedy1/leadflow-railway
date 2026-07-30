@@ -2616,6 +2616,149 @@ async function handleJobStatusStream(db: Awaited<ReturnType<typeof getDb>>): Pro
   return { type: "job_status_stream", alerts, cleanerStatuses };
 }
 
+// ── Shared dispatcher ──────────────────────────────────────────────────────────
+/**
+ * Single canonical pipeline: parse → validate → dispatch.
+ * Both AiConcierge and CommandChat call this function.
+ * Fixing routing here fixes both entry points automatically.
+ */
+export type ResolvedEntity =
+  | { type: "customer"; phone: string; name: string }
+  | { type: "cleaner"; cleanerProfileId: number; name: string };
+
+export async function handleConciergeRequest({
+  message,
+  context,
+  resolvedEntity,
+  db,
+}: {
+  message: string;
+  context?: { history?: Array<{ role: "user" | "assistant"; content: string }>; summary?: string };
+  resolvedEntity?: ResolvedEntity | null;
+  db: Awaited<ReturnType<typeof getDb>>;
+}): Promise<ConciergeResult> {
+  const re = resolvedEntity ?? null;
+  const rawPlan = await parseConciergeRequest(message, {
+    history: context?.history,
+    summary: context?.summary,
+  });
+  const { plan, corrected, correction } = validateAndNormalizePlan(rawPlan, re);
+  if (corrected && correction) {
+    console.log(`[Concierge] Plan corrected: ${correction.originalAction} → ${correction.correctedAction} (${correction.reason}) [evidence: ${correction.evidenceSource}]`);
+  }
+  const intent = {
+    action: plan.action === "query" ? "query_data" : plan.action,
+    teamHint: plan.teamHint,
+    targetHint: plan.targetHint,
+    clientName: plan.clientName,
+    messageHint: plan.messageHint,
+    questionHint: plan.questionHint,
+    targetType: plan.targetType,
+  } as const;
+  console.log("[Concierge] plan:", JSON.stringify({ action: plan.action, targetType: plan.targetType, fields: plan.requestedFields, timeScope: plan.timeScope.type, entities: plan.entities }), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", message);
+
+  if (intent.action === "eta_update") {
+    return await handleEtaUpdate(intent.teamHint, db);
+  }
+  if (intent.action === "get_eta_for_customer") {
+    return await handleGetEtaForCustomer(intent.clientName, db);
+  }
+  if (intent.action === "text_cleaners") {
+    const textCleanersResult = re?.type === "cleaner"
+      ? await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db)
+      : await handleTextCleaners(plan, intent.messageHint, db);
+    if (textCleanersResult.type === "bulk_sms_confirm") {
+      return { ...textCleanersResult, command: message };
+    }
+    return textCleanersResult;
+  }
+  if (intent.action === "text_client") {
+    if (re?.type === "cleaner") {
+      const r = await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db);
+      if (r.type === "bulk_sms_confirm") return { ...r, command: message };
+      return r;
+    }
+    const textClientResult = re?.type === "customer"
+      ? await handleTextClient(null, intent.messageHint, db, re.phone)
+      : await handleTextClient(intent.clientName, intent.messageHint, db);
+    if (textClientResult.type === "bulk_sms_confirm") {
+      return { ...textClientResult, command: message };
+    }
+    return textClientResult;
+  }
+  if (intent.action === "send_payment_link") {
+    const paymentLinkResult = re?.type === "customer"
+      ? await handleSendPaymentLink(null, db, re.phone, re.name)
+      : await handleSendPaymentLink(intent.clientName, db);
+    if (paymentLinkResult.type === "payment_link_confirm") {
+      return { ...paymentLinkResult, command: message };
+    }
+    return paymentLinkResult;
+  }
+  if (intent.action === "call_client") {
+    return re?.type === "customer"
+      ? await handleCallPerson(null, intent.questionHint, db, re.phone, re.name)
+      : await handleCallPerson(intent.clientName, intent.questionHint, db);
+  }
+  if (intent.action === "email_client") {
+    const emailResult = re?.type === "customer"
+      ? await handleEmailClient(null, intent.messageHint, db, re.phone)
+      : await handleEmailClient(intent.clientName, intent.messageHint, db);
+    if (emailResult.type === "email_confirm") return { ...emailResult, command: message };
+    return emailResult;
+  }
+  if (plan.action === "card_status") {
+    return await handleCardStatus(plan, db);
+  }
+  if (plan.action === "rank_teams") {
+    return await handleRankTeams(db);
+  }
+  if (plan.action === "list_no_eta") {
+    return await handleListNoEta(db);
+  }
+  if (plan.action === "confirmation_texts") {
+    return await handleConfirmationTexts(plan, db);
+  }
+  if (plan.action === "confirmation_results") {
+    return await handleConfirmationResults(plan, db);
+  }
+  if (plan.action === "job_status_stream") {
+    return await handleJobStatusStream(db);
+  }
+  if (plan.action === "unanswered_sms") {
+    return await handleUnansweredSms(plan, db);
+  }
+  if (plan.action === "generate_invoice") {
+    return await handleGenerateInvoice(plan, db);
+  }
+  if (plan.action === "query") {
+    const chipEntity = re?.type === "customer"
+      ? { type: "customer" as const, name: re.name, phone: re.phone, phone10: re.phone.replace(/\D/g, "").slice(-10) }
+      : re?.type === "cleaner"
+        ? { type: "cleaner" as const, name: re.name, cleanerProfileId: re.cleanerProfileId }
+        : undefined;
+    const queryResult = await resolveQuery(plan, db, message, chipEntity, {
+      history: context?.history,
+      summary: context?.summary,
+    });
+    if (queryResult.type === "clarification") {
+      return {
+        type: "error" as const,
+        message: queryResult.question,
+      };
+    }
+    return {
+      type: "query_result" as const,
+      answer: queryResult.answer,
+      status: queryResult.status,
+    };
+  }
+  return {
+    type: "error" as const,
+    message: "Not sure what you need there — I can look up customers, check job status, send ETAs, text cleaners or clients, pull ratings, send payment links, or place calls. Try something like \"Tell me about Sarah Jones\", \"What's Team 3's ETA?\", or \"Text Abigail Avrick\".",
+  };
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 export const aiConciergeRouter = router({
   /**
@@ -2687,145 +2830,13 @@ export const aiConciergeRouter = router({
       }
 
       // resolvedEntity = chip-attached person (already resolved by the UI).
-      // Intent classification always runs — the chip is injected only as the pre-resolved
-      // target for the matching intent. Strict type guards prevent cross-type mismatches.
-      // When the chip type conflicts with the classified intent, fall back to the
-      // unresolved handler so the LLM-extracted name is used instead.
-      const re = input.resolvedEntity ?? null;
-
-      // ─────────────────────────────────────────────────────────────────────
-
-      // Use new unified parser — replaces classifyIntent for all intents
-      const rawPlan = await parseConciergeRequest(input.message, {
-        history: input.history,
-        summary: input.summary,
+      // ── Single shared dispatcher — one source of truth for routing ──────────
+      return await handleConciergeRequest({
+        message: input.message,
+        context: { history: input.history, summary: input.summary },
+        resolvedEntity: input.resolvedEntity ?? null,
+        db,
       });
-      // Validate and normalize: resolve contradictions before dispatch
-      const { plan, corrected, correction } = validateAndNormalizePlan(rawPlan, re);
-      if (corrected && correction) {
-        console.log(`[Concierge] Plan corrected: ${correction.originalAction} → ${correction.correctedAction} (${correction.reason}) [evidence: ${correction.evidenceSource}]`);
-      }
-      // Backward-compat: map plan to legacy intent shape for action handlers
-      const intent = {
-        action: plan.action === "query" ? "query_data" : plan.action,
-        teamHint: plan.teamHint,
-        targetHint: plan.targetHint,
-        clientName: plan.clientName,
-        messageHint: plan.messageHint,
-        questionHint: plan.questionHint,
-        targetType: plan.targetType,
-      } as const;
-      console.log("[Concierge] plan:", JSON.stringify({ action: plan.action, targetType: plan.targetType, fields: plan.requestedFields, timeScope: plan.timeScope.type, entities: plan.entities }), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
-
-      if (intent.action === "eta_update") {
-        return await handleEtaUpdate(intent.teamHint, db);
-      }
-      if (intent.action === "get_eta_for_customer") {
-        return await handleGetEtaForCustomer(intent.clientName, db);
-      }
-
-      if (intent.action === "text_cleaners") {
-        // Use chip only when it is a cleaner entity; customer chip → fall back to LLM name
-        const textCleanersResult = re?.type === "cleaner"
-          ? await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db)
-          : await handleTextCleaners(plan, intent.messageHint, db);
-        if (textCleanersResult.type === "bulk_sms_confirm") {
-          return { ...textCleanersResult, command: input.message };
-        }
-        return textCleanersResult;
-      }
-
-      if (intent.action === "text_client") {
-        // If locked entity is a cleaner, route to handleTextCleaners — not customer search
-        if (re?.type === "cleaner") {
-          const r = await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db);
-          if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
-          return r;
-        }
-        const textClientResult = re?.type === "customer"
-          ? await handleTextClient(null, intent.messageHint, db, re.phone)
-          : await handleTextClient(intent.clientName, intent.messageHint, db);
-        if (textClientResult.type === "bulk_sms_confirm") {
-          return { ...textClientResult, command: input.message };
-        }
-        return textClientResult;
-      }
-
-      if (intent.action === "send_payment_link") {
-        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
-        const paymentLinkResult = re?.type === "customer"
-          ? await handleSendPaymentLink(null, db, re.phone, re.name)
-          : await handleSendPaymentLink(intent.clientName, db);
-        if (paymentLinkResult.type === "payment_link_confirm") {
-          return { ...paymentLinkResult, command: input.message };
-        }
-        return paymentLinkResult;
-      }
-
-            if (intent.action === "call_client") {
-        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
-        return re?.type === "customer"
-          ? await handleCallPerson(null, intent.questionHint, db, re.phone, re.name)
-          : await handleCallPerson(intent.clientName, intent.questionHint, db);
-      }
-      if (intent.action === "email_client") {
-        const emailResult = re?.type === "customer"
-          ? await handleEmailClient(null, intent.messageHint, db, re.phone)
-          : await handleEmailClient(intent.clientName, intent.messageHint, db);
-        if (emailResult.type === "email_confirm") return { ...emailResult, command: input.message };
-        return emailResult;
-      }
-      if (plan.action === "card_status") {
-        return await handleCardStatus(plan, db);
-      }
-      if (plan.action === "rank_teams") {
-        return await handleRankTeams(db);
-      }
-      if (plan.action === "list_no_eta") {
-        return await handleListNoEta(db);
-      }
-      if (plan.action === "confirmation_texts") {
-        return await handleConfirmationTexts(plan, db);
-      }
-      if (plan.action === "confirmation_results") {
-        return await handleConfirmationResults(plan, db);
-      }
-      if (plan.action === "job_status_stream") {
-        return await handleJobStatusStream(db);
-      }
-      if (plan.action === "unanswered_sms") {
-        return await handleUnansweredSms(plan, db);
-      }
-      if (plan.action === "generate_invoice") {
-        return await handleGenerateInvoice(plan, db);
-      }
-      if (plan.action === "query") {
-        // New unified query path — replaces both query_data and customer_profile
-        const chipEntity = re?.type === "customer"
-          ? { type: "customer" as const, name: re.name, phone: re.phone, phone10: re.phone.replace(/\D/g, "").slice(-10) }
-          : re?.type === "cleaner"
-            ? { type: "cleaner" as const, name: re.name, cleanerProfileId: re.cleanerProfileId }
-            : undefined;
-        const queryResult = await resolveQuery(plan, db, input.message, chipEntity, {
-          history: input.history,
-          summary: input.summary,
-        });
-        if (queryResult.type === "clarification") {
-          return {
-            type: "error" as const,
-            message: queryResult.question,
-          };
-        }
-        return {
-          type: "query_result" as const,
-          answer: queryResult.answer,
-          status: queryResult.status,
-        };
-      }
-      return {
-        type: "error" as const,
-        message: "Not sure what you need there — I can look up customers, check job status, send ETAs, text cleaners or clients, pull ratings, send payment links, or place calls. Try something like \"Tell me about Sarah Jones\", \"What's Team 3's ETA?\", or \"Text Abigail Avrick\".",
-      };
     }),
 
   /**
