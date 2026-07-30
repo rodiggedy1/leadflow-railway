@@ -513,7 +513,7 @@ async function classifyIntent(message: string): Promise<Intent> {
 Classify the user's message into one of these actions:
 - eta_update: user wants to request an ETA call for a team by team name (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
 - get_eta_for_customer: user wants an ETA for a specific CUSTOMER's job — the system will find which team is assigned and call them (e.g. "get ETA for Dave Pringle", "ETA for Mary Jones", "what's the ETA for John Smith's job")
-- text_cleaners: user wants to send an SMS to one or more CLEANERS/STAFF (e.g. "text cleaners working today", "text all DC cleaners", "text team 5", "message all cleaners about tomorrow")
+- text_cleaners: user wants to send an SMS to one or more CLEANERS/STAFF (e.g. "text cleaners working today", "text all DC cleaners", "text team 5", "message all cleaners about tomorrow", "text all teams working today", "text all teams", "message teams about X", "text teams working", "tell all teams have a good day")
 - text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
 - call_client: user wants to call a specific customer to ask them something or deliver a message (e.g. "call rohan gilkes and ask if he wants to reschedule", "call Mary Jones and tell her we're running late", "give sarah a call about her appointment")
