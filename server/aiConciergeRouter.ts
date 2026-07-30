@@ -2638,10 +2638,6 @@ export async function handleConciergeRequest({
   db: Awaited<ReturnType<typeof getDb>>;
 }): Promise<ConciergeResult> {
   const re = resolvedEntity ?? null;
-    message,
-    resolvedEntity: re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : null,
-    historyLen: context?.history?.length ?? 0,
-  }));
   const rawPlan = await parseConciergeRequest(message, {
     history: context?.history,
     summary: context?.summary,
