@@ -12,7 +12,8 @@ import { z } from "zod";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { csMissions, conversationSessions, cleanerJobs } from "../drizzle/schema";
+import { csMissions, conversationSessions, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
+import { getMissionHandler } from "./missions/index";
 import type { CsMissionStage } from "../drizzle/schema";
 import { eq, and, inArray, asc, desc, sql } from "drizzle-orm";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -61,6 +62,8 @@ export const csMissionsRouter = router({
         createdAt: r.createdAt ? r.createdAt.getTime() : null,
         updatedAt: r.updatedAt ? r.updatedAt.getTime() : null,
         completedAt: r.completedAt ? r.completedAt.getTime() : null,
+        failureReason: (r as any).failureReason ?? null,
+        missionType: (r as any).missionType ?? "MANUAL",
       }));
     }),
 
@@ -75,12 +78,86 @@ export const csMissionsRouter = router({
       emoji: z.string().max(16).optional(),
       stages: z.array(stageSchema).optional(),
       sortOrder: z.number().int().optional(),
+      missionType: z.string().max(32).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const now = new Date();
+      const missionType = input.missionType ?? "MANUAL";
       const initialStages: CsMissionStage[] = input.stages ?? [];
+
+      // For GET_ETA missions, resolve cleaner/customer context from today's job
+      let jobId: number | null = null;
+      let cleanerPhone: string | null = null;
+      let cleanerName: string | null = null;
+      let customerPhone: string | null = null;
+      let customerName: string | null = null;
+      let missionStatus: string = "active";
+      let failureReason: string | null = null;
+
+      if (missionType === "GET_ETA") {
+        try {
+          // 1. Get session phone
+          const [session] = await db
+            .select({ leadPhone: conversationSessions.leadPhone, leadName: conversationSessions.leadName })
+            .from(conversationSessions)
+            .where(eq(conversationSessions.id, input.sessionId))
+            .limit(1);
+          const phone10 = session?.leadPhone?.replace(/[^\d]/g, "").slice(-10) ?? "";
+          customerPhone = session?.leadPhone ?? null;
+          customerName = (session as any)?.leadName ?? null;
+
+          if (phone10.length >= 10) {
+            // 2. Find today's job for this customer
+            const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+            const todayET = nowET.toISOString().slice(0, 10);
+            const [job] = await db
+              .select({
+                id: cleanerJobs.id,
+                cleanerProfileId: cleanerJobs.cleanerProfileId,
+                cleanerName: cleanerJobs.cleanerName,
+                customerName: cleanerJobs.customerName,
+              })
+              .from(cleanerJobs)
+              .where(
+                and(
+                  sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phone10}`,
+                  sql`${cleanerJobs.jobDate} = ${todayET}`
+                )
+              )
+              .orderBy(asc(cleanerJobs.id))
+              .limit(1);
+
+            if (!job) {
+              missionStatus = "needs_attention";
+              failureReason = "No job found for today";
+            } else {
+              jobId = job.id;
+              customerName = customerName ?? job.customerName ?? null;
+              // 3. Get cleaner phone from cleanerProfiles
+              const [profile] = await db
+                .select({ phone: cleanerProfiles.phone, name: cleanerProfiles.name })
+                .from(cleanerProfiles)
+                .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+                .limit(1);
+              cleanerPhone = profile?.phone ?? null;
+              cleanerName = profile?.name ?? job.cleanerName ?? null;
+              if (!cleanerPhone) {
+                missionStatus = "needs_attention";
+                failureReason = "Cleaner has no phone on file";
+              }
+            }
+          } else {
+            missionStatus = "needs_attention";
+            failureReason = "Session has no phone number";
+          }
+        } catch (ctxErr: any) {
+          console.error("[csMissions.create] GET_ETA context lookup failed:", ctxErr?.message);
+          // Non-fatal — create mission without context
+        }
+      }
+
       let result: any;
       try {
         [result] = await db.insert(csMissions).values({
@@ -89,9 +166,16 @@ export const csMissionsRouter = router({
           agentName: ctx.agent.agentName,
           title: input.title,
           emoji: input.emoji ?? null,
-          status: "active",
+          status: missionStatus as any,
           stages: initialStages,
           sortOrder: input.sortOrder ?? 0,
+          missionType,
+          jobId: jobId ?? undefined,
+          cleanerPhone: cleanerPhone ?? undefined,
+          cleanerName: cleanerName ?? undefined,
+          customerPhone: customerPhone ?? undefined,
+          customerName: customerName ?? undefined,
+          failureReason: failureReason ?? undefined,
           createdAt: now,
           updatedAt: now,
         } as any);
@@ -100,6 +184,21 @@ export const csMissionsRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: dbErr?.sqlMessage ?? dbErr?.message ?? "DB insert failed" });
       }
       const newId = (result as any).insertId as number;
+
+      // Fire onCreate handler for mission types that have automated kickoff
+      if (missionStatus === "active") {
+        const handler = getMissionHandler(missionType);
+        if (handler?.onCreate) {
+          // Fetch the newly created mission row so onCreate has full context
+          const [newMission] = await db.select().from(csMissions).where(eq(csMissions.id, newId)).limit(1);
+          if (newMission) {
+            handler.onCreate(newMission as any).catch((e: any) =>
+              console.error(`[csMissions.create] ${missionType}.onCreate failed:`, e?.message)
+            );
+          }
+        }
+      }
+
       broadcastOpsUpdate("cs_mission_update", { sessionId: input.sessionId });
       return { id: newId };
     }),

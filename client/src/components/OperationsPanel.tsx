@@ -314,12 +314,12 @@ function MissionCard({
 // ── New Mission Form ───────────────────────────────────────────────────────────
 
 const QUICK_TEMPLATES = [
-  { emoji: "🚕", title: "Get ETA" },
-  { emoji: "🔑", title: "Send Gate Code" },
-  { emoji: "💬", title: "Follow-up Needed" },
-  { emoji: "💳", title: "Payment Question" },
-  { emoji: "🛏", title: "Room Change Request" },
-  { emoji: "📋", title: "Special Instructions" },
+  { emoji: "🚕", title: "Get ETA", missionType: "GET_ETA" },
+  { emoji: "🔑", title: "Send Gate Code", missionType: "MANUAL" },
+  { emoji: "💬", title: "Follow-up Needed", missionType: "MANUAL" },
+  { emoji: "💳", title: "Payment Question", missionType: "MANUAL" },
+  { emoji: "🛏", title: "Room Change Request", missionType: "MANUAL" },
+  { emoji: "📋", title: "Special Instructions", missionType: "MANUAL" },
 ];
 
 function NewMissionForm({
@@ -328,13 +328,14 @@ function NewMissionForm({
   isLoading,
   teamName,
 }: {
-  onSubmit: (title: string, emoji: string) => void;
+  onSubmit: (title: string, emoji: string, missionType: string) => void;
   onCancel: () => void;
   isLoading: boolean;
   teamName: string | null;
 }) {
   const [title, setTitle] = useState("");
   const [emoji, setEmoji] = useState("📌");
+  const [missionType, setMissionType] = useState("MANUAL");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -364,7 +365,7 @@ function NewMissionForm({
           <button
             key={t.title}
             type="button"
-            onClick={() => { setEmoji(t.emoji); setTitle(t.title); }}
+            onClick={() => { setEmoji(t.emoji); setTitle(t.title); setMissionType(t.missionType); }}
             className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
               title === t.title
                 ? "bg-violet-600 text-white border-violet-600"
@@ -384,7 +385,7 @@ function NewMissionForm({
           value={title}
           onChange={e => setTitle(e.target.value)}
           onKeyDown={e => {
-            if (e.key === "Enter" && title.trim()) onSubmit(title.trim(), emoji);
+            if (e.key === "Enter" && title.trim()) onSubmit(title.trim(), emoji, missionType);
             if (e.key === "Escape") onCancel();
           }}
           placeholder="Custom mission title..."
@@ -396,7 +397,7 @@ function NewMissionForm({
         <button
           type="button"
           disabled={!title.trim() || isLoading}
-          onClick={() => title.trim() && onSubmit(title.trim(), emoji)}
+          onClick={() => title.trim() && onSubmit(title.trim(), emoji, missionType)}
           className="flex-1 text-sm font-bold py-2 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95"
           style={{ background: "linear-gradient(135deg, #7C5CFF, #6B4FE0)" }}
         >
@@ -498,13 +499,13 @@ export function OperationsPanel({
   const completedMissions = missions.filter(m => m.status === "completed");
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  function handleCreate(title: string, emoji: string) {
+  function handleCreate(title: string, emoji: string, missionType: string) {
     if (!sessionId) {
       toast.error("Select a customer conversation before creating a mission");
       return;
     }
     const stages = buildStages(title, teamName);
-    createMission.mutate({ sessionId, title, emoji, stages });
+    createMission.mutate({ sessionId, title, emoji, stages, missionType });
   }
 
   function handleSendReply(text: string, missionId: number) {
