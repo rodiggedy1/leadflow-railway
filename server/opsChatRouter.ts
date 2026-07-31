@@ -600,7 +600,16 @@ export const opsChatRouter = router({
         .select()
         .from(opsChatMessages)
         .where(eq(opsChatMessages.channel, input.channel))
-        .orderBy(desc(opsChatMessages.createdAt))
+        .orderBy(
+          // Active madison_sms_draft cards sort by lastActivityAt so they resurface
+          // when a customer replies. Everything else keeps its original createdAt order.
+          desc(sql`CASE
+            WHEN ${opsChatMessages.quickAction} = 'madison_sms_draft'
+             AND ${opsChatMessages.cardStatus} = 'active'
+            THEN COALESCE(${opsChatMessages.lastActivityAt}, UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000)
+            ELSE UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000
+          END`)
+        )
         .limit(500);
 
       // Count thread replies per parent message
