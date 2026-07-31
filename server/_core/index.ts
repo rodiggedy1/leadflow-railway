@@ -1143,6 +1143,39 @@ async function runStartupMigrations() {
     console.error('[Migration] cs_missions table failed:', err);
   }
 
+  // ── cs_missions engine columns (0092) ────────────────────────────────────────
+  try {
+    const [colRows] = await db.execute(sql.raw(`
+      SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs_missions'
+        AND COLUMN_NAME IN ('missionType','jobId','cleanerPhone','cleanerName','customerPhone','customerName','activeDedupKey','failureReason')
+    `)) as any;
+    const existingCols = new Set((Array.isArray(colRows) ? colRows : []).map((r: any) => r.COLUMN_NAME));
+    if (!existingCols.has('missionType'))    await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN missionType VARCHAR(32) NOT NULL DEFAULT 'MANUAL'`));
+    if (!existingCols.has('jobId'))          await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN jobId BIGINT NULL`));
+    if (!existingCols.has('cleanerPhone'))   await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN cleanerPhone VARCHAR(32) NULL`));
+    if (!existingCols.has('cleanerName'))    await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN cleanerName VARCHAR(160) NULL`));
+    if (!existingCols.has('customerPhone'))  await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN customerPhone VARCHAR(32) NULL`));
+    if (!existingCols.has('customerName'))   await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN customerName VARCHAR(160) NULL`));
+    if (!existingCols.has('activeDedupKey')) await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN activeDedupKey VARCHAR(128) NULL`));
+    if (!existingCols.has('failureReason'))  await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN failureReason VARCHAR(255) NULL`));
+    // Unique index on activeDedupKey
+    const [idxRows0092] = await db.execute(sql.raw(`
+      SELECT INDEX_NAME FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs_missions' AND INDEX_NAME = 'uq_cs_mission_active_dedup'
+    `)) as any;
+    if ((Array.isArray(idxRows0092) ? idxRows0092 : []).length === 0) {
+      await db.execute(sql.raw(`ALTER TABLE cs_missions ADD UNIQUE KEY uq_cs_mission_active_dedup (activeDedupKey)`));
+    }
+    // Extend status enum to include sending and needs_attention
+    await db.execute(sql.raw(
+      `ALTER TABLE cs_missions MODIFY COLUMN status ENUM('active','waiting','ready','sending','completed','cancelled','needs_attention') NOT NULL DEFAULT 'active'`
+    ));
+    console.log('[Migration] cs_missions engine columns (0092): OK');
+  } catch (err) {
+    console.error('[Migration] cs_missions engine columns (0092) failed:', err);
+  }
+
   // sms_card_diag — lightweight diagnostic table for insert verification
   try {
     await db.execute(sql.raw(`
