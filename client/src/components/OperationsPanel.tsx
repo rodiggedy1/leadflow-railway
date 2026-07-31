@@ -33,7 +33,8 @@ interface CsMissionRow {
   agentName: string | null;
   title: string;
   emoji: string | null;
-  status: "active" | "waiting" | "ready" | "completed" | "cancelled";
+  status: "active" | "waiting" | "ready" | "sending" | "completed" | "cancelled" | "needs_attention";
+  failureReason?: string | null;
   stages: CsMissionStage[];
   sortOrder: number;
   createdAt: number | null;
@@ -91,11 +92,13 @@ const STAGE_STYLES: Record<CsMissionStage["status"], {
 };
 
 const STATUS_BADGE: Record<CsMissionRow["status"], { label: string; className: string }> = {
-  active:    { label: "Active",    className: "bg-violet-100 text-violet-700" },
-  waiting:   { label: "Waiting",   className: "bg-amber-100 text-amber-700" },
-  ready:     { label: "Ready",     className: "bg-emerald-100 text-emerald-700" },
-  completed: { label: "Done",      className: "bg-slate-100 text-slate-500" },
-  cancelled: { label: "Cancelled", className: "bg-slate-100 text-slate-400" },
+  active:          { label: "Active",          className: "bg-violet-100 text-violet-700" },
+  waiting:         { label: "Waiting",         className: "bg-amber-100 text-amber-700" },
+  ready:           { label: "Ready — Send Now", className: "bg-emerald-100 text-emerald-700" },
+  sending:         { label: "Sending…",        className: "bg-blue-100 text-blue-700" },
+  completed:       { label: "Done",            className: "bg-slate-100 text-slate-500" },
+  cancelled:       { label: "Cancelled",       className: "bg-slate-100 text-slate-400" },
+  needs_attention: { label: "Needs Attention", className: "bg-red-100 text-red-700" },
 };
 
 // ── Stage templates keyed by mission title ─────────────────────────────────────
@@ -212,8 +215,10 @@ function MissionCard({
       className={`rounded-2xl overflow-hidden transition-all ${
         isCompleted
           ? "opacity-60"
-          : mission.status === "ready"
+          : (mission.status === "ready" || mission.status === "sending")
           ? "ring-2 ring-violet-400 shadow-lg shadow-violet-100"
+          : mission.status === "needs_attention"
+          ? "ring-2 ring-red-300 shadow-lg shadow-red-50"
           : "shadow-sm"
       }`}
       style={{
@@ -272,6 +277,13 @@ function MissionCard({
                 </div>
               ) : (
                 <p className="text-xs text-slate-400 italic">No stages yet.</p>
+              )}
+              {/* Failure reason for needs_attention missions */}
+              {mission.status === "needs_attention" && mission.failureReason && (
+                <div className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg bg-red-50 border border-red-100">
+                  <span className="text-red-500 text-xs mt-0.5">⚠</span>
+                  <p className="text-xs text-red-700 font-medium">{mission.failureReason}</p>
+                </div>
               )}
 
               {/* Action row */}
@@ -471,6 +483,15 @@ export function OperationsPanel({
       if (sessionId) utils.csMissions.listBySession.invalidate({ sessionId });
     },
   });
+  const sendSuggestedReply = trpc.csMissions.sendSuggestedReply.useMutation({
+    onSuccess: () => {
+      if (sessionId) utils.csMissions.listBySession.invalidate({ sessionId });
+      toast.success("Reply sent to customer");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to send reply");
+    },
+  });
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const activeMissions = missions.filter(m => m.status !== "completed" && m.status !== "cancelled");
@@ -487,7 +508,7 @@ export function OperationsPanel({
   }
 
   function handleSendReply(text: string, missionId: number) {
-    navigator.clipboard?.writeText(text).catch(() => {});
+    sendSuggestedReply.mutate({ missionId, text });
   }
 
   // ── Empty state ───────────────────────────────────────────────────────────

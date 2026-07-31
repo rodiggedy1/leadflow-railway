@@ -44,7 +44,7 @@ export const csMissionsRouter = router({
           and(
             eq(csMissions.sessionId, input.sessionId),
             // Return all except cancelled — let the UI decide what to show
-            inArray(csMissions.status, ["active", "waiting", "ready", "completed"])
+            inArray(csMissions.status, ["active", "waiting", "ready", "sending", "completed", "needs_attention"])
           )
         )
         .orderBy(asc(csMissions.sortOrder), asc(csMissions.createdAt));
@@ -207,6 +207,78 @@ export const csMissionsRouter = router({
         .set({ title: input.title, emoji: input.emoji ?? null, updatedAt: new Date() } as any)
         .where(eq(csMissions.id, input.missionId));
       broadcastOpsUpdate("cs_mission_update", { sessionId: existing.sessionId });
+      return { ok: true };
+    }),
+
+  /**
+   * sendSuggestedReply — atomically transitions a mission from ready → sending,
+   * sends the SMS to the customer, then marks stage 3 done and completes the mission.
+   * Double-send protection: only the request that wins the ready→sending CAS may send.
+   */
+  sendSuggestedReply: agentProcedure
+    .input(z.object({
+      missionId: z.number().int(),
+      text: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Atomic CAS: ready → sending. Only one request wins.
+      const now = new Date();
+      const casResult = await db.execute(
+        sql`UPDATE cs_missions
+            SET status = 'sending', updatedAt = ${now}
+            WHERE id = ${input.missionId}
+              AND status = 'ready'`
+      ) as any;
+      const affectedRows = Number(casResult?.[0]?.affectedRows ?? casResult?.affectedRows ?? 0);
+      if (affectedRows === 0) {
+        // Either already sent or not in ready state
+        const [m] = await db.select({ status: csMissions.status }).from(csMissions).where(eq(csMissions.id, input.missionId)).limit(1);
+        if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "Mission not found" });
+        if ((m.status as string) === "completed") throw new TRPCError({ code: "CONFLICT", message: "Already sent" });
+        throw new TRPCError({ code: "CONFLICT", message: `Cannot send from status: ${m.status}` });
+      }
+
+      // Fetch mission for customer phone
+      const [mission] = await db.select().from(csMissions).where(eq(csMissions.id, input.missionId)).limit(1);
+      if (!mission) throw new TRPCError({ code: "NOT_FOUND", message: "Mission not found after CAS" });
+
+      const customerPhone = (mission as any).customerPhone as string | null;
+      if (!customerPhone) {
+        // Roll back to ready so agent can retry
+        await db.execute(sql`UPDATE cs_missions SET status = 'ready', updatedAt = ${now} WHERE id = ${input.missionId}`);
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No customer phone on mission" });
+      }
+
+      // Send SMS
+      try {
+        const { sendSms } = await import("./openphone");
+        await sendSms({ to: customerPhone, content: input.text });
+      } catch (smsErr: any) {
+        // Roll back to ready so agent can retry
+        await db.execute(sql`UPDATE cs_missions SET status = 'ready', updatedAt = ${now} WHERE id = ${input.missionId}`);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `SMS send failed: ${smsErr?.message}` });
+      }
+
+      // Mark last stage done and complete the mission
+      const stages = (mission.stages ?? []) as any[];
+      const updatedStages = stages.map((s: any, i: number) =>
+        i === stages.length - 1 ? { ...s, status: "done" } : s
+      );
+      const completedAt = new Date();
+      await db.execute(
+        sql`UPDATE cs_missions
+            SET status = 'completed',
+                stages = ${JSON.stringify(updatedStages)},
+                activeDedupKey = NULL,
+                completedAt = ${completedAt},
+                updatedAt = ${completedAt}
+            WHERE id = ${input.missionId}`
+      );
+
+      broadcastOpsUpdate("cs_mission_update", { sessionId: mission.sessionId });
       return { ok: true };
     }),
 

@@ -23,6 +23,8 @@ import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
+import { missionHandlers } from "./missions/index";
+import { createMission } from "./missionEngine";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -255,6 +257,21 @@ export async function triggerMadisonSmsDraft(params: {
       observations: draftResponse.observations,
       db,
     });
+
+    // ── Step 9: Trigger Mission Engine (fire-and-forget) ─────────────────────
+    // Only for customer messages with a recognized intent — not for cleaners.
+    if (!isCleaner && intent === "get_eta") {
+      triggerMissionForIntent({
+        intent,
+        sessionId,
+        fromPhone,
+        customerName: context.customerName ?? senderName,
+        cleanerJobId: context.cleanerJobId,
+        cleanerPhone: context.cleanerPhone,
+        cleanerName: context.teamName,
+        inboundText,
+      }).catch((err) => console.error("[MadisonSMS] Mission trigger error:", err));
+    }
 
     console.log(`[MadisonSMS] Draft ${draftId} posted for ${fromPhone} (${intent ?? classification.type})`);
 
@@ -926,6 +943,95 @@ async function postDraftCardToCommandChat(params: {
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("new_message", { channel: "command" });
+}
+
+// ─── Mission Engine Trigger ─────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget wrapper that creates a mission when a customer SMS has a
+ * recognized intent. Called after the draft card is posted.
+ * Uses agentId=0 (system) since there is no logged-in agent at this point.
+ */
+async function triggerMissionForIntent(params: {
+  intent: string;
+  sessionId: number;
+  fromPhone: string;
+  customerName?: string;
+  cleanerJobId?: number;
+  cleanerPhone?: string;
+  cleanerName?: string;
+  inboundText: string;
+}): Promise<void> {
+  const { intent, sessionId, fromPhone, customerName, cleanerJobId, cleanerPhone, cleanerName, inboundText } = params;
+
+  // Find the handler for this intent (missionType === intent.toUpperCase())
+  const missionType = intent.toUpperCase(); // "get_eta" → "GET_ETA"
+  const handler = missionHandlers.find((h) => h.missionType === missionType);
+  if (!handler) return; // No handler registered for this intent
+
+  // Check shouldTrigger if defined
+  const ctx = {
+    sessionId,
+    agentId: 0,
+    fromPhone,
+    customerName,
+    inboundText,
+    cleanerJobId,
+    cleanerPhone,
+    cleanerName,
+  };
+  if (handler.shouldTrigger) {
+    const should = await handler.shouldTrigger(ctx);
+    if (!should) return;
+  }
+
+  if (!cleanerJobId) {
+    console.log(`[MissionEngine] No cleanerJobId for ${missionType} — skipping mission creation`);
+    return;
+  }
+
+  const dedupKey = `${missionType}:${sessionId}:${cleanerJobId}`;
+
+  // Build initial stages via the handler's stage builder (use GET_ETA default stages)
+  const stages = [
+    { id: "1", label: "Text cleaner for ETA", status: "pending" as const },
+    { id: "2", label: "Waiting on cleaner reply", status: "pending" as const },
+    { id: "3", label: "Reply to customer with ETA", status: "pending" as const, suggestedReply: "" },
+  ];
+
+  const { missionId, created } = await createMission({
+    sessionId,
+    agentId: 0,
+    agentName: "Madison",
+    title: "Get ETA",
+    emoji: "🚕",
+    missionType,
+    jobId: cleanerJobId,
+    cleanerPhone,
+    cleanerName,
+    customerPhone: fromPhone,
+    customerName,
+    activeDedupKey: dedupKey,
+    stages,
+    status: "active",
+  });
+
+  if (!created) {
+    console.log(`[MissionEngine] ${missionType} mission already active for session ${sessionId} (id=${missionId}) — skipping onCreate`);
+    return;
+  }
+
+  console.log(`[MissionEngine] Created ${missionType} mission id=${missionId} for session ${sessionId}`);
+
+  // Fetch the newly created mission row so handler.onCreate has the full object
+  const db = await import("./db").then((m) => m.getDb());
+  if (!db) return;
+  const { csMissions } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  const [mission] = await db.select().from(csMissions).where(eq(csMissions.id, missionId)).limit(1);
+  if (!mission) return;
+
+  await handler.onCreate(ctx, mission);
 }
 
 // ─── Retry ────────────────────────────────────────────────────────────────────
