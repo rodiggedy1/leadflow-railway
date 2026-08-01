@@ -1365,18 +1365,11 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed 
   const msgTime = typeof msg.createdAt === "string" ? msg.createdAt : new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const [showConversation, setShowConversation] = useState(false);
 
-  // Conversation history — always fetched to get latest message time; shown when toggle is opened
+  // Conversation history — only fetched when the toggle is opened
   const { data: conversationMessages, isLoading: convLoading } = trpc.opsChat.getSmsDraftConversation.useQuery(
     { draftId: meta.draftId!, limit: 5 },
-    { enabled: !!meta.draftId, refetchOnWindowFocus: false, staleTime: 60_000 }
+    { enabled: !!meta.draftId && showConversation, refetchOnWindowFocus: false, staleTime: 60_000 }
   );
-  // Use the latest message timestamp if available, otherwise fall back to draft creation time
-  const latestMsgTs = conversationMessages && conversationMessages.length > 0
-    ? conversationMessages[conversationMessages.length - 1].ts
-    : 0;
-  const displayTime = latestMsgTs
-    ? new Date(latestMsgTs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : msgTime;
 
   const handleApprove = async (text: string) => {
     if (!meta.draftId || isSending) return;
@@ -1515,7 +1508,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed 
               <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
                 <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
                 <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
-                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{displayTime}</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
               </div>
               {/* Copy — human summary */}
               {isLoading || isProcessing ? (
@@ -7137,7 +7130,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
               </div>
             </aside>
             {/* ── CENTER: Card ── */}
-            <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, overflowY: "auto", scrollbarWidth: "none" }}>
+            <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, flex: 1, minHeight: 0 }}>
               {/* Top bar */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
                 <button onClick={backToHero} style={{ border: 0, background: "none", fontWeight: 700, color: "#4c4d63", cursor: "pointer", fontSize: 14, textAlign: "left" }}>× Exit Focus</button>
@@ -7162,7 +7155,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                   <button onClick={onCelebrationContinue} style={{ padding: "13px 28px", background: `linear-gradient(135deg,${P},${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>Continue to next card →</button>
                 </div>
               ) : (
-                <div key={currentCard.id} style={{ background: "#fff", borderRadius: 26, border: "1px solid #e9e6fb", boxShadow: "0 20px 55px rgba(67,45,145,.13)", overflow: "hidden" }}>
+                <div key={currentCard.id} style={{ background: "#fff", borderRadius: 26, border: "1px solid #e9e6fb", boxShadow: "0 20px 55px rgba(67,45,145,.13)", overflowY: "auto", scrollbarWidth: "none", flex: 1, minHeight: 0 }}>
                   {currentCard.quickAction === "madison_sms_draft"
                     ? <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
                     : currentCard.quickAction === "madison_email_draft"
