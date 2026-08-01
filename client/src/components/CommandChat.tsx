@@ -7066,45 +7066,9 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                 </>
               )}
             </main>
-            {/* ── RIGHT: Customer Context + AiConcierge ── */}
+            {/* ── RIGHT: AiConcierge ── */}
             <aside style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-              {/* Customer / Cleaner Context Card */}
-              <div style={{ background: "rgba(255,255,255,.92)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 18, boxShadow: "0 4px 18px rgba(52,42,95,.06)", flexShrink: 0 }}>
-                {ctxLoading ? (
-                  <div style={{ color: "#9ca3af", fontSize: 12 }}>Loading context…</div>
-                ) : focusCardCtx && (focusCardCtx.cleanerName || focusCardCtx.cleanerPhone) ? (
-                  <>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c5cfc,#5d49f3)", color: "#fff", fontWeight: 800, fontSize: 15, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        {(focusCardCtx.cleanerName ?? "?").slice(0, 1).toUpperCase()}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 800, fontSize: 14, color: "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{focusCardCtx.cleanerName ?? "Unknown"}</div>
-                        {focusCardCtx.cleanerPhone && (
-                          <a href={`tel:${focusCardCtx.cleanerPhone}`} style={{ fontSize: 12, color: "#7c5cfc", textDecoration: "none", fontWeight: 600 }}>{focusCardCtx.cleanerPhone}</a>
-                        )}
-                      </div>
-                    </div>
-                    {focusCardCtx.todayJobs.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "#9ca3af" }}>No jobs scheduled today.</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 2 }}>TODAY'S SCHEDULE</div>
-                        {focusCardCtx.todayJobs.map((job, i) => (
-                          <div key={i} style={{ background: "#f5f3ff", borderRadius: 12, padding: "8px 12px" }}>
-                            <div style={{ fontWeight: 700, fontSize: 12, color: "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.customerName ?? job.jobAddress ?? "Job"}</div>
-                            <div style={{ fontSize: 11, color: "#7e829c", marginTop: 2 }}>{job.serviceDateTime ? new Date(job.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : job.jobDate} · {job.teamName ?? job.serviceType ?? ""}</div>
-                            {job.jobAddress && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.jobAddress}</div>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ fontSize: 12, color: "#9ca3af" }}>No context available for this card.</div>
-                )}
-              </div>
-              {/* AiConcierge — pre-seeded with cleaner context */}
+              {/* AiConcierge — pre-seeded with booking context */}
               <div style={{ flex: 1, minHeight: 0, borderRadius: 22, overflow: "hidden" }}>
                 <AiConcierge
                   compact
