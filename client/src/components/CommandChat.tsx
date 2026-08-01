@@ -44,7 +44,6 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
 import AiConcierge from "@/components/AiConcierge";
-import { OperationsPanel } from "@/components/OperationsPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -11574,20 +11573,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className="w-[4px] h-full" />
       </div>
 
-      {/* ── RIGHT PANEL: Operations Center ── */}
-      {/* AiConcierge preserved in AiConcierge.tsx — available for middle window when needed */}
+      {/* ── RIGHT PANEL: AiConcierge ── */}
       <div
         className="shrink-0 flex flex-col transition-[width] duration-200"
-        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined }}
+        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <OperationsPanel
-          sessionId={activeOpsSession?.sessionId ?? null}
-          customerName={activeOpsSession?.customerName ?? ""}
-          initials={activeOpsSession?.initials ?? ""}
-          agentId={agentList?.find(a => a.name === callerName)?.id ?? 0}
-          agentName={callerName}
-          sseRefetchKey={missionRefetchKey}
-        />
+        <AiConcierge compact onSwitchToCSSession={onSwitchToCSSession} />
         {/* end right panel */}
       </div>
 
