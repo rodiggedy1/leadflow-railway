@@ -4115,3 +4115,65 @@ export const madisonEmailDrafts = mysqlTable("madison_email_drafts", {
 ]);
 export type MadisonEmailDraft = typeof madisonEmailDrafts.$inferSelect;
 export type InsertMadisonEmailDraft = typeof madisonEmailDrafts.$inferInsert;
+
+// ── CS Operations Missions ────────────────────────────────────────────────────
+/**
+ * csMissions — live, per-conversation operation cards in the Operations Center panel.
+ * Each row represents one active piece of work for a specific CS conversation.
+ * Stages are stored as JSON (CsMissionStage[]) and updated as the operation progresses.
+ */
+export interface CsMissionStage {
+  id: string;
+  label: string;
+  status: "done" | "waiting" | "ready" | "pending";
+  content?: string;
+  suggestedReply?: string;
+  ts?: number;
+}
+export const csMissions = mysqlTable("cs_missions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  agentId: int("agentId").notNull(),
+  agentName: varchar("agentName", { length: 128 }),
+  title: varchar("title", { length: 255 }).notNull(),
+  emoji: varchar("emoji", { length: 16 }),
+  status: mysqlEnum("status", ["active", "waiting", "ready", "sending", "completed", "cancelled", "needs_attention"]).default("active").notNull(),
+  stages: json("stages").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+  completedAt: datetime("completedAt", { mode: "date", fsp: 3 }),
+  // Mission Engine fields (added in migration 0092)
+  missionType: varchar("missionType", { length: 32 }).default("MANUAL").notNull(),
+  jobId: bigint("jobId", { mode: "number" }),
+  cleanerPhone: varchar("cleanerPhone", { length: 32 }),
+  cleanerName: varchar("cleanerName", { length: 160 }),
+  customerPhone: varchar("customerPhone", { length: 32 }),
+  customerName: varchar("customerName", { length: 160 }),
+  /** Nullable unique dedup key — cleared on complete/cancel to allow future missions for same session+job */
+  activeDedupKey: varchar("activeDedupKey", { length: 128 }),
+  /** Reason string when status = 'needs_attention' */
+  failureReason: varchar("failureReason", { length: 255 }),
+}, (t) => [
+  index("idx_cs_missions_session").on(t.sessionId),
+  index("idx_cs_missions_session_status").on(t.sessionId, t.status),
+  uniqueIndex("uq_cs_mission_active_dedup").on(t.activeDedupKey),
+]);
+export type CsMission = typeof csMissions.$inferSelect;
+export type InsertCsMission = typeof csMissions.$inferInsert;
+
+// ── Focus Mode Points ─────────────────────────────────────────────────────────
+// One row per agent per week. Points accumulate via upsert on every Send.
+export const focusPoints = mysqlTable("focus_points", {
+  id: int("id").autoincrement().primaryKey(),
+  agentName: varchar("agentName", { length: 128 }).notNull(),
+  points: int("points").notNull().default(0),
+  /** ISO date string of the Monday that starts this week (YYYY-MM-DD) */
+  weekStart: varchar("weekStart", { length: 10 }).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_focus_points_agent_week").on(t.agentName, t.weekStart),
+  index("idx_focus_points_week").on(t.weekStart),
+]);
+export type FocusPoints = typeof focusPoints.$inferSelect;

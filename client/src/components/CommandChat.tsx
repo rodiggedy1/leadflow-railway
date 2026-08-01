@@ -44,6 +44,7 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
 import AiConcierge from "@/components/AiConcierge";
+import { OperationsPanel } from "@/components/OperationsPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -197,6 +198,7 @@ interface CommandChatProps {
     threadParentFrom?: string | null;
     replyCount?: number;
     createdAt: Date;
+    lastActivityAt?: number | null;
   }>;
   channelLoading: boolean;
   callerName: string;
@@ -603,12 +605,14 @@ function HotLeadCard({
   claimLeadMutation,
   sessionStatus,
   onOpenFirstMsg,
+  onSelectSession,
 }: {
   msg: LeadMsg;
   isFirst?: boolean;
   claimLeadMutation: ClaimMutation;
   sessionStatus?: SessionStatus | null;
   onOpenFirstMsg?: (details: string) => void;
+  onSelectSession?: (sessionId: number, customerName: string) => void;
 }) {
   // Shake state: fires every 8 seconds while unclaimed
   const [shaking, setShaking] = useState(false);
@@ -788,7 +792,13 @@ function HotLeadCard({
       {/* Card body — clickable to open SMS */}
       <div
         className={cn(sessionId && "cursor-pointer")}
-        onClick={() => { if (sessionId) window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); }}
+        onClick={() => {
+          console.log("[Operations] HotLeadCard clicked — sessionId:", sessionId, "leadName:", leadName);
+          if (sessionId) {
+            window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank");
+          }
+          onSelectSession?.(sessionId ?? 0, leadName ?? "");
+        }}
       >
         {/* Status pill — exact prototype .lead-status */}
         <span style={{display:"inline-flex",alignItems:"center",gap:"5px",padding:"5px 8px",borderRadius:"999px",fontSize:"10px",fontWeight:800,...(isBooked?{background:"#eff6ff",color:"#1d4ed8"}:isLost||isCold?{background:"#f1f5f9",color:"#64748b"}:isFollowUp?{background:"#fff6e8",color:"#df7e00"}:isClaimed?{background:"#eafaf4",color:"#0da875"}:{background:"#fff0f2",color:"#ff475f"})}}>
@@ -828,12 +838,14 @@ function HotLeadsTray({
   onCollapse,
   onOpenFirstMsg,
   searchQuery = "",
+  onSelectSession,
 }: {
   channelMsgs: LeadMsg[];
   claimLeadMutation: ClaimMutation;
   onCollapse: () => void;
   onOpenFirstMsg?: (details: string) => void;
   searchQuery?: string;
+  onSelectSession?: (sessionId: number | null | undefined, customerName: string | null | undefined) => void;
 }) {
   // Derive lead cards from channelMsgs — only new_lead quickAction, last 8h
   const cutoff = Date.now() - 8 * 60 * 60 * 1000;
@@ -918,6 +930,10 @@ function HotLeadsTray({
               isFirst={idx === 0}
               claimLeadMutation={claimLeadMutation}
               onOpenFirstMsg={onOpenFirstMsg}
+              onSelectSession={(sid, name) => {
+                console.log("[Operations] HotLeadCard onSelectSession fired", { sid, name });
+                onSelectSession?.(sid, name);
+              }}
               sessionStatus={(() => {
                 try {
                   const meta = JSON.parse(msg.metadata ?? "{}");
@@ -1005,6 +1021,7 @@ type MessageListProps = {
   onOpenConcierge: () => void;
   onCallBack: (name: string, phone: string, msgId: number) => void;
   onTextBack: (name: string, phone: string, msgId: number) => void;
+  onSelectOpsSession?: (sessionId: number, customerName: string) => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1306,7 +1323,7 @@ function EtaCallResultCard({
 
 // ── MadisonSmsDraftCard ─────────────────────────────────────────────────────
 // Self-contained component — fetches draft by draftId, handles approve/dismiss/retry
-export function MadisonSmsDraftCard({ msg, callerName, onActed }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string; onActed?: () => void }) {
+export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string; onSelectSession?: (sessionId: number, customerName: string) => void; onActed?: () => void }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -1373,10 +1390,28 @@ export function MadisonSmsDraftCard({ msg, callerName, onActed }: { msg: { id: n
     dismissMutation.mutate({ draftId: meta.draftId, dismissedBy: callerName });
   };
 
+  // ── Auto-activate Operations panel when draft loads ──
+  const prevSessionRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    // Fire as soon as we have a sessionId — use senderName if available, else "Customer"
+    if (meta.sessionId && prevSessionRef.current !== meta.sessionId) {
+      prevSessionRef.current = meta.sessionId;
+      const name = draft?.senderName ?? "Customer";
+      console.log("[Operations] MadisonSmsDraftCard auto-activate", { sessionId: meta.sessionId, name });
+      onSelectSession?.(meta.sessionId, name);
+    }
+  }, [meta.sessionId, draft?.senderName, onSelectSession]);
+  const handleCardClick = () => {
+    if (meta.sessionId) {
+      const name = draft?.senderName ?? "Customer";
+      console.log("[Operations] MadisonSmsDraftCard click", { sessionId: meta.sessionId, name });
+      onSelectSession?.(meta.sessionId, name);
+    }
+  };
   // ── No draftId in metadata — render minimal fallback ──
   if (!meta.draftId) {
     return (
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px", cursor: meta.sessionId ? "pointer" : "default" }} onClick={handleCardClick}>
         <img src={MADISON_PHOTO} alt="Madison" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
@@ -1445,7 +1480,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onActed }: { msg: { id: n
   }
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }} onClick={handleCardClick}>
       {/* Outer wrapper — no card chrome here, just the chat row */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* V6 card */}
@@ -1603,7 +1638,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onActed }: { msg: { id: n
                           font: "13px/1.5 Inter,system-ui",
                           resize: "vertical" as const,
                           outline: "none",
-                          minHeight: 90,
+                          minHeight: 200,
                           color: "#111827",
                           background: "#fff",
                         }}
@@ -1621,7 +1656,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onActed }: { msg: { id: n
                           font: "13px/1.5 Inter,system-ui",
                           resize: "none" as const,
                           outline: "none",
-                          minHeight: 60,
+                          minHeight: 200,
                           color: "#111827",
                           background: "#fff",
                           cursor: "default",
@@ -2037,7 +2072,7 @@ export function MadisonEmailDraftCard({ msg, callerName, onActed }: { msg: { id:
                           font: "13px/1.5 Inter,system-ui",
                           resize: "vertical" as const,
                           outline: "none",
-                          minHeight: 90,
+                          minHeight: 200,
                           color: "#111827",
                           background: "#fff",
                         }}
@@ -2055,7 +2090,7 @@ export function MadisonEmailDraftCard({ msg, callerName, onActed }: { msg: { id:
                           font: "13px/1.5 Inter,system-ui",
                           resize: "none" as const,
                           outline: "none",
-                          minHeight: 60,
+                          minHeight: 200,
                           color: "#111827",
                           background: "#fff",
                           cursor: "default",
@@ -4026,6 +4061,7 @@ const MessageList = memo(function MessageList({
   onOpenConcierge,
   onCallBack,
   onTextBack,
+  onSelectOpsSession,
 }: MessageListProps) {
   return (
     <>
@@ -5652,11 +5688,18 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
                     <div
-                      key={msg.id}
+                      key={`${msg.id}:${msg.lastActivityAt ?? 0}`}
                       ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
                       className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
                     >
-                      <MadisonSmsDraftCard msg={msg} callerName={callerName} />
+                      <MadisonSmsDraftCard
+                        msg={msg}
+                        callerName={callerName}
+                        onSelectSession={(sid, name) => {
+                          console.log("[Operations] MadisonSmsDraftCard onSelectSession fired", { sessionId: sid, customerName: name });
+                          onSelectOpsSession?.(sid, name);
+                        }}
+                      />
                     </div>
                   );
                 }
@@ -5684,6 +5727,10 @@ const MessageList = memo(function MessageList({
                         msg={msg}
                         onCallBack={onCallBack}
                         onTextBack={onTextBack}
+                        onSelectSession={(sid, name) => {
+                          console.log("[Operations] MadisonCallSummaryCard selected", { sessionId: sid, customerName: name });
+                          onSelectOpsSession?.(sid, name);
+                        }}
                       />
                     </div>
                   );
@@ -5968,11 +6015,13 @@ export function MadisonCallSummaryCard({
   msg,
   onCallBack,
   onTextBack,
+  onSelectSession,
   onActed,
 }: {
   msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
   onCallBack: (name: string, phone: string, msgId: number) => void;
   onTextBack: (name: string, phone: string, msgId: number) => void;
+  onSelectSession?: (sessionId: number, customerName: string) => void;
   onActed?: () => void;
 }) {
   const [showTranscript, setShowTranscript] = useState(false);
@@ -6014,6 +6063,12 @@ export function MadisonCallSummaryCard({
   const callerPhone = meta.callerPhone ?? null;
   const durationDisplay = meta.durationDisplay ?? "";
   const outcome = meta.outcome ?? "";
+  // Notify parent when this card is clicked so Operations panel can show missions for this session
+  const handleCardClick = () => {
+    if (meta.sessionId && onSelectSession) {
+      onSelectSession(meta.sessionId as number, callerName ?? callerPhone ?? "Unknown");
+    }
+  };
   const actedBy = meta.actedBy ?? null;
   const actedAction = meta.actedAction ?? null;
   const intentSummary = meta.intentSummary ?? "Called but left no details.";
@@ -6064,7 +6119,10 @@ export function MadisonCallSummaryCard({
   }
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }}>
+    <div
+      style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px", cursor: meta.sessionId ? "pointer" : "default" }}
+      onClick={handleCardClick}
+    >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           width: "100%",
@@ -6767,161 +6825,253 @@ function KudosModal({
   );
 }
 
-// ── DebriefModal helpers ─────────────────────────────────────────────────────
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function fmtDebriefDate(dateStr: string): string {
-  const d = new Date(`${dateStr}T12:00:00`);
-  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-}
-
-// ── DebriefModal ─────────────────────────────────────────────────────────────
-// Full-screen modal overlay that embeds the Madison Debrief review flow.
+// ── FocusModal (Focus Mode popup) ────────────────────────────────────────────
+// Full-screen modal overlay that shows the unresolved Madison queue.
+// 3-column layout matching the Focus Mode prototype:
+//   Left  : Leaderboard + streak
+//   Center: Card + nav + celebration screen
+//   Right : Session stats + recent wins + queue preview
+type FocusRecentWin = { label: string; type: "sms" | "email" | "call"; ts: number };
 function DebriefModal({ onClose }: { onClose: () => void }) {
-  const [selectedDate, setSelectedDate] = useState(todayLocal);
   const [view, setView] = useState<"hero" | "review" | "done">("hero");
   const [cardIndex, setCardIndex] = useState(0);
-
-  const { data: cards = [], isLoading } = trpc.opsChat.getDebriefCards.useQuery(
-    { date: selectedDate },
-    { staleTime: 30_000 }
-  );
-
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [sessionStreak, setSessionStreak] = useState(0);
+  const [sessionDone, setSessionDone] = useState(0);
+  const [recentWins, setRecentWins] = useState<FocusRecentWin[]>([]);
+  const utils = trpc.useUtils();
+  const { data: cards = [], isLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { staleTime: 0 });
+  const { data: leaderboard = [] } = trpc.opsChat.getFocusLeaderboard.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
+  const { data: myPtsData } = trpc.opsChat.getMyFocusPoints.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
+  const awardPoints = trpc.opsChat.awardFocusPoints.useMutation();
   const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
+  const emailCount = cards.filter(c => c.quickAction === "madison_email_draft").length;
   const currentCard = cards[cardIndex];
   const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
-
+  const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
+  const medals = ["🥇", "🥈", "🥉"];
+  // After Send/Dismiss the queue shrinks — clamp index safely
+  useEffect(() => {
+    if (cards.length > 0 && cardIndex >= cards.length) setCardIndex(cards.length - 1);
+    if (cards.length === 0 && view === "review") setView("done");
+  }, [cards.length, cardIndex, view]);
   const startReview = () => { if (cards.length > 0) { setCardIndex(0); setView("review"); } };
   const goNext = () => { if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done"); };
   const goPrev = () => { if (cardIndex > 0) setCardIndex(i => i - 1); };
-  const backToHero = () => { setView("hero"); setCardIndex(0); };
-
+  const backToHero = () => { setView("hero"); setCardIndex(0); setShowCelebration(false); };
+  // Called by cards after their own Send/Dismiss mutation succeeds
+  const onCardActed = (acted: "sent" | "dismissed" = "sent") => {
+    utils.opsChat.getFocusCards.invalidate();
+    if (acted === "sent") {
+      awardPoints.mutate();
+      utils.opsChat.getMyFocusPoints.invalidate();
+      utils.opsChat.getFocusLeaderboard.invalidate();
+      setSessionStreak(s => s + 1);
+      setSessionDone(d => d + 1);
+      if (currentCard) {
+        const type: FocusRecentWin["type"] = currentCard.quickAction === "madison_sms_draft" ? "sms" : currentCard.quickAction === "madison_email_draft" ? "email" : "call";
+        setRecentWins(w => [{ label: (currentCard.body ?? "").slice(0, 40) || "Card", type, ts: Date.now() }, ...w]);
+      }
+      setShowCelebration(true);
+    } else {
+      setSessionDone(d => d + 1);
+      setSessionStreak(0);
+      if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done");
+    }
+  };
+  const onCelebrationContinue = () => {
+    setShowCelebration(false);
+    if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done");
+  };
   const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
-
+  const P = "#6d46ff"; const P2 = "#8d70ff"; const G = "#1f9d70";
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        className="relative flex flex-col bg-[#f4f6fb] rounded-2xl shadow-2xl overflow-hidden"
-        style={{ width: "min(760px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}
-      >
-        {/* Close X */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow text-slate-500 hover:text-slate-800 transition"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        {view === "hero" && (
-          <div>
-            {/* Hero gradient */}
-            <div style={{ padding: "32px 32px 28px", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
-                <img src={MADISON_PHOTO} alt="Madison" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0 }} />
-                <div>
-                  <div style={{ font: "700 24px Georgia, serif", lineHeight: 1 }}>Daily Debrief ✦</div>
-                  <div style={{ fontSize: 13, opacity: 0.8, marginTop: 3 }}>Madison's interaction history</div>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-                <label style={{ fontSize: 13, fontWeight: 600, opacity: 0.85, whiteSpace: "nowrap" }}>Reviewing:</label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  max={todayLocal()}
-                  onChange={e => { setSelectedDate(e.target.value); setView("hero"); setCardIndex(0); }}
-                  style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 10, padding: "6px 12px", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", outline: "none" }}
-                />
-              </div>
-              {isLoading ? (
-                <div style={{ fontSize: 16, opacity: 0.8 }}>Loading…</div>
-              ) : cards.length === 0 ? (
-                <div style={{ fontSize: 17, lineHeight: 1.6 }}>No interactions recorded for <b>{fmtDebriefDate(selectedDate)}</b>.</div>
-              ) : (
-                <div style={{ fontSize: 17, lineHeight: 1.6 }}>
-                  On <b>{fmtDebriefDate(selectedDate)}</b>, I handled <b>{cards.length} interaction{cards.length !== 1 ? "s" : ""}</b>
-                  {callCount > 0 && smsCount > 0 ? ` — ${callCount} call${callCount !== 1 ? "s" : ""} and ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}.`
-                    : callCount > 0 ? ` — ${callCount} inbound call${callCount !== 1 ? "s" : ""}.`
-                    : ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}.`}
-                </div>
-              )}
+      {/* Hero screen — compact centered card */}
+      {view === "hero" && (
+        <div className="relative flex flex-col bg-[#f4f6fb] rounded-2xl shadow-2xl overflow-hidden" style={{ width: "min(600px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}>
+          <button onClick={onClose} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow text-slate-500 hover:text-slate-800 transition"><X className="w-4 h-4" /></button>
+          <div style={{ padding: "32px 32px 28px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+              <img src={MADISON_PHOTO} alt="Madison" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0 }} />
+              <div><div style={{ font: "700 24px Georgia, serif", lineHeight: 1 }}>Focus Mode ✦</div><div style={{ fontSize: 13, opacity: 0.8, marginTop: 3 }}>Review and act on pending items</div></div>
             </div>
-            {!isLoading && cards.length > 0 && (
-              <div style={{ display: "flex", borderBottom: "1px solid #f0eeff" }}>
-                <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}>
-                  <div style={{ fontSize: 28, fontWeight: 700, color: "#5d49f3" }}>{callCount}</div>
-                  <div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div>
-                </div>
-                <div style={{ flex: 1, padding: "18px 24px" }}>
-                  <div style={{ fontSize: 28, fontWeight: 700, color: "#5d49f3" }}>{smsCount}</div>
-                  <div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div>
-                </div>
-              </div>
-            )}
-            {!isLoading && cards.length > 0 && (
-              <div style={{ padding: "20px 24px" }}>
-                <button
-                  onClick={startReview}
-                  style={{ width: "100%", padding: "14px 0", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 16, cursor: "pointer" }}
-                >
-                  Start Review →
-                </button>
-              </div>
-            )}
+            {isLoading ? <div style={{ fontSize: 16, opacity: 0.8 }}>Loading…</div>
+              : cards.length === 0 ? <div style={{ fontSize: 17, lineHeight: 1.6 }}>✅ <b>You're all caught up.</b> No pending items right now.</div>
+              : <div style={{ fontSize: 17, lineHeight: 1.6 }}>You have <b>{cards.length} pending item{cards.length !== 1 ? "s" : ""}</b>{callCount > 0 && smsCount > 0 ? ` — ${callCount} call${callCount !== 1 ? "s" : ""}, ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}${emailCount > 0 ? `, ${emailCount} email draft${emailCount !== 1 ? "s" : ""}` : ""}.` : callCount > 0 ? ` — ${callCount} inbound call${callCount !== 1 ? "s" : ""}.` : smsCount > 0 && emailCount > 0 ? ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""} and ${emailCount} email draft${emailCount !== 1 ? "s" : ""}.` : smsCount > 0 ? ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}.` : ` — ${emailCount} email draft${emailCount !== 1 ? "s" : ""}.`}</div>}
           </div>
-        )}
-
-        {view === "done" && (
+          {!isLoading && cards.length > 0 && (
+            <div style={{ display: "flex", borderBottom: "1px solid #f0eeff" }}>
+              {callCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{callCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div></div>}
+              {smsCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: emailCount > 0 ? "1px solid #f0eeff" : undefined }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{smsCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div></div>}
+              {emailCount > 0 && <div style={{ flex: 1, padding: "18px 24px" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{emailCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Email Drafts</div></div>}
+            </div>
+          )}
+          {!isLoading && cards.length > 0 && (
+            <div style={{ padding: "20px 24px" }}>
+              <button onClick={startReview} style={{ width: "100%", padding: "14px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Start Focus →</button>
+            </div>
+          )}
+        </div>
+      )}
+      {/* Done screen */}
+      {view === "done" && (
+        <div className="relative flex flex-col bg-[#f4f6fb] rounded-2xl shadow-2xl overflow-hidden" style={{ width: "min(500px, 96vw)" }}>
+          <button onClick={onClose} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow text-slate-500 hover:text-slate-800 transition"><X className="w-4 h-4" /></button>
           <div style={{ padding: "60px 40px", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 14 }}>✅</div>
             <div style={{ font: "700 24px Georgia, serif", color: "#1a1a2e", marginBottom: 10 }}>You're all caught up</div>
-            <div style={{ fontSize: 15, color: "#6b7280", marginBottom: 24 }}>That's all {cards.length} interaction{cards.length !== 1 ? "s" : ""} for {fmtDebriefDate(selectedDate)}.</div>
-            <button onClick={backToHero} style={{ padding: "12px 28px", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>← Back to Brief</button>
+            <div style={{ fontSize: 15, color: "#6b7280", marginBottom: 8 }}>No more pending items right now.</div>
+            {sessionDone > 0 && <div style={{ fontSize: 14, color: P, fontWeight: 700, marginBottom: 20 }}>🔥 {sessionDone} card{sessionDone !== 1 ? "s" : ""} handled · +{sessionDone * 10} pts</div>}
+            <button onClick={backToHero} style={{ padding: "12px 28px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>← Back</button>
           </div>
-        )}
-
-        {view === "review" && currentCard && (() => {
-          const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
-          return (
-            <div style={{ padding: "24px 24px 32px" }}>
+        </div>
+      )}
+      {/* Review screen — 3-column full-screen layout */}
+      {view === "review" && currentCard && (() => {
+        const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
+        return (
+          <div style={{ width: "min(1260px, 98vw)", maxHeight: "96vh", overflowY: "auto", background: "radial-gradient(circle at 10% 0,#eee8ff,transparent 28%),#f7f8ff", borderRadius: 28, boxShadow: "0 24px 80px rgba(67,45,145,.22)", fontFamily: "Inter, system-ui, sans-serif" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18 }}>
+            {/* ── LEFT: Leaderboard ── */}
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Brand */}
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: "20px 18px", boxShadow: "0 4px 18px rgba(52,42,95,.06)", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${P},#4c2ed0)`, display: "grid", placeItems: "center", color: "#fff", fontSize: 20, flexShrink: 0 }}>◎</div>
+                  <div><div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.08em", color: "#17152d" }}>FOCUS MODE</div><div style={{ fontSize: 12, color: "#7e829c", marginTop: 3, lineHeight: 1.5 }}>One card.<br />Zero distractions.</div></div>
+                </div>
+                {/* Leaderboard */}
+                <div style={{ borderTop: "1px solid #f0eeff", paddingTop: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#7e829c", letterSpacing: "0.06em", marginBottom: 10 }}>🏆 THIS WEEK</div>
+                  {leaderboard.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "8px 0" }}>No points yet. Be first! 🚀</div>
+                  ) : leaderboard.map((entry, i) => (
+                    <div key={entry.agentName} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 8, alignItems: "center", padding: "8px 10px", borderRadius: 13, background: i === 0 ? "#f5f1ff" : "transparent", border: i === 0 ? "1px solid #ddd4ff" : "1px solid transparent", marginBottom: 4 }}>
+                      <span style={{ fontSize: 15, textAlign: "center" }}>{medals[i] ?? `${i + 1}`}</span>
+                      <span style={{ fontSize: 13, fontWeight: i === 0 ? 800 : 600, color: i === 0 ? P : "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.agentName}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: i === 0 ? P : "#6b7280" }}>{entry.points}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* My points */}
+                <div style={{ background: `linear-gradient(135deg,${P},${P2})`, borderRadius: 16, padding: "14px 16px", color: "#fff" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, marginBottom: 2 }}>YOUR POINTS THIS WEEK</div>
+                  <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1 }}>{myPtsData?.points ?? 0}</div>
+                  <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>+10 pts per send</div>
+                </div>
+                {/* Streak */}
+                {sessionStreak > 0 && (
+                  <div style={{ background: "#fff8ed", border: "1px solid #f5dfbd", borderRadius: 16, padding: "14px 16px" }}>
+                    <div style={{ fontWeight: 800, color: "#bd610d", fontSize: 13 }}>🔥 On a roll!</div>
+                    <div style={{ fontSize: 13, color: "#7e829c", marginTop: 2 }}>{sessionStreak} in a row</div>
+                    <div style={{ display: "flex", gap: 5, marginTop: 10, flexWrap: "wrap" }}>
+                      {Array.from({ length: Math.min(sessionStreak, 7) }).map((_, i) => (
+                        <div key={i} style={{ width: 22, height: 22, borderRadius: "50%", background: P, color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700 }}>✓</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </aside>
+            {/* ── CENTER: Card ── */}
+            <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
               {/* Top bar */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <button onClick={backToHero} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#6b7280", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}>
-                  <X style={{ width: 13, height: 13 }} /> Exit
-                </button>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{cardIndex + 1} of {cards.length}</span>
-                <span style={{ fontSize: 12, color: "#9ca3af" }}>{fmtDebriefDate(selectedDate)}</span>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
+                <button onClick={backToHero} style={{ border: 0, background: "none", fontWeight: 700, color: "#4c4d63", cursor: "pointer", fontSize: 14, textAlign: "left" }}>× Exit Focus</button>
+                <div style={{ fontWeight: 800, fontSize: 14, color: "#17152d" }}>{cardIndex + 1} of {cards.length}</div>
+                <div style={{ textAlign: "right", color: "#7e829c", fontSize: 13 }}>Focus Mode 🎯</div>
               </div>
               {/* Progress bar */}
-              <div style={{ height: 6, background: "#ececf8", borderRadius: 999, marginBottom: 20, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, #5d49f3, #7a63ff)", borderRadius: 999, transition: "width 0.3s ease" }} />
+              <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg,${P},${P2})`, transition: ".3s" }} />
               </div>
-              {/* Card */}
-              <div style={{ background: "#fff", borderRadius: 18, boxShadow: "0 6px 24px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 18 }}>
-                {currentCard.quickAction === "madison_sms_draft"
-                  ? <MadisonSmsDraftCard msg={msgObj} callerName="" />
-                  : <MadisonCallSummaryCard msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} />}
-              </div>
+              {/* Celebration or Card */}
+              {showCelebration ? (
+                <div style={{ border: "1px solid #e9e6fb", borderRadius: 26, background: "radial-gradient(circle at 80% 50%,#eee9ff,transparent 28%),radial-gradient(circle at 20% 50%,#fff1dd,transparent 28%),white", textAlign: "center", padding: "34px 28px", position: "relative", overflow: "hidden" }}>
+                  <div style={{ width: 74, height: 74, margin: "0 auto", borderRadius: "50%", background: `linear-gradient(135deg,${P},${P2})`, color: "#fff", display: "grid", placeItems: "center", fontSize: 37, boxShadow: `0 15px 30px ${P}44` }}>✓</div>
+                  <h2 style={{ fontSize: 28, margin: "12px 0 5px", fontFamily: "Georgia,serif", color: "#17152d" }}>Woohoo! 🎉</h2>
+                  <p style={{ color: "#7e829c", marginBottom: 18 }}>Message sent successfully. Madison's got this one.</p>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 }}>
+                    <div style={{ padding: "10px 14px", border: "1px solid #e9e6fb", borderRadius: 13, fontSize: 13, fontWeight: 800, background: "#fff" }}>⭐ +10 points</div>
+                    <div style={{ padding: "10px 14px", border: "1px solid #e9e6fb", borderRadius: 13, fontSize: 13, fontWeight: 800, background: "#fff" }}>🔥 {sessionStreak} in a row</div>
+                    <div style={{ padding: "10px 14px", border: "1px solid #e9e6fb", borderRadius: 13, fontSize: 13, fontWeight: 800, background: "#fff" }}>😊 Great job!</div>
+                  </div>
+                  <button onClick={onCelebrationContinue} style={{ padding: "13px 28px", background: `linear-gradient(135deg,${P},${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>Continue to next card →</button>
+                </div>
+              ) : (
+                <div key={currentCard.id} style={{ background: "#fff", borderRadius: 26, border: "1px solid #e9e6fb", boxShadow: "0 20px 55px rgba(67,45,145,.13)", overflow: "hidden" }}>
+                  {currentCard.quickAction === "madison_sms_draft"
+                    ? <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
+                    : currentCard.quickAction === "madison_email_draft"
+                    ? <MadisonEmailDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
+                    : <MadisonCallSummaryCard key={currentCard.id} msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} onActed={() => onCardActed("dismissed")} />}
+                </div>
+              )}
               {/* Nav */}
-              <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={goPrev} disabled={cardIndex === 0} style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 18px", borderRadius: 12, border: "1.5px solid #ddd5ff", background: "#fff", color: cardIndex === 0 ? "#d1d5db" : "#5d49f3", fontWeight: 700, fontSize: 14, cursor: cardIndex === 0 ? "not-allowed" : "pointer" }}>
-                  <ChevronLeft style={{ width: 16, height: 16 }} /> Prev
-                </button>
-                <button onClick={goNext} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 18px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                  {cardIndex < cards.length - 1 ? <><ChevronRight style={{ width: 16, height: 16 }} /> Next</> : <>Done ✓</>}
-                </button>
+              {!showCelebration && (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", gap: 12 }}>
+                    <button onClick={goPrev} disabled={cardIndex === 0} style={{ height: 54, border: "1px solid #ded9f5", background: "white", borderRadius: 14, fontWeight: 800, fontSize: 14, cursor: cardIndex === 0 ? "not-allowed" : "pointer", color: cardIndex === 0 ? "#d1d5db" : "#17152d" }}>← Prev</button>
+                    <button onClick={goNext} style={{ height: 54, border: 0, background: `linear-gradient(135deg,${P},#7d56ff)`, color: "#fff", borderRadius: 14, fontWeight: 800, fontSize: 14, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>{cardIndex < cards.length - 1 ? "Next →" : "Done ✓"}</button>
+                  </div>
+                  <div style={{ textAlign: "center", color: "#a0a3b5", fontSize: 12, marginTop: -4 }}>Next moves to the next card without acting. The card stays in your queue.</div>
+                </>
+              )}
+            </main>
+            {/* ── RIGHT: Stats ── */}
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Session stats */}
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
+                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>🎯 Your Focus Session</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+                  {[{ label: "Total", val: cards.length, color: P }, { label: "Done", val: sessionDone, color: G }, { label: "Streak", val: sessionStreak, color: "#ff922f" }, { label: "Pct", val: `${pct}%`, color: "#ff922f" }].map(s => (
+                    <div key={s.label} style={{ border: "1px solid #e9e6fb", borderRadius: 14, textAlign: "center", padding: "11px 5px" }}>
+                      <strong style={{ display: "block", color: s.color, fontSize: 20, fontWeight: 800 }}>{s.val}</strong>
+                      <small style={{ color: "#7e829c", fontSize: 11 }}>{s.label}</small>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden", marginTop: 14 }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg,${P},${P2})`, transition: ".3s" }} />
+                </div>
               </div>
-            </div>
-          );
-        })()}
-      </div>
+              {/* Recent wins */}
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
+                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Recent Wins</h3>
+                {recentWins.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#9ca3af" }}>Act on a card to see wins here.</div>
+                ) : recentWins.slice(0, 4).map((w, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < Math.min(recentWins.length, 4) - 1 ? "1px solid #efedf7" : "none" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 12, background: w.type === "call" ? "#fff3e5" : "#eaf8f2", display: "grid", placeItems: "center", fontSize: 16 }}>{w.type === "sms" ? "✉" : w.type === "email" ? "📧" : "☎"}</div>
+                    <div><strong style={{ fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{w.label}</strong><small style={{ color: G, fontSize: 11, fontWeight: 600 }}>Sent</small></div>
+                    <time style={{ fontSize: 11, color: "#9da1b4" }}>{Math.floor((Date.now() - w.ts) / 60000)}m ago</time>
+                  </div>
+                ))}
+              </div>
+              {/* Queue preview */}
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
+                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Queue Preview</h3>
+                <div style={{ color: "#7e829c", fontSize: 13, marginBottom: 10 }}>What's ahead</div>
+                <div style={{ display: "flex", marginBottom: 10 }}>
+                  {cards.slice(cardIndex + 1, cardIndex + 6).map((c, i) => (
+                    <div key={c.id} style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c5cfc,#5d49f3)", color: "#fff", fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", marginLeft: i === 0 ? 0 : -8, border: "2px solid #fff" }}>
+                      {(c.body ?? "?").slice(0, 1).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+                <strong style={{ fontSize: 13, color: "#17152d" }}>{Math.max(0, cards.length - cardIndex - 1)} card{cards.length - cardIndex - 1 !== 1 ? "s" : ""} remaining</strong>
+              </div>
+            </aside>
+          </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -7072,6 +7222,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [quickReplyTarget, setQuickReplyTarget] = useState<{ customer: CustomerData; view: "sms" | "email"; lastMessage?: string; emailSubject?: string; isLeadChat?: boolean; sessionId?: number } | null>(null);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [taskRefetchTick, setTaskRefetchTick] = useState(0);
+  // ── Operations Center — active lead/session context for right panel ────────
+  const [activeOpsSession, setActiveOpsSession] = useState<{ sessionId: number; customerName: string; initials: string } | null>(null);
+  const [missionRefetchKey, setMissionRefetchKey] = useState(0);
   const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
   const { data: dueTasks = [] } = trpc.tasks.getDue.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -7235,6 +7388,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.tasks.listMine.invalidate();
       utils.tasks.getDue.invalidate();
       setTaskRefetchTick(t => t + 1);
+    },
+    onCsMissionUpdate: (sessionId) => {
+      // Only bump refetch key if the update is for the currently active session
+      setActiveOpsSession(prev => {
+        if (prev && prev.sessionId === sessionId) {
+          setMissionRefetchKey(k => k + 1);
+        }
+        return prev;
+      });
     },
   }, { label: "CommandChat" });
 
@@ -8892,6 +9054,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setFirstMsgCopied(false);
               setFirstMsgOpen(true);
             }}
+            onSelectSession={(sid, name) => {
+              if (!sid) return;
+              const safeName = name?.trim() || "Unknown Customer";
+              const initials = safeName.split(/\s+/).slice(0,2).map((w: string) => w[0]).join("").toUpperCase();
+              console.log("[Operations] Setting activeOpsSession from HotLeadsTray", { sid, safeName, initials });
+              setActiveOpsSession({ sessionId: sid, customerName: safeName, initials });
+            }}
           />
           )}
 
@@ -9681,15 +9850,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </button>
                 </>
               )}
-              {/* Debrief button */}
+              {/* Focus button */}
               <button
                 onClick={() => setShowDebrief(true)}
                 className="flex items-center gap-1 rounded-full border border-[#e3e6ef] bg-white hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition whitespace-nowrap"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
-                title="Open Madison Debrief"
+                title="Open Madison Focus"
               >
                 <span style={{ fontSize: 12 }}>✦</span>
-                <span className="font-semibold text-[#6f3cff]">Debrief</span>
+                <span className="font-semibold text-[#6f3cff]">Focus</span>
               </button>
               {/* Payment Link button */}
               <button
@@ -9968,6 +10137,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             });
             setVoiceTone("friendly");
             setVoiceCardMinimized(false);
+          }}
+          onSelectOpsSession={(sid, name) => {
+            const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+            setActiveOpsSession({ sessionId: sid, customerName: name, initials });
           }}
         />
         {/* New-message badge — shown when user is scrolled up */}
@@ -11401,12 +11574,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className="w-[4px] h-full" />
       </div>
 
-      {/* ── RIGHT PANEL: AI Concierge (always open) ── */}
+      {/* ── RIGHT PANEL: Operations Center ── */}
+      {/* AiConcierge preserved in AiConcierge.tsx — available for middle window when needed */}
       <div
-        className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200"
-        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
+        className="shrink-0 flex flex-col transition-[width] duration-200"
+        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined }}
       >
-        <AiConcierge compact onSwitchToCSSession={onSwitchToCSSession} />
+        <OperationsPanel
+          sessionId={activeOpsSession?.sessionId ?? null}
+          customerName={activeOpsSession?.customerName ?? ""}
+          initials={activeOpsSession?.initials ?? ""}
+          agentId={agentList?.find(a => a.name === callerName)?.id ?? 0}
+          agentName={callerName}
+          sseRefetchKey={missionRefetchKey}
+        />
         {/* end right panel */}
       </div>
 

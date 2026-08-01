@@ -40,6 +40,7 @@ import {
   issueEngineTimeline,
   madisonSmsDrafts,
   madisonEmailDrafts,
+  focusPoints,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
@@ -88,8 +89,28 @@ function formatTime(serviceDateTime: string | null | undefined): string {
   }
 }
 
-// ── router ────────────────────────────────────────────────────────────────────
+/**
+ * Deactivate the active ops_chat_messages card for a madison_sms_draft.
+ * Sets cardStatus = 'dismissed' so the activeDedupKey generated column becomes NULL,
+ * freeing the unique index slot for the next inbound message from the same session.
+ */
+async function deactivateOpsSmsCard(draftId: number): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(
+      sql`UPDATE ops_chat_messages
+          SET cardStatus = 'dismissed', activeDedupKey = NULL
+          WHERE quickAction = 'madison_sms_draft'
+            AND JSON_EXTRACT(metadata, '$.draftId') = ${draftId}
+            AND cardStatus = 'active'`
+    );
+  } catch (err) {
+    console.error('[deactivateOpsSmsCard] failed for draftId', draftId, err);
+  }
+}
 
+// ── router ────────────────────────────────────────────────────────────────────
 // In-memory typing presence store (ephemeral, no DB needed)
 const typingStore = new Map<string, Map<string, { name: string; expiresAt: number }>>();
 
@@ -832,6 +853,7 @@ export const opsChatRouter = router({
         threadParentBody: m.threadParentId ? (parentMap.get(m.threadParentId)?.body ?? null) : null,
         threadParentFrom: m.threadParentId ? (parentMap.get(m.threadParentId)?.authorName ?? null) : null,
         replyCount: m.threadParentId ? 0 : (replyCounts[m.id] ?? 0),
+        lastActivityAt: (m as any).lastActivityAt ?? null,
       }));
     }),
 
@@ -5681,6 +5703,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         await db.update(madisonSmsDrafts)
           .set({ status: "SENT", outboundOpenPhoneId: outboundId, sentAt: new Date(), updatedAt: new Date() })
           .where(eq(madisonSmsDrafts.id, input.draftId));
+        await deactivateOpsSmsCard(input.draftId);
         broadcastOpsUpdate("sms_draft_sent", { draftId: input.draftId });
         return { ok: true };
       } catch (err: unknown) {
@@ -5706,6 +5729,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       await db.update(madisonSmsDrafts)
         .set({ status: "DISMISSED", dismissedBy: input.dismissedBy, dismissedAt: new Date(), updatedAt: new Date() })
         .where(and(eq(madisonSmsDrafts.id, input.draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
+      await deactivateOpsSmsCard(input.draftId);
       broadcastOpsUpdate("sms_draft_dismissed", { draftId: input.draftId });
       return { ok: true };
     }),
@@ -5841,239 +5865,197 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       broadcastOpsUpdate("email_draft_dismissed", { draftId: input.draftId });
       return { ok: true };
     }),
-
   /**
    * Count unresolved Madison cards:
-   *   - madison_sms_draft: draft status is not SENT / DISMISSED / DELIVERED
-   *   - madison_call_summary: metadata has no actedBy
+   *   - madison_sms_draft: draft status is DRAFT_READY
+   *   - madison_email_draft: draft status is DRAFT_READY
+   *   - madison_call_summary: active + actedBy missing/null/empty
    * Used by the header Madison avatar button to show the correct count.
    */
   getUnresolvedMadisonCount: opsChatProcedure
     .query(async () => {
       const db = await getDb();
       if (!db) return { smsDraftCount: 0, callSummaryCount: 0, emailDraftCount: 0, total: 0, unresolvedDraftIds: [] as number[], unresolvedCallMsgIds: [] as number[], unresolvedEmailDraftIds: [] as number[] };
-
-      // ── SMS drafts: only DRAFT_READY needs human action ──────────────────────
-      // RECEIVED/CLASSIFIED/TOOLS_RUNNING/GENERATING/SENDING = in-flight (not actionable yet)
-      // SENT/DELIVERED/DISMISSED = resolved
-      // FAILED = pipeline error (not a human action item)
-      // Only DRAFT_READY = waiting for approve or dismiss
-      const draftReadyRows = await db
-        .select({ id: madisonSmsDrafts.id })
-        .from(madisonSmsDrafts)
-        .where(eq(madisonSmsDrafts.status, 'DRAFT_READY'));
-      const draftReadyIds = new Set(draftReadyRows.map(r => r.id));
-
-      // Find channel message IDs whose draftId maps to a DRAFT_READY row
-      const smsDraftMsgs = await db
-        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
-        .from(opsChatMessages)
-        .where(and(
-          eq(opsChatMessages.channel, 'command'),
-          eq(opsChatMessages.quickAction, 'madison_sms_draft'),
-        ))
-        .orderBy(desc(opsChatMessages.createdAt))
-        .limit(200);
-      const unresolvedDraftIds: number[] = smsDraftMsgs
-        .filter(m => {
-          try {
-            const meta = JSON.parse(m.metadata ?? '{}');
-            return draftReadyIds.has(meta.draftId);
-          } catch { return false; }
-        })
-        .map(m => m.id);
-      const smsDraftCount = unresolvedDraftIds.length;
-
-      // ── Call summary cards: unresolved = no actedBy in metadata ──────────────
-      const callSummaryMsgs = await db
-        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
-        .from(opsChatMessages)
-        .where(and(
-          eq(opsChatMessages.channel, 'command'),
-          eq(opsChatMessages.quickAction, 'madison_call_summary'),
-        ))
-        .orderBy(desc(opsChatMessages.createdAt))
-        .limit(200);
-      const unresolvedCallMsgIds: number[] = callSummaryMsgs
-        .filter(m => {
-          try {
-            const meta = JSON.parse(m.metadata ?? '{}');
-            return !meta.actedBy;
-          } catch { return true; }
-        })
-        .map(m => m.id);
-      const callSummaryCount = unresolvedCallMsgIds.length;
-      // ── Email drafts: only DRAFT_READY needs human action ──────────────────
-      const emailDraftReadyRows = await db
-        .select({ id: madisonEmailDrafts.id })
-        .from(madisonEmailDrafts)
-        .where(eq(madisonEmailDrafts.status, 'DRAFT_READY'));
-      const emailDraftReadyIds = new Set(emailDraftReadyRows.map(r => r.id));
-      const emailDraftMsgs = await db
-        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
-        .from(opsChatMessages)
-        .where(and(
-          eq(opsChatMessages.channel, 'command'),
-          eq(opsChatMessages.quickAction, 'madison_email_draft'),
-        ))
-        .orderBy(desc(opsChatMessages.createdAt))
-        .limit(200);
-      const unresolvedEmailDraftIds: number[] = emailDraftMsgs
-        .filter(m => {
-          try {
-            const meta = JSON.parse(m.metadata ?? '{}');
-            return emailDraftReadyIds.has(meta.draftId);
-          } catch { return false; }
-        })
-        .map(m => m.id);
-      const emailDraftCount = unresolvedEmailDraftIds.length;
-
+      const { smsCards, emailCards, callCards } = await getUnresolvedMadisonCards(db);
       return {
-        smsDraftCount,
-        callSummaryCount,
-        emailDraftCount,
-        total: smsDraftCount + callSummaryCount + emailDraftCount,
-        unresolvedDraftIds,
-        unresolvedCallMsgIds,
-        unresolvedEmailDraftIds,
+        smsDraftCount: smsCards.length,
+        callSummaryCount: callCards.length,
+        emailDraftCount: emailCards.length,
+        total: smsCards.length + callCards.length + emailCards.length,
+        unresolvedDraftIds: smsCards.map(m => m.id),
+        unresolvedCallMsgIds: callCards.map(m => m.id),
+        unresolvedEmailDraftIds: emailCards.map(m => m.id),
       };
     }),
-
   /**
-   * Fetch all madison_call_summary and madison_sms_draft cards for a given date (YYYY-MM-DD).
-   * Used by the Madison Debrief page to review the day's interactions.
-   */
-  getDebriefCards: opsChatProcedure
-    .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return [];
-
-      // Build start/end of day in Eastern time (business timezone).
-      // The DB stores timestamps as UTC. Eastern is UTC-5 (EST) or UTC-4 (EDT).
-      // We use UTC-4 (EDT, the more common case May-Nov) as a safe offset;
-      // this means the window is 04:00 UTC to 03:59:59 UTC next day.
-      // For a more precise solution we could use the BUSINESS_TIMEZONE env var,
-      // but this simple offset covers the vast majority of cases.
-      const EASTERN_OFFSET_MS = 4 * 60 * 60 * 1000; // UTC-4 (EDT)
-      const dayStart = new Date(new Date(`${input.date}T00:00:00.000`).getTime() + EASTERN_OFFSET_MS);
-      const dayEnd = new Date(new Date(`${input.date}T23:59:59.999`).getTime() + EASTERN_OFFSET_MS);
-
-      const rows = await db
-        .select()
-        .from(opsChatMessages)
-        .where(
-          and(
-            eq(opsChatMessages.channel, 'command'),
-            inArray(opsChatMessages.quickAction as any, ['madison_call_summary', 'madison_sms_draft', 'madison_email_draft']),
-            gte(opsChatMessages.createdAt, dayStart),
-            lte(opsChatMessages.createdAt, dayEnd),
-          )
-        )
-        .orderBy(opsChatMessages.createdAt)  // oldest first for chronological review
-        .limit(200);
-
-      return rows.map(m => ({
-        id: m.id,
-        ts: m.createdAt.getTime(),
-        quickAction: m.quickAction,
-        body: m.body,
-        metadata: m.metadata ?? null,
-        mediaUrl: m.mediaUrl ?? null,
-      }));
-    }),
-
-  /**
-   * getFocusCards — returns all undismissed Madison cards (SMS draft, email draft, call summary)
-   * for the Focus Mode queue. Uses the same unresolved predicate as getUnresolvedMadisonCount
-   * so the badge count and Focus queue always agree.
-   * Ordered by COALESCE(lastActivityAt, UNIX_TIMESTAMP(createdAt)*1000) DESC.
+   * getFocusCards — returns unresolved Madison cards from the same 500-row command
+   * channel window that the badge uses, with the same draft-status filter.
+   * This guarantees badge count === Focus count at all times.
    */
   getFocusCards: opsChatProcedure
     .query(async () => {
       const db = await getDb();
       if (!db) return [];
 
-      // ── Unresolved SMS draft IDs (same predicate as getUnresolvedMadisonCount) ──
-      const draftReadyRows = await db
-        .select({ id: madisonSmsDrafts.id })
-        .from(madisonSmsDrafts)
-        .where(eq(madisonSmsDrafts.status, 'DRAFT_READY'));
-      const draftReadyIds = new Set(draftReadyRows.map(r => r.id));
-
-      const smsDraftMsgs = await db
-        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
-        .from(opsChatMessages)
-        .where(and(
-          eq(opsChatMessages.channel, 'command'),
-          eq(opsChatMessages.quickAction as any, 'madison_sms_draft'),
-        ))
-        .orderBy(desc(opsChatMessages.createdAt))
-        .limit(200);
-      const unresolvedSmsIds = new Set(
-        smsDraftMsgs
-          .filter(m => { try { return draftReadyIds.has(JSON.parse(m.metadata ?? '{}').draftId); } catch { return false; } })
-          .map(m => m.id)
-      );
-
-      // ── Unresolved email draft IDs ──
-      const emailDraftReadyRows = await db
-        .select({ id: madisonEmailDrafts.id })
-        .from(madisonEmailDrafts)
-        .where(eq(madisonEmailDrafts.status, 'DRAFT_READY'));
-      const emailDraftReadyIds = new Set(emailDraftReadyRows.map(r => r.id));
-
-      const emailDraftMsgs = await db
-        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
-        .from(opsChatMessages)
-        .where(and(
-          eq(opsChatMessages.channel, 'command'),
-          eq(opsChatMessages.quickAction as any, 'madison_email_draft'),
-        ))
-        .orderBy(desc(opsChatMessages.createdAt))
-        .limit(200);
-      const unresolvedEmailIds = new Set(
-        emailDraftMsgs
-          .filter(m => { try { return emailDraftReadyIds.has(JSON.parse(m.metadata ?? '{}').draftId); } catch { return false; } })
-          .map(m => m.id)
-      );
-
-      // ── Unresolved call summary IDs (no actedBy in metadata) ──
-      const callSummaryMsgs = await db
-        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
-        .from(opsChatMessages)
-        .where(and(
-          eq(opsChatMessages.channel, 'command'),
-          eq(opsChatMessages.quickAction as any, 'madison_call_summary'),
-        ))
-        .orderBy(desc(opsChatMessages.createdAt))
-        .limit(200);
-      const unresolvedCallIds = new Set(
-        callSummaryMsgs
-          .filter(m => { try { return !JSON.parse(m.metadata ?? '{}').actedBy; } catch { return true; } })
-          .map(m => m.id)
-      );
-
-      const allUnresolvedIds = [...new Set([...unresolvedSmsIds, ...unresolvedEmailIds, ...unresolvedCallIds])];
-      if (allUnresolvedIds.length === 0) return [];
-
-      // Fetch full rows ordered by COALESCE(lastActivityAt, createdAt timestamp) DESC
-      const focusRows = await db
+      // Step 1: fetch the same 500-row window as listChannelMessages for 'command'
+      const msgs = await db
         .select()
         .from(opsChatMessages)
-        .where(inArray(opsChatMessages.id, allUnresolvedIds))
+        .where(eq(opsChatMessages.channel, 'command'))
         .orderBy(
-          sql`COALESCE(${opsChatMessages.lastActivityAt}, UNIX_TIMESTAMP(${opsChatMessages.createdAt})*1000) DESC`
-        );
+          desc(sql`CASE
+            WHEN ${opsChatMessages.quickAction} = 'madison_sms_draft'
+             AND ${opsChatMessages.cardStatus} = 'active'
+            THEN COALESCE(${opsChatMessages.lastActivityAt}, UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000)
+            ELSE UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000
+          END`)
+        )
+        .limit(500);
 
-      return focusRows.map(m => ({
-        id: m.id,
-        ts: (m.createdAt as Date).getTime(),
-        quickAction: m.quickAction,
-        body: m.body,
-        metadata: m.metadata ?? null,
-        mediaUrl: m.mediaUrl ?? null,
-      }));
+      // Step 2: narrow to active madison cards only
+      const madisonMsgs = msgs.filter(m =>
+        m.cardStatus === 'active' &&
+        (m.quickAction === 'madison_sms_draft' ||
+         m.quickAction === 'madison_email_draft' ||
+         m.quickAction === 'madison_call_summary')
+      );
+      if (madisonMsgs.length === 0) return [];
+
+      // Step 3: apply the exact same draft-status filter as listChannelMessages
+      // SMS
+      const smsCardDraftIds: number[] = [];
+      for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_sms_draft')) {
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+      }
+      const completedSmsDraftIds = new Set<number>();
+      if (smsCardDraftIds.length > 0) {
+        const draftRows = await db
+          .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
+          .from(madisonSmsDrafts)
+          .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
+        for (const d of draftRows) {
+          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') {
+            completedSmsDraftIds.add(d.id);
+          }
+        }
+      }
+
+      // Email
+      const emailCardDraftIds: number[] = [];
+      for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_email_draft')) {
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) emailCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+      }
+      const completedEmailDraftIds = new Set<number>();
+      if (emailCardDraftIds.length > 0) {
+        const emailDraftRows = await db
+          .select({ id: madisonEmailDrafts.id, status: madisonEmailDrafts.status })
+          .from(madisonEmailDrafts)
+          .where(inArray(madisonEmailDrafts.id, emailCardDraftIds));
+        for (const d of emailDraftRows) {
+          if (d.status === 'SENT' || d.status === 'DISMISSED') {
+            completedEmailDraftIds.add(d.id);
+          }
+        }
+      }
+
+      // Step 4: filter out completed cards — same predicate as listChannelMessages
+      const unresolvedCards = madisonMsgs.filter(m => {
+        if (m.quickAction === 'madison_sms_draft') {
+          try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedSmsDraftIds.has(meta.draftId); } catch { return true; }
+        }
+        if (m.quickAction === 'madison_email_draft') {
+          try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedEmailDraftIds.has(meta.draftId); } catch { return true; }
+        }
+        if (m.quickAction === 'madison_call_summary') {
+          try { const meta = JSON.parse(m.metadata ?? '{}'); return !meta.actedBy; } catch { return true; }
+        }
+        return true;
+      });
+
+      // Step 5: sort by lastActivityAt desc (same as badge cycling order)
+      return unresolvedCards
+        .sort((a, b) => {
+          const tsA = Number(a.lastActivityAt ?? new Date(a.createdAt as Date).getTime());
+          const tsB = Number(b.lastActivityAt ?? new Date(b.createdAt as Date).getTime());
+          return tsB - tsA || b.id - a.id;
+        })
+        .map(m => ({
+          id: m.id,
+          ts: new Date(m.createdAt as Date).getTime(),
+          quickAction: m.quickAction,
+          body: m.body,
+          metadata: m.metadata ?? null,
+          mediaUrl: m.mediaUrl ?? null,
+        }));
+    }),
+
+  /**
+   * awardFocusPoints — called by the client after a successful Send in Focus Mode.
+   * Upserts 10 points for the calling agent for the current week.
+   * Purely additive — does not affect any send/dismiss logic.
+   */
+  awardFocusPoints: opsChatProcedure
+    .mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { ok: false };
+      const agentName = ctx.opsCaller.name;
+      // Monday of the current week (YYYY-MM-DD)
+      const now = new Date();
+      const day = now.getDay(); // 0=Sun, 1=Mon...
+      const diff = (day === 0 ? -6 : 1 - day);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diff);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const nowDate = new Date();
+      await db
+        .insert(focusPoints)
+        .values({ agentName, points: 10, weekStart, createdAt: nowDate, updatedAt: nowDate })
+        .onDuplicateKeyUpdate({ set: { points: sql`${focusPoints.points} + 10`, updatedAt: nowDate } });
+      return { ok: true };
+    }),
+
+  /**
+   * getFocusLeaderboard — top agents by points for the current week.
+   */
+  getFocusLeaderboard: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const now = new Date();
+      const day = now.getDay();
+      const diff = (day === 0 ? -6 : 1 - day);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diff);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const rows = await db
+        .select({ agentName: focusPoints.agentName, points: focusPoints.points })
+        .from(focusPoints)
+        .where(eq(focusPoints.weekStart, weekStart))
+        .orderBy(desc(focusPoints.points))
+        .limit(10);
+      return rows;
+    }),
+
+  /**
+   * getMyFocusPoints — current caller's weekly point total.
+   */
+  getMyFocusPoints: opsChatProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { points: 0 };
+      const agentName = ctx.opsCaller.name;
+      const now = new Date();
+      const day = now.getDay();
+      const diff = (day === 0 ? -6 : 1 - day);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diff);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const [row] = await db
+        .select({ points: focusPoints.points })
+        .from(focusPoints)
+        .where(and(eq(focusPoints.agentName, agentName), eq(focusPoints.weekStart, weekStart)))
+        .limit(1);
+      return { points: row?.points ?? 0 };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
