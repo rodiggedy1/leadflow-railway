@@ -5802,13 +5802,14 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         .map(m => m.id);
       const smsDraftCount = unresolvedDraftIds.length;
 
-      // ── Call summary cards: unresolved = no actedBy in metadata ──────────────
+      // ── Call summary cards: unresolved = active + no actedBy in metadata ──────
       const callSummaryMsgs = await db
         .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
         .from(opsChatMessages)
         .where(and(
           eq(opsChatMessages.channel, 'command'),
           eq(opsChatMessages.quickAction, 'madison_call_summary'),
+          eq(opsChatMessages.cardStatus as any, 'active'),
         ))
         .orderBy(desc(opsChatMessages.createdAt))
         .limit(200);
@@ -5956,13 +5957,14 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           .map(m => m.id)
       );
 
-      // ── Unresolved call summary IDs (no actedBy in metadata) ──
+      // ── Unresolved call summary IDs (active + no actedBy in metadata) ──
       const callSummaryMsgs = await db
         .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
         .from(opsChatMessages)
         .where(and(
           eq(opsChatMessages.channel, 'command'),
           eq(opsChatMessages.quickAction as any, 'madison_call_summary'),
+          eq(opsChatMessages.cardStatus as any, 'active'),
         ))
         .orderBy(desc(opsChatMessages.createdAt))
         .limit(200);

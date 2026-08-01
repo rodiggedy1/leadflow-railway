@@ -6884,7 +6884,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
                 <img src={MADISON_PHOTO} alt="Madison" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0 }} />
                 <div>
-                  <div style={{ font: "700 24px Georgia, serif", lineHeight: 1 }}>Daily Debrief ✦</div>
+                  <div style={{ font: "700 24px Georgia, serif", lineHeight: 1 }}>Focus Mode ✦</div>
                   <div style={{ fontSize: 13, opacity: 0.8, marginTop: 3 }}>Madison's interaction history</div>
                 </div>
               </div>
@@ -9758,15 +9758,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </button>
                 </>
               )}
-              {/* Debrief button */}
+              {/* Focus button */}
               <button
                 onClick={() => setShowDebrief(true)}
                 className="flex items-center gap-1 rounded-full border border-[#e3e6ef] bg-white hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition whitespace-nowrap"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
-                title="Open Madison Debrief"
+                title="Open Madison Focus"
               >
                 <span style={{ fontSize: 12 }}>✦</span>
-                <span className="font-semibold text-[#6f3cff]">Debrief</span>
+                <span className="font-semibold text-[#6f3cff]">Focus</span>
               </button>
               {/* Payment Link button */}
               <button
