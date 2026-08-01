@@ -40,6 +40,7 @@ import {
   issueEngineTimeline,
   madisonSmsDrafts,
   madisonEmailDrafts,
+  focusPoints,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
@@ -5986,6 +5987,75 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           metadata: m.metadata ?? null,
           mediaUrl: m.mediaUrl ?? null,
         }));
+    }),
+
+  /**
+   * awardFocusPoints — called by the client after a successful Send in Focus Mode.
+   * Upserts 10 points for the calling agent for the current week.
+   * Purely additive — does not affect any send/dismiss logic.
+   */
+  awardFocusPoints: opsChatProcedure
+    .mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { ok: false };
+      const agentName = ctx.opsCaller.name;
+      // Monday of the current week (YYYY-MM-DD)
+      const now = new Date();
+      const day = now.getDay(); // 0=Sun, 1=Mon...
+      const diff = (day === 0 ? -6 : 1 - day);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diff);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const nowDate = new Date();
+      await db
+        .insert(focusPoints)
+        .values({ agentName, points: 10, weekStart, createdAt: nowDate, updatedAt: nowDate })
+        .onDuplicateKeyUpdate({ set: { points: sql`${focusPoints.points} + 10`, updatedAt: nowDate } });
+      return { ok: true };
+    }),
+
+  /**
+   * getFocusLeaderboard — top agents by points for the current week.
+   */
+  getFocusLeaderboard: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const now = new Date();
+      const day = now.getDay();
+      const diff = (day === 0 ? -6 : 1 - day);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diff);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const rows = await db
+        .select({ agentName: focusPoints.agentName, points: focusPoints.points })
+        .from(focusPoints)
+        .where(eq(focusPoints.weekStart, weekStart))
+        .orderBy(desc(focusPoints.points))
+        .limit(10);
+      return rows;
+    }),
+
+  /**
+   * getMyFocusPoints — current caller's weekly point total.
+   */
+  getMyFocusPoints: opsChatProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { points: 0 };
+      const agentName = ctx.opsCaller.name;
+      const now = new Date();
+      const day = now.getDay();
+      const diff = (day === 0 ? -6 : 1 - day);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diff);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const [row] = await db
+        .select({ points: focusPoints.points })
+        .from(focusPoints)
+        .where(and(eq(focusPoints.agentName, agentName), eq(focusPoints.weekStart, weekStart)))
+        .limit(1);
+      return { points: row?.points ?? 0 };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

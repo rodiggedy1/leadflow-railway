@@ -6827,162 +6827,249 @@ function KudosModal({
 
 // ── FocusModal (Focus Mode popup) ────────────────────────────────────────────
 // Full-screen modal overlay that shows the unresolved Madison queue.
-// Uses the same getFocusCards procedure as /admin/madison-focus so the
-// badge count and this modal always show the same cards.
+// 3-column layout matching the Focus Mode prototype:
+//   Left  : Leaderboard + streak
+//   Center: Card + nav + celebration screen
+//   Right : Session stats + recent wins + queue preview
+type FocusRecentWin = { label: string; type: "sms" | "email" | "call"; ts: number };
 function DebriefModal({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<"hero" | "review" | "done">("hero");
   const [cardIndex, setCardIndex] = useState(0);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [sessionStreak, setSessionStreak] = useState(0);
+  const [sessionDone, setSessionDone] = useState(0);
+  const [recentWins, setRecentWins] = useState<FocusRecentWin[]>([]);
   const utils = trpc.useUtils();
-  const { data: cards = [], isLoading } = trpc.opsChat.getFocusCards.useQuery(
-    undefined,
-    { staleTime: 0 }
-  );
+  const { data: cards = [], isLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { staleTime: 0 });
+  const { data: leaderboard = [] } = trpc.opsChat.getFocusLeaderboard.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
+  const { data: myPtsData } = trpc.opsChat.getMyFocusPoints.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
+  const awardPoints = trpc.opsChat.awardFocusPoints.useMutation();
   const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
   const emailCount = cards.filter(c => c.quickAction === "madison_email_draft").length;
   const currentCard = cards[cardIndex];
   const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
+  const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
+  const medals = ["🥇", "🥈", "🥉"];
   // After Send/Dismiss the queue shrinks — clamp index safely
   useEffect(() => {
     if (cards.length > 0 && cardIndex >= cards.length) setCardIndex(cards.length - 1);
     if (cards.length === 0 && view === "review") setView("done");
   }, [cards.length, cardIndex, view]);
   const startReview = () => { if (cards.length > 0) { setCardIndex(0); setView("review"); } };
-  // Skip: frontend-only cursor advance, no mutation
   const goNext = () => { if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done"); };
   const goPrev = () => { if (cardIndex > 0) setCardIndex(i => i - 1); };
-  const backToHero = () => { setView("hero"); setCardIndex(0); };
-  // Called by cards after their own Send/Dismiss mutation succeeds — advance immediately
-  const onCardActed = () => {
+  const backToHero = () => { setView("hero"); setCardIndex(0); setShowCelebration(false); };
+  // Called by cards after their own Send/Dismiss mutation succeeds
+  const onCardActed = (acted: "sent" | "dismissed" = "sent") => {
     utils.opsChat.getFocusCards.invalidate();
-    if (cardIndex < cards.length - 1) setCardIndex(i => i + 1);
-    else setView("done");
+    if (acted === "sent") {
+      awardPoints.mutate();
+      utils.opsChat.getMyFocusPoints.invalidate();
+      utils.opsChat.getFocusLeaderboard.invalidate();
+      setSessionStreak(s => s + 1);
+      setSessionDone(d => d + 1);
+      if (currentCard) {
+        const type: FocusRecentWin["type"] = currentCard.quickAction === "madison_sms_draft" ? "sms" : currentCard.quickAction === "madison_email_draft" ? "email" : "call";
+        setRecentWins(w => [{ label: (currentCard.body ?? "").slice(0, 40) || "Card", type, ts: Date.now() }, ...w]);
+      }
+      setShowCelebration(true);
+    } else {
+      setSessionDone(d => d + 1);
+      setSessionStreak(0);
+      if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done");
+    }
+  };
+  const onCelebrationContinue = () => {
+    setShowCelebration(false);
+    if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done");
   };
   const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
+  const P = "#6d46ff"; const P2 = "#8d70ff"; const G = "#1f9d70";
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        className="relative flex flex-col bg-[#f4f6fb] rounded-2xl shadow-2xl overflow-hidden"
-        style={{ width: "min(760px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}
-      >
-        {/* Close X */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow text-slate-500 hover:text-slate-800 transition"
-        >
-          <X className="w-4 h-4" />
-        </button>
-        {view === "hero" && (
-          <div>
-            <div style={{ padding: "32px 32px 28px", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
-                <img src={MADISON_PHOTO} alt="Madison" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0 }} />
-                <div>
-                  <div style={{ font: "700 24px Georgia, serif", lineHeight: 1 }}>Focus Mode ✦</div>
-                  <div style={{ fontSize: 13, opacity: 0.8, marginTop: 3 }}>Review and act on pending items</div>
-                </div>
-              </div>
-              {isLoading ? (
-                <div style={{ fontSize: 16, opacity: 0.8 }}>Loading…</div>
-              ) : cards.length === 0 ? (
-                <div style={{ fontSize: 17, lineHeight: 1.6 }}>✅ <b>You're all caught up.</b> No pending items right now.</div>
-              ) : (
-                <div style={{ fontSize: 17, lineHeight: 1.6 }}>
-                  You have <b>{cards.length} pending item{cards.length !== 1 ? "s" : ""}</b>
-                  {callCount > 0 && smsCount > 0
-                    ? ` — ${callCount} call${callCount !== 1 ? "s" : ""}, ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}${emailCount > 0 ? `, ${emailCount} email draft${emailCount !== 1 ? "s" : ""}` : ""}.`
-                    : callCount > 0
-                    ? ` — ${callCount} inbound call${callCount !== 1 ? "s" : ""}.`
-                    : smsCount > 0 && emailCount > 0
-                    ? ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""} and ${emailCount} email draft${emailCount !== 1 ? "s" : ""}.`
-                    : smsCount > 0
-                    ? ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}.`
-                    : ` — ${emailCount} email draft${emailCount !== 1 ? "s" : ""}.`}
-                </div>
-              )}
+      {/* Hero screen — compact centered card */}
+      {view === "hero" && (
+        <div className="relative flex flex-col bg-[#f4f6fb] rounded-2xl shadow-2xl overflow-hidden" style={{ width: "min(600px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}>
+          <button onClick={onClose} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow text-slate-500 hover:text-slate-800 transition"><X className="w-4 h-4" /></button>
+          <div style={{ padding: "32px 32px 28px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+              <img src={MADISON_PHOTO} alt="Madison" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0 }} />
+              <div><div style={{ font: "700 24px Georgia, serif", lineHeight: 1 }}>Focus Mode ✦</div><div style={{ fontSize: 13, opacity: 0.8, marginTop: 3 }}>Review and act on pending items</div></div>
             </div>
-            {!isLoading && cards.length > 0 && (
-              <div style={{ display: "flex", borderBottom: "1px solid #f0eeff" }}>
-                {callCount > 0 && (
-                  <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#5d49f3" }}>{callCount}</div>
-                    <div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div>
-                  </div>
-                )}
-                {smsCount > 0 && (
-                  <div style={{ flex: 1, padding: "18px 24px", borderRight: emailCount > 0 ? "1px solid #f0eeff" : undefined }}>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#5d49f3" }}>{smsCount}</div>
-                    <div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div>
-                  </div>
-                )}
-                {emailCount > 0 && (
-                  <div style={{ flex: 1, padding: "18px 24px" }}>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#5d49f3" }}>{emailCount}</div>
-                    <div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Email Drafts</div>
-                  </div>
-                )}
-              </div>
-            )}
-            {!isLoading && cards.length > 0 && (
-              <div style={{ padding: "20px 24px" }}>
-                <button
-                  onClick={startReview}
-                  style={{ width: "100%", padding: "14px", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}
-                >
-                  Start Review →
-                </button>
-              </div>
-            )}
+            {isLoading ? <div style={{ fontSize: 16, opacity: 0.8 }}>Loading…</div>
+              : cards.length === 0 ? <div style={{ fontSize: 17, lineHeight: 1.6 }}>✅ <b>You're all caught up.</b> No pending items right now.</div>
+              : <div style={{ fontSize: 17, lineHeight: 1.6 }}>You have <b>{cards.length} pending item{cards.length !== 1 ? "s" : ""}</b>{callCount > 0 && smsCount > 0 ? ` — ${callCount} call${callCount !== 1 ? "s" : ""}, ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}${emailCount > 0 ? `, ${emailCount} email draft${emailCount !== 1 ? "s" : ""}` : ""}.` : callCount > 0 ? ` — ${callCount} inbound call${callCount !== 1 ? "s" : ""}.` : smsCount > 0 && emailCount > 0 ? ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""} and ${emailCount} email draft${emailCount !== 1 ? "s" : ""}.` : smsCount > 0 ? ` — ${smsCount} SMS draft${smsCount !== 1 ? "s" : ""}.` : ` — ${emailCount} email draft${emailCount !== 1 ? "s" : ""}.`}</div>}
           </div>
-        )}
-        {view === "done" && (
+          {!isLoading && cards.length > 0 && (
+            <div style={{ display: "flex", borderBottom: "1px solid #f0eeff" }}>
+              {callCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{callCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div></div>}
+              {smsCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: emailCount > 0 ? "1px solid #f0eeff" : undefined }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{smsCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div></div>}
+              {emailCount > 0 && <div style={{ flex: 1, padding: "18px 24px" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{emailCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Email Drafts</div></div>}
+            </div>
+          )}
+          {!isLoading && cards.length > 0 && (
+            <div style={{ padding: "20px 24px" }}>
+              <button onClick={startReview} style={{ width: "100%", padding: "14px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Start Focus →</button>
+            </div>
+          )}
+        </div>
+      )}
+      {/* Done screen */}
+      {view === "done" && (
+        <div className="relative flex flex-col bg-[#f4f6fb] rounded-2xl shadow-2xl overflow-hidden" style={{ width: "min(500px, 96vw)" }}>
+          <button onClick={onClose} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow text-slate-500 hover:text-slate-800 transition"><X className="w-4 h-4" /></button>
           <div style={{ padding: "60px 40px", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 14 }}>✅</div>
             <div style={{ font: "700 24px Georgia, serif", color: "#1a1a2e", marginBottom: 10 }}>You're all caught up</div>
-            <div style={{ fontSize: 15, color: "#6b7280", marginBottom: 24 }}>No more pending items right now.</div>
-            <button onClick={backToHero} style={{ padding: "12px 28px", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>← Back</button>
+            <div style={{ fontSize: 15, color: "#6b7280", marginBottom: 8 }}>No more pending items right now.</div>
+            {sessionDone > 0 && <div style={{ fontSize: 14, color: P, fontWeight: 700, marginBottom: 20 }}>🔥 {sessionDone} card{sessionDone !== 1 ? "s" : ""} handled · +{sessionDone * 10} pts</div>}
+            <button onClick={backToHero} style={{ padding: "12px 28px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>← Back</button>
           </div>
-        )}
-        {view === "review" && currentCard && (() => {
-          const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
-          return (
-            <div style={{ padding: "24px 24px 32px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <button onClick={backToHero} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#6b7280", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}>
-                  <X style={{ width: 13, height: 13 }} /> Exit
-                </button>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{cardIndex + 1} of {cards.length}</span>
-                <span style={{ fontSize: 12, color: "#9ca3af" }}>Focus Mode</span>
+        </div>
+      )}
+      {/* Review screen — 3-column full-screen layout */}
+      {view === "review" && currentCard && (() => {
+        const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18, width: "min(1240px, 98vw)", maxHeight: "96vh", overflowY: "auto", fontFamily: "Inter, system-ui, sans-serif" }}>
+            {/* ── LEFT: Leaderboard ── */}
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Brand */}
+              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: "20px 18px", boxShadow: "0 10px 28px rgba(52,42,95,.08)", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${P},#4c2ed0)`, display: "grid", placeItems: "center", color: "#fff", fontSize: 20, flexShrink: 0 }}>◎</div>
+                  <div><div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.08em", color: "#17152d" }}>FOCUS MODE</div><div style={{ fontSize: 12, color: "#7e829c", marginTop: 3, lineHeight: 1.5 }}>One card.<br />Zero distractions.</div></div>
+                </div>
+                {/* Leaderboard */}
+                <div style={{ borderTop: "1px solid #f0eeff", paddingTop: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#7e829c", letterSpacing: "0.06em", marginBottom: 10 }}>🏆 THIS WEEK</div>
+                  {leaderboard.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "8px 0" }}>No points yet. Be first! 🚀</div>
+                  ) : leaderboard.map((entry, i) => (
+                    <div key={entry.agentName} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 8, alignItems: "center", padding: "8px 10px", borderRadius: 13, background: i === 0 ? "#f5f1ff" : "transparent", border: i === 0 ? "1px solid #ddd4ff" : "1px solid transparent", marginBottom: 4 }}>
+                      <span style={{ fontSize: 15, textAlign: "center" }}>{medals[i] ?? `${i + 1}`}</span>
+                      <span style={{ fontSize: 13, fontWeight: i === 0 ? 800 : 600, color: i === 0 ? P : "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.agentName}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: i === 0 ? P : "#6b7280" }}>{entry.points}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* My points */}
+                <div style={{ background: `linear-gradient(135deg,${P},${P2})`, borderRadius: 16, padding: "14px 16px", color: "#fff" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, marginBottom: 2 }}>YOUR POINTS THIS WEEK</div>
+                  <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1 }}>{myPtsData?.points ?? 0}</div>
+                  <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>+10 pts per send</div>
+                </div>
+                {/* Streak */}
+                {sessionStreak > 0 && (
+                  <div style={{ background: "#fff8ed", border: "1px solid #f5dfbd", borderRadius: 16, padding: "14px 16px" }}>
+                    <div style={{ fontWeight: 800, color: "#bd610d", fontSize: 13 }}>🔥 On a roll!</div>
+                    <div style={{ fontSize: 13, color: "#7e829c", marginTop: 2 }}>{sessionStreak} in a row</div>
+                    <div style={{ display: "flex", gap: 5, marginTop: 10, flexWrap: "wrap" }}>
+                      {Array.from({ length: Math.min(sessionStreak, 7) }).map((_, i) => (
+                        <div key={i} style={{ width: 22, height: 22, borderRadius: "50%", background: P, color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700 }}>✓</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ height: 6, background: "#ececf8", borderRadius: 999, marginBottom: 20, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, #5d49f3, #7a63ff)", borderRadius: 999, transition: "width 0.3s ease" }} />
+            </aside>
+            {/* ── CENTER: Card ── */}
+            <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+              {/* Top bar */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
+                <button onClick={backToHero} style={{ border: 0, background: "none", fontWeight: 700, color: "#4c4d63", cursor: "pointer", fontSize: 14, textAlign: "left" }}>× Exit Focus</button>
+                <div style={{ fontWeight: 800, fontSize: 14, color: "#17152d" }}>{cardIndex + 1} of {cards.length}</div>
+                <div style={{ textAlign: "right", color: "#7e829c", fontSize: 13 }}>Focus Mode 🎯</div>
               </div>
-              <div key={currentCard.id} style={{ background: "#fff", borderRadius: 18, boxShadow: "0 6px 24px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 18 }}>
-                {currentCard.quickAction === "madison_sms_draft"
-                  ? <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={onCardActed} />
-                  : currentCard.quickAction === "madison_email_draft"
-                  ? <MadisonEmailDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={onCardActed} />
-                  : <MadisonCallSummaryCard key={currentCard.id} msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} onActed={onCardActed} />}
+              {/* Progress bar */}
+              <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg,${P},${P2})`, transition: ".3s" }} />
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={goPrev} disabled={cardIndex === 0} style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 18px", borderRadius: 12, border: "1.5px solid #ddd5ff", background: "#fff", color: cardIndex === 0 ? "#d1d5db" : "#5d49f3", fontWeight: 700, fontSize: 14, cursor: cardIndex === 0 ? "not-allowed" : "pointer" }}>
-                  <ChevronLeft style={{ width: 16, height: 16 }} /> Prev
-                </button>
-                <button onClick={goNext} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 18px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #5d49f3, #7a63ff)", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                  {cardIndex < cards.length - 1 ? <><ChevronRight style={{ width: 16, height: 16 }} /> Next</> : <>Done ✓</>}
-                </button>
+              {/* Celebration or Card */}
+              {showCelebration ? (
+                <div style={{ border: "1px solid #e9e6fb", borderRadius: 26, background: "radial-gradient(circle at 80% 50%,#eee9ff,transparent 28%),radial-gradient(circle at 20% 50%,#fff1dd,transparent 28%),white", textAlign: "center", padding: "34px 28px", position: "relative", overflow: "hidden" }}>
+                  <div style={{ width: 74, height: 74, margin: "0 auto", borderRadius: "50%", background: `linear-gradient(135deg,${P},${P2})`, color: "#fff", display: "grid", placeItems: "center", fontSize: 37, boxShadow: `0 15px 30px ${P}44` }}>✓</div>
+                  <h2 style={{ fontSize: 28, margin: "12px 0 5px", fontFamily: "Georgia,serif", color: "#17152d" }}>Woohoo! 🎉</h2>
+                  <p style={{ color: "#7e829c", marginBottom: 18 }}>Message sent successfully. Madison's got this one.</p>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 }}>
+                    <div style={{ padding: "10px 14px", border: "1px solid #e9e6fb", borderRadius: 13, fontSize: 13, fontWeight: 800, background: "#fff" }}>⭐ +10 points</div>
+                    <div style={{ padding: "10px 14px", border: "1px solid #e9e6fb", borderRadius: 13, fontSize: 13, fontWeight: 800, background: "#fff" }}>🔥 {sessionStreak} in a row</div>
+                    <div style={{ padding: "10px 14px", border: "1px solid #e9e6fb", borderRadius: 13, fontSize: 13, fontWeight: 800, background: "#fff" }}>😊 Great job!</div>
+                  </div>
+                  <button onClick={onCelebrationContinue} style={{ padding: "13px 28px", background: `linear-gradient(135deg,${P},${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>Continue to next card →</button>
+                </div>
+              ) : (
+                <div key={currentCard.id} style={{ background: "#fff", borderRadius: 26, border: "1px solid #e9e6fb", boxShadow: "0 20px 55px rgba(67,45,145,.13)", overflow: "hidden" }}>
+                  {currentCard.quickAction === "madison_sms_draft"
+                    ? <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
+                    : currentCard.quickAction === "madison_email_draft"
+                    ? <MadisonEmailDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
+                    : <MadisonCallSummaryCard key={currentCard.id} msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} onActed={() => onCardActed("dismissed")} />}
+                </div>
+              )}
+              {/* Nav */}
+              {!showCelebration && (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", gap: 12 }}>
+                    <button onClick={goPrev} disabled={cardIndex === 0} style={{ height: 54, border: "1px solid #ded9f5", background: "white", borderRadius: 14, fontWeight: 800, fontSize: 14, cursor: cardIndex === 0 ? "not-allowed" : "pointer", color: cardIndex === 0 ? "#d1d5db" : "#17152d" }}>← Prev</button>
+                    <button onClick={goNext} style={{ height: 54, border: 0, background: `linear-gradient(135deg,${P},#7d56ff)`, color: "#fff", borderRadius: 14, fontWeight: 800, fontSize: 14, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>{cardIndex < cards.length - 1 ? "Next →" : "Done ✓"}</button>
+                  </div>
+                  <div style={{ textAlign: "center", color: "#a0a3b5", fontSize: 12, marginTop: -4 }}>Next moves to the next card without acting. The card stays in your queue.</div>
+                </>
+              )}
+            </main>
+            {/* ── RIGHT: Stats ── */}
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Session stats */}
+              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: 20, boxShadow: "0 10px 28px rgba(52,42,95,.08)" }}>
+                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>🎯 Your Focus Session</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+                  {[{ label: "Total", val: cards.length, color: P }, { label: "Done", val: sessionDone, color: G }, { label: "Streak", val: sessionStreak, color: "#ff922f" }, { label: "Pct", val: `${pct}%`, color: "#ff922f" }].map(s => (
+                    <div key={s.label} style={{ border: "1px solid #e9e6fb", borderRadius: 14, textAlign: "center", padding: "11px 5px" }}>
+                      <strong style={{ display: "block", color: s.color, fontSize: 20, fontWeight: 800 }}>{s.val}</strong>
+                      <small style={{ color: "#7e829c", fontSize: 11 }}>{s.label}</small>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden", marginTop: 14 }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg,${P},${P2})`, transition: ".3s" }} />
+                </div>
               </div>
-              <div style={{ marginTop: 8, textAlign: "center", fontSize: 11, color: "#9ca3af" }}>
-                Next moves to the next card without acting. The card stays in your queue.
+              {/* Recent wins */}
+              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: 20, boxShadow: "0 10px 28px rgba(52,42,95,.08)" }}>
+                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Recent Wins</h3>
+                {recentWins.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#9ca3af" }}>Act on a card to see wins here.</div>
+                ) : recentWins.slice(0, 4).map((w, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < Math.min(recentWins.length, 4) - 1 ? "1px solid #efedf7" : "none" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 12, background: w.type === "call" ? "#fff3e5" : "#eaf8f2", display: "grid", placeItems: "center", fontSize: 16 }}>{w.type === "sms" ? "✉" : w.type === "email" ? "📧" : "☎"}</div>
+                    <div><strong style={{ fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{w.label}</strong><small style={{ color: G, fontSize: 11, fontWeight: 600 }}>Sent</small></div>
+                    <time style={{ fontSize: 11, color: "#9da1b4" }}>{Math.floor((Date.now() - w.ts) / 60000)}m ago</time>
+                  </div>
+                ))}
               </div>
-            </div>
-          );
-        })()}
-      </div>
+              {/* Queue preview */}
+              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: 20, boxShadow: "0 10px 28px rgba(52,42,95,.08)" }}>
+                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Queue Preview</h3>
+                <div style={{ color: "#7e829c", fontSize: 13, marginBottom: 10 }}>What's ahead</div>
+                <div style={{ display: "flex", marginBottom: 10 }}>
+                  {cards.slice(cardIndex + 1, cardIndex + 6).map((c, i) => (
+                    <div key={c.id} style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#f2b998,#75483f)", color: "#fff", fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", marginLeft: i === 0 ? 0 : -8, border: "2px solid #fff" }}>
+                      {(c.body ?? "?").slice(0, 1).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+                <strong style={{ fontSize: 13, color: "#17152d" }}>{Math.max(0, cards.length - cardIndex - 1)} card{cards.length - cardIndex - 1 !== 1 ? "s" : ""} remaining</strong>
+              </div>
+            </aside>
+          </div>
+        );
+      })()}
     </div>
   );
 }

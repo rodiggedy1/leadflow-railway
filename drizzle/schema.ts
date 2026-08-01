@@ -4161,3 +4161,19 @@ export const csMissions = mysqlTable("cs_missions", {
 ]);
 export type CsMission = typeof csMissions.$inferSelect;
 export type InsertCsMission = typeof csMissions.$inferInsert;
+
+// ── Focus Mode Points ─────────────────────────────────────────────────────────
+// One row per agent per week. Points accumulate via upsert on every Send.
+export const focusPoints = mysqlTable("focus_points", {
+  id: int("id").autoincrement().primaryKey(),
+  agentName: varchar("agentName", { length: 128 }).notNull(),
+  points: int("points").notNull().default(0),
+  /** ISO date string of the Monday that starts this week (YYYY-MM-DD) */
+  weekStart: varchar("weekStart", { length: 10 }).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_focus_points_agent_week").on(t.agentName, t.weekStart),
+  index("idx_focus_points_week").on(t.weekStart),
+]);
+export type FocusPoints = typeof focusPoints.$inferSelect;
