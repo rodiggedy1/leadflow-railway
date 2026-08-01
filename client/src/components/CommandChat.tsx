@@ -6936,11 +6936,12 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
       {view === "review" && currentCard && (() => {
         const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18, width: "min(1240px, 98vw)", maxHeight: "96vh", overflowY: "auto", fontFamily: "Inter, system-ui, sans-serif" }}>
+          <div style={{ width: "min(1260px, 98vw)", maxHeight: "96vh", overflowY: "auto", background: "radial-gradient(circle at 10% 0,#eee8ff,transparent 28%),#f7f8ff", borderRadius: 28, boxShadow: "0 24px 80px rgba(67,45,145,.22)", fontFamily: "Inter, system-ui, sans-serif" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18 }}>
             {/* ── LEFT: Leaderboard ── */}
             <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {/* Brand */}
-              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: "20px 18px", boxShadow: "0 10px 28px rgba(52,42,95,.08)", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: "20px 18px", boxShadow: "0 4px 18px rgba(52,42,95,.06)", display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                   <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${P},#4c2ed0)`, display: "grid", placeItems: "center", color: "#fff", fontSize: 20, flexShrink: 0 }}>◎</div>
                   <div><div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.08em", color: "#17152d" }}>FOCUS MODE</div><div style={{ fontSize: 12, color: "#7e829c", marginTop: 3, lineHeight: 1.5 }}>One card.<br />Zero distractions.</div></div>
@@ -7026,7 +7027,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
             {/* ── RIGHT: Stats ── */}
             <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {/* Session stats */}
-              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: 20, boxShadow: "0 10px 28px rgba(52,42,95,.08)" }}>
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
                 <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>🎯 Your Focus Session</h3>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
                   {[{ label: "Total", val: cards.length, color: P }, { label: "Done", val: sessionDone, color: G }, { label: "Streak", val: sessionStreak, color: "#ff922f" }, { label: "Pct", val: `${pct}%`, color: "#ff922f" }].map(s => (
@@ -7041,7 +7042,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
               {/* Recent wins */}
-              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: 20, boxShadow: "0 10px 28px rgba(52,42,95,.08)" }}>
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
                 <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Recent Wins</h3>
                 {recentWins.length === 0 ? (
                   <div style={{ fontSize: 12, color: "#9ca3af" }}>Act on a card to see wins here.</div>
@@ -7054,12 +7055,12 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
               {/* Queue preview */}
-              <div style={{ background: "rgba(255,255,255,.94)", border: "1px solid #e9e6fb", borderRadius: 26, padding: 20, boxShadow: "0 10px 28px rgba(52,42,95,.08)" }}>
+              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
                 <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Queue Preview</h3>
                 <div style={{ color: "#7e829c", fontSize: 13, marginBottom: 10 }}>What's ahead</div>
                 <div style={{ display: "flex", marginBottom: 10 }}>
                   {cards.slice(cardIndex + 1, cardIndex + 6).map((c, i) => (
-                    <div key={c.id} style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#f2b998,#75483f)", color: "#fff", fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", marginLeft: i === 0 ? 0 : -8, border: "2px solid #fff" }}>
+                    <div key={c.id} style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c5cfc,#5d49f3)", color: "#fff", fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", marginLeft: i === 0 ? 0 : -8, border: "2px solid #fff" }}>
                       {(c.body ?? "?").slice(0, 1).toUpperCase()}
                     </div>
                   ))}
@@ -7067,6 +7068,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                 <strong style={{ fontSize: 13, color: "#17152d" }}>{Math.max(0, cards.length - cardIndex - 1)} card{cards.length - cardIndex - 1 !== 1 ? "s" : ""} remaining</strong>
               </div>
             </aside>
+          </div>
           </div>
         );
       })()}
