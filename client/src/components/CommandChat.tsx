@@ -6859,9 +6859,19 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
     { enabled: !!focusDraftId && currentCard?.quickAction === 'madison_sms_draft', staleTime: 30_000 }
   );
   const focusClientPhone = focusDraft?.fromPhone ?? '';
-  const { data: focusClientProfile, isLoading: focusProfileLoading } = trpc.leads.getClientProfile.useQuery(
+  // Try cleaner profile first — if found, it's a cleaner card; otherwise it's a customer card
+  const { data: focusCleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
     { phone: focusClientPhone },
     { enabled: !!focusClientPhone, refetchOnWindowFocus: false, staleTime: 60_000 }
+  );
+  const { data: focusCleanerTodayJobs, isLoading: focusCleanerJobsLoading } = trpc.leads.getCleanerTodayJobs.useQuery(
+    { cleanerProfileId: focusCleanerProfile?.id ?? 0 },
+    { enabled: !!focusCleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 }
+  );
+  const focusIsCleanerCard = !!focusCleanerProfile;
+  const { data: focusClientProfile, isLoading: focusProfileLoading } = trpc.leads.getClientProfile.useQuery(
+    { phone: focusClientPhone },
+    { enabled: !!focusClientPhone && !focusIsCleanerCard, refetchOnWindowFocus: false, staleTime: 60_000 }
   );
   const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
   const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
@@ -6992,14 +7002,103 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                 )}
-                {/* Booking Context — same data source as CsInbox TODAY'S JOB */}
-                {focusProfileLoading && focusClientPhone ? (
+                {/* Booking Context — cleaner: today's schedule; customer: today's job */}
+                {focusClientPhone && (focusCleanerJobsLoading || focusProfileLoading) ? (
                   <div style={{ background: "#f5f3ff", borderRadius: 14, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 TODAY'S JOB</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 LOADING...</div>
                     <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, marginBottom: 6 }} />
                     <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, width: "70%" }} />
                   </div>
+                ) : focusIsCleanerCard ? (
+                  /* ── CLEANER: show today's schedule (same as CsInbox Teams panel) ── */
+                  <div>
+                    <div className="flex items-center gap-2 mt-2 mb-3" style={{fontSize:'10px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3'}}>
+                      <Briefcase className="h-3.5 w-3.5" /> Today's jobs
+                    </div>
+                    {!focusCleanerTodayJobs || focusCleanerTodayJobs.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">No jobs scheduled today</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {focusCleanerTodayJobs.map((job) => {
+                          const time = job.serviceDateTime ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+                          const l27Url = job.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}` : null;
+                          const cp10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+                          const callHref = cp10 ? `openphone://call?to=+1${cp10}` : null;
+                          const statusStyle = (s: string | null | undefined) => {
+                            switch(s) {
+                              case "on_the_way": return "bg-blue-50 text-blue-700 border-blue-200";
+                              case "arrived": return "bg-teal-50 text-teal-700 border-teal-200";
+                              case "running_late": return "bg-amber-50 text-amber-700 border-amber-200";
+                              case "in_progress": return "bg-indigo-50 text-indigo-700 border-indigo-200";
+                              case "completed": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+                              case "issue_at_property": return "bg-rose-50 text-rose-700 border-rose-200";
+                              default: return "bg-slate-50 text-slate-600 border-slate-200";
+                            }
+                          };
+                          const statusLabel = (s: string | null | undefined) => {
+                            switch(s) {
+                              case "on_the_way": return "On the way";
+                              case "arrived": return "Arrived";
+                              case "running_late": return "Running late";
+                              case "in_progress": return "In progress";
+                              case "completed": return "Completed";
+                              case "issue_at_property": return "Issue at property";
+                              default: return "Scheduled";
+                            }
+                          };
+                          return (
+                            <div key={job.id} className="rounded-[20px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+                              <div className="p-3 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                                    <Clock className="h-3.5 w-3.5 text-slate-400" />{time}
+                                  </div>
+                                  <span className={`rounded-full border text-xs font-medium px-2 py-0.5 ${statusStyle(job.jobStatus)}`}>{statusLabel(job.jobStatus)}</span>
+                                </div>
+                                <div className="flex items-start gap-1.5 text-xs text-slate-700">
+                                  <User className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                                  <span className="font-medium">{job.customerName || "—"}</span>
+                                </div>
+                                {job.jobAddress && (
+                                  <div className="flex items-start gap-1.5 text-xs text-slate-500">
+                                    <MapPin className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                                    <span>{job.jobAddress}</span>
+                                  </div>
+                                )}
+                                {job.serviceType && (
+                                  <div className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1 text-xs text-slate-600">{job.serviceType}</div>
+                                )}
+                                {job.jobStatus === "issue_at_property" && job.issueNote && (
+                                  <div className="rounded-lg bg-rose-50 border border-rose-200 px-2 py-1.5 text-xs text-rose-800 flex items-start gap-1.5">
+                                    <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />{job.issueNote}
+                                  </div>
+                                )}
+                                {job.jobStatus === "running_late" && job.delayMinutes && (
+                                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1.5 text-xs text-amber-800">Running {job.delayMinutes} min late</div>
+                                )}
+                              </div>
+                              {(callHref || l27Url) && (
+                                <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-100 bg-slate-50">
+                                  {callHref && (
+                                    <a href={callHref} className="flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors">
+                                      <Phone className="h-3 w-3" /> Call
+                                    </a>
+                                  )}
+                                  {l27Url && (
+                                    <a href={l27Url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors">
+                                      <ExternalLink className="h-3 w-3" /> L27
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 ) : focusClientProfile?.todayJob ? (() => {
+                  /* ── CUSTOMER: show today's job (same as CsInbox client panel) ── */
                   const tj = focusClientProfile.todayJob;
                   const tjUrl = tj.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${tj.bookingId}` : null;
                   const TjCard = tjUrl ? "a" : "div";
