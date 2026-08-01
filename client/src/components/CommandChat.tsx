@@ -6842,15 +6842,15 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const { data: cards = [], isLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { staleTime: 0 });
   const { data: leaderboard = [] } = trpc.opsChat.getFocusLeaderboard.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
   const { data: myPtsData } = trpc.opsChat.getMyFocusPoints.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
-  const { data: focusCardCtx, isLoading: ctxLoading } = trpc.opsChat.getFocusCardContext.useQuery(
-    { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
-    { enabled: !!currentCard, staleTime: 30_000 }
-  );
   const awardPoints = trpc.opsChat.awardFocusPoints.useMutation();
   const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
   const emailCount = cards.filter(c => c.quickAction === "madison_email_draft").length;
   const currentCard = cards[cardIndex];
+  const { data: focusCardCtx, isLoading: ctxLoading } = trpc.opsChat.getFocusCardContext.useQuery(
+    { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
+    { enabled: !!currentCard, staleTime: 30_000 }
+  );
   const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
   const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
   const medals = ["🥇", "🥈", "🥉"];
