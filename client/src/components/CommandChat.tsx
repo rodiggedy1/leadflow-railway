@@ -44,7 +44,6 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
 import AiConcierge from "@/components/AiConcierge";
-import { OperationsPanel } from "@/components/OperationsPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -6843,6 +6842,10 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const { data: cards = [], isLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { staleTime: 0 });
   const { data: leaderboard = [] } = trpc.opsChat.getFocusLeaderboard.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
   const { data: myPtsData } = trpc.opsChat.getMyFocusPoints.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
+  const { data: focusCardCtx, isLoading: ctxLoading } = trpc.opsChat.getFocusCardContext.useQuery(
+    { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
+    { enabled: !!currentCard, staleTime: 30_000 }
+  );
   const awardPoints = trpc.opsChat.awardFocusPoints.useMutation();
   const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
@@ -7024,48 +7027,53 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                 </>
               )}
             </main>
-            {/* ── RIGHT: Stats ── */}
-            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* Session stats */}
-              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
-                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>🎯 Your Focus Session</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-                  {[{ label: "Total", val: cards.length, color: P }, { label: "Done", val: sessionDone, color: G }, { label: "Streak", val: sessionStreak, color: "#ff922f" }, { label: "Pct", val: `${pct}%`, color: "#ff922f" }].map(s => (
-                    <div key={s.label} style={{ border: "1px solid #e9e6fb", borderRadius: 14, textAlign: "center", padding: "11px 5px" }}>
-                      <strong style={{ display: "block", color: s.color, fontSize: 20, fontWeight: 800 }}>{s.val}</strong>
-                      <small style={{ color: "#7e829c", fontSize: 11 }}>{s.label}</small>
+            {/* ── RIGHT: Customer Context + AiConcierge ── */}
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+              {/* Customer / Cleaner Context Card */}
+              <div style={{ background: "rgba(255,255,255,.92)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 18, boxShadow: "0 4px 18px rgba(52,42,95,.06)", flexShrink: 0 }}>
+                {ctxLoading ? (
+                  <div style={{ color: "#9ca3af", fontSize: 12 }}>Loading context…</div>
+                ) : focusCardCtx && (focusCardCtx.cleanerName || focusCardCtx.cleanerPhone) ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c5cfc,#5d49f3)", color: "#fff", fontWeight: 800, fontSize: 15, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        {(focusCardCtx.cleanerName ?? "?").slice(0, 1).toUpperCase()}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, fontSize: 14, color: "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{focusCardCtx.cleanerName ?? "Unknown"}</div>
+                        {focusCardCtx.cleanerPhone && (
+                          <a href={`tel:${focusCardCtx.cleanerPhone}`} style={{ fontSize: 12, color: "#7c5cfc", textDecoration: "none", fontWeight: 600 }}>{focusCardCtx.cleanerPhone}</a>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden", marginTop: 14 }}>
-                  <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg,${P},${P2})`, transition: ".3s" }} />
-                </div>
+                    {focusCardCtx.todayJobs.length === 0 ? (
+                      <div style={{ fontSize: 12, color: "#9ca3af" }}>No jobs scheduled today.</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 2 }}>TODAY'S SCHEDULE</div>
+                        {focusCardCtx.todayJobs.map((job, i) => (
+                          <div key={i} style={{ background: "#f5f3ff", borderRadius: 12, padding: "8px 12px" }}>
+                            <div style={{ fontWeight: 700, fontSize: 12, color: "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.customerName ?? job.jobAddress ?? "Job"}</div>
+                            <div style={{ fontSize: 11, color: "#7e829c", marginTop: 2 }}>{job.serviceDateTime ? new Date(job.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : job.jobDate} · {job.teamName ?? job.serviceType ?? ""}</div>
+                            {job.jobAddress && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.jobAddress}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#9ca3af" }}>No context available for this card.</div>
+                )}
               </div>
-              {/* Recent wins */}
-              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
-                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Recent Wins</h3>
-                {recentWins.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#9ca3af" }}>Act on a card to see wins here.</div>
-                ) : recentWins.slice(0, 4).map((w, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < Math.min(recentWins.length, 4) - 1 ? "1px solid #efedf7" : "none" }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 12, background: w.type === "call" ? "#fff3e5" : "#eaf8f2", display: "grid", placeItems: "center", fontSize: 16 }}>{w.type === "sms" ? "✉" : w.type === "email" ? "📧" : "☎"}</div>
-                    <div><strong style={{ fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{w.label}</strong><small style={{ color: G, fontSize: 11, fontWeight: 600 }}>Sent</small></div>
-                    <time style={{ fontSize: 11, color: "#9da1b4" }}>{Math.floor((Date.now() - w.ts) / 60000)}m ago</time>
-                  </div>
-                ))}
-              </div>
-              {/* Queue preview */}
-              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
-                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Queue Preview</h3>
-                <div style={{ color: "#7e829c", fontSize: 13, marginBottom: 10 }}>What's ahead</div>
-                <div style={{ display: "flex", marginBottom: 10 }}>
-                  {cards.slice(cardIndex + 1, cardIndex + 6).map((c, i) => (
-                    <div key={c.id} style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c5cfc,#5d49f3)", color: "#fff", fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", marginLeft: i === 0 ? 0 : -8, border: "2px solid #fff" }}>
-                      {(c.body ?? "?").slice(0, 1).toUpperCase()}
-                    </div>
-                  ))}
-                </div>
-                <strong style={{ fontSize: 13, color: "#17152d" }}>{Math.max(0, cards.length - cardIndex - 1)} card{cards.length - cardIndex - 1 !== 1 ? "s" : ""} remaining</strong>
+              {/* AiConcierge — pre-seeded with cleaner context */}
+              <div style={{ flex: 1, minHeight: 0, borderRadius: 22, overflow: "hidden" }}>
+                <AiConcierge
+                  compact
+                  initialSummary={focusCardCtx && (focusCardCtx.cleanerName || focusCardCtx.todayJobs.length > 0)
+                    ? `=== FOCUS MODE CONTEXT ===\nCleaner: ${focusCardCtx.cleanerName ?? "Unknown"}\nPhone: ${focusCardCtx.cleanerPhone ?? "N/A"}\nToday's jobs:\n${focusCardCtx.todayJobs.map(j => `- ${j.customerName ?? j.jobAddress ?? "Job"} at ${j.serviceDateTime ? new Date(j.serviceDateTime).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : j.jobDate} (${j.teamName ?? j.serviceType ?? ""})`).join("\n") || "None"}`
+                    : undefined
+                  }
+                />
               </div>
             </aside>
           </div>
@@ -7075,8 +7083,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
+export default function CommandChat, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
   onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp, openTasksSignal }: CommandChatProps) {
   const DEBUG_RENDER = import.meta.env.DEV || localStorage.getItem("debug-renders") === "1";
   if (DEBUG_RENDER) { console.log("[RENDER] CommandChat", performance.now().toFixed(1)); }
@@ -11326,7 +11333,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               }}
               placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Message the team…"}
               rows={1}
-              className="flex-1 resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400 self-center"
+              className="flex-1 min-w-0 resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400 self-center"
               onKeyDown={(e) => {
                 if (mentionQuery !== null && mentionSuggestions.length > 0) {
                   if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
@@ -11370,32 +11377,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               onBlur={onCmdBlur}
             />
             {/* WhatsApp-style bottom bar: + menu | emoji */}
-              {/* Commands button — opens CommandPicker panel */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowMadisonCommands(v => !v)}
-                  title="Madison commands"
-                  style={{ border: 0, background: showMadisonCommands ? "linear-gradient(145deg,#7447f5,#9b6ff5)" : "#f0ecff", color: showMadisonCommands ? "#fff" : "#7447f5", padding: "10px 14px", borderRadius: 999, fontSize: 11, fontWeight: 800, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}
-                >
-                  <Zap style={{ width: 12, height: 12 }} />
-                  Commands
-                </button>
-                {showMadisonCommands && (
-                  <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, zIndex: 50, width: 380, maxHeight: "60vh", overflowY: "auto" }}>
-                    <CommandPicker
-                      onSelect={(cmd) => {
-                        // Prepend @madison if not already present
-                        const prefixed = /^@madison/i.test(cmd) ? cmd : `@madison ${cmd}`;
-                        // Set the composer value — find the composerRef setter
-                        setComposer(prefixed);
-                        setShowMadisonCommands(false);
-                        composerRef.current?.focus();
-                      }}
-                      onClose={() => setShowMadisonCommands(false)}
-                    />
-                  </div>
-                )}
-              </div>
               {/* PTT mic button — hold to talk, release to send */}
               <button
                 style={{ width: 42, height: 42, borderRadius: 14, border: isPttActive ? "1px solid #ef4444" : "1px solid #e0e4ef", background: isPttActive ? "#ef4444" : isTranscribing ? "#f5f3ff" : "#fff", color: isPttActive ? "#fff" : isTranscribing ? "#a78bfa" : "#6e7890", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, lineHeight: 1, flexShrink: 0, cursor: isTranscribing ? "wait" : "pointer", transition: "background .15s", userSelect: "none" }}
@@ -11574,20 +11555,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className="w-[4px] h-full" />
       </div>
 
-      {/* ── RIGHT PANEL: Operations Center ── */}
-      {/* AiConcierge preserved in AiConcierge.tsx — available for middle window when needed */}
+      {/* ── RIGHT PANEL: AiConcierge ── */}
       <div
         className="shrink-0 flex flex-col transition-[width] duration-200"
-        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined }}
+        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <OperationsPanel
-          sessionId={activeOpsSession?.sessionId ?? null}
-          customerName={activeOpsSession?.customerName ?? ""}
-          initials={activeOpsSession?.initials ?? ""}
-          agentId={agentList?.find(a => a.name === callerName)?.id ?? 0}
-          agentName={callerName}
-          sseRefetchKey={missionRefetchKey}
-        />
+        <AiConcierge compact onSwitchToCSSession={onSwitchToCSSession} />
         {/* end right panel */}
       </div>
 
