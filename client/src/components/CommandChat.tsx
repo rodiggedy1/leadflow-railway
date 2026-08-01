@@ -7130,7 +7130,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
               </div>
             </aside>
             {/* ── CENTER: Card ── */}
-            <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+            <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, flex: 1, minHeight: 0 }}>
               {/* Top bar */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
                 <button onClick={backToHero} style={{ border: 0, background: "none", fontWeight: 700, color: "#4c4d63", cursor: "pointer", fontSize: 14, textAlign: "left" }}>× Exit Focus</button>
@@ -7155,7 +7155,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                   <button onClick={onCelebrationContinue} style={{ padding: "13px 28px", background: `linear-gradient(135deg,${P},${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>Continue to next card →</button>
                 </div>
               ) : (
-                <div key={currentCard.id} style={{ background: "#fff", borderRadius: 26, border: "1px solid #e9e6fb", boxShadow: "0 20px 55px rgba(67,45,145,.13)", overflow: "hidden" }}>
+                <div key={currentCard.id} style={{ background: "#fff", borderRadius: 26, border: "1px solid #e9e6fb", boxShadow: "0 20px 55px rgba(67,45,145,.13)", overflowY: "auto", scrollbarWidth: "none", flex: 1, minHeight: 0 }}>
                   {currentCard.quickAction === "madison_sms_draft"
                     ? <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
                     : currentCard.quickAction === "madison_email_draft"
