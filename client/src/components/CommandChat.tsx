@@ -6852,8 +6852,12 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const goNext = () => { if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done"); };
   const goPrev = () => { if (cardIndex > 0) setCardIndex(i => i - 1); };
   const backToHero = () => { setView("hero"); setCardIndex(0); };
-  // Called by cards after their own Send/Dismiss mutation succeeds
-  const onCardActed = () => { utils.opsChat.getFocusCards.invalidate(); };
+  // Called by cards after their own Send/Dismiss mutation succeeds — advance immediately
+  const onCardActed = () => {
+    utils.opsChat.getFocusCards.invalidate();
+    if (cardIndex < cards.length - 1) setCardIndex(i => i + 1);
+    else setView("done");
+  };
   const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
   return (
     <div

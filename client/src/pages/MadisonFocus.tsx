@@ -59,10 +59,11 @@ export default function MadisonFocus() {
     if (cardIndex > 0) setCardIndex(i => i - 1);
   };
 
-  // Called by cards after their own Send/Dismiss mutation succeeds
+  // Called by cards after their own Send/Dismiss mutation succeeds — advance immediately
   const onCardActed = () => {
     utils.opsChat.getFocusCards.invalidate();
-    // Index clamping is handled by the useEffect above after the query refetches
+    if (cardIndex < cards.length - 1) setCardIndex(i => i + 1);
+    else setView("done");
   };
 
   const exitReview = () => { setView("hero"); setCardIndex(0); };
