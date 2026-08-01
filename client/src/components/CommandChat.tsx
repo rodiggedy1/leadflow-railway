@@ -6961,10 +6961,10 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
       {view === "review" && currentCard && (() => {
         const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
         return (
-          <div style={{ width: "min(1260px, 98vw)", maxHeight: "96vh", overflowY: "auto", background: "radial-gradient(circle at 10% 0,#eee8ff,transparent 28%),#f7f8ff", borderRadius: 28, boxShadow: "0 24px 80px rgba(67,45,145,.22)", fontFamily: "Inter, system-ui, sans-serif" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18 }}>
+          <div style={{ width: "min(1260px, 98vw)", height: "96vh", overflow: "hidden", background: "radial-gradient(circle at 10% 0,#eee8ff,transparent 28%),#f7f8ff", borderRadius: 28, boxShadow: "0 24px 80px rgba(67,45,145,.22)", fontFamily: "Inter, system-ui, sans-serif", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18, flex: 1, minHeight: 0 }}>
             {/* ── LEFT: Leaderboard ── */}
-            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", scrollbarWidth: "none" }}>
               {/* Brand */}
               <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: "20px 18px", boxShadow: "0 4px 18px rgba(52,42,95,.06)", display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -7175,7 +7175,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
               )}
             </main>
             {/* ── RIGHT: AiConcierge ── */}
-            <aside style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, overflowY: "auto", scrollbarWidth: "none" }}>
               {/* AiConcierge — pre-seeded with booking context */}
               <div style={{ flex: 1, minHeight: 0, borderRadius: 22, overflow: "hidden" }}>
                 <AiConcierge
