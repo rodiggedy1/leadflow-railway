@@ -191,13 +191,14 @@ export default function MadisonFocus() {
         <div style={{ height: 7, background: "#ececf8", borderRadius: 999, marginBottom: 24, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, #5d49f3, #7a63ff)", borderRadius: 999, transition: "width 0.3s ease" }} />
         </div>
-        <div style={{ background: "#fff", borderRadius: 20, boxShadow: "0 8px 32px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 20 }}>
+        <div key={currentCard.id} style={{ background: "#fff", borderRadius: 20, boxShadow: "0 8px 32px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 20 }}>
           {currentCard.quickAction === "madison_sms_draft" ? (
-            <MadisonSmsDraftCard msg={msgObj} callerName="" onActed={onCardActed} />
+            <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={onCardActed} />
           ) : currentCard.quickAction === "madison_email_draft" ? (
-            <MadisonEmailDraftCard msg={msgObj} callerName="" onActed={onCardActed} />
+            <MadisonEmailDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={onCardActed} />
           ) : (
             <MadisonCallSummaryCard
+              key={currentCard.id}
               msg={msgObj}
               onCallBack={(_name, phone) => { window.open(`tel:${phone}`, "_self"); }}
               onTextBack={(_name, phone) => { navigate(`/admin/leads?tab=callbacks&phone=${encodeURIComponent(phone)}`); }}

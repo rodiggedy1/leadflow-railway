@@ -6961,12 +6961,12 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
               <div style={{ height: 6, background: "#ececf8", borderRadius: 999, marginBottom: 20, overflow: "hidden" }}>
                 <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, #5d49f3, #7a63ff)", borderRadius: 999, transition: "width 0.3s ease" }} />
               </div>
-              <div style={{ background: "#fff", borderRadius: 18, boxShadow: "0 6px 24px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 18 }}>
+              <div key={currentCard.id} style={{ background: "#fff", borderRadius: 18, boxShadow: "0 6px 24px rgba(0,0,0,.07)", overflow: "hidden", marginBottom: 18 }}>
                 {currentCard.quickAction === "madison_sms_draft"
-                  ? <MadisonSmsDraftCard msg={msgObj} callerName="" onActed={onCardActed} />
+                  ? <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={onCardActed} />
                   : currentCard.quickAction === "madison_email_draft"
-                  ? <MadisonEmailDraftCard msg={msgObj} callerName="" onActed={onCardActed} />
-                  : <MadisonCallSummaryCard msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} onActed={onCardActed} />}
+                  ? <MadisonEmailDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={onCardActed} />
+                  : <MadisonCallSummaryCard key={currentCard.id} msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} onActed={onCardActed} />}
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={goPrev} disabled={cardIndex === 0} style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 18px", borderRadius: 12, border: "1.5px solid #ddd5ff", background: "#fff", color: cardIndex === 0 ? "#d1d5db" : "#5d49f3", fontWeight: 700, fontSize: 14, cursor: cardIndex === 0 ? "not-allowed" : "pointer" }}>
