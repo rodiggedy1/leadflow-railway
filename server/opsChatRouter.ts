@@ -127,6 +127,7 @@ async function getUnresolvedMadisonCards(db: NonNullable<Awaited<ReturnType<type
     ? await db.select().from(opsChatMessages).where(and(
         eq(opsChatMessages.channel, 'command'),
         eq(opsChatMessages.quickAction as any, 'madison_sms_draft'),
+        eq(opsChatMessages.cardStatus as any, 'active'),
         sql`JSON_VALID(${opsChatMessages.metadata}) = 1`,
         inArray(
           sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`,
@@ -145,6 +146,7 @@ async function getUnresolvedMadisonCards(db: NonNullable<Awaited<ReturnType<type
     ? await db.select().from(opsChatMessages).where(and(
         eq(opsChatMessages.channel, 'command'),
         eq(opsChatMessages.quickAction as any, 'madison_email_draft'),
+        eq(opsChatMessages.cardStatus as any, 'active'),
         sql`JSON_VALID(${opsChatMessages.metadata}) = 1`,
         inArray(
           sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`,
