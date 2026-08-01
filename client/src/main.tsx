@@ -1,4 +1,6 @@
 import "@/lib/i18n"; // initialize i18next singleton
+(window as any).__BUILD_ID__ = "focus-v1 2026-08-01";
+console.log("[BUILD]", (window as any).__BUILD_ID__);
 import { trpc } from "@/lib/trpc";
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
