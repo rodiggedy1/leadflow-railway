@@ -6852,6 +6852,17 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
     { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
     { enabled: !!currentCard, staleTime: 30_000 }
   );
+  // For customer cards: resolve fromPhone via getSmsDraft, then call getClientProfile (same as CsInbox)
+  const focusDraftId = (() => { try { return JSON.parse(currentCard?.metadata ?? '{}').draftId ?? null; } catch { return null; } })();
+  const { data: focusDraft } = trpc.opsChat.getSmsDraft.useQuery(
+    { draftId: focusDraftId! },
+    { enabled: !!focusDraftId && currentCard?.quickAction === 'madison_sms_draft', staleTime: 30_000 }
+  );
+  const focusClientPhone = focusDraft?.fromPhone ?? '';
+  const { data: focusClientProfile, isLoading: focusProfileLoading } = trpc.leads.getClientProfile.useQuery(
+    { phone: focusClientPhone },
+    { enabled: !!focusClientPhone, refetchOnWindowFocus: false, staleTime: 60_000 }
+  );
   const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
   const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
   const medals = ["🥇", "🥈", "🥉"];
@@ -6981,44 +6992,42 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                 )}
-                {/* Booking Context */}
-                {ctxLoading ? (
+                {/* Booking Context — same data source as CsInbox TODAY'S JOB */}
+                {focusProfileLoading && focusClientPhone ? (
                   <div style={{ background: "#f5f3ff", borderRadius: 14, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 BOOKING CONTEXT</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 TODAY'S JOB</div>
                     <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, marginBottom: 6 }} />
                     <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, width: "70%" }} />
                   </div>
-                ) : focusCardCtx && focusCardCtx.todayJobs.length > 0 ? (
-                  <div style={{ background: "#f5f3ff", border: "1px solid #e9e6fb", borderRadius: 14, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 BOOKING CONTEXT</div>
-                    {focusCardCtx.todayJobs.map((job, i) => (
-                      <div key={i} style={{ marginBottom: i < focusCardCtx.todayJobs.length - 1 ? 8 : 0 }}>
-                        {job.teamName && (
-                          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
-                            <span style={{ fontSize: 11, color: "#9ca3af" }}>Team</span>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.teamName}</span>
+                ) : focusClientProfile?.todayJob ? (() => {
+                  const tj = focusClientProfile.todayJob;
+                  const tjUrl = tj.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${tj.bookingId}` : null;
+                  const TjCard = tjUrl ? "a" : "div";
+                  return (
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-2 mb-3">Today's job</div>
+                      <TjCard
+                        {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
+                        className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-semibold text-sm text-emerald-900">
+                            {tj.serviceDateTime ? new Date(tj.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : tj.jobDate} · {tj.serviceType}
+                          </div>
+                          {tjUrl && <ExternalLink className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
+                        </div>
+                        <div className="text-xs text-emerald-700 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />{tj.jobAddress}
+                        </div>
+                        {(tj as any).teamName && (
+                          <div className="text-xs text-emerald-700 flex items-center gap-1">
+                            <Users className="h-3 w-3" />{(tj as any).teamName}
                           </div>
                         )}
-                        {(job.jobDate || job.serviceDateTime) && (
-                          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
-                            <span style={{ fontSize: 11, color: "#9ca3af" }}>Date</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
-                              {job.serviceDateTime
-                                ? new Date(job.serviceDateTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-                                : job.jobDate}
-                            </span>
-                          </div>
-                        )}
-                        {job.jobAddress && (
-                          <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
-                            <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0, marginTop: 1 }}>Addr</span>
-                            <span style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>{job.jobAddress}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                      </TjCard>
+                    </div>
+                  );
+                })() : null}
               </div>
             </aside>
             {/* ── CENTER: Card ── */}
@@ -7072,8 +7081,8 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
               <div style={{ flex: 1, minHeight: 0, borderRadius: 22, overflow: "hidden" }}>
                 <AiConcierge
                   compact
-                  initialSummary={focusCardCtx && (focusCardCtx.cleanerName || focusCardCtx.todayJobs.length > 0)
-                    ? `=== FOCUS MODE CONTEXT ===\nCleaner: ${focusCardCtx.cleanerName ?? "Unknown"}\nPhone: ${focusCardCtx.cleanerPhone ?? "N/A"}\nToday's jobs:\n${focusCardCtx.todayJobs.map(j => `- ${j.customerName ?? j.jobAddress ?? "Job"} at ${j.serviceDateTime ? new Date(j.serviceDateTime).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : j.jobDate} (${j.teamName ?? j.serviceType ?? ""})`).join("\n") || "None"}`
+                  initialSummary={focusClientProfile?.todayJob
+                    ? `=== FOCUS MODE CONTEXT ===\nCustomer: ${focusClientProfile.todayJob.customerName ?? focusDraft?.senderName ?? 'Unknown'}\nToday's job: ${focusClientProfile.todayJob.serviceType ?? ''} at ${focusClientProfile.todayJob.serviceDateTime ? new Date(focusClientProfile.todayJob.serviceDateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : focusClientProfile.todayJob.jobDate}\nAddress: ${focusClientProfile.todayJob.jobAddress ?? 'N/A'}\nTeam: ${(focusClientProfile.todayJob as any).teamName ?? 'N/A'}\nStatus: ${focusClientProfile.todayJob.jobStatus ?? focusClientProfile.todayJob.bookingStatus ?? 'scheduled'}`
                     : undefined
                   }
                 />
