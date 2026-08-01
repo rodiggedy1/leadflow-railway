@@ -6098,7 +6098,6 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
 
             if (draft) {
               const rc = draft.resolvedContext as Record<string, unknown> | null;
-              console.log('[getFocusCardContext] draftId:', draftId, 'quickAction:', input.quickAction, 'rc:', JSON.stringify(rc));
               const jobId = rc?.cleanerJobId as number | undefined;
               const cleanerPhone = rc?.cleanerPhone as string | undefined;
               const cleanerNameFromCtx = rc?.senderName as string | undefined ?? draft.senderName ?? null;
