@@ -203,6 +203,10 @@ async function fetchIndexes(
 
 export async function checkSmsCampaignSchema(): Promise<void> {
   const db = await getDb();
+  if (!db) {
+    console.log('[SchemaCheck] No DB available — skipping schema check');
+    return;
+  }
   const errors: string[] = [];
 
   // 1. Column checks
