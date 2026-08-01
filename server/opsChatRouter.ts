@@ -5887,18 +5887,92 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       };
     }),
   /**
-   * getFocusCards — returns all undismissed Madison cards ordered by recency.
-   * Uses the same getUnresolvedMadisonCards helper as getUnresolvedMadisonCount
-   * so the badge count and Focus queue are guaranteed to agree.
+   * getFocusCards — returns unresolved Madison cards from the same 500-row command
+   * channel window that the badge uses, with the same draft-status filter.
+   * This guarantees badge count === Focus count at all times.
    */
   getFocusCards: opsChatProcedure
     .query(async () => {
       const db = await getDb();
       if (!db) return [];
-      const { smsCards, emailCards, callCards } = await getUnresolvedMadisonCards(db);
-      const allCards = [...smsCards, ...emailCards, ...callCards];
-      if (allCards.length === 0) return [];
-      return allCards
+
+      // Step 1: fetch the same 500-row window as listChannelMessages for 'command'
+      const msgs = await db
+        .select()
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.channel, 'command'))
+        .orderBy(
+          desc(sql`CASE
+            WHEN ${opsChatMessages.quickAction} = 'madison_sms_draft'
+             AND ${opsChatMessages.cardStatus} = 'active'
+            THEN COALESCE(${opsChatMessages.lastActivityAt}, UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000)
+            ELSE UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000
+          END`)
+        )
+        .limit(500);
+
+      // Step 2: narrow to active madison cards only
+      const madisonMsgs = msgs.filter(m =>
+        m.cardStatus === 'active' &&
+        (m.quickAction === 'madison_sms_draft' ||
+         m.quickAction === 'madison_email_draft' ||
+         m.quickAction === 'madison_call_summary')
+      );
+      if (madisonMsgs.length === 0) return [];
+
+      // Step 3: apply the exact same draft-status filter as listChannelMessages
+      // SMS
+      const smsCardDraftIds: number[] = [];
+      for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_sms_draft')) {
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+      }
+      const completedSmsDraftIds = new Set<number>();
+      if (smsCardDraftIds.length > 0) {
+        const draftRows = await db
+          .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
+          .from(madisonSmsDrafts)
+          .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
+        for (const d of draftRows) {
+          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') {
+            completedSmsDraftIds.add(d.id);
+          }
+        }
+      }
+
+      // Email
+      const emailCardDraftIds: number[] = [];
+      for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_email_draft')) {
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) emailCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+      }
+      const completedEmailDraftIds = new Set<number>();
+      if (emailCardDraftIds.length > 0) {
+        const emailDraftRows = await db
+          .select({ id: madisonEmailDrafts.id, status: madisonEmailDrafts.status })
+          .from(madisonEmailDrafts)
+          .where(inArray(madisonEmailDrafts.id, emailCardDraftIds));
+        for (const d of emailDraftRows) {
+          if (d.status === 'SENT' || d.status === 'DISMISSED') {
+            completedEmailDraftIds.add(d.id);
+          }
+        }
+      }
+
+      // Step 4: filter out completed cards — same predicate as listChannelMessages
+      const unresolvedCards = madisonMsgs.filter(m => {
+        if (m.quickAction === 'madison_sms_draft') {
+          try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedSmsDraftIds.has(meta.draftId); } catch { return true; }
+        }
+        if (m.quickAction === 'madison_email_draft') {
+          try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedEmailDraftIds.has(meta.draftId); } catch { return true; }
+        }
+        if (m.quickAction === 'madison_call_summary') {
+          try { const meta = JSON.parse(m.metadata ?? '{}'); return !meta.actedBy; } catch { return true; }
+        }
+        return true;
+      });
+
+      // Step 5: sort by lastActivityAt desc (same as badge cycling order)
+      return unresolvedCards
         .sort((a, b) => {
           const tsA = Number(a.lastActivityAt ?? new Date(a.createdAt as Date).getTime());
           const tsB = Number(b.lastActivityAt ?? new Date(b.createdAt as Date).getTime());
