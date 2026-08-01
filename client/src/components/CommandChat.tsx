@@ -7175,9 +7175,9 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
               )}
             </main>
             {/* ── RIGHT: AiConcierge ── */}
-            <aside style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, overflowY: "auto", scrollbarWidth: "none" }}>
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, minHeight: 0, overflow: "hidden" }}>
               {/* AiConcierge — pre-seeded with booking context */}
-              <div style={{ flex: 1, minHeight: 0, borderRadius: 22, overflow: "hidden" }}>
+              <div style={{ flex: 1, minHeight: 0, borderRadius: 22, overflow: "hidden", display: "flex", flexDirection: "column" }}>
                 <AiConcierge
                   compact
                   initialSummary={focusClientProfile?.todayJob
