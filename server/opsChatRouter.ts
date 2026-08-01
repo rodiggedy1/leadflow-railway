@@ -117,43 +117,91 @@ const typingStore = new Map<string, Map<string, { name: string; expiresAt: numbe
 // Single source of truth for both getUnresolvedMadisonCount and getFocusCards.
 // No .limit() — queries exact rows by draft ID so counts can never drift.
 async function getUnresolvedMadisonCards(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
-  // ── SMS drafts: query exact opsChatMessages rows matching DRAFT_READY draft IDs ──
-  const smsDraftReadyRows = await db
-    .select({ id: madisonSmsDrafts.id })
-    .from(madisonSmsDrafts)
-    .where(eq(madisonSmsDrafts.status, 'DRAFT_READY'));
-  const smsDraftReadyIds = smsDraftReadyRows.map(r => r.id);
-  const smsCards = smsDraftReadyIds.length
-    ? await db.select().from(opsChatMessages).where(and(
-        eq(opsChatMessages.channel, 'command'),
-        eq(opsChatMessages.quickAction as any, 'madison_sms_draft'),
-        eq(opsChatMessages.cardStatus as any, 'active'),
-        sql`JSON_VALID(${opsChatMessages.metadata}) = 1`,
-        inArray(
+  // ── SMS drafts: JOIN to madisonSmsDrafts, exclude completed drafts ──────────
+  // Mirrors listChannelMessages exactly: hide cards whose draft is SENT, DISMISSED,
+  // or DELIVERED. cardStatus = 'active' ensures only the current actionable card
+  // per draft is returned (no historical duplicates).
+  const smsCards = await db
+    .select({
+      id: opsChatMessages.id,
+      cleanerJobId: opsChatMessages.cleanerJobId,
+      channel: opsChatMessages.channel,
+      authorName: opsChatMessages.authorName,
+      authorRole: opsChatMessages.authorRole,
+      body: opsChatMessages.body,
+      mediaUrl: opsChatMessages.mediaUrl,
+      quickAction: opsChatMessages.quickAction,
+      metadata: opsChatMessages.metadata,
+      replyToId: opsChatMessages.replyToId,
+      replyToBody: opsChatMessages.replyToBody,
+      replyToAuthor: opsChatMessages.replyToAuthor,
+      dmThread: opsChatMessages.dmThread,
+      threadParentId: opsChatMessages.threadParentId,
+      createdAt: opsChatMessages.createdAt,
+      sessionId: opsChatMessages.sessionId,
+      lastActivityAt: opsChatMessages.lastActivityAt,
+      cardStatus: opsChatMessages.cardStatus,
+      activeDedupKey: opsChatMessages.activeDedupKey,
+    })
+    .from(opsChatMessages)
+    .innerJoin(
+      madisonSmsDrafts,
+      and(
+        eq(
           sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`,
-          smsDraftReadyIds
-        )
-      ))
-    : [];
+          madisonSmsDrafts.id
+        ),
+        notInArray(madisonSmsDrafts.status, ['SENT', 'DISMISSED', 'DELIVERED'])
+      )
+    )
+    .where(and(
+      eq(opsChatMessages.channel, 'command'),
+      eq(opsChatMessages.quickAction as any, 'madison_sms_draft'),
+      eq(opsChatMessages.cardStatus as any, 'active'),
+      sql`JSON_VALID(${opsChatMessages.metadata}) = 1`
+    ));
 
-  // ── Email drafts: same pattern ────────────────────────────────────────────
-  const emailDraftReadyRows = await db
-    .select({ id: madisonEmailDrafts.id })
-    .from(madisonEmailDrafts)
-    .where(eq(madisonEmailDrafts.status, 'DRAFT_READY'));
-  const emailDraftReadyIds = emailDraftReadyRows.map(r => r.id);
-  const emailCards = emailDraftReadyIds.length
-    ? await db.select().from(opsChatMessages).where(and(
-        eq(opsChatMessages.channel, 'command'),
-        eq(opsChatMessages.quickAction as any, 'madison_email_draft'),
-        eq(opsChatMessages.cardStatus as any, 'active'),
-        sql`JSON_VALID(${opsChatMessages.metadata}) = 1`,
-        inArray(
+  // ── Email drafts: same JOIN pattern, exclude SENT or DISMISSED ──────────────
+  // listChannelMessages uses SENT | DISMISSED for email (no DELIVERED status).
+  const emailCards = await db
+    .select({
+      id: opsChatMessages.id,
+      cleanerJobId: opsChatMessages.cleanerJobId,
+      channel: opsChatMessages.channel,
+      authorName: opsChatMessages.authorName,
+      authorRole: opsChatMessages.authorRole,
+      body: opsChatMessages.body,
+      mediaUrl: opsChatMessages.mediaUrl,
+      quickAction: opsChatMessages.quickAction,
+      metadata: opsChatMessages.metadata,
+      replyToId: opsChatMessages.replyToId,
+      replyToBody: opsChatMessages.replyToBody,
+      replyToAuthor: opsChatMessages.replyToAuthor,
+      dmThread: opsChatMessages.dmThread,
+      threadParentId: opsChatMessages.threadParentId,
+      createdAt: opsChatMessages.createdAt,
+      sessionId: opsChatMessages.sessionId,
+      lastActivityAt: opsChatMessages.lastActivityAt,
+      cardStatus: opsChatMessages.cardStatus,
+      activeDedupKey: opsChatMessages.activeDedupKey,
+    })
+    .from(opsChatMessages)
+    .innerJoin(
+      madisonEmailDrafts,
+      and(
+        eq(
           sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`,
-          emailDraftReadyIds
-        )
-      ))
-    : [];
+          madisonEmailDrafts.id
+        ),
+        notInArray(madisonEmailDrafts.status, ['SENT', 'DISMISSED'])
+      )
+    )
+    .where(and(
+      eq(opsChatMessages.channel, 'command'),
+      eq(opsChatMessages.quickAction as any, 'madison_email_draft'),
+      eq(opsChatMessages.cardStatus as any, 'active'),
+      sql`JSON_VALID(${opsChatMessages.metadata}) = 1`
+    ));
 
   // ── Call summaries: active + actedBy missing/null/empty (preserves old JS catch behavior) ──
   const callCards = await db.select().from(opsChatMessages).where(and(
