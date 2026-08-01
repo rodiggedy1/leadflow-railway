@@ -1306,7 +1306,7 @@ function EtaCallResultCard({
 
 // ── MadisonSmsDraftCard ─────────────────────────────────────────────────────
 // Self-contained component — fetches draft by draftId, handles approve/dismiss/retry
-export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
+export function MadisonSmsDraftCard({ msg, callerName, onActed }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string; onActed?: () => void }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -1328,6 +1328,7 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
       setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+      onActed?.();
     },
   });
   const dismissMutation = trpc.opsChat.dismissSmsDraft.useMutation({
@@ -1336,6 +1337,7 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
       utils.opsChat.getSmsDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
       setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+      onActed?.();
     },
   });
   const retryMutation = trpc.opsChat.retrySmsDraft.useMutation({
@@ -1780,7 +1782,7 @@ export function MadisonSmsDraftCard({ msg, callerName }: { msg: { id: number; bo
 // ── MadisonEmailDraftCard ──────────────────────────────────────────────────
 // Exact clone of MadisonSmsDraftCard — same behavior, same flow.
 // Differences: blue accent, mail icon label, uses approveEmailDraft/dismissEmailDraft.
-export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string }) {
+export function MadisonEmailDraftCard({ msg, callerName, onActed }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string; onActed?: () => void }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -1802,6 +1804,7 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
       utils.opsChat.getEmailDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
       setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+      onActed?.();
     },
   });
   const dismissMutation = trpc.opsChat.dismissEmailDraft.useMutation({
@@ -1810,6 +1813,7 @@ export function MadisonEmailDraftCard({ msg, callerName }: { msg: { id: number; 
       utils.opsChat.getEmailDraft.invalidate({ draftId: meta.draftId! });
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
       setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+      onActed?.();
     },
   });
 
@@ -5964,10 +5968,12 @@ export function MadisonCallSummaryCard({
   msg,
   onCallBack,
   onTextBack,
+  onActed,
 }: {
   msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date };
   onCallBack: (name: string, phone: string, msgId: number) => void;
   onTextBack: (name: string, phone: string, msgId: number) => void;
+  onActed?: () => void;
 }) {
   const [showTranscript, setShowTranscript] = useState(false);
   const [justActed, setJustActed] = useState<"called" | "texted" | "dismissed" | null>(null);
@@ -5979,6 +5985,7 @@ export function MadisonCallSummaryCard({
       setJustActed(action === "call" ? "called" : action === "text" ? "texted" : "dismissed");
       utils.opsChat.getUnresolvedMadisonCount.invalidate();
       setTimeout(() => utils.opsChat.listChannelMessages.invalidate({ channel: "command" }), 4000);
+      onActed?.();
     },
   });
   const handleDismiss = () => {

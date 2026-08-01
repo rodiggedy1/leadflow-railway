@@ -5877,6 +5877,99 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         mediaUrl: m.mediaUrl ?? null,
       }));
     }),
+
+  /**
+   * getFocusCards — returns all undismissed Madison cards (SMS draft, email draft, call summary)
+   * for the Focus Mode queue. Uses the same unresolved predicate as getUnresolvedMadisonCount
+   * so the badge count and Focus queue always agree.
+   * Ordered by COALESCE(lastActivityAt, UNIX_TIMESTAMP(createdAt)*1000) DESC.
+   */
+  getFocusCards: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+
+      // ── Unresolved SMS draft IDs (same predicate as getUnresolvedMadisonCount) ──
+      const draftReadyRows = await db
+        .select({ id: madisonSmsDrafts.id })
+        .from(madisonSmsDrafts)
+        .where(eq(madisonSmsDrafts.status, 'DRAFT_READY'));
+      const draftReadyIds = new Set(draftReadyRows.map(r => r.id));
+
+      const smsDraftMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction as any, 'madison_sms_draft'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedSmsIds = new Set(
+        smsDraftMsgs
+          .filter(m => { try { return draftReadyIds.has(JSON.parse(m.metadata ?? '{}').draftId); } catch { return false; } })
+          .map(m => m.id)
+      );
+
+      // ── Unresolved email draft IDs ──
+      const emailDraftReadyRows = await db
+        .select({ id: madisonEmailDrafts.id })
+        .from(madisonEmailDrafts)
+        .where(eq(madisonEmailDrafts.status, 'DRAFT_READY'));
+      const emailDraftReadyIds = new Set(emailDraftReadyRows.map(r => r.id));
+
+      const emailDraftMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction as any, 'madison_email_draft'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedEmailIds = new Set(
+        emailDraftMsgs
+          .filter(m => { try { return emailDraftReadyIds.has(JSON.parse(m.metadata ?? '{}').draftId); } catch { return false; } })
+          .map(m => m.id)
+      );
+
+      // ── Unresolved call summary IDs (no actedBy in metadata) ──
+      const callSummaryMsgs = await db
+        .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction as any, 'madison_call_summary'),
+        ))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(200);
+      const unresolvedCallIds = new Set(
+        callSummaryMsgs
+          .filter(m => { try { return !JSON.parse(m.metadata ?? '{}').actedBy; } catch { return true; } })
+          .map(m => m.id)
+      );
+
+      const allUnresolvedIds = [...new Set([...unresolvedSmsIds, ...unresolvedEmailIds, ...unresolvedCallIds])];
+      if (allUnresolvedIds.length === 0) return [];
+
+      // Fetch full rows ordered by COALESCE(lastActivityAt, createdAt timestamp) DESC
+      const focusRows = await db
+        .select()
+        .from(opsChatMessages)
+        .where(inArray(opsChatMessages.id, allUnresolvedIds))
+        .orderBy(
+          sql`COALESCE(${opsChatMessages.lastActivityAt}, UNIX_TIMESTAMP(${opsChatMessages.createdAt})*1000) DESC`
+        );
+
+      return focusRows.map(m => ({
+        id: m.id,
+        ts: (m.createdAt as Date).getTime(),
+        quickAction: m.quickAction,
+        body: m.body,
+        metadata: m.metadata ?? null,
+        mediaUrl: m.mediaUrl ?? null,
+      }));
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
