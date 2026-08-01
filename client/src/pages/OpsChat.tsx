@@ -19,6 +19,7 @@ import LeadsInbox from "@/components/LeadsInbox";
 import CsInbox, { type InboxFilter } from "@/components/CsInbox";
 import { getInitialCsConversationId } from "@shared/csInboxUtils";
 import DmPanel from "@/components/DmPanel";
+import AiConcierge from "@/components/AiConcierge";
 import ReminderPopup from "@/components/ReminderPopup";
 import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -1288,6 +1289,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // Profile photo state
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
+  const [madisonOpen, setMadisonOpen] = useState(false);
   // Signal to open the Tasks panel inside CommandChat (incremented on each profile picture click)
   const [openTasksSignal, setOpenTasksSignal] = useState(0);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
@@ -3704,6 +3706,58 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           onClose={() => closeDm(dm.key)}
         />
       ))}
+      {/* ── Floating Madison Widget ─────────────────────────────────────────── */}
+      {madisonOpen && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 80,
+            right: 16,
+            width: 380,
+            maxHeight: "calc(100vh - 100px)",
+            zIndex: 9999,
+            borderRadius: 20,
+            overflow: "hidden",
+            boxShadow: "0 8px 40px rgba(116,71,245,0.22), 0 2px 12px rgba(0,0,0,0.12)",
+            border: "1px solid #e0d7ff",
+            background: "#fff",
+          }}
+        >
+          <AiConcierge
+            agentPhotoUrl={profilePhotoUrl ?? undefined}
+            onClose={() => setMadisonOpen(false)}
+            compact
+          />
+        </div>
+      )}
+      <button
+        onClick={() => setMadisonOpen(o => !o)}
+        style={{
+          position: "fixed",
+          bottom: 16,
+          right: 16,
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          border: "none",
+          cursor: "pointer",
+          zIndex: 10000,
+          padding: 0,
+          overflow: "hidden",
+          boxShadow: madisonOpen
+            ? "0 0 0 3px #7447f5, 0 4px 20px rgba(116,71,245,0.4)"
+            : "0 2px 12px rgba(0,0,0,0.18)",
+          transition: "box-shadow 0.2s",
+        }}
+        title="Ask Madison"
+        aria-label="Open Madison"
+      >
+        <img
+          src="/madison-avatar.jpg"
+          alt="Madison"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      </button>
       </div>{/* end flex-1 wrapper */}
     </div>
   );

@@ -44,6 +44,7 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
 import AiConcierge from "@/components/AiConcierge";
+import { OperationsPanel } from "@/components/OperationsPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -6847,6 +6848,31 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
   const emailCount = cards.filter(c => c.quickAction === "madison_email_draft").length;
   const currentCard = cards[cardIndex];
+  const { data: focusCardCtx, isLoading: ctxLoading } = trpc.opsChat.getFocusCardContext.useQuery(
+    { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
+    { enabled: !!currentCard, staleTime: 30_000 }
+  );
+  // For customer cards: resolve fromPhone via getSmsDraft, then call getClientProfile (same as CsInbox)
+  const focusDraftId = (() => { try { return JSON.parse(currentCard?.metadata ?? '{}').draftId ?? null; } catch { return null; } })();
+  const { data: focusDraft } = trpc.opsChat.getSmsDraft.useQuery(
+    { draftId: focusDraftId! },
+    { enabled: !!focusDraftId && currentCard?.quickAction === 'madison_sms_draft', staleTime: 30_000 }
+  );
+  const focusClientPhone = focusDraft?.fromPhone ?? '';
+  // Try cleaner profile first — if found, it's a cleaner card; otherwise it's a customer card
+  const { data: focusCleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
+    { phone: focusClientPhone },
+    { enabled: !!focusClientPhone, refetchOnWindowFocus: false, staleTime: 60_000 }
+  );
+  const { data: focusCleanerTodayJobs, isLoading: focusCleanerJobsLoading } = trpc.leads.getCleanerTodayJobs.useQuery(
+    { cleanerProfileId: focusCleanerProfile?.id ?? 0 },
+    { enabled: !!focusCleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 }
+  );
+  const focusIsCleanerCard = !!focusCleanerProfile;
+  const { data: focusClientProfile, isLoading: focusProfileLoading } = trpc.leads.getClientProfile.useQuery(
+    { phone: focusClientPhone },
+    { enabled: !!focusClientPhone && !focusIsCleanerCard, refetchOnWindowFocus: false, staleTime: 60_000 }
+  );
   const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
   const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
   const medals = ["🥇", "🥈", "🥉"];
@@ -6935,10 +6961,10 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
       {view === "review" && currentCard && (() => {
         const msgObj = { id: currentCard.id, body: currentCard.body, metadata: currentCard.metadata, mediaUrl: currentCard.mediaUrl, createdAt: new Date(currentCard.ts) };
         return (
-          <div style={{ width: "min(1260px, 98vw)", maxHeight: "96vh", overflowY: "auto", background: "radial-gradient(circle at 10% 0,#eee8ff,transparent 28%),#f7f8ff", borderRadius: 28, boxShadow: "0 24px 80px rgba(67,45,145,.22)", fontFamily: "Inter, system-ui, sans-serif" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18 }}>
+          <div style={{ width: "min(1260px, 98vw)", height: "96vh", overflow: "hidden", background: "radial-gradient(circle at 10% 0,#eee8ff,transparent 28%),#f7f8ff", borderRadius: 28, boxShadow: "0 24px 80px rgba(67,45,145,.22)", fontFamily: "Inter, system-ui, sans-serif", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 300px", gap: 16, padding: 18, flex: 1, minHeight: 0 }}>
             {/* ── LEFT: Leaderboard ── */}
-            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", scrollbarWidth: "none" }}>
               {/* Brand */}
               <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: "20px 18px", boxShadow: "0 4px 18px rgba(52,42,95,.06)", display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -6976,6 +7002,131 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                 )}
+                {/* Booking Context — cleaner: today's schedule; customer: today's job */}
+                {focusClientPhone && (focusCleanerJobsLoading || focusProfileLoading) ? (
+                  <div style={{ background: "#f5f3ff", borderRadius: 14, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 LOADING...</div>
+                    <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, marginBottom: 6 }} />
+                    <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, width: "70%" }} />
+                  </div>
+                ) : focusIsCleanerCard ? (
+                  /* ── CLEANER: show today's schedule (same as CsInbox Teams panel) ── */
+                  <div>
+                    <div className="flex items-center gap-2 mt-2 mb-3" style={{fontSize:'10px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3'}}>
+                      <Briefcase className="h-3.5 w-3.5" /> Today's jobs
+                    </div>
+                    {!focusCleanerTodayJobs || focusCleanerTodayJobs.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">No jobs scheduled today</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {focusCleanerTodayJobs.map((job) => {
+                          const time = job.serviceDateTime ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+                          const l27Url = job.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}` : null;
+                          const cp10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+                          const callHref = cp10 ? `openphone://call?to=+1${cp10}` : null;
+                          const statusStyle = (s: string | null | undefined) => {
+                            switch(s) {
+                              case "on_the_way": return "bg-blue-50 text-blue-700 border-blue-200";
+                              case "arrived": return "bg-teal-50 text-teal-700 border-teal-200";
+                              case "running_late": return "bg-amber-50 text-amber-700 border-amber-200";
+                              case "in_progress": return "bg-indigo-50 text-indigo-700 border-indigo-200";
+                              case "completed": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+                              case "issue_at_property": return "bg-rose-50 text-rose-700 border-rose-200";
+                              default: return "bg-slate-50 text-slate-600 border-slate-200";
+                            }
+                          };
+                          const statusLabel = (s: string | null | undefined) => {
+                            switch(s) {
+                              case "on_the_way": return "On the way";
+                              case "arrived": return "Arrived";
+                              case "running_late": return "Running late";
+                              case "in_progress": return "In progress";
+                              case "completed": return "Completed";
+                              case "issue_at_property": return "Issue at property";
+                              default: return "Scheduled";
+                            }
+                          };
+                          return (
+                            <div key={job.id} className="rounded-[20px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+                              <div className="p-3 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                                    <Clock className="h-3.5 w-3.5 text-slate-400" />{time}
+                                  </div>
+                                  <span className={`rounded-full border text-xs font-medium px-2 py-0.5 ${statusStyle(job.jobStatus)}`}>{statusLabel(job.jobStatus)}</span>
+                                </div>
+                                <div className="flex items-start gap-1.5 text-xs text-slate-700">
+                                  <User className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                                  <span className="font-medium">{job.customerName || "—"}</span>
+                                </div>
+                                {job.jobAddress && (
+                                  <div className="flex items-start gap-1.5 text-xs text-slate-500">
+                                    <MapPin className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                                    <span>{job.jobAddress}</span>
+                                  </div>
+                                )}
+                                {job.serviceType && (
+                                  <div className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1 text-xs text-slate-600">{job.serviceType}</div>
+                                )}
+                                {job.jobStatus === "issue_at_property" && job.issueNote && (
+                                  <div className="rounded-lg bg-rose-50 border border-rose-200 px-2 py-1.5 text-xs text-rose-800 flex items-start gap-1.5">
+                                    <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />{job.issueNote}
+                                  </div>
+                                )}
+                                {job.jobStatus === "running_late" && job.delayMinutes && (
+                                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1.5 text-xs text-amber-800">Running {job.delayMinutes} min late</div>
+                                )}
+                              </div>
+                              {(callHref || l27Url) && (
+                                <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-100 bg-slate-50">
+                                  {callHref && (
+                                    <a href={callHref} className="flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors">
+                                      <Phone className="h-3 w-3" /> Call
+                                    </a>
+                                  )}
+                                  {l27Url && (
+                                    <a href={l27Url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors">
+                                      <ExternalLink className="h-3 w-3" /> L27
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : focusClientProfile?.todayJob ? (() => {
+                  /* ── CUSTOMER: show today's job (same as CsInbox client panel) ── */
+                  const tj = focusClientProfile.todayJob;
+                  const tjUrl = tj.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${tj.bookingId}` : null;
+                  const TjCard = tjUrl ? "a" : "div";
+                  return (
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-2 mb-3">Today's job</div>
+                      <TjCard
+                        {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
+                        className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-semibold text-sm text-emerald-900">
+                            {tj.serviceDateTime ? new Date(tj.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : tj.jobDate} · {tj.serviceType}
+                          </div>
+                          {tjUrl && <ExternalLink className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
+                        </div>
+                        <div className="text-xs text-emerald-700 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />{tj.jobAddress}
+                        </div>
+                        {(tj as any).teamName && (
+                          <div className="text-xs text-emerald-700 flex items-center gap-1">
+                            <Users className="h-3 w-3" />{(tj as any).teamName}
+                          </div>
+                        )}
+                      </TjCard>
+                    </div>
+                  );
+                })() : null}
               </div>
             </aside>
             {/* ── CENTER: Card ── */}
@@ -7023,48 +7174,17 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                 </>
               )}
             </main>
-            {/* ── RIGHT: Stats ── */}
-            <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* Session stats */}
-              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
-                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>🎯 Your Focus Session</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-                  {[{ label: "Total", val: cards.length, color: P }, { label: "Done", val: sessionDone, color: G }, { label: "Streak", val: sessionStreak, color: "#ff922f" }, { label: "Pct", val: `${pct}%`, color: "#ff922f" }].map(s => (
-                    <div key={s.label} style={{ border: "1px solid #e9e6fb", borderRadius: 14, textAlign: "center", padding: "11px 5px" }}>
-                      <strong style={{ display: "block", color: s.color, fontSize: 20, fontWeight: 800 }}>{s.val}</strong>
-                      <small style={{ color: "#7e829c", fontSize: 11 }}>{s.label}</small>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden", marginTop: 14 }}>
-                  <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg,${P},${P2})`, transition: ".3s" }} />
-                </div>
-              </div>
-              {/* Recent wins */}
-              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
-                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Recent Wins</h3>
-                {recentWins.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#9ca3af" }}>Act on a card to see wins here.</div>
-                ) : recentWins.slice(0, 4).map((w, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < Math.min(recentWins.length, 4) - 1 ? "1px solid #efedf7" : "none" }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 12, background: w.type === "call" ? "#fff3e5" : "#eaf8f2", display: "grid", placeItems: "center", fontSize: 16 }}>{w.type === "sms" ? "✉" : w.type === "email" ? "📧" : "☎"}</div>
-                    <div><strong style={{ fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{w.label}</strong><small style={{ color: G, fontSize: 11, fontWeight: 600 }}>Sent</small></div>
-                    <time style={{ fontSize: 11, color: "#9da1b4" }}>{Math.floor((Date.now() - w.ts) / 60000)}m ago</time>
-                  </div>
-                ))}
-              </div>
-              {/* Queue preview */}
-              <div style={{ background: "rgba(255,255,255,.88)", border: "1px solid #e9e6fb", borderRadius: 22, padding: 20, boxShadow: "0 4px 18px rgba(52,42,95,.06)" }}>
-                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 800, color: "#17152d" }}>Queue Preview</h3>
-                <div style={{ color: "#7e829c", fontSize: 13, marginBottom: 10 }}>What's ahead</div>
-                <div style={{ display: "flex", marginBottom: 10 }}>
-                  {cards.slice(cardIndex + 1, cardIndex + 6).map((c, i) => (
-                    <div key={c.id} style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c5cfc,#5d49f3)", color: "#fff", fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", marginLeft: i === 0 ? 0 : -8, border: "2px solid #fff" }}>
-                      {(c.body ?? "?").slice(0, 1).toUpperCase()}
-                    </div>
-                  ))}
-                </div>
-                <strong style={{ fontSize: 13, color: "#17152d" }}>{Math.max(0, cards.length - cardIndex - 1)} card{cards.length - cardIndex - 1 !== 1 ? "s" : ""} remaining</strong>
+            {/* ── RIGHT: AiConcierge ── */}
+            <aside style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, overflowY: "auto", scrollbarWidth: "none" }}>
+              {/* AiConcierge — pre-seeded with booking context */}
+              <div style={{ flex: 1, minHeight: 0, borderRadius: 22, overflow: "hidden" }}>
+                <AiConcierge
+                  compact
+                  initialSummary={focusClientProfile?.todayJob
+                    ? `=== FOCUS MODE CONTEXT ===\nCustomer: ${focusClientProfile.todayJob.customerName ?? focusDraft?.senderName ?? 'Unknown'}\nToday's job: ${focusClientProfile.todayJob.serviceType ?? ''} at ${focusClientProfile.todayJob.serviceDateTime ? new Date(focusClientProfile.todayJob.serviceDateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : focusClientProfile.todayJob.jobDate}\nAddress: ${focusClientProfile.todayJob.jobAddress ?? 'N/A'}\nTeam: ${(focusClientProfile.todayJob as any).teamName ?? 'N/A'}\nStatus: ${focusClientProfile.todayJob.jobStatus ?? focusClientProfile.todayJob.bookingStatus ?? 'scheduled'}`
+                    : undefined
+                  }
+                />
               </div>
             </aside>
           </div>
@@ -7074,7 +7194,6 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
   onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp, openTasksSignal }: CommandChatProps) {
   const DEBUG_RENDER = import.meta.env.DEV || localStorage.getItem("debug-renders") === "1";
@@ -7188,7 +7307,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
-  // conciergeOpen removed — AiConcierge is always inline in right panel
+  // conciergeOpen removed — OperationsPanel (missions) is in right panel; AiConcierge is in Focus Mode popup
   const [objectionOpen, setObjectionOpen] = useState(false);
   const [followUpsInitialId, setFollowUpsInitialId] = useState<number | null>(null);
   const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
@@ -11547,12 +11666,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className="w-[4px] h-full" />
       </div>
 
-      {/* ── RIGHT PANEL: AiConcierge ── */}
+      {/* ── RIGHT PANEL: Operations Center (Missions) ── */}
       <div
         className="shrink-0 flex flex-col transition-[width] duration-200"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <AiConcierge compact onSwitchToCSSession={onSwitchToCSSession} />
+        <OperationsPanel
+          sessionId={activeOpsSession?.sessionId ?? null}
+          customerName={activeOpsSession?.customerName ?? ""}
+          initials={activeOpsSession?.initials ?? ""}
+          agentId={agentList?.find(a => a.name === callerName)?.id ?? 0}
+          agentName={callerName}
+          sseRefetchKey={missionRefetchKey}
+        />
         {/* end right panel */}
       </div>
 
@@ -12587,7 +12713,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       )}
-      {/* AI Concierge is now inline in the right panel */}
+      {/* AI Concierge is used inside Focus Mode popup; OperationsPanel handles main right panel */}
       {/* Email Inbox slide-in panel */}
       {emailsOpen && (
         <div

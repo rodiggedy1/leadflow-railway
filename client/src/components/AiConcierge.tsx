@@ -2900,7 +2900,7 @@ type MissionStep = MadisonMission["missionSteps"][number];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchToCSSession }: { agentPhotoUrl?: string; onClose?: () => void; compact?: boolean; onSwitchToCSSession?: (sessionId: number) => void }) {
+export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchToCSSession, initialSummary }: { agentPhotoUrl?: string; onClose?: () => void; compact?: boolean; onSwitchToCSSession?: (sessionId: number) => void; initialSummary?: string }) {
   const { user } = useAuth();
   // Use the agent's numeric id (from agent cookie session) as the stable userId for
   // mission history. Agents do NOT use Manus OAuth, so user?.openId is always undefined.
@@ -2940,7 +2940,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [readinessDate, setReadinessDate] = useState<string | undefined>(undefined);
   // Rolling conversation summary — updated after each AI response
-  const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
+  const [conversationSummary, setConversationSummary] = useState<string | undefined>(initialSummary);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Build the last-N turns + summary to send with every request

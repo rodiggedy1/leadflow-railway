@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls, confirmationCalls, smsCampaignRecipients } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls, confirmationCalls, smsCampaignRecipients, csMissions } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -2304,6 +2304,13 @@ async function handleCsInboundMessage(msg: any) {
       cleanerName: resolvedName ?? "Cleaner",
       inboundText,
     }).catch(err => console.error("[CS] tryDetectCleanerRunningLate error:", err));
+
+    // Check if this cleaner reply advances a waiting GET_ETA mission
+    tryAdvanceGetEtaMission({
+      db,
+      fromPhone,
+      inboundText,
+    }).catch(err => console.error("[CS] tryAdvanceGetEtaMission error:", err));
   }
 
   // ── Client status inquiry auto-handler ─── DISABLED ───────────────────────
@@ -3509,5 +3516,66 @@ async function handleSmsDeliveryUpdate(messageId: string, status: string): Promi
     }
   } catch (err) {
     console.error("[Webhook] handleSmsDeliveryUpdate DB error:", err);
+  }
+}
+
+// ── GET_ETA Mission: Cleaner Reply Handler ────────────────────────────────────
+
+/**
+ * When a cleaner texts in, check if there's a waiting GET_ETA mission for their
+ * phone number. If found, advance the mission stages (stage 2 done, stage 3 ready)
+ * with the cleaner's reply as the suggested customer response.
+ *
+ * Matches by cleanerPhone stored on the mission row — no re-query of cleanerProfiles.
+ */
+async function tryAdvanceGetEtaMission({
+  db,
+  fromPhone,
+  inboundText,
+}: {
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  fromPhone: string;
+  inboundText: string;
+}): Promise<void> {
+  // Normalize phone for matching — stored as raw 10-digit or E.164
+  const phone10 = fromPhone.replace(/^\+1/, "").replace(/[^\d]/g, "").slice(-10);
+  const phoneE164 = `+1${phone10}`;
+
+  // Find waiting GET_ETA missions where cleanerPhone matches this sender
+  const waitingMissions = await db
+    .select()
+    .from(csMissions)
+    .where(
+      and(
+        eq(csMissions.missionType as any, "GET_ETA"),
+        eq(csMissions.status as any, "waiting"),
+        or(
+          sql`REPLACE(REPLACE(${(csMissions as any).cleanerPhone}, '+1', ''), '-', '') = ${phone10}`,
+          eq((csMissions as any).cleanerPhone, phoneE164),
+          eq((csMissions as any).cleanerPhone, phone10),
+        )
+      )
+    )
+    .limit(5);
+
+  if (waitingMissions.length === 0) return;
+
+  if (waitingMissions.length > 1) {
+    // Ambiguous — multiple waiting missions for this cleaner phone
+    // Flag all of them so an agent can resolve
+    console.warn(`[MissionEngine] Ambiguous cleaner reply: ${waitingMissions.length} waiting GET_ETA missions for ${fromPhone}`);
+    const { flagMission } = await import("./missionEngine");
+    for (const m of waitingMissions) {
+      await flagMission(m.id, "ambiguous_cleaner_match", { releaseDedupKey: false });
+    }
+    return;
+  }
+
+  const mission = waitingMissions[0];
+  const { getEtaHandler } = await import("./missions/getEta");
+
+  if (getEtaHandler.handleInboundMessage) {
+    await getEtaHandler.handleInboundMessage(inboundText, fromPhone, mission as any);
+    console.log(`[MissionEngine] GET_ETA mission ${mission.id} advanced to ready — cleaner replied: "${inboundText.slice(0, 60)}"`);
   }
 }

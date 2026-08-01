@@ -6057,6 +6057,164 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         .limit(1);
       return { points: row?.points ?? 0 };
     }),
+
+  /**
+   * getFocusCardContext — returns booking context for the current Focus Mode card.
+   * Strategy (in order):
+   *   1. SMS/email draft: read resolvedContext.cleanerJobId → direct job lookup (team, date, address, cleaner)
+   *   2. Call summary: parse cleanerPhone/cleanerName from metadata → cleanerProfiles → today's jobs
+   *   3. Fallback: look up by senderName if phone lookup failed
+   */
+  getFocusCardContext: opsChatProcedure
+    .input(z.object({
+      quickAction: z.string(),
+      metadata: z.string().nullable(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const today = todayDateString();
+
+      type JobRow = { jobDate: string; jobAddress: string | null; customerName: string | null; teamName: string | null; serviceType: string | null; bookingStatus: string | null; serviceDateTime: string | null };
+
+      try {
+        const meta = JSON.parse(input.metadata ?? '{}');
+
+        // ── Strategy 1: SMS/email draft — use resolvedContext.cleanerJobId ──────
+        if (input.quickAction === 'madison_sms_draft' || input.quickAction === 'madison_email_draft') {
+          const draftId = meta.draftId;
+          if (draftId) {
+            const [draft] = input.quickAction === 'madison_sms_draft'
+              ? await db
+                  .select({ resolvedContext: madisonSmsDrafts.resolvedContext, senderName: madisonSmsDrafts.senderName })
+                  .from(madisonSmsDrafts)
+                  .where(eq(madisonSmsDrafts.id, draftId))
+                  .limit(1)
+              : await db
+                  .select({ resolvedContext: madisonEmailDrafts.resolvedContext, senderName: madisonEmailDrafts.senderName })
+                  .from(madisonEmailDrafts)
+                  .where(eq(madisonEmailDrafts.id, draftId))
+                  .limit(1);
+
+            if (draft) {
+              const rc = draft.resolvedContext as Record<string, unknown> | null;
+              const jobId = rc?.cleanerJobId as number | undefined;
+              const cleanerPhone = rc?.cleanerPhone as string | undefined;
+              const cleanerNameFromCtx = rc?.senderName as string | undefined ?? draft.senderName ?? null;
+
+              if (jobId) {
+                // Direct job lookup — most accurate
+                const [job] = await db
+                  .select({
+                    jobDate: cleanerJobs.jobDate,
+                    jobAddress: cleanerJobs.jobAddress,
+                    customerName: cleanerJobs.customerName,
+                    teamName: cleanerJobs.teamName,
+                    serviceType: cleanerJobs.serviceType,
+                    bookingStatus: cleanerJobs.bookingStatus,
+                    serviceDateTime: cleanerJobs.serviceDateTime,
+                  })
+                  .from(cleanerJobs)
+                  .where(eq(cleanerJobs.id, jobId))
+                  .limit(1);
+                if (job) {
+                  return {
+                    cleanerName: cleanerNameFromCtx,
+                    cleanerPhone: cleanerPhone ?? null,
+                    todayJobs: [job as JobRow],
+                  };
+                }
+              }
+
+              // No jobId in resolvedContext — fall through to phone/name lookup below
+              if (cleanerPhone || cleanerNameFromCtx) {
+                let profileId: number | null = null;
+                if (cleanerPhone) {
+                  const phoneDigits = cleanerPhone.replace(/^\+1/, '').replace(/[^\d]/g, '');
+                  const [profile] = await db
+                    .select({ id: cleanerProfiles.id, name: cleanerProfiles.name })
+                    .from(cleanerProfiles)
+                    .where(eq(cleanerProfiles.phone, phoneDigits))
+                    .limit(1);
+                  if (profile) { profileId = profile.id; }
+                }
+                if (!profileId && cleanerNameFromCtx) {
+                  const [profile] = await db
+                    .select({ id: cleanerProfiles.id })
+                    .from(cleanerProfiles)
+                    .where(eq(cleanerProfiles.name, cleanerNameFromCtx))
+                    .limit(1);
+                  if (profile) { profileId = profile.id; }
+                }
+                if (profileId) {
+                  const jobs = await db
+                    .select({
+                      jobDate: cleanerJobs.jobDate,
+                      jobAddress: cleanerJobs.jobAddress,
+                      customerName: cleanerJobs.customerName,
+                      teamName: cleanerJobs.teamName,
+                      serviceType: cleanerJobs.serviceType,
+                      bookingStatus: cleanerJobs.bookingStatus,
+                      serviceDateTime: cleanerJobs.serviceDateTime,
+                    })
+                    .from(cleanerJobs)
+                    .where(and(eq(cleanerJobs.cleanerProfileId, profileId), eq(cleanerJobs.jobDate, today)))
+                    .orderBy(cleanerJobs.serviceDateTime);
+                  return { cleanerName: cleanerNameFromCtx, cleanerPhone: cleanerPhone ?? null, todayJobs: jobs as JobRow[] };
+                }
+              }
+            }
+          }
+          return { cleanerName: null, cleanerPhone: null, todayJobs: [] };
+        }
+
+        // ── Strategy 2: Call summary — parse cleanerPhone/cleanerName from metadata ──
+        if (input.quickAction === 'madison_call_summary') {
+          const cleanerPhone = meta.cleanerPhone ?? null;
+          const cleanerName = meta.cleanerName ?? null;
+          if (!cleanerPhone && !cleanerName) return { cleanerName: null, cleanerPhone: null, todayJobs: [] };
+
+          let profileId: number | null = null;
+          if (cleanerPhone) {
+            const [profile] = await db
+              .select({ id: cleanerProfiles.id, name: cleanerProfiles.name })
+              .from(cleanerProfiles)
+              .where(eq(cleanerProfiles.phone, cleanerPhone))
+              .limit(1);
+            if (profile) { profileId = profile.id; }
+          }
+          if (!profileId && cleanerName) {
+            const [profile] = await db
+              .select({ id: cleanerProfiles.id, phone: cleanerProfiles.phone })
+              .from(cleanerProfiles)
+              .where(eq(cleanerProfiles.name, cleanerName))
+              .limit(1);
+            if (profile) { profileId = profile.id; }
+          }
+          const todayJobs: JobRow[] = [];
+          if (profileId) {
+            const jobs = await db
+              .select({
+                jobDate: cleanerJobs.jobDate,
+                jobAddress: cleanerJobs.jobAddress,
+                customerName: cleanerJobs.customerName,
+                teamName: cleanerJobs.teamName,
+                serviceType: cleanerJobs.serviceType,
+                bookingStatus: cleanerJobs.bookingStatus,
+                serviceDateTime: cleanerJobs.serviceDateTime,
+              })
+              .from(cleanerJobs)
+              .where(and(eq(cleanerJobs.cleanerProfileId, profileId), eq(cleanerJobs.jobDate, today)))
+              .orderBy(cleanerJobs.serviceDateTime);
+            todayJobs.push(...(jobs as JobRow[]));
+          }
+          return { cleanerName, cleanerPhone, todayJobs };
+        }
+      } catch (err) {
+        console.warn('[getFocusCardContext] error:', err);
+      }
+      return { cleanerName: null, cleanerPhone: null, todayJobs: [] };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
