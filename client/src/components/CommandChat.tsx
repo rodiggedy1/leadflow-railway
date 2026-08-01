@@ -6980,6 +6980,44 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                 )}
+                {/* Booking Context */}
+                {ctxLoading ? (
+                  <div style={{ background: "#f5f3ff", borderRadius: 14, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 BOOKING CONTEXT</div>
+                    <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, marginBottom: 6 }} />
+                    <div style={{ height: 10, background: "#e9e6fb", borderRadius: 6, width: "70%" }} />
+                  </div>
+                ) : focusCardCtx && focusCardCtx.todayJobs.length > 0 ? (
+                  <div style={{ background: "#f5f3ff", border: "1px solid #e9e6fb", borderRadius: 14, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#7e829c", letterSpacing: "0.05em", marginBottom: 8 }}>📋 BOOKING CONTEXT</div>
+                    {focusCardCtx.todayJobs.map((job, i) => (
+                      <div key={i} style={{ marginBottom: i < focusCardCtx.todayJobs.length - 1 ? 8 : 0 }}>
+                        {job.teamName && (
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
+                            <span style={{ fontSize: 11, color: "#9ca3af" }}>Team</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "#17152d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.teamName}</span>
+                          </div>
+                        )}
+                        {(job.jobDate || job.serviceDateTime) && (
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
+                            <span style={{ fontSize: 11, color: "#9ca3af" }}>Date</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+                              {job.serviceDateTime
+                                ? new Date(job.serviceDateTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                                : job.jobDate}
+                            </span>
+                          </div>
+                        )}
+                        {job.jobAddress && (
+                          <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+                            <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0, marginTop: 1 }}>Addr</span>
+                            <span style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>{job.jobAddress}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </aside>
             {/* ── CENTER: Card ── */}
