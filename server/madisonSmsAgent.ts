@@ -23,8 +23,6 @@ import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
-import { missionHandlers } from "./missions/index";
-import { createMission } from "./missionEngine";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -257,21 +255,6 @@ export async function triggerMadisonSmsDraft(params: {
       observations: draftResponse.observations,
       db,
     });
-
-    // ── Step 9: Trigger Mission Engine (fire-and-forget) ─────────────────────
-    // Only for customer messages with a recognized intent — not for cleaners.
-    if (!isCleaner && intent === "get_eta") {
-      triggerMissionForIntent({
-        intent,
-        sessionId,
-        fromPhone,
-        customerName: context.customerName ?? senderName,
-        cleanerJobId: context.cleanerJobId,
-        cleanerPhone: context.cleanerPhone,
-        cleanerName: context.teamName,
-        inboundText,
-      }).catch((err) => console.error("[MadisonSMS] Mission trigger error:", err));
-    }
 
     console.log(`[MadisonSMS] Draft ${draftId} posted for ${fromPhone} (${intent ?? classification.type})`);
 
@@ -864,174 +847,40 @@ async function postDraftCardToCommandChat(params: {
   ].join("\n").trim();
 
   // Upsert: one active card per session — if a card already exists for this session,
-  // update its body/metadata/lastActivityAt so it resurfaces at the bottom of the feed.
-  // Uses ON DUPLICATE KEY UPDATE against the activeDedupKey unique index.
+  // update its body/metadata/lastActivityAt so it resurfaces at the top of the feed.
+  // Uses Drizzle's onDuplicateKeyUpdate() which produces a fully parameterized query;
+  // no customer-controlled string is ever concatenated into SQL text.
   const eventTs = Date.now();
-  const dedupKey = 'madison_sms_draft:' + sessionId;
-  const bodyEscaped = body.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const metadataEscaped = JSON.stringify({ draftId, quickActionVersion: 1, sessionId }).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const insertSql = `
-    INSERT INTO ops_chat_messages
-      (channel, authorName, authorRole, body, quickAction, metadata, sessionId, lastActivityAt, cardStatus, activeDedupKey, createdAt)
-    VALUES
-      ('command', 'Madison', 'system', '${bodyEscaped}', 'madison_sms_draft', '${metadataEscaped}', ${sessionId}, ${eventTs}, 'active', '${dedupKey}', NOW())
-    ON DUPLICATE KEY UPDATE
-      body            = VALUES(body),
-      metadata        = VALUES(metadata),
-      lastActivityAt  = GREATEST(COALESCE(lastActivityAt, 0), VALUES(lastActivityAt)),
-      cardStatus      = 'active',
-      activeDedupKey  = VALUES(activeDedupKey)
-  `;
-  // Verify the SQL string contains the expected columns before executing
-  const sqlHasSessionId    = insertSql.includes('sessionId');
-  const sqlHasDedupKey     = insertSql.includes('activeDedupKey');
-  const sqlHasCardStatus   = insertSql.includes('cardStatus');
-  const sqlHasLastActivity = insertSql.includes('lastActivityAt');
-  console.log('[SMS CARD INSERT] SQL column presence: sessionId=%s activeDedupKey=%s cardStatus=%s lastActivityAt=%s',
-    sqlHasSessionId, sqlHasDedupKey, sqlHasCardStatus, sqlHasLastActivity);
-  console.log('[SMS CARD INSERT] params: sessionId=%s eventTs=%s dedupKey=%s', sessionId, eventTs, dedupKey);
-
-  console.log('[SMS CARD INSERT] postDraftCardToCommandChat');
-  const insertResult = await db.execute(sql.raw(insertSql)) as any;
-  const resultMeta = insertResult?.[0] ?? insertResult;
-  const insertId = Number(resultMeta?.insertId ?? 0);
-  const affectedRows = Number(resultMeta?.affectedRows ?? -1);
-  console.log('[SMS CARD INSERT] result: insertId=%s affectedRows=%s (1=insert, 2=dup-key-update)', insertId, affectedRows);
-
-  // Query the stored row by insertId (connection-safe, no LAST_INSERT_ID() ambiguity)
-  if (insertId > 0) {
-    const storedCheck = await db.execute(sql.raw(`
-      SELECT id, sessionId, activeDedupKey, cardStatus, lastActivityAt
-      FROM ops_chat_messages
-      WHERE id = ${insertId}
-    `)) as any;
-    const storedRows = storedCheck?.[0] ?? storedCheck;
-    console.log('[SMS CARD INSERT STORED ROW]', JSON.stringify(storedRows));
-  } else {
-    // affectedRows=2 means ON DUPLICATE KEY UPDATE fired — no new insertId
-    console.log('[SMS CARD INSERT] ON DUPLICATE KEY UPDATE fired (no new insertId), affectedRows=%s', affectedRows);
-  }
-
-  // Persist diagnostic record to DB so it's queryable after the fact
-  // (not reliant on Railway log buffer)
-  try {
-    const storedRowCheck = await db.execute(sql.raw(`
-      SELECT id, sessionId, activeDedupKey, cardStatus, lastActivityAt,
-             JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.sessionId')) AS metaSessionId
-      FROM ops_chat_messages
-      WHERE id = (SELECT MAX(id) FROM ops_chat_messages WHERE quickAction = 'madison_sms_draft' AND channel = 'command')
-    `)) as any;
-    const storedRow = (storedRowCheck?.[0] ?? storedRowCheck)?.[0] ?? null;
-    const diagJson = JSON.stringify({
+  const dedupKey = `madison_sms_draft:${sessionId}`;
+  const metadataJson = JSON.stringify({ draftId, quickActionVersion: 1, sessionId });
+  await db
+    .insert(opsChatMessages)
+    .values({
+      channel: "command",
+      authorName: "Madison",
+      authorRole: "system",
+      body,
+      quickAction: "madison_sms_draft",
+      metadata: metadataJson,
       sessionId,
-      draftId,
-      dedupKey,
-      insertId,
-      affectedRows,
-      storedRow,
-      ts: new Date().toISOString(),
-    }).replace(/'/g, "\\'");
-    await db.execute(sql.raw(`
-      INSERT INTO sms_card_diag (sessionId, draftId, insertId, affectedRows, dedupKey, diagPayload, createdAt)
-      VALUES (${sessionId}, ${draftId}, ${insertId}, ${affectedRows}, '${dedupKey}', '${diagJson}', NOW())
-    `));
-  } catch (_diagErr: any) {
-    // diag table may not exist yet — ignore silently
-    console.log('[SMS CARD DIAG] write skipped:', _diagErr?.message);
-  }
+      lastActivityAt: eventTs,
+      cardStatus: "active",
+      activeDedupKey: dedupKey,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        body,
+        metadata: metadataJson,
+        // Keep the later timestamp; GREATEST guards against clock skew on retry
+        lastActivityAt: sql`GREATEST(COALESCE(${opsChatMessages.lastActivityAt}, 0), ${eventTs})`,
+        cardStatus: "active",
+        activeDedupKey: dedupKey,
+      },
+    });
 
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("new_message", { channel: "command" });
-}
-
-// ─── Mission Engine Trigger ─────────────────────────────────────────────────
-
-/**
- * Fire-and-forget wrapper that creates a mission when a customer SMS has a
- * recognized intent. Called after the draft card is posted.
- * Uses agentId=0 (system) since there is no logged-in agent at this point.
- */
-async function triggerMissionForIntent(params: {
-  intent: string;
-  sessionId: number;
-  fromPhone: string;
-  customerName?: string;
-  cleanerJobId?: number;
-  cleanerPhone?: string;
-  cleanerName?: string;
-  inboundText: string;
-}): Promise<void> {
-  const { intent, sessionId, fromPhone, customerName, cleanerJobId, cleanerPhone, cleanerName, inboundText } = params;
-
-  // Find the handler for this intent (missionType === intent.toUpperCase())
-  const missionType = intent.toUpperCase(); // "get_eta" → "GET_ETA"
-  const handler = missionHandlers.find((h) => h.missionType === missionType);
-  if (!handler) return; // No handler registered for this intent
-
-  // Check shouldTrigger if defined
-  const ctx = {
-    sessionId,
-    agentId: 0,
-    fromPhone,
-    customerName,
-    inboundText,
-    cleanerJobId,
-    cleanerPhone,
-    cleanerName,
-  };
-  if (handler.shouldTrigger) {
-    const should = await handler.shouldTrigger(ctx);
-    if (!should) return;
-  }
-
-  if (!cleanerJobId) {
-    console.log(`[MissionEngine] No cleanerJobId for ${missionType} — skipping mission creation`);
-    return;
-  }
-
-  const dedupKey = `${missionType}:${sessionId}:${cleanerJobId}`;
-
-  // Build initial stages via the handler's stage builder (use GET_ETA default stages)
-  const stages = [
-    { id: "1", label: "Text cleaner for ETA", status: "pending" as const },
-    { id: "2", label: "Waiting on cleaner reply", status: "pending" as const },
-    { id: "3", label: "Reply to customer with ETA", status: "pending" as const, suggestedReply: "" },
-  ];
-
-  const { missionId, created } = await createMission({
-    sessionId,
-    agentId: 0,
-    agentName: "Madison",
-    title: "Get ETA",
-    emoji: "🚕",
-    missionType,
-    jobId: cleanerJobId,
-    cleanerPhone,
-    cleanerName,
-    customerPhone: fromPhone,
-    customerName,
-    activeDedupKey: dedupKey,
-    stages,
-    status: "active",
-  });
-
-  if (!created) {
-    console.log(`[MissionEngine] ${missionType} mission already active for session ${sessionId} (id=${missionId}) — skipping onCreate`);
-    return;
-  }
-
-  console.log(`[MissionEngine] Created ${missionType} mission id=${missionId} for session ${sessionId}`);
-
-  // Fetch the newly created mission row so handler.onCreate has the full object
-  const db = await import("./db").then((m) => m.getDb());
-  if (!db) return;
-  const { csMissions } = await import("../drizzle/schema");
-  const { eq } = await import("drizzle-orm");
-  const [mission] = await db.select().from(csMissions).where(eq(csMissions.id, missionId)).limit(1);
-  if (!mission) return;
-
-  await handler.onCreate(ctx, mission);
 }
 
 // ─── Retry ────────────────────────────────────────────────────────────────────

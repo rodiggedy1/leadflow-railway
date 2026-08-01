@@ -58,6 +58,8 @@ import { proxyRecordingUrl } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useMissionHistory, type MissionMetadata, type MadisonMission, type MissionViewState } from "@/hooks/useMissionHistory";
 import { toast } from "sonner";
+import { BulkSmsConfirmCard } from "./BulkSmsConfirmCard";
+import type { BulkSmsConfirmCardData, BulkSmsSentResult } from "./BulkSmsConfirmCard";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -450,106 +452,16 @@ function ClientDisambiguationCardView({
 }
 
 // ─── Bulk SMS confirm card ───────────────────────────────────────────────────
+// BulkSmsConfirmCardView — alias for the shared BulkSmsConfirmCard component
 function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; onSent: (result: BulkSmsSentCard) => void }) {
-  const [draft, setDraft] = useState(card.draftMessage);
-  const [sent, setSent] = useState(false);
-  const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const sendMutation = trpc.aiConcierge.sendBulkSms.useMutation();
-
-  const activeRecipients = card.recipients.filter(r => !excluded.has(r.phone));
-
-  function toggleRecipient(phone: string) {
-    setExcluded(prev => {
-      const next = new Set(prev);
-      if (next.has(phone)) next.delete(phone);
-      else next.add(phone);
-      return next;
-    });
-  }
-
-  function handleSend() {
-    if (sent || sendMutation.isPending) return;
-    sendMutation.mutate(
-      {
-        recipients: activeRecipients,
-        message: draft,
-        ...(card.command ? { command: card.command } : {}),
-      },
-      {
-        onSuccess: (result) => {
-          setSent(true);
-          onSent({ message: result.message, results: result.results, mission: result.mission ?? undefined });
-        },
-      }
-    );
-  }
-
   return (
-    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
-      <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
-        <Users className="w-4 h-4 flex-shrink-0" style={{color:"#7447f5"}} />
-        <p className="text-sm font-semibold" style={{color:"#202431"}}>Text {card.targetDescription}</p>
-        <span className="ml-auto text-xs text-gray-500">{activeRecipients.length} of {card.recipients.length} recipient{card.recipients.length !== 1 ? "s" : ""}</span>
-      </div>
-      <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
-        {card.recipients.map((r) => {
-          const isExcluded = excluded.has(r.phone);
-          return (
-            <button
-              key={r.phone}
-              type="button"
-              onClick={() => !sent && toggleRecipient(r.phone)}
-              title={isExcluded ? "Click to re-add" : "Click to remove"}
-              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-all"
-              style={{
-                background: isExcluded ? "rgba(0,0,0,0.04)" : "rgba(116,71,245,0.08)",
-                border: isExcluded ? "1px solid #d0d0d8" : "1px solid #e5d9ea",
-                color: isExcluded ? "#aaa" : "#4a4a5a",
-                opacity: isExcluded ? 0.5 : 1,
-                cursor: sent ? "default" : "pointer",
-                textDecoration: isExcluded ? "line-through" : "none",
-              }}
-            >
-              <User className="w-3 h-3" style={{color: isExcluded ? "#bbb" : "#9b8aaa"}} />
-              <span className="font-medium" style={{color: isExcluded ? "#aaa" : "#202431"}}>{r.name}</span>
-              <span style={{color: isExcluded ? "#ccc" : "#9b8aaa"}}>·</span>
-              <span style={{color: isExcluded ? "#aaa" : "#7447f5"}}>{r.phone}</span>
-              {isExcluded && <X className="w-3 h-3 ml-0.5" style={{color:"#bbb"}} />}
-            </button>
-          );
-        })}
-      </div>
-      <div className="px-4 pb-3">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <Edit3 className="w-3 h-3" style={{color:"#7447f5"}} />
-          <span className="text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>Message</span>
-        </div>
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          disabled={sent || sendMutation.isPending}
-          rows={10}
-          className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039",minHeight:"200px"}}
-        />
-      </div>
-      {!sent && (
-        <div className="px-4 pb-4">
-          <button
-            onClick={handleSend}
-            disabled={!draft.trim() || sendMutation.isPending || activeRecipients.length === 0}
-            className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}
-          >
-            {sendMutation.isPending ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
-            ) : (
-              <><Send className="w-4 h-4" /> Send text{activeRecipients.length > 1 ? ` to ${activeRecipients.length} people` : ""}</>
-            )}
-          </button>
-        </div>
-      )}
-    </div>
+    <BulkSmsConfirmCard
+      card={{ targetDescription: card.targetDescription, recipients: card.recipients as any, draftMessage: card.draftMessage, command: card.command }}
+      onSent={(result) => onSent({ message: result.message, results: result.results, mission: result.mission })}
+    />
   );
 }
+
 // ─── Bulk SMS sent card ───────────────────────────────────────────────────────
 function BulkSmsSentCardView({ card }: { card: BulkSmsSentCard }) {
   const allOk = card.results.every(r => r.success);
@@ -2766,7 +2678,7 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
 // ─── Command chip ─────────────────────────────────────────────────────────────
 
-const EXAMPLES = [
+export const EXAMPLES = [
   { emoji: "🚗", label: "ETA update", example: "Update ETA for Maria's team" },
   { emoji: "📞", label: "Call client", example: "Call Sarah about her upcoming clean" },
   { emoji: "💬", label: "Text client", example: "Text Jennifer I'll be 15 min late" },
@@ -2794,7 +2706,7 @@ const HINT_EXAMPLES = [
   'Try: "Call Sarah about her upcoming clean"',
 ];
 
-function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
+export function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
   return (
     <div className="mb-2 rounded-xl overflow-hidden" style={{background:"#fffdf9",border:"1px solid #e8dff0",boxShadow:"0 4px 24px rgba(120,80,160,0.08)"}}>
       <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #ede6f5"}}>

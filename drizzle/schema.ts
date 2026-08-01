@@ -1805,6 +1805,14 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
    */
   threadParentId: int("threadParentId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  /** Session ID — links madison_sms_draft cards to a conversationSession */
+  sessionId: bigint("sessionId", { mode: "number" }),
+  /** Epoch-ms of the most recent activity on this card (used for sort + dedup) */
+  lastActivityAt: bigint("lastActivityAt", { mode: "number" }),
+  /** Card lifecycle: 'active' | 'dismissed' */
+  cardStatus: varchar("cardStatus", { length: 32 }).default("active"),
+  /** Unique dedup key — one active card per session. Format: 'madison_sms_draft:<sessionId>' */
+  activeDedupKey: varchar("activeDedupKey", { length: 128 }),
 }, (table) => ({
   idxJob: index("idx_ocm_job").on(table.cleanerJobId),
   idxChannel: index("idx_ocm_channel").on(table.channel),
@@ -1812,6 +1820,8 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
   // Composite index for the listChannelMessages query pattern:
   // WHERE channel = ? ORDER BY createdAt DESC LIMIT N
   idxChannelCreatedAt: index("idx_ocm_channel_created_at").on(table.channel, table.createdAt),
+  // Unique index for SMS draft dedup — one active card per session
+  uqActiveSmsCard: uniqueIndex("uq_ops_active_sms_card").on(table.activeDedupKey),
 }));
 export type OpsChatMessage = typeof opsChatMessages.$inferSelect;
 export type InsertOpsChatMessage = typeof opsChatMessages.$inferInsert;

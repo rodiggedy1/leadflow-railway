@@ -766,433 +766,204 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] Failed to reset fired confirmation_calls (non-fatal):', err);
   }
+  // ── ops_chat_messages: madison_sms_draft dedup — schema + historical cleanup ──────────────────────
+  //
+  // Order of operations:
+  //   Step 1: ADD COLUMN IF NOT EXISTS for all 4 dedup columns (idempotent).
+  //   Step 2: Transactional cleanup of existing bad rows (idempotent — all UPDATEs
+  //           affect 0 rows once the database is clean; no sentinel needed):
+  //              Stage 0  — clear stale activeDedupKey from non-active rows
+  //              Stage 1a — for sessions with both a keyed and a null-key active card,
+  //                         copy the fresher body/metadata onto the keyed row
+  //              Stage 1b — dismiss the null-key orphan for those same sessions
+  //              Stage 2  — for sessions with multiple null-key active cards,
+  //                         keep the newest, dismiss the rest
+  //              Stage 3  — backfill activeDedupKey on the one remaining active card per session
+  //              Verify   — assert no duplicate sessions, no null keys, no malformed keys remain
+  //              Rollback if any verification count > 0
+  //   Step 3: CREATE UNIQUE INDEX (after cleanup, so no conflicting non-null keys remain).
+  //
+  // The unique index is created AFTER cleanup to avoid a conflict if non-null duplicate keys
+  // exist in the DB before the cleanup transaction runs.
 
-  // ── ops_chat_messages deduplication columns ────────────────────────────────
+  // ── Step 1: columns ────────────────────────────────────────────────────────────────────────────────
   try {
-    // Step 1: Add sessionId column
-    const [sessionIdCols] = await db.execute(sql.raw(`
-      SELECT COLUMN_NAME FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'sessionId'
-    `)) as any;
-    if (!sessionIdCols || sessionIdCols.length === 0) {
-      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN sessionId BIGINT NULL`));
-      console.log('[Migration] ops_chat_messages.sessionId: added');
-    } else {
-      console.log('[Migration] ops_chat_messages.sessionId: already exists');
-    }
-
-    // Step 2: Add lastActivityAt column
-    const [lastActivityCols] = await db.execute(sql.raw(`
-      SELECT COLUMN_NAME FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'lastActivityAt'
-    `)) as any;
-    if (!lastActivityCols || lastActivityCols.length === 0) {
-      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN lastActivityAt BIGINT NULL`));
-      console.log('[Migration] ops_chat_messages.lastActivityAt: added');
-    } else {
-      console.log('[Migration] ops_chat_messages.lastActivityAt: already exists');
-    }
-
-    // Step 3: Add cardStatus column
-    const [cardStatusCols] = await db.execute(sql.raw(`
-      SELECT COLUMN_NAME FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'cardStatus'
-    `)) as any;
-    if (!cardStatusCols || cardStatusCols.length === 0) {
-      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN cardStatus VARCHAR(16) NOT NULL DEFAULT 'active'`));
-      console.log('[Migration] ops_chat_messages.cardStatus: added');
-    } else {
-      console.log('[Migration] ops_chat_messages.cardStatus: already exists');
-    }
-
-    // Step 4: Backfill cardStatus for existing rows
-    await db.execute(sql.raw(`UPDATE ops_chat_messages SET cardStatus = 'active' WHERE cardStatus IS NULL OR cardStatus = ''`));
-
-    // Step 5: Add activeDedupKey plain column (app-managed, not generated)
-    // Value = 'madison_sms_draft:{sessionId}' when card is active, NULL when dismissed.
-    // Unique index enforces one active card per session.
-    const [dedupKeyCols] = await db.execute(sql.raw(`
-      SELECT COLUMN_NAME FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND COLUMN_NAME = 'activeDedupKey'
-    `)) as any;
-    if (!dedupKeyCols || dedupKeyCols.length === 0) {
-      await db.execute(sql.raw(`ALTER TABLE ops_chat_messages ADD COLUMN activeDedupKey VARCHAR(320) NULL`));
-      console.log('[Migration] ops_chat_messages.activeDedupKey: added');
-    } else {
-      console.log('[Migration] ops_chat_messages.activeDedupKey: already exists');
-    }
-
-    // Step 5b: Backfill sessionId from metadata JSON for existing SMS draft cards
     await db.execute(sql.raw(`
-      UPDATE ops_chat_messages
-      SET sessionId = CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.sessionId')) AS UNSIGNED)
-      WHERE quickAction = 'madison_sms_draft'
-        AND sessionId IS NULL
-        AND metadata IS NOT NULL
-        AND JSON_EXTRACT(metadata, '$.sessionId') IS NOT NULL
+      ALTER TABLE ops_chat_messages
+        ADD COLUMN IF NOT EXISTS sessionId       BIGINT NULL,
+        ADD COLUMN IF NOT EXISTS lastActivityAt  BIGINT NULL,
+        ADD COLUMN IF NOT EXISTS cardStatus      VARCHAR(32) NOT NULL DEFAULT 'active',
+        ADD COLUMN IF NOT EXISTS activeDedupKey  VARCHAR(128) NULL
     `));
-    console.log('[Migration] ops_chat_messages.sessionId: backfilled from metadata');
+    console.log('[Migration] ops_chat_messages dedup columns: OK');
+  } catch (err) {
+    console.error('[Migration] ops_chat_messages dedup columns failed (non-fatal):', err);
+    // If columns cannot be added we cannot safely run cleanup or create the index — abort
+    return;
+  }
 
-    // Step 6: Three-stage transactional dedup + backfill.
-    // All cleanup and verification run on a single dedicated connection inside
-    // a BEGIN/COMMIT block. Every query uses conn.execute() — not db.execute().
-    {
-      const pool = getPool();
-      if (!pool) throw new Error('[Migration] No pool available for dedup migration');
-      const conn = await pool.getConnection();
-      try {
-        await conn.beginTransaction();
-        console.log('[Migration] dedup: beginTransaction OK');
+  // ── Step 2: transactional historical cleanup (runs every startup; all UPDATEs are no-ops once clean) ──
+  try {
+    await db.execute(sql.raw(`START TRANSACTION`));
 
-        // Stage 0: Clear activeDedupKey from all dismissed madison_sms_draft rows.
-        // Dismissed rows must not retain the key — it blocks the unique index from
-        // being assigned to the active orphan for the same session.
-        const [stage0Result] = await conn.execute(`
-          UPDATE ops_chat_messages
-          SET activeDedupKey = NULL
-          WHERE quickAction    = 'madison_sms_draft'
-            AND cardStatus     != 'active'
-            AND activeDedupKey IS NOT NULL
-        `) as any;
-        console.log('[Migration] dedup stage 0: cleared stale keys from dismissed rows, affectedRows=' + (stage0Result?.affectedRows ?? 'unknown'));
+      // Stage 0: clear stale activeDedupKey from non-active rows
+      // (dismissed rows should never hold a key — they would block future upserts)
+      const [s0] = await db.execute(sql.raw(
+        `UPDATE ops_chat_messages
+         SET activeDedupKey = NULL
+         WHERE quickAction = 'madison_sms_draft'
+           AND cardStatus != 'active'
+           AND activeDedupKey IS NOT NULL`
+      )) as any;
+      console.log(`[Migration] Stage 0: cleared stale keys from ${s0?.affectedRows ?? 0} non-active rows`);
 
-        // Stage 1a: For sessions with BOTH a keyed row AND null-key orphan(s):
-        // pick the single freshest orphan per session (ranked by draftId DESC,
-        // lastActivityAt DESC, id DESC). If that orphan has a higher draftId than
-        // the keyed survivor, copy its body/metadata/lastActivityAt into the survivor.
-        // "Keyed" means activeDedupKey = CONCAT('madison_sms_draft:', sessionId).
-        const [stage1aResult] = await conn.execute(`
-          UPDATE ops_chat_messages AS survivor
-          JOIN (
-            SELECT
-              keyed.id                  AS keyed_id,
-              freshest_orphan.body      AS orphan_body,
-              freshest_orphan.metadata  AS orphan_metadata,
-              freshest_orphan.lat       AS orphan_lat
-            FROM ops_chat_messages AS keyed
-            JOIN (
-              SELECT id, sessionId, body, metadata, lastActivityAt AS lat,
-                ROW_NUMBER() OVER (
-                  PARTITION BY sessionId
-                  ORDER BY
-                    COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')), 'null') AS UNSIGNED), 0) DESC,
-                    lastActivityAt DESC,
-                    id DESC
-                ) AS rn
-              FROM ops_chat_messages
-              WHERE quickAction    = 'madison_sms_draft'
-                AND cardStatus     = 'active'
-                AND activeDedupKey IS NULL
-            ) AS freshest_orphan
-              ON keyed.sessionId = freshest_orphan.sessionId
-              AND freshest_orphan.rn = 1
-            WHERE keyed.quickAction    = 'madison_sms_draft'
-              AND keyed.cardStatus     = 'active'
-              AND keyed.activeDedupKey = CONCAT('madison_sms_draft:', keyed.sessionId)
-              AND COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(freshest_orphan.metadata, '$.draftId')), 'null') AS UNSIGNED), 0)
-                > COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(keyed.metadata, '$.draftId')), 'null') AS UNSIGNED), 0)
-          ) AS fresher ON survivor.id = fresher.keyed_id
-          SET
-            survivor.body           = fresher.orphan_body,
-            survivor.metadata       = fresher.orphan_metadata,
-            survivor.lastActivityAt = GREATEST(
-              COALESCE(survivor.lastActivityAt, 0),
-              COALESCE(fresher.orphan_lat, 0)
-            )
-        `) as any;
-        console.log('[Migration] dedup stage 1a: content merge done, affectedRows=' + (stage1aResult?.affectedRows ?? 'unknown'));
+      // Stage 1a: for sessions that have BOTH a keyed active card AND a null-key active card,
+      // copy the fresher body+metadata onto the keyed row so we don't lose newer content.
+      // "Fresher" = higher id (later insert).
+      const [s1a] = await db.execute(sql.raw(
+        `UPDATE ops_chat_messages AS keyed
+         JOIN (
+           SELECT
+             keyed_row.id          AS keyed_id,
+             null_row.body         AS null_body,
+             null_row.metadata     AS null_meta,
+             null_row.lastActivityAt AS null_lat
+           FROM ops_chat_messages AS keyed_row
+           JOIN ops_chat_messages AS null_row
+             ON null_row.quickAction = 'madison_sms_draft'
+            AND null_row.cardStatus  = 'active'
+            AND null_row.activeDedupKey IS NULL
+            AND null_row.sessionId  = keyed_row.sessionId
+            AND null_row.id         > keyed_row.id
+           WHERE keyed_row.quickAction    = 'madison_sms_draft'
+             AND keyed_row.cardStatus     = 'active'
+             AND keyed_row.activeDedupKey IS NOT NULL
+         ) AS src ON keyed.id = src.keyed_id
+         SET keyed.body          = src.null_body,
+             keyed.metadata      = src.null_meta,
+             keyed.lastActivityAt = GREATEST(COALESCE(keyed.lastActivityAt, 0), COALESCE(src.null_lat, 0))`
+      )) as any;
+      console.log(`[Migration] Stage 1a: promoted fresher content onto ${s1a?.affectedRows ?? 0} keyed rows`);
 
-        // Stage 1b: Dismiss every null-key orphan whose session already has a keyed row.
-        const [stage1bResult] = await conn.execute(`
-          UPDATE ops_chat_messages AS orphan
-          JOIN (
-            SELECT DISTINCT sessionId
-            FROM ops_chat_messages
-            WHERE quickAction    = 'madison_sms_draft'
-              AND cardStatus     = 'active'
-              AND activeDedupKey = CONCAT('madison_sms_draft:', sessionId)
-          ) AS has_keyed ON orphan.sessionId = has_keyed.sessionId
-          SET orphan.cardStatus = 'dismissed', orphan.activeDedupKey = NULL
-          WHERE orphan.quickAction    = 'madison_sms_draft'
-            AND orphan.cardStatus     = 'active'
-            AND orphan.activeDedupKey IS NULL
-        `) as any;
-        console.log('[Migration] dedup stage 1b: orphan dismissal done, affectedRows=' + (stage1bResult?.affectedRows ?? 'unknown'));
+      // Stage 1b: dismiss the null-key orphan for sessions that already have a keyed active card.
+      const [s1b] = await db.execute(sql.raw(
+        `UPDATE ops_chat_messages AS orphan
+         JOIN ops_chat_messages AS keyed
+           ON keyed.quickAction    = 'madison_sms_draft'
+          AND keyed.cardStatus     = 'active'
+          AND keyed.activeDedupKey IS NOT NULL
+          AND keyed.sessionId      = orphan.sessionId
+         SET orphan.cardStatus      = 'dismissed',
+             orphan.activeDedupKey  = NULL
+         WHERE orphan.quickAction    = 'madison_sms_draft'
+           AND orphan.cardStatus     = 'active'
+           AND orphan.activeDedupKey IS NULL`
+      )) as any;
+      console.log(`[Migration] Stage 1b: dismissed ${s1b?.affectedRows ?? 0} null-key orphans with keyed siblings`);
 
-        // Diagnostic after Stage 1b:
-        // conflictingSessions must be 0 — no session should still have both a keyed row and a null-key orphan.
-        // remainingNullKeys are expected (sole orphans for sessions with no keyed row) — handled by Stages 2 and 3.
-        const [conflictRows] = await conn.execute(`
-          SELECT orphan.sessionId, COUNT(*) AS orphan_count
-          FROM ops_chat_messages AS orphan
-          JOIN ops_chat_messages AS keyed
-            ON keyed.sessionId = orphan.sessionId
-          WHERE orphan.quickAction    = 'madison_sms_draft'
-            AND orphan.cardStatus     = 'active'
-            AND orphan.activeDedupKey IS NULL
-            AND keyed.quickAction     = 'madison_sms_draft'
-            AND keyed.cardStatus      = 'active'
-            AND keyed.activeDedupKey  = CONCAT('madison_sms_draft:', keyed.sessionId)
-          GROUP BY orphan.sessionId
-        `) as any;
-        const [nullKeyRows] = await conn.execute(`
-          SELECT COUNT(*) AS remaining_null_keys
-          FROM ops_chat_messages
-          WHERE quickAction    = 'madison_sms_draft'
-            AND cardStatus     = 'active'
-            AND activeDedupKey IS NULL
-        `) as any;
-        const conflictCount = Array.isArray(conflictRows) ? conflictRows.length : -1;
-        const remainingNullKeys = Number(Array.isArray(nullKeyRows) ? (nullKeyRows[0] as any)?.remaining_null_keys ?? -1 : -1);
-        console.log('[Migration] dedup after stage 1b: conflictingSessions=' + conflictCount + ' remainingNullKeys=' + remainingNullKeys);
+      // Stage 2: for sessions that still have multiple null-key active cards (no keyed sibling),
+      // keep the newest (highest id), dismiss the rest.
+      const [s2] = await db.execute(sql.raw(
+        `UPDATE ops_chat_messages AS old_card
+         JOIN (
+           SELECT sessionId, MAX(id) AS keep_id
+           FROM ops_chat_messages
+           WHERE quickAction    = 'madison_sms_draft'
+             AND cardStatus     = 'active'
+             AND activeDedupKey IS NULL
+             AND sessionId IS NOT NULL
+           GROUP BY sessionId
+           HAVING COUNT(*) > 1
+         ) AS newest ON old_card.sessionId = newest.sessionId
+         SET old_card.cardStatus = 'dismissed',
+             old_card.activeDedupKey = NULL
+         WHERE old_card.quickAction    = 'madison_sms_draft'
+           AND old_card.cardStatus     = 'active'
+           AND old_card.activeDedupKey IS NULL
+           AND old_card.id             != newest.keep_id`
+      )) as any;
+      console.log(`[Migration] Stage 2: dismissed ${s2?.affectedRows ?? 0} extra null-key duplicates`);
 
-        // Stage 2: Sessions with ONLY null-key active rows and more than one such row.
-        // Rank by draftId DESC, lastActivityAt DESC, id DESC. Keep rn=1, dismiss rn>1.
-        const [stage2Result] = await conn.execute(`
-          UPDATE ops_chat_messages AS loser
-          JOIN (
-            SELECT id
-            FROM (
-              SELECT id,
-                ROW_NUMBER() OVER (
-                  PARTITION BY sessionId
-                  ORDER BY
-                    COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')), 'null') AS UNSIGNED), 0) DESC,
-                    lastActivityAt DESC,
-                    id DESC
-                ) AS rn
-              FROM ops_chat_messages
-              WHERE quickAction    = 'madison_sms_draft'
-                AND cardStatus     = 'active'
-                AND activeDedupKey IS NULL
-                AND sessionId IN (
-                  SELECT sessionId
-                  FROM ops_chat_messages
-                  WHERE quickAction    = 'madison_sms_draft'
-                    AND cardStatus     = 'active'
-                    AND activeDedupKey IS NULL
-                  GROUP BY sessionId
-                  HAVING COUNT(*) > 1
-                )
-            ) AS ranked
-            WHERE rn > 1
-          ) AS losers ON loser.id = losers.id
-          SET loser.cardStatus = 'dismissed', loser.activeDedupKey = NULL
-        `) as any;
-        console.log('[Migration] dedup stage 2: null-only duplicate dismissal done, affectedRows=' + (stage2Result?.affectedRows ?? 'unknown'));
+      // Stage 2b: dismiss active madison_sms_draft rows where sessionId IS NULL.
+      // These rows are unrecoverable — no canonical key can be built without a session ID.
+      // Must run before Stage 3 and before verification so nullKeys count reaches zero.
+      const [s2b] = await db.execute(sql.raw(
+        `UPDATE ops_chat_messages
+         SET cardStatus = 'dismissed', activeDedupKey = NULL
+         WHERE quickAction = 'madison_sms_draft'
+           AND cardStatus = 'active'
+           AND sessionId IS NULL`
+      )) as any;
+      console.log(`[Migration] Stage 2b: dismissed ${s2b?.affectedRows ?? 0} active rows with null sessionId`);
 
-        // Pre-Stage-3 diagnostics: identify every row that already owns a key
-        // that Stage 3 would try to assign to an orphan — regardless of cardStatus.
-        const [collisionRows] = await conn.execute(`
-          SELECT
-            orphan.id               AS orphan_id,
-            orphan.sessionId        AS orphan_session_id,
-            owner.id                AS owner_id,
-            owner.sessionId         AS owner_session_id,
-            owner.cardStatus        AS owner_status,
-            owner.quickAction       AS owner_quick_action,
-            owner.activeDedupKey    AS existing_key,
-            owner.lastActivityAt    AS owner_last_activity
-          FROM ops_chat_messages AS orphan
-          JOIN ops_chat_messages AS owner
-            ON owner.activeDedupKey =
-               CONCAT('madison_sms_draft:', orphan.sessionId)
-           AND owner.id <> orphan.id
-          WHERE orphan.quickAction    = 'madison_sms_draft'
-            AND orphan.cardStatus     = 'active'
-            AND orphan.activeDedupKey IS NULL
-            AND orphan.sessionId      IS NOT NULL
-          ORDER BY orphan.sessionId, owner.id
-        `) as any;
-        const [keyOwnershipRows] = await conn.execute(`
-          SELECT
-            cardStatus,
-            quickAction,
-            COUNT(*) AS row_count
-          FROM ops_chat_messages
-          WHERE activeDedupKey IS NOT NULL
-          GROUP BY cardStatus, quickAction
-          ORDER BY row_count DESC
-        `) as any;
-        console.log('[Migration] dedup pre-stage3 collisions:', JSON.stringify(Array.isArray(collisionRows) ? collisionRows : []));
-        console.log('[Migration] dedup pre-stage3 key ownership:', JSON.stringify(Array.isArray(keyOwnershipRows) ? keyOwnershipRows : []));
+      // Stage 3: backfill activeDedupKey on the one remaining active card per session.
+      const [s3] = await db.execute(sql.raw(
+        `UPDATE ops_chat_messages
+         SET activeDedupKey = CONCAT('madison_sms_draft:', sessionId)
+         WHERE quickAction    = 'madison_sms_draft'
+           AND cardStatus     = 'active'
+           AND activeDedupKey IS NULL
+           AND sessionId IS NOT NULL`
+      )) as any;
+      console.log(`[Migration] Stage 3: backfilled keys on ${s3?.affectedRows ?? 0} active rows`);
 
-        // Stage 3: Backfill activeDedupKey on all remaining sole active rows with NULL.
-        // Each session now has at most one active row — no duplicate key errors expected.
-        let stage3AffectedRows: number | string = 'unknown';
-        try {
-          const [stage3Result] = await conn.execute(`
-            UPDATE ops_chat_messages
-            SET activeDedupKey = CONCAT('madison_sms_draft:', sessionId)
-            WHERE quickAction    = 'madison_sms_draft'
-              AND cardStatus     = 'active'
-              AND activeDedupKey IS NULL
-              AND sessionId      IS NOT NULL
-          `) as any;
-          stage3AffectedRows = stage3Result?.affectedRows ?? 'unknown';
-          console.log('[Migration] dedup stage 3: backfill done, affectedRows=' + stage3AffectedRows);
-        } catch (stage3Err: any) {
-          console.error('[Migration] dedup stage 3 FAILED:', {
-            message:  stage3Err?.message,
-            code:     stage3Err?.code,
-            sqlState: stage3Err?.sqlState,
-            errno:    stage3Err?.errno,
-          });
-          throw stage3Err;
-        }
+      // ── Verify all three invariants ──────────────────────────────────────────────────────────────────
+      const [dupRows] = await db.execute(sql.raw(
+        `SELECT COUNT(*) AS cnt FROM (
+           SELECT sessionId FROM ops_chat_messages
+           WHERE quickAction = 'madison_sms_draft' AND cardStatus = 'active'
+           GROUP BY sessionId HAVING COUNT(*) > 1
+         ) AS dups`
+      )) as any;
+      const dupCount = Number((dupRows as any[])[0]?.cnt ?? 0);
 
-        // Verification — all three must return zero before committing.
-        const [vDupRows]   = await conn.execute(`
-          SELECT sessionId, COUNT(*) AS active_count
-          FROM ops_chat_messages
-          WHERE quickAction = 'madison_sms_draft'
-            AND cardStatus  = 'active'
-            AND sessionId   IS NOT NULL
-          GROUP BY sessionId
-          HAVING COUNT(*) > 1
-        `) as any;
-        const [vNullRows]  = await conn.execute(`
-          SELECT COUNT(*) AS remaining_null_keys
-          FROM ops_chat_messages
-          WHERE quickAction    = 'madison_sms_draft'
-            AND cardStatus     = 'active'
-            AND sessionId      IS NOT NULL
-            AND activeDedupKey IS NULL
-        `) as any;
-        const [vWrongRows] = await conn.execute(`
-          SELECT COUNT(*) AS wrong_key_rows
-          FROM ops_chat_messages
-          WHERE quickAction    = 'madison_sms_draft'
-            AND cardStatus     = 'active'
-            AND sessionId      IS NOT NULL
-            AND activeDedupKey != CONCAT('madison_sms_draft:', sessionId)
-        `) as any;
+      const [nullRows] = await db.execute(sql.raw(
+        `SELECT COUNT(*) AS cnt FROM ops_chat_messages
+         WHERE quickAction = 'madison_sms_draft' AND cardStatus = 'active' AND activeDedupKey IS NULL`
+      )) as any;
+      const remainingNull = Number((nullRows as any[])[0]?.cnt ?? 0);
 
-        const dupCount   = Array.isArray(vDupRows)   ? vDupRows.length                                             : 1;
-        const nullCount  = Number(Array.isArray(vNullRows)  ? (vNullRows[0]  as any)?.remaining_null_keys ?? 1    : 1);
-        const wrongCount = Number(Array.isArray(vWrongRows) ? (vWrongRows[0] as any)?.wrong_key_rows      ?? 1    : 1);
-        console.log('[Migration] dedup verification: dupCount=' + dupCount + ' nullCount=' + nullCount + ' wrongCount=' + wrongCount);
+      const [malformedRows] = await db.execute(sql.raw(
+        `SELECT COUNT(*) AS cnt FROM ops_chat_messages
+         WHERE quickAction = 'madison_sms_draft' AND cardStatus = 'active'
+           AND activeDedupKey IS NOT NULL
+           AND activeDedupKey NOT LIKE 'madison_sms_draft:%'`
+      )) as any;
+      const malformedCount = Number((malformedRows as any[])[0]?.cnt ?? 0);
 
-        if (dupCount > 0 || nullCount > 0 || wrongCount > 0) {
-          await conn.rollback();
-          console.error('[Migration] ops_chat_messages dedup ROLLED BACK — invariant failed', { dupCount, nullCount, wrongCount });
-          return; // explicit early return after rollback
-        }
-        await conn.commit();
-        console.log('[Migration] ops_chat_messages.activeDedupKey: backfilled for existing active cards');
-      } catch (dedupErr) {
-        await conn.rollback();
-        throw dedupErr;
-      } finally {
-        conn.release();
+      if (dupCount > 0 || remainingNull > 0 || malformedCount > 0) {
+        await db.execute(sql.raw(`ROLLBACK`));
+        // Throw so startServer() never completes — Railway will restart the service
+        throw new Error(
+          `[Migration] dedup cleanup verification failed: dupSessions=${dupCount}, nullKeys=${remainingNull}, malformedKeys=${malformedCount} — aborting startup`
+        );
+      } else {
+        await db.execute(sql.raw(`COMMIT`));
+        console.log('[Migration] ops_chat_messages dedup cleanup: COMMITTED — all invariants satisfied');
       }
-    }
+  } catch (err) {
+    try { await db.execute(sql.raw(`ROLLBACK`)); } catch (_) {}
+    // Re-throw so startServer() never completes — Railway will restart the service
+    throw err;
+  }
 
-    // Step 7: Add unique index on activeDedupKey
-    const [dedupIdx] = await db.execute(sql.raw(`
-      SELECT INDEX_NAME FROM information_schema.STATISTICS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND INDEX_NAME = 'uq_ops_active_sms_card'
-    `)) as any;
-    if (!dedupIdx || dedupIdx.length === 0) {
-      await db.execute(sql.raw(`CREATE UNIQUE INDEX uq_ops_active_sms_card ON ops_chat_messages (activeDedupKey)`));
+  // ── Step 3: unique index (after cleanup, so no conflicting non-null duplicate keys exist) ──────────────────────
+  try {
+    const [idxRows] = await db.execute(sql.raw(
+      `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages'
+       AND INDEX_NAME = 'uq_ops_active_sms_card' LIMIT 1`
+    )) as any;
+    if (!Array.isArray(idxRows) || idxRows.length === 0) {
+      await db.execute(sql.raw(
+        `CREATE UNIQUE INDEX uq_ops_active_sms_card ON ops_chat_messages (activeDedupKey)`
+      ));
       console.log('[Migration] ops_chat_messages uq_ops_active_sms_card index: created');
     } else {
       console.log('[Migration] ops_chat_messages uq_ops_active_sms_card index: already exists');
     }
-
-    // Step 8: Add feed activity index
-    const [activityIdx] = await db.execute(sql.raw(`
-      SELECT INDEX_NAME FROM information_schema.STATISTICS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ops_chat_messages' AND INDEX_NAME = 'idx_ocm_channel_activity'
-    `)) as any;
-    if (!activityIdx || activityIdx.length === 0) {
-      await db.execute(sql.raw(`CREATE INDEX idx_ocm_channel_activity ON ops_chat_messages (channel, lastActivityAt)`));
-      console.log('[Migration] ops_chat_messages idx_ocm_channel_activity index: created');
-    } else {
-      console.log('[Migration] ops_chat_messages idx_ocm_channel_activity index: already exists');
-    }
-
-    console.log('[Migration] ops_chat_messages dedup columns: OK');
   } catch (err) {
-    console.error('[Migration] ops_chat_messages dedup columns failed:', err);
-  }
-
-  // ── cs_missions table ────────────────────────────────────────────────────────
-  try {
-    await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS cs_missions (
-        id INT AUTO_INCREMENT NOT NULL,
-        sessionId INT NOT NULL,
-        agentId INT NOT NULL,
-        agentName VARCHAR(128),
-        title VARCHAR(255) NOT NULL,
-        emoji VARCHAR(16),
-        status ENUM('active','waiting','ready','completed','cancelled') NOT NULL DEFAULT 'active',
-        stages JSON NOT NULL,
-        sortOrder INT NOT NULL DEFAULT 0,
-        createdAt DATETIME(3) NOT NULL,
-        updatedAt DATETIME(3) NOT NULL,
-        completedAt DATETIME(3),
-        CONSTRAINT cs_missions_id PRIMARY KEY (id)
-      )
-    `));
-    await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS idx_cs_missions_session ON cs_missions (sessionId)`));
-    await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS idx_cs_missions_session_status ON cs_missions (sessionId, status)`));
-    console.log('[Migration] cs_missions table: OK');
-  } catch (err) {
-    console.error('[Migration] cs_missions table failed:', err);
-  }
-
-  // ── cs_missions engine columns (0092) ────────────────────────────────────────
-  try {
-    const [colRows] = await db.execute(sql.raw(`
-      SELECT COLUMN_NAME FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs_missions'
-        AND COLUMN_NAME IN ('missionType','jobId','cleanerPhone','cleanerName','customerPhone','customerName','activeDedupKey','failureReason')
-    `)) as any;
-    const existingCols = new Set((Array.isArray(colRows) ? colRows : []).map((r: any) => r.COLUMN_NAME));
-    if (!existingCols.has('missionType'))    await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN missionType VARCHAR(32) NOT NULL DEFAULT 'MANUAL'`));
-    if (!existingCols.has('jobId'))          await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN jobId BIGINT NULL`));
-    if (!existingCols.has('cleanerPhone'))   await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN cleanerPhone VARCHAR(32) NULL`));
-    if (!existingCols.has('cleanerName'))    await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN cleanerName VARCHAR(160) NULL`));
-    if (!existingCols.has('customerPhone'))  await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN customerPhone VARCHAR(32) NULL`));
-    if (!existingCols.has('customerName'))   await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN customerName VARCHAR(160) NULL`));
-    if (!existingCols.has('activeDedupKey')) await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN activeDedupKey VARCHAR(128) NULL`));
-    if (!existingCols.has('failureReason'))  await db.execute(sql.raw(`ALTER TABLE cs_missions ADD COLUMN failureReason VARCHAR(255) NULL`));
-    // Unique index on activeDedupKey
-    const [idxRows0092] = await db.execute(sql.raw(`
-      SELECT INDEX_NAME FROM information_schema.STATISTICS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs_missions' AND INDEX_NAME = 'uq_cs_mission_active_dedup'
-    `)) as any;
-    if ((Array.isArray(idxRows0092) ? idxRows0092 : []).length === 0) {
-      await db.execute(sql.raw(`ALTER TABLE cs_missions ADD UNIQUE KEY uq_cs_mission_active_dedup (activeDedupKey)`));
-    }
-    // Extend status enum to include sending and needs_attention
-    await db.execute(sql.raw(
-      `ALTER TABLE cs_missions MODIFY COLUMN status ENUM('active','waiting','ready','sending','completed','cancelled','needs_attention') NOT NULL DEFAULT 'active'`
-    ));
-    console.log('[Migration] cs_missions engine columns (0092): OK');
-  } catch (err) {
-    console.error('[Migration] cs_missions engine columns (0092) failed:', err);
-  }
-
-  // sms_card_diag — lightweight diagnostic table for insert verification
-  try {
-    await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS sms_card_diag (
-        id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        sessionId  BIGINT,
-        draftId    BIGINT,
-        insertId   BIGINT,
-        affectedRows INT,
-        dedupKey   VARCHAR(320),
-        diagPayload TEXT,
-        createdAt  DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `));
-    console.log('[Migration] sms_card_diag table: OK');
-  } catch (err) {
-    console.error('[Migration] sms_card_diag table failed:', err);
+    console.error('[Migration] ops_chat_messages unique index failed (non-fatal):', err);
   }
 }
 async function startServer() {
@@ -1446,26 +1217,6 @@ async function startServer() {
       const [ashleyRows] = await db.execute(sql.raw(`SELECT id, quickAction, metadata, channel, createdAt FROM ops_chat_messages WHERE quickAction = 'madison_email_draft' AND metadata LIKE '%30015%'`)) as any;
       result.ashleyCard = ashleyRows;
     } catch (e: any) { result.ashleyCardError = { message: e.message }; }
-    return res.json(result);
-  });
-  // TEMPORARY: ops_chat_messages dedup column check
-  app.get("/api/diag/sms-dedup", async (req, res) => {
-    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
-    const db = await getDb();
-    if (!db) return res.status(500).json({ error: 'no db' });
-    const result: Record<string, unknown> = {};
-    try {
-      const [cols] = await db.execute(sql.raw(`SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ops_chat_messages' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION`)) as any;
-      result.columns = cols;
-    } catch (e: any) { result.columnsError = e.message; }
-    try {
-      const [idx] = await db.execute(sql.raw(`SELECT INDEX_NAME, NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_NAME = 'ops_chat_messages' AND TABLE_SCHEMA = DATABASE() GROUP BY INDEX_NAME, NON_UNIQUE`)) as any;
-      result.indexes = idx;
-    } catch (e: any) { result.indexesError = e.message; }
-    try {
-      const [cards] = await db.execute(sql.raw(`SELECT id, quickAction, sessionId, cardStatus, lastActivityAt, metadata FROM ops_chat_messages WHERE quickAction = 'madison_sms_draft' ORDER BY id DESC LIMIT 20`)) as any;
-      result.recentSmsCards = cards;
-    } catch (e: any) { result.recentSmsCardsError = e.message; }
     return res.json(result);
   });
   // TEMPORARY debug endpoint — remove after login is confirmed working
@@ -1775,4 +1526,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((err) => {
+  console.error('[Startup] Fatal error — process exiting so Railway will restart:', err);
+  process.exit(1);
+});

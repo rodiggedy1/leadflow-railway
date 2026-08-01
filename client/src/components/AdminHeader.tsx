@@ -290,7 +290,8 @@ export type AdminTab =
   | "payments"
   | "sms-campaigns"
   | "invoices"
-  | "madison-debrief";
+  | "madison-debrief"
+  | "madison-focus";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -419,11 +420,11 @@ const NAV_ENTRIES: NavEntry[] = [
     tabId: "invoices" as AdminTab,
   },
   {
-    id: "madison-debrief",
-    label: "Debrief",
+    id: "madison-focus",
+    label: "Focus",
     icon: <Sparkles className="w-3.5 h-3.5" />,
-    href: "/admin/madison-debrief",
-    tabId: "madison-debrief",
+    href: "/admin/madison-focus",
+    tabId: "madison-focus",
   },
   {
     id: "settings",
