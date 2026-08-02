@@ -392,7 +392,7 @@ export const csMissionsRouter = router({
     .input(z.object({ sessionId: z.number().int() }))
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) return { teamName: null, leadPhone: null, leadName: null, bedrooms: null, bathrooms: null, serviceType: null };
+      if (!db) return { teamName: null, teamPhone: null, leadPhone: null, leadName: null, bedrooms: null, bathrooms: null, serviceType: null };
       // 1. Get the session's phone number + lead details
       const [session] = await db
         .select({
@@ -405,10 +405,10 @@ export const csMissionsRouter = router({
         .from(conversationSessions)
         .where(eq(conversationSessions.id, input.sessionId))
         .limit(1);
-      if (!session?.leadPhone) return { teamName: null, leadPhone: null, leadName: null, bedrooms: null, bathrooms: null, serviceType: null };
+      if (!session?.leadPhone) return { teamName: null, teamPhone: null, leadPhone: null, leadName: null, bedrooms: null, bathrooms: null, serviceType: null };
       // Normalize to 10 digits
       const phone10 = session.leadPhone.replace(/[^\d]/g, "").slice(-10);
-      if (phone10.length < 10) return { teamName: null, leadPhone: session.leadPhone, leadName: session.leadName ?? null, bedrooms: session.bedrooms ?? null, bathrooms: session.bathrooms ?? null, serviceType: session.serviceType ?? null };
+      if (phone10.length < 10) return { teamName: null, teamPhone: null, leadPhone: session.leadPhone, leadName: session.leadName ?? null, bedrooms: session.bedrooms ?? null, bathrooms: session.bathrooms ?? null, serviceType: session.serviceType ?? null };
       // 2. Find today's or next upcoming cleaner job for this customer
       const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
       const todayET = nowET.toISOString().slice(0, 10);
@@ -417,6 +417,7 @@ export const csMissionsRouter = router({
           teamName: cleanerJobs.teamName,
           cleanerName: cleanerJobs.cleanerName,
           jobDate: cleanerJobs.jobDate,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
         })
         .from(cleanerJobs)
         .where(
@@ -428,8 +429,19 @@ export const csMissionsRouter = router({
         .orderBy(asc(cleanerJobs.jobDate))
         .limit(1);
       const teamName = job?.teamName ?? job?.cleanerName ?? null;
+      // 3. Get team phone from cleanerProfiles
+      let teamPhone: string | null = null;
+      if (job?.cleanerProfileId) {
+        const [profile] = await db
+          .select({ phone: cleanerProfiles.phone })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+          .limit(1);
+        teamPhone = profile?.phone ?? null;
+      }
       return {
         teamName,
+        teamPhone,
         leadPhone: session.leadPhone,
         leadName: session.leadName ?? null,
         bedrooms: session.bedrooms ?? null,
@@ -461,6 +473,31 @@ export const csMissionsRouter = router({
       // Send SMS
       const { sendSms } = await import("./openphone");
       await sendSms({ to: session.leadPhone, content: input.text });
+      // Mark mission complete
+      const now = new Date();
+      await db.execute(
+        sql`UPDATE cs_missions SET status = 'completed', completedAt = ${now}, updatedAt = ${now} WHERE id = ${input.missionId}`
+      );
+      broadcastOpsUpdate("cs_mission_update", { sessionId: input.sessionId });
+      return { ok: true };
+    }),
+
+  /**
+   * sendTeamSms — sends an SMS to the team's phone number.
+   * Used by missions that need to notify the cleaner/team (e.g. Save Access Details).
+   */
+  sendTeamSms: agentProcedure
+    .input(z.object({
+      missionId: z.number().int(),
+      sessionId: z.number().int(),
+      text: z.string().min(1),
+      teamPhone: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { sendSms } = await import("./openphone");
+      await sendSms({ to: input.teamPhone, content: input.text });
       // Mark mission complete
       const now = new Date();
       await db.execute(

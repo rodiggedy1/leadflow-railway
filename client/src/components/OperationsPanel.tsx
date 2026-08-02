@@ -510,6 +510,73 @@ function SendQuoteWidget({
   );
 }
 
+function SaveAccessWidget({
+  mission,
+  sessionContext,
+  customerName,
+}: {
+  mission: CsMissionRow;
+  sessionContext: SessionContext | null;
+  customerName: string;
+}) {
+  const utils = trpc.useUtils();
+  const sendTeamSms = trpc.csMissions.sendTeamSms.useMutation({
+    onSuccess: () => utils.csMissions.listBySession.invalidate({ sessionId: mission.sessionId }),
+  });
+
+  const teamPhone = (sessionContext as any)?.teamPhone ?? null;
+  const teamName = sessionContext?.teamName ?? "the team";
+  const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0] || "the customer";
+
+  const defaultMsg = `Hi! Just a heads up — ${firstName} has provided access details for today's job:\n\n[Paste access details here]\n\nPlease make note before you arrive. Thanks!`;
+  const [smsText, setSmsText] = React.useState(defaultMsg);
+  const [sent, setSent] = React.useState(false);
+
+  const handleSend = async () => {
+    if (!teamPhone) return;
+    await sendTeamSms.mutateAsync({
+      missionId: mission.id,
+      sessionId: mission.sessionId,
+      text: smsText,
+      teamPhone,
+    });
+    setSent(true);
+  };
+
+  if (sent) {
+    return (
+      <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-center">
+        <p className="text-emerald-700 font-semibold text-sm">Access details sent to {teamName}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pt-1">
+      <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+        <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Text to {teamName}</p>
+        {!teamPhone && (
+          <p className="text-xs text-amber-600 mb-2">No team phone found for today's job — check Launch27</p>
+        )}
+        <textarea
+          className="w-full text-sm rounded-lg border border-amber-300 bg-white p-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+          rows={5}
+          value={smsText}
+          onChange={e => setSmsText(e.target.value)}
+        />
+        <button
+          type="button"
+          disabled={!teamPhone || sendTeamSms.isPending}
+          onClick={handleSend}
+          className="mt-2 w-full py-2 rounded-xl text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {sendTeamSms.isPending ? "Sending..." : `Send to ${teamName}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MissionCard({
   mission,
   agentId,
@@ -589,7 +656,7 @@ function MissionCard({
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 flex flex-col gap-2">
-              {/* Send Quote interactive widget */}
+                            {/* Send Quote interactive widget */}
               {mission.title === "Send Quote" && !isCompleted && (
                 <SendQuoteWidget
                   mission={mission}
@@ -597,9 +664,16 @@ function MissionCard({
                   customerName={customerName ?? ""}
                 />
               )}
-
-              {/* Stage pipeline — shown for non-Send-Quote missions */}
-              {mission.title !== "Send Quote" && (
+              {/* Save Access Details — SMS widget to text the team */}
+              {mission.title === "Save Access Details" && !isCompleted && (
+                <SaveAccessWidget
+                  mission={mission}
+                  sessionContext={sessionContext ?? null}
+                  customerName={customerName ?? ""}
+                />
+              )}
+              {/* Stage pipeline — shown for non-widget missions */}
+              {mission.title !== "Send Quote" && mission.title !== "Save Access Details" && (
                 mission.stages.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
                     <AnimatePresence mode="popLayout">
