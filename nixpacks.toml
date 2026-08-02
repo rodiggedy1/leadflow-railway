@@ -1,6 +1,2 @@
 [phases.build]
-cmds = [
-  "rm -rf node_modules/.vite dist",
-  "node -e \"const fs=require('fs'),cp=require('child_process');const sha=cp.execSync('git rev-parse --short HEAD').toString().trim();fs.writeFileSync('client/public/__manus__/version.json',JSON.stringify({version:sha,timestamp:Date.now()}));console.log('version.json written:',sha);\"",
-  "pnpm run build"
-]
+cmds = ["rm -rf node_modules/.vite dist", "pnpm run build"]
