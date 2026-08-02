@@ -64,6 +64,8 @@ export const csMissionsRouter = router({
         completedAt: r.completedAt ? r.completedAt.getTime() : null,
         failureReason: (r as any).failureReason ?? null,
         missionType: (r as any).missionType ?? "MANUAL",
+        cleanerName: (r as any).cleanerName ?? null,
+        customerName: (r as any).customerName ?? null,
       }));
     }),
 

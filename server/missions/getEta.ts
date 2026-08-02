@@ -42,11 +42,13 @@ function normalizePhone(phone: string): string {
 }
 
 /** Build the initial stages for a new GET_ETA mission */
-function buildInitialStages(): CsMissionStage[] {
+function buildInitialStages(cleanerName?: string | null, customerName?: string | null): CsMissionStage[] {
+  const cleaner = cleanerName ? cleanerName.split(" ")[0] : "cleaner";
+  const customer = customerName ?? "customer";
   return [
-    { id: "1", label: "Text cleaner for ETA", status: "pending" },
-    { id: "2", label: "Waiting on cleaner reply", status: "pending" },
-    { id: "3", label: "Reply to customer with ETA", status: "pending", suggestedReply: "" },
+    { id: "1", label: `Text ${cleaner} for ETA`, status: "pending" },
+    { id: "2", label: `Waiting on ${cleaner} reply`, status: "pending" },
+    { id: "3", label: `Reply to ${customer} with ETA`, status: "pending", suggestedReply: "" },
   ];
 }
 
@@ -78,7 +80,7 @@ export const getEtaHandler: MissionHandler = {
     }
 
     // Mark stage 1 as waiting (in progress)
-    const stages = buildInitialStages();
+    const stages = buildInitialStages(mission.cleanerName, mission.customerName);
     stages[0] = { ...stages[0], status: "waiting" };
     await advanceStages(mission.id, stages, "waiting");
 

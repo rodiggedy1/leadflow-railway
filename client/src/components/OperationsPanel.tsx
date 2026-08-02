@@ -40,6 +40,8 @@ interface CsMissionRow {
   createdAt: number | null;
   updatedAt: number | null;
   completedAt: number | null;
+  cleanerName?: string | null;
+  customerName?: string | null;
 }
 
 interface OperationsPanelProps {
@@ -103,15 +105,16 @@ const STATUS_BADGE: Record<CsMissionRow["status"], { label: string; className: s
 
 // ── Stage templates keyed by mission title ─────────────────────────────────────
 
-function buildStages(title: string, teamName: string | null): CsMissionStage[] {
+function buildStages(title: string, teamName: string | null, customerName?: string | null): CsMissionStage[] {
   const team = teamName ?? "the team";
+  const customer = customerName ?? "customer";
   const now = Date.now();
   switch (title) {
     case "Get ETA":
       return [
         { id: `${now}-1`, label: `Text ${team} for ETA`, status: "pending" },
         { id: `${now}-2`, label: `Waiting on ${team}`, status: "pending" },
-        { id: `${now}-3`, label: "Reply to customer with ETA", status: "pending" },
+        { id: `${now}-3`, label: `Reply to ${customer} with ETA`, status: "pending" },
       ];
     case "Send Gate Code":
       return [
@@ -504,7 +507,7 @@ export function OperationsPanel({
       toast.error("Select a customer conversation before creating a mission");
       return;
     }
-    const stages = buildStages(title, teamName);
+    const stages = buildStages(title, teamName, customerName);
     createMission.mutate({ sessionId, title, emoji, stages, missionType });
   }
 
@@ -693,7 +696,7 @@ export function OperationsPanel({
 
         {/* Completed missions */}
         {completedMissions.length > 0 && (
-          <details className="group">
+          <details className="group" open>
             <summary className="text-xs font-semibold text-slate-400 cursor-pointer select-none hover:text-slate-600 transition-colors list-none flex items-center gap-1.5 py-1">
               <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
               {completedMissions.length} completed
