@@ -133,9 +133,10 @@ function buildStages(title: string, teamName: string | null, customerName?: stri
       ];
     case "Update Scope & Extras":
       return [
-        { id: `${now}-1`, label: `Clarify requested extras/instructions with ${customer}`, status: "pending" },
-        { id: `${now}-2`, label: "Recalculate time/cost if needed & get approval", status: "pending" },
-        { id: `${now}-3`, label: `Update job notes & notify ${team}`, status: "pending" },
+        { id: `${now}-1`, label: `Clarify what ${customer} wants added or changed`, status: "pending" },
+        { id: `${now}-2`, label: "Update the job in Launch27", status: "pending" },
+        { id: `${now}-3`, label: `Notify ${team} of the scope change`, status: "pending" },
+        { id: `${now}-4`, label: `Confirm updated details with ${customer}`, status: "pending" },
       ];
     case "Save Access Details":
       return [
