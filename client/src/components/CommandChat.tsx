@@ -1487,13 +1487,17 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed 
         <div style={{
           width: "100%",
           background: "#fff",
-          border: "1px solid #ebe8fb",
+          border: isDraftReady ? "2px solid #6d5cff" : "1px solid #ebe8fb",
           borderRadius: 20,
-          boxShadow: "0 4px 24px rgba(30,30,60,0.08)",
+          boxShadow: isDraftReady ? "0 6px 32px rgba(109,92,255,0.18)" : "0 4px 24px rgba(30,30,60,0.08)",
           overflow: "hidden",
           opacity: isDismissed ? 0.55 : 1,
-          transition: "opacity 0.2s",
+          transition: "border 0.2s, box-shadow 0.2s, opacity 0.2s",
         }}>
+          {/* Top accent bar — only when awaiting approval */}
+          {isDraftReady && (
+            <div style={{ height: 3, background: "linear-gradient(90deg, #6d5cff, #a78bfa)", borderRadius: "20px 20px 0 0" }} />
+          )}
 
           {/* ── Header ── */}
           <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
@@ -1951,13 +1955,17 @@ export function MadisonEmailDraftCard({ msg, callerName, onActed }: { msg: { id:
         <div style={{
           width: "100%",
           background: "#fff",
-          border: "1px solid #bfdbfe",
+          border: isDraftReady ? "2px solid #6d5cff" : "1px solid #bfdbfe",
           borderRadius: 20,
-          boxShadow: "0 4px 24px rgba(30,60,120,0.08)",
+          boxShadow: isDraftReady ? "0 6px 32px rgba(109,92,255,0.18)" : "0 4px 24px rgba(30,60,120,0.08)",
           overflow: "hidden",
           opacity: isDismissed ? 0.55 : 1,
-          transition: "opacity 0.2s",
+          transition: "border 0.2s, box-shadow 0.2s, opacity 0.2s",
         }}>
+          {/* Top accent bar — only when awaiting approval */}
+          {isDraftReady && (
+            <div style={{ height: 3, background: "linear-gradient(90deg, #6d5cff, #a78bfa)", borderRadius: "20px 20px 0 0" }} />
+          )}
 
           {/* Header */}
           <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
