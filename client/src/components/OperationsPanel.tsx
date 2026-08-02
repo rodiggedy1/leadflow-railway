@@ -3,11 +3,12 @@
  * The Operations Center — right panel of the CS Inbox.
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import type { CsMissionStage } from "../../../drizzle/schema";
+import { EXTRAS_LIST, calculateExtrasTotal } from "../../../shared/extras";
 import {
   CheckCircle2,
   Clock,
@@ -22,6 +23,8 @@ import {
   StickyNote,
   History,
   Loader2,
+  Copy,
+  Send,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -243,6 +246,288 @@ function StageRow({ stage, missionId, onSendReply }: {
   );
 }
 
+// ── Pricing helpers (mirrors server/engine/pricing.ts) ────────────────────────
+
+const BEDROOM_BASE: Record<number, number> = {
+  1: 119, 2: 209, 3: 229, 4: 279, 5: 319, 6: 379, 7: 419,
+};
+const BATH_PRICE = 30;
+const SERVICE_SURCHARGES: Record<string, number> = {
+  "Standard Cleaning": 0,
+  "Deep Cleaning": 60,
+  "Move-In/Move-Out": 60,
+  "Post-Construction Cleaning": 60,
+};
+const SERVICE_TYPES = ["Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Post-Construction Cleaning"];
+const BATH_OPTIONS = [1, 1.5, 2, 2.5, 3, 3.5, 4];
+
+// Top extras to show in the widget (most common ones)
+const WIDGET_EXTRAS = [
+  "clean_inside_oven",
+  "clean_inside_cabinets",
+  "clean_inside_full_fridge",
+  "clean_interior_windows",
+  "clean_finished_basement",
+  "move_in_move_out",
+  "i_have_pets",
+  "same_day_booking",
+];
+
+interface SessionContext {
+  teamName: string | null;
+  leadPhone: string | null;
+  leadName: string | null;
+  bedrooms: string | null;
+  bathrooms: string | null;
+  serviceType: string | null;
+}
+
+function SendQuoteWidget({
+  mission,
+  sessionContext,
+  customerName,
+}: {
+  mission: CsMissionRow;
+  sessionContext: SessionContext | null;
+  customerName: string;
+}) {
+  // Parse pre-filled beds/baths from session context
+  const initBeds = useMemo(() => {
+    const raw = sessionContext?.bedrooms ?? "";
+    const m = String(raw).match(/(\d+)/);
+    const n = m ? parseInt(m[1], 10) : 1;
+    return Math.min(Math.max(n, 1), 7);
+  }, [sessionContext?.bedrooms]);
+
+  const initBaths = useMemo(() => {
+    const raw = sessionContext?.bathrooms ?? "";
+    const m = String(raw).match(/(\d+\.?\d*)/);
+    const n = m ? parseFloat(m[1]) : 1;
+    return BATH_OPTIONS.includes(n) ? n : 1;
+  }, [sessionContext?.bathrooms]);
+
+  const initServiceType = useMemo(() => {
+    const s = sessionContext?.serviceType ?? "";
+    return SERVICE_TYPES.find(t => t.toLowerCase().includes(s.toLowerCase().split(" ")[0])) ?? "Standard Cleaning";
+  }, [sessionContext?.serviceType]);
+
+  const [beds, setBeds] = useState(initBeds);
+  const [baths, setBaths] = useState(initBaths);
+  const [serviceType, setServiceType] = useState(initServiceType);
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+  const [quoteUrl, setQuoteUrl] = useState<string | null>(null);
+  const [smsText, setSmsText] = useState("");
+  const [step, setStep] = useState<"configure" | "compose">("configure");
+
+  const basePrice = (BEDROOM_BASE[beds] ?? 119) + baths * BATH_PRICE + (SERVICE_SURCHARGES[serviceType] ?? 0);
+  const extrasTotal = calculateExtrasTotal(selectedExtras);
+  const totalPrice = basePrice + extrasTotal;
+
+  const generateLink = trpc.csMissions.generateQuoteLink.useMutation({
+    onSuccess: (result) => {
+      setQuoteUrl(result.url);
+      const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0];
+      const extrasNote = selectedExtras.length > 0
+        ? ` (includes ${EXTRAS_LIST.filter(e => selectedExtras.includes(e.key)).map(e => e.label.toLowerCase()).join(", ")})`
+        : "";
+      setSmsText(
+        `Hi ${firstName}! 🖤✨ Here's your custom quote${extrasNote}:\n👉 ${result.url}\n\nEverything's in there based on what you shared. Click the link to review and book your spot — takes about 60 seconds! If you have any questions I'll be here. Can't wait to get your home sparkling! 😊`
+      );
+      setStep("compose");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to generate quote link");
+    },
+  });
+
+  const sendQuoteSms = trpc.csMissions.sendQuoteSms.useMutation({
+    onSuccess: () => {
+      toast.success("Quote sent to customer! ✨");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to send SMS");
+    },
+  });
+
+  function handleGenerate() {
+    const phone = sessionContext?.leadPhone;
+    if (!phone) {
+      toast.error("No phone number found for this customer");
+      return;
+    }
+    generateLink.mutate({
+      customerName: sessionContext?.leadName ?? customerName,
+      customerPhone: phone,
+      bedrooms: beds,
+      bathrooms: baths,
+      serviceType,
+      price: totalPrice,
+      extras: selectedExtras,
+    });
+  }
+
+  function handleSend() {
+    if (!smsText.trim()) return;
+    sendQuoteSms.mutate({
+      missionId: mission.id,
+      sessionId: mission.sessionId,
+      text: smsText.trim(),
+    });
+  }
+
+  function toggleExtra(key: string) {
+    setSelectedExtras(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pt-1">
+      {step === "configure" ? (
+        <>
+          {/* Beds / Baths / Service Type */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Beds</label>
+              <select
+                value={beds}
+                onChange={e => setBeds(Number(e.target.value))}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              >
+                {[1,2,3,4,5,6,7].map(n => (
+                  <option key={n} value={n}>{n} {n === 1 ? "Bed" : "Beds"}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Baths</label>
+              <select
+                value={baths}
+                onChange={e => setBaths(Number(e.target.value))}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              >
+                {BATH_OPTIONS.map(n => (
+                  <option key={n} value={n}>{n} {n === 1 ? "Bath" : "Baths"}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Type</label>
+              <select
+                value={serviceType}
+                onChange={e => setServiceType(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              >
+                {SERVICE_TYPES.map(t => (
+                  <option key={t} value={t}>{t.replace(" Cleaning", "").replace("Post-Construction", "Post-Const.")}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Extras */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Extras</label>
+            <div className="flex flex-wrap gap-1.5">
+              {WIDGET_EXTRAS.map(key => {
+                const extra = EXTRAS_LIST.find(e => e.key === key);
+                if (!extra) return null;
+                const selected = selectedExtras.includes(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleExtra(key)}
+                    className={`text-[11px] px-2 py-1 rounded-full border transition-all ${
+                      selected
+                        ? "bg-violet-600 text-white border-violet-600"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-violet-300"
+                    }`}
+                  >
+                    {extra.label} +${extra.price}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Price display */}
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-violet-50 border border-violet-100">
+            <span className="text-xs font-semibold text-violet-700">Estimated Price</span>
+            <span className="text-sm font-bold text-violet-900">${totalPrice}</span>
+          </div>
+
+          {/* Generate button */}
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={generateLink.isPending}
+            className="w-full text-xs font-bold py-2.5 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+            style={{ background: "linear-gradient(135deg, #7C5CFF, #6B4FE0)" }}
+          >
+            {generateLink.isPending ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating Link...</>
+            ) : (
+              <><Link2 className="w-3.5 h-3.5" /> Generate Quote Link</>
+            )}
+          </button>
+        </>
+      ) : (
+        <>
+          {/* Quote URL display */}
+          {quoteUrl && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+              <span className="text-[11px] text-emerald-700 font-medium truncate flex-1">{quoteUrl}</span>
+              <button
+                type="button"
+                onClick={() => { navigator.clipboard.writeText(quoteUrl); toast.success("Link copied!"); }}
+                className="flex-shrink-0 text-emerald-600 hover:text-emerald-800"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Editable SMS */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Message to Customer</label>
+            <textarea
+              value={smsText}
+              onChange={e => setSmsText(e.target.value)}
+              rows={6}
+              className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none leading-relaxed"
+            />
+          </div>
+
+          {/* Send + Back */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sendQuoteSms.isPending || !smsText.trim()}
+              className="flex-1 text-xs font-bold py-2.5 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+              style={{ background: "linear-gradient(135deg, #7C5CFF, #6B4FE0)" }}
+            >
+              {sendQuoteSms.isPending ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending...</>
+              ) : (
+                <><Send className="w-3.5 h-3.5" /> Send Quote</>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep("configure")}
+              className="text-xs font-semibold py-2 px-3 rounded-xl bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+            >
+              ← Back
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function MissionCard({
   mission,
   agentId,
@@ -250,6 +535,8 @@ function MissionCard({
   onSendReply,
   onComplete,
   onCancel,
+  sessionContext,
+  customerName,
 }: {
   mission: CsMissionRow;
   agentId: number;
@@ -257,6 +544,8 @@ function MissionCard({
   onSendReply?: (text: string, missionId: number) => void;
   onComplete: (missionId: number) => void;
   onCancel: (missionId: number) => void;
+  sessionContext?: SessionContext | null;
+  customerName?: string;
 }) {
   const [expanded, setExpanded] = useState(mission.status !== "completed");
   const badge = STATUS_BADGE[mission.status];
@@ -318,22 +607,33 @@ function MissionCard({
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 flex flex-col gap-2">
-              {/* Stage pipeline */}
-              {mission.stages.length > 0 ? (
-                <div className="flex flex-col gap-1.5">
-                  <AnimatePresence mode="popLayout">
-                    {mission.stages.map(stage => (
-                      <StageRow
-                        key={stage.id}
-                        stage={stage}
-                        missionId={mission.id}
-                        onSendReply={onSendReply}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No stages yet.</p>
+              {/* Send Quote interactive widget */}
+              {mission.title === "Send Quote" && !isCompleted && (
+                <SendQuoteWidget
+                  mission={mission}
+                  sessionContext={sessionContext ?? null}
+                  customerName={customerName ?? ""}
+                />
+              )}
+
+              {/* Stage pipeline — shown for non-Send-Quote missions */}
+              {mission.title !== "Send Quote" && (
+                mission.stages.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    <AnimatePresence mode="popLayout">
+                      {mission.stages.map(stage => (
+                        <StageRow
+                          key={stage.id}
+                          stage={stage}
+                          missionId={mission.id}
+                          onSendReply={onSendReply}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No stages yet.</p>
+                )
               )}
               {/* Failure reason for needs_attention missions */}
               {mission.status === "needs_attention" && mission.failureReason && (
@@ -343,8 +643,8 @@ function MissionCard({
                 </div>
               )}
 
-              {/* Action row */}
-              {!isCompleted && (
+              {/* Action row — hide for Send Quote (it has its own Send button) */}
+              {!isCompleted && mission.title !== "Send Quote" && (
                 <div className="flex gap-2 mt-1">
                   <button
                     onClick={() => onComplete(mission.id)}
@@ -359,6 +659,10 @@ function MissionCard({
                     <X className="w-3 h-3" />
                   </button>
                 </div>
+              )}
+              {/* For completed Send Quote missions, show a summary */}
+              {isCompleted && mission.title === "Send Quote" && (
+                <p className="text-xs text-slate-400 italic">Quote was sent to customer.</p>
               )}
             </div>
           </motion.div>
@@ -754,6 +1058,8 @@ export function OperationsPanel({
               onSendReply={handleSendReply}
               onComplete={id => completeMission.mutate({ missionId: id })}
               onCancel={id => cancelMission.mutate({ missionId: id })}
+              sessionContext={sessionContext ?? null}
+              customerName={customerName}
             />
           ))}
         </AnimatePresence>
@@ -775,6 +1081,8 @@ export function OperationsPanel({
                     agentName={agentName}
                     onComplete={id => completeMission.mutate({ missionId: id })}
                     onCancel={id => cancelMission.mutate({ missionId: id })}
+                    sessionContext={sessionContext ?? null}
+                    customerName={customerName}
                   />
                 ))}
               </AnimatePresence>

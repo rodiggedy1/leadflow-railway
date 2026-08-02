@@ -392,17 +392,23 @@ export const csMissionsRouter = router({
     .input(z.object({ sessionId: z.number().int() }))
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) return { teamName: null, leadPhone: null };
-      // 1. Get the session's phone number
+      if (!db) return { teamName: null, leadPhone: null, leadName: null, bedrooms: null, bathrooms: null, serviceType: null };
+      // 1. Get the session's phone number + lead details
       const [session] = await db
-        .select({ leadPhone: conversationSessions.leadPhone })
+        .select({
+          leadPhone: conversationSessions.leadPhone,
+          leadName: conversationSessions.leadName,
+          bedrooms: conversationSessions.bedrooms,
+          bathrooms: conversationSessions.bathrooms,
+          serviceType: conversationSessions.serviceType,
+        })
         .from(conversationSessions)
         .where(eq(conversationSessions.id, input.sessionId))
         .limit(1);
-      if (!session?.leadPhone) return { teamName: null, leadPhone: null };
+      if (!session?.leadPhone) return { teamName: null, leadPhone: null, leadName: null, bedrooms: null, bathrooms: null, serviceType: null };
       // Normalize to 10 digits
       const phone10 = session.leadPhone.replace(/[^\d]/g, "").slice(-10);
-      if (phone10.length < 10) return { teamName: null, leadPhone: session.leadPhone };
+      if (phone10.length < 10) return { teamName: null, leadPhone: session.leadPhone, leadName: session.leadName ?? null, bedrooms: session.bedrooms ?? null, bathrooms: session.bathrooms ?? null, serviceType: session.serviceType ?? null };
       // 2. Find today's or next upcoming cleaner job for this customer
       const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
       const todayET = nowET.toISOString().slice(0, 10);
@@ -422,6 +428,77 @@ export const csMissionsRouter = router({
         .orderBy(asc(cleanerJobs.jobDate))
         .limit(1);
       const teamName = job?.teamName ?? job?.cleanerName ?? null;
-      return { teamName, leadPhone: session.leadPhone };
+      return {
+        teamName,
+        leadPhone: session.leadPhone,
+        leadName: session.leadName ?? null,
+        bedrooms: session.bedrooms ?? null,
+        bathrooms: session.bathrooms ?? null,
+        serviceType: session.serviceType ?? null,
+      };
+    }),
+
+  /**
+   * sendQuoteSms — sends an SMS to the session's lead phone and marks the mission complete.
+   * Used by the Send Quote widget where the mission may not have customerPhone set.
+   */
+  sendQuoteSms: agentProcedure
+    .input(z.object({
+      missionId: z.number().int(),
+      sessionId: z.number().int(),
+      text: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Get the session's lead phone
+      const [session] = await db
+        .select({ leadPhone: conversationSessions.leadPhone })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session?.leadPhone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No phone number for this session" });
+      // Send SMS
+      const { sendSms } = await import("./openphone");
+      await sendSms({ to: session.leadPhone, content: input.text });
+      // Mark mission complete
+      const now = new Date();
+      await db.execute(
+        sql`UPDATE cs_missions SET status = 'completed', completedAt = ${now}, updatedAt = ${now} WHERE id = ${input.missionId}`
+      );
+      broadcastOpsUpdate("cs_mission_update", { sessionId: input.sessionId });
+      return { ok: true };
+    }),
+
+  /**
+   * generateQuoteLink — creates a personalized quote page via the quote app API
+   * and returns the URL to embed in the SMS message.
+   */
+  generateQuoteLink: agentProcedure
+    .input(
+      z.object({
+        customerName: z.string(),
+        customerPhone: z.string(),
+        bedrooms: z.number().int().min(1).max(10),
+        bathrooms: z.number().min(0.5).max(10),
+        serviceType: z.string().default("Standard Cleaning"),
+        price: z.number(),
+        extras: z.array(z.string()).default([]),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { createQuoteLink } = await import("./quoteLink");
+      const result = await createQuoteLink({
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+        bedrooms: input.bedrooms,
+        bathrooms: input.bathrooms,
+        serviceType: input.serviceType,
+        price: input.price,
+        conversationSummary: input.extras.length ? `Extras: ${input.extras.join(", ")}` : "",
+        source: "LeadFlow CS Mission",
+      });
+      if (!result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to generate quote link" });
+      return result;
     }),
 });
