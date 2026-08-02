@@ -604,28 +604,31 @@ function MissionCard({
     <motion.div
       layout
       initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{
+        opacity: isCompleted ? 0.6 : 1,
+        y: 0,
+        scale: expanded && !isCompleted ? 1.012 : 1,
+      }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
-      transition={{ duration: 0.25 }}
-      className={`rounded-2xl overflow-hidden transition-all duration-200 ${
+      transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className={`rounded-2xl overflow-hidden ${
         isCompleted
-          ? "opacity-60 shadow-none"
+          ? "shadow-none"
           : expanded
           ? "shadow-xl shadow-violet-100/60"
           : (mission.status === "ready" || mission.status === "sending")
           ? "ring-2 ring-violet-400 shadow-lg shadow-violet-100"
           : mission.status === "needs_attention"
           ? "ring-2 ring-red-300 shadow-lg shadow-red-50"
-          : "shadow-sm hover:shadow-md"
+          : "shadow-sm"
       }`}
       style={{
         background: "#FFFFFF",
         border: isCompleted
           ? "1px solid rgba(16,24,40,.06)"
           : expanded
-          ? "2px solid rgba(124,92,255,0.55)"
+          ? "2px solid rgba(124,92,255,0.6)"
           : "1.5px solid rgba(124,92,255,.15)",
-        transform: expanded && !isCompleted ? "translateY(-1px)" : undefined,
       }}
     >
       {/* Card header */}
