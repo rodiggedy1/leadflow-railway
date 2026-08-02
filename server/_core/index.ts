@@ -1158,6 +1158,34 @@ async function startServer() {
     }
   });
 
+  // TEMPORARY: SMS message analysis endpoint — remove after analysis complete
+  app.get("/api/diag/sms-analysis", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    const db = await getDb();
+    if (!db) return res.status(500).json({ error: 'no db' });
+    try {
+      const rows = await db.execute(sql.raw(`
+        SELECT
+          originalMessage,
+          intent,
+          capability,
+          intentSummary,
+          status
+        FROM madison_sms_drafts
+        WHERE createdAt >= DATE_SUB(NOW(), INTERVAL 3 MONTH)
+          AND senderType = 'customer'
+          AND originalMessage IS NOT NULL
+          AND originalMessage != ''
+        ORDER BY createdAt DESC
+        LIMIT 2000
+      `)) as any;
+      const data = Array.isArray(rows[0]) ? rows[0] : rows;
+      return res.json({ count: data.length, messages: data });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
   // TEMPORARY: madison_email_drafts schema + update diagnostic — remove after issue resolved
   app.get("/api/diag/email-drafts", async (req, res) => {
     if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
