@@ -115,7 +115,7 @@ export const getEtaHandler: MissionHandler = {
     const etaText = inboundText.trim();
 
     // Build suggested reply — do NOT say "on the way" unless cleaner said so
-    const suggestedReply = `Hi ${customerName}, your cleaning team expects to arrive around ${etaText}. We'll keep you posted!`;
+    const suggestedReply = `Hi ${customerName}! 👋 Your cleaning team expects to arrive around ${etaText} 🕣. Thanks so much for your patience, they're going to leave your home sparkling! ✨🧼`;
 
     const stages = (mission.stages as CsMissionStage[]).map((s) => ({ ...s }));
     // Find stages by id for safety
