@@ -89,7 +89,7 @@ export default function WelcomePage() {
             <script src={`https://fast.wistia.com/embed/medias/${WISTIA_ID}.jsonp`} async />
             <script src="https://fast.wistia.com/assets/external/E-v1.js" async />
             <div
-              className={`wistia_embed wistia_async_${WISTIA_ID} videoFoam=true`}
+              className={`wistia_embed wistia_async_${WISTIA_ID} videoFoam=true playButton=true`}
               style={{ height: "100%", position: "relative", width: "100%" }}
             />
           </div>
