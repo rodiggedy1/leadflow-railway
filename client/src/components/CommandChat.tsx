@@ -1390,17 +1390,6 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed 
     dismissMutation.mutate({ draftId: meta.draftId, dismissedBy: callerName });
   };
 
-  // ── Auto-activate Operations panel when draft loads ──
-  const prevSessionRef = React.useRef<number | null>(null);
-  React.useEffect(() => {
-    // Fire as soon as we have a sessionId — use senderName if available, else "Customer"
-    if (meta.sessionId && prevSessionRef.current !== meta.sessionId) {
-      prevSessionRef.current = meta.sessionId;
-      const name = draft?.senderName ?? "Customer";
-      console.log("[Operations] MadisonSmsDraftCard auto-activate", { sessionId: meta.sessionId, name });
-      onSelectSession?.(meta.sessionId, name);
-    }
-  }, [meta.sessionId, draft?.senderName, onSelectSession]);
   const handleCardClick = () => {
     if (meta.sessionId) {
       const name = draft?.senderName ?? "Customer";
