@@ -888,6 +888,7 @@ export function OperationsPanel({
   sseRefetchKey = 0,
 }: OperationsPanelProps) {
   const [showNewForm, setShowNewForm] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -910,6 +911,16 @@ export function OperationsPanel({
     }
   );
   const teamName = sessionContext?.teamName ?? null;
+
+  // Scroll to top when new mission form opens
+  useEffect(() => {
+    if (showNewForm) {
+      scrollContainerRef.current?.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }
+  }, [showNewForm]);
 
   // Refetch when SSE fires a cs_mission_update for this session
   const prevRefetchKey = useRef(sseRefetchKey);
@@ -1059,7 +1070,7 @@ export function OperationsPanel({
       </div>
 
       {/* ── Mission list (scrollable) ────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {/* No session selected */}
         {!hasValidContext && (
           <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
