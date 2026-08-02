@@ -422,7 +422,7 @@ export const csMissionsRouter = router({
         .from(cleanerJobs)
         .where(
           and(
-            sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phone10}`,
+            sql`RIGHT(REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone10}`,
             sql`${cleanerJobs.jobDate} >= ${todayET}`
           )
         )
