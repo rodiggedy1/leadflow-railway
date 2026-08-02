@@ -429,6 +429,7 @@ export const csMissionsRouter = router({
         .orderBy(asc(cleanerJobs.jobDate))
         .limit(1);
       const teamName = job?.teamName ?? job?.cleanerName ?? null;
+      console.log(`[getSessionContext] phone10=${phone10} todayET=${todayET} job=`, JSON.stringify(job ?? null));
       // 3. Get team phone from cleanerProfiles
       let teamPhone: string | null = null;
       if (job?.cleanerProfileId) {
