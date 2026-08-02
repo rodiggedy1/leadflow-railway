@@ -625,7 +625,11 @@ function MissionCard({
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
+        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors cursor-pointer select-none active:bg-slate-100 ${
+          expanded && !isCompleted
+            ? "bg-violet-50/40 hover:bg-violet-50/60"
+            : "hover:bg-slate-50/60"
+        }`}
       >
         <div className="flex items-center gap-2 min-w-0">
           {mission.emoji && (
