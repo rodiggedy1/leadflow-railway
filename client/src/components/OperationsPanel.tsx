@@ -318,10 +318,15 @@ function SendQuoteWidget({
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
   const [smsText, setSmsText] = useState("");
   const [step, setStep] = useState<"configure" | "compose">("configure");
+  const [notes, setNotes] = useState("");
+  const [finalPriceInput, setFinalPriceInput] = useState("");
 
   const basePrice = (BEDROOM_BASE[beds] ?? 119) + baths * BATH_PRICE + (SERVICE_SURCHARGES[serviceType] ?? 0);
   const extrasTotal = calculateExtrasTotal(selectedExtras);
-  const totalPrice = basePrice + extrasTotal;
+  const calculatedPrice = basePrice + extrasTotal;
+  const finalPrice = finalPriceInput !== "" ? Math.max(0, Number(finalPriceInput) || 0) : calculatedPrice;
+  const discount = calculatedPrice - finalPrice;
+  const totalPrice = finalPrice;
 
   const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0] || "there";
   const welcomeUrl = (() => {
@@ -349,8 +354,10 @@ function SendQuoteWidget({
       ? `\n🧹 Extras: ${EXTRAS_LIST.filter(e => selectedExtras.includes(e.key)).map(e => e.label).join(", ")}`
       : "";
     const serviceLabel = serviceType === "Standard Cleaning" ? "Standard" : serviceType.replace(" Cleaning", "");
+    const discountLine = discount > 0 ? `\n🎁 Special discount for ${firstName}: -$${discount}` : "";
+    const notesLine = notes.trim() ? `\n\n📝 Note: ${notes.trim()}` : "";
     setSmsText(
-      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}\n💰 Estimated total: $${totalPrice}\n\nI put everything together for you here — tap the link to review the details and get scheduled:\n👉 ${welcomeUrl}\n\nTakes about 60 seconds. Can't wait to get your home sparkling! 🧹✨`
+      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}${discountLine}\n💰 Total: $${finalPrice}${notesLine}\n\nReply to this message or text us to get scheduled! 🧹✨`
     );
     setStep("compose");
   }
@@ -440,10 +447,41 @@ function SendQuoteWidget({
             </div>
           </div>
 
-          {/* Price display */}
-          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-violet-50 border border-violet-100">
-            <span className="text-xs font-semibold text-violet-700">Estimated Price</span>
-            <span className="text-sm font-bold text-violet-900">${totalPrice}</span>
+          {/* Price display + override */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-violet-50 border border-violet-100">
+              <span className="text-xs font-semibold text-violet-700">Calculated Price</span>
+              <span className="text-sm font-bold text-violet-900">${calculatedPrice}</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Final Price (optional override)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder={String(calculatedPrice)}
+                  value={finalPriceInput}
+                  onChange={e => setFinalPriceInput(e.target.value)}
+                  className="w-full text-xs pl-6 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+                />
+              </div>
+              {discount > 0 && (
+                <p className="text-[11px] text-emerald-600 font-semibold pl-1">🎁 Special discount for {firstName}: -${discount}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="e.g. First visit includes oven cleaning"
+              rows={2}
+              className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300 resize-none leading-relaxed"
+            />
           </div>
 
           {/* Generate button */}
