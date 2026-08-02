@@ -12,12 +12,9 @@ import { getEtaHandler } from "./getEta";
 export const missionHandlers: MissionHandler[] = [getEtaHandler];
 
 /**
- * Returns the handler for a given missionType.
- * Throws if no handler is registered — this is intentional so unhandled
- * mission types surface immediately rather than silently failing.
+ * Returns the handler for a given missionType, or undefined if none is registered.
+ * MANUAL and other unregistered types return undefined — callers must guard.
  */
-export function getMissionHandler(missionType: string): MissionHandler {
-  const handler = missionHandlers.find((h) => h.missionType === missionType);
-  if (!handler) throw new Error(`No mission handler registered for type: ${missionType}`);
-  return handler;
+export function getMissionHandler(missionType: string): MissionHandler | undefined {
+  return missionHandlers.find((h) => h.missionType === missionType);
 }

@@ -15,7 +15,7 @@
  * - All DB mutations go through missionEngine helpers.
  */
 
-import type { MissionHandler, MissionTriggerCtx } from "./types";
+import type { MissionHandler, MissionTriggerCtx } from "./types"; // MissionTriggerCtx used in shouldTrigger
 import type { CsMission, CsMissionStage } from "../../drizzle/schema";
 import {
   createMission,
@@ -67,7 +67,7 @@ export const getEtaHandler: MissionHandler = {
    * Sends the SMS to the cleaner using the phone stored on the mission row.
    * Does NOT re-query the job.
    */
-  async onCreate(ctx: MissionTriggerCtx, mission: CsMission): Promise<void> {
+  async onCreate(mission: CsMission): Promise<void> {
     const cleanerPhone = mission.cleanerPhone;
     const cleanerFirstName = (mission.cleanerName ?? "Team").split(" ")[0];
     const customerName = mission.customerName ?? "your customer";
