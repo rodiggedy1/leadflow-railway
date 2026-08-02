@@ -802,10 +802,7 @@ function NewMissionForm({
   }, []);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 8 }}
+    <div
       className="rounded-2xl p-4 flex flex-col gap-3"
       style={{ background: "#F8F6FF", border: "1.5px solid rgba(124,92,255,.25)" }}
     >
@@ -870,7 +867,7 @@ function NewMissionForm({
           Cancel
         </button>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
