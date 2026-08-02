@@ -315,7 +315,6 @@ function SendQuoteWidget({
   const [baths, setBaths] = useState(initBaths);
   const [serviceType, setServiceType] = useState(initServiceType);
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
-  const [quoteUrl, setQuoteUrl] = useState<string | null>(null);
   const [smsText, setSmsText] = useState("");
   const [step, setStep] = useState<"configure" | "compose">("configure");
 
@@ -323,22 +322,8 @@ function SendQuoteWidget({
   const extrasTotal = calculateExtrasTotal(selectedExtras);
   const totalPrice = basePrice + extrasTotal;
 
-  const generateLink = trpc.csMissions.generateQuoteLink.useMutation({
-    onSuccess: (result) => {
-      setQuoteUrl(result.url);
-      const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0];
-      const extrasNote = selectedExtras.length > 0
-        ? ` (includes ${EXTRAS_LIST.filter(e => selectedExtras.includes(e.key)).map(e => e.label.toLowerCase()).join(", ")})`
-        : "";
-      setSmsText(
-        `Hi ${firstName}! 🖤✨ Here's your custom quote${extrasNote}:\n👉 ${result.url}\n\nEverything's in there based on what you shared. Click the link to review and book your spot — takes about 60 seconds! If you have any questions I'll be here. Can't wait to get your home sparkling! 😊`
-      );
-      setStep("compose");
-    },
-    onError: (err) => {
-      toast.error(err.message || "Failed to generate quote link");
-    },
-  });
+  const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0] || "there";
+  const welcomeUrl = `https://maidsquote-eydicein.manus.space/welcome/${encodeURIComponent(firstName)}`;
 
   const sendQuoteSms = trpc.csMissions.sendQuoteSms.useMutation({
     onSuccess: () => {
@@ -350,20 +335,14 @@ function SendQuoteWidget({
   });
 
   function handleGenerate() {
-    const phone = sessionContext?.leadPhone;
-    if (!phone) {
-      toast.error("No phone number found for this customer");
-      return;
-    }
-    generateLink.mutate({
-      customerName: sessionContext?.leadName ?? customerName,
-      customerPhone: phone,
-      bedrooms: beds,
-      bathrooms: baths,
-      serviceType,
-      price: totalPrice,
-      extras: selectedExtras,
-    });
+    const extrasLines = selectedExtras.length > 0
+      ? `\n🧹 Extras: ${EXTRAS_LIST.filter(e => selectedExtras.includes(e.key)).map(e => e.label).join(", ")}`
+      : "";
+    const serviceLabel = serviceType === "Standard Cleaning" ? "Standard" : serviceType.replace(" Cleaning", "");
+    setSmsText(
+      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}\n💰 Estimated total: $${totalPrice}\n\n👉 ${welcomeUrl}\n\nEverything you need to know is in that link. Ready to book? Just reply or tap the link — takes 60 seconds! Can't wait to get your home sparkling! 😊`
+    );
+    setStep("compose");
   }
 
   function handleSend() {
@@ -461,32 +440,25 @@ function SendQuoteWidget({
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={generateLink.isPending}
-            className="w-full text-xs font-bold py-2.5 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+            className="w-full text-xs font-bold py-2.5 rounded-xl text-white transition-all active:scale-95 flex items-center justify-center gap-2"
             style={{ background: "linear-gradient(135deg, #7C5CFF, #6B4FE0)" }}
           >
-            {generateLink.isPending ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating Link...</>
-            ) : (
-              <><Link2 className="w-3.5 h-3.5" /> Generate Quote Link</>
-            )}
+            <Link2 className="w-3.5 h-3.5" /> Build Welcome Message
           </button>
         </>
       ) : (
         <>
-          {/* Quote URL display */}
-          {quoteUrl && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
-              <span className="text-[11px] text-emerald-700 font-medium truncate flex-1">{quoteUrl}</span>
-              <button
-                type="button"
-                onClick={() => { navigator.clipboard.writeText(quoteUrl); toast.success("Link copied!"); }}
-                className="flex-shrink-0 text-emerald-600 hover:text-emerald-800"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+          {/* Welcome link display */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+            <span className="text-[11px] text-emerald-700 font-medium truncate flex-1">{welcomeUrl}</span>
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard.writeText(welcomeUrl); toast.success("Link copied!"); }}
+              className="flex-shrink-0 text-emerald-600 hover:text-emerald-800"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           {/* Editable SMS */}
           <div className="flex flex-col gap-1.5">
