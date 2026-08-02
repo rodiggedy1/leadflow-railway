@@ -335,7 +335,10 @@ function SendQuoteWidget({
     p.set("beds", String(beds));
     p.set("baths", String(baths));
     p.set("type", serviceType);
-    p.set("price", String(totalPrice));
+    p.set("price", String(calculatedPrice));
+    if (finalPriceInput !== "") p.set("finalPrice", String(finalPrice));
+    if (discount > 0) p.set("discount", String(discount));
+    if (notes.trim()) p.set("notes", encodeURIComponent(notes.trim()));
     if (selectedExtras.length > 0) p.set("extras", selectedExtras.join(","));
     return `${base}?${p.toString()}`;
   })();

@@ -6,6 +6,7 @@
 import { useParams, useSearch } from "wouter";
 import { useEffect, useRef, useState } from "react";
 import { Phone, MessageSquare, Star, ShieldCheck, Sparkles, MapPin, Calendar, Mail, CheckCircle, Clock } from "lucide-react";
+import { EXTRAS_LIST } from "../../../shared/extras";
 
 const EMBER = "#E8651A";
 const TEAM_PHOTO = "https://d36hbw14aib5lz.cloudfront.net/310519663254023424/EYDicEiNHjWxiyMLLXmwJP/mib-team-photo_eac8c843.webp?Expires=1785647257&Signature=cTXwptAvTQIV~m~jpe9szBLJO5xymCtNz6-M-P8J4Oa1av22GE-rGb9KGBq0GsoI1iOXM23y~Hdmb4600TmxM9wRwqqVECZ8aculsYh7bKt6RaZs5LTAy3g~DYphsObNzBCj~Lg5V8g3T6AzsF0RluOYtcdWUsVrBBTZG3BdxLShABcLdCvkAZZw1Pnuor6JlPomNrl7c7B~jS5ZKy4nxSY~xMpeCAVE2Ln4Hp5ZDWos2t9Z6-YxiUuGi2XGcFdn5WP1cX89oA8UgOtZgo1yv69-YyduUtzrodWdv7bHgK82OyRILAqHnbhERYs9OIe3X5Cas9SrDoWgSk6RJIyr0w__&Key-Pair-Id=K1MP89RTKNH4J";
@@ -83,8 +84,18 @@ export default function WelcomePage() {
   const baths = params.get("baths");
   const serviceType = params.get("type");
   const price = params.get("price");
+  const finalPriceParam = params.get("finalPrice");
+  const discountParam = params.get("discount");
+  const notesParam = params.get("notes");
   const extrasRaw = params.get("extras");
-  const extras = extrasRaw ? extrasRaw.split(",").filter(Boolean) : [];
+  const extraKeys = extrasRaw ? extrasRaw.split(",").filter(Boolean) : [];
+  // Map raw keys to human-readable labels
+  const extras = extraKeys.map(key => {
+    const found = EXTRAS_LIST.find(e => e.key === key);
+    return found ? found.label : key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  });
+  const displayPrice = finalPriceParam ?? price;
+  const discount = discountParam ? Number(discountParam) : 0;
 
   const displayName = decodeURIComponent(firstName);
   const hasQuote = !!(beds || baths || price);
@@ -161,32 +172,42 @@ export default function WelcomePage() {
         {hasQuote && (
           <FadeIn delay={80}>
             <div className="rounded-2xl px-6 md:px-8 py-8 border" style={{ backgroundColor: "#141414", borderColor: "rgba(232,101,26,0.3)" }}>
-              <Label>Your Quote</Label>
+              {/* Personal greeting header */}
+              <p className="font-serif-display text-xl md:text-2xl font-bold text-white mb-5">
+                Hi {displayName}! 🖤✨ Here's your custom quote:
+              </p>
               <div className="flex flex-col gap-3">
                 {beds && baths && (
-                  <div className="flex items-center justify-between">
-                    <span className="font-sans text-white/60 text-sm">Property</span>
-                    <span className="font-sans text-white font-semibold text-sm">{beds} bed / {baths} bath</span>
-                  </div>
-                )}
-                {serviceType && (
-                  <div className="flex items-center justify-between">
-                    <span className="font-sans text-white/60 text-sm">Service type</span>
-                    <span className="font-sans text-white font-semibold text-sm">{decodeURIComponent(serviceType)}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-base">🏠</span>
+                    <span className="font-sans text-white font-semibold text-sm">{beds} bed / {baths} bath{serviceType ? ` — ${decodeURIComponent(serviceType).replace(" Cleaning", "")}` : ""}</span>
                   </div>
                 )}
                 {extras.length > 0 && (
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="font-sans text-white/60 text-sm shrink-0">Extras</span>
-                    <span className="font-sans text-white font-semibold text-sm text-right">{extras.map(e => e.replace(/-/g, " ")).join(", ")}</span>
+                  <div className="flex items-start gap-3">
+                    <span className="text-base">🧹</span>
+                    <span className="font-sans text-white/80 text-sm">Extras: {extras.join(", ")}</span>
                   </div>
                 )}
-                {price && (
+                {discount > 0 && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-base">🎁</span>
+                    <span className="font-sans text-sm" style={{ color: "#4ade80" }}>Special discount for {displayName}: -${discount}</span>
+                  </div>
+                )}
+                {notesParam && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-base">📝</span>
+                    <span className="font-sans text-white/70 text-sm italic">{decodeURIComponent(notesParam)}</span>
+                  </div>
+                )}
+                {displayPrice && (
                   <>
-                    <div className="border-t my-1" style={{ borderColor: "rgba(255,255,255,0.1)" }} />
-                    <div className="flex items-center justify-between">
-                      <span className="font-sans text-white/60 text-sm">Estimated total</span>
-                      <span className="font-serif-display text-2xl font-bold" style={{ color: EMBER }}>${price}</span>
+                    <div className="border-t my-2" style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+                    <div className="flex items-center gap-3">
+                      <span className="text-base">💰</span>
+                      <span className="font-sans text-white/60 text-sm">Total:</span>
+                      <span className="font-serif-display text-2xl font-bold ml-auto" style={{ color: EMBER }}>${displayPrice}</span>
                     </div>
                   </>
                 )}
