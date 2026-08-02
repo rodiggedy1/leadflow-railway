@@ -604,18 +604,14 @@ function MissionCard({
     <motion.div
       layout
       initial={{ opacity: 0, y: 8 }}
-      animate={{
-        opacity: isCompleted ? 0.6 : 1,
-        y: 0,
-        scale: expanded && !isCompleted ? 1.012 : 1,
-      }}
+      animate={{ opacity: isCompleted ? 0.6 : 1, y: 0 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className={`rounded-2xl overflow-hidden ${
+      className={`rounded-2xl overflow-hidden transition-shadow duration-200 ${
         isCompleted
           ? "shadow-none"
           : expanded
-          ? "shadow-xl shadow-violet-100/60"
+          ? "shadow-lg shadow-violet-200/70"
           : (mission.status === "ready" || mission.status === "sending")
           ? "ring-2 ring-violet-400 shadow-lg shadow-violet-100"
           : mission.status === "needs_attention"
@@ -627,17 +623,21 @@ function MissionCard({
         border: isCompleted
           ? "1px solid rgba(16,24,40,.06)"
           : expanded
-          ? "2px solid rgba(124,92,255,0.6)"
+          ? "2px solid rgba(124,92,255,0.65)"
           : "1.5px solid rgba(124,92,255,.15)",
       }}
     >
+      {/* Colored left accent bar — visible when expanded */}
+      {expanded && !isCompleted && (
+        <div style={{ height: 3, background: "linear-gradient(90deg, #7C5CFF, #a78bfa)" }} />
+      )}
       {/* Card header */}
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors cursor-pointer select-none active:bg-slate-100 ${
+        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors cursor-pointer select-none active:bg-violet-100/60 ${
           expanded && !isCompleted
-            ? "bg-violet-50/40 hover:bg-violet-50/60"
+            ? "bg-violet-50/50 hover:bg-violet-50/70"
             : "hover:bg-slate-50/60"
         }`}
       >
