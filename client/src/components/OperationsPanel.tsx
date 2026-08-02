@@ -607,18 +607,25 @@ function MissionCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.25 }}
-      className={`rounded-2xl overflow-hidden transition-all ${
+      className={`rounded-2xl overflow-hidden transition-all duration-200 ${
         isCompleted
-          ? "opacity-60"
+          ? "opacity-60 shadow-none"
+          : expanded
+          ? "shadow-xl shadow-violet-100/60"
           : (mission.status === "ready" || mission.status === "sending")
           ? "ring-2 ring-violet-400 shadow-lg shadow-violet-100"
           : mission.status === "needs_attention"
           ? "ring-2 ring-red-300 shadow-lg shadow-red-50"
-          : "shadow-sm"
+          : "shadow-sm hover:shadow-md"
       }`}
       style={{
         background: "#FFFFFF",
-        border: isCompleted ? "1px solid rgba(16,24,40,.06)" : "1.5px solid rgba(124,92,255,.15)",
+        border: isCompleted
+          ? "1px solid rgba(16,24,40,.06)"
+          : expanded
+          ? "2px solid rgba(124,92,255,0.55)"
+          : "1.5px solid rgba(124,92,255,.15)",
+        transform: expanded && !isCompleted ? "translateY(-1px)" : undefined,
       }}
     >
       {/* Card header */}
