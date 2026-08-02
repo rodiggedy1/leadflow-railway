@@ -84,7 +84,7 @@ export default function WelcomePage() {
       {/* ── Hero: Wistia video centered with black bars + text overlay ── */}
       <section className="relative w-full bg-black">
         {/* Centered video container — max 900px wide, black bars on sides */}
-        <div className="relative mx-auto" style={{ maxWidth: "900px" }}>
+        <div className="relative mx-auto" style={{ maxWidth: "1100px" }}>
           {/* 16:9 aspect ratio box */}
           <div style={{ position: "relative", paddingTop: "56.25%" }}>
             <script src={`https://fast.wistia.com/embed/medias/${WISTIA_ID}.jsonp`} async />
@@ -112,8 +112,8 @@ export default function WelcomePage() {
         <div style={{ height: "40px", background: "linear-gradient(rgb(10,10,10) 0%, rgb(1,2,2) 100%)" }} />
       </section>
 
-      {/* ── Dashed divider ── */}
-      <div className="w-full" style={{ borderTop: "1px dashed rgba(232,101,26,0.4)" }} />
+      {/* ── Dashed divider — same width as video ── */}
+      <div className="mx-auto" style={{ maxWidth: "1100px", borderTop: "1px dashed rgba(232,101,26,0.4)" }} />
 
       {/* ── Main content ── */}
       <div className="max-w-2xl mx-auto px-4 py-10 flex flex-col gap-10">
