@@ -120,7 +120,7 @@ export default function WelcomePage() {
             />
           </div>
           <div className="absolute bottom-0 left-0 right-0 pointer-events-none" style={{ height: "30%", background: "linear-gradient(rgba(0,0,0,0) 0%, rgba(10,10,10,0.9) 70%, rgb(10,10,10) 100%)" }} />
-          <div className="absolute bottom-0 left-0 right-0 z-20 text-center pb-3 md:pb-8 px-4">
+          <div className="absolute bottom-0 left-0 right-0 z-20 text-center pb-8 md:pb-8 px-4">
             <p className="font-sans text-xs tracking-[0.3em] uppercase font-medium mb-0.5 md:mb-2" style={{ color: EMBER }}>Professional Cleaning</p>
             <h1 className="font-serif-display text-4xl md:text-5xl font-bold text-white mb-0.5 md:mb-1">Maids in Black</h1>
             <p className="font-sans text-xs md:text-sm text-white/60 tracking-wide">
