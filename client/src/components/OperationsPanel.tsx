@@ -634,11 +634,7 @@ function MissionCard({
   const isCompleted = mission.status === "completed";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: isCompleted ? 0.6 : 1, y: 0 }}
-      exit={{ opacity: 0, y: -8, scale: 0.97 }}
-      transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+    <div
       className={`rounded-2xl transition-shadow duration-200 ${
         isCompleted
           ? "shadow-none"
@@ -657,6 +653,7 @@ function MissionCard({
           : expanded
           ? "2px solid rgba(124,92,255,0.65)"
           : "1.5px solid rgba(124,92,255,.15)",
+        opacity: isCompleted ? 0.6 : 1,
       }}
     >
       {/* Colored left accent bar — visible when expanded */}
@@ -761,7 +758,7 @@ function MissionCard({
           </div>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
