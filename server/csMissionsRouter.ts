@@ -467,17 +467,10 @@ export const csMissionsRouter = router({
       // Send SMS
       const { sendSms } = await import("./openphone");
       await sendSms({ to: session.leadPhone, content: input.text, fromNumberId: ENV.openPhoneCsNumberId || undefined });
-      // Mark mission complete and store sent text in stages
+      // Mark mission complete
       const now = new Date();
-      const [existing] = await db
-        .select({ stages: csMissions.stages })
-        .from(csMissions)
-        .where(eq(csMissions.id, input.missionId))
-        .limit(1);
-      const existingStages = (existing?.stages ?? []) as any[];
-      const updatedStages = [...existingStages, { id: "__sent_text__", label: input.text, status: "done" }];
       await db.execute(
-        sql`UPDATE cs_missions SET status = 'completed', completedAt = ${now}, updatedAt = ${now}, stages = ${JSON.stringify(updatedStages)} WHERE id = ${input.missionId}`
+        sql`UPDATE cs_missions SET status = 'completed', completedAt = ${now}, updatedAt = ${now} WHERE id = ${input.missionId}`
       );
       broadcastOpsUpdate("cs_mission_update", { sessionId: input.sessionId });
       return { ok: true };
