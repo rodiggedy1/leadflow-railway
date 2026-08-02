@@ -198,6 +198,12 @@ export default function WelcomePage() {
                     <span className="font-sans text-white/80 text-sm text-right">{extras.join(", ")}</span>
                   </div>
                 )}
+                {discount > 0 && price && (
+                  <div className="flex items-center justify-between">
+                    <span className="font-sans text-white/50 text-sm tracking-wide">💰 Standard Price</span>
+                    <span className="font-sans text-white/40 text-sm line-through">${price}</span>
+                  </div>
+                )}
                 {discount > 0 && (
                   <div className="flex items-center justify-between">
                     <span className="font-sans text-sm tracking-wide" style={{ color: "#4ade80" }}>🎁 Special discount for {displayName}</span>

@@ -353,10 +353,9 @@ function SendQuoteWidget({
   });
 
   function handleGenerate() {
-    const discountLine = discount > 0 ? `\nWe've included a special discount for you 🎁` : "";
-    const notesLine = notes.trim() ? `\n\n📝 Note: ${notes.trim()}` : "";
+    const discountLine = discount > 0 ? `\nWe've included a special discount for you as well. 🎁` : "";
     setSmsText(
-      `Hi ${firstName}! We put together a custom quote just for you 🖤${discountLine}${notesLine}\n\nTap the link to view your personalized pricing and book your first clean:\n\n${welcomeUrl}\n\nAny questions? Just reply here — we're happy to help!`
+      `Hi ${firstName}! We put together a custom quote just for you 🖤${discountLine}\n\nTap the link to view your personalized pricing and book your first clean:\n\n${welcomeUrl}\n\nAny questions? Just reply here, we're happy to help!`
     );
     setStep("compose");
   }
