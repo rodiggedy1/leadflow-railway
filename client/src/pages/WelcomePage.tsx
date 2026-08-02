@@ -14,7 +14,7 @@ import { useParams, useSearch } from "wouter";
 import { Phone, MessageSquare, Star, ShieldCheck, Sparkles, MapPin, Calendar, Mail, CheckCircle, Clock, Users } from "lucide-react";
 
 const EMBER = "#E8651A";
-const TEAM_PHOTO = "https://d36hbw14aib5lz.cloudfront.net/310519663254023424/EYDicEiNHjWxiyMLLXmwJP/mib-team-photo_eac8c843.webp";
+const TEAM_PHOTO = "https://d36hbw14aib5lz.cloudfront.net/310519663254023424/EYDicEiNHjWxiyMLLXmwJP/mib-team-photo_eac8c843.webp?Expires=1785647257&Signature=cTXwptAvTQIV~m~jpe9szBLJO5xymCtNz6-M-P8J4Oa1av22GE-rGb9KGBq0GsoI1iOXM23y~Hdmb4600TmxM9wRwqqVECZ8aculsYh7bKt6RaZs5LTAy3g~DYphsObNzBCj~Lg5V8g3T6AzsF0RluOYtcdWUsVrBBTZG3BdxLShABcLdCvkAZZw1Pnuor6JlPomNrl7c7B~jS5ZKy4nxSY~xMpeCAVE2Ln4Hp5ZDWos2t9Z6-YxiUuGi2XGcFdn5WP1cX89oA8UgOtZgo1yv69-YyduUtzrodWdv7bHgK82OyRILAqHnbhERYs9OIe3X5Cas9SrDoWgSk6RJIyr0w__&Key-Pair-Id=K1MP89RTKNH4J";
 const WISTIA_ID = "bzlt49ipk1";
 
 function Label({ children }: { children: React.ReactNode }) {
