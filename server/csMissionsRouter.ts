@@ -409,9 +409,7 @@ export const csMissionsRouter = router({
       // Normalize to 10 digits
       const phone10 = session.leadPhone.replace(/[^\d]/g, "").slice(-10);
       if (phone10.length < 10) return { teamName: null, teamPhone: null, leadPhone: session.leadPhone, leadName: session.leadName ?? null, bedrooms: session.bedrooms ?? null, bathrooms: session.bathrooms ?? null, serviceType: session.serviceType ?? null };
-      // 2. Find today's or next upcoming cleaner job for this customer
-      const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-      const todayET = nowET.toISOString().slice(0, 10);
+      // 2. Find the customer's most recent cleaner job
       const [job] = await db
         .select({
           teamName: cleanerJobs.teamName,
@@ -420,16 +418,10 @@ export const csMissionsRouter = router({
           cleanerProfileId: cleanerJobs.cleanerProfileId,
         })
         .from(cleanerJobs)
-        .where(
-          and(
-            sql`RIGHT(REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone10}`,
-            sql`${cleanerJobs.jobDate} >= ${todayET}`
-          )
-        )
-        .orderBy(asc(cleanerJobs.jobDate))
+        .where(sql`RIGHT(REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone10}`)
+        .orderBy(desc(cleanerJobs.jobDate))
         .limit(1);
       const teamName = job?.teamName ?? job?.cleanerName ?? null;
-      console.log(`[getSessionContext] phone10=${phone10} todayET=${todayET} job=`, JSON.stringify(job ?? null));
       // 3. Get team phone from cleanerProfiles
       let teamPhone: string | null = null;
       if (job?.cleanerProfileId) {
