@@ -171,65 +171,65 @@ export default function WelcomePage() {
         {/* ── Quote details card ── */}
         {hasQuote && (
           <FadeIn delay={80}>
-            <div className="rounded-2xl px-6 md:px-8 py-8 border" style={{ backgroundColor: "#141414", borderColor: "rgba(232,101,26,0.3)" }}>
-              {/* Personal greeting header */}
-              <p className="font-serif-display text-xl md:text-2xl font-bold text-white mb-5">
-                Hi {displayName}! 🖤✨ Here's your custom quote:
-              </p>
-              <div className="flex flex-col gap-3">
+            <div className="rounded-2xl border overflow-hidden" style={{ backgroundColor: "#141414", borderColor: "rgba(232,101,26,0.3)" }}>
+              {/* Header band */}
+              <div className="px-7 pt-8 pb-6">
+                <p className="font-sans text-xs tracking-[0.25em] uppercase font-semibold mb-3" style={{ color: EMBER }}>Your Custom Quote</p>
+                <h2 className="font-serif-display text-2xl md:text-3xl font-bold text-white leading-snug">
+                  Hi {displayName},<br />
+                  <span className="text-white/70 font-normal text-xl md:text-2xl">here's what we put together for you.</span>
+                </h2>
+              </div>
+
+              {/* Divider */}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} />
+
+              {/* Line items */}
+              <div className="px-7 py-6 flex flex-col gap-4">
                 {beds && baths && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-base">🏠</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-sans text-white/50 text-sm tracking-wide">🏠 Property</span>
                     <span className="font-sans text-white font-semibold text-sm">{beds} bed / {baths} bath{serviceType ? ` — ${decodeURIComponent(serviceType).replace(" Cleaning", "")}` : ""}</span>
                   </div>
                 )}
                 {extras.length > 0 && (
-                  <div className="flex items-start gap-3">
-                    <span className="text-base">🧹</span>
-                    <span className="font-sans text-white/80 text-sm">Extras: {extras.join(", ")}</span>
+                  <div className="flex items-start justify-between gap-6">
+                    <span className="font-sans text-white/50 text-sm tracking-wide shrink-0">🧹 Extras</span>
+                    <span className="font-sans text-white/80 text-sm text-right">{extras.join(", ")}</span>
                   </div>
                 )}
                 {discount > 0 && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-base">🎁</span>
-                    <span className="font-sans text-sm" style={{ color: "#4ade80" }}>Special discount for {displayName}: -${discount}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-sans text-sm tracking-wide" style={{ color: "#4ade80" }}>🎁 Special discount for {displayName}</span>
+                    <span className="font-sans text-sm font-semibold" style={{ color: "#4ade80" }}>-${discount}</span>
                   </div>
                 )}
                 {notesParam && (
-                  <div className="flex items-start gap-3">
-                    <span className="text-base">📝</span>
-                    <span className="font-sans text-white/70 text-sm italic">{decodeURIComponent(notesParam)}</span>
+                  <div className="flex items-start gap-3 pt-1">
+                    <span className="font-sans text-white/40 text-xs italic leading-relaxed">{decodeURIComponent(notesParam)}</span>
                   </div>
                 )}
-                {displayPrice && (
-                  <>
-                    <div className="border-t my-2" style={{ borderColor: "rgba(255,255,255,0.1)" }} />
-                    <div className="flex items-center gap-3">
-                      <span className="text-base">💰</span>
-                      <span className="font-sans text-white/60 text-sm">Total:</span>
-                      <span className="font-serif-display text-2xl font-bold ml-auto" style={{ color: EMBER }}>${displayPrice}</span>
-                    </div>
-                  </>
-                )}
               </div>
-              {/* Inline CTA */}
-              <div className="mt-6 pt-5 border-t flex flex-col sm:flex-row gap-3" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
-                <a
-                  href="tel:2028885362"
-                  className="flex-1 flex items-center justify-center gap-2 font-sans font-semibold text-sm px-5 py-3 rounded-xl text-white transition-all active:scale-95"
-                  style={{ backgroundColor: EMBER }}
-                >
-                  <Phone className="w-4 h-4" /> Lock In This Price
-                </a>
+
+              {/* Total band */}
+              {displayPrice && (
+                <div className="px-7 py-5 flex items-center justify-between" style={{ backgroundColor: "rgba(232,101,26,0.08)", borderTop: "1px solid rgba(232,101,26,0.2)" }}>
+                  <span className="font-sans text-white/60 text-sm tracking-widest uppercase">Total</span>
+                  <span className="font-serif-display text-3xl font-bold" style={{ color: EMBER }}>${displayPrice}</span>
+                </div>
+              )}
+
+              {/* CTA */}
+              <div className="px-7 pb-7 pt-5">
                 <a
                   href="sms:2028885362"
-                  className="flex-1 flex items-center justify-center gap-2 font-sans font-semibold text-sm px-5 py-3 rounded-xl text-white transition-all active:scale-95"
-                  style={{ backgroundColor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  className="w-full flex items-center justify-center gap-2 font-sans font-bold text-sm px-5 py-4 rounded-2xl text-white transition-all active:scale-95"
+                  style={{ backgroundColor: EMBER }}
                 >
-                  <MessageSquare className="w-4 h-4" /> Text Us
+                  <MessageSquare className="w-4 h-4" /> Text Us to Lock In This Price
                 </a>
+                <p className="font-sans text-white/25 text-xs mt-3 text-center">* Final price confirmed at booking.</p>
               </div>
-              <p className="font-sans text-white/30 text-xs mt-3 text-center">* Final price confirmed at booking.</p>
             </div>
           </FadeIn>
         )}
