@@ -360,7 +360,7 @@ function SendQuoteWidget({
     const discountLine = discount > 0 ? `\n🎁 Special discount for ${firstName}: -$${discount}` : "";
     const notesLine = notes.trim() ? `\n\n📝 Note: ${notes.trim()}` : "";
     setSmsText(
-      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}${discountLine}\n💰 Total: $${finalPrice}${notesLine}\n\nReply to this message or text us to get scheduled! 🧹✨`
+      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}${discountLine}\n💰 Total: $${finalPrice}${notesLine}\n\n${welcomeUrl}\n\nReply to this message or text us to get scheduled! 🧹✨`
     );
     setStep("compose");
   }

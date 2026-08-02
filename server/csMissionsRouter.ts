@@ -17,6 +17,7 @@ import { getMissionHandler } from "./missions/index";
 import type { CsMissionStage } from "../drizzle/schema";
 import { eq, and, inArray, asc, desc, sql } from "drizzle-orm";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { ENV } from "./_core/env";
 
 const stageSchema = z.object({
   id: z.string(),
@@ -465,7 +466,7 @@ export const csMissionsRouter = router({
       if (!session?.leadPhone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No phone number for this session" });
       // Send SMS
       const { sendSms } = await import("./openphone");
-      await sendSms({ to: session.leadPhone, content: input.text });
+      await sendSms({ to: session.leadPhone, content: input.text, fromNumberId: ENV.openPhoneCsNumberId || undefined });
       // Mark mission complete
       const now = new Date();
       await db.execute(
