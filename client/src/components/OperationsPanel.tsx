@@ -529,8 +529,8 @@ function SaveAccessWidget({
   const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0] || "the customer";
 
   const defaultMsg = `Hi! Just a heads up — ${firstName} has provided access details for today's job:\n\n[Paste access details here]\n\nPlease make note before you arrive. Thanks!`;
-  const [smsText, setSmsText] = React.useState(defaultMsg);
-  const [sent, setSent] = React.useState(false);
+  const [smsText, setSmsText] = useState(defaultMsg);
+  const [sent, setSent] = useState(false);
 
   const handleSend = async () => {
     if (!teamPhone) return;
