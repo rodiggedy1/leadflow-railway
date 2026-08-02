@@ -353,14 +353,10 @@ function SendQuoteWidget({
   });
 
   function handleGenerate() {
-    const extrasLines = selectedExtras.length > 0
-      ? `\n🧹 Extras: ${EXTRAS_LIST.filter(e => selectedExtras.includes(e.key)).map(e => e.label).join(", ")}`
-      : "";
-    const serviceLabel = serviceType === "Standard Cleaning" ? "Standard" : serviceType.replace(" Cleaning", "");
-    const discountLine = discount > 0 ? `\n🎁 Special discount for ${firstName}: -$${discount}` : "";
+    const discountLine = discount > 0 ? `\nWe've included a special discount for you 🎁` : "";
     const notesLine = notes.trim() ? `\n\n📝 Note: ${notes.trim()}` : "";
     setSmsText(
-      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}${discountLine}\n💰 Total: $${finalPrice}${notesLine}\n\n${welcomeUrl}\n\nReply to this message or text us to get scheduled! 🧹✨`
+      `Hi ${firstName}! We put together a custom quote just for you 🖤${discountLine}${notesLine}\n\nTap the link to view your personalized pricing and book your first clean:\n\n${welcomeUrl}\n\nAny questions? Just reply here — we're happy to help!`
     );
     setStep("compose");
   }
