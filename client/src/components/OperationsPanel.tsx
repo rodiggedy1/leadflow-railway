@@ -499,7 +499,9 @@ export function OperationsPanel({
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const activeMissions = missions.filter(m => m.status !== "completed" && m.status !== "cancelled");
-  const completedMissions = missions.filter(m => m.status === "completed");
+  const completedMissions = missions
+    .filter(m => m.status === "completed")
+    .sort((a, b) => (b.completedAt ?? b.updatedAt ?? 0) - (a.completedAt ?? a.updatedAt ?? 0));
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleCreate(title: string, emoji: string, missionType: string) {
