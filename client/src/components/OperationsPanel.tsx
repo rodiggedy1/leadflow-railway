@@ -116,6 +116,60 @@ function buildStages(title: string, teamName: string | null, customerName?: stri
         { id: `${now}-2`, label: `Waiting on ${team}`, status: "pending" },
         { id: `${now}-3`, label: `Reply to ${customer} with ETA`, status: "pending" },
       ];
+    case "Book Appointment":
+      return [
+        { id: `${now}-1`, label: "Check schedule for availability", status: "pending" },
+        { id: `${now}-2`, label: `Confirm service type, property details & price with ${customer}`, status: "pending" },
+        { id: `${now}-3`, label: "Create booking & send confirmation", status: "pending" },
+      ];
+    case "Send Quote":
+      return [
+        { id: `${now}-1`, label: `Gather details from ${customer} (beds, baths, scope)`, status: "pending" },
+        { id: `${now}-2`, label: "Calculate price & note inclusions", status: "pending" },
+        { id: `${now}-3`, label: `Send written quote to ${customer}`, status: "pending" },
+      ];
+    case "Update Scope & Extras":
+      return [
+        { id: `${now}-1`, label: `Clarify requested extras/instructions with ${customer}`, status: "pending" },
+        { id: `${now}-2`, label: "Recalculate time/cost if needed & get approval", status: "pending" },
+        { id: `${now}-3`, label: `Update job notes & notify ${team}`, status: "pending" },
+      ];
+    case "Save Access Details":
+      return [
+        { id: `${now}-1`, label: `Record door code / key / parking from ${customer}`, status: "pending" },
+        { id: `${now}-2`, label: `Share access instructions with ${team}`, status: "pending" },
+        { id: `${now}-3`, label: "Confirm access plan before arrival", status: "pending" },
+      ];
+    case "Reschedule Visit":
+      return [
+        { id: `${now}-1`, label: "Locate existing booking & check constraints", status: "pending" },
+        { id: `${now}-2`, label: `Offer alternative dates/times to ${customer}`, status: "pending" },
+        { id: `${now}-3`, label: `Update system, notify ${team} & send new confirmation`, status: "pending" },
+      ];
+    case "Cancel Booking":
+      return [
+        { id: `${now}-1`, label: "Find & cancel appointment per policy", status: "pending" },
+        { id: `${now}-2`, label: `Inform ${customer} of any fees/refunds`, status: "pending" },
+        { id: `${now}-3`, label: `Update ${team} schedule & send cancellation confirmation`, status: "pending" },
+      ];
+    case "Payment / Invoice":
+      return [
+        { id: `${now}-1`, label: `Confirm payment method & verify card on file for ${customer}`, status: "pending" },
+        { id: `${now}-2`, label: "Send invoice or payment link", status: "pending" },
+        { id: `${now}-3`, label: "Confirm payment receipt", status: "pending" },
+      ];
+    case "Fix Service Issue":
+      return [
+        { id: `${now}-1`, label: `Apologize & log quality issue from ${customer} (get specifics/photos)`, status: "pending" },
+        { id: `${now}-2`, label: `Schedule re-clean & arrange access with ${team}`, status: "pending" },
+        { id: `${now}-3`, label: `Follow up with ${customer} after re-clean to confirm satisfaction`, status: "pending" },
+      ];
+    case "Call Customer":
+      return [
+        { id: `${now}-1`, label: `Call ${customer} at requested time`, status: "pending" },
+        { id: `${now}-2`, label: "Discuss details & agree next steps", status: "pending" },
+        { id: `${now}-3`, label: "Log call outcome & send text summary", status: "pending" },
+      ];
     case "Send Gate Code":
       return [
         { id: `${now}-1`, label: `Get gate code from ${team}`, status: "pending" },
@@ -124,22 +178,22 @@ function buildStages(title: string, teamName: string | null, customerName?: stri
     case "Follow-up Needed":
       return [
         { id: `${now}-1`, label: "Review customer message", status: "pending" },
-        { id: `${now}-2`, label: "Follow up with customer", status: "pending" },
+        { id: `${now}-2`, label: `Follow up with ${customer}`, status: "pending" },
       ];
     case "Payment Question":
       return [
         { id: `${now}-1`, label: "Review payment issue", status: "pending" },
-        { id: `${now}-2`, label: "Resolve with customer", status: "pending" },
+        { id: `${now}-2`, label: `Resolve with ${customer}`, status: "pending" },
       ];
     case "Room Change Request":
       return [
         { id: `${now}-1`, label: `Notify ${team} of room change`, status: "pending" },
-        { id: `${now}-2`, label: "Confirm change with customer", status: "pending" },
+        { id: `${now}-2`, label: `Confirm change with ${customer}`, status: "pending" },
       ];
     case "Special Instructions":
       return [
         { id: `${now}-1`, label: `Forward instructions to ${team}`, status: "pending" },
-        { id: `${now}-2`, label: "Confirm receipt with customer", status: "pending" },
+        { id: `${now}-2`, label: `Confirm receipt with ${customer}`, status: "pending" },
       ];
     default:
       return [
@@ -318,11 +372,19 @@ function MissionCard({
 
 const QUICK_TEMPLATES = [
   { emoji: "🚕", title: "Get ETA", missionType: "GET_ETA" },
-  { emoji: "🔑", title: "Send Gate Code", missionType: "MANUAL" },
+  { emoji: "📅", title: "Book Appointment", missionType: "MANUAL" },
+  { emoji: "🧾", title: "Send Quote", missionType: "MANUAL" },
+  { emoji: "🧰", title: "Update Scope & Extras", missionType: "MANUAL" },
+  { emoji: "🔑", title: "Save Access Details", missionType: "MANUAL" },
+  { emoji: "🔁", title: "Reschedule Visit", missionType: "MANUAL" },
+  { emoji: "❌", title: "Cancel Booking", missionType: "MANUAL" },
+  { emoji: "💳", title: "Payment / Invoice", missionType: "MANUAL" },
+  { emoji: "⚠️", title: "Fix Service Issue", missionType: "MANUAL" },
+  { emoji: "📞", title: "Call Customer", missionType: "MANUAL" },
   { emoji: "💬", title: "Follow-up Needed", missionType: "MANUAL" },
-  { emoji: "💳", title: "Payment Question", missionType: "MANUAL" },
   { emoji: "🛏", title: "Room Change Request", missionType: "MANUAL" },
   { emoji: "📋", title: "Special Instructions", missionType: "MANUAL" },
+  { emoji: "🔒", title: "Send Gate Code", missionType: "MANUAL" },
 ];
 
 function NewMissionForm({
