@@ -37,6 +37,7 @@ import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getAgentByEmail, getDb, getPool } from "../db";
 import { startDbWatchdog } from "../dbWatchdog";
+import { registerStorageProxy } from "./storageProxy";
 import { sql, isNotNull, count } from "drizzle-orm";
 import { gmailThreadMeta } from "../../drizzle/schema";
 
@@ -989,6 +990,8 @@ async function startServer() {
   // Raw binary parser for interview video chunks
   app.use("/api/interview/chunk", express.raw({ type: ["video/webm", "video/mp4", "video/*"], limit: "20mb" }));
 
+  // Storage proxy — serves /manus-storage/* assets via signed URLs
+  registerStorageProxy(app);
   // Media proxy — serves R2/S3 audio/images with correct CORS headers so all users can view them
   app.get("/api/media-proxy", async (req, res) => {
     const url = req.query.url as string;

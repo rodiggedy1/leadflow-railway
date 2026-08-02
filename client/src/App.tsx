@@ -61,6 +61,7 @@ const InvoiceManager = lazy(() => import("./pages/InvoiceManager"));
 const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
+const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -147,6 +148,7 @@ function Router() {
         <Route path={"/admin/madison-focus"} component={MadisonFocus} />
         <Route path={"/admin/madison-debrief"} component={DebriefRedirect} />
         <Route path={"/madison-debug"} component={MadisonDebugPanel} />
+        <Route path={"/welcome/:firstName"} component={WelcomePage} />
         <Route path={"/icon-picker"} component={IconPicker} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />

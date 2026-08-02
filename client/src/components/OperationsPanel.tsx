@@ -323,7 +323,16 @@ function SendQuoteWidget({
   const totalPrice = basePrice + extrasTotal;
 
   const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0] || "there";
-  const welcomeUrl = `https://maidsquote-eydicein.manus.space/welcome/${encodeURIComponent(firstName)}`;
+  const welcomeUrl = (() => {
+    const base = `https://quote.maidinblack.com/welcome/${encodeURIComponent(firstName)}`;
+    const p = new URLSearchParams();
+    p.set("beds", String(beds));
+    p.set("baths", String(baths));
+    p.set("type", serviceType);
+    p.set("price", String(totalPrice));
+    if (selectedExtras.length > 0) p.set("extras", selectedExtras.join(","));
+    return `${base}?${p.toString()}`;
+  })();
 
   const sendQuoteSms = trpc.csMissions.sendQuoteSms.useMutation({
     onSuccess: () => {
@@ -340,7 +349,7 @@ function SendQuoteWidget({
       : "";
     const serviceLabel = serviceType === "Standard Cleaning" ? "Standard" : serviceType.replace(" Cleaning", "");
     setSmsText(
-      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}\n💰 Estimated total: $${totalPrice}\n\n👉 ${welcomeUrl}\n\nEverything you need to know is in that link. Ready to book? Just reply or tap the link — takes 60 seconds! Can't wait to get your home sparkling! 😊`
+      `Hi ${firstName}! 🖤✨ Here's your custom quote:\n\n🏠 ${beds} bed / ${baths} bath — ${serviceLabel}${extrasLines}\n💰 Estimated total: $${totalPrice}\n\nI put everything together for you here — tap the link to review the details and get scheduled:\n👉 ${welcomeUrl}\n\nTakes about 60 seconds. Can't wait to get your home sparkling! 🧹✨`
     );
     setStep("compose");
   }
