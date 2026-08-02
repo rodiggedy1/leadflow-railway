@@ -175,8 +175,7 @@ export default function WelcomePage() {
           <img
             src={TEAM_PHOTO}
             alt="Maids in Black team member"
-            className="w-full object-cover"
-            style={{ maxHeight: "400px" }}
+            className="w-full"
           />
           <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(0,0,0,0) 50%, rgb(10,10,10) 100%)" }} />
           <div className="absolute bottom-0 left-0 right-0 p-5">
