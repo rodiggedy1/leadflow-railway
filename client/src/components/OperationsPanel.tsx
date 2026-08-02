@@ -754,10 +754,15 @@ function MissionCard({
                   </button>
                 </div>
               )}
-              {/* For completed Send Quote missions, show a summary */}
-              {isCompleted && mission.title === "Send Quote" && (
-                <p className="text-xs text-slate-400 italic">Quote was sent to customer.</p>
-              )}
+              {/* For completed Send Quote missions, show the sent SMS text */}
+              {isCompleted && mission.title === "Send Quote" && (() => {
+                const sentStage = mission.stages.find((s: any) => s.id === "__sent_text__");
+                return sentStage ? (
+                  <p className="text-xs text-slate-500 whitespace-pre-wrap leading-relaxed">{sentStage.label}</p>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">Quote was sent to customer.</p>
+                );
+              })()}
           </div>
         </div>
       )}
