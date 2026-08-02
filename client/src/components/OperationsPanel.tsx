@@ -640,12 +640,11 @@ function MissionCard({
 
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: isCompleted ? 0.6 : 1, y: 0 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className={`rounded-2xl overflow-hidden transition-shadow duration-200 ${
+      className={`rounded-2xl transition-shadow duration-200 ${
         isCompleted
           ? "shadow-none"
           : expanded
@@ -697,17 +696,9 @@ function MissionCard({
       </button>
 
       {/* Expandable body */}
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-4 flex flex-col gap-2">
+      {expanded && (
+        <div className="w-full">
+          <div className="px-4 pb-4 flex flex-col gap-2">
                             {/* Send Quote interactive widget */}
               {mission.title === "Send Quote" && !isCompleted && (
                 <SendQuoteWidget
@@ -772,10 +763,9 @@ function MissionCard({
               {isCompleted && mission.title === "Send Quote" && (
                 <p className="text-xs text-slate-400 italic">Quote was sent to customer.</p>
               )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
