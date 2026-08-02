@@ -422,9 +422,9 @@ function SendQuoteWidget({
           </div>
 
           {/* Extras */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Extras</label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
               {WIDGET_EXTRAS.map(key => {
                 const extra = EXTRAS_LIST.find(e => e.key === key);
                 if (!extra) return null;
@@ -447,30 +447,27 @@ function SendQuoteWidget({
             </div>
           </div>
 
-          {/* Price display + override */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-violet-50 border border-violet-100">
-              <span className="text-xs font-semibold text-violet-700">Calculated Price</span>
+          {/* Price row: calculated + final price inline */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between flex-1 px-3 py-2 rounded-xl bg-violet-50 border border-violet-100">
+              <span className="text-xs font-semibold text-violet-700">Price</span>
               <span className="text-sm font-bold text-violet-900">${calculatedPrice}</span>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Final Price (optional override)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder={String(calculatedPrice)}
-                  value={finalPriceInput}
-                  onChange={e => setFinalPriceInput(e.target.value)}
-                  className="w-full text-xs pl-6 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
-                />
-              </div>
-              {discount > 0 && (
-                <p className="text-[11px] text-emerald-600 font-semibold pl-1">🎁 Special discount for {firstName}: -${discount}</p>
-              )}
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">Final $</span>
+              <input
+                type="number"
+                min="0"
+                placeholder={String(calculatedPrice)}
+                value={finalPriceInput}
+                onChange={e => setFinalPriceInput(e.target.value)}
+                className="w-full text-xs pl-14 pr-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              />
             </div>
           </div>
+          {discount > 0 && (
+            <p className="text-[11px] text-emerald-600 font-semibold -mt-1 pl-1">🎁 Special discount for {firstName}: -${discount}</p>
+          )}
 
           {/* Notes */}
           <div className="flex flex-col gap-1">
