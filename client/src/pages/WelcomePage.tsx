@@ -81,24 +81,25 @@ export default function WelcomePage() {
         .font-sans { font-family: 'Montserrat', sans-serif; }
       `}</style>
 
-      {/* ── Hero: Wistia video background ── */}
-      <section className="relative w-full overflow-hidden bg-black" style={{ aspectRatio: "16/9", maxHeight: "520px" }}>
-        {/* Wistia embed */}
-        <div className="absolute inset-0 w-full h-full">
-          <script src={`https://fast.wistia.com/embed/medias/${WISTIA_ID}.jsonp`} async />
-          <script src="https://fast.wistia.com/assets/external/E-v1.js" async />
-          <div
-            className="wistia_embed wistia_async_bzlt49ipk1 videoFoam=true autoPlay=true muted=true loop=true controlsVisibleOnLoad=false playButton=false"
-            style={{ height: "100%", width: "100%", position: "absolute", inset: 0 }}
-          />
+      {/* ── Hero: Wistia video ── */}
+      <section className="relative w-full bg-black">
+        {/* Wistia responsive embed — natural 16:9 aspect ratio, no cropping */}
+        <div className="wistia_responsive_padding" style={{ padding: "56.25% 0 0 0", position: "relative" }}>
+          <div className="wistia_responsive_wrapper" style={{ height: "100%", left: 0, position: "absolute", top: 0, width: "100%" }}>
+            <script src={`https://fast.wistia.com/embed/medias/${WISTIA_ID}.jsonp`} async />
+            <script src="https://fast.wistia.com/assets/external/E-v1.js" async />
+            <div
+              className={`wistia_embed wistia_async_${WISTIA_ID} videoFoam=true`}
+              style={{ height: "100%", position: "relative", width: "100%" }}
+            />
+          </div>
         </div>
 
-        {/* Gradient overlays */}
-        <div className="absolute inset-0 pointer-events-none z-10" style={{ background: "linear-gradient(rgba(10,10,10,0.45) 0%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 55%, rgba(10,10,10,0.85) 85%, rgb(10,10,10) 100%)" }} />
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(0,0,0,0) 50%, rgb(10,10,10) 100%)" }} />
+        {/* Bottom gradient fade into dark background */}
+        <div className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none" style={{ background: "linear-gradient(rgba(0,0,0,0) 0%, rgb(1,2,2) 100%)" }} />
 
-        {/* Hero text overlay */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 text-center pb-8 px-4">
+        {/* Hero text below video */}
+        <div className="text-center py-8 px-4 relative z-10">
           <p className="font-sans text-xs tracking-[0.3em] uppercase font-medium mb-2" style={{ color: EMBER }}>Professional Cleaning</p>
           <h1 className="font-serif-display text-4xl md:text-5xl font-bold text-white mb-2">Maids in Black</h1>
           <p className="font-sans text-sm text-white/60 tracking-wide">
