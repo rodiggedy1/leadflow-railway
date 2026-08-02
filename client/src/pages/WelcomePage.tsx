@@ -184,38 +184,7 @@ export default function WelcomePage() {
           </div>
         </div>
 
-        {/* ── Why Choose Us ── */}
-        <div>
-          <Label>Why Choose Us</Label>
-          <h2 className="font-serif-display text-2xl md:text-3xl font-bold text-white mb-2">
-            Why folks love us, {displayName}
-          </h2>
-          <p className="font-sans text-white/60 text-sm mb-6">Here's what our clients say keeps them coming back.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FeatureCard
-              icon={<Star className="w-4 h-4" />}
-              title="Top-Rated Service"
-              desc="Consistently 5-star reviews from clients across the DC area."
-            />
-            <FeatureCard
-              icon={<ShieldCheck className="w-4 h-4" />}
-              title="Vetted & Insured"
-              desc="Every cleaner is background-checked and fully insured for your peace of mind."
-            />
-            <FeatureCard
-              icon={<Sparkles className="w-4 h-4" />}
-              title="Premium Products"
-              desc="We use professional-grade, eco-friendly cleaning products — safe for kids and pets."
-            />
-            <FeatureCard
-              icon={<MapPin className="w-4 h-4" />}
-              title="Live Tracking"
-              desc="Know exactly when your cleaner is on the way with our real-time tracking link."
-            />
-          </div>
-        </div>
-
-        {/* ── What Happens Next ── */}
+                {/* ── What Happens Next ── */}
         <div className="rounded-2xl px-6 md:px-8 py-8 border" style={{ backgroundColor: "#141414", borderColor: "rgba(255,255,255,0.1)" }}>
           <Label>What Happens Next</Label>
           <h2 className="font-serif-display text-2xl md:text-3xl font-bold text-white mb-8">
@@ -255,6 +224,36 @@ export default function WelcomePage() {
           </div>
         </div>
 
+        {/* ── Why Choose Us ── */}
+        <div>
+          <Label>Why Choose Us</Label>
+          <h2 className="font-serif-display text-2xl md:text-3xl font-bold text-white mb-2">
+            Why folks love us, {displayName}
+          </h2>
+          <p className="font-sans text-white/60 text-sm mb-6">Here's what our clients say keeps them coming back.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FeatureCard
+              icon={<Star className="w-4 h-4" />}
+              title="Top-Rated Service"
+              desc="Consistently 5-star reviews from clients across the DC area."
+            />
+            <FeatureCard
+              icon={<ShieldCheck className="w-4 h-4" />}
+              title="Vetted & Insured"
+              desc="Every cleaner is background-checked and fully insured for your peace of mind."
+            />
+            <FeatureCard
+              icon={<Sparkles className="w-4 h-4" />}
+              title="Premium Products"
+              desc="We use professional-grade, eco-friendly cleaning products — safe for kids and pets."
+            />
+            <FeatureCard
+              icon={<MapPin className="w-4 h-4" />}
+              title="Live Tracking"
+              desc="Know exactly when your cleaner is on the way with our real-time tracking link."
+            />
+          </div>
+        </div>
         {/* ── CTA ── */}
         <div className="rounded-2xl px-6 md:px-8 py-10 text-center border" style={{ backgroundColor: "#141414", borderColor: "rgba(255,255,255,0.1)" }}>
           <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "rgba(232,101,26,0.15)" }}>
