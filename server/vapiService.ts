@@ -1317,6 +1317,29 @@ Return ONLY a JSON object with these 4 keys. No markdown, no explanation.`,
     console.log(`[Vapi] Voice call linked to session ${sessionId}`);
   }
 
+  // Invariant: every actionable call card must have a sessionId.
+  // If we still have no session (caller hung up before giving info, no prior history),
+  // create a minimal UNHANDLED session so the card is mission-capable.
+  if (!sessionId && normalizedPhone) {
+    try {
+      const callerNameForSession = (structuredData as Record<string, unknown> | null)?.callerName as string | null ?? null;
+      const [minSessionResult] = await db.insert(conversationSessions).values({
+        leadPhone: normalizedPhone,
+        leadName: callerNameForSession,
+        leadSource: "ai_call",
+        stage: "UNHANDLED",
+        messageHistory: "[]",
+      });
+      sessionId = (minSessionResult as { insertId: number }).insertId;
+      await db.update(voiceCalls)
+        .set({ sessionId })
+        .where(eq(voiceCalls.vapiCallId, vapiCallId));
+      console.log(`[Vapi] Created minimal UNHANDLED session ${sessionId} for inbound call from ${normalizedPhone}`);
+    } catch (err) {
+      console.error("[Vapi] Failed to create minimal session for call card:", err);
+    }
+  }
+
   // Send a follow-up SMS only when the mid-call sendSms tool did NOT already run.
   // When leadCreated=true, Madison called sendSms mid-call (Step 9 in system prompt),
   // so sending again here would result in a duplicate. Only send for FAQ-only calls,
