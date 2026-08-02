@@ -122,7 +122,7 @@ export default function WelcomePage() {
           <div className="absolute bottom-0 left-0 right-0 pointer-events-none" style={{ height: "50%", background: "linear-gradient(rgba(0,0,0,0) 0%, rgba(10,10,10,0.85) 80%, rgb(10,10,10) 100%)" }} />
           <div className="absolute bottom-0 left-0 right-0 z-20 text-center pb-4 md:pb-6 px-4" style={{ bottom: "0" }}>
             <p className="font-sans text-xs tracking-[0.3em] uppercase font-medium mb-1 md:mb-2" style={{ color: EMBER }}>Professional Cleaning</p>
-            <h1 className="font-serif-display text-2xl md:text-5xl font-bold text-white mb-1">Maids in Black</h1>
+            <h1 className="font-serif-display text-4xl md:text-5xl font-bold text-white mb-1">Maids in Black</h1>
             <p className="font-sans text-xs md:text-sm text-white/60 tracking-wide">
               Prepared for <span className="text-white font-semibold">{displayName}</span>
             </p>
