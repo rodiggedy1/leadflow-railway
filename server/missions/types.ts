@@ -43,7 +43,7 @@ export interface MissionHandler {
    * Responsible for sending the first external action (e.g. SMS to cleaner).
    * Uses the already-stored mission row — do NOT re-query job/participants.
    */
-  onCreate: (ctx: MissionTriggerCtx, mission: CsMission) => Promise<void>;
+  onCreate: (mission: CsMission) => Promise<void>;
 
   /**
    * Called when an inbound SMS arrives from a cleaner phone that matches
