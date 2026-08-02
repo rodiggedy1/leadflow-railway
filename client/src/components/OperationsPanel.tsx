@@ -965,7 +965,8 @@ export function OperationsPanel({
   const activeMissions = missions.filter(m => m.status !== "completed" && m.status !== "cancelled");
   const completedMissions = missions
     .filter(m => m.status === "completed")
-    .sort((a, b) => (b.completedAt ?? b.updatedAt ?? 0) - (a.completedAt ?? a.updatedAt ?? 0));
+    .sort((a, b) => (b.completedAt ?? b.updatedAt ?? 0) - (a.completedAt ?? a.updatedAt ?? 0))
+    .slice(0, 3);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleCreate(title: string, emoji: string, missionType: string) {
@@ -1167,7 +1168,7 @@ export function OperationsPanel({
           <details className="group" open>
             <summary className="text-xs font-semibold text-slate-400 cursor-pointer select-none hover:text-slate-600 transition-colors list-none flex items-center gap-1.5 py-1">
               <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
-              {completedMissions.length} completed
+              Last 3 completed
             </summary>
             <div className="flex flex-col gap-2 mt-2">
               <AnimatePresence>
