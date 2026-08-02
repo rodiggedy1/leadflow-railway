@@ -14,7 +14,7 @@ import { useParams, useSearch } from "wouter";
 import { Phone, MessageSquare, Star, ShieldCheck, Sparkles, MapPin, Calendar, Mail, CheckCircle, Clock, Users } from "lucide-react";
 
 const EMBER = "#E8651A";
-const TEAM_PHOTO = "/manus-storage/mib-team-photo_3eeb93f8.webp";
+const TEAM_PHOTO = "https://d36hbw14aib5lz.cloudfront.net/310519663254023424/EYDicEiNHjWxiyMLLXmwJP/mib-team-photo_eac8c843.webp";
 const WISTIA_ID = "bzlt49ipk1";
 
 function Label({ children }: { children: React.ReactNode }) {
