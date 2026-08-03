@@ -1323,11 +1323,13 @@ function EtaCallResultCard({
 
 // ── MadisonSmsDraftCard ─────────────────────────────────────────────────────
 // Self-contained component — fetches draft by draftId, handles approve/dismiss/retry
-export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string; onSelectSession?: (sessionId: number, customerName: string) => void; onActed?: () => void }) {
+export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed, compact = false }: { msg: { id: number; body: string; metadata: string | null; mediaUrl?: string | null; createdAt: string | Date }; callerName: string; onSelectSession?: (sessionId: number, customerName: string) => void; onActed?: () => void; compact?: boolean }) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [justActed, setJustActed] = useState<"sent" | "dismissed" | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const utils = trpc.useUtils();
 
@@ -1397,6 +1399,19 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed 
       onSelectSession?.(meta.sessionId, name);
     }
   };
+
+  const handleExpandAndEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditMode(true);
+    setEditedText(draft?.generatedDraft ?? "");
+    if (!isExpanded) {
+      setIsExpanded(true);
+      setTimeout(() => textareaRef.current?.focus(), 80);
+    } else {
+      setTimeout(() => textareaRef.current?.focus(), 20);
+    }
+  };
+
   // ── No draftId in metadata — render minimal fallback ──
   if (!meta.draftId) {
     return (
@@ -1414,7 +1429,208 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed 
     );
   }
 
-  const status = draft?.status ?? "RECEIVED";
+  // ── Compact mode render ──
+  if (compact && !justActed) {
+    const _status = draft?.status ?? "RECEIVED";
+    const isDraftReadyC = _status === "DRAFT_READY";
+    const isSentC = _status === "SENT";
+    const isDismissedC = _status === "DISMISSED";
+    const isProcessingC = ["RECEIVED","CLASSIFIED","INTENT_RESOLVED","CONTEXT_RESOLVED","TOOLS_RUNNING","GENERATING","SENDING"].includes(_status);
+    const statusBadgeC = isSentC
+      ? { label: "Sent", bg: "#eef8f2", color: "#157c5a" }
+      : isDismissedC
+      ? { label: "Dismissed", bg: "#f3f4f6", color: "#6b7280" }
+      : (_status === "FAILED")
+      ? { label: "Failed", bg: "#fef2f2", color: "#dc2626" }
+      : isProcessingC
+      ? { label: "Drafting…", bg: "#ede9fe", color: "#6d5cff" }
+      : { label: "Awaiting approval", bg: "#eef8f2", color: "#157c5a" };
+    const senderNameC = draft?.senderName ?? "Customer";
+    const bodyLinesC = msg.body.split("\n");
+    const quotedLineC = bodyLinesC[1] ?? bodyLinesC[0] ?? "";
+    const generatedDraftC = draft?.generatedDraft ?? "";
+
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }} onClick={handleCardClick}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            background: "#fff",
+            border: isDraftReadyC ? "2px solid #6d5cff" : "1px solid #ebe8fb",
+            borderRadius: 20,
+            boxShadow: isDraftReadyC ? "0 6px 32px rgba(109,92,255,0.18)" : "0 4px 24px rgba(30,30,60,0.08)",
+            overflow: "hidden",
+            opacity: isDismissedC ? 0.55 : 1,
+            transition: "border 0.2s, box-shadow 0.2s",
+          }}>
+            {isDraftReadyC && (
+              <div style={{ height: 3, background: "linear-gradient(90deg, #6d5cff, #a78bfa)", borderRadius: "20px 20px 0 0" }} />
+            )}
+
+            {/* Compact header row */}
+            <div style={{ display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10, padding: "12px 14px 10px", alignItems: "center", cursor: "pointer" }}>
+              <img src={MADISON_PHOTO} alt="Madison" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: 1 }}>
+                  <span style={{ font: "700 15px Georgia,serif", color: "#1a1a2e" }}>Madison</span>
+                  <span style={{ font: "800 10px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
+                  <span style={{ fontSize: 11, color: "#9ca3af" }}>{msgTime}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, overflow: "hidden" }}>
+                  <span style={{ fontWeight: 800, color: "#697089", whiteSpace: "nowrap" as const, flexShrink: 0 }}>{senderNameC}</span>
+                  <span style={{ color: "#9ca3af", flexShrink: 0 }}>·</span>
+                  <span style={{ color: "#3c4153", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>&ldquo;{quotedLineC || "…"}&rdquo;</span>
+                </div>
+              </div>
+              <div style={{ background: statusBadgeC.bg, color: statusBadgeC.color, padding: "4px 9px", borderRadius: 999, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" as const, flexShrink: 0 }}>
+                {statusBadgeC.label}
+              </div>
+            </div>
+
+            {/* Draft preview row */}
+            {(isDraftReadyC || isProcessingC) && (
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 8, alignItems: "center", margin: "0 14px 10px", padding: "9px 11px", borderRadius: 12, background: "#faf9ff", border: "1px solid #ece8ff" }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, background: "#f3f0ff", display: "grid", placeItems: "center", color: "#6d5cff", fontSize: 13, flexShrink: 0 }}>&#128172;</div>
+                {isProcessingC ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#9ca3af", overflow: "hidden" }}>
+                    <Loader2 className="w-3 h-3 animate-spin" style={{ color: "#6d5cff", flexShrink: 0 }} />
+                    <span style={{ fontStyle: "italic" }}>Drafting…</span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#42475a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{generatedDraftC}</div>
+                )}
+                <button
+                  onClick={e => { e.stopPropagation(); setIsExpanded(v => !v); }}
+                  style={{ border: 0, background: "transparent", color: "#6d5cff", fontWeight: 800, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" as const, padding: "0 2px", flexShrink: 0 }}
+                >
+                  {isExpanded ? "Close ↑" : "Open ↓"}
+                </button>
+              </div>
+            )}
+
+            {/* Compact action buttons */}
+            {isDraftReadyC && !isExpanded && (
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "0 14px 12px", flexWrap: "wrap" as const }}>
+                <button
+                  onClick={e => handleExpandAndEdit(e)}
+                  style={{ padding: "7px 12px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 12 }}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleApprove(generatedDraftC); }}
+                  disabled={isSending}
+                  style={{ padding: "7px 12px", borderRadius: 10, fontWeight: 700, border: "none", background: "linear-gradient(135deg,#5d49f3,#7d66ff)", color: "#fff", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                >
+                  {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : "✓"} Looks good
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDismiss(); }}
+                  style={{ padding: "7px 12px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 12, color: "#6b7280" }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* Expanded full content */}
+            {isExpanded && (
+              <div style={{ borderTop: "1px solid #ebe8fb", padding: "0 16px 16px" }}>
+                <div style={{ border: "1px solid #ebe8fb", borderRadius: 14, padding: 14, background: "#fbfbff", marginTop: 12 }}>
+                  <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span>{draft?.senderName ? `Latest message from ${draft.senderName}` : "Latest customer message"}</span>
+                    {draft?.fromPhone && (() => { const d = draft.fromPhone.replace(/\D/g, ""); const fmt = d.length === 11 && d[0] === "1" ? `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : draft.fromPhone; return <span style={{ fontWeight: 600, color: "#6d5cff", fontSize: 10 }}>{fmt}</span>; })()}
+                  </div>
+                  <div style={{ display: "flex" }}>
+                    <div style={{ display: "inline-block", padding: "10px 13px", borderRadius: 14, fontSize: 13, lineHeight: 1.5, maxWidth: "85%", background: "#ece7ff", color: "#222" }}>
+                      {quotedLineC}
+                    </div>
+                  </div>
+
+                  {isDraftReadyC && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <strong style={{ color: "#6d5cff", fontSize: 12 }}>I’ll send this</strong>
+                        <a href="#" onClick={e => { e.preventDefault(); setShowConversation(v => !v); }} style={{ color: "#6d5cff", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: 13 }}>
+                          {showConversation ? "Hide conversation ↑" : "View conversation →"}
+                        </a>
+                      </div>
+                      {editMode ? (
+                        <textarea
+                          ref={textareaRef}
+                          value={editedText}
+                          onChange={e => setEditedText(e.target.value)}
+                          style={{ width: "100%", border: "1px solid #ddd6ff", borderRadius: 16, padding: 16, font: "13px/1.5 Inter,system-ui", resize: "vertical" as const, outline: "none", minHeight: 160, color: "#111827", background: "#fff" }}
+                          autoFocus
+                        />
+                      ) : (
+                        <textarea
+                          ref={textareaRef}
+                          value={generatedDraftC}
+                          readOnly
+                          style={{ width: "100%", border: "1px solid #ddd6ff", borderRadius: 16, padding: 16, font: "13px/1.5 Inter,system-ui", resize: "none" as const, outline: "none", minHeight: 160, color: "#111827", background: "#fff", cursor: "default" }}
+                        />
+                      )}
+
+                      {showConversation && (
+                        <div style={{ marginTop: 14, borderTop: "1px solid #ece8fb", paddingTop: 14 }}>
+                          <div style={{ fontSize: 10, color: "#8a90a3", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 10 }}>Last 5 messages</div>
+                          {convLoading ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#9ca3af" }}><Loader2 className="w-3 h-3 animate-spin" /><span>Loading…</span></div>
+                          ) : !conversationMessages || conversationMessages.length === 0 ? (
+                            <div style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>No conversation history found.</div>
+                          ) : (
+                            conversationMessages.map((m, i) => {
+                              const isCustomer = m.role === "user";
+                              const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                              return (
+                                <div key={i} style={{ marginBottom: 8, display: "flex", flexDirection: "column" as const, alignItems: isCustomer ? "flex-start" : "flex-end" }}>
+                                  <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3 }}>{isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}</div>
+                                  <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222" }}>{m.content}</div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Expanded footer */}
+                <div style={{ display: "flex", alignItems: "center", marginTop: 12 }}>
+                  <button onClick={e => { e.stopPropagation(); setIsExpanded(false); setEditMode(false); }} style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}>Close ↑</button>
+                  <div style={{ display: "flex", gap: 12, marginLeft: "auto" }}>
+                    {isDraftReadyC && !editMode && (
+                      <>
+                        <button onClick={e => handleExpandAndEdit(e)} style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13 }}>Edit</button>
+                        <button onClick={e => { e.stopPropagation(); handleApprove(generatedDraftC); }} disabled={isSending} style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none", background: "linear-gradient(135deg,#5d49f3,#7d66ff)", color: "#fff", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                          {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Looks good
+                        </button>
+                      </>
+                    )}
+                    {isDraftReadyC && editMode && (
+                      <>
+                        <button onClick={e => { e.stopPropagation(); setEditMode(false); setEditedText(generatedDraftC); }} style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                        <button onClick={e => { e.stopPropagation(); handleApprove(editedText); }} disabled={isSending || !editedText.trim()} style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "none", background: "linear-gradient(135deg,#5d49f3,#7d66ff)", color: "#fff", cursor: isSending ? "wait" : "pointer", opacity: (isSending || !editedText.trim()) ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                          {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "✓"} Send Edited
+                        </button>
+                      </>
+                    )}
+                    {isDraftReadyC && !editMode && (
+                      <button onClick={e => { e.stopPropagation(); handleDismiss(); }} style={{ padding: "9px 14px", borderRadius: 10, fontWeight: 700, border: "1px solid #ddd6ff", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280" }}>Dismiss</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+    const status = draft?.status ?? "RECEIVED";
   const isSent = status === "SENT";
   const isDismissed = status === "DISMISSED";
   const isFailed = status === "FAILED";
@@ -5692,6 +5908,7 @@ const MessageList = memo(function MessageList({
                       <MadisonSmsDraftCard
                         msg={msg}
                         callerName={callerName}
+                        compact={true}
                         onSelectSession={(sid, name) => {
                           console.log("[Operations] MadisonSmsDraftCard onSelectSession fired", { sessionId: sid, customerName: name });
                           onSelectOpsSession?.(sid, name);
