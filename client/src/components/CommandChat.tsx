@@ -7055,7 +7055,7 @@ function KudosModal({
 //   Center: Card + nav + celebration screen
 //   Right : Session stats + recent wins + queue preview
 type FocusRecentWin = { label: string; type: "sms" | "email" | "call"; ts: number };
-function DebriefModal({ onClose }: { onClose: () => void }) {
+function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void; onCallBack: (name: string, phone: string, msgId: number) => void; onTextBack: (name: string, phone: string, msgId: number) => void; }) {
   const [view, setView] = useState<"hero" | "review" | "done">("hero");
   const [cardIndex, setCardIndex] = useState(0);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -7409,7 +7409,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
                     ? <MadisonSmsDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
                     : currentCard.quickAction === "madison_email_draft"
                     ? <MadisonEmailDraftCard key={currentCard.id} msg={msgObj} callerName="" onActed={() => onCardActed("sent")} />
-                    : <MadisonCallSummaryCard key={currentCard.id} msg={msgObj} onCallBack={(_n, phone) => window.open(`tel:${phone}`, "_self")} onTextBack={() => {}} onActed={() => onCardActed("dismissed")} />}
+                    : <MadisonCallSummaryCard key={currentCard.id} msg={msgObj} onCallBack={onCallBack} onTextBack={onTextBack} onActed={() => onCardActed("dismissed")} />}
                 </div>
               )}
               {/* Nav */}
@@ -10243,7 +10243,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <AICallPanel open={showCallPanel} onClose={() => setShowCallPanel(false)} />
           <PaymentLinkModal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} />
           {/* Madison Debrief modal */}
-          {showDebrief && <DebriefModal onClose={() => setShowDebrief(false)} />}
+          {showDebrief && <DebriefModal onClose={() => setShowDebrief(false)} onCallBack={onCallBack} onTextBack={onTextBack} />}
 
           {/* Mention History Drawer — slide-in from right */}
           {showMentionHistory && (
