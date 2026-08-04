@@ -51,7 +51,7 @@ import { runEscalationCalls } from "./escalationEngine";
 import { runMessageIntegrityCheck } from "./messageIntegrityEngine";
 import { setupGmailWatch, alertInvalidGrant } from "./gmailService";
 import { opsReminders, opsChatMessages, agents, jobAlerts, gmailState, conversationSessions, madisonSmsDrafts } from "../drizzle/schema";
-import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql, ne, inArray } from "drizzle-orm";
+import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql, ne, inArray, or } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -1517,6 +1517,8 @@ export async function runUnansweredAlarmCron(): Promise<void> {
     const unansweredSince = session.lastCustomerMessageTs ?? now;
 
     // ── Path A: Find active madison_sms_draft card for this session ──────────
+    // Match by sessionId (new cards) OR activeDedupKey (older cards where sessionId was not populated)
+    const madisonDedupKey = `madison_sms_draft:${session.id}`;
     const [madisonCard] = await db
       .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, lastActivityAt: opsChatMessages.lastActivityAt })
       .from(opsChatMessages)
@@ -1524,7 +1526,10 @@ export async function runUnansweredAlarmCron(): Promise<void> {
         and(
           eq(opsChatMessages.quickAction as any, "madison_sms_draft"),
           eq(opsChatMessages.cardStatus, "active"),
-          eq(opsChatMessages.sessionId, session.id),
+          or(
+            eq(opsChatMessages.sessionId, session.id),
+            eq(opsChatMessages.activeDedupKey, madisonDedupKey),
+          ),
         )
       )
       .limit(1);
