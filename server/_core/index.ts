@@ -1267,6 +1267,7 @@ async function startServer() {
           cs.lastCustomerMessageTs AS lastCustomerMessageTs,
           ROUND((${nowMs} - cs.lastCustomerMessageTs) / 60000) AS minutesUnanswered,
           mdc.id AS madisonCardId,
+          mdc.sessionId AS madisonCardSessionId,
           JSON_EXTRACT(mdc.metadata, '$.unansweredSince') AS unansweredSince,
           JSON_EXTRACT(mdc.metadata, '$.unansweredMinutes') AS unansweredMinutes,
           CASE WHEN mdc.id IS NOT NULL THEN 'YES' ELSE 'NO' END AS hasMadisonCard,
