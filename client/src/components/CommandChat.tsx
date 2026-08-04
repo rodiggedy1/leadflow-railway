@@ -3928,6 +3928,81 @@ function MadisonJobStatusCard({ card, onDismiss }: { card: CmdJobStatusStreamCar
   );
 }
 
+// ── Unanswered Alarm Card ──────────────────────────────────────────────────────
+// Renders a single persistent alarm card for one unanswered session.
+// Created by the 5-min cron; auto-dismissed when an outbound reply is sent.
+// No manual dismiss in v1 — alarm stays until the session is actually answered.
+function UnansweredAlarmCard({ msg, onSelectSession }: {
+  msg: { id: number; body: string; metadata: string | null; lastActivityAt?: number | null };
+  onSelectSession?: (sessionId: number, customerName: string) => void;
+}) {
+  let meta: { sessionId?: number; leadName?: string | null; lastMessagePreview?: string | null; lastCustomerMessageTs?: number | null } = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+
+  const sessionId = typeof meta.sessionId === "number" ? meta.sessionId : null;
+  const leadName = meta.leadName || "Unknown";
+  const preview = meta.lastMessagePreview || "";
+  const ts = meta.lastCustomerMessageTs ?? 0;
+
+  const [ageMs, setAgeMs] = React.useState(() => ts > 0 ? Date.now() - ts : 0);
+  React.useEffect(() => {
+    if (!ts) return;
+    const id = setInterval(() => setAgeMs(Date.now() - ts), 30_000);
+    return () => clearInterval(id);
+  }, [ts]);
+
+  const fmtAge = (ms: number) => {
+    const m = Math.floor(ms / 60000);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60); const rm = m % 60;
+    return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+  };
+
+  const ageMin = Math.floor(ageMs / 60000);
+  const isOverdue = ageMin >= 60;
+  const borderColor = isOverdue ? "#ef4444" : "#f59e0b";
+  const badgeBg = isOverdue ? "#ef444422" : "#f59e0b22";
+  const badgeColor = isOverdue ? "#ef4444" : "#f59e0b";
+  const icon = isOverdue ? "🚨🚨" : "🚨";
+
+  const handleClick = () => {
+    if (sessionId && onSelectSession) onSelectSession(sessionId, leadName);
+  };
+
+  return (
+    <div
+      style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px", cursor: sessionId ? "pointer" : "default" }}
+      onClick={handleClick}
+    >
+      <div style={{ width: 40, height: 40, borderRadius: "50%", background: `linear-gradient(135deg, ${borderColor}, #7f1d1d)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+          <span style={{ font: "700 15px Inter,system-ui", color: "#1a1a2e" }}>Unanswered</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: badgeBg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>
+            {fmtAge(ageMs)} ago
+          </span>
+        </div>
+        <div style={{ font: "600 14px Inter,system-ui", color: "#374151", marginBottom: 3 }}>{leadName}</div>
+        {preview && (
+          <div style={{ fontSize: 13, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+            &ldquo;{preview}&rdquo;
+          </div>
+        )}
+        {sessionId && (
+          <button
+            onClick={e => { e.stopPropagation(); if (onSelectSession) onSelectSession(sessionId, leadName); }}
+            style={{ marginTop: 8, padding: "5px 14px", background: borderColor, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            Reply Now
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // unanswered_sms
 type CmdUnansweredSmsCard = { thresholdMinutes: number; rows: Array<{ sessionId: number; leadName: string | null; leadPhone: string; lastMessagePreview: string; waitMs: number }> };
 function MadisonUnansweredSmsCard({ card, onDismiss }: { card: CmdUnansweredSmsCard; onDismiss: () => void }) {
@@ -5903,6 +5978,23 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_call_result") { return <MadisonCallResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_email_result") { return <MadisonEmailResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_invoice_result") { return <MadisonInvoiceResultCard key={msg.id} msg={msg} />; }
+                // ── Unanswered Alarm card ─────────────────────────────────────────────
+                if (msg.quickAction === "unanswered_alarm") {
+                  return (
+                    <div
+                      key={`${msg.id}:${msg.lastActivityAt ?? 0}`}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "")}
+                    >
+                      <UnansweredAlarmCard
+                        msg={msg}
+                        onSelectSession={(sid, name) => {
+                          onSelectOpsSession?.(sid, name);
+                        }}
+                      />
+                    </div>
+                  );
+                }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
                   return (
