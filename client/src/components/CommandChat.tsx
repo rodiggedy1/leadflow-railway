@@ -9177,6 +9177,34 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     };
   }
 
+  const handleCallBack = (name: string, phone: string, msgId: number) => {
+    markCallCardActedMutation.mutate({ msgId, action: "call", actedBy: currentUser?.name ?? "Agent" });
+    const first = name.split(" ")[0];
+    const script = `Hi ${first}, this is Ava from Maids in Black. I'm following up on the call you just had with us.\n\nI wanted to make sure all your questions were answered and see if there's anything else we can help you with.\n\nWould you like to schedule a cleaning or get a quote?`;
+    setVoiceConfirmMsg(script);
+    setVoiceConfirmAction("call");
+    setVoiceConfirmScenario(`Follow up with ${name} who called in`);
+    setVoiceConfirm({ message: script, matches: [{ sessionId: 0, name, phone }], selected: { sessionId: 0, name, phone } });
+    setVoiceTone("friendly");
+    setVoiceCallStatus("idle");
+    setVoiceCallVapiId(null);
+    setVoiceCallSummary(null);
+    setVoiceCallTranscript(null);
+    setVoiceCallRecordingUrl(null);
+    setVoiceCardMinimized(false);
+  };
+  const handleTextBack = (name: string, phone: string, msgId: number) => {
+    markCallCardActedMutation.mutate({ msgId, action: "text", actedBy: currentUser?.name ?? "Agent" });
+    const first = name.split(" ")[0];
+    const draft = `Hi ${first}, this is the Maids in Black team! We saw you just called us. How can we help you today? Feel free to reply here and we'll get right back to you. 😊`;
+    setVoiceConfirmMsg(draft);
+    setVoiceConfirmAction("text");
+    setVoiceConfirmScenario(null);
+    setVoiceConfirm({ message: draft, matches: [{ sessionId: 0, name, phone }], selected: { sessionId: 0, name, phone } });
+    setVoiceTone("friendly");
+    setVoiceCardMinimized(false);
+  };
+
   return (
     <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden" style={{ ['--workspace-gutter' as string]: '16px' } as React.CSSProperties}>
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
@@ -10243,7 +10271,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <AICallPanel open={showCallPanel} onClose={() => setShowCallPanel(false)} />
           <PaymentLinkModal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} />
           {/* Madison Debrief modal */}
-          {showDebrief && <DebriefModal onClose={() => setShowDebrief(false)} onCallBack={onCallBack} onTextBack={onTextBack} />}
+          {showDebrief && <DebriefModal onClose={() => setShowDebrief(false)} onCallBack={handleCallBack} onTextBack={handleTextBack} />}
 
           {/* Mention History Drawer — slide-in from right */}
           {showMentionHistory && (
@@ -10466,45 +10494,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           mentionPhoneMap={mentionPhoneMapRef.current}
           openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
           onOpenConcierge={() => { /* concierge always open */ }}
-          onCallBack={(name, phone, msgId) => {
-            // Lock the card immediately so other agents see it's been acted on
-            markCallCardActedMutation.mutate({ msgId, action: "call", actedBy: currentUser?.name ?? "Agent" });
-            // Open AI concierge confirm panel with editable script — same flow as voice command
-            const first = name.split(" ")[0];
-            const script = `Hi ${first}, this is Ava from Maids in Black. I'm following up on the call you just had with us.\n\nI wanted to make sure all your questions were answered and see if there's anything else we can help you with.\n\nWould you like to schedule a cleaning or get a quote?`;
-            setVoiceConfirmMsg(script);
-            setVoiceConfirmAction("call");
-            setVoiceConfirmScenario(`Follow up with ${name} who called in`);
-            setVoiceConfirm({
-              message: script,
-              matches: [{ sessionId: 0, name, phone }],
-              selected: { sessionId: 0, name, phone },
-            });
-            setVoiceTone("friendly");
-            setVoiceCallStatus("idle");
-            setVoiceCallVapiId(null);
-            setVoiceCallSummary(null);
-            setVoiceCallTranscript(null);
-            setVoiceCallRecordingUrl(null);
-            setVoiceCardMinimized(false);
-          }}
-          onTextBack={(name, phone, msgId) => {
-            // Lock the card immediately so other agents see it's been acted on
-            markCallCardActedMutation.mutate({ msgId, action: "text", actedBy: currentUser?.name ?? "Agent" });
-            // Open AI concierge text confirm panel with editable draft — same flow as voice command
-            const first = name.split(" ")[0];
-            const draft = `Hi ${first}, this is the Maids in Black team! We saw you just called us. How can we help you today? Feel free to reply here and we'll get right back to you. 😊`;
-            setVoiceConfirmMsg(draft);
-            setVoiceConfirmAction("text");
-            setVoiceConfirmScenario(null);
-            setVoiceConfirm({
-              message: draft,
-              matches: [{ sessionId: 0, name, phone }],
-              selected: { sessionId: 0, name, phone },
-            });
-            setVoiceTone("friendly");
-            setVoiceCardMinimized(false);
-          }}
+          onCallBack={handleCallBack}
+          onTextBack={handleTextBack}
           onSelectOpsSession={(sid, name) => {
             const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
             setActiveOpsSession({ sessionId: sid, customerName: name, initials });
