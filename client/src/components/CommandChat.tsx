@@ -1586,7 +1586,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
                               return (
                                 <div key={i} style={{ marginBottom: 8, display: "flex", flexDirection: "column" as const, alignItems: isCustomer ? "flex-start" : "flex-end" }}>
                                   <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3 }}>{isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}</div>
-                                  <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222" }}>{m.content}</div>
+                                  <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222", wordBreak: "break-word", overflowWrap: "break-word" }}>{m.content}</div>
                                 </div>
                               );
                             })
@@ -1810,7 +1810,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
                               <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3, paddingLeft: isCustomer ? 2 : 0, paddingRight: isCustomer ? 0 : 2 }}>
                                 {isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}
                               </div>
-                              <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222" }}>
+                              <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222", wordBreak: "break-word", overflowWrap: "break-word" }}>
                                 {m.content}
                               </div>
                             </div>
@@ -3932,72 +3932,183 @@ function MadisonJobStatusCard({ card, onDismiss }: { card: CmdJobStatusStreamCar
 // Renders a single persistent alarm card for one unanswered session.
 // Created by the 5-min cron; auto-dismissed when an outbound reply is sent.
 // No manual dismiss in v1 — alarm stays until the session is actually answered.
-function UnansweredAlarmCard({ msg, onSelectSession }: {
+// Small helper: renders full conversation thread for a session (used by UnansweredAlarmCard)
+function ConversationThread({ sessionId }: { sessionId: number | null }) {
+  const { data, isLoading } = trpc.leads.getCsConversation.useQuery(
+    { sessionId: sessionId! },
+    { enabled: !!sessionId }
+  );
+  if (!sessionId) return null;
+  if (isLoading) return <div style={{ padding: "8px 0", fontSize: 12, color: "#9ca3af" }}>Loading…</div>;
+  let messages: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+  try { messages = JSON.parse(data?.messageHistory ?? "[]"); } catch { /* ignore */ }
+  if (messages.length === 0) return null;
+  return (
+    <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, paddingBottom: 4 }}>
+      {messages.map((m, idx) => {
+        const isAgent = m.role === "assistant";
+        return (
+          <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: isAgent ? "flex-end" : "flex-start" }}>
+            {m.senderName && (
+              <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2, paddingLeft: isAgent ? 0 : 4, paddingRight: isAgent ? 4 : 0 }}>
+                {m.senderName}
+              </div>
+            )}
+            <div style={{
+              maxWidth: "85%",
+              background: isAgent ? "#ede9fe" : "#f3f4f6",
+              color: "#1a1a2e",
+              borderRadius: isAgent ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+              padding: "7px 11px",
+              fontSize: 13,
+              lineHeight: 1.45,
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
+            }}>
+              {m.content}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   msg: { id: number; body: string; metadata: string | null; lastActivityAt?: number | null };
+  callerName: string;
   onSelectSession?: (sessionId: number, customerName: string) => void;
 }) {
   let meta: { sessionId?: number; leadName?: string | null; lastMessagePreview?: string | null; lastCustomerMessageTs?: number | null } = {};
   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-
   const sessionId = typeof meta.sessionId === "number" ? meta.sessionId : null;
   const leadName = meta.leadName || "Unknown";
+  // leadPhone not needed - send uses sessionId directly
   const preview = meta.lastMessagePreview || "";
   const ts = meta.lastCustomerMessageTs ?? 0;
-
+  const utils = trpc.useUtils();
   const [ageMs, setAgeMs] = React.useState(() => ts > 0 ? Date.now() - ts : 0);
+  const [replyText, setReplyText] = React.useState("");
+  const [isSending, setIsSending] = React.useState(false);
+  const [justActed, setJustActed] = React.useState<"sent" | "no_reply" | null>(null);
   React.useEffect(() => {
     if (!ts) return;
     const id = setInterval(() => setAgeMs(Date.now() - ts), 30_000);
     return () => clearInterval(id);
   }, [ts]);
-
   const fmtAge = (ms: number) => {
     const m = Math.floor(ms / 60000);
     if (m < 60) return `${m}m`;
     const h = Math.floor(m / 60); const rm = m % 60;
     return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
   };
-
   const ageMin = Math.floor(ageMs / 60000);
   const isOverdue = ageMin >= 60;
-  const borderColor = isOverdue ? "#ef4444" : "#f59e0b";
-  const badgeBg = isOverdue ? "#ef444422" : "#f59e0b22";
-  const badgeColor = isOverdue ? "#ef4444" : "#f59e0b";
-  const icon = isOverdue ? "🚨🚨" : "🚨";
-
-  const handleClick = () => {
-    if (sessionId && onSelectSession) onSelectSession(sessionId, leadName);
+  const alarmColor = isOverdue ? "#ef4444" : "#f59e0b";
+  const alarmBg = isOverdue ? "#fef2f2" : "#fffbeb";
+  const alarmBorder = isOverdue ? "#fecaca" : "#fde68a";
+  const sendSmsMutation = trpc.leads.sendMessage.useMutation();
+  const dismissAlarmMutation = trpc.opsChat.dismissAlarmCard.useMutation({
+    onSuccess: () => { utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); },
+  });
+  const handleSend = async () => {
+    if (!replyText.trim() || !sessionId || isSending) return;
+    setIsSending(true);
+    setSendError(null);
+    try {
+      await sendSmsMutation.mutateAsync({ sessionId, message: replyText.trim(), fromNumberId: "PN0wVLcpCq" });
+      // Only dismiss after successful send
+      await dismissAlarmMutation.mutateAsync({ msgId: msg.id, handledReason: "replied" });
+      setJustActed("sent");
+      setReplyText("");
+    } catch (err: any) {
+      setSendError(err?.message ?? "Failed to send. Try again.");
+    } finally {
+      setIsSending(false);
+    }
   };
-
-  return (
-    <div
-      style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px", cursor: sessionId ? "pointer" : "default" }}
-      onClick={handleClick}
-    >
-      <div style={{ width: 40, height: 40, borderRadius: "50%", background: `linear-gradient(135deg, ${borderColor}, #7f1d1d)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 }}>
-        {icon}
+  const handleNoReply = async () => {
+    if (isSending) return;
+    setIsSending(true);
+    try {
+      await dismissAlarmMutation.mutateAsync({ msgId: msg.id, handledReason: "no_reply_needed" });
+      setJustActed("no_reply");
+    } catch (err: any) {
+      console.error("[UnansweredAlarm] no-reply dismiss failed:", err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+  if (justActed) {
+    return (
+      <div style={{ padding: "4px 16px" }}>
+        <div style={{ background: justActed === "sent" ? "#f0fdf4" : "#fafafa", border: `1px solid ${justActed === "sent" ? "#bbf7d0" : "#e5e7eb"}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>{justActed === "sent" ? "✅" : "✓"}</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: justActed === "sent" ? "#15803d" : "#6b7280" }}>
+              {justActed === "sent" ? "Sent" : "Marked — no reply needed"}
+            </div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>Alarm cleared</div>
+          </div>
+        </div>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-          <span style={{ font: "700 15px Inter,system-ui", color: "#1a1a2e" }}>Unanswered</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: badgeBg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>
-            {fmtAge(ageMs)} ago
+    );
+  }
+  return (
+    <div style={{ padding: "4px 16px" }}>
+      <div style={{ background: "#fff", border: `1px solid ${alarmBorder}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(30,30,60,0.07)" }}>
+        {/* Alarm banner */}
+        <div style={{ background: alarmBg, borderBottom: `1px solid ${alarmBorder}`, padding: "7px 14px", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 13 }}>{isOverdue ? "🚨🚨" : "🚨"}</span>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" as const, color: alarmColor }}>
+            UNANSWERED · {fmtAge(ageMs)}
           </span>
         </div>
-        <div style={{ font: "600 14px Inter,system-ui", color: "#374151", marginBottom: 3 }}>{leadName}</div>
-        {preview && (
-          <div style={{ fontSize: 13, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-            &ldquo;{preview}&rdquo;
-          </div>
-        )}
-        {sessionId && (
-          <button
-            onClick={e => { e.stopPropagation(); if (onSelectSession) onSelectSession(sessionId, leadName); }}
-            style={{ marginTop: 8, padding: "5px 14px", background: borderColor, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+        {/* Card body */}
+        <div style={{ padding: "12px 14px" }}>
+          <div
+            style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e", marginBottom: 6, cursor: sessionId ? "pointer" : "default", display: "inline-block" }}
+            onClick={() => { if (sessionId && onSelectSession) onSelectSession(sessionId, leadName); }}
           >
-            Reply Now
-          </button>
-        )}
+            {leadName}
+          </div>
+          {preview && (
+            <div style={{ fontSize: 13, color: "#374151", marginBottom: 12, lineHeight: 1.5 }}>
+              <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", display: "block", marginBottom: 2 }}>Latest message</span>
+              &ldquo;{preview}&rdquo;
+            </div>
+          )}
+          {sessionId && (
+            <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+              <textarea
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                placeholder="Type a reply…"
+                rows={2}
+                style={{ width: "100%", resize: "none" as const, border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 10px", fontSize: 13, fontFamily: "Inter, system-ui, sans-serif", outline: "none", boxSizing: "border-box" as const, color: "#1a1a2e", background: "#fafafa" }}
+                onClick={e => e.stopPropagation()}
+              />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button
+                  onClick={e => { e.stopPropagation(); handleNoReply(); }}
+                  disabled={isSending}
+                  style={{ padding: "7px 14px", borderRadius: 9, fontWeight: 600, fontSize: 12, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1 }}
+                >
+                  ✓ No reply needed
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleSend(); }}
+                  disabled={isSending || !replyText.trim()}
+                  style={{ padding: "7px 16px", borderRadius: 9, fontWeight: 700, fontSize: 12, border: "none", background: "linear-gradient(135deg, #5d49f3, #7d66ff)", color: "#fff", cursor: (isSending || !replyText.trim()) ? "not-allowed" : "pointer", opacity: (isSending || !replyText.trim()) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 5 }}
+                >
+                  {isSending ? <Loader2 style={{ width: 12, height: 12 }} className="animate-spin" /> : null}
+                  Send
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

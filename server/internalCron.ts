@@ -1473,6 +1473,7 @@ export async function runUnansweredAlarmCron(): Promise<void> {
 
   const unansweredSessionIds = new Set(unanswered.map(s => s.id));
 
+  const dismissedAlarmIds = new Set<number>();
   for (const alarm of activeAlarms) {
     let meta: { sessionId?: number; thresholdIndex?: number } = {};
     try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
@@ -1486,6 +1487,7 @@ export async function runUnansweredAlarmCron(): Promise<void> {
           activeDedupKey: null,
         })
         .where(eq(opsChatMessages.id, alarm.id));
+      dismissedAlarmIds.add(alarm.id);
     }
   }
 
@@ -1494,6 +1496,7 @@ export async function runUnansweredAlarmCron(): Promise<void> {
   // so that a new inbound message from the same customer creates a fresh alarm card.
   const existingBySession = new Map<string, { id: number; thresholdIndex: number; lastActivityAt: number | null }>();
   for (const alarm of activeAlarms) {
+    if (dismissedAlarmIds.has(alarm.id)) continue; // skip already-dismissed cards
     let meta: { sessionId?: number; lastCustomerMessageTs?: number | null; thresholdIndex?: number } = {};
     try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
     if (meta.sessionId) {

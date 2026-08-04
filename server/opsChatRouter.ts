@@ -5743,10 +5743,10 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
   dismissAlarmCard: opsChatProcedure
     .input(z.object({
       msgId: z.number().int().positive(),
-      handledBy: z.string(),
       handledReason: z.enum(["replied", "no_reply_needed"]),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const handledBy = ctx.opsCaller.name;
       const db = await getDb();
       if (!db) return { ok: false, reason: "no_db" };
       const rows = await db
@@ -5759,7 +5759,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       try { meta = JSON.parse(rows[0].metadata ?? "{}"); } catch { /* ignore */ }
       const updatedMeta = JSON.stringify({
         ...meta,
-        handledBy: input.handledBy,
+        handledBy: handledBy,
         handledAt: new Date().toISOString(),
         handledReason: input.handledReason,
       });
