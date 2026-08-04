@@ -1717,6 +1717,12 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
               <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
                 <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
                 <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
+                {meta.leadCategory === "lead" && (
+                  <span style={{ font: "700 10px Inter,system-ui", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>🔥 Lead</span>
+                )}
+                {meta.leadCategory === "unclear" && (
+                  <span style={{ font: "700 10px Inter,system-ui", color: "#6b7280", background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>? Unclear</span>
+                )}
                 <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
               </div>
               {/* Copy — human summary */}

@@ -243,6 +243,16 @@ export async function triggerMadisonSmsDraft(params: {
       })
       .where(eq(madisonSmsDrafts.id, draftId));
 
+    // ── Step 7.5: Classify lead category ────────────────────────────────────────
+    const leadCategory = await classifyLeadCategory({
+      sessionId,
+      context,
+      intent,
+      intentSummary: draftResponse.intentSummary,
+      conversationMessages,
+      db,
+    });
+
     // ── Step 8: Post Draft Card to Command Chat ───────────────────────────────
     await postDraftCardToCommandChat({
       draftId,
@@ -253,6 +263,7 @@ export async function triggerMadisonSmsDraft(params: {
       inboundText,
       draft: draftResponse.draft,
       observations: draftResponse.observations,
+      leadCategory,
       db,
     });
 
@@ -818,7 +829,122 @@ function computeQualityScore(params: {
   };
 }
 
-// ─── Step 7: Post Draft Card to Command Chat ──────────────────────────────────
+// ─── Step 7.5: Classify Lead Category ───────────────────────────────────────
+
+type LeadCategory = "lead" | "regular" | "unclear";
+
+/**
+ * Classifies whether this conversation is about a new sales opportunity (lead)
+ * or an operational/service interaction with an existing customer (regular).
+ *
+ * Rules: deterministic overrides first, AI fallback only for ambiguous cases.
+ * Never fires on leadSource alone. Never fires on bookedCount alone.
+ */
+async function classifyLeadCategory(params: {
+  sessionId: number;
+  context: ResolvedContext;
+  intent: string | null;
+  intentSummary: string;
+  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+}): Promise<LeadCategory> {
+  const { sessionId, context, intent, intentSummary, conversationMessages, db } = params;
+
+  try {
+    // ── Deterministic rule 1: cleaner/team member → always regular ────────────
+    if (context.isCleaner) return "regular";
+
+    // ── Deterministic rule 2: has a job today → operational → regular ─────────
+    if (context.cleanerJobId) return "regular";
+
+    // ── Deterministic rule 3: operational intents → regular ───────────────────
+    if (intent === "get_eta" || intent === "card_status") return "regular";
+
+    // ── Deterministic rule 4: fetch session to check stage/csQueue ────────────
+    const [session] = await db
+      .select({
+        stage: conversationSessions.stage,
+        csQueue: conversationSessions.csQueue,
+      })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.id, sessionId))
+      .limit(1);
+
+    if (!session) return "unclear";
+
+    // Post-booking operational stages → regular
+    const operationalStages = new Set([
+      "BOOKED",
+      "SCHEDULE_CONFIRM_SENT",
+      "SCHEDULE_CONFIRM_DONE",
+      "QUALITY_RATING_REQUESTED",
+      "QUALITY_RATING_DONE",
+      "REVIEW_REQUESTED",
+      "REVIEW_DONE",
+      "REVIEW_REBOOKING_REQUESTED",
+      "REVIEW_REBOOKING_DONE",
+    ]);
+    if (operationalStages.has(session.stage)) return "regular";
+
+    // Cleaner-side CS queue → regular
+    if (session.csQueue === "Teams") return "regular";
+
+    // ── AI fallback: is this conversation about purchasing/booking? ────────────
+    const lastMessages = conversationMessages.slice(-6);
+    const historyText = lastMessages
+      .map(m => `${m.role === "user" ? "Customer" : "Agent"}: ${m.content}`)
+      .join("\n");
+
+    const prompt = [
+      `Intent summary: ${intentSummary}`,
+      historyText ? `\nRecent conversation:\n${historyText}` : "",
+    ].join("").trim();
+
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You classify customer SMS conversations for a cleaning service.
+
+Answer ONLY: is this conversation currently about potentially purchasing or booking a cleaning service?
+- "lead" = the customer is asking about pricing, availability, booking a new cleaning, or trying to schedule a service they haven't booked yet
+- "regular" = the customer is an existing customer in an active service relationship (asking about their upcoming clean, giving notes, thanking, complaining about a recent clean, etc.)
+- "unclear" = not enough evidence to decide
+
+Return JSON only. No prose.`,
+        },
+        { role: "user", content: prompt },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "lead_category",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              category: { type: "string", enum: ["lead", "regular", "unclear"] },
+            },
+            required: ["category"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+
+    const content = response?.choices?.[0]?.message?.content;
+    if (!content) return "unclear";
+    const parsed = typeof content === "string" ? JSON.parse(content) : content;
+    const cat = parsed?.category;
+    if (cat === "lead" || cat === "regular" || cat === "unclear") return cat;
+    return "unclear";
+  } catch (err) {
+    console.warn("[MadisonSMS] classifyLeadCategory failed:", err);
+    return "unclear";
+  }
+}
+
+// ─── Step 8: Post Draft Card to Command Chat ──────────────────────────────────
 
 async function postDraftCardToCommandChat(params: {
   draftId: number;
@@ -829,9 +955,10 @@ async function postDraftCardToCommandChat(params: {
   inboundText: string;
   draft: string;
   observations: string[];
+  leadCategory: LeadCategory;
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
 }): Promise<void> {
-  const { draftId, sessionId, fromPhone, senderName, isCleaner, inboundText, draft, observations, db } = params;
+  const { draftId, sessionId, fromPhone, senderName, isCleaner, inboundText, draft, observations, leadCategory, db } = params;
 
   const displayName = senderName ?? fromPhone;
   const senderLabel = isCleaner ? "🧹 Cleaner" : "👤 Customer";
@@ -852,7 +979,17 @@ async function postDraftCardToCommandChat(params: {
   // no customer-controlled string is ever concatenated into SQL text.
   const eventTs = Date.now();
   const dedupKey = `madison_sms_draft:${sessionId}`;
-  const metadataJson = JSON.stringify({ draftId, quickActionVersion: 1, sessionId });
+  // Preserve any existing metadata keys; add leadCategory without rebuilding from scratch
+  let existingMeta: Record<string, unknown> = {};
+  try {
+    const [existing] = await db
+      .select({ metadata: opsChatMessages.metadata })
+      .from(opsChatMessages)
+      .where(eq(opsChatMessages.activeDedupKey, dedupKey))
+      .limit(1);
+    if (existing?.metadata) existingMeta = JSON.parse(existing.metadata as string);
+  } catch { /* no existing card — start fresh */ }
+  const metadataJson = JSON.stringify({ ...existingMeta, draftId, quickActionVersion: 1, sessionId, leadCategory });
   await db
     .insert(opsChatMessages)
     .values({
