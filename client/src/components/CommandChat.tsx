@@ -6277,10 +6277,18 @@ export function MadisonCallSummaryCard({
   const callerPhone = meta.callerPhone ?? null;
   const durationDisplay = meta.durationDisplay ?? "";
   const outcome = meta.outcome ?? "";
+
+  // DB lookup for caller name when Vapi didn't collect one (hang-ups, short calls)
+  const { data: clientProfile } = trpc.leads.getClientProfile.useQuery(
+    { phone: callerPhone! },
+    { enabled: !!callerPhone && !callerName, staleTime: 60_000, refetchOnWindowFocus: false }
+  );
+  const resolvedName = callerName ?? clientProfile?.name ?? null;
+
   // Notify parent when this card is clicked so Operations panel can show missions for this session
   const handleCardClick = () => {
     if (meta.sessionId && onSelectSession) {
-      onSelectSession(meta.sessionId as number, callerName ?? callerPhone ?? "Unknown");
+      onSelectSession(meta.sessionId as number, resolvedName ?? callerPhone ?? "Unknown");
     }
   };
   const actedBy = meta.actedBy ?? null;
@@ -6299,8 +6307,9 @@ export function MadisonCallSummaryCard({
     return { label: "Call complete", bg: "#f0fdf4", color: "#166534" };
   })();
 
-  const displayName = callerName ?? callerPhone ?? "Unknown caller";
-  const callLabel = callerName ? callerName.split(" ")[0] : "Customer";
+  // Always show name (resolved or phone fallback) + always show phone alongside
+  const displayName = resolvedName ?? callerPhone ?? "Unknown caller";
+  const callLabel = resolvedName ? resolvedName.split(" ")[0] : "Customer";
 
   // ── Confirmation flash before card disappears ──
   if (justActed) {
