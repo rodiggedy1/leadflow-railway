@@ -9,7 +9,7 @@
  * Composer has full parity with the job-thread composer:
  *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
-import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo, createPortal } from "react";
 import { ConversationViewport, type ConversationMessage as CVMessage } from "@/components/ConversationViewport";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
@@ -10758,7 +10758,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
             </div>
           )}
-          {voiceConfirm && !voiceCardMinimized && (
+          {voiceConfirm && !voiceCardMinimized && createPortal(
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setVoiceCardMinimized(true)}>
             <div className="mb-2 mx-auto w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[400px] max-h-[80vh] flex flex-col overflow-y-auto" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}} onClick={e => e.stopPropagation()}>
               {/* Header — contact identity */}
@@ -11176,7 +11176,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             </div>
             </div>
-          )}
+          , document.body)}
 
           {/* ── @madison inline name picker — shown while typing before submit ── */}
           {!madisonChatLoading && !madisonDisambigCard && madisonInlineQuery && madisonInlineMatches.length > 0 && (
