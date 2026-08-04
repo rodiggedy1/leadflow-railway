@@ -1490,13 +1490,15 @@ export async function runUnansweredAlarmCron(): Promise<void> {
   }
 
   // ── Step 3: Upsert alarm cards for unanswered sessions ─────────────────────
-  // Build a map of existing active alarm cards by sessionId for threshold tracking
-  const existingBySession = new Map<number, { id: number; thresholdIndex: number; lastActivityAt: number | null }>();
+  // Build a map of existing active alarm cards keyed by "sessionId:lastCustomerMessageTs"
+  // so that a new inbound message from the same customer creates a fresh alarm card.
+  const existingBySession = new Map<string, { id: number; thresholdIndex: number; lastActivityAt: number | null }>();
   for (const alarm of activeAlarms) {
-    let meta: { sessionId?: number; thresholdIndex?: number } = {};
+    let meta: { sessionId?: number; lastCustomerMessageTs?: number | null; thresholdIndex?: number } = {};
     try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
     if (meta.sessionId) {
-      existingBySession.set(meta.sessionId, {
+      const key = `${meta.sessionId}:${meta.lastCustomerMessageTs ?? 0}`;
+      existingBySession.set(key, {
         id: alarm.id,
         thresholdIndex: meta.thresholdIndex ?? 0,
         lastActivityAt: alarm.lastActivityAt ?? null,
@@ -1513,12 +1515,16 @@ export async function runUnansweredAlarmCron(): Promise<void> {
     const thresholdIdx = alarmThresholdIndex(ageMs);
     if (thresholdIdx < 0) continue; // shouldn't happen but guard
 
-    const dedupKey = `unanswered_alarm:${session.id}`;
+    // Dedup key includes lastCustomerMessageTs so each new inbound message
+    // from the same customer creates a genuinely new alarm card.
+    const dedupKey = `unanswered_alarm:${session.id}:${session.lastCustomerMessageTs ?? 0}`;
     const body = alarmBody(session.leadName ?? null, session.lastMessageText ?? null, ageMs);
-    const existing = existingBySession.get(session.id);
+    const existingKey = `${session.id}:${session.lastCustomerMessageTs ?? 0}`;
+    const existing = existingBySession.get(existingKey);
     const metadataJson = JSON.stringify({
       sessionId: session.id,
       leadName: session.leadName ?? null,
+      leadPhone: session.leadPhone ?? null,
       lastMessagePreview: (session.lastMessageText ?? "").slice(0, 120),
       lastCustomerMessageTs: session.lastCustomerMessageTs,
       thresholdIndex: thresholdIdx,

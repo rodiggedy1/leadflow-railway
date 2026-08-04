@@ -5735,6 +5735,45 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+   * Dismiss an unanswered_alarm card immediately after the agent acts on it
+   * (either sends a reply or marks "no reply needed").
+   * Writes audit fields into the card metadata before dismissing so the
+   * action is traceable without a separate table.
+   */
+  dismissAlarmCard: opsChatProcedure
+    .input(z.object({
+      msgId: z.number().int().positive(),
+      handledBy: z.string(),
+      handledReason: z.enum(["replied", "no_reply_needed"]),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false, reason: "no_db" };
+      const rows = await db
+        .select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.msgId))
+        .limit(1);
+      if (!rows.length) return { ok: false, reason: "not_found" };
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(rows[0].metadata ?? "{}"); } catch { /* ignore */ }
+      const updatedMeta = JSON.stringify({
+        ...meta,
+        handledBy: input.handledBy,
+        handledAt: new Date().toISOString(),
+        handledReason: input.handledReason,
+      });
+      await db
+        .update(opsChatMessages)
+        .set({ cardStatus: "dismissed", activeDedupKey: null, metadata: updatedMeta })
+        .where(and(
+          eq(opsChatMessages.id, input.msgId),
+          eq(opsChatMessages.cardStatus, "active"),
+        ));
+      broadcastOpsUpdate("alarm_card_dismissed", { msgId: input.msgId });
+      return { ok: true };
+    }),
+  /**
    * Mark a madison_call_summary card as acted on (called or texted).
    * Stores actedBy, actedAction, actedAt in the message metadata so all
    * connected clients see the locked state and don't double-act.

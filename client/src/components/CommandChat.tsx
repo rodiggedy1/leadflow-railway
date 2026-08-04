@@ -5988,6 +5988,7 @@ const MessageList = memo(function MessageList({
                     >
                       <UnansweredAlarmCard
                         msg={msg}
+                        callerName={callerName}
                         onSelectSession={(sid, name) => {
                           onSelectOpsSession?.(sid, name);
                         }}
