@@ -9,7 +9,7 @@
  * Composer has full parity with the job-thread composer:
  *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
-import React, { useState, useRef, useEffect, useCallback, useMemo, memo, createPortal } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { ConversationViewport, type ConversationMessage as CVMessage } from "@/components/ConversationViewport";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
@@ -9650,7 +9650,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
         {/* White card wrapper with grey showing on sides */}
-        <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0" style={{overflow: 'clip'}}>
         {/* Header */}
         <div className="px-4 pt-2 pb-2 border-b border-slate-200 bg-white shrink-0">
           {/* Compact single-row header */}
@@ -10760,7 +10760,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
             </div>
           )}
-          {voiceConfirm && !voiceCardMinimized && createPortal(
+          {voiceConfirm && !voiceCardMinimized && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setVoiceCardMinimized(true)}>
             <div className="mb-2 mx-auto w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[400px] max-h-[80vh] flex flex-col overflow-y-auto" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}} onClick={e => e.stopPropagation()}>
               {/* Header — contact identity */}
@@ -11186,7 +11186,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             </div>
             </div>
-          , document.body)}
+          )}
 
           {/* ── @madison inline name picker — shown while typing before submit ── */}
           {!madisonChatLoading && !madisonDisambigCard && madisonInlineQuery && madisonInlineMatches.length > 0 && (
