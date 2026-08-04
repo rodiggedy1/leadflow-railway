@@ -95,8 +95,10 @@ export async function triggerMadisonSmsDraft(params: {
   senderName?: string;
   isCleaner: boolean;
   inboundText: string;
+  /** Minutes the customer has been waiting unanswered — set by the unanswered alarm cron */
+  unansweredMinutes?: number;
 }): Promise<void> {
-  const { inboundOpenPhoneId, sessionId, fromPhone, senderName, isCleaner, inboundText } = params;
+  const { inboundOpenPhoneId, sessionId, fromPhone, senderName, isCleaner, inboundText, unansweredMinutes } = params;
 
   // Skip empty messages
   if (!inboundText?.trim()) return;
@@ -264,6 +266,7 @@ export async function triggerMadisonSmsDraft(params: {
       draft: draftResponse.draft,
       observations: draftResponse.observations,
       leadCategory,
+      unansweredMinutes,
       db,
     });
 
@@ -956,9 +959,11 @@ async function postDraftCardToCommandChat(params: {
   draft: string;
   observations: string[];
   leadCategory: LeadCategory;
+  /** Minutes the customer has been waiting unanswered — shown as red banner in the card */
+  unansweredMinutes?: number;
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
 }): Promise<void> {
-  const { draftId, sessionId, fromPhone, senderName, isCleaner, inboundText, draft, observations, leadCategory, db } = params;
+  const { draftId, sessionId, fromPhone, senderName, isCleaner, inboundText, draft, observations, leadCategory, unansweredMinutes, db } = params;
 
   const displayName = senderName ?? fromPhone;
   const senderLabel = isCleaner ? "🧹 Cleaner" : "👤 Customer";
@@ -989,7 +994,7 @@ async function postDraftCardToCommandChat(params: {
       .limit(1);
     if (existing?.metadata) existingMeta = JSON.parse(existing.metadata as string);
   } catch { /* no existing card — start fresh */ }
-  const metadataJson = JSON.stringify({ ...existingMeta, draftId, quickActionVersion: 1, sessionId, leadCategory });
+  const metadataJson = JSON.stringify({ ...existingMeta, draftId, quickActionVersion: 1, sessionId, leadCategory, ...(unansweredMinutes !== undefined ? { unansweredMinutes } : {}) });
   await db
     .insert(opsChatMessages)
     .values({

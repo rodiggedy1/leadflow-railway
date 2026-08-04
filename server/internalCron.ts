@@ -42,6 +42,7 @@ import {
   recoverMissingEtaRecordings,
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
+import { triggerMadisonSmsDraft } from "./madisonSmsAgent";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { cleanerJobs } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation, purgeEscalationNudges } from "./unclaimedLeadEscalation";
@@ -1395,40 +1396,21 @@ async function runGmailHealthCheck(): Promise<void> {
  * No AI. No schema migration. No manual dismiss in v1.
  */
 
-const ALARM_THRESHOLDS_MS = [
+// ─── Unanswered Alarm Cron ───────────────────────────────────────────────────
+// Thresholds for escalation (resurface card at top of feed)
+const UNANSWERED_THRESHOLDS_MS = [
   30 * 60 * 1000,   // 30 min  — first alarm
   45 * 60 * 1000,   // 45 min  — escalation 1
   60 * 60 * 1000,   // 60 min  — escalation 2
   90 * 60 * 1000,   // 90 min  — escalation 3
 ];
-
-function alarmThresholdIndex(ageMs: number): number {
+function unansweredThresholdIndex(ageMs: number): number {
   let idx = -1;
-  for (let i = 0; i < ALARM_THRESHOLDS_MS.length; i++) {
-    if (ageMs >= ALARM_THRESHOLDS_MS[i]) idx = i;
+  for (let i = 0; i < UNANSWERED_THRESHOLDS_MS.length; i++) {
+    if (ageMs >= UNANSWERED_THRESHOLDS_MS[i]) idx = i;
   }
   return idx;
 }
-
-function alarmBody(leadName: string | null, preview: string | null, ageMs: number): string {
-  const m = Math.floor(ageMs / 60000);
-  let label: string;
-  if (m >= 90) {
-    const h = Math.floor(m / 60);
-    const rm = m % 60;
-    label = `🚨🚨 OVERDUE — ${h}h${rm > 0 ? ` ${rm}m` : ""}`;
-  } else if (m >= 60) {
-    label = `🔴 UNANSWERED — ${m} MIN`;
-  } else if (m >= 45) {
-    label = `🔴 UNANSWERED — ${m} MIN`;
-  } else {
-    label = `🚨 UNANSWERED — ${m} MIN`;
-  }
-  const name = leadName || "Unknown";
-  const msg = preview ? `"${preview.slice(0, 100)}"` : "(no preview)";
-  return `${label}\n${name}\n${msg}`;
-}
-
 export async function runUnansweredAlarmCron(): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -1442,6 +1424,7 @@ export async function runUnansweredAlarmCron(): Promise<void> {
       id: conversationSessions.id,
       leadName: conversationSessions.leadName,
       leadPhone: conversationSessions.leadPhone,
+      leadSource: conversationSessions.leadSource,
       lastCustomerMessageTs: conversationSessions.lastCustomerMessageTs,
       lastMessageText: conversationSessions.lastMessageText,
     })
@@ -1455,14 +1438,12 @@ export async function runUnansweredAlarmCron(): Promise<void> {
       )
     );
 
-  // ── Step 2: Auto-resolve alarms for sessions that are now answered ──────────
-  // Fetch all active unanswered_alarm cards
-  const activeAlarms = await db
-    .select({
-      id: opsChatMessages.id,
-      metadata: opsChatMessages.metadata,
-      lastActivityAt: opsChatMessages.lastActivityAt,
-    })
+  // ── Step 2: Dismiss old unanswered_alarm cards (legacy cleanup) ─────────────
+  // These are the old separate alarm card type — dismiss them all since we now
+  // embed the alarm in the madison_sms_draft card.
+  const unansweredSessionIds = new Set(unanswered.map(s => s.id));
+  const legacyAlarms = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
     .from(opsChatMessages)
     .where(
       and(
@@ -1470,119 +1451,97 @@ export async function runUnansweredAlarmCron(): Promise<void> {
         eq(opsChatMessages.cardStatus, "active"),
       )
     );
-
-  const unansweredSessionIds = new Set(unanswered.map(s => s.id));
-
-  for (const alarm of activeAlarms) {
-    let meta: { sessionId?: number; thresholdIndex?: number } = {};
-    try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
-    const sid = meta.sessionId;
-    if (!sid || !unansweredSessionIds.has(sid)) {
-      // Session is now answered or resolved — dismiss the alarm
-      await db
-        .update(opsChatMessages)
-        .set({
-          cardStatus: "dismissed",
-          activeDedupKey: null,
-        })
-        .where(eq(opsChatMessages.id, alarm.id));
-    }
+  for (const alarm of legacyAlarms) {
+    await db
+      .update(opsChatMessages)
+      .set({ cardStatus: "dismissed", activeDedupKey: null })
+      .where(eq(opsChatMessages.id, alarm.id));
   }
 
-  // ── Step 3: Upsert alarm cards for unanswered sessions ─────────────────────
-  // Build a map of existing active alarm cards by sessionId for threshold tracking
-  const existingBySession = new Map<number, { id: number; thresholdIndex: number; lastActivityAt: number | null }>();
-  for (const alarm of activeAlarms) {
-    let meta: { sessionId?: number; thresholdIndex?: number } = {};
-    try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
-    if (meta.sessionId) {
-      existingBySession.set(meta.sessionId, {
-        id: alarm.id,
-        thresholdIndex: meta.thresholdIndex ?? 0,
-        lastActivityAt: alarm.lastActivityAt ?? null,
-      });
-    }
-  }
-
-  let created = 0;
-  let escalated = 0;
+  // ── Step 3: For each unanswered session, check for existing draft card ──────
+  let triggered = 0;
   let updated = 0;
+  let escalated = 0;
 
   for (const session of unanswered) {
     const ageMs = now - (session.lastCustomerMessageTs ?? 0);
-    const thresholdIdx = alarmThresholdIndex(ageMs);
-    if (thresholdIdx < 0) continue; // shouldn't happen but guard
+    const thresholdIdx = unansweredThresholdIndex(ageMs);
+    if (thresholdIdx < 0) continue;
+    const unansweredMinutes = Math.floor(ageMs / 60000);
+    const draftDedupKey = `madison_sms_draft:${session.id}`;
 
-    const dedupKey = `unanswered_alarm:${session.id}`;
-    const body = alarmBody(session.leadName ?? null, session.lastMessageText ?? null, ageMs);
-    const existing = existingBySession.get(session.id);
-    const metadataJson = JSON.stringify({
-      sessionId: session.id,
-      leadName: session.leadName ?? null,
-      lastMessagePreview: (session.lastMessageText ?? "").slice(0, 120),
-      lastCustomerMessageTs: session.lastCustomerMessageTs,
-      thresholdIndex: thresholdIdx,
-    });
+    // Check for existing active madison_sms_draft card for this session
+    const [existingDraft] = await db
+      .select({
+        id: opsChatMessages.id,
+        metadata: opsChatMessages.metadata,
+        lastActivityAt: opsChatMessages.lastActivityAt,
+      })
+      .from(opsChatMessages)
+      .where(
+        and(
+          eq(opsChatMessages.activeDedupKey, draftDedupKey),
+          eq(opsChatMessages.cardStatus, "active"),
+        )
+      )
+      .limit(1);
 
-    if (!existing) {
-      // First alarm — insert with current timestamp as lastActivityAt
-      await db
-        .insert(opsChatMessages)
-        .values({
-          channel: "command",
-          authorName: "System",
-          authorRole: "system",
-          body,
-          quickAction: "unanswered_alarm" as any,
-          metadata: metadataJson,
-          sessionId: session.id,
-          lastActivityAt: now,
-          cardStatus: "active",
-          activeDedupKey: dedupKey,
-        } as any)
-        .onDuplicateKeyUpdate({
-          set: {
-            body,
-            metadata: metadataJson,
-            cardStatus: "active",
-            activeDedupKey: dedupKey,
-            lastActivityAt: now,
-          },
-        });
-      created++;
-    } else if (thresholdIdx > existing.thresholdIndex) {
-      // Crossed a new escalation threshold — bump lastActivityAt to resurface card
-      await db
-        .update(opsChatMessages)
-        .set({
-          body,
-          metadata: metadataJson,
-          lastActivityAt: now,
-        })
-        .where(eq(opsChatMessages.id, existing.id));
-      escalated++;
+    if (existingDraft) {
+      // Draft card already exists — update unansweredMinutes in metadata
+      let existingMeta: Record<string, unknown> = {};
+      try { existingMeta = JSON.parse(existingDraft.metadata ?? "{}"); } catch { /* ignore */ }
+      const prevThresholdIdx = (existingMeta.unansweredThresholdIdx as number) ?? -1;
+      const newMeta = JSON.stringify({ ...existingMeta, unansweredMinutes, unansweredThresholdIdx: thresholdIdx });
+
+      if (thresholdIdx > prevThresholdIdx) {
+        // Crossed a new threshold — bump lastActivityAt to resurface card
+        await db
+          .update(opsChatMessages)
+          .set({ metadata: newMeta, lastActivityAt: now })
+          .where(eq(opsChatMessages.id, existingDraft.id));
+        escalated++;
+      } else {
+        // Same threshold — update metadata only (do NOT bump lastActivityAt)
+        await db
+          .update(opsChatMessages)
+          .set({ metadata: newMeta })
+          .where(eq(opsChatMessages.id, existingDraft.id));
+        updated++;
+      }
     } else {
-      // Same threshold — update body (age display) but do NOT bump lastActivityAt
-      await db
-        .update(opsChatMessages)
-        .set({ body, metadata: metadataJson })
-        .where(eq(opsChatMessages.id, existing.id));
-      updated++;
+      // No active draft — trigger Madison to generate one
+      const isCleaner = session.leadSource === "cs-inbound-cleaner";
+      const inboundText = session.lastMessageText ?? "";
+      if (!inboundText.trim()) continue; // skip sessions with no message text
+      // Use a synthetic inboundOpenPhoneId so the dedup key is unique per session+timestamp
+      const syntheticId = `unanswered-cron:${session.id}:${session.lastCustomerMessageTs}`;
+      try {
+        await triggerMadisonSmsDraft({
+          inboundOpenPhoneId: syntheticId,
+          sessionId: session.id,
+          fromPhone: session.leadPhone ?? "",
+          senderName: session.leadName ?? undefined,
+          isCleaner,
+          inboundText,
+          unansweredMinutes,
+        });
+        triggered++;
+      } catch (err) {
+        console.error(`[UnansweredAlarm] Failed to trigger draft for session ${session.id}:`, err);
+      }
     }
   }
 
-  if (created > 0 || escalated > 0) {
+  if (triggered > 0 || escalated > 0) {
     const { broadcastOpsUpdate } = await import("./sseBroadcast");
     broadcastOpsUpdate("new_message", { channel: "command" });
   }
-
-  if (created > 0 || escalated > 0 || updated > 0) {
-    console.log(`[UnansweredAlarm] created: ${created}, escalated: ${escalated}, updated: ${updated}, resolved: ${activeAlarms.length - unanswered.length}`);
+  if (triggered > 0 || escalated > 0 || updated > 0) {
+    console.log(`[UnansweredAlarm] triggered: ${triggered}, escalated: ${escalated}, updated: ${updated}, legacy_dismissed: ${legacyAlarms.length}`);
   }
-
   await recordHeartbeat(
     "unanswered-alarm",
-    `unanswered: ${unanswered.length}, created: ${created}, escalated: ${escalated}, updated: ${updated}`,
-    created > 0 || escalated > 0
+    `unanswered: ${unanswered.length}, triggered: ${triggered}, escalated: ${escalated}, updated: ${updated}`,
+    triggered > 0 || escalated > 0
   );
 }

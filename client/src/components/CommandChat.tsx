@@ -1699,11 +1699,16 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
           opacity: isDismissed ? 0.55 : 1,
           transition: "border 0.2s, box-shadow 0.2s, opacity 0.2s",
         }}>
-          {/* Top accent bar — only when awaiting approval */}
+                    {/* Top accent bar — only when awaiting approval */}
           {isDraftReady && (
             <div style={{ height: 3, background: "linear-gradient(90deg, #6d5cff, #a78bfa)", borderRadius: "20px 20px 0 0" }} />
           )}
-
+          {/* Unanswered banner */}
+          {(meta as any).unansweredMinutes !== undefined && (
+            <div style={{ background: "#dc2626", color: "#fff", font: "700 11px Inter,system-ui", letterSpacing: "0.06em", textAlign: "center", padding: "4px 0" }}>
+              ⏱ UNANSWERED {(() => { const m = (meta as any).unansweredMinutes as number; return m >= 60 ? `${Math.floor(m/60)}h${m%60>0?` ${m%60}m`:""}` : `${m} MIN`; })()}
+            </div>
+          )}
           {/* ── Header ── */}
           <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
             {/* Avatar */}
@@ -5978,8 +5983,9 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_call_result") { return <MadisonCallResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_email_result") { return <MadisonEmailResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_invoice_result") { return <MadisonInvoiceResultCard key={msg.id} msg={msg} />; }
-                // ── Unanswered Alarm card ─────────────────────────────────────────────
-                if (msg.quickAction === "unanswered_alarm") {
+                // ── Unanswered Alarm card — suppressed: alarm is now embedded in madison_sms_draft ──
+                if (msg.quickAction === "unanswered_alarm") { return null; }
+                if (false && msg.quickAction === "unanswered_alarm_legacy") {
                   return (
                     <div
                       key={`${msg.id}:${msg.lastActivityAt ?? 0}`}
