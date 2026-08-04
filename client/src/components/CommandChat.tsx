@@ -4012,6 +4012,7 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   const [ageMs, setAgeMs] = React.useState(() => ts > 0 ? Date.now() - ts : 0);
   const [replyText, setReplyText] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
+  const [sendError, setSendError] = React.useState<string | null>(null);
   const [justActed, setJustActed] = React.useState<"sent" | "no_reply" | null>(null);
   React.useEffect(() => {
     if (!ts) return;
@@ -4052,11 +4053,12 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   const handleNoReply = async () => {
     if (isSending) return;
     setIsSending(true);
+    setSendError(null);
     try {
       await dismissAlarmMutation.mutateAsync({ msgId: msg.id, handledReason: "no_reply_needed" });
       setJustActed("no_reply");
     } catch (err: any) {
-      console.error("[UnansweredAlarm] no-reply dismiss failed:", err);
+      setSendError(err?.message ?? "Failed. Try again.");
     } finally {
       setIsSending(false);
     }
@@ -4094,42 +4096,42 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
           >
             {leadName}
           </div>
-          {preview && (
-            <div style={{ fontSize: 13, color: "#374151", marginBottom: 12, lineHeight: 1.5 }}>
-              <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", display: "block", marginBottom: 2 }}>Latest message</span>
-              &ldquo;{preview}&rdquo;
-            </div>
-          )}
+          {/* Full conversation thread */}
           {sessionId && (
-            <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
-              <textarea
-                value={replyText}
-                onChange={e => setReplyText(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="Type a reply…"
-                rows={2}
-                style={{ width: "100%", resize: "none" as const, border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 10px", fontSize: 13, fontFamily: "Inter, system-ui, sans-serif", outline: "none", boxSizing: "border-box" as const, color: "#1a1a2e", background: "#fafafa" }}
-                onClick={e => e.stopPropagation()}
-              />
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button
-                  onClick={e => { e.stopPropagation(); handleNoReply(); }}
-                  disabled={isSending}
-                  style={{ padding: "7px 14px", borderRadius: 9, fontWeight: 600, fontSize: 12, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1 }}
-                >
-                  ✓ No reply needed
-                </button>
-                <button
-                  onClick={e => { e.stopPropagation(); handleSend(); }}
-                  disabled={isSending || !replyText.trim()}
-                  style={{ padding: "7px 16px", borderRadius: 9, fontWeight: 700, fontSize: 12, border: "none", background: "linear-gradient(135deg, #5d49f3, #7d66ff)", color: "#fff", cursor: (isSending || !replyText.trim()) ? "not-allowed" : "pointer", opacity: (isSending || !replyText.trim()) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 5 }}
-                >
-                  {isSending ? <Loader2 style={{ width: 12, height: 12 }} className="animate-spin" /> : null}
-                  Send
-                </button>
-              </div>
+            <div style={{ marginBottom: 12 }} onClick={e => e.stopPropagation()}>
+              <ConversationThread sessionId={sessionId} />
             </div>
           )}
+          {/* Reply composer */}
+          <textarea
+            value={replyText}
+            onChange={e => setReplyText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            placeholder="Type a reply…"
+            rows={2}
+            style={{ width: "100%", resize: "none" as const, border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 10px", fontSize: 13, fontFamily: "Inter, system-ui, sans-serif", outline: "none", boxSizing: "border-box" as const, color: "#1a1a2e", background: "#fafafa", marginBottom: 8 }}
+            onClick={e => e.stopPropagation()}
+          />
+          {sendError && (
+            <div style={{ fontSize: 12, color: "#ef4444", marginBottom: 6 }}>{sendError}</div>
+          )}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button
+              onClick={e => { e.stopPropagation(); handleNoReply(); }}
+              disabled={isSending}
+              style={{ padding: "7px 14px", borderRadius: 9, fontWeight: 600, fontSize: 12, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1 }}
+            >
+              ✓ No reply needed
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); handleSend(); }}
+              disabled={isSending || !replyText.trim() || !sessionId}
+              style={{ padding: "7px 16px", borderRadius: 9, fontWeight: 700, fontSize: 12, border: "none", background: "linear-gradient(135deg, #5d49f3, #7d66ff)", color: "#fff", cursor: (isSending || !replyText.trim() || !sessionId) ? "not-allowed" : "pointer", opacity: (isSending || !replyText.trim() || !sessionId) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 5 }}
+            >
+              {isSending ? <Loader2 style={{ width: 12, height: 12 }} className="animate-spin" /> : null}
+              Send
+            </button>
+          </div>
         </div>
       </div>
     </div>
