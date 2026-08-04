@@ -7055,7 +7055,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const [sessionDone, setSessionDone] = useState(0);
   const [recentWins, setRecentWins] = useState<FocusRecentWin[]>([]);
   const utils = trpc.useUtils();
-  const { data: cards = [], isLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { staleTime: 0 });
+  const { data: cards = [], isLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { staleTime: 0, refetchInterval: 15_000 });
   const { data: leaderboard = [] } = trpc.opsChat.getFocusLeaderboard.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
   const { data: myPtsData } = trpc.opsChat.getMyFocusPoints.useQuery(undefined, { staleTime: 15_000, refetchInterval: 30_000 });
   const awardPoints = trpc.opsChat.awardFocusPoints.useMutation();
@@ -7092,12 +7092,34 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
   const medals = ["🥇", "🥈", "🥉"];
   // After Send/Dismiss the queue shrinks — clamp index safely
+  // Also: if new cards arrive while on Done screen, return to review automatically
   useEffect(() => {
     if (cards.length > 0 && cardIndex >= cards.length) setCardIndex(cards.length - 1);
-    if (cards.length === 0 && view === "review") setView("done");
-  }, [cards.length, cardIndex, view]);
+    if (cards.length > 0 && view === "done") { setView("review"); setCardIndex(0); }
+    if (cards.length === 0 && view === "review") {
+      // Before showing Done, do a fresh fetch to confirm queue is truly empty
+      const checkAndDone = async () => {
+        const fresh = await utils.opsChat.getFocusCards.fetch();
+        if (!fresh || fresh.length === 0) setView("done");
+        // else: fresh cards exist — stay in review, cards state will update via query
+      };
+      checkAndDone();
+    }
+  }, [cards.length, cardIndex, view]);  // eslint-disable-line react-hooks/exhaustive-deps
   const startReview = () => { if (cards.length > 0) { setCardIndex(0); setView("review"); } };
-  const goNext = () => { if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done"); };
+  const goNext = () => {
+    if (cardIndex < cards.length - 1) {
+      setCardIndex(i => i + 1);
+    } else {
+      // Before showing Done, do a fresh fetch to confirm queue is truly empty
+      const checkAndDone = async () => {
+        const fresh = await utils.opsChat.getFocusCards.fetch();
+        if (!fresh || fresh.length === 0) setView("done");
+        // else: fresh cards exist — stay in review, cards state will update via query
+      };
+      checkAndDone();
+    }
+  };
   const goPrev = () => { if (cardIndex > 0) setCardIndex(i => i - 1); };
   const backToHero = () => { setView("hero"); setCardIndex(0); setShowCelebration(false); };
   // Called by cards after their own Send/Dismiss mutation succeeds
