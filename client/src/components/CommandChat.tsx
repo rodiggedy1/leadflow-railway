@@ -4067,7 +4067,7 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   if (justActed) {
     return (
       <div style={{ padding: "4px 16px" }}>
-        <div style={{ background: justActed === "sent" ? "#f0fdf4" : "#fafafa", border: `1px solid ${justActed === "sent" ? "#bbf7d0" : "#e5e7eb"}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ background: justActed === "sent" ? "#f0fdf4" : "#fafafa", border: `1px solid ${justActed === "sent" ? "#bbf7d0" : "#e5e7eb"}`, borderRadius: 20, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 20 }}>{justActed === "sent" ? "✅" : "✓"}</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: justActed === "sent" ? "#15803d" : "#6b7280" }}>
@@ -4079,66 +4079,78 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
       </div>
     );
   }
+  // accent bar + badge colors
+  const accentColor = isOverdue ? "#ef4444" : "#f59e0b";
+  const badgeColor = isOverdue ? "#d92d20" : "#b86600";
+  const badgeBg = isOverdue ? "#fff0ef" : "#fff4dc";
   return (
     <div style={{ padding: "4px 16px" }}>
-      <div style={{ background: "#fff", border: `1px solid ${alarmBorder}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(30,30,60,0.07)" }}>
-        {/* Alarm banner — click to expand/collapse */}
-        <div
-          style={{ background: alarmBg, borderBottom: isExpanded ? `1px solid ${alarmBorder}` : "none", padding: "7px 14px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" as const }}
+      <div style={{ background: "#fff", border: "1px solid #e7e9f0", borderRadius: 20, boxShadow: "0 8px 28px rgba(28,32,55,0.05)", overflow: "hidden" }}>
+        {/* Summary row — always visible, click to expand */}
+        <button
+          style={{ width: "100%", border: 0, background: "transparent", padding: "16px 18px", display: "grid", gridTemplateColumns: "7px 1fr auto 22px", gap: 14, alignItems: "center", textAlign: "left" as const, cursor: "pointer" }}
           onClick={() => setIsExpanded(v => !v)}
         >
-          <span style={{ fontSize: 13 }}>{isOverdue ? "🚨🚨" : "🚨"}</span>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" as const, color: alarmColor }}>
-            UNANSWERED · {fmtAge(ageMs)}
+          {/* Left accent bar */}
+          <span style={{ height: 43, borderRadius: 20, background: accentColor, display: "block" }} />
+          {/* Name + badge + preview */}
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <span style={{ fontSize: 17, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, color: "#18192b" }}>{leadName}</span>
+              <span style={{ fontSize: 11, fontWeight: 800, padding: "5px 9px", borderRadius: 999, color: badgeColor, background: badgeBg, whiteSpace: "nowrap" as const }}>Waiting {fmtAge(ageMs)}</span>
+            </span>
+            {preview && <span style={{ display: "block", marginTop: 5, color: "#737b8e", fontSize: 14, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>"{preview}"</span>}
           </span>
-          <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#1a1a2e" }}>{leadName}</span>
-          <span style={{ fontSize: 11, color: alarmColor, marginLeft: 8 }}>{isExpanded ? "▲" : "▼"}</span>
-        </div>
-        {/* Card body — only shown when expanded */}
-        {isExpanded && <div style={{ padding: "12px 14px" }}>
-          <div
-            style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e", marginBottom: 6, cursor: sessionId ? "pointer" : "default", display: "inline-block" }}
-            onClick={() => { if (sessionId && onSelectSession) onSelectSession(sessionId, leadName); }}
-          >
-            {leadName}
-          </div>
-          {/* Full conversation thread */}
-          {sessionId && (
-            <div style={{ marginBottom: 12 }} onClick={e => e.stopPropagation()}>
-              <ConversationThread sessionId={sessionId} />
+          {/* Right hint */}
+          <span style={{ fontSize: 12, lineHeight: 1.35, color: "#8b93a7", textAlign: "right" as const, whiteSpace: "nowrap" as const }}>
+            No one has responded yet.<br /><b style={{ color: badgeColor, fontWeight: 800 }}>Click to respond</b>
+          </span>
+          {/* Chevron */}
+          <span style={{ fontSize: 23, color: "#a5acba", transition: "transform .2s", transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block" }}>›</span>
+        </button>
+        {/* Expanded detail */}
+        {isExpanded && (
+          <div style={{ borderTop: "1px solid #eff0f4", padding: 18 }}>
+            <div style={{ display: "inline-block", fontSize: 12, fontWeight: 800, color: "#d92d20", background: "#fff1f0", border: "1px solid #ffd4d0", padding: "7px 10px", borderRadius: 999, marginBottom: 14 }}>
+              🚨 UNANSWERED · {fmtAge(ageMs).toUpperCase()}
             </div>
-          )}
-          {/* Reply composer */}
-          <textarea
-            value={replyText}
-            onChange={e => setReplyText(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            placeholder="Type a reply…"
-            rows={2}
-            style={{ width: "100%", resize: "none" as const, border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 10px", fontSize: 13, fontFamily: "Inter, system-ui, sans-serif", outline: "none", boxSizing: "border-box" as const, color: "#1a1a2e", background: "#fafafa", marginBottom: 8 }}
-            onClick={e => e.stopPropagation()}
-          />
-          {sendError && (
-            <div style={{ fontSize: 12, color: "#ef4444", marginBottom: 6 }}>{sendError}</div>
-          )}
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button
-              onClick={e => { e.stopPropagation(); handleNoReply(); }}
-              disabled={isSending}
-              style={{ padding: "7px 14px", borderRadius: 9, fontWeight: 600, fontSize: 12, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1 }}
-            >
-              ✓ No reply needed
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); handleSend(); }}
-              disabled={isSending || !replyText.trim() || !sessionId}
-              style={{ padding: "7px 16px", borderRadius: 9, fontWeight: 700, fontSize: 12, border: "none", background: "linear-gradient(135deg, #5d49f3, #7d66ff)", color: "#fff", cursor: (isSending || !replyText.trim() || !sessionId) ? "not-allowed" : "pointer", opacity: (isSending || !replyText.trim() || !sessionId) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 5 }}
-            >
-              {isSending ? <Loader2 style={{ width: 12, height: 12 }} className="animate-spin" /> : null}
-              Send
-            </button>
+            {/* Full conversation thread */}
+            {sessionId && (
+              <div style={{ marginBottom: 12 }} onClick={e => e.stopPropagation()}>
+                <ConversationThread sessionId={sessionId} />
+              </div>
+            )}
+            {/* Reply composer */}
+            <textarea
+              value={replyText}
+              onChange={e => setReplyText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder={`Reply to ${leadName}…`}
+              style={{ width: "100%", minHeight: 80, marginTop: 13, border: "1px solid #dfe2ea", borderRadius: 15, padding: 13, fontFamily: "inherit", fontSize: 14, outline: "none", resize: "vertical" as const, boxSizing: "border-box" as const, color: "#18192b", background: "#fff" }}
+              onClick={e => e.stopPropagation()}
+            />
+            {sendError && (
+              <div style={{ fontSize: 12, color: "#ef4444", marginTop: 6 }}>{sendError}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 10 }}>
+              <button
+                onClick={e => { e.stopPropagation(); handleNoReply(); }}
+                disabled={isSending}
+                style={{ border: "1px solid #dfe2ea", background: "#fff", color: "#626a79", borderRadius: 12, padding: "10px 14px", fontWeight: 800, fontSize: 13, cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1 }}
+              >
+                ✓ No reply needed
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); handleSend(); }}
+                disabled={isSending || !replyText.trim() || !sessionId}
+                style={{ background: "#6f4cff", color: "#fff", borderRadius: 12, padding: "10px 14px", fontWeight: 800, fontSize: 13, border: "none", cursor: (isSending || !replyText.trim() || !sessionId) ? "not-allowed" : "pointer", opacity: (isSending || !replyText.trim() || !sessionId) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {isSending ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : null}
+                Send reply
+              </button>
+            </div>
           </div>
-        </div>}
+        )}
       </div>
     </div>
   );
