@@ -1262,32 +1262,32 @@ async function startServer() {
       const [rows] = await db.execute(sql.raw(`
         SELECT
           cs.id AS sessionId,
-          cs.lead_name AS customerName,
-          cs.lead_phone AS phone,
-          cs.last_customer_message_ts AS lastCustomerMessageTs,
-          ROUND((${nowMs} - cs.last_customer_message_ts) / 60000) AS minutesUnanswered,
+          cs.leadName AS customerName,
+          cs.leadPhone AS phone,
+          cs.lastCustomerMessageTs AS lastCustomerMessageTs,
+          ROUND((${nowMs} - cs.lastCustomerMessageTs) / 60000) AS minutesUnanswered,
           mdc.id AS madisonCardId,
           JSON_EXTRACT(mdc.metadata, '$.unansweredSince') AS unansweredSince,
           JSON_EXTRACT(mdc.metadata, '$.unansweredMinutes') AS unansweredMinutes,
           CASE WHEN mdc.id IS NOT NULL THEN 'YES' ELSE 'NO' END AS hasMadisonCard,
           CASE WHEN JSON_EXTRACT(mdc.metadata, '$.unansweredSince') IS NOT NULL THEN 'YES' ELSE 'NO' END AS isEscalated,
           alm.id AS alarmCardId,
-          alm.card_status AS alarmCardStatus,
+          alm.cardStatus AS alarmCardStatus,
           CASE WHEN alm.id IS NOT NULL THEN 'YES' ELSE 'NO' END AS hasAlarmCard
         FROM conversation_sessions cs
         LEFT JOIN ops_chat_messages mdc
-          ON mdc.active_dedup_key = CONCAT('madison_sms_draft:', cs.id)
-          AND mdc.card_status = 'active'
+          ON mdc.activeDedupKey = CONCAT('madison_sms_draft:', cs.id)
+          AND mdc.cardStatus = 'active'
         LEFT JOIN ops_chat_messages alm
-          ON alm.session_id = cs.id
-          AND alm.quick_action = 'unanswered_alarm'
-          AND alm.card_status = 'active'
+          ON alm.sessionId = cs.id
+          AND alm.quickAction = 'unanswered_alarm'
+          AND alm.cardStatus = 'active'
         WHERE
-          cs.last_message_role = 'user'
-          AND cs.cs_resolved_at IS NULL
-          AND cs.last_customer_message_ts <= ${nowMs - thirtyMinMs}
-          AND cs.last_customer_message_ts >= ${nowMs - thirtyDaysMs}
-        ORDER BY cs.last_customer_message_ts ASC
+          cs.lastMessageRole = 'user'
+          AND cs.csResolvedAt IS NULL
+          AND cs.lastCustomerMessageTs <= ${nowMs - thirtyMinMs}
+          AND cs.lastCustomerMessageTs >= ${nowMs - thirtyDaysMs}
+        ORDER BY cs.lastCustomerMessageTs ASC
       `)) as any;
       const data = Array.isArray(rows) ? rows : [];
       const summary = {
