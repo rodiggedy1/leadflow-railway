@@ -1699,6 +1699,28 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
           opacity: isDismissed ? 0.55 : 1,
           transition: "border 0.2s, box-shadow 0.2s, opacity 0.2s",
         }}>
+          {/* ── Unanswered alarm banner — shown when cron escalated this card ── */}
+          {meta.unansweredSince && (() => {
+            const mins = meta.unansweredMinutes ?? Math.round((Date.now() - meta.unansweredSince!) / 60000);
+            const isRed = mins >= 60;
+            const label = mins >= 60 ? `${Math.floor(mins / 60)}H ${mins % 60}M` : `${mins}M`;
+            return (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 16px",
+                background: isRed ? "#fef2f2" : "#fffbeb",
+                borderBottom: `1px solid ${isRed ? "#fecaca" : "#fde68a"}`,
+              }}>
+                <span style={{ fontSize: 14 }}>🚨</span>
+                <span style={{
+                  font: "800 11px Inter,system-ui",
+                  color: isRed ? "#dc2626" : "#d97706",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase" as const,
+                }}>UNANSWERED · {label}</span>
+              </div>
+            );
+          })()}
           {/* Top accent bar — only when awaiting approval */}
           {isDraftReady && (
             <div style={{ height: 3, background: "linear-gradient(90deg, #6d5cff, #a78bfa)", borderRadius: "20px 20px 0 0" }} />

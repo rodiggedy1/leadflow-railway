@@ -50,7 +50,7 @@ import { postOpsSummary } from "./opsSummaryEngine";
 import { runEscalationCalls } from "./escalationEngine";
 import { runMessageIntegrityCheck } from "./messageIntegrityEngine";
 import { setupGmailWatch, alertInvalidGrant } from "./gmailService";
-import { opsReminders, opsChatMessages, agents, jobAlerts, gmailState, conversationSessions } from "../drizzle/schema";
+import { opsReminders, opsChatMessages, agents, jobAlerts, gmailState, conversationSessions, madisonSmsDrafts } from "../drizzle/schema";
 import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql, ne, inArray } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
@@ -1436,7 +1436,7 @@ export async function runUnansweredAlarmCron(): Promise<void> {
   const THIRTY_MIN_MS = 30 * 60 * 1000;
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-  // ── Step 1: Find sessions that need an alarm ────────────────────────────────
+  // ── Step 1: Find sessions that need an alarm ──────────────────────────────
   const unanswered = await db
     .select({
       id: conversationSessions.id,
@@ -1455,14 +1455,40 @@ export async function runUnansweredAlarmCron(): Promise<void> {
       )
     );
 
-  // ── Step 2: Auto-resolve alarms for sessions that are now answered ──────────
-  // Fetch all active unanswered_alarm cards
-  const activeAlarms = await db
-    .select({
-      id: opsChatMessages.id,
-      metadata: opsChatMessages.metadata,
-      lastActivityAt: opsChatMessages.lastActivityAt,
-    })
+  const unansweredSessionIds = new Set(unanswered.map(s => s.id));
+
+  // ── Step 2: Clear unanswered metadata from Madison cards that are now answered ──
+  // Find all active madison_sms_draft cards that have unansweredSince in metadata
+  const escalatedCards = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, sessionId: opsChatMessages.sessionId })
+    .from(opsChatMessages)
+    .where(
+      and(
+        eq(opsChatMessages.quickAction as any, "madison_sms_draft"),
+        eq(opsChatMessages.cardStatus, "active"),
+        sql`JSON_EXTRACT(${opsChatMessages.metadata}, '$.unansweredSince') IS NOT NULL`,
+      )
+    );
+
+  for (const card of escalatedCards) {
+    const sid = card.sessionId;
+    if (!sid || !unansweredSessionIds.has(sid)) {
+      // Session is now answered — strip unanswered metadata
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(card.metadata ?? "{}"); } catch { /* ignore */ }
+      delete meta.unansweredSince;
+      delete meta.unansweredMinutes;
+      delete meta.thresholdIndex;
+      await db
+        .update(opsChatMessages)
+        .set({ metadata: JSON.stringify(meta) })
+        .where(eq(opsChatMessages.id, card.id));
+    }
+  }
+
+  // Also auto-dismiss legacy unanswered_alarm cards for sessions that are now answered
+  const legacyAlarms = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
     .from(opsChatMessages)
     .where(
       and(
@@ -1470,60 +1496,88 @@ export async function runUnansweredAlarmCron(): Promise<void> {
         eq(opsChatMessages.cardStatus, "active"),
       )
     );
-
-  const unansweredSessionIds = new Set(unanswered.map(s => s.id));
-
-  const dismissedAlarmIds = new Set<number>();
-  for (const alarm of activeAlarms) {
-    let meta: { sessionId?: number; thresholdIndex?: number } = {};
+  for (const alarm of legacyAlarms) {
+    let meta: { sessionId?: number } = {};
     try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
-    const sid = meta.sessionId;
-    if (!sid || !unansweredSessionIds.has(sid)) {
-      // Session is now answered or resolved — dismiss the alarm
-      await db
-        .update(opsChatMessages)
-        .set({
-          cardStatus: "dismissed",
-          activeDedupKey: null,
-        })
-        .where(eq(opsChatMessages.id, alarm.id));
-      dismissedAlarmIds.add(alarm.id);
+    if (!meta.sessionId || !unansweredSessionIds.has(meta.sessionId)) {
+      await db.update(opsChatMessages).set({ cardStatus: "dismissed", activeDedupKey: null }).where(eq(opsChatMessages.id, alarm.id));
     }
   }
 
-  // ── Step 3: Upsert alarm cards for unanswered sessions ─────────────────────
-  // Build a map of existing active alarm cards keyed by "sessionId:lastCustomerMessageTs"
-  // so that a new inbound message from the same customer creates a fresh alarm card.
-  const existingBySession = new Map<string, { id: number; thresholdIndex: number; lastActivityAt: number | null }>();
-  for (const alarm of activeAlarms) {
-    if (dismissedAlarmIds.has(alarm.id)) continue; // skip already-dismissed cards
-    let meta: { sessionId?: number; lastCustomerMessageTs?: number | null; thresholdIndex?: number } = {};
-    try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
-    if (meta.sessionId) {
-      const key = `${meta.sessionId}:${meta.lastCustomerMessageTs ?? 0}`;
-      existingBySession.set(key, {
-        id: alarm.id,
-        thresholdIndex: meta.thresholdIndex ?? 0,
-        lastActivityAt: alarm.lastActivityAt ?? null,
-      });
-    }
-  }
-
-  let created = 0;
+  // ── Step 3: Escalate unanswered sessions ──────────────────────────────────
   let escalated = 0;
-  let updated = 0;
+  let fallback = 0;
 
   for (const session of unanswered) {
     const ageMs = now - (session.lastCustomerMessageTs ?? 0);
     const thresholdIdx = alarmThresholdIndex(ageMs);
-    if (thresholdIdx < 0) continue; // shouldn't happen but guard
+    if (thresholdIdx < 0) continue;
 
-    // Dedup key includes lastCustomerMessageTs so each new inbound message
-    // from the same customer creates a genuinely new alarm card.
+    const unansweredMinutes = Math.floor(ageMs / 60000);
+    const unansweredSince = session.lastCustomerMessageTs ?? now;
+
+    // ── Path A: Find active madison_sms_draft card for this session ──────────
+    const [madisonCard] = await db
+      .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, lastActivityAt: opsChatMessages.lastActivityAt })
+      .from(opsChatMessages)
+      .where(
+        and(
+          eq(opsChatMessages.quickAction as any, "madison_sms_draft"),
+          eq(opsChatMessages.cardStatus, "active"),
+          eq(opsChatMessages.sessionId, session.id),
+        )
+      )
+      .limit(1);
+
+    if (madisonCard) {
+      // Escalate: add/update unanswered metadata and bump lastActivityAt if threshold crossed
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(madisonCard.metadata ?? "{}"); } catch { /* ignore */ }
+      const prevThreshold = typeof meta.thresholdIndex === "number" ? meta.thresholdIndex : -1;
+      meta.unansweredSince = unansweredSince;
+      meta.unansweredMinutes = unansweredMinutes;
+      meta.thresholdIndex = thresholdIdx;
+      const shouldBump = thresholdIdx > prevThreshold;
+      await db
+        .update(opsChatMessages)
+        .set({
+          metadata: JSON.stringify(meta),
+          ...(shouldBump ? { lastActivityAt: now } : {}),
+        })
+        .where(eq(opsChatMessages.id, madisonCard.id));
+      escalated++;
+      continue;
+    }
+
+    // ── Path B: No active card — check if a DRAFT_READY draft exists ─────────
+    const [draftReady] = await db
+      .select({ id: madisonSmsDrafts.id, sessionId: madisonSmsDrafts.sessionId })
+      .from(madisonSmsDrafts)
+      .where(
+        and(
+          eq(madisonSmsDrafts.sessionId, session.id),
+          eq(madisonSmsDrafts.status, "DRAFT_READY"),
+        )
+      )
+      .orderBy(desc(madisonSmsDrafts.createdAt))
+      .limit(1);
+
+    if (draftReady) {
+      // Resurface the Madison card from the existing draft
+      const { postDraftCardForAlarm } = await import("./madisonSmsAgent");
+      try {
+        await postDraftCardForAlarm(draftReady.id, unansweredSince, unansweredMinutes, thresholdIdx);
+        escalated++;
+        continue;
+      } catch (err) {
+        console.error("[UnansweredAlarm] postDraftCardForAlarm failed:", err);
+        // fall through to Path C
+      }
+    }
+
+    // ── Path C: Fallback — create legacy unanswered_alarm card ───────────────
     const dedupKey = `unanswered_alarm:${session.id}:${session.lastCustomerMessageTs ?? 0}`;
     const body = alarmBody(session.leadName ?? null, session.lastMessageText ?? null, ageMs);
-    const existingKey = `${session.id}:${session.lastCustomerMessageTs ?? 0}`;
-    const existing = existingBySession.get(existingKey);
     const metadataJson = JSON.stringify({
       sessionId: session.id,
       leadName: session.leadName ?? null,
@@ -1532,66 +1586,35 @@ export async function runUnansweredAlarmCron(): Promise<void> {
       lastCustomerMessageTs: session.lastCustomerMessageTs,
       thresholdIndex: thresholdIdx,
     });
-
-    if (!existing) {
-      // First alarm — insert with current timestamp as lastActivityAt
-      await db
-        .insert(opsChatMessages)
-        .values({
-          channel: "command",
-          authorName: "System",
-          authorRole: "system",
-          body,
-          quickAction: "unanswered_alarm" as any,
-          metadata: metadataJson,
-          sessionId: session.id,
-          lastActivityAt: now,
-          cardStatus: "active",
-          activeDedupKey: dedupKey,
-        } as any)
-        .onDuplicateKeyUpdate({
-          set: {
-            body,
-            metadata: metadataJson,
-            cardStatus: "active",
-            activeDedupKey: dedupKey,
-            lastActivityAt: now,
-          },
-        });
-      created++;
-    } else if (thresholdIdx > existing.thresholdIndex) {
-      // Crossed a new escalation threshold — bump lastActivityAt to resurface card
-      await db
-        .update(opsChatMessages)
-        .set({
-          body,
-          metadata: metadataJson,
-          lastActivityAt: now,
-        })
-        .where(eq(opsChatMessages.id, existing.id));
-      escalated++;
-    } else {
-      // Same threshold — update body (age display) but do NOT bump lastActivityAt
-      await db
-        .update(opsChatMessages)
-        .set({ body, metadata: metadataJson })
-        .where(eq(opsChatMessages.id, existing.id));
-      updated++;
-    }
+    await db
+      .insert(opsChatMessages)
+      .values({
+        channel: "command",
+        authorName: "System",
+        authorRole: "system",
+        body,
+        quickAction: "unanswered_alarm" as any,
+        metadata: metadataJson,
+        sessionId: session.id,
+        lastActivityAt: now,
+        cardStatus: "active",
+        activeDedupKey: dedupKey,
+      } as any)
+      .onDuplicateKeyUpdate({
+        set: { body, metadata: metadataJson, cardStatus: "active", activeDedupKey: dedupKey, lastActivityAt: now },
+      });
+    fallback++;
   }
 
-  if (created > 0 || escalated > 0) {
+  if (escalated > 0 || fallback > 0) {
     const { broadcastOpsUpdate } = await import("./sseBroadcast");
     broadcastOpsUpdate("new_message", { channel: "command" });
   }
-
-  if (created > 0 || escalated > 0 || updated > 0) {
-    console.log(`[UnansweredAlarm] created: ${created}, escalated: ${escalated}, updated: ${updated}, resolved: ${activeAlarms.length - unanswered.length}`);
-  }
-
+  console.log(`[UnansweredAlarm] unanswered: ${unanswered.length}, escalated: ${escalated}, fallback: ${fallback}`);
   await recordHeartbeat(
     "unanswered-alarm",
-    `unanswered: ${unanswered.length}, created: ${created}, escalated: ${escalated}, updated: ${updated}`,
-    created > 0 || escalated > 0
+    `unanswered: ${unanswered.length}, escalated: ${escalated}, fallback: ${fallback}`,
+    escalated > 0 || fallback > 0
   );
 }
+
