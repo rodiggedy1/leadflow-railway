@@ -1303,6 +1303,17 @@ async function startServer() {
       return res.status(500).json({ error: e.message });
     }
   });
+  // TEMPORARY: manual trigger for unanswered alarm cron — remove after confirmed working
+  app.post("/api/diag/trigger-unanswered-alarm", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const { runUnansweredAlarmCron } = await import("../internalCron");
+      await runUnansweredAlarmCron();
+      return res.json({ ok: true, message: 'runUnansweredAlarmCron completed' });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
     try {
