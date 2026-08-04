@@ -7050,6 +7050,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<"hero" | "review" | "done">("hero");
   const [cardIndex, setCardIndex] = useState(0);
   const [showCelebration, setShowCelebration] = useState(false);
+  const actedCardIdRef = React.useRef<number | null>(null);
   const [sessionStreak, setSessionStreak] = useState(0);
   const [sessionDone, setSessionDone] = useState(0);
   const [recentWins, setRecentWins] = useState<FocusRecentWin[]>([]);
@@ -7103,6 +7104,7 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
   const onCardActed = (acted: "sent" | "dismissed" = "sent") => {
     utils.opsChat.getFocusCards.invalidate();
     if (acted === "sent") {
+      actedCardIdRef.current = currentCard?.id ?? null;
       awardPoints.mutate();
       utils.opsChat.getMyFocusPoints.invalidate();
       utils.opsChat.getFocusLeaderboard.invalidate();
@@ -7114,14 +7116,16 @@ function DebriefModal({ onClose }: { onClose: () => void }) {
       }
       setShowCelebration(true);
     } else {
+      actedCardIdRef.current = currentCard?.id ?? null;
       setSessionDone(d => d + 1);
       setSessionStreak(0);
-      if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done");
+      // Do NOT advance index — card will be removed by refetch, next card slides into same slot
     }
   };
   const onCelebrationContinue = () => {
+    actedCardIdRef.current = null;
     setShowCelebration(false);
-    if (cardIndex < cards.length - 1) setCardIndex(i => i + 1); else setView("done");
+    // Do NOT advance index — acted card already removed by refetch, next card is at same slot
   };
   const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v3-Ky5x7Vzm5HBzWn6As5hsPv.webp";
   const P = "#6d46ff"; const P2 = "#8d70ff"; const G = "#1f9d70";
