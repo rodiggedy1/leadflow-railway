@@ -10759,7 +10759,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
           )}
           {voiceConfirm && !voiceCardMinimized && (
-            <div className="mb-2 mx-auto w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[400px] max-h-[80vh] flex flex-col overflow-y-auto" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setVoiceCardMinimized(true)}>
+            <div className="mb-2 mx-auto w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[400px] max-h-[80vh] flex flex-col overflow-y-auto" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}} onClick={e => e.stopPropagation()}>
               {/* Header — contact identity */}
               <div className="flex items-start gap-4 px-5 pt-5 pb-4">
                 {/* Avatar */}
@@ -11173,6 +11174,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </button>
                 )}
               </div>
+            </div>
             </div>
           )}
 
