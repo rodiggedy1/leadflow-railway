@@ -4014,6 +4014,7 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   const [isSending, setIsSending] = React.useState(false);
   const [sendError, setSendError] = React.useState<string | null>(null);
   const [justActed, setJustActed] = React.useState<"sent" | "no_reply" | null>(null);
+  const [isExpanded, setIsExpanded] = React.useState(false);
   React.useEffect(() => {
     if (!ts) return;
     const id = setInterval(() => setAgeMs(Date.now() - ts), 30_000);
@@ -4081,15 +4082,20 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   return (
     <div style={{ padding: "4px 16px" }}>
       <div style={{ background: "#fff", border: `1px solid ${alarmBorder}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(30,30,60,0.07)" }}>
-        {/* Alarm banner */}
-        <div style={{ background: alarmBg, borderBottom: `1px solid ${alarmBorder}`, padding: "7px 14px", display: "flex", alignItems: "center", gap: 6 }}>
+        {/* Alarm banner — click to expand/collapse */}
+        <div
+          style={{ background: alarmBg, borderBottom: isExpanded ? `1px solid ${alarmBorder}` : "none", padding: "7px 14px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" as const }}
+          onClick={() => setIsExpanded(v => !v)}
+        >
           <span style={{ fontSize: 13 }}>{isOverdue ? "🚨🚨" : "🚨"}</span>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" as const, color: alarmColor }}>
             UNANSWERED · {fmtAge(ageMs)}
           </span>
+          <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#1a1a2e" }}>{leadName}</span>
+          <span style={{ fontSize: 11, color: alarmColor, marginLeft: 8 }}>{isExpanded ? "▲" : "▼"}</span>
         </div>
-        {/* Card body */}
-        <div style={{ padding: "12px 14px" }}>
+        {/* Card body — only shown when expanded */}
+        {isExpanded && <div style={{ padding: "12px 14px" }}>
           <div
             style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e", marginBottom: 6, cursor: sessionId ? "pointer" : "default", display: "inline-block" }}
             onClick={() => { if (sessionId && onSelectSession) onSelectSession(sessionId, leadName); }}
@@ -4132,7 +4138,7 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
               Send
             </button>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
