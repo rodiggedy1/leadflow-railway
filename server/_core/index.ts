@@ -1250,6 +1250,70 @@ async function startServer() {
     } catch (e: any) { result.ashleyCardError = { message: e.message }; }
     return res.json(result);
   });
+  // TEMPORARY: unanswered alarm diagnostic - read-only, remove after confirmed working
+  app.get("/api/diag/unanswered-alarm", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    const db = await getDb();
+    if (!db) return res.status(500).json({ error: 'no db' });
+    try {
+      const nowMs = Date.now();
+      const thirtyMinMs = 30 * 60 * 1000;
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+      const [rows] = await db.execute(sql.raw(`
+        SELECT
+          cs.id AS sessionId,
+          cs.leadName AS customerName,
+          cs.leadPhone AS phone,
+          cs.lastCustomerMessageTs AS lastCustomerMessageTs,
+          ROUND((${nowMs} - cs.lastCustomerMessageTs) / 60000) AS minutesUnanswered,
+          mdc.id AS madisonCardId,
+          mdc.sessionId AS madisonCardSessionId,
+          JSON_EXTRACT(mdc.metadata, '$.unansweredSince') AS unansweredSince,
+          JSON_EXTRACT(mdc.metadata, '$.unansweredMinutes') AS unansweredMinutes,
+          CASE WHEN mdc.id IS NOT NULL THEN 'YES' ELSE 'NO' END AS hasMadisonCard,
+          CASE WHEN JSON_EXTRACT(mdc.metadata, '$.unansweredSince') IS NOT NULL THEN 'YES' ELSE 'NO' END AS isEscalated,
+          alm.id AS alarmCardId,
+          alm.cardStatus AS alarmCardStatus,
+          CASE WHEN alm.id IS NOT NULL THEN 'YES' ELSE 'NO' END AS hasAlarmCard
+        FROM conversation_sessions cs
+        LEFT JOIN ops_chat_messages mdc
+          ON mdc.activeDedupKey = CONCAT('madison_sms_draft:', cs.id)
+          AND mdc.cardStatus = 'active'
+        LEFT JOIN ops_chat_messages alm
+          ON alm.sessionId = cs.id
+          AND alm.quickAction = 'unanswered_alarm'
+          AND alm.cardStatus = 'active'
+        WHERE
+          cs.lastMessageRole = 'user'
+          AND cs.csResolvedAt IS NULL
+          AND cs.lastCustomerMessageTs <= ${nowMs - thirtyMinMs}
+          AND cs.lastCustomerMessageTs >= ${nowMs - thirtyDaysMs}
+        ORDER BY cs.lastCustomerMessageTs ASC
+      `)) as any;
+      const data = Array.isArray(rows) ? rows : [];
+      const summary = {
+        totalUnanswered: data.length,
+        escalatedMadisonCards: data.filter((r: any) => r.isEscalated === 'YES').length,
+        madisonCardNotEscalated: data.filter((r: any) => r.hasMadisonCard === 'YES' && r.isEscalated === 'NO').length,
+        fallbackAlarmCards: data.filter((r: any) => r.hasAlarmCard === 'YES' && r.hasMadisonCard === 'NO').length,
+        noCardAtAll: data.filter((r: any) => r.hasMadisonCard === 'NO' && r.hasAlarmCard === 'NO').length,
+      };
+      return res.json({ summary, rows: data });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+  // TEMPORARY: manual trigger for unanswered alarm cron — remove after confirmed working
+  app.post("/api/diag/trigger-unanswered-alarm", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const { runUnansweredAlarmCron } = await import("../internalCron");
+      await runUnansweredAlarmCron();
+      return res.json({ ok: true, message: 'runUnansweredAlarmCron completed' });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
     try {

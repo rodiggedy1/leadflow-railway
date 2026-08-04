@@ -1586,7 +1586,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
                               return (
                                 <div key={i} style={{ marginBottom: 8, display: "flex", flexDirection: "column" as const, alignItems: isCustomer ? "flex-start" : "flex-end" }}>
                                   <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3 }}>{isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}</div>
-                                  <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222" }}>{m.content}</div>
+                                  <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222", wordBreak: "break-word", overflowWrap: "break-word" }}>{m.content}</div>
                                 </div>
                               );
                             })
@@ -1699,16 +1699,33 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
           opacity: isDismissed ? 0.55 : 1,
           transition: "border 0.2s, box-shadow 0.2s, opacity 0.2s",
         }}>
-                    {/* Top accent bar — only when awaiting approval */}
+          {/* ── Unanswered alarm banner — shown when cron escalated this card ── */}
+          {meta.unansweredSince && (() => {
+            const mins = meta.unansweredMinutes ?? Math.round((Date.now() - meta.unansweredSince!) / 60000);
+            const isRed = mins >= 60;
+            const label = mins >= 60 ? `${Math.floor(mins / 60)}H ${mins % 60}M` : `${mins}M`;
+            return (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 16px",
+                background: isRed ? "#fef2f2" : "#fffbeb",
+                borderBottom: `1px solid ${isRed ? "#fecaca" : "#fde68a"}`,
+              }}>
+                <span style={{ fontSize: 14 }}>🚨</span>
+                <span style={{
+                  font: "800 11px Inter,system-ui",
+                  color: isRed ? "#dc2626" : "#d97706",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase" as const,
+                }}>UNANSWERED · {label}</span>
+              </div>
+            );
+          })()}
+          {/* Top accent bar — only when awaiting approval */}
           {isDraftReady && (
             <div style={{ height: 3, background: "linear-gradient(90deg, #6d5cff, #a78bfa)", borderRadius: "20px 20px 0 0" }} />
           )}
-          {/* Unanswered banner */}
-          {(meta as any).unansweredMinutes !== undefined && (
-            <div style={{ background: "#dc2626", color: "#fff", font: "700 11px Inter,system-ui", letterSpacing: "0.06em", textAlign: "center", padding: "4px 0" }}>
-              ⏱ UNANSWERED {(() => { const m = (meta as any).unansweredMinutes as number; return m >= 60 ? `${Math.floor(m/60)}h${m%60>0?` ${m%60}m`:""}` : `${m} MIN`; })()}
-            </div>
-          )}
+
           {/* ── Header ── */}
           <div style={{ display: "flex", gap: 12, padding: "16px 18px" }}>
             {/* Avatar */}
@@ -1815,7 +1832,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
                               <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 3, paddingLeft: isCustomer ? 2 : 0, paddingRight: isCustomer ? 0 : 2 }}>
                                 {isCustomer ? (draft?.senderName ?? "Customer") : (m.senderName ?? "Madison")}{timeStr ? ` · ${timeStr}` : ""}
                               </div>
-                              <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222" }}>
+                              <div style={{ display: "inline-block", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, maxWidth: "80%", background: isCustomer ? "#ece7ff" : "#f0f0f0", color: "#222", wordBreak: "break-word", overflowWrap: "break-word" }}>
                                 {m.content}
                               </div>
                             </div>
@@ -3937,71 +3954,202 @@ function MadisonJobStatusCard({ card, onDismiss }: { card: CmdJobStatusStreamCar
 // Renders a single persistent alarm card for one unanswered session.
 // Created by the 5-min cron; auto-dismissed when an outbound reply is sent.
 // No manual dismiss in v1 — alarm stays until the session is actually answered.
-function UnansweredAlarmCard({ msg, onSelectSession }: {
+// Small helper: renders full conversation thread for a session (used by UnansweredAlarmCard)
+function ConversationThread({ sessionId }: { sessionId: number | null }) {
+  const { data, isLoading } = trpc.leads.getCsConversation.useQuery(
+    { sessionId: sessionId! },
+    { enabled: !!sessionId }
+  );
+  if (!sessionId) return null;
+  if (isLoading) return <div style={{ padding: "8px 0", fontSize: 12, color: "#9ca3af" }}>Loading…</div>;
+  let messages: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+  try { messages = JSON.parse(data?.messageHistory ?? "[]"); } catch { /* ignore */ }
+  if (messages.length === 0) return null;
+  return (
+    <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, paddingBottom: 4 }}>
+      {messages.map((m, idx) => {
+        const isAgent = m.role === "assistant";
+        return (
+          <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: isAgent ? "flex-end" : "flex-start" }}>
+            {m.senderName && (
+              <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2, paddingLeft: isAgent ? 0 : 4, paddingRight: isAgent ? 4 : 0 }}>
+                {m.senderName}
+              </div>
+            )}
+            <div style={{
+              maxWidth: "85%",
+              background: isAgent ? "#ede9fe" : "#f3f4f6",
+              color: "#1a1a2e",
+              borderRadius: isAgent ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+              padding: "7px 11px",
+              fontSize: 13,
+              lineHeight: 1.45,
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
+            }}>
+              {m.content}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   msg: { id: number; body: string; metadata: string | null; lastActivityAt?: number | null };
+  callerName: string;
   onSelectSession?: (sessionId: number, customerName: string) => void;
 }) {
   let meta: { sessionId?: number; leadName?: string | null; lastMessagePreview?: string | null; lastCustomerMessageTs?: number | null } = {};
   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-
   const sessionId = typeof meta.sessionId === "number" ? meta.sessionId : null;
   const leadName = meta.leadName || "Unknown";
+  // leadPhone not needed - send uses sessionId directly
   const preview = meta.lastMessagePreview || "";
   const ts = meta.lastCustomerMessageTs ?? 0;
-
+  const utils = trpc.useUtils();
   const [ageMs, setAgeMs] = React.useState(() => ts > 0 ? Date.now() - ts : 0);
+  const [replyText, setReplyText] = React.useState("");
+  const [isSending, setIsSending] = React.useState(false);
+  const [sendError, setSendError] = React.useState<string | null>(null);
+  const [justActed, setJustActed] = React.useState<"sent" | "no_reply" | null>(null);
+  const [isExpanded, setIsExpanded] = React.useState(false);
   React.useEffect(() => {
     if (!ts) return;
     const id = setInterval(() => setAgeMs(Date.now() - ts), 30_000);
     return () => clearInterval(id);
   }, [ts]);
-
   const fmtAge = (ms: number) => {
     const m = Math.floor(ms / 60000);
     if (m < 60) return `${m}m`;
     const h = Math.floor(m / 60); const rm = m % 60;
     return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
   };
-
   const ageMin = Math.floor(ageMs / 60000);
   const isOverdue = ageMin >= 60;
-  const borderColor = isOverdue ? "#ef4444" : "#f59e0b";
-  const badgeBg = isOverdue ? "#ef444422" : "#f59e0b22";
-  const badgeColor = isOverdue ? "#ef4444" : "#f59e0b";
-  const icon = isOverdue ? "🚨🚨" : "🚨";
-
-  const handleClick = () => {
-    if (sessionId && onSelectSession) onSelectSession(sessionId, leadName);
+  const alarmColor = isOverdue ? "#ef4444" : "#f59e0b";
+  const alarmBg = isOverdue ? "#fef2f2" : "#fffbeb";
+  const alarmBorder = isOverdue ? "#fecaca" : "#fde68a";
+  const sendSmsMutation = trpc.leads.sendMessage.useMutation();
+  const dismissAlarmMutation = trpc.opsChat.dismissAlarmCard.useMutation({
+    onSuccess: () => { utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); },
+  });
+  const handleSend = async () => {
+    if (!replyText.trim() || !sessionId || isSending) return;
+    setIsSending(true);
+    setSendError(null);
+    try {
+      await sendSmsMutation.mutateAsync({ sessionId, message: replyText.trim(), fromNumberId: "PN0wVLcpCq" });
+      // Only dismiss after successful send
+      await dismissAlarmMutation.mutateAsync({ msgId: msg.id, handledReason: "replied" });
+      setJustActed("sent");
+      setReplyText("");
+    } catch (err: any) {
+      setSendError(err?.message ?? "Failed to send. Try again.");
+    } finally {
+      setIsSending(false);
+    }
   };
-
-  return (
-    <div
-      style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px", cursor: sessionId ? "pointer" : "default" }}
-      onClick={handleClick}
-    >
-      <div style={{ width: 40, height: 40, borderRadius: "50%", background: `linear-gradient(135deg, ${borderColor}, #7f1d1d)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 }}>
-        {icon}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-          <span style={{ font: "700 15px Inter,system-ui", color: "#1a1a2e" }}>Unanswered</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: badgeBg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>
-            {fmtAge(ageMs)} ago
-          </span>
-        </div>
-        <div style={{ font: "600 14px Inter,system-ui", color: "#374151", marginBottom: 3 }}>{leadName}</div>
-        {preview && (
-          <div style={{ fontSize: 13, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-            &ldquo;{preview}&rdquo;
+  const handleNoReply = async () => {
+    if (isSending) return;
+    setIsSending(true);
+    setSendError(null);
+    try {
+      await dismissAlarmMutation.mutateAsync({ msgId: msg.id, handledReason: "no_reply_needed" });
+      setJustActed("no_reply");
+    } catch (err: any) {
+      setSendError(err?.message ?? "Failed. Try again.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+  if (justActed) {
+    return (
+      <div style={{ padding: "4px 16px" }}>
+        <div style={{ background: justActed === "sent" ? "#f0fdf4" : "#fafafa", border: `1px solid ${justActed === "sent" ? "#bbf7d0" : "#e5e7eb"}`, borderRadius: 20, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>{justActed === "sent" ? "✅" : "✓"}</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: justActed === "sent" ? "#15803d" : "#6b7280" }}>
+              {justActed === "sent" ? "Sent" : "Marked — no reply needed"}
+            </div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>Alarm cleared</div>
           </div>
-        )}
-        {sessionId && (
-          <button
-            onClick={e => { e.stopPropagation(); if (onSelectSession) onSelectSession(sessionId, leadName); }}
-            style={{ marginTop: 8, padding: "5px 14px", background: borderColor, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-          >
-            Reply Now
-          </button>
+        </div>
+      </div>
+    );
+  }
+  // accent bar + badge colors
+  const accentColor = isOverdue ? "#ef4444" : "#f59e0b";
+  const badgeColor = isOverdue ? "#d92d20" : "#b86600";
+  const badgeBg = isOverdue ? "#fff0ef" : "#fff4dc";
+  return (
+    <div style={{ padding: "4px 16px" }}>
+      <div style={{ background: "#fff", border: "1px solid #e7e9f0", borderRadius: 20, boxShadow: "0 8px 28px rgba(28,32,55,0.05)", overflow: "hidden" }}>
+        {/* Summary row — always visible, click to expand */}
+        <button
+          style={{ width: "100%", border: 0, background: "transparent", padding: "16px 18px", display: "grid", gridTemplateColumns: "7px 1fr auto 22px", gap: 14, alignItems: "center", textAlign: "left" as const, cursor: "pointer" }}
+          onClick={() => setIsExpanded(v => !v)}
+        >
+          {/* Left accent bar */}
+          <span style={{ height: 43, borderRadius: 20, background: accentColor, display: "block" }} />
+          {/* Name + badge + preview */}
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <span style={{ fontSize: 17, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, color: "#18192b" }}>{leadName}</span>
+              <span style={{ fontSize: 11, fontWeight: 800, padding: "5px 9px", borderRadius: 999, color: badgeColor, background: badgeBg, whiteSpace: "nowrap" as const }}>Waiting {fmtAge(ageMs)}</span>
+            </span>
+            {preview && <span style={{ display: "block", marginTop: 5, color: "#737b8e", fontSize: 14, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>"{preview}"</span>}
+          </span>
+          {/* Right hint */}
+          <span style={{ fontSize: 12, lineHeight: 1.35, color: "#8b93a7", textAlign: "right" as const, whiteSpace: "nowrap" as const }}>
+            No one has responded yet.<br /><b style={{ color: badgeColor, fontWeight: 800 }}>Click to respond</b>
+          </span>
+          {/* Chevron */}
+          <span style={{ fontSize: 23, color: "#a5acba", transition: "transform .2s", transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block" }}>›</span>
+        </button>
+        {/* Expanded detail */}
+        {isExpanded && (
+          <div style={{ borderTop: "1px solid #eff0f4", padding: 18 }}>
+            <div style={{ display: "inline-block", fontSize: 12, fontWeight: 800, color: "#d92d20", background: "#fff1f0", border: "1px solid #ffd4d0", padding: "7px 10px", borderRadius: 999, marginBottom: 14 }}>
+              🚨 UNANSWERED · {fmtAge(ageMs).toUpperCase()}
+            </div>
+            {/* Full conversation thread */}
+            {sessionId && (
+              <div style={{ marginBottom: 12 }} onClick={e => e.stopPropagation()}>
+                <ConversationThread sessionId={sessionId} />
+              </div>
+            )}
+            {/* Reply composer */}
+            <textarea
+              value={replyText}
+              onChange={e => setReplyText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder={`Reply to ${leadName}…`}
+              style={{ width: "100%", minHeight: 80, marginTop: 13, border: "1px solid #dfe2ea", borderRadius: 15, padding: 13, fontFamily: "inherit", fontSize: 14, outline: "none", resize: "vertical" as const, boxSizing: "border-box" as const, color: "#18192b", background: "#fff" }}
+              onClick={e => e.stopPropagation()}
+            />
+            {sendError && (
+              <div style={{ fontSize: 12, color: "#ef4444", marginTop: 6 }}>{sendError}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 10 }}>
+              <button
+                onClick={e => { e.stopPropagation(); handleNoReply(); }}
+                disabled={isSending}
+                style={{ border: "1px solid #dfe2ea", background: "#fff", color: "#626a79", borderRadius: 12, padding: "10px 14px", fontWeight: 800, fontSize: 13, cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1 }}
+              >
+                ✓ No reply needed
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); handleSend(); }}
+                disabled={isSending || !replyText.trim() || !sessionId}
+                style={{ background: "#6f4cff", color: "#fff", borderRadius: 12, padding: "10px 14px", fontWeight: 800, fontSize: 13, border: "none", cursor: (isSending || !replyText.trim() || !sessionId) ? "not-allowed" : "pointer", opacity: (isSending || !replyText.trim() || !sessionId) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {isSending ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : null}
+                Send reply
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -5983,9 +6131,8 @@ const MessageList = memo(function MessageList({
                 if (msg.quickAction === "madison_call_result") { return <MadisonCallResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_email_result") { return <MadisonEmailResultCard key={msg.id} msg={msg} />; }
                 if (msg.quickAction === "madison_invoice_result") { return <MadisonInvoiceResultCard key={msg.id} msg={msg} />; }
-                // ── Unanswered Alarm card — suppressed: alarm is now embedded in madison_sms_draft ──
-                if (msg.quickAction === "unanswered_alarm") { return null; }
-                if (false && msg.quickAction === "unanswered_alarm_legacy") {
+                // ── Unanswered Alarm card ─────────────────────────────────────────────
+                if (msg.quickAction === "unanswered_alarm") {
                   return (
                     <div
                       key={`${msg.id}:${msg.lastActivityAt ?? 0}`}
@@ -5994,6 +6141,7 @@ const MessageList = memo(function MessageList({
                     >
                       <UnansweredAlarmCard
                         msg={msg}
+                        callerName={callerName}
                         onSelectSession={(sid, name) => {
                           onSelectOpsSession?.(sid, name);
                         }}
