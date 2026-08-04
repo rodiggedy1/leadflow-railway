@@ -8358,6 +8358,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     message: string;
     matches: VoiceMatch[];
     selected: VoiceMatch | null;
+    /** msgId of the call summary card that triggered this panel (if any) — used to mark it acted after send/call */
+    callCardMsgId?: number | null;
   };
   const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmState | null>(null);
   const [voiceConfirmMsg, setVoiceConfirmMsg] = useState("");
@@ -9178,13 +9180,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   const handleCallBack = (name: string, phone: string, msgId: number) => {
-    markCallCardActedMutation.mutate({ msgId, action: "call", actedBy: currentUser?.name ?? "Agent" });
+    // NOTE: do NOT mark the card acted here — mark it only after the call actually fires
     const first = name.split(" ")[0];
     const script = `Hi ${first}, this is Ava from Maids in Black. I'm following up on the call you just had with us.\n\nI wanted to make sure all your questions were answered and see if there's anything else we can help you with.\n\nWould you like to schedule a cleaning or get a quote?`;
     setVoiceConfirmMsg(script);
     setVoiceConfirmAction("call");
     setVoiceConfirmScenario(`Follow up with ${name} who called in`);
-    setVoiceConfirm({ message: script, matches: [{ sessionId: 0, name, phone }], selected: { sessionId: 0, name, phone } });
+    setVoiceConfirm({ message: script, matches: [{ sessionId: 0, name, phone }], selected: { sessionId: 0, name, phone }, callCardMsgId: msgId });
     setVoiceTone("friendly");
     setVoiceCallStatus("idle");
     setVoiceCallVapiId(null);
@@ -9194,13 +9196,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     setVoiceCardMinimized(false);
   };
   const handleTextBack = (name: string, phone: string, msgId: number) => {
-    markCallCardActedMutation.mutate({ msgId, action: "text", actedBy: currentUser?.name ?? "Agent" });
+    // NOTE: do NOT mark the card acted here — mark it only after the SMS actually sends
     const first = name.split(" ")[0];
     const draft = `Hi ${first}, this is the Maids in Black team! We saw you just called us. How can we help you today? Feel free to reply here and we'll get right back to you. 😊`;
     setVoiceConfirmMsg(draft);
     setVoiceConfirmAction("text");
     setVoiceConfirmScenario(null);
-    setVoiceConfirm({ message: draft, matches: [{ sessionId: 0, name, phone }], selected: { sessionId: 0, name, phone } });
+    setVoiceConfirm({ message: draft, matches: [{ sessionId: 0, name, phone }], selected: { sessionId: 0, name, phone }, callCardMsgId: msgId });
     setVoiceTone("friendly");
     setVoiceCardMinimized(false);
   };
@@ -11074,6 +11076,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           });
                         }
                         toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
+                        // Mark the originating call card as acted (text) — only after SMS actually sent
+                        if (voiceConfirm.callCardMsgId) {
+                          markCallCardActedMutation.mutate({ msgId: voiceConfirm.callCardMsgId, action: "text", actedBy: currentUser?.name ?? "Agent" });
+                        }
                         setVoiceConfirm(null);
                         setVoiceConfirmMsg("");
                         setVoiceNeedsSearch(false);
@@ -11158,6 +11164,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       voiceCallContactPhoneRef.current = voiceConfirm.selected.phone;
                       voiceCallScriptRef.current = voiceConfirmMsg.trim();
                       setVoiceCallStatus("firing");
+                      // Mark the originating call card as acted (call) — only after call fires
+                      if (voiceConfirm.callCardMsgId) {
+                        markCallCardActedMutation.mutate({ msgId: voiceConfirm.callCardMsgId, action: "call", actedBy: currentUser?.name ?? "Agent" });
+                      }
                       voiceStartCallMutation.mutate({
                         cleanerJobId: 1,
                         jobDate: "",
