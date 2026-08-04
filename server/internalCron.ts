@@ -50,8 +50,8 @@ import { postOpsSummary } from "./opsSummaryEngine";
 import { runEscalationCalls } from "./escalationEngine";
 import { runMessageIntegrityCheck } from "./messageIntegrityEngine";
 import { setupGmailWatch, alertInvalidGrant } from "./gmailService";
-import { opsReminders, opsChatMessages, agents, jobAlerts, gmailState } from "../drizzle/schema";
-import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql } from "drizzle-orm";
+import { opsReminders, opsChatMessages, agents, jobAlerts, gmailState, conversationSessions } from "../drizzle/schema";
+import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql, ne, inArray } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -1139,6 +1139,23 @@ export function startInternalCron(): void {
   console.log("  - GmailHealthCheck:   9 AM ET daily");
   console.log(`  - EtaCallTrigger:     every 2 min (ENABLED=${FIELD_MGMT_ENABLED})`);
   console.log(`  - EtaRecordingRecovery: every 2 min (ENABLED=${FIELD_MGMT_ENABLED})`);
+  console.log("  - UnansweredAlarm:     every 5 min (all hours)");
+
+  // ── Unanswered message alarm: every 5 minutes ─────────────────────────────
+  // Creates a persistent alarm card in Command Chat when a customer message
+  // has been waiting >= 30 minutes with no outbound reply.
+  // Auto-resolves when lastMessageRole flips to "assistant" (actual send).
+  // Escalation thresholds (30m, 45m, 60m, 90m) bump lastActivityAt so the
+  // card resurfaces at the top of the feed.
+  cron.schedule("0 */5 * * * *", async () => {
+    try {
+      await runUnansweredAlarmCron();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[UnansweredAlarm] Cron failed:", msg);
+      await recordHeartbeat("unanswered-alarm", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
 }
 
 // ── Gmail watch reconciliation ────────────────────────────────────────────────
@@ -1360,4 +1377,212 @@ async function runGmailHealthCheck(): Promise<void> {
     console.error(`[GmailHealthCheck] Unexpected error — ${msg}`);
     await recordHeartbeat("gmail-health-check", `error: ${msg}`, false);
   }
+}
+
+// ── Unanswered message alarm ──────────────────────────────────────────────────
+/**
+ * Every 5 minutes:
+ *  1. Finds sessions where the last message is from a customer AND it's been
+ *     >= 30 minutes with no outbound reply.
+ *  2. Upserts one alarm card per session into opsChatMessages.
+ *     - activeDedupKey = "unanswered_alarm:<sessionId>" ensures one active card.
+ *     - lastActivityAt is only bumped when the card is first created OR when
+ *       the alarm crosses a new escalation threshold (45m, 60m, 90m).
+ *  3. Auto-resolves (sets cardStatus="dismissed", clears activeDedupKey) for
+ *     any alarm cards whose session now has lastMessageRole != "user" or is
+ *     csResolvedAt IS NOT NULL (meaning an outbound was sent or session closed).
+ *
+ * No AI. No schema migration. No manual dismiss in v1.
+ */
+
+const ALARM_THRESHOLDS_MS = [
+  30 * 60 * 1000,   // 30 min  — first alarm
+  45 * 60 * 1000,   // 45 min  — escalation 1
+  60 * 60 * 1000,   // 60 min  — escalation 2
+  90 * 60 * 1000,   // 90 min  — escalation 3
+];
+
+function alarmThresholdIndex(ageMs: number): number {
+  let idx = -1;
+  for (let i = 0; i < ALARM_THRESHOLDS_MS.length; i++) {
+    if (ageMs >= ALARM_THRESHOLDS_MS[i]) idx = i;
+  }
+  return idx;
+}
+
+function alarmBody(leadName: string | null, preview: string | null, ageMs: number): string {
+  const m = Math.floor(ageMs / 60000);
+  let label: string;
+  if (m >= 90) {
+    const h = Math.floor(m / 60);
+    const rm = m % 60;
+    label = `🚨🚨 OVERDUE — ${h}h${rm > 0 ? ` ${rm}m` : ""}`;
+  } else if (m >= 60) {
+    label = `🔴 UNANSWERED — ${m} MIN`;
+  } else if (m >= 45) {
+    label = `🔴 UNANSWERED — ${m} MIN`;
+  } else {
+    label = `🚨 UNANSWERED — ${m} MIN`;
+  }
+  const name = leadName || "Unknown";
+  const msg = preview ? `"${preview.slice(0, 100)}"` : "(no preview)";
+  return `${label}\n${name}\n${msg}`;
+}
+
+export async function runUnansweredAlarmCron(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const now = Date.now();
+  const THIRTY_MIN_MS = 30 * 60 * 1000;
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  // ── Step 1: Find sessions that need an alarm ────────────────────────────────
+  const unanswered = await db
+    .select({
+      id: conversationSessions.id,
+      leadName: conversationSessions.leadName,
+      leadPhone: conversationSessions.leadPhone,
+      lastCustomerMessageTs: conversationSessions.lastCustomerMessageTs,
+      lastMessageText: conversationSessions.lastMessageText,
+    })
+    .from(conversationSessions)
+    .where(
+      and(
+        eq(conversationSessions.lastMessageRole, "user"),
+        isNull(conversationSessions.csResolvedAt),
+        lte(conversationSessions.lastCustomerMessageTs, now - THIRTY_MIN_MS),
+        gte(conversationSessions.lastCustomerMessageTs, now - THIRTY_DAYS_MS),
+      )
+    );
+
+  // ── Step 2: Auto-resolve alarms for sessions that are now answered ──────────
+  // Fetch all active unanswered_alarm cards
+  const activeAlarms = await db
+    .select({
+      id: opsChatMessages.id,
+      metadata: opsChatMessages.metadata,
+      lastActivityAt: opsChatMessages.lastActivityAt,
+    })
+    .from(opsChatMessages)
+    .where(
+      and(
+        eq(opsChatMessages.quickAction as any, "unanswered_alarm"),
+        eq(opsChatMessages.cardStatus, "active"),
+      )
+    );
+
+  const unansweredSessionIds = new Set(unanswered.map(s => s.id));
+
+  for (const alarm of activeAlarms) {
+    let meta: { sessionId?: number; thresholdIndex?: number } = {};
+    try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
+    const sid = meta.sessionId;
+    if (!sid || !unansweredSessionIds.has(sid)) {
+      // Session is now answered or resolved — dismiss the alarm
+      await db
+        .update(opsChatMessages)
+        .set({
+          cardStatus: "dismissed",
+          activeDedupKey: null,
+        })
+        .where(eq(opsChatMessages.id, alarm.id));
+    }
+  }
+
+  // ── Step 3: Upsert alarm cards for unanswered sessions ─────────────────────
+  // Build a map of existing active alarm cards by sessionId for threshold tracking
+  const existingBySession = new Map<number, { id: number; thresholdIndex: number; lastActivityAt: number | null }>();
+  for (const alarm of activeAlarms) {
+    let meta: { sessionId?: number; thresholdIndex?: number } = {};
+    try { meta = JSON.parse(alarm.metadata ?? "{}"); } catch { /* ignore */ }
+    if (meta.sessionId) {
+      existingBySession.set(meta.sessionId, {
+        id: alarm.id,
+        thresholdIndex: meta.thresholdIndex ?? 0,
+        lastActivityAt: alarm.lastActivityAt ?? null,
+      });
+    }
+  }
+
+  let created = 0;
+  let escalated = 0;
+  let updated = 0;
+
+  for (const session of unanswered) {
+    const ageMs = now - (session.lastCustomerMessageTs ?? 0);
+    const thresholdIdx = alarmThresholdIndex(ageMs);
+    if (thresholdIdx < 0) continue; // shouldn't happen but guard
+
+    const dedupKey = `unanswered_alarm:${session.id}`;
+    const body = alarmBody(session.leadName ?? null, session.lastMessageText ?? null, ageMs);
+    const existing = existingBySession.get(session.id);
+    const metadataJson = JSON.stringify({
+      sessionId: session.id,
+      leadName: session.leadName ?? null,
+      lastMessagePreview: (session.lastMessageText ?? "").slice(0, 120),
+      lastCustomerMessageTs: session.lastCustomerMessageTs,
+      thresholdIndex: thresholdIdx,
+    });
+
+    if (!existing) {
+      // First alarm — insert with current timestamp as lastActivityAt
+      await db
+        .insert(opsChatMessages)
+        .values({
+          channel: "command",
+          authorName: "System",
+          authorRole: "system",
+          body,
+          quickAction: "unanswered_alarm" as any,
+          metadata: metadataJson,
+          sessionId: session.id,
+          lastActivityAt: now,
+          cardStatus: "active",
+          activeDedupKey: dedupKey,
+        } as any)
+        .onDuplicateKeyUpdate({
+          set: {
+            body,
+            metadata: metadataJson,
+            cardStatus: "active",
+            activeDedupKey: dedupKey,
+            lastActivityAt: now,
+          },
+        });
+      created++;
+    } else if (thresholdIdx > existing.thresholdIndex) {
+      // Crossed a new escalation threshold — bump lastActivityAt to resurface card
+      await db
+        .update(opsChatMessages)
+        .set({
+          body,
+          metadata: metadataJson,
+          lastActivityAt: now,
+        })
+        .where(eq(opsChatMessages.id, existing.id));
+      escalated++;
+    } else {
+      // Same threshold — update body (age display) but do NOT bump lastActivityAt
+      await db
+        .update(opsChatMessages)
+        .set({ body, metadata: metadataJson })
+        .where(eq(opsChatMessages.id, existing.id));
+      updated++;
+    }
+  }
+
+  if (created > 0 || escalated > 0) {
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("new_message", { channel: "command" });
+  }
+
+  if (created > 0 || escalated > 0 || updated > 0) {
+    console.log(`[UnansweredAlarm] created: ${created}, escalated: ${escalated}, updated: ${updated}, resolved: ${activeAlarms.length - unanswered.length}`);
+  }
+
+  await recordHeartbeat(
+    "unanswered-alarm",
+    `unanswered: ${unanswered.length}, created: ${created}, escalated: ${escalated}, updated: ${updated}`,
+    created > 0 || escalated > 0
+  );
 }
