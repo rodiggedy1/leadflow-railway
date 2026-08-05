@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls, confirmationCalls, smsCampaignRecipients, csMissions } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls, confirmationCalls, smsCampaignRecipients, csMissions, madisonSmsDrafts } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -2820,16 +2820,76 @@ async function handleCsOutboundMessage(msg: any) {
   }
   history.push({ role: "assistant", content: outboundText, ts: now, senderName: outboundSenderName, opMsgId: messageId });
 
-
+  // ── Step 1: Persist session with full summary fields + lastReadAt ─────────
+  // Use computeSessionSummary (same as sendMessage path) so lastMessageRole,
+  // lastMessageTs, lastMessageText, lastCustomerMessageTs, messageCount are
+  // all up-to-date. lastReadAt = sentAt (now) clears the unread badge — same
+  // convention as appendCsOutboundMessage.
+  const summary = computeSessionSummary(history as any);
   await db
     .update(conversationSessions)
-    .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() } as any)
+    .set({ messageHistory: JSON.stringify(history), updatedAt: new Date(), lastReadAt: now, ...summary } as any)
     .where(eq(conversationSessions.id, session.id));
 
   console.log(`[CS Outbound] Mirrored OpenPhone reply to session ${session.id} for ${leadPhone}: "${outboundText.slice(0, 60)}"`);
 
-  // Broadcast SSE so CS inbox updates instantly
+  // ── Step 2: Dismiss the active Madison SMS card + draft ───────────────────
+  // Look up by activeDedupKey (safest — sessionId column may be null on older cards).
+  const madisonDedupKey = `madison_sms_draft:${session.id}`;
+  try {
+    const [madisonCard] = await db
+      .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+      .from(opsChatMessages)
+      .where(
+        and(
+          eq(opsChatMessages.quickAction as any, "madison_sms_draft"),
+          eq(opsChatMessages.cardStatus, "active"),
+          eq(opsChatMessages.activeDedupKey, madisonDedupKey),
+        )
+      )
+      .limit(1);
+    if (madisonCard) {
+      // Dismiss the ops_chat_messages card (mirrors deactivateOpsSmsCard logic)
+      await db
+        .update(opsChatMessages)
+        .set({ cardStatus: "dismissed", activeDedupKey: null })
+        .where(eq(opsChatMessages.id, madisonCard.id));
+      // Mark the linked madison_sms_drafts row DISMISSED (not SENT — draft was superseded)
+      let cardMeta: { draftId?: number } = {};
+      try { cardMeta = JSON.parse(madisonCard.metadata ?? "{}"); } catch { /* ignore */ }
+      if (cardMeta.draftId) {
+        await db
+          .update(madisonSmsDrafts)
+          .set({ status: "DISMISSED", dismissedBy: outboundSenderName, dismissedAt: new Date(), updatedAt: new Date() })
+          .where(
+            and(
+              eq(madisonSmsDrafts.id, cardMeta.draftId),
+              eq(madisonSmsDrafts.status, "DRAFT_READY"),
+            )
+          );
+      }
+      console.log(`[CS Outbound] Dismissed Madison card ${madisonCard.id} (draftId=${cardMeta.draftId}) for session ${session.id}`);
+    }
+  } catch (err) {
+    console.error(`[CS Outbound] Non-fatal: failed to dismiss Madison card for session ${session.id}:`, err);
+  }
+
+  // ── Step 3: Dismiss any active unanswered_alarm card for this session ─────
+  try {
+    await db.execute(
+      sql`UPDATE ops_chat_messages
+          SET cardStatus = 'dismissed', activeDedupKey = NULL
+          WHERE quickAction = 'unanswered_alarm'
+            AND cardStatus = 'active'
+            AND JSON_EXTRACT(metadata, '$.sessionId') = ${session.id}`
+    );
+  } catch (err) {
+    console.error(`[CS Outbound] Non-fatal: failed to dismiss alarm card for session ${session.id}:`, err);
+  }
+
+  // ── Step 4: Broadcast so Command Chat + Focus refresh immediately ─────────
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("new_message", { channel: "command" });
   broadcastOpsUpdate("lead_update");
 }
 
