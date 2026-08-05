@@ -1314,6 +1314,36 @@ async function startServer() {
       return res.status(500).json({ error: e.message });
     }
   });
+  // Diagnostic: recent outbound webhook events (to verify OpenPhone fires them)
+  app.get("/api/diag/webhook-outbound", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      const rows = await db.execute(
+        sql`SELECT event_type, event_id, from_phone, to_phone, raw_payload, processed, created_at
+            FROM webhook_events
+            WHERE created_at >= NOW() - INTERVAL 2 HOUR
+            ORDER BY created_at DESC
+            LIMIT 30`
+      );
+      const events = (rows as any)[0] ?? rows;
+      return res.json({
+        count: Array.isArray(events) ? events.length : 0,
+        events: Array.isArray(events) ? events.map((e: any) => ({
+          type: e.event_type,
+          id: e.event_id,
+          from: e.from_phone,
+          to: e.to_phone,
+          createdAt: e.created_at,
+          payloadSnippet: typeof e.raw_payload === 'string' ? e.raw_payload.slice(0, 200) : null,
+        })) : events,
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
     try {
