@@ -1140,6 +1140,7 @@ export function startInternalCron(): void {
   console.log(`  - EtaCallTrigger:     every 2 min (ENABLED=${FIELD_MGMT_ENABLED})`);
   console.log(`  - EtaRecordingRecovery: every 2 min (ENABLED=${FIELD_MGMT_ENABLED})`);
   console.log("  - UnansweredAlarm:     every 5 min (all hours)");
+  console.log("  - OutboundSyncRecon:   every 2 min (OpenPhone/Quo reply reconciliation)");
 
   // ── Unanswered message alarm: every 5 minutes ─────────────────────────────
   // Creates a persistent alarm card in Command Chat when a customer message
@@ -1154,6 +1155,27 @@ export function startInternalCron(): void {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[UnansweredAlarm] Cron failed:", msg);
       await recordHeartbeat("unanswered-alarm", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Outbound sync reconciliation: every 2 minutes ───────────────────────────────
+  // Proactively reconciles sessions where the agent replied in OpenPhone/Quo
+  // without going through LeadFlow. OpenPhone does not fire a webhook for
+  // outbound messages, so this cron polls the OpenPhone API for all currently-
+  // unanswered sessions and runs the full "conversation answered" cleanup
+  // (session summary, card dismissal, broadcast) whenever a new outbound
+  // message is found.
+  //
+  // Overlap guard: in-memory boolean. Safe because Railway is configured with
+  // 1 replica (railway.json has no numReplicas). If replicas are ever scaled
+  // to N > 1, replace this with a DB advisory lock.
+  cron.schedule("0 */2 * * * *", async () => {
+    try {
+      await runOutboundSyncReconciliation();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[OutboundSync] Cron failed:", msg);
+      await recordHeartbeat("outbound-sync-reconciliation", `error: ${msg}`, false);
     }
   }, { timezone: "America/New_York" });
 }
@@ -1623,3 +1645,98 @@ export async function runUnansweredAlarmCron(): Promise<void> {
   );
 }
 
+
+// ── Outbound sync reconciliation ─────────────────────────────────────────────
+/**
+ * runOutboundSyncReconciliation
+ *
+ * Every 2 minutes: for all sessions that currently look unanswered
+ * (lastMessageRole = 'user', csResolvedAt IS NULL, recent enough to matter),
+ * call syncAllOutboundMessages to check whether an agent replied directly in
+ * OpenPhone/Quo. If new outbound messages are found, syncAllOutboundMessages
+ * will call handleSyncedOutboundReply which persists the session summary,
+ * dismisses Madison/alarm cards, and broadcasts Command Chat refresh.
+ *
+ * This makes LeadFlow eventually consistent with OpenPhone within ~2 minutes
+ * even when the customer never sends another message.
+ *
+ * Overlap guard: in-memory boolean. Safe for 1 Railway replica.
+ * If replicas are ever scaled to N > 1, replace with a DB advisory lock.
+ */
+let _outboundSyncRunning = false;
+
+export async function runOutboundSyncReconciliation(): Promise<void> {
+  if (_outboundSyncRunning) {
+    console.log("[OutboundSync] Previous run still active — skipping this tick");
+    return;
+  }
+  _outboundSyncRunning = true;
+  const t0 = Date.now();
+  let sessionsChecked = 0;
+  let sessionsWithNewOutbound = 0;
+  let outboundMessagesAdded = 0;
+  let cardsCleared = 0;
+  let errors = 0;
+
+  try {
+    const db = await getDb();
+    if (!db) return;
+
+    const now = Date.now();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+    // Query only sessions that currently look unanswered — keeps the set small.
+    // No minimum age cutoff: an agent may reply in Quo within minutes of the
+    // customer texting, and we want LeadFlow to know within the next 2-min tick.
+    const unanswered = await db
+      .select({
+        id: conversationSessions.id,
+        leadPhone: conversationSessions.leadPhone,
+      })
+      .from(conversationSessions)
+      .where(
+        and(
+          eq(conversationSessions.lastMessageRole, "user"),
+          isNull(conversationSessions.csResolvedAt),
+          gte(conversationSessions.lastCustomerMessageTs, now - THIRTY_DAYS_MS),
+        )
+      )
+      .limit(50); // safety cap — should be well under 50 in normal operation
+
+    sessionsChecked = unanswered.length;
+
+    // Import syncAllOutboundMessages lazily to avoid circular dependency
+    const { syncAllOutboundMessages } = await import("./webhooks");
+
+    for (const session of unanswered) {
+      if (!session.leadPhone) continue;
+      try {
+        const result = await syncAllOutboundMessages(session.leadPhone, session.id);
+        if (result && result.added > 0) {
+          sessionsWithNewOutbound++;
+          outboundMessagesAdded += result.added;
+          if (result.newestOutboundTs !== null) cardsCleared++;
+        }
+      } catch (err) {
+        errors++;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[OutboundSync] Error for session ${session.id} (${session.leadPhone}): ${msg}`);
+      }
+    }
+  } finally {
+    _outboundSyncRunning = false;
+  }
+
+  const durationMs = Date.now() - t0;
+  const summary = `checked: ${sessionsChecked}, withNewOutbound: ${sessionsWithNewOutbound}, msgAdded: ${outboundMessagesAdded}, cardsCleared: ${cardsCleared}, errors: ${errors}, duration: ${durationMs}ms`;
+
+  if (sessionsWithNewOutbound > 0 || errors > 0) {
+    console.log(`[OutboundSync] ${summary}`);
+  }
+
+  await recordHeartbeat(
+    "outbound-sync-reconciliation",
+    summary,
+    sessionsWithNewOutbound > 0,
+  );
+}

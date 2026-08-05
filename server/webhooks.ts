@@ -2894,6 +2894,92 @@ async function handleCsOutboundMessage(msg: any) {
 }
 
 /**
+ * handleSyncedOutboundReply — called whenever syncAllOutboundMessages discovers
+ * one or more newly-added outbound (agent) messages for a session.
+ *
+ * Performs the full "conversation answered" cleanup:
+ *   1. Persists computeSessionSummary + lastReadAt (clears unread badge)
+ *   2. Dismisses the active Madison SMS card + marks draft DISMISSED
+ *   3. Dismisses any fallback unanswered_alarm card
+ *   4. Broadcasts new_message + lead_update so Command Chat / Focus refresh
+ *
+ * @param db            Active DB connection
+ * @param sessionId     The conversation session ID
+ * @param history       The full sorted message history after sync
+ * @param lastReadAt    Timestamp of the newest newly-synced outbound message
+ */
+async function handleSyncedOutboundReply(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  sessionId: number,
+  history: Array<{ role: string; content: string; ts?: number; senderName?: string; opMsgId?: string }>,
+  lastReadAt: number,
+): Promise<void> {
+  // Step 1: Persist session summary fields + lastReadAt
+  const { computeSessionSummary } = await import("./sessionSummary");
+  const summary = computeSessionSummary(history as any);
+  await db
+    .update(conversationSessions)
+    .set({ lastReadAt, updatedAt: new Date(), ...summary } as any)
+    .where(eq(conversationSessions.id, sessionId));
+
+  // Step 2: Dismiss the active Madison SMS card + linked draft
+  const madisonDedupKey = `madison_sms_draft:${sessionId}`;
+  try {
+    const [madisonCard] = await db
+      .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+      .from(opsChatMessages)
+      .where(
+        and(
+          eq(opsChatMessages.quickAction as any, "madison_sms_draft"),
+          eq(opsChatMessages.cardStatus, "active"),
+          eq(opsChatMessages.activeDedupKey, madisonDedupKey),
+        )
+      )
+      .limit(1);
+    if (madisonCard) {
+      await db
+        .update(opsChatMessages)
+        .set({ cardStatus: "dismissed", activeDedupKey: null })
+        .where(eq(opsChatMessages.id, madisonCard.id));
+      let cardMeta: { draftId?: number } = {};
+      try { cardMeta = JSON.parse(madisonCard.metadata ?? "{}"); } catch { /* ignore */ }
+      if (cardMeta.draftId) {
+        await db
+          .update(madisonSmsDrafts)
+          .set({ status: "DISMISSED", dismissedBy: "OpenPhone (external reply)", dismissedAt: new Date(), updatedAt: new Date() })
+          .where(
+            and(
+              eq(madisonSmsDrafts.id, cardMeta.draftId),
+              eq(madisonSmsDrafts.status, "DRAFT_READY"),
+            )
+          );
+      }
+      console.log(`[SyncReply] Dismissed Madison card ${madisonCard.id} (draftId=${cardMeta.draftId}) for session ${sessionId}`);
+    }
+  } catch (err) {
+    console.error(`[SyncReply] Non-fatal: failed to dismiss Madison card for session ${sessionId}:`, err);
+  }
+
+  // Step 3: Dismiss any active unanswered_alarm card for this session
+  try {
+    await db.execute(
+      sql`UPDATE ops_chat_messages
+          SET cardStatus = 'dismissed', activeDedupKey = NULL
+          WHERE quickAction = 'unanswered_alarm'
+            AND cardStatus = 'active'
+            AND JSON_EXTRACT(metadata, '$.sessionId') = ${sessionId}`
+    );
+  } catch (err) {
+    console.error(`[SyncReply] Non-fatal: failed to dismiss alarm card for session ${sessionId}:`, err);
+  }
+
+  // Step 4: Broadcast so Command Chat + Focus refresh immediately
+  const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("new_message", { channel: "command" });
+  broadcastOpsUpdate("lead_update");
+}
+
+/**
  * syncAllOutboundMessages — fetches recent messages from ALL authorized company
  * OpenPhone numbers for a given conversation and mirrors any outbound (agent-sent)
  * messages that aren't already in the session history.
@@ -2905,8 +2991,10 @@ async function handleCsOutboundMessage(msg: any) {
  * per request), merges results, deduplicates strictly by OpenPhone message ID,
  * sorts chronologically, and writes once inside a transaction with FOR UPDATE
  * to prevent concurrent inbound events from overwriting each other.
+ *
+ * Returns { added, newestOutboundTs } so callers can instrument results.
  */
-export async function syncAllOutboundMessages(leadPhone: string, sessionId: number): Promise<void> {
+export async function syncAllOutboundMessages(leadPhone: string, sessionId: number): Promise<{ added: number; newestOutboundTs: number | null }> {
   const db = await getDb();
   if (!db) return;
   const apiKey = ENV.openPhoneApiKey;
@@ -2989,6 +3077,8 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
   // Use a transaction with FOR UPDATE to prevent concurrent inbound webhooks from
   // reading stale history between our SELECT and UPDATE.
   let added = 0;
+  let newestOutboundTs: number | null = null; // max ts among newly-added outbound messages only
+  let finalHistory: Array<{ role: string; content: string; ts?: number; senderName?: string; opMsgId?: string }> = [];
   await (db as any).transaction(async (tx: typeof db) => {
     const [session] = await (tx as any)
       .select({ messageHistory: conversationSessions.messageHistory })
@@ -3044,12 +3134,15 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
       history.push(entry);
       syncedIds.add(msgId);
       added++;
+      // Track newest outbound timestamp from newly-added messages only
+      if (!isInbound && msgTs > (newestOutboundTs ?? 0)) newestOutboundTs = msgTs;
     }
 
     if (added === 0) return;
 
     // Sort chronologically before writing
     history.sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
+    finalHistory = history;
 
     await (tx as any)
       .update(conversationSessions)
@@ -3057,13 +3150,21 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
       .where(eq(conversationSessions.id, sessionId));
   });
 
-  if (added === 0) return;
+  if (added === 0) return { added: 0, newestOutboundTs: null };
 
   console.log(`[Sync] Synced ${added} message(s) from OpenPhone for session ${sessionId} (${leadPhone})`);
 
-  // Broadcast SSE so the inbox updates instantly
-  const { broadcastOpsUpdate: broadcastOpsUpdate2 } = await import("./sseBroadcast");
-  broadcastOpsUpdate2("lead_update");
+  // If any newly-synced messages were outbound (agent replies), run the full
+  // "conversation answered" cleanup: persist session summary, dismiss cards, broadcast.
+  if (newestOutboundTs !== null) {
+    await handleSyncedOutboundReply(db, sessionId, finalHistory, newestOutboundTs);
+  } else {
+    // Inbound-only sync: just broadcast lead_update
+    const { broadcastOpsUpdate: broadcastOpsUpdate2 } = await import("./sseBroadcast");
+    broadcastOpsUpdate2("lead_update");
+  }
+
+  return { added, newestOutboundTs };
 }
 
 /** @deprecated Use syncAllOutboundMessages instead */
