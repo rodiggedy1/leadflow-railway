@@ -360,7 +360,7 @@ export default function CsInbox2() {
   }, [detailMessages, selectedConv]);
 
   // ── Filtered columns ────────────────────────────────────────────────────
-  const clientConvs = useMemo(() => liveConvs.filter(c => c.queue !== "Teams"), [liveConvs]);
+  const clientConvs = useMemo(() => liveConvs, [liveConvs]);
   const teamConvs   = useMemo(() => liveConvs.filter(c => c.queue === "Teams"),  [liveConvs]);
 
   // Active (non-resolved) client conversations only
