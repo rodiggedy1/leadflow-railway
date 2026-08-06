@@ -1531,327 +1531,407 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     <>
     <div className="h-full overflow-hidden flex flex-col cs-inbox-scope" style={{color:'#101828', background:'transparent'}}>
       <div className="w-full flex flex-col flex-1 min-h-0" style={{padding:'20px'}}>
-        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_minmax(0,1fr)_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[minmax(0,1fr)_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '16px'}}>
+        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '16px'}}>
           {rail}
-          {/* ── COL 1: Kanban Board (Client conversations) ── */}
-          {(() => {
-            const now = Date.now();
-            const THIRTY_MIN = 30 * 60 * 1000;
-            const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+          {/* ── COL 1: Revenue Lane (Client conversations) ── */}
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FCFCFD', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '24px 24px 24px'}}>
 
-            function getKanbanColumn(conv: (typeof clientConvs)[number]) {
-              const hasUnanswered = !!(conv as any).hasUnanswered;
-              const csResolvedAt = (conv as any).csResolvedAt ?? null;
-              const lastCustomerMessageTs = (conv as any).lastCustomerMessageTs ?? 0;
-              const createdAt = (conv as any).createdAt;
-              const createdAtMs = createdAt ? new Date(createdAt).getTime() : 0;
-              const messageCount = (conv as any).messageCount ?? 0;
-              const isAtRisk = hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-              const isNew = createdAtMs > 0 && (now - createdAtMs) < TWENTY_FOUR_H && messageCount <= 2 && !csResolvedAt && !isAtRisk;
-              const needsReply = hasUnanswered && !csResolvedAt && !isAtRisk;
-              if (isAtRisk) return "at-risk";
-              if (isNew) return "new";
-              if (needsReply) return "needs-response";
-              return "on-customer";
-            }
-
-            function matchesSidebarFilter(conv: (typeof clientConvs)[number], f: string) {
-              if (f === "all") return true;
-              const hasUnanswered = !!(conv as any).hasUnanswered;
-              const csResolvedAt = (conv as any).csResolvedAt ?? null;
-              const lastCustomerMessageTs = (conv as any).lastCustomerMessageTs ?? 0;
-              const isAtRisk = hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-              const needsReply = hasUnanswered && !csResolvedAt;
-              const csStatusTier = (conv as any).csStatusTier as string | null;
-              if (f === "needs-response") return needsReply && !isAtRisk;
-              if (f === "unanswered") return isAtRisk;
-              if (f === "hot") return csStatusTier === "hot_lead";
-              return true;
-            }
-
-            const [kanbanFilter, setKanbanFilter] = React.useState<string>("all");
-
-            const needsResponseCount = clientConvs.filter(c => {
-              const hasUnanswered = !!(c as any).hasUnanswered;
-              const csResolvedAt = (c as any).csResolvedAt ?? null;
-              const lastCustomerMessageTs = (c as any).lastCustomerMessageTs ?? 0;
-              const isAtRisk = hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-              return hasUnanswered && !csResolvedAt && !isAtRisk;
-            }).length;
-            const unansweredCount = clientConvs.filter(c => {
-              const hasUnanswered = !!(c as any).hasUnanswered;
-              const csResolvedAt = (c as any).csResolvedAt ?? null;
-              const lastCustomerMessageTs = (c as any).lastCustomerMessageTs ?? 0;
-              return hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-            }).length;
-            const hotLeadsCount = clientConvs.filter(c => (c as any).csStatusTier === "hot_lead").length;
-
-            const sidebarFiltered = clientConvs.filter(c => matchesSidebarFilter(c, kanbanFilter));
-
-            const kanbanColumns: { id: string; label: string; dotColor: string; convs: (typeof clientConvs) }[] = [
-              { id: "at-risk",        label: "At Risk",        dotColor: "#ff9f1a", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "at-risk") },
-              { id: "new",            label: "New",            dotColor: "#3478f6", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "new") },
-              { id: "needs-response", label: "Needs Response", dotColor: "#13b77a", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "needs-response") },
-              { id: "on-customer",    label: "On Customer",    dotColor: "#8b5cf6", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "on-customer") },
-            ];
-
-            function renderKanbanCard(conversation: (typeof clientConvs)[number]) {
-              const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
-              const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
-              const isSelected = selected.id === conversation.id;
-              const hasUnanswered = !!(conversation as any).hasUnanswered;
-              const isResolved = !!(conversation as any).csResolvedAt;
-              const gradientPalette = [
-                "linear-gradient(135deg,#7C4DFF,#C05CFF)",
-                "linear-gradient(135deg,#FF7242,#FF9D1C)",
-                "linear-gradient(135deg,#0EA76D,#24C98A)",
-                "linear-gradient(135deg,#5B6CFF,#4AA3FF)",
-                "linear-gradient(135deg,#E06B8B,#F4A0B0)",
-                "linear-gradient(135deg,#6B7CFF,#9B8CFF)",
-                "linear-gradient(135deg,#2EB8A6,#4DD9C5)",
-                "linear-gradient(135deg,#F5A623,#F7C35F)",
-              ];
-              const initials = conversation.initials || "?";
-              const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
-              const gradient = gradientPalette[hashIdx];
-              const csPriorityTag = (conversation as any).csPriorityTag;
-              const csQueue = (conversation as any).csQueue;
-              const lastSenderRole = (conversation as any).lastSenderRole as "user" | "assistant" | null;
-              const llmTier = (conversation as any).csStatusTier as string | null;
-              const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
-              const waitMinDisplay = Math.floor(waitMs / 60_000);
-              const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000;
-              const isBooked = csQueue === "Active jobs" || csQueue === "Hot leads";
-              type StatusKey = "new_inquiry" | "waiting_on_you" | "hot_lead" | "slow_response" | "scheduling" | "objection" | "post_job" | "happy_customer" | "cold_lead" | "solved" | "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
-              type StatusCfg = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
-              const statusCfg: Record<StatusKey, StatusCfg> = {
-                new_inquiry:     { label: "🟢 New Inquiry",       action: "Respond now · book this lead",           pill: "bg-emerald-50 text-emerald-700 border-emerald-200",  dot: "bg-emerald-500",  Icon: MessageSquare },
-                waiting_on_you:  { label: "🟡 Waiting on You",    action: "Follow up now · recommended",            pill: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500",    Icon: ShieldAlert },
-                hot_lead:        { label: "🔥 Hot Lead",           action: "Close now · send time + price",          pill: "bg-orange-50 text-orange-700 border-orange-200",    dot: "bg-orange-500",   Icon: TrendingUp },
-                slow_response:   { label: "⏱️ Slow Response",      action: `Nudge now · ${waitMinDisplay}m wait`,    pill: "bg-rose-50 text-rose-700 border-rose-200",          dot: "bg-rose-500",     Icon: Clock3 },
-                scheduling:      { label: "📅 Scheduling",         action: "Lock in time · confirm slot",            pill: "bg-sky-50 text-sky-700 border-sky-200",             dot: "bg-sky-500",      Icon: Clock3 },
-                objection:       { label: "❌ Objection",          action: "Overcome objection · use script",        pill: "bg-red-50 text-red-700 border-red-200",             dot: "bg-red-500",      Icon: ShieldAlert },
-                post_job:        { label: "🔁 Post-job",           action: "Push to recurring",                      pill: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-400",   Icon: CheckCircle2 },
-                happy_customer:  { label: "🌟 Happy Customer",     action: "Ask for review + rebook",               pill: "bg-yellow-50 text-yellow-700 border-yellow-200",    dot: "bg-yellow-400",   Icon: CheckCircle2 },
-                cold_lead:       { label: "🧊 Cold Lead",          action: "Reactivate · last-minute opening",       pill: "bg-slate-50 text-slate-500 border-slate-200",       dot: "bg-slate-400",    Icon: Clock3 },
-                solved:          { label: "✅ Solved",             action: "No action needed",                       pill: "bg-slate-50 text-slate-400 border-slate-200",       dot: "bg-slate-300",    Icon: CheckCircle2 },
-                act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500", Icon: ShieldAlert },
-                your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
-                their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", Icon: Clock3 },
-                monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
-                resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
-              };
-              const ACK_WORDS = /\b(ok|okay|sure|yes|yep|yup|alright|great|perfect|sounds good|got it|will do|noted|confirmed|received|on it|done|no problem|no worries|thank you|thanks|ty|np|appreciate it|see you|see you then|we'll be there|on my way|just finished|all set|all good|good to go|makes sense|understood|copy that|roger|10-4)\b/i;
-              const lastMsgText = (conversation.lastMessage || "").trim();
-              const wordCount = lastMsgText.split(/\s+/).filter(Boolean).length;
-              const isTerminalAck = !llmTier && wordCount <= 8 && ACK_WORDS.test(lastMsgText) && !lastMsgText.includes("?");
-              const validLlmKeys = new Set<string>(Object.keys(statusCfg));
-              const resolvedLlmKey = llmTier && validLlmKeys.has(llmTier) ? (llmTier as StatusKey) : null;
-              const statusKey: StatusKey =
-                isResolved ? "resolved" :
-                resolvedLlmKey ? resolvedLlmKey :
-                isTerminalAck ? "solved" :
-                (csPriorityTag || waitingTooLong) ? "act_now" :
-                lastSenderRole === "user" ? "your_turn" :
-                lastSenderRole === "assistant" ? "their_turn" :
-                "monitor";
-              const sc = statusCfg[statusKey];
-              const linkedSessionId = (conversation as any).linkedSessionId ?? null;
-              const isResolvingThis = resolvingId === conversation.id;
-              return (
-                <motion.div
-                  key={conversation.id}
-                  layout
-                  animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
-                  transition={{ duration: 0.16, ease: [.2,.8,.2,1] }}
-                  className="group relative"
-                  style={{borderRadius:'12px', marginBottom:'9px'}}
-                >
-                  <motion.button
-                    whileHover={{ y: -1, transition: { duration: 0.12, ease: [.2,.8,.2,1] } }}
-                    onClick={() => {
-                      setSelectedId(conversation.id);
-                      userNavigatedToId.current = conversation.id;
-                      triggerAutoDraft(conversation);
-                    }}
-                    className="w-full text-left"
-                    style={{
-                      background: '#fff',
-                      border: isSelected ? '2px solid #7356ff' : '1px solid #dfe2e8',
-                      borderRadius: '12px',
-                      padding: '13px',
-                      cursor: 'pointer',
-                      transition: '.15s',
-                      boxShadow: isSelected ? '0 8px 24px rgba(30,32,60,.08)' : 'none',
-                      display: 'block',
-                      width: '100%',
-                    }}
-                  >
-                    <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                      <div className="flex items-center justify-center font-bold text-white" style={{width:'32px', height:'32px', borderRadius:'50%', fontSize:'11px', fontWeight:800, flexShrink:0, background:gradient}}>
-                        {initials}
-                      </div>
-                      <strong style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, color: isUnread ? '#181a24' : '#424755', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.name}</strong>
-                      <span style={{marginLeft:'auto', color:'#9aa0aa', fontSize:'11px', flexShrink:0}}>
-                        {conversation.lastMsgTs
-                          ? (() => {
-                              const d = new Date(conversation.lastMsgTs);
-                              const nowD = new Date();
-                              const isToday = d.toDateString() === nowD.toDateString();
-                              const yesterday = new Date(nowD); yesterday.setDate(nowD.getDate() - 1);
-                              if (isToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-                              if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-                              return d.toLocaleDateString([], { month: "short", day: "numeric" });
-                            })()
-                          : conversation.wait
-                        }
-                      </span>
-                    </div>
-                    <div style={{fontSize:'13px', lineHeight:'1.42', color: isUnread ? '#3f4450' : '#8c929f', margin:'8px 0 0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: isUnread ? 600 : 400}}>{conversation.lastMessage || sc.action}</div>
-                    <div style={{display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'8px', alignItems:'center'}}>
-                      <span style={{
-                        fontSize:'10px', padding:'4px 7px', borderRadius:'7px',
-                        background: (statusKey === 'resolved' || statusKey === 'solved') ? '#e9f8f2' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#ffefed' : '#f2f3f5',
-                        color: (statusKey === 'resolved' || statusKey === 'solved') ? '#11815c' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#dd4435' : '#424755',
-                        fontWeight: 700,
-                      }}>
-                        {sc.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
-                      </span>
-                      {linkedSessionId && (
-                        <span style={{fontSize:'10px', padding:'4px 7px', borderRadius:'7px', background:'#f2f3f5', color:'#757b88', display:'inline-flex', alignItems:'center', gap:'3px'}}>
-                          <Link2 className="h-3 w-3" /> Linked
-                        </span>
-                      )}
-                    </div>
-                  </motion.button>
-                  {!isResolved && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); resolveSession.mutate({ sessionId: conversation.id }); }}
-                      className="absolute right-2 top-2 rounded-lg bg-white/90 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 opacity-0 group-hover:opacity-100 shadow-sm transition-all hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
-                    >
-                      Resolve
-                    </button>
-                  )}
-                  <AnimatePresence>
-                    {isResolvingThis && (
-                      <motion.div
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[12px]"
-                      >
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="absolute inset-0 bg-violet-400/10" />
-                        {[...Array(18)].map((_, i) => {
-                          const x = ((i % 6) - 2.5) * 28;
-                          const y = Math.floor(i / 6) * 10;
-                          return (
-                            <motion.div key={i} initial={{ x: 0, y: 0, opacity: 0, scale: 0.4, rotate: 0 }} animate={{ x, y: -40 - y, opacity: [0, 1, 0], scale: [0.4, 1, 0.8], rotate: 140 }} exit={{ opacity: 0 }} transition={{ duration: 0.8, delay: i * 0.015 }} className="absolute left-1/2 top-1/2 -ml-2 -mt-2 text-violet-500">
-                              <Sparkles className="h-4 w-4" />
-                            </motion.div>
-                          );
-                        })}
-                        <motion.div initial={{ scale: 0.6, opacity: 0, y: 6 }} animate={{ scale: [0.6, 1.08, 1], opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.45 }} className="absolute inset-0 flex items-center justify-center">
-                          <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">Resolved ✨</div>
-                        </motion.div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              );
-            }
-
-            return (
-              <div style={{display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden', background:'transparent', borderRadius:'14px', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
-                {/* Topbar */}
-                <div style={{height:'56px', background:'#fff', borderBottom:'1px solid #e5e7ee', padding:'0 18px', display:'flex', alignItems:'center', gap:'10px', borderRadius:'14px 14px 0 0', flexShrink:0}}>
-                  <h2 style={{margin:0, fontSize:'20px', fontWeight:900, letterSpacing:'-0.03em', color:'#181a24', marginRight:'auto'}}>All Conversations</h2>
-                  <div style={{background:'#11131a', color:'white', height:'24px', padding:'0 10px', borderRadius:'999px', fontSize:'11px', fontWeight:700, display:'flex', alignItems:'center'}}>
-                    {clientConvs.length} open
-                  </div>
+              {/* Revenue Lane header */}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div style={{fontSize:'10px', fontWeight:900, letterSpacing:'.22em', color:'#98A2B3', textTransform:'uppercase', marginBottom:'6px'}}>Revenue Lane</div>
+                  <div style={{fontSize:'30px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Clients</div>
                 </div>
-                {/* Search */}
-                <div style={{display:'flex', gap:'8px', padding:'10px 14px', background:'#fff', flexShrink:0, borderBottom:'1px solid #e5e7ee'}}>
-                  <div style={{position:'relative', flex:1}}>
-                    <Search className="h-4 w-4 absolute" style={{left:'12px', top:'50%', transform:'translateY(-50%)', color:'#9aa3b2'}} />
-                    <Input
-                      value={clientQuery}
-                      onChange={(e) => setClientQuery(e.target.value)}
-                      placeholder="Search conversations..."
-                      style={{height:'34px', borderRadius:'9px', background:'#fff', border:'1px solid #e1e4ea', paddingLeft:'34px', paddingRight:'12px', fontSize:'13px', color:'#181a24', boxShadow:'none'}}
-                      className="placeholder:text-[#9aa3b2] focus-visible:ring-0"
-                    />
-                  </div>
-                </div>
-                {/* Body: sidebar + board */}
-                <div style={{display:'flex', flex:1, minHeight:0, overflow:'hidden'}}>
-                  {/* Sidebar */}
-                  <div style={{width:'190px', flexShrink:0, background:'#fff', borderRight:'1px solid #e5e7ee', padding:'12px 8px', display:'flex', flexDirection:'column', overflowY:'auto'}}>
-                    <div style={{fontSize:'10px', color:'#959baa', fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', margin:'0 8px 8px'}}>Views</div>
-                    {[
-                      { id: 'all',            label: 'All Conversations', count: clientConvs.length,  dot: null },
-                      { id: 'needs-response', label: 'Needs Response',    count: needsResponseCount,  dot: '#13b77a' },
-                      { id: 'unanswered',     label: 'Unanswered',        count: unansweredCount,     dot: '#ff9f1a' },
-                      { id: 'hot',            label: 'Hot Leads',         count: hotLeadsCount,       dot: '#ff5f8f' },
-                    ].map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => setKanbanFilter(item.id)}
-                        style={{
-                          border: 0,
-                          background: kanbanFilter === item.id ? '#f2efff' : 'transparent',
-                          color: kanbanFilter === item.id ? '#6345f5' : '#424755',
-                          textAlign: 'left', padding: '8px 10px', borderRadius: '9px',
-                          display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-                          fontSize: '13px', fontWeight: 600, width: '100%',
-                        }}
-                      >
-                        {item.dot
-                          ? <span style={{width:'8px', height:'8px', borderRadius:'50%', background:item.dot, flexShrink:0, display:'inline-block'}} />
-                          : <span style={{width:'8px', height:'8px', flexShrink:0, display:'inline-block'}} />
-                        }
-                        <span style={{flex:1, fontSize:'12px'}}>{item.label}</span>
-                        <span style={{marginLeft:'auto', background: kanbanFilter === item.id ? '#ede9ff' : '#f0f1f4', color: kanbanFilter === item.id ? '#6345f5' : '#757b88', borderRadius:'999px', padding:'2px 6px', fontSize:'10px', fontWeight:700}}>
-                          {item.count}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  {/* Kanban board */}
-                  <div style={{flex:1, overflowX:'auto', overflowY:'hidden'}}>
-                    <div style={{display:'grid', gridTemplateColumns:'repeat(4, minmax(200px, 1fr))', gap:'10px', height:'100%', padding:'12px'}}>
-                      {kanbanColumns.map((col) => (
-                        <div key={col.id} style={{background:'#f1f2f5', border:'1px solid #e0e3e8', borderRadius:'14px', padding:'10px', display:'flex', flexDirection:'column', minHeight:0, overflow:'hidden'}}>
-                          <div style={{display:'flex', alignItems:'center', gap:'8px', padding:'4px 4px 10px', fontWeight:800, flexShrink:0}}>
-                            <span style={{width:'8px', height:'8px', borderRadius:'50%', background:col.dotColor, flexShrink:0, display:'inline-block'}} />
-                            <span style={{fontSize:'13px', color:'#181a24'}}>{col.label}</span>
-                            <span style={{marginLeft:'auto', color:'#9aa0ab', fontSize:'12px', fontWeight:700}}>{col.convs.length}</span>
-                          </div>
-                          <div className="cs-inbox-scroll" style={{flex:1, overflowY:'auto', paddingRight:'2px'}}>
-                            {col.convs.length === 0 && (
-                              <div style={{textAlign:'center', color:'#9aa0aa', padding:'28px 8px', fontSize:'12px'}}>No conversations</div>
-                            )}
-                            {col.convs.map(conv => renderKanbanCard(conv))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                {/* Footer stats */}
-                <div style={{height:'50px', background:'#fff', borderTop:'1px solid #e5e7ee', display:'grid', gridTemplateColumns:'repeat(3,1fr)', flexShrink:0, borderRadius:'0 0 14px 14px'}}>
-                  {[
-                    { label: 'Total Conversations', value: clientConvs.length },
-                    { label: 'Needs Response',       value: needsResponseCount },
-                    { label: 'At Risk',              value: unansweredCount },
-                  ].map((s, i) => (
-                    <div key={i} style={{padding:'7px 14px', borderRight: i < 2 ? '1px solid #eceef2' : 'none'}}>
-                      <div style={{fontSize:'10px', color:'#818795'}}>{s.label}</div>
-                      <div style={{fontSize:'16px', fontWeight:800, color:'#181a24', marginTop:'1px'}}>{s.value}</div>
-                    </div>
-                  ))}
+                <div style={{background:'#101828', color:'white', height:'28px', padding:'0 12px', borderRadius:'999px', fontSize:'12px', fontWeight:700, flexShrink:0, display:'flex', alignItems:'center'}}>
+                  {clientConvs.length} open
                 </div>
               </div>
-            );
-          })()}
+
+              {/* Search bar */}
+              <div className="relative" style={{marginTop:'16px'}}>
+                <Search className="h-4 w-4 absolute" style={{left:'20px', top:'50%', transform:'translateY(-50%)', color:'#9aa3b2'}} />
+                <Input
+                  value={clientQuery}
+                  onChange={(e) => setClientQuery(e.target.value)}
+                  placeholder="Search clients, leads, bookings"
+                  style={{height:'36px', borderRadius:'999px', background:'#FAFBFC', border:'1px solid #E6E9EE', paddingLeft:'34px', paddingRight:'12px', fontSize:'13px', fontWeight:600, color:'#101828', boxShadow:'none'}}
+                  className="placeholder:text-[#9aa3b2] focus-visible:ring-0"
+                />
+              </div>
+
+              {/* AI priority queue — collapsed by default, hover to expand */}
+              <div className="group cursor-default transition-all" style={{marginTop:'16px', borderRadius:'16px', padding:'12px 14px', background:'rgba(139,92,246,.04)', border:'1px solid rgba(139,92,246,.10)'}}>
+                <div className="flex flex-col" style={{gap:'8px'}}>
+                  <div className="flex items-center gap-2">
+                    <Sparkles style={{width:'13px',height:'13px',color:'#8B5CF6',flexShrink:0}} />
+                    <div style={{fontSize:'11px', fontWeight:900, color:'#6D28D9', letterSpacing:'.12em', textTransform:'uppercase'}}>Client priority queue</div>
+                    {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA',flexShrink:0}} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {priorityItems.length === 0 && !priorityLoading && (
+                      <div style={{marginTop:'4px', fontSize:'12px', fontWeight:500, color:'#7a8290', lineHeight:'1.4'}}>No urgent items right now.</div>
+                    )}
+                    {priorityItems.length > 0 && (
+                      <div style={{marginTop:'4px', fontSize:'12px', fontWeight:500, color:'#7a8290', lineHeight:'1.4'}}>
+                        {priorityItems.length} high-intent {priorityItems.length === 1 ? "opportunity" : "opportunities"}. {priorityItems.slice(0, 2).map(i => i.reason).join(" ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Expanded items — visible on hover */}
+                {priorityItems.length > 0 && (
+                  <div className="mt-3 space-y-1.5">
+                    {priorityItems.map((item, idx) => {
+                      const style = priorityTagStyle(item.tag);
+                      return (
+                        <div key={item.id} className="flex items-center gap-2">
+                          <button
+                            className="flex-1 flex items-center gap-2 text-left"
+                            onClick={() => {
+                              setActiveFilter("Priority");
+                              setSelectedId(item.id);
+                              userNavigatedToId.current = item.id;
+                              const found = displayConversations.find((c) => c.id === item.id);
+                              if (found) triggerAutoDraft(found);
+                            }}
+                          >
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
+                              <span className={`relative inline-flex rounded-full h-2 w-2 ${style.dot}`} />
+                            </span>
+                            <span className="text-xs font-semibold text-slate-800 truncate">{idx + 1}. {item.name}</span>
+                            <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); dismissPriority.mutate({ sessionId: item.id }); }}
+                            className="shrink-0 text-slate-300 hover:text-slate-500 transition-colors"
+                            title="Dismiss"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Active filter banner — shown when not viewing All */}
+              {activeFilter !== 'All' && (
+                <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'6px', padding:'6px 12px', borderRadius:'999px', background:'#101828', color:'white', fontSize:'12px', fontWeight:700}}>
+                  <span style={{flex:1}}>Showing: {activeFilter}</span>
+                  <button
+                    onClick={() => setActiveFilter('All')}
+                    style={{display:'flex', alignItems:'center', gap:'3px', fontSize:'11px', fontWeight:700, color:'rgba(255,255,255,0.7)', background:'none', border:'none', cursor:'pointer', padding:'0'}}
+                    title="Clear filter — show all"
+                  >
+                    <X className="h-3 w-3" /> All
+                  </button>
+                </div>
+              )}
+
+              {/* Client conversation list */}
+              <div style={{marginTop:'16px'}}>
+                <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                  {clientConvs.length === 0 && (
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'64px 24px',textAlign:'center'}}>
+                      <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
+                        <MessageSquare style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
+                      </div>
+                      <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>Inbox is clear</div>
+                      <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>New client conversations will appear here</div>
+                    </div>
+                  )}
+                  {clientConvs.map((conversation) => {
+                    const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
+                    const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
+                    const isSelected = selected.id === conversation.id;
+                    const hasUnanswered = !!(conversation as any).hasUnanswered;
+                    const isResolved = !!(conversation as any).csResolvedAt;
+
+                    // ── Color-hash gradient from initials ──
+                    // Softer, desaturated gradients — Stripe/Linear aesthetic
+                    const gradientPalette = [
+                      "linear-gradient(135deg,#7C4DFF,#C05CFF)",  // muted purple
+                      "linear-gradient(135deg,#FF7242,#FF9D1C)",  // warm orange
+                      "linear-gradient(135deg,#0EA76D,#24C98A)",  // soft green
+                      "linear-gradient(135deg,#5B6CFF,#4AA3FF)",  // slate blue
+                      "linear-gradient(135deg,#E06B8B,#F4A0B0)",  // dusty rose
+                      "linear-gradient(135deg,#6B7CFF,#9B8CFF)",  // periwinkle
+                      "linear-gradient(135deg,#2EB8A6,#4DD9C5)",  // teal
+                      "linear-gradient(135deg,#F5A623,#F7C35F)",  // amber
+                    ];
+                    const initials = conversation.initials || "?";
+                    const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
+                    const gradient = gradientPalette[hashIdx];
+
+                    // ── Status pill — full 21-state LLM-powered system ──
+                    const csPriorityTag = (conversation as any).csPriorityTag;
+                    const csQueue = (conversation as any).csQueue;
+                    const lastSenderRole = (conversation as any).lastSenderRole as "user" | "assistant" | null;
+                    const llmTier = (conversation as any).csStatusTier as string | null;
+                    const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
+                    const waitMinDisplay = Math.floor(waitMs / 60_000);
+                    const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000;
+                    const isBooked = csQueue === "Active jobs" || csQueue === "Hot leads";
+
+                    // Full 21-state config map (client lane)
+                    type StatusKey = "new_inquiry" | "waiting_on_you" | "hot_lead" | "slow_response" | "scheduling" | "objection" | "post_job" | "happy_customer" | "cold_lead" | "solved" | "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
+                    type StatusCfg = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
+                    const statusCfg: Record<StatusKey, StatusCfg> = {
+                      // LLM-scored client states
+                      new_inquiry:     { label: "🟢 New Inquiry",       action: "Respond now · book this lead",           pill: "bg-emerald-50 text-emerald-700 border-emerald-200",  dot: "bg-emerald-500",  Icon: MessageSquare },
+                      waiting_on_you:  { label: "🟡 Waiting on You",    action: "Follow up now · recommended",            pill: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500",    Icon: ShieldAlert },
+                      hot_lead:        { label: "🔥 Hot Lead",           action: "Close now · send time + price",          pill: "bg-orange-50 text-orange-700 border-orange-200",    dot: "bg-orange-500",   Icon: TrendingUp },
+                      slow_response:   { label: "⏱️ Slow Response",      action: `Nudge now · ${waitMinDisplay}m wait`,    pill: "bg-rose-50 text-rose-700 border-rose-200",          dot: "bg-rose-500",     Icon: Clock3 },
+                      scheduling:      { label: "📅 Scheduling",         action: "Lock in time · confirm slot",            pill: "bg-sky-50 text-sky-700 border-sky-200",             dot: "bg-sky-500",      Icon: Clock3 },
+                      objection:       { label: "❌ Objection",          action: "Overcome objection · use script",        pill: "bg-red-50 text-red-700 border-red-200",             dot: "bg-red-500",      Icon: ShieldAlert },
+                      post_job:        { label: "🔁 Post-job",           action: "Push to recurring",                      pill: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-400",   Icon: CheckCircle2 },
+                      happy_customer:  { label: "🌟 Happy Customer",     action: "Ask for review + rebook",               pill: "bg-yellow-50 text-yellow-700 border-yellow-200",    dot: "bg-yellow-400",   Icon: CheckCircle2 },
+                      cold_lead:       { label: "🧊 Cold Lead",          action: "Reactivate · last-minute opening",       pill: "bg-slate-50 text-slate-500 border-slate-200",       dot: "bg-slate-400",    Icon: Clock3 },
+                      solved:          { label: "✅ Solved",             action: "No action needed",                       pill: "bg-slate-50 text-slate-400 border-slate-200",       dot: "bg-slate-300",    Icon: CheckCircle2 },
+                      // Mechanical fallbacks (used when llmTier is null)
+                      act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
+                      your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
+                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", Icon: Clock3 },
+                      monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
+                      resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
+                    };
+
+                    // Client-side terminal-ack fast path (fires before mechanical fallback when LLM score not yet cached)
+                    // Strategy: short messages (≤8 words) that start or end with a clear ack word/phrase → Solved
+                    // Catches: "yes thanks", "ok no problem", "yes that works", "sounds good thanks", etc.
+                    const ACK_WORDS = /\b(ok|okay|sure|yes|yep|yup|alright|great|perfect|sounds good|got it|will do|noted|confirmed|received|on it|done|no problem|no worries|thank you|thanks|ty|np|appreciate it|see you|see you then|we'll be there|on my way|just finished|all set|all good|good to go|makes sense|understood|copy that|roger|10-4)\b/i;
+                    const lastMsgText = (conversation.lastMessage || "").trim();
+                    const wordCount = lastMsgText.split(/\s+/).filter(Boolean).length;
+                    // Short message (≤8 words) that contains at least one ack word and no question mark → Solved
+                    const isTerminalAck = !llmTier && wordCount <= 8 && ACK_WORDS.test(lastMsgText) && !lastMsgText.includes("?");
+
+                    // Resolve status key: LLM tier takes priority, terminal-ack fast path second, mechanical fallback if null
+                    const validLlmKeys = new Set<string>(Object.keys(statusCfg));
+                    const resolvedLlmKey = llmTier && validLlmKeys.has(llmTier) ? (llmTier as StatusKey) : null;
+                    const statusKey: StatusKey =
+                      isResolved ? "resolved" :
+                      resolvedLlmKey ? resolvedLlmKey :
+                      isTerminalAck ? "solved" :
+                      (csPriorityTag || waitingTooLong) ? "act_now" :
+                      lastSenderRole === "user" ? "your_turn" :
+                      lastSenderRole === "assistant" ? "their_turn" :
+                      "monitor";
+
+                    const sc = statusCfg[statusKey];
+
+                    // ── Priority badge (top-left of avatar) ──
+                    // VIP = 3+ jobs, Today = has a job scheduled today, Team = Teams queue
+                    type PriorityKey = "vip" | "today" | "revenue" | "normal";
+                    const jobCount = conversation.jobCount ?? 0;
+                    const hasTodayJob = conversation.hasTodayJob ?? false;
+                    const priorityKey: PriorityKey =
+                      jobCount >= 3 ? "vip" :
+                      hasTodayJob ? "today" :
+                      conversation.queue === "Teams" ? "revenue" :
+                      "normal";
+                    const priorityCfg: Record<PriorityKey, { label: string; className: string }> = {
+                      vip:     { label: "VIP",   className: "bg-violet-600 text-white" },
+                      today:   { label: "Booked", className: "bg-amber-500 text-white" },
+                      revenue: { label: "Team",  className: "bg-violet-600 text-white" },
+                      normal:  { label: "",      className: "" },
+                    };
+                    const pc = priorityCfg[priorityKey];
+
+                    // ── Activity strip (derived from message count, seeded by id) ──
+                    const msgCount = conversation.messages?.length ?? 0;
+                    const activityValues = Array.from({ length: 6 }, (_, i) =>
+                      Math.max(3, ((conversation.id * 7 + i * 13 + msgCount * 3) % 16) + 3)
+                    );
+
+                    // ── Unread count ──
+                    const unreadCount = (conversation as any).unreadCount ?? (isUnread ? 1 : 0);
+
+                    // ── Avatar ring color keyed to status ──
+                    const ringColorMap: Record<StatusKey, string> = {
+                      new_inquiry:    "ring-emerald-300 shadow-emerald-100",
+                      waiting_on_you: "ring-amber-400 shadow-amber-100",
+                      hot_lead:       "ring-orange-400 shadow-orange-100",
+                      slow_response:  "ring-rose-400 shadow-rose-100",
+                      scheduling:     "ring-sky-300 shadow-sky-100",
+                      objection:      "ring-red-400 shadow-red-100",
+                      post_job:       "ring-violet-300 shadow-violet-100",
+                      happy_customer: "ring-yellow-300 shadow-yellow-100",
+                      cold_lead:      "ring-slate-300 shadow-slate-100",
+                      solved:         "ring-slate-200 shadow-slate-100",
+                      act_now:        "ring-rose-300 shadow-rose-100",
+                      your_turn:      "ring-amber-400 shadow-amber-100",
+                      their_turn:     "ring-blue-300 shadow-blue-100",
+                      monitor:        "ring-slate-300 shadow-slate-100",
+                      resolved:       "ring-slate-200 shadow-slate-100",
+                    };
+                    const ringColor = ringColorMap[statusKey];
+                    // ── Note line: directional action hint ──
+                    const noteText = sc.action;
+                    const isResolvingThis = resolvingId === conversation.id;
+                    const linkedSessionId = (conversation as any).linkedSessionId ?? null;
+                    return (
+                      <motion.div
+                        key={conversation.id}
+                        layout
+                        animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.16, ease: [.2,.8,.2,1] }}
+                        className="group relative rounded-[22px]"
+                      >
+                      <motion.button
+                        whileHover={{ y: -1, transition: { duration: 0.12, ease: [.2,.8,.2,1] } }}
+                        onClick={() => {
+                          setSelectedId(conversation.id);
+                          userNavigatedToId.current = conversation.id;
+                          triggerAutoDraft(conversation);
+                        }}
+                        className="w-full text-left relative"
+                        style={{
+                          borderRadius: '22px',
+                          padding: '16px 14px 16px 16px',
+                          border: 'none',
+                          minHeight: 'unset',
+                          boxShadow: isSelected ? '0 18px 45px rgba(15,23,42,.09)' : isUnread ? '0 8px 22px rgba(15,23,42,.05)' : 'none',
+                          background: isSelected ? '#FFFFFF' : isUnread ? '#FFFFFF' : 'transparent',
+                        }}
+                      >
+                        {/* Selected accent bar */}
+                        {isSelected && (
+                          <div style={{position:'absolute', left:0, top:'16px', bottom:'16px', width:'4px', borderRadius:'999px', background:'linear-gradient(180deg,#FF5A1F,#FF8A4C)'}} />
+                        )}
+                        {/* Row grid: avatar | content | time */}
+                        <div style={{display:'grid', gridTemplateColumns:'36px 1fr auto', columnGap:'8px', alignItems:'start'}}>
+                          {/* Avatar */}
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'36px', height:'36px', borderRadius:'18px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.7) brightness(.97)'}}>
+                            {initials}
+                          </div>
+
+                          {/* Content: name + metadata + preview + status */}
+                          <div className="min-w-0">
+                            <div className="flex items-center" style={{gap:'6px'}}>
+                              <span style={{fontSize:'15px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
+                            </div>
+                            <div style={{marginTop:'2px', fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                              {conversation.service || conversation.location || ''}
+                            </div>
+                          </div>
+
+                          {/* Timestamp — top right */}
+                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0'}}>
+                            {conversation.lastMsgTs
+                              ? (() => {
+                                  const d = new Date(conversation.lastMsgTs);
+                                  const now = new Date();
+                                  const isToday = d.toDateString() === now.toDateString();
+                                  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+                                  const isYesterday = d.toDateString() === yesterday.toDateString();
+                                  if (isToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+                                  if (isYesterday) return "Yesterday";
+                                  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+                                })()
+                              : conversation.wait
+                            }
+                          </div>
+                        </div>
+
+                        {/* Row 2: Message preview — spans content + time columns */}
+                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#101828' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+
+                        {/* Row 3: Status pill — minimal outlined style matching target screenshot */}
+                        <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
+                          <div style={{
+                            height:'26px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:850, display:'inline-flex', alignItems:'center', gap:'4px',
+                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#0F8A52' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#C2410C' : '#475467',
+                            background: (statusKey === 'resolved' || statusKey === 'solved') ? '#EAF8F0' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#FFF1E8' : '#F2F4F7',
+                            border: 'none',
+                          }}>
+                            {(statusKey === 'resolved' || statusKey === 'solved') && <span style={{fontSize:'13px', lineHeight:1}}>✓</span>}
+                            {sc.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
+                          </div>
+                          {/* Job value */}
+                          {conversation.amount && (
+                            <span className="text-[12px] text-slate-500 font-medium">{conversation.amount} job</span>
+                          )}
+                          {/* Linked badge */}
+                          {linkedSessionId && (
+                            <div className="ml-auto inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                              <Link2 className="h-3 w-3" />
+                              Linked
+                            </div>
+                          )}
+                        </div>
+                      </motion.button>
+                      {/* Subtle resolve button — only on unresolved cards */}
+                      {!isResolved && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resolveSession.mutate({ sessionId: conversation.id });
+                          }}
+                          className="absolute right-3 top-3 rounded-lg bg-white/80 border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-500 opacity-0 group-hover:opacity-100 shadow-sm transition-all hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                        >
+                          Resolve
+                        </button>
+                      )}
+                      {/* Celebration overlay */}
+                      <AnimatePresence>
+                        {isResolvingThis && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[24px]"
+                          >
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.18 }}
+                              className="absolute inset-0 bg-violet-400/10"
+                            />
+                            {[...Array(18)].map((_, i) => {
+                              const x = ((i % 6) - 2.5) * 28;
+                              const y = Math.floor(i / 6) * 10;
+                              return (
+                                <motion.div
+                                  key={i}
+                                  initial={{ x: 0, y: 0, opacity: 0, scale: 0.4, rotate: 0 }}
+                                  animate={{ x, y: -40 - y, opacity: [0, 1, 0], scale: [0.4, 1, 0.8], rotate: 140 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.8, delay: i * 0.015 }}
+                                  className="absolute left-1/2 top-1/2 -ml-2 -mt-2 text-violet-500"
+                                >
+                                  <Sparkles className="h-4 w-4" />
+                                </motion.div>
+                              );
+                            })}
+                            <motion.div
+                              initial={{ scale: 0.6, opacity: 0, y: 6 }}
+                              animate={{ scale: [0.6, 1.08, 1], opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{ duration: 0.45 }}
+                              className="absolute inset-0 flex items-center justify-center"
+                            >
+                              <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">
+                                Resolved ✨
+                              </div>
+                            </motion.div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
           <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FCFCFD', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
