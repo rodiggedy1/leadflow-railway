@@ -190,13 +190,7 @@ const DETAIL_STYLES = `
 export default function CsInbox2() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerName, setDrawerName] = useState("");
-  const [drawerInitials, setDrawerInitials] = useState("");
-  const [drawerMessages, setDrawerMessages] = useState<{ type: "customer" | "agent"; text: string }[]>([]);
-  const [replyText, setReplyText] = useState("");
   const [toast, setToast] = useState(false);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<KanbanCard | null>(null);
   const INIT_MESSAGES = [
@@ -259,24 +253,9 @@ export default function CsInbox2() {
     });
   }, [DATA, query, filter]);
 
-  function openCard(card: KanbanCard) {
-    setSelectedCardId(String(card.id));
-    setDrawerName(card.name);
-    setDrawerInitials(card.initials);
-    setDrawerMessages([
-      { type: "agent", text: "Hi! This is Madison from Maids in Black. How can I help?" },
-      { type: "customer", text: card.preview },
-    ]);
-    setDrawerOpen(true);
-  }
 
-  function sendReply() {
-    if (!replyText.trim()) return;
-    setDrawerMessages(prev => [...prev, { type: "agent", text: replyText.trim() }]);
-    setReplyText("");
-    setToast(true);
-    setTimeout(() => setToast(false), 1300);
-  }
+
+
 
   const totalCards = Object.values(DATA).flat().length;
   const needsResponseCount = DATA["Needs Response"].length;
@@ -493,8 +472,8 @@ export default function CsInbox2() {
                   {col.cards.map((card, i) => (
                     <button
                       key={card.id}
-                      className={`cs2-card${selectedCardId === String(card.id) ? " selected" : ""}`}
-                      onClick={() => openCard(card)}
+                      className="cs2-card"
+                      onClick={() => { setSelected(card); setMessages(INIT_MESSAGES); }}
                     >
                       <div className="cs2-cardTop">
                         <div className="cs2-avatar" style={{background: COLORS[i % COLORS.length]}}>{card.initials}</div>
@@ -530,35 +509,6 @@ export default function CsInbox2() {
           </footer>
         </main>
       </div>
-
-      {/* ── DRAWER ── */}
-      <div className={`cs2-drawer${drawerOpen ? " open" : ""}`}>
-        <div className="cs2-drawerHead">
-          <div className="cs2-avatar" style={{background:"#6c4cff",width:"38px",height:"38px",fontSize:"13px"}}>{drawerInitials}</div>
-          <div>
-            <h3>{drawerName}</h3>
-            <div style={{color:"#8b91a0",fontSize:"12px"}}>Customer conversation</div>
-          </div>
-          <button className="cs2-close" onClick={() => setDrawerOpen(false)}>×</button>
-        </div>
-        <div className="cs2-thread">
-          {drawerMessages.map((m, i) => (
-            <div key={i} className={`bubble ${m.type}`}>{m.text}</div>
-          ))}
-        </div>
-        <div className="cs2-composer">
-          <textarea
-            placeholder="Reply to customer..."
-            value={replyText}
-            onChange={e => setReplyText(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendReply(); }}
-          />
-          <div className="cs2-sendRow">
-            <button className="cs2-btn primary" onClick={sendReply}>Send reply</button>
-          </div>
-        </div>
-      </div>
-
       {/* ── TOAST ── */}
       <div className={`cs2-toast${toast ? " show" : ""}`}>Sent ✓</div>
     </>
