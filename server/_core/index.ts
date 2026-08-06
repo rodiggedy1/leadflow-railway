@@ -1352,10 +1352,16 @@ async function startServer() {
     try {
       const db = await getDb();
       if (!db) return res.status(500).json({ error: 'no db' });
+      // Join on cleanerProfiles.phone — handles both 10-digit and E.164 formats
+      // cleanerProfiles.phone is 10-digit; cs.leadPhone is E.164 (+1XXXXXXXXXX)
       const rows = await db.execute(
-        sql`SELECT ocm.id, ocm.metadata, cs.leadSource
+        sql`SELECT ocm.id, ocm.metadata,
+              CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS isCleanerByPhone
             FROM ops_chat_messages ocm
             JOIN conversation_sessions cs ON cs.id = ocm.sessionId
+            LEFT JOIN cleaner_profiles cp
+              ON cp.phone = REGEXP_REPLACE(cs.leadPhone, '^\\+1', '')
+              AND cp.isActive = 1
             WHERE ocm.quickAction = 'madison_sms_draft'
               AND ocm.cardStatus = 'active'`
       );
@@ -1366,7 +1372,7 @@ async function startServer() {
       let trueToFalse = 0;  // currently true, should be false
       let alreadyCorrect = 0;
       for (const card of (Array.isArray(cards) ? cards : [])) {
-        const isCleaner = card.leadSource === 'cs-inbound-cleaner';
+        const isCleaner = card.isCleanerByPhone === 1 || card.isCleanerByPhone === true;
         if (isCleaner) expectedCleaners++;
         let meta: Record<string, unknown> = {};
         try { meta = JSON.parse(card.metadata ?? '{}'); } catch { /* ignore */ }
@@ -1382,6 +1388,46 @@ async function startServer() {
       }
       const willChange = falseToTrue + trueToFalse;
       return res.json({ dry, total, expectedCleaners, falseToTrue, trueToFalse, willChange, alreadyCorrect });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Diagnostic: cleaner session counts
+  app.get("/api/diag/cleaner-sessions", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      // Total cleaner sessions (all time)
+      const [totalRow] = (await db.execute(
+        sql`SELECT COUNT(*) as cnt FROM conversation_sessions WHERE leadSource = 'cs-inbound-cleaner'`
+      ) as any)[0];
+      // Active (unresolved) cleaner sessions
+      const [activeRow] = (await db.execute(
+        sql`SELECT COUNT(*) as cnt FROM conversation_sessions WHERE leadSource = 'cs-inbound-cleaner' AND csResolvedAt IS NULL`
+      ) as any)[0];
+      // Active madison cards for cleaner sessions
+      const [madisonRow] = (await db.execute(
+        sql`SELECT COUNT(*) as cnt FROM ops_chat_messages ocm
+            JOIN conversation_sessions cs ON cs.id = ocm.sessionId
+            WHERE ocm.quickAction = 'madison_sms_draft'
+              AND ocm.cardStatus = 'active'
+              AND cs.leadSource = 'cs-inbound-cleaner'`
+      ) as any)[0];
+      // Active madison cards with isCleaner=true in metadata
+      const [metaRow] = (await db.execute(
+        sql`SELECT COUNT(*) as cnt FROM ops_chat_messages
+            WHERE quickAction = 'madison_sms_draft'
+              AND cardStatus = 'active'
+              AND JSON_EXTRACT(metadata, '$.isCleaner') = true`
+      ) as any)[0];
+      return res.json({
+        totalCleanerSessions: totalRow?.cnt ?? 0,
+        activeCleanerSessions: activeRow?.cnt ?? 0,
+        activeMadisonCardsForCleaners: madisonRow?.cnt ?? 0,
+        activeMadisonCardsWithIsCleanerTrue: metaRow?.cnt ?? 0,
+      });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
