@@ -1444,14 +1444,29 @@ async function startServer() {
   // One-time: update phone numbers for Team Maria Suarez and Team Pilar
   app.post("/api/diag/fix-cleaner-phones", async (req, res) => {
     if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    const dry = req.query.dry === '1';
     try {
       const db = await getDb();
       if (!db) return res.status(500).json({ error: 'no db' });
-      // Find profiles by name (partial match)
+      const changes: string[] = [];
+      if (!dry) {
+        // Update Pilar Duarte phone to the number she texts from
+        await db.execute(sql`UPDATE cleaner_profiles SET phone = '2023160161' WHERE id = 540001`);
+        changes.push('Updated Pilar Duarte (id=540001) phone to 2023160161');
+        // Insert Team Maria Suarez if not already there
+        const [existing] = (await db.execute(sql`SELECT id FROM cleaner_profiles WHERE phone = '5715053130'`) as any)[0];
+        if (!existing) {
+          await db.execute(sql`INSERT INTO cleaner_profiles (name, phone, isActive, language, createdAt, updatedAt) VALUES ('Team Maria Suarez', '5715053130', 1, 'en', NOW(), NOW())`);
+          changes.push('Inserted Team Maria Suarez with phone 5715053130');
+        } else {
+          changes.push('Team Maria Suarez already exists, skipped');
+        }
+      }
+      // Verify final state
       const rows = (await db.execute(
-        sql`SELECT id, name, phone FROM cleaner_profiles WHERE name LIKE '%Maria Suarez%' OR name LIKE '%Pilar%' ORDER BY name`
+        sql`SELECT id, name, phone FROM cleaner_profiles WHERE phone IN ('2023160161', '5715053130') ORDER BY name`
       ) as any)[0];
-      return res.json({ found: rows });
+      return res.json({ dry, changes, result: rows });
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });
 
