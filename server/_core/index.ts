@@ -1415,6 +1415,32 @@ async function startServer() {
     }
   });
 
+  // List all active madison cards with name, phone, and cleaner match
+  app.get("/api/diag/active-cards", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      const rows = (await db.execute(
+        sql`SELECT cs.leadName, cs.leadPhone, ocm.metadata,
+              cp.name AS cleanerName
+            FROM ops_chat_messages ocm
+            JOIN conversation_sessions cs ON cs.id = ocm.sessionId
+            LEFT JOIN cleaner_profiles cp ON cp.phone = RIGHT(cs.leadPhone, 10) AND cp.isActive = 1
+            WHERE ocm.quickAction = 'madison_sms_draft'
+              AND ocm.cardStatus = 'active'
+            ORDER BY cs.leadName`
+      ) as any)[0];
+      const cards = Array.isArray(rows) ? rows.map((r: any) => ({
+        name: r.leadName,
+        phone: r.leadPhone,
+        cleanerName: r.cleanerName ?? null,
+        isCleanerInMeta: (() => { try { return JSON.parse(r.metadata ?? '{}').isCleaner; } catch { return undefined; } })()
+      })) : [];
+      return res.json({ total: cards.length, cards });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
   // List all active cleaners
   app.get("/api/diag/cleaners", async (req, res) => {
     if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
