@@ -1415,6 +1415,17 @@ async function startServer() {
     }
   });
 
+  // List all active cleaners
+  app.get("/api/diag/cleaners", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      const rows = (await db.execute(sql`SELECT name, phone, isActive FROM cleaner_profiles ORDER BY name`) as any)[0];
+      return res.json({ total: Array.isArray(rows) ? rows.length : 0, cleaners: rows });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
   // Diagnostic: cleaner session counts
   app.get("/api/diag/cleaner-sessions", async (req, res) => {
     if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
