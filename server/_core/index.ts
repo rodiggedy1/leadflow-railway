@@ -1393,6 +1393,28 @@ async function startServer() {
     }
   });
 
+  // Diagnostic: phone format check — sample cleanerProfiles phones vs active session leadPhones
+  app.get("/api/diag/phone-format", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      const cpRows = (await db.execute(sql`SELECT name, phone FROM cleaner_profiles WHERE isActive = 1 LIMIT 5`) as any)[0];
+      const csRows = (await db.execute(sql`SELECT leadPhone FROM conversation_sessions WHERE leadSource = 'cs-inbound-cleaner' LIMIT 5`) as any)[0];
+      // Cross-join count to see how many active madison cards match cleanerProfiles by phone
+      const [matchRow] = (await db.execute(
+        sql`SELECT COUNT(DISTINCT ocm.id) as cnt
+            FROM ops_chat_messages ocm
+            JOIN conversation_sessions cs ON cs.id = ocm.sessionId
+            JOIN cleaner_profiles cp ON cp.phone = REGEXP_REPLACE(cs.leadPhone, '^\\+1', '') AND cp.isActive = 1
+            WHERE ocm.quickAction = 'madison_sms_draft' AND ocm.cardStatus = 'active'`
+      ) as any)[0];
+      return res.json({ sampleCleanerPhones: cpRows, sampleCleanerSessionPhones: csRows, matchCount: matchRow?.cnt ?? 0 });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // Diagnostic: cleaner session counts
   app.get("/api/diag/cleaner-sessions", async (req, res) => {
     if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
