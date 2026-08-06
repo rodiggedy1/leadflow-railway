@@ -278,7 +278,7 @@ export default function CsInbox2() {
           <aside className="cs2-list">
             <div className="cs2-listhead">
               <div className="eyebrow">Customer inbox</div>
-              <h1>Needs Response <span style={{color:"#a0a5af",fontWeight:500}}>{DEMO_CARDS.length}</span></h1>
+              <h1>Needs Response <span style={{color:"#a0a5af",fontWeight:500}}>{Object.values(DATA).flat().length}</span></h1>
               <div className="cs2-listsearch">⌕ <input placeholder="Search conversations" /></div>
               <div className="cs2-dtabs">
                 <button className="cs2-dtab on">All</button>
@@ -287,7 +287,7 @@ export default function CsInbox2() {
               </div>
             </div>
             <div className="cs2-tickets">
-              {DEMO_CARDS.map(card => (
+              {Object.values(DATA).flat().map(card => (
                 <div key={card.id} className={`ticket${selected.id === card.id ? " on" : ""}`} onClick={() => { setSelected(card); setMessages(INIT_MESSAGES); }}>
                   <div className="trow">
                     <div className="mini">{card.initials}</div>
