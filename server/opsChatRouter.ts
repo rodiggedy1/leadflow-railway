@@ -5770,7 +5770,19 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           eq(opsChatMessages.id, input.msgId),
           eq(opsChatMessages.cardStatus, "active"),
         ));
+      // When agent marks "no reply needed", flip lastMessageRole so the cron
+      // doesn't recreate the alarm card on the next tick.
+      if (input.handledReason === "no_reply_needed") {
+        const sessionId = typeof meta.sessionId === "number" ? meta.sessionId : null;
+        if (sessionId) {
+          await db
+            .update(conversationSessions)
+            .set({ lastMessageRole: "assistant" })
+            .where(eq(conversationSessions.id, sessionId));
+        }
+      }
       broadcastOpsUpdate("alarm_card_dismissed", { msgId: input.msgId });
+      broadcastOpsUpdate("lead_update");
       return { ok: true };
     }),
   /**
