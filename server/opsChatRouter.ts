@@ -5770,17 +5770,12 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           eq(opsChatMessages.id, input.msgId),
           eq(opsChatMessages.cardStatus, "active"),
         ));
-      // When agent marks "no reply needed", flip lastMessageRole so the cron
-      // doesn't recreate the alarm card on the next tick.
-      if (input.handledReason === "no_reply_needed") {
-        const sessionId = typeof meta.sessionId === "number" ? meta.sessionId : null;
-        if (sessionId) {
-          await db
-            .update(conversationSessions)
-            .set({ lastMessageRole: "assistant" })
-            .where(eq(conversationSessions.id, sessionId));
-        }
-      }
+      // Note: lastMessageRole is intentionally NOT changed here.
+      // "No reply needed" means the agent reviewed this specific inbound message
+      // and decided no response was required — it does NOT mean an outbound message was sent.
+      // Suppression is handled by the cron checking for a dismissed alarm with
+      // matching (metadata.sessionId, metadata.lastCustomerMessageTs) in the dismissed card.
+      // When the customer sends a new message, lastCustomerMessageTs changes and a fresh alarm fires.
       broadcastOpsUpdate("alarm_card_dismissed", { msgId: input.msgId });
       broadcastOpsUpdate("lead_update");
       return { ok: true };

@@ -1603,6 +1603,24 @@ export async function runUnansweredAlarmCron(): Promise<void> {
     }
 
     // ── Path C: Fallback — create legacy unanswered_alarm card ───────────────
+    // Skip if agent already marked this exact inbound message as "no reply needed".
+    // Suppression is scoped to (sessionId, lastCustomerMessageTs) — a new customer
+    // message produces a different lastCustomerMessageTs and gets a fresh alarm.
+    const [alreadyDismissed] = await db
+      .select({ id: opsChatMessages.id })
+      .from(opsChatMessages)
+      .where(and(
+        eq(opsChatMessages.quickAction as any, "unanswered_alarm"),
+        eq(opsChatMessages.cardStatus as any, "dismissed"),
+        sql`JSON_EXTRACT(${opsChatMessages.metadata}, '$.sessionId') = ${session.id}`,
+        sql`JSON_EXTRACT(${opsChatMessages.metadata}, '$.lastCustomerMessageTs') = ${session.lastCustomerMessageTs}`,
+        sql`JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.handledReason')) = 'no_reply_needed'`,
+      ))
+      .limit(1);
+    if (alreadyDismissed) {
+      console.log(`[UnansweredAlarm] Skipping Path C for session ${session.id} — already dismissed as no_reply_needed`);
+      continue;
+    }
     const dedupKey = `unanswered_alarm:${session.id}:${session.lastCustomerMessageTs ?? 0}`;
     const body = alarmBody(session.leadName ?? null, session.lastMessageText ?? null, ageMs);
     const metadataJson = JSON.stringify({
