@@ -6169,6 +6169,34 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Madison Auto-Sent card (informational, no action needed) ───────────────────────
+                if (msg.quickAction === "madison_auto_sent") {
+                  let autoMeta: { sessionId?: number; leadName?: string; inboundText?: string; autoReply?: string; autoSentAt?: string; autoSendConfidence?: number } = {};
+                  try { autoMeta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const autoSessionId = typeof autoMeta.sessionId === "number" ? autoMeta.sessionId : null;
+                  const autoName = autoMeta.leadName || "Customer";
+                  const autoTs = autoMeta.autoSentAt ? new Date(autoMeta.autoSentAt) : new Date(msg.createdAt);
+                  const autoTimeStr = autoTs.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <div key={msg.id} style={{ padding: "4px 16px" }}>
+                      <div
+                        style={{ background: "#f5f3ff", border: "1px solid #ede9fe", borderRadius: 16, padding: "12px 16px", cursor: autoSessionId ? "pointer" : "default", opacity: 0.85 }}
+                        onClick={() => autoSessionId && onSelectOpsSession?.(autoSessionId, autoName)}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: "#6d5cff" }}>✦ Madison replied automatically</span>
+                          <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>Auto-sent · {autoTimeStr}</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: "#4b5563", marginBottom: 3 }}>
+                          <span style={{ fontWeight: 700 }}>{autoName}</span>: “{autoMeta.inboundText ?? ""}”
+                        </div>
+                        <div style={{ fontSize: 13, color: "#6d5cff" }}>
+                          Madison: “{autoMeta.autoReply ?? ""}”
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Madison Email Draft card
                 if (msg.quickAction === "madison_email_draft") {
                   return (
