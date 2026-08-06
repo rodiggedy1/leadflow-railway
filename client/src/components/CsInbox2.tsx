@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import CsRightPanelClient from "@/components/CsRightPanelClient";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
@@ -487,17 +488,9 @@ export default function CsInbox2() {
               </div>
             </footer>
           </main>
-          <aside className="cs2-side">
-            <div className="sideTitle"><b>Customer command center</b><span>LIVE CONTEXT</span></div>
-            <section className="scard">
-              <div className="cardHead">Customer</div>
-              <div className="rows2">
-                {[["Name",selectedConv.name],["Phone",selectedConv.phone],["Queue",selectedConv.queue||"—"],["Status",selectedConv.csStatusTier||"—"]].map(([k,v]) => (
-                  <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>
-                ))}
-              </div>
-            </section>
-            <section className="scard">
+          <aside className="cs2-side" style={{overflow:'hidden',display:'flex',flexDirection:'column',gap:0,padding:0}}>
+            {/* Missions — always at top, wired later */}
+            <section className="scard" style={{flexShrink:0,padding:'14px 16px'}}>
               <div className="cardHead">Missions <span className="link">+ Add</span></div>
               {[
                 {id:1,icon:"✦",title:"Confirm slot",    desc:"Lock in the appointment."},
@@ -509,14 +502,22 @@ export default function CsInbox2() {
                 </div>
               ))}
             </section>
-            <section className="scard">
-              <div className="cardHead">Conversation</div>
-              <div className="rows2">
-                {[["Status",selectedConv.hasUnanswered?"Needs Response":"Waiting"],["Priority",selectedConv.priority],["Wait",selectedConv.wait]].map(([k,v]) => (
-                  <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>
-                ))}
-              </div>
-            </section>
+            {/* Client/Team profile panel */}
+            <div style={{flex:1,minHeight:0,overflow:'hidden'}}>
+              <CsRightPanelClient
+                selected={{
+                  id: selectedConv.id,
+                  name: selectedConv.name,
+                  initials: selectedConv.initials,
+                  phone: selectedConv.phone,
+                  queue: selectedConv.queue,
+                  wait: selectedConv.wait,
+                  status: selectedConv.csStatusTier ?? undefined,
+                  stats: { bookings: 0, complaints: 0 },
+                }}
+                setCompose={setCompose}
+              />
+            </div>
           </aside>
         </div>
         <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>
