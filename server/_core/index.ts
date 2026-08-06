@@ -1540,6 +1540,85 @@ async function startServer() {
     }
   });
 
+  // Diagnostic: inspect latest madisonSmsDrafts row and run gate-by-gate auto-send evaluation
+  app.get("/api/diag/madison-draft", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    const phone = (req.query.phone as string) ?? '+13029816191';
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      const rows = (await db.execute(
+        sql`SELECT id, status, approvedBy, approvedText, sentAt, generatedDraft, originalMessage,
+                   messageType, intent, qualityScore, isCleaner
+            FROM madison_sms_drafts
+            WHERE fromPhone = ${phone}
+            ORDER BY createdAt DESC
+            LIMIT 3`
+      ) as any)[0];
+      if (!Array.isArray(rows) || rows.length === 0) return res.json({ found: false, phone });
+      const row = rows[0];
+      // Parse qualityScore for confidence values
+      let qs: any = {};
+      try { qs = typeof row.qualityScore === 'string' ? JSON.parse(row.qualityScore) : (row.qualityScore ?? {}); } catch {}
+      const intentConfidence: number = qs.intentConfidence ?? null;
+      const draftConfidence: number = qs.draftConfidence ?? null;
+      const inboundText: string = row.originalMessage ?? '';
+      const generatedDraft: string = row.generatedDraft ?? '';
+      const classificationType: string = row.messageType ?? '';
+      const isCleaner: boolean = !!row.isCleaner;
+      // Run gate-by-gate evaluation
+      const AUTO_SEND_ALLOWLIST = [
+        /^thanks[!.]*$/i, /^thank you[!.]*$/i, /^thank u[!.]*$/i, /^thx[!.]*$/i,
+        /^okay thanks[!.]*$/i, /^ok thanks[!.]*$/i, /^ok thank you[!.]*$/i,
+        /^got it[!.]*$/i, /^got it[,\s]+thanks[!.]*$/i,
+        /^have a good day[!.]*$/i, /^have a great day[!.]*$/i,
+        /^you too[!.]*$/i, /^you're welcome[!.]*$/i, /^youre welcome[!.]*$/i,
+      ];
+      const AUTO_SEND_INBOUND_EXCLUSIONS = [
+        '?', '$', 'cost', 'price', 'charge', 'refund', 'discount', 'payment', 'pay', 'fee',
+        'quote', 'book', 'availab', 'reschedule', 'cancel', 'move', 'appointment', 'recurring',
+        'damage', 'broken', 'missing', 'stole', 'complaint', 'unhappy', 'disappoint', 'terrible', 'awful',
+        'key', 'code', 'lock', 'alarm', 'gate', 'entry',
+        'late', 'no show', "didn't show", 'not here', 'where is', 'eta', 'when will', 'what time',
+        'yes', 'confirmed', 'sure', 'absolutely', 'do it', 'go ahead', 'sounds fine', "that's fine",
+        'that works', 'sounds good', 'sounds great', 'perfect', 'see you',
+      ];
+      const AUTO_SEND_REPLY_EXCLUSIONS = [
+        'booked', 'scheduled', 'confirmed for', "we'll arrive", 'your total',
+        'charged', 'added', 'removed', 'cancelled', 'refunded',
+        'appointment is', 'we can', 'we will', "you're set",
+      ];
+      const normalised = inboundText.trim().replace(/[\u{1F300}-\u{1FFFF}]/gu, '').trim();
+      const allowlistPass = AUTO_SEND_ALLOWLIST.some(re => re.test(normalised));
+      const classificationPass = classificationType === 'CONVERSATION';
+      const intentConfPass = intentConfidence !== null && intentConfidence >= 0.98;
+      const draftConfPass = draftConfidence !== null && draftConfidence >= 0.98;
+      const lowerInbound = inboundText.toLowerCase();
+      const inboundExclusion = AUTO_SEND_INBOUND_EXCLUSIONS.find(kw => lowerInbound.includes(kw)) ?? null;
+      const lowerReply = generatedDraft.toLowerCase();
+      const replyExclusion = AUTO_SEND_REPLY_EXCLUSIONS.find(kw => lowerReply.includes(kw)) ?? null;
+      return res.json({
+        phone,
+        row: {
+          id: row.id, status: row.status, approvedBy: row.approvedBy,
+          approvedText: row.approvedText, sentAt: row.sentAt,
+          originalMessage: row.originalMessage, generatedDraft: row.generatedDraft,
+          messageType: row.messageType, intent: row.intent, isCleaner: row.isCleaner,
+          intentConfidence, draftConfidence,
+        },
+        gate: {
+          'positive_allowlist': allowlistPass ? 'PASS' : 'FAIL',
+          'classification_CONVERSATION': classificationPass ? 'PASS' : `FAIL (actual: ${classificationType})`,
+          'intentConfidence_gte_0.98': intentConfPass ? `PASS (${intentConfidence})` : `FAIL (actual: ${intentConfidence})`,
+          'draftConfidence_gte_0.98': draftConfPass ? `PASS (${draftConfidence})` : `FAIL (actual: ${draftConfidence})`,
+          'inbound_exclusions': inboundExclusion ? `FAIL (matched: "${inboundExclusion}")` : 'PASS',
+          'reply_side_safety': replyExclusion ? `FAIL (matched: "${replyExclusion}")` : 'PASS',
+        },
+        recentRows: rows.map((r: any) => ({ id: r.id, status: r.status, originalMessage: r.originalMessage, approvedBy: r.approvedBy })),
+      });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
   // Video upload for applicant recordings
   registerVideoUploadRoute(app as any);
   // Interview video chunk upload + finalize
