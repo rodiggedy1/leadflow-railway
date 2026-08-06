@@ -2267,6 +2267,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               { href: "/admin/sms-campaigns",     icon: "📣", color: "#f43f5e", line1: "Campaigns",line2: "" },
               { href: "/admin/confirmation-calls",icon: "📞", color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
               { href: "/admin/payments",          icon: "💳", color: "#f59e0b", line1: "Payments", line2: "" },
+              { href: "/admin/cs-inbox-2",         icon: "⊞",  color: "#6b4eff", line1: "Inbox",    line2: "v2" },
             ]).map((nav) => (
               <a
                 key={nav.href}
@@ -3143,6 +3144,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
                       { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
                       { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+                      { href: "/admin/cs-inbox-2",         Icon: LayoutDashboard, color: "#6b4eff", line1: "Inbox",    line2: "v2" },
                     ]).map((nav) => (
                       <a
                         key={nav.href}
@@ -3229,6 +3231,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
                       { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
                       { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+                      { href: "/admin/cs-inbox-2",         Icon: LayoutDashboard, color: "#6b4eff", line1: "Inbox",    line2: "v2" },
                     ]).map((nav) => (
                       <a
                         key={nav.href}
