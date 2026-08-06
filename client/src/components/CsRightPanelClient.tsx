@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import {
   Brain, Tag, RefreshCw, Copy, CircleDot, Briefcase, MapPin,
   TrendingUp, Users, X, ClipboardList,
 } from "lucide-react";
+import { Bot } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -51,9 +52,11 @@ interface ClientProfile {
 interface Props {
   selected: SelectedConv;
   setCompose: (v: string) => void;
+  messages?: { sender: string; text: string; ts?: number }[];
+  missionSection?: React.ReactNode;
 }
 
-export default function CsRightPanelClient({ selected, setCompose }: Props) {
+export default function CsRightPanelClient({ selected, setCompose, messages = [], missionSection }: Props) {
   const [debriefDismissed, setDebriefDismissed] = useState<Record<number, boolean>>({});
   const [upsellResult, setUpsellResult] = useState<{ upsell: { signal: string; pitch: string; upsellType: string } | null } | null>(null);
   const [upsellLoading, setUpsellLoading] = useState(false);
@@ -68,6 +71,44 @@ export default function CsRightPanelClient({ selected, setCompose }: Props) {
     { sessionId: selected.id },
     { enabled: selected.id > 0, refetchOnWindowFocus: false }
   );
+
+  // ── AI insight — exact copy from CsInbox.tsx ──────────────────────────────
+  const [insightData, setInsightData] = useState<{ insight: string } | null>(null);
+  const [insightFetchedForId, setInsightFetchedForId] = useState<number | null>(null);
+  const insightMutation = trpc.opsChat.getCsConvInsight.useMutation({
+    onSuccess: (data) => { setInsightData(data); },
+  });
+  const insightLoading = insightMutation.isPending;
+  const insightMsgHistory = useMemo(() => {
+    if (!messages.length) return "[]";
+    return JSON.stringify(messages.map(m => ({ role: m.sender === "client" ? "user" : "assistant", content: (m as any).text ?? "" })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected.id, messages.length]);
+  const clientProfileSummary = useMemo(() => {
+    if (!clientProfile) return undefined;
+    const parts: string[] = [];
+    if (clientProfile.name) parts.push(`Name: ${clientProfile.name}`);
+    if (clientProfile.totalBookings) parts.push(`Total bookings: ${clientProfile.totalBookings}`);
+    if (clientProfile.avgPrice) parts.push(`Avg price: $${clientProfile.avgPrice}`);
+    if (clientProfile.frequency) parts.push(`Frequency: ${clientProfile.frequency}`);
+    return parts.join(", ");
+  }, [clientProfile]);
+  useEffect(() => {
+    if (!selected || selected.id <= 0 || messages.length === 0) return;
+    if (insightFetchedForId !== selected.id) setInsightData(null);
+    const key = `${selected.id}:${messages.length}`;
+    if (insightFetchedForId === selected.id && insightMutation.variables &&
+        `${insightMutation.variables.sessionId}:${JSON.parse(insightMutation.variables.messageHistory ?? '[]').length}` === key) return;
+    setInsightFetchedForId(selected.id);
+    insightMutation.mutate({
+      sessionId: selected.id,
+      messageHistory: insightMsgHistory,
+      clientName: selected.name ?? undefined,
+      queue: selected.queue ?? undefined,
+      clientProfile: clientProfileSummary,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected.id, messages.length, insightMsgHistory]);
 
   const showDebrief = !!callDebrief && selected?.id != null && !debriefDismissed[selected.id];
   const showUpsell = !!(upsellResult?.upsell && upsellDismissed !== selected?.id);
@@ -126,6 +167,8 @@ export default function CsRightPanelClient({ selected, setCompose }: Props) {
       </div>
       {/* Scrollable body */}
       <div className="cs-inbox-scroll overflow-y-auto flex-1">
+        {/* Missions — rendered here (below header), passed from parent */}
+        {missionSection}
         {/* CLIENT PROFILE metrics */}
         <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
           <CardContent className="p-0">
@@ -219,14 +262,26 @@ export default function CsRightPanelClient({ selected, setCompose }: Props) {
             </Card>
           );
         })()}
-        {/* AI insight placeholder */}
+        {/* AI insight — exact render from CsInbox.tsx */}
         <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
           <CardContent className="p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <span style={{fontSize:'14px'}}>✦</span>
-              <span className="text-xs font-semibold text-violet-700 uppercase tracking-widest">AI insight</span>
+            <div style={{borderRadius:'20px',border:'1px solid rgba(139,92,246,.12)',background:'rgba(139,92,246,.04)',padding:'16px'}}>
+              <div className="flex items-center gap-2 text-sm font-medium" style={{color:'#6D28D9'}}>
+                <Bot className="h-4 w-4" /> AI insight
+                {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA'}} />}
+              </div>
+              {insightLoading && !insightData?.insight ? (
+                <div className="mt-2 space-y-1.5">
+                  <div className="h-3 w-full rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                  <div className="h-3 w-4/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                  <div className="h-3 w-3/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                </div>
+              ) : insightData?.insight ? (
+                <div className="mt-2 text-sm leading-6" style={{color:'#4C1D95'}}>{insightData.insight}</div>
+              ) : (
+                <div className="mt-2 text-xs italic" style={{color:'#A78BFA'}}>Select a conversation with messages to generate insight.</div>
+              )}
             </div>
-            <p className="text-xs text-slate-400 italic">Select a conversation with messages to generate insight.</p>
           </CardContent>
         </Card>
         {/* Recent jobs */}

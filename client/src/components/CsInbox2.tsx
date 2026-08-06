@@ -489,19 +489,6 @@ export default function CsInbox2() {
             </footer>
           </main>
           <aside className="cs2-side" style={{overflow:'hidden',display:'flex',flexDirection:'column',gap:0,padding:0}}>
-            {/* Missions — always at top, wired later */}
-            <section className="scard" style={{flexShrink:0,padding:'14px 16px'}}>
-              <div className="cardHead">Missions <span className="link">+ Add</span></div>
-              {[
-                {id:1,icon:"✦",title:"Confirm slot",    desc:"Lock in the appointment."},
-                {id:2,icon:"💳",title:"Get card on file",desc:"Required before appointment."},
-                {id:3,icon:"📍",title:"Confirm address", desc:"Street address still missing."},
-              ].map(m => (
-                <div key={m.id} className="mission" style={{opacity:missionDone.has(m.id)?0.42:1}} onClick={() => { setMissionDone(prev => new Set([...prev,m.id])); showToast("Mission completed ✓"); }}>
-                  <div className="mico">{m.icon}</div><div><b>{m.title}</b><p>{m.desc}</p></div>
-                </div>
-              ))}
-            </section>
             {/* Client/Team profile panel */}
             <div style={{flex:1,minHeight:0,overflow:'hidden'}}>
               <CsRightPanelClient
@@ -516,6 +503,21 @@ export default function CsInbox2() {
                   stats: { bookings: 0, complaints: 0 },
                 }}
                 setCompose={setCompose}
+                messages={detailMessages}
+                missionSection={
+                  <section className="scard" style={{flexShrink:0,padding:'14px 16px',borderBottom:'1px solid #eff0f2'}}>
+                    <div className="cardHead">Missions <span className="link">+ Add</span></div>
+                    {[
+                      {id:1,icon:"✦",title:"Confirm slot",    desc:"Lock in the appointment."},
+                      {id:2,icon:"💳",title:"Get card on file",desc:"Required before appointment."},
+                      {id:3,icon:"📍",title:"Confirm address", desc:"Street address still missing."},
+                    ].map(m => (
+                      <div key={m.id} className="mission" style={{opacity:missionDone.has(m.id)?0.42:1}} onClick={() => { setMissionDone(prev => new Set([...prev,m.id])); showToast("Mission completed ✓"); }}>
+                        <div className="mico">{m.icon}</div><div><b>{m.title}</b><p>{m.desc}</p></div>
+                      </div>
+                    ))}
+                  </section>
+                }
               />
             </div>
           </aside>
