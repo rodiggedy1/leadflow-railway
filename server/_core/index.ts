@@ -1549,7 +1549,7 @@ async function startServer() {
       if (!db) return res.status(500).json({ error: 'no db' });
       const rows = (await db.execute(
         sql`SELECT id, status, approvedBy, approvedText, sentAt, generatedDraft, originalMessage,
-                   messageType, intent, qualityScore, isCleaner
+                   messageType, intent, qualityScore, senderType
             FROM madison_sms_drafts
             WHERE fromPhone = ${phone}
             ORDER BY createdAt DESC
@@ -1565,7 +1565,7 @@ async function startServer() {
       const inboundText: string = row.originalMessage ?? '';
       const generatedDraft: string = row.generatedDraft ?? '';
       const classificationType: string = row.messageType ?? '';
-      const isCleaner: boolean = !!row.isCleaner;
+      const isCleaner: boolean = row.senderType === 'cleaner';
       // Run gate-by-gate evaluation
       const AUTO_SEND_ALLOWLIST = [
         /^thanks[!.]*$/i, /^thank you[!.]*$/i, /^thank u[!.]*$/i, /^thx[!.]*$/i,
@@ -1603,7 +1603,7 @@ async function startServer() {
           id: row.id, status: row.status, approvedBy: row.approvedBy,
           approvedText: row.approvedText, sentAt: row.sentAt,
           originalMessage: row.originalMessage, generatedDraft: row.generatedDraft,
-          messageType: row.messageType, intent: row.intent, isCleaner: row.isCleaner,
+          messageType: row.messageType, intent: row.intent,           senderType: row.senderType,
           intentConfidence, draftConfidence,
         },
         gate: {
