@@ -1441,6 +1441,20 @@ async function startServer() {
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });
 
+  // One-time: update phone numbers for Team Maria Suarez and Team Pilar
+  app.post("/api/diag/fix-cleaner-phones", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      // Find profiles by name (partial match)
+      const rows = (await db.execute(
+        sql`SELECT id, name, phone FROM cleaner_profiles WHERE name LIKE '%Maria Suarez%' OR name LIKE '%Pilar%' ORDER BY name`
+      ) as any)[0];
+      return res.json({ found: rows });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
   // List all active cleaners
   app.get("/api/diag/cleaners", async (req, res) => {
     if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
