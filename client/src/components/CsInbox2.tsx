@@ -11,7 +11,7 @@ import { useOpsStream } from "@/hooks/useOpsStream";
 
 const COLORS = ["#6d4aff","#10b981","#f97316","#3478f6","#ef4444","#a855f7"];
 const HEAD_COLORS: Record<string,string> = {
-  "At Risk":"#ff9f1a","New":"#3478f6","Needs Response":"#13b77a","On Customer":"#8b5cf6"
+  "New":"#3478f6","Needs Response":"#13b77a","On Customer":"#8b5cf6","At Risk":"#ff9f1a"
 };
 
 type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
@@ -376,7 +376,7 @@ export default function CsInbox2() {
 
   const columns = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const colNames = ["At Risk", "New", "Needs Response", "On Customer"] as const;
+      const colNames = ["New", "Needs Response", "On Customer", "At Risk"] as const;
     return colNames.map(label => {
       // Only active (non-resolved) conversations on the board
       let convs = activeClientConvs.filter(c => {
