@@ -834,7 +834,9 @@ function computeQualityScore(params: {
 
 // ─── Step 7.5: Classify Lead Category ───────────────────────────────────────
 
-type LeadCategory = "lead" | "regular" | "unclear";
+// leadCategory is only persisted when classification succeeds: "lead" | "regular".
+// Technical failures (timeout, malformed output) return null — nothing is stored.
+type LeadCategory = "lead" | "regular";
 
 /**
  * Classifies whether this conversation is about a new sales opportunity (lead)
@@ -850,7 +852,7 @@ async function classifyLeadCategory(params: {
   intentSummary: string;
   conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
-}): Promise<LeadCategory> {
+}): Promise<LeadCategory | null> {
   const { sessionId, context, intent, intentSummary, conversationMessages, db } = params;
 
   try {
@@ -873,26 +875,28 @@ async function classifyLeadCategory(params: {
       .where(eq(conversationSessions.id, sessionId))
       .limit(1);
 
-    if (!session) return "unclear";
+    // Session not found — fall through to AI fallback
+    if (!session) {
+      // handled below
+    } else {
+      // Post-booking operational stages → regular
+      const operationalStages = new Set([
+        "BOOKED",
+        "SCHEDULE_CONFIRM_SENT",
+        "SCHEDULE_CONFIRM_DONE",
+        "QUALITY_RATING_REQUESTED",
+        "QUALITY_RATING_DONE",
+        "REVIEW_REQUESTED",
+        "REVIEW_DONE",
+        "REVIEW_REBOOKING_REQUESTED",
+        "REVIEW_REBOOKING_DONE",
+      ]);
+      if (operationalStages.has(session.stage)) return "regular";
+      // Cleaner-side CS queue → regular
+      if (session.csQueue === "Teams") return "regular";
+    }
 
-    // Post-booking operational stages → regular
-    const operationalStages = new Set([
-      "BOOKED",
-      "SCHEDULE_CONFIRM_SENT",
-      "SCHEDULE_CONFIRM_DONE",
-      "QUALITY_RATING_REQUESTED",
-      "QUALITY_RATING_DONE",
-      "REVIEW_REQUESTED",
-      "REVIEW_DONE",
-      "REVIEW_REBOOKING_REQUESTED",
-      "REVIEW_REBOOKING_DONE",
-    ]);
-    if (operationalStages.has(session.stage)) return "regular";
-
-    // Cleaner-side CS queue → regular
-    if (session.csQueue === "Teams") return "regular";
-
-    // ── AI fallback: is this conversation about purchasing/booking? ────────────
+    // ── AI fallback: force lead | regular decision ─────────────────────────────
     const lastMessages = conversationMessages.slice(-6);
     const historyText = lastMessages
       .map(m => `${m.role === "user" ? "Customer" : "Agent"}: ${m.content}`)
@@ -909,10 +913,9 @@ async function classifyLeadCategory(params: {
           role: "system",
           content: `You classify customer SMS conversations for a cleaning service.
 
-Answer ONLY: is this conversation currently about potentially purchasing or booking a cleaning service?
-- "lead" = the customer is asking about pricing, availability, booking a new cleaning, or trying to schedule a service they haven't booked yet
-- "regular" = the customer is an existing customer in an active service relationship (asking about their upcoming clean, giving notes, thanking, complaining about a recent clean, etc.)
-- "unclear" = not enough evidence to decide
+You MUST choose exactly one:
+- "lead" = potential customer currently considering, requesting, or trying to book a cleaning service they haven't booked yet
+- "regular" = existing/booked customer, cleaner/team member, operational or support conversation, or anything that is NOT a current sales opportunity
 
 Return JSON only. No prose.`,
         },
@@ -926,7 +929,7 @@ Return JSON only. No prose.`,
           schema: {
             type: "object",
             properties: {
-              category: { type: "string", enum: ["lead", "regular", "unclear"] },
+              category: { type: "string", enum: ["lead", "regular"] },
             },
             required: ["category"],
             additionalProperties: false,
@@ -936,14 +939,18 @@ Return JSON only. No prose.`,
     });
 
     const content = response?.choices?.[0]?.message?.content;
-    if (!content) return "unclear";
+    if (!content) {
+      console.warn("[MadisonSMS] classifyLeadCategory: empty LLM response — omitting category");
+      return null;
+    }
     const parsed = typeof content === "string" ? JSON.parse(content) : content;
     const cat = parsed?.category;
-    if (cat === "lead" || cat === "regular" || cat === "unclear") return cat;
-    return "unclear";
+    if (cat === "lead" || cat === "regular") return cat;
+    console.warn("[MadisonSMS] classifyLeadCategory: unexpected LLM value:", cat, "— omitting category");
+    return null;
   } catch (err) {
-    console.warn("[MadisonSMS] classifyLeadCategory failed:", err);
-    return "unclear";
+    console.warn("[MadisonSMS] classifyLeadCategory failed — omitting category:", err);
+    return null;
   }
 }
 
@@ -958,7 +965,7 @@ async function postDraftCardToCommandChat(params: {
   inboundText: string;
   draft: string;
   observations: string[];
-  leadCategory: LeadCategory;
+  leadCategory: LeadCategory | null;
   /** Minutes the customer has been waiting unanswered — shown as red banner in the card */
   unansweredMinutes?: number;
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -994,7 +1001,16 @@ async function postDraftCardToCommandChat(params: {
       .limit(1);
     if (existing?.metadata) existingMeta = JSON.parse(existing.metadata as string);
   } catch { /* no existing card — start fresh */ }
-  const metadataJson = JSON.stringify({ ...existingMeta, draftId, quickActionVersion: 1, sessionId, leadCategory, ...(unansweredMinutes !== undefined ? { unansweredMinutes } : {}) });
+  // Only include leadCategory in metadata when classification succeeded (non-null).
+  // On technical failure, omit the key entirely so old cards stay visually unchanged.
+  const metadataJson = JSON.stringify({
+    ...existingMeta,
+    draftId,
+    quickActionVersion: 1,
+    sessionId,
+    ...(leadCategory !== null ? { leadCategory } : {}),
+    ...(unansweredMinutes !== undefined ? { unansweredMinutes } : {}),
+  });
   await db
     .insert(opsChatMessages)
     .values({

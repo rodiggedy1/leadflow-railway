@@ -1449,6 +1449,7 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
     const bodyLinesC = msg.body.split("\n");
     const quotedLineC = bodyLinesC[1] ?? bodyLinesC[0] ?? "";
     const generatedDraftC = draft?.generatedDraft ?? "";
+    const leadCategoryC: string | undefined = (() => { try { return JSON.parse(msg.metadata ?? "{}").leadCategory; } catch { return undefined; } })();
 
     return (
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "4px 16px" }} onClick={handleCardClick}>
@@ -1482,8 +1483,16 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
                   <span style={{ color: "#3c4153", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>&ldquo;{quotedLineC || "…"}&rdquo;</span>
                 </div>
               </div>
-              <div style={{ background: statusBadgeC.bg, color: statusBadgeC.color, padding: "4px 9px", borderRadius: 999, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" as const, flexShrink: 0 }}>
-                {statusBadgeC.label}
+              <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                {leadCategoryC === "lead" && (
+                  <div style={{ background: "#fff3e0", color: "#c2410c", padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, whiteSpace: "nowrap" as const }}>🔥 Lead</div>
+                )}
+                {leadCategoryC === "regular" && (
+                  <div style={{ background: "#ede9fe", color: "#6d5cff", padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, whiteSpace: "nowrap" as const }}>✦ Madison</div>
+                )}
+                <div style={{ background: statusBadgeC.bg, color: statusBadgeC.color, padding: "4px 9px", borderRadius: 999, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" as const }}>{
+                  statusBadgeC.label}
+                </div>
               </div>
             </div>
 
@@ -7323,6 +7332,9 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
   const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
   const emailCount = cards.filter(c => c.quickAction === "madison_email_draft").length;
+  // Lead classification counts — only explicitly classified cards; missing/null not counted
+  const leadCount = cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === "lead"; } catch { return false; } }).length;
+  const regularCount = cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === "regular"; } catch { return false; } }).length;
   const currentCard = cards[cardIndex];
   const { data: focusCardCtx, isLoading: ctxLoading } = trpc.opsChat.getFocusCardContext.useQuery(
     { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
@@ -7436,6 +7448,12 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
               {callCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{callCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div></div>}
               {smsCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: emailCount > 0 ? "1px solid #f0eeff" : undefined }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{smsCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div></div>}
               {emailCount > 0 && <div style={{ flex: 1, padding: "18px 24px" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{emailCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Email Drafts</div></div>}
+              {(leadCount > 0 || regularCount > 0) && (
+                <div style={{ flex: 1, padding: "14px 24px", display: "flex", gap: 16, alignItems: "center", borderTop: "1px solid #f0eeff" }}>
+                  {leadCount > 0 && <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 20, fontWeight: 700, color: "#c2410c" }}>{leadCount}</span><span style={{ fontSize: 11, fontWeight: 700, color: "#c2410c", background: "#fff3e0", padding: "2px 7px", borderRadius: 999 }}>🔥 Leads</span></div>}
+                  {regularCount > 0 && <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 20, fontWeight: 700, color: "#6d5cff" }}>{regularCount}</span><span style={{ fontSize: 11, fontWeight: 700, color: "#6d5cff", background: "#ede9fe", padding: "2px 7px", borderRadius: 999 }}>✦ Madison</span></div>}
+                </div>
+              )}
             </div>
           )}
           {!isLoading && cards.length > 0 && (
