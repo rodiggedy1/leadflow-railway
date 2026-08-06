@@ -65,8 +65,8 @@ const STYLES = `
 .cs2-boardWrap{padding:0 22px 16px;overflow-x:auto;overflow-y:hidden;flex:1;min-height:0;display:flex;flex-direction:column}
 .cs2-board{min-width:1160px;display:grid;grid-template-columns:repeat(4,minmax(270px,1fr));gap:12px;flex:1;min-height:0;align-items:stretch}
 .cs2-column{background:#f1f2f5;border:1px solid #e0e3e8;border-radius:14px;padding:10px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
-.cs2-colCards{flex:1;overflow-y:auto;overflow-x:hidden;padding-right:2px}
-.cs2-colCards::-webkit-scrollbar{width:4px}.cs2-colCards::-webkit-scrollbar-track{background:transparent}.cs2-colCards::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px}
+.cs2-colCards{flex:1;overflow-y:auto;overflow-x:hidden;padding-right:2px;scrollbar-width:none;-ms-overflow-style:none}
+.cs2-colCards::-webkit-scrollbar{display:none}
 .cs2-colHead{display:flex;align-items:center;gap:8px;padding:8px 4px 12px;font-weight:800;font-size:14px}
 .cs2-colHead small{color:#8e94a2;font-weight:600;margin-left:4px}.cs2-colHead span.chevron{margin-left:auto;color:#9aa0ab;font-weight:400}
 .cs2-card{background:#fff;border:1px solid #dfe2e8;border-radius:12px;padding:13px;margin-bottom:9px;cursor:pointer;transition:.15s;text-align:left;width:100%}
