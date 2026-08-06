@@ -7486,28 +7486,20 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
               {callCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{callCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div></div>}
               {smsCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: emailCount > 0 ? "1px solid #f0eeff" : undefined }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{smsCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div></div>}
               {emailCount > 0 && <div style={{ flex: 1, padding: "18px 24px" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{emailCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Email Drafts</div></div>}
-              {(leadCount > 0 || regularCount > 0 || teamCount > 0) && (
-                <div style={{ flex: 1, padding: "14px 24px", display: "flex", gap: 10, alignItems: "center", borderTop: "1px solid #f0eeff", flexWrap: "wrap" }}>
-                  {leadCount > 0 && (
-                    <button onClick={() => startReview("lead")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff3e0", border: "1px solid #fed7aa", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: "#c2410c" }}>{leadCount}</span>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: "#c2410c" }}>🔥 Leads</span>
-                    </button>
-                  )}
-                  {regularCount > 0 && (
-                    <button onClick={() => startReview("regular")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#ede9fe", border: "1px solid #ddd6fe", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: "#6d5cff" }}>{regularCount}</span>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: "#6d5cff" }}>✦ Madison</span>
-                    </button>
-                  )}
-                  {teamCount > 0 && (
-                    <button onClick={() => startReview("cleaner")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: "#15803d" }}>{teamCount}</span>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: "#15803d" }}>🚧 Teams</span>
-                    </button>
-                  )}
-                </div>
-              )}
+              <div style={{ flex: 1, padding: "14px 24px", display: "flex", gap: 10, alignItems: "center", borderTop: "1px solid #f0eeff", flexWrap: "wrap" }}>
+                <button onClick={() => startReview("lead")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff3e0", border: "1px solid #fed7aa", borderRadius: 10, padding: "6px 12px", cursor: "pointer", opacity: leadCount === 0 ? 0.45 : 1 }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: "#c2410c" }}>{leadCount}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#c2410c" }}>🔥 Leads</span>
+                </button>
+                <button onClick={() => startReview("regular")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#ede9fe", border: "1px solid #ddd6fe", borderRadius: 10, padding: "6px 12px", cursor: "pointer", opacity: regularCount === 0 ? 0.45 : 1 }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: "#6d5cff" }}>{regularCount}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#6d5cff" }}>✦ Madison</span>
+                </button>
+                <button onClick={() => startReview("cleaner")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "6px 12px", cursor: "pointer", opacity: teamCount === 0 ? 0.45 : 1 }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: "#15803d" }}>{teamCount}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#15803d" }}>🚧 Teams</span>
+                </button>
+              </div>
             </div>
           )}
           {!isLoading && cards.length > 0 && (
@@ -7711,45 +7703,40 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
                   <div style={{ fontWeight: 800, fontSize: 14, color: "#17152d" }}>{cardIndex + 1} of {filteredCards.length}{focusFilter !== null ? ` (× filter)` : ""}</div>
                   <div style={{ textAlign: "right", color: "#7e829c", fontSize: 13 }}>Focus Mode 🎯</div>
                 </div>
-                {/* Filter tabs */}
-                {(leadCount > 0 || regularCount > 0) && (
-                  <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                    <button
-                      onClick={() => { setFocusFilter(null); setCardIndex(0); }}
-                      style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
-                        background: focusFilter === null ? P : "#fff",
-                        color: focusFilter === null ? "#fff" : "#6b7280",
-                        borderColor: focusFilter === null ? P : "#e5e7eb" }}
-                    >All ({cards.length})</button>
-                    {leadCount > 0 && (
-                      <button
-                        onClick={() => { setFocusFilter("lead"); setCardIndex(0); }}
-                        style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
-                          background: focusFilter === "lead" ? "#c2410c" : "#fff3e0",
-                          color: focusFilter === "lead" ? "#fff" : "#c2410c",
-                          borderColor: focusFilter === "lead" ? "#c2410c" : "#fed7aa" }}
-                      >🔥 Leads ({leadCount})</button>
-                    )}
-                    {regularCount > 0 && (
-                      <button
-                        onClick={() => { setFocusFilter("regular"); setCardIndex(0); }}
-                        style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
-                          background: focusFilter === "regular" ? "#6d5cff" : "#ede9fe",
-                          color: focusFilter === "regular" ? "#fff" : "#6d5cff",
-                          borderColor: focusFilter === "regular" ? "#6d5cff" : "#ddd6fe" }}
-                      >✦ Madison ({regularCount})</button>
-                    )}
-                    {teamCount > 0 && (
-                      <button
-                        onClick={() => { setFocusFilter("cleaner"); setCardIndex(0); }}
-                        style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
-                          background: focusFilter === "cleaner" ? "#15803d" : "#f0fdf4",
-                          color: focusFilter === "cleaner" ? "#fff" : "#15803d",
-                          borderColor: focusFilter === "cleaner" ? "#15803d" : "#bbf7d0" }}
-                      >🚧 Teams ({teamCount})</button>
-                    )}
-                  </div>
-                )}
+                {/* Filter tabs — always visible */}
+                <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                  <button
+                    onClick={() => { setFocusFilter(null); setCardIndex(0); }}
+                    style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                      background: focusFilter === null ? P : "#fff",
+                      color: focusFilter === null ? "#fff" : "#6b7280",
+                      borderColor: focusFilter === null ? P : "#e5e7eb" }}
+                  >All ({cards.length})</button>
+                  <button
+                    onClick={() => { setFocusFilter("lead"); setCardIndex(0); }}
+                    style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                      background: focusFilter === "lead" ? "#c2410c" : "#fff3e0",
+                      color: focusFilter === "lead" ? "#fff" : "#c2410c",
+                      borderColor: focusFilter === "lead" ? "#c2410c" : "#fed7aa",
+                      opacity: leadCount === 0 ? 0.45 : 1 }}
+                  >🔥 Leads ({leadCount})</button>
+                  <button
+                    onClick={() => { setFocusFilter("regular"); setCardIndex(0); }}
+                    style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                      background: focusFilter === "regular" ? "#6d5cff" : "#ede9fe",
+                      color: focusFilter === "regular" ? "#fff" : "#6d5cff",
+                      borderColor: focusFilter === "regular" ? "#6d5cff" : "#ddd6fe",
+                      opacity: regularCount === 0 ? 0.45 : 1 }}
+                  >✦ Madison ({regularCount})</button>
+                  <button
+                    onClick={() => { setFocusFilter("cleaner"); setCardIndex(0); }}
+                    style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                      background: focusFilter === "cleaner" ? "#15803d" : "#f0fdf4",
+                      color: focusFilter === "cleaner" ? "#fff" : "#15803d",
+                      borderColor: focusFilter === "cleaner" ? "#15803d" : "#bbf7d0",
+                      opacity: teamCount === 0 ? 0.45 : 1 }}
+                  >🚧 Teams ({teamCount})</button>
+                </div>
               </div>
               {/* Progress bar */}
               <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden" }}>
