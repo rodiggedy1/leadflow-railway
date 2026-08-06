@@ -218,7 +218,9 @@ export default function CsInbox2() {
       let msgs: RawMsg[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
       const lastMsg = msgs.slice(-1)[0];
-      const lastTs = lastMsg?.ts;
+      // Use server-computed lastMsgTs (same as CsInbox.tsx) — more reliable than parsing ts from messageHistory
+      const serverLastMsgTs = (row as any).lastMsgTs as number | undefined;
+      const lastTs = serverLastMsgTs ?? lastMsg?.ts;
       const waitMs = lastTs ? Date.now() - lastTs : 0;
       const waitMin = Math.round(waitMs / 60000);
       const waitDays = Math.floor(waitMs / 86_400_000);
