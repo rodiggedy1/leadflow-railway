@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2 — pixel-perfect port of the user-supplied HTML/CSS design.
@@ -98,6 +98,95 @@ const STYLES = `
 .cs2-addConv{text-align:center;color:#9aa0aa;padding:14px;font-size:13px}
 `;
 
+const DETAIL_STYLES = `
+/* ── DETAIL VIEW — exact translation of user HTML/CSS ── */
+:root{--bg:#f4f5f7;--paper:#fff;--ink:#101116;--muted:#858b98;--line:#e7e9ee;--purple:#6b4eff;--soft:#f5f2ff;--red:#e44c42;--green:#138a64;--amber:#c98019}
+.cs2-shell{position:fixed;inset:0;display:grid;grid-template-columns:72px 310px minmax(580px,1fr) 370px;background:#fff;max-width:1800px;margin:auto;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;color:var(--ink)}
+.cs2-rail{background:#111219;color:#fff;padding:18px 13px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.cs2-rail .logo{width:42px;height:42px;border-radius:13px;background:#fff;color:#111;display:grid;place-items:center;font-weight:950;font-size:20px;margin-bottom:14px}
+.cs2-rbtn{width:42px;height:42px;border:0;border-radius:12px;background:transparent;color:#9da2ae;font-size:18px;cursor:pointer}
+.cs2-rbtn:hover,.cs2-rbtn.on{background:#272832;color:#fff}
+.cs2-rail .bottom{margin-top:auto}
+.cs2-list{background:#fafbfc;border-right:1px solid var(--line);min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.cs2-listhead{padding:21px 18px 13px;border-bottom:1px solid var(--line);flex-shrink:0}
+.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-weight:800;font-size:9px;color:#9ca1ad}
+.cs2-listhead h1{font-size:19px;margin:5px 0 14px;font-weight:900}
+.cs2-listsearch{height:36px;border:1px solid #e2e4e9;background:#fff;border-radius:10px;padding:0 11px;display:flex;align-items:center;color:#a0a5af;font-size:12px}
+.cs2-listsearch input{border:0;outline:0;width:100%;margin-left:7px;font-size:12px;font-family:inherit}
+.cs2-dtabs{display:flex;gap:6px;margin-top:12px}
+.cs2-dtab{border:0;background:transparent;border-radius:8px;padding:7px 9px;font-size:10px;color:#777d89;cursor:pointer}
+.cs2-dtab.on{background:#eeeaff;color:#5e43e8;font-weight:800}
+.cs2-tickets{overflow:auto;padding:8px;flex:1;scrollbar-width:none}
+.cs2-tickets::-webkit-scrollbar{display:none}
+.ticket{position:relative;padding:13px 12px;margin:4px 0;border-radius:13px;cursor:pointer;border:1px solid transparent}
+.ticket:hover{background:#fff;border-color:#e7e8ed}
+.ticket.on{background:#fff;border-color:#ded8ff;box-shadow:0 8px 28px rgba(56,42,127,.08)}
+.ticket.on:before{content:"";position:absolute;left:-1px;top:12px;bottom:12px;width:3px;border-radius:4px;background:var(--purple)}
+.trow{display:flex;align-items:center;gap:8px}
+.mini{width:30px;height:30px;border-radius:9px;background:#eae6ff;color:#6249e9;display:grid;place-items:center;font-weight:800;font-size:11px;flex-shrink:0}
+.tname{font-weight:780}
+.age{margin-left:auto;color:#9da2ad;font-size:10px}
+.age.risk{color:#d34e42}
+.preview2{margin:8px 0 9px 38px;color:#626875;font-size:11px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tags2{margin-left:38px}
+.tag2{display:inline-block;font-size:9px;padding:4px 6px;border-radius:6px;background:#f0f1f4;color:#6d7380;margin-right:3px}
+.tag2.hot{background:#fff0ed;color:#d14a3f}
+.cs2-dmain{min-width:0;display:flex;flex-direction:column;background:#fff;overflow:hidden}
+.cs2-dtop{height:72px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 24px;gap:12px;flex-shrink:0}
+.cs2-davatar{width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,#7a60ff,#5b3ee7);color:#fff;display:grid;place-items:center;font-weight:900;font-size:14px;box-shadow:0 6px 16px rgba(91,62,231,.18);flex-shrink:0}
+.identity h2{font-size:16px;margin:0 0 3px;font-weight:800}
+.identity span{font-size:10px;color:#9298a3}
+.topActions{margin-left:auto;display:flex;gap:7px}
+.iconBtn{height:34px;border:1px solid #e2e4e9;background:#fff;border-radius:9px;padding:0 10px;cursor:pointer;font-size:12px}
+.resolve{color:#167a5c;background:#effaf6;border-color:#d8f0e7}
+.cs2-context{padding:15px 24px 4px;flex-shrink:0}
+.ai{background:linear-gradient(110deg,#f7f5ff,#fbfaff);border:1px solid #ebe7ff;border-radius:14px;padding:12px 14px;line-height:1.5;color:#555b68;font-size:12px}
+.ai strong{color:#5d43df}
+.chips2{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+.chip2{font-size:9px;border:1px solid #e5e7eb;border-radius:999px;padding:5px 8px;color:#707683}
+.chip2.green{background:#effaf6;border-color:#d8f0e7;color:#17765a}
+.cs2-thread{flex:1;overflow:auto;padding:17px 30px 12px;scrollbar-width:none}
+.cs2-thread::-webkit-scrollbar{display:none}
+.day{text-align:center;color:#aaaeb7;font-size:9px;margin:7px;text-transform:uppercase;letter-spacing:.08em}
+.msg{max-width:68%;margin:14px 0}
+.msg.out{margin-left:auto}
+.mmeta{font-size:9px;color:#9ba0aa;margin:0 4px 4px}
+.msg.out .mmeta{text-align:right}
+.bubble2{padding:11px 13px;border-radius:16px;background:#f0ecff;line-height:1.48;font-size:12px}
+.msg.out .bubble2{background:#f1f2f4}
+.msg.latest .bubble2{box-shadow:0 0 0 2px rgba(107,78,255,.08)}
+.cs2-composer{padding:10px 24px 20px;border-top:1px solid #f0f1f3;flex-shrink:0}
+.composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}
+.composeBox:focus-within{border-color:#bdb2ff;box-shadow:0 8px 30px rgba(70,53,159,.08),0 0 0 3px #f2efff}
+.composeBox textarea{width:100%;height:55px;border:0;outline:0;resize:none;font-size:13px;font-family:inherit}
+.composeRow{display:flex;align-items:center;gap:6px;margin-top:8px}
+.quick{border:0;background:#f4f4f6;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}
+.send2{margin-left:auto;border:0;background:#684bfa;color:#fff;border-radius:9px;padding:8px 17px;font-weight:750;cursor:pointer;box-shadow:0 5px 13px rgba(104,75,250,.2)}
+.cs2-side{border-left:1px solid var(--line);background:#f8f9fb;overflow:auto;padding:17px 15px;scrollbar-width:none}
+.cs2-side::-webkit-scrollbar{display:none}
+.sideTitle{display:flex;align-items:end;justify-content:space-between;margin:2px 3px 12px}
+.sideTitle b{font-size:14px;font-weight:800}.sideTitle span{font-size:9px;color:#9da2ad}
+.scard{background:#fff;border:1px solid #e6e8ed;border-radius:15px;margin-bottom:11px;overflow:hidden;box-shadow:0 3px 12px rgba(20,21,35,.02)}
+.cardHead{padding:12px 13px;border-bottom:1px solid #eef0f2;display:flex;align-items:center;font-weight:800;font-size:11px}
+.cardHead .link{margin-left:auto;color:#674cf1;font-size:9px;cursor:pointer}
+.rows2{padding:6px 13px}
+.row2{display:grid;grid-template-columns:105px 1fr;padding:6px 0;font-size:10px}
+.row2 span:first-child{color:#9aa0ab}.row2 strong{font-weight:750}
+.job{margin:10px 12px;padding:11px;border-radius:11px;background:#f7f8fa;border:1px solid #eff0f3}
+.live{float:right;background:#e9f8f2;color:#137a5b;padding:4px 7px;border-radius:20px;font-size:8px;font-weight:800}
+.job h3{font-size:12px;margin:6px 0 3px;font-weight:800}.job p{font-size:9px;color:#7d838e;margin:3px 0}
+.actions2{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 12px}
+.act{border:1px solid #e0e2e7;background:#fff;border-radius:8px;padding:8px;font-size:9px;cursor:pointer;font-weight:600}
+.act.primary{background:#684bfa;color:#fff;border-color:#684bfa}
+.teamHero{padding:11px 13px;display:flex;align-items:center;gap:9px}
+.teamAv{width:34px;height:34px;border-radius:10px;background:#151621;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:800;flex-shrink:0}
+.teamHero b{font-size:11px}.teamHero small{display:block;color:#969ca7;margin-top:2px;font-size:9px}
+.mission{padding:10px 12px;border-bottom:1px solid #eff0f2;cursor:pointer;transition:.15s;display:flex;align-items:flex-start;gap:9px}
+.mission:last-child{border:0}.mission:hover{background:#faf9ff}
+.mico{width:27px;height:27px;border-radius:8px;background:#f0edff;display:grid;place-items:center;flex-shrink:0;font-size:13px}
+.mission b{font-size:10px;font-weight:800}.mission p{margin:3px 0 0;color:#9298a4;font-size:9px}
+`;
+
 export default function CsInbox2() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -108,6 +197,27 @@ export default function CsInbox2() {
   const [replyText, setReplyText] = useState("");
   const [toast, setToast] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+
+  const [selected, setSelected] = useState<KanbanCard | null>(null);
+  const INIT_MESSAGES = [
+    { out: true,  who: "Madison",  time: "9:12 AM", text: "Hi! 😊 Madison from Maids in Black. What day were you thinking for the cleaning?" },
+    { out: false, who: "Customer", time: "9:15 AM", text: "Tomorrow if possible. It's 4 bedrooms and 3 bathrooms." },
+    { out: true,  who: "Madison",  time: "9:17 AM", text: "Absolutely. For a deep clean, most homes that size land around $329–$369 depending on condition. Would morning or afternoon work better?" },
+    { out: false, who: "Customer", time: "9:31 AM", text: "Can you come tomorrow morning? I need the whole house cleaned." },
+  ];
+  const [messages, setMessages] = useState(INIT_MESSAGES);
+  const [reply, setReply] = useState("");
+  const [missionDone, setMissionDone] = useState<Set<number>>(new Set());
+  const threadRef = useRef<HTMLDivElement>(null);
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 1200); }
+  function sendReply() {
+    if (!reply.trim()) return;
+    setMessages(prev => [...prev, { out: true, who: "Madison", time: new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}), text: reply.trim() }]);
+    setReply("");
+    showToast("Reply sent ✓");
+  }
+  useEffect(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight; }, [messages, selected]);
 
   // Static demo data matching the HTML exactly
   const DATA: Record<string, KanbanCard[]> = useMemo(() => ({
@@ -170,6 +280,117 @@ export default function CsInbox2() {
 
   const totalCards = Object.values(DATA).flat().length;
   const needsResponseCount = DATA["Needs Response"].length;
+
+  // ── DETAIL VIEW — exact translation of user HTML/CSS ──
+  if (selected) {
+    return (
+      <>
+        <style>{STYLES + DETAIL_STYLES}</style>
+        <div className="cs2-shell">
+          <nav className="cs2-rail">
+            <div className="logo">M</div>
+            <button className="cs2-rbtn">⌂</button>
+            <button className="cs2-rbtn on">✉</button>
+            <button className="cs2-rbtn">✓</button>
+            <button className="cs2-rbtn">⌁</button>
+            <button className="cs2-rbtn">✦</button>
+            <button className="cs2-rbtn bottom" onClick={() => setSelected(null)}>←</button>
+          </nav>
+          <aside className="cs2-list">
+            <div className="cs2-listhead">
+              <div className="eyebrow">Customer inbox</div>
+              <h1>Needs Response <span style={{color:"#a0a5af",fontWeight:500}}>{DEMO_CARDS.length}</span></h1>
+              <div className="cs2-listsearch">⌕ <input placeholder="Search conversations" /></div>
+              <div className="cs2-dtabs">
+                <button className="cs2-dtab on">All</button>
+                <button className="cs2-dtab">🔥 Leads</button>
+                <button className="cs2-dtab">👷 Teams</button>
+              </div>
+            </div>
+            <div className="cs2-tickets">
+              {DEMO_CARDS.map(card => (
+                <div key={card.id} className={`ticket${selected.id === card.id ? " on" : ""}`} onClick={() => { setSelected(card); setMessages(INIT_MESSAGES); }}>
+                  <div className="trow">
+                    <div className="mini">{card.initials}</div>
+                    <span className="tname">{card.name}</span>
+                    <span className={`age${card.priority === "P1" && card.chips.some(c => /No Reply|Overdue|Urgent|At Risk/.test(c)) ? " risk" : ""}`}>{card.ago}</span>
+                  </div>
+                  <div className="preview2">{card.preview}</div>
+                  <div className="tags2">{card.chips.slice(0,2).map(c => <span key={c} className={`tag2${/Hot|Urgent|At Risk|No Reply/.test(c) ? " hot" : ""}`}>{c}</span>)}</div>
+                </div>
+              ))}
+            </div>
+          </aside>
+          <main className="cs2-dmain">
+            <header className="cs2-dtop">
+              <div className="cs2-davatar">{selected.initials}</div>
+              <div className="identity"><h2>{selected.name}</h2><span>+1 (202) 555-0148 · Washington, DC · New customer</span></div>
+              <div className="topActions"><button className="iconBtn">•••</button><button className="iconBtn resolve">✓ Resolve</button></div>
+            </header>
+            <div className="cs2-context">
+              <div className="ai"><strong>✦ Madison</strong>&nbsp; {selected.name} wants a deep clean for a 4 bed / 3 bath home tomorrow morning. She has been quoted $329–$369 and is ready to choose a slot.</div>
+              <div className="chips2">
+                <span className="chip2 green">● Needs response</span>
+                {selected.chips.map(c => <span key={c} className="chip2">{c}</span>)}
+              </div>
+            </div>
+            <section className="cs2-thread" ref={threadRef}>
+              <div className="day">TODAY</div>
+              {messages.map((m, i) => (
+                <div key={i} className={`msg${m.out ? " out" : ""}${i === messages.length - 1 ? " latest" : ""}`}>
+                  <div className="mmeta">{m.who} · {m.time}</div>
+                  <div className="bubble2">{m.text}</div>
+                </div>
+              ))}
+            </section>
+            <footer className="cs2-composer">
+              <div className="composeBox">
+                <textarea placeholder={`Reply to ${selected.name.split(" ")[0]}…`} value={reply} onChange={e => setReply(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendReply(); }} />
+                <div className="composeRow">
+                  <button className="quick" onClick={() => setReply("Yes! We have a morning opening 😊")}>Morning opening</button>
+                  <button className="quick" onClick={() => setReply("Let me check with the team and get right back to you.")}>Check team</button>
+                  <button className="quick">+ More</button>
+                  <button className="send2" onClick={sendReply}>Send ↗</button>
+                </div>
+              </div>
+            </footer>
+          </main>
+          <aside className="cs2-side">
+            <div className="sideTitle"><b>Customer command center</b><span>LIVE CONTEXT</span></div>
+            <section className="scard">
+              <div className="cardHead">Customer <span className="link">Edit</span></div>
+              <div className="rows2">{[["Name",selected.name],["Phone","(202) 555-0148"],["Address","Washington, DC"],["Customer","New"],["Past jobs","0"],["Lead source","Thumbtack"]].map(([k,v]) => <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>)}</div>
+            </section>
+            <section className="scard">
+              <div className="cardHead">Today's / Next Job <span className="link">Open ↗</span></div>
+              <div className="job"><span className="live">SCHEDULED</span><b>Deep Clean</b><h3>Tomorrow · 9:00 AM</h3><p>4 bedrooms · 3 bathrooms</p><p>Washington, DC · $349</p></div>
+              <div className="actions2"><button className="act primary" onClick={() => showToast("ETA request started")}>Send ETA</button><button className="act">View booking</button></div>
+            </section>
+            <section className="scard">
+              <div className="cardHead">Team <span className="link">Change</span></div>
+              <div className="teamHero"><div className="teamAv">TP</div><div><b>Team Pilar</b><small>Last assigned team · 4.9 ★</small></div></div>
+              <div className="rows2">{[["Current ETA","Not requested"],["Last service","—"]].map(([k,v]) => <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>)}</div>
+              <div className="actions2"><button className="act" onClick={() => showToast("Team conversation opened")}>Text team</button><button className="act">Assign team</button></div>
+            </section>
+            <section className="scard">
+              <div className="cardHead">Missions <span className="link">+ Add</span></div>
+              {[{id:1,icon:"✦",title:"Confirm tomorrow's slot",desc:"Lock in the 9 AM opening."},{id:2,icon:"💳",title:"Get card on file",desc:"Required before appointment."},{id:3,icon:"📍",title:"Confirm full address",desc:"Street address still missing."}].map(m => (
+                <div key={m.id} className="mission" style={{opacity:missionDone.has(m.id)?0.42:1}} onClick={() => { setMissionDone(prev => new Set([...prev,m.id])); showToast("Mission completed ✓"); }}>
+                  <div className="mico">{m.icon}</div><div><b>{m.title}</b><p>{m.desc}</p></div>
+                </div>
+              ))}
+            </section>
+            <section className="scard">
+              <div className="cardHead">Conversation</div>
+              <div className="rows2">{[["Status","Needs Response"],["Queue","Sales"],["Priority","🔥 Hot Lead"],["Waiting","15 minutes"]].map(([k,v]) => <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>)}</div>
+            </section>
+          </aside>
+        </div>
+        <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>
+      </>
+    );
+  }
+
 
   return (
     <>
