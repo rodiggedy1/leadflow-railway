@@ -1749,10 +1749,10 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
                 <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
                 <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
                 {meta.leadCategory === "lead" && (
-                  <span style={{ font: "700 10px Inter,system-ui", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>🔥 Lead</span>
+                  <span style={{ font: "700 10px Inter,system-ui", color: "#c2410c", background: "#fff3e0", border: "1px solid #fed7aa", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>🔥 Lead</span>
                 )}
-                {meta.leadCategory === "unclear" && (
-                  <span style={{ font: "700 10px Inter,system-ui", color: "#6b7280", background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>? Unclear</span>
+                {meta.leadCategory === "regular" && (
+                  <span style={{ font: "700 10px Inter,system-ui", color: "#6d5cff", background: "#ede9fe", border: "1px solid #ddd6fe", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>✦ Madison</span>
                 )}
                 <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
               </div>
@@ -7319,6 +7319,8 @@ type FocusRecentWin = { label: string; type: "sms" | "email" | "call"; ts: numbe
 function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void; onCallBack: (name: string, phone: string, msgId: number) => void; onTextBack: (name: string, phone: string, msgId: number) => void; }) {
   const [view, setView] = useState<"hero" | "review" | "done">("hero");
   const [cardIndex, setCardIndex] = useState(0);
+  // null = show all cards; "lead" | "regular" = filtered mode
+  const [focusFilter, setFocusFilter] = useState<"lead" | "regular" | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const actedCardIdRef = React.useRef<number | null>(null);
   const [sessionStreak, setSessionStreak] = useState(0);
@@ -7335,7 +7337,11 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
   // Lead classification counts — only explicitly classified cards; missing/null not counted
   const leadCount = cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === "lead"; } catch { return false; } }).length;
   const regularCount = cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === "regular"; } catch { return false; } }).length;
-  const currentCard = cards[cardIndex];
+  // Filtered card list — used in review mode
+  const filteredCards = focusFilter === null
+    ? cards
+    : cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === focusFilter; } catch { return false; } });
+  const currentCard = filteredCards[cardIndex];
   const { data: focusCardCtx, isLoading: ctxLoading } = trpc.opsChat.getFocusCardContext.useQuery(
     { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
     { enabled: !!currentCard, staleTime: 30_000 }
@@ -7361,33 +7367,40 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
     { phone: focusClientPhone },
     { enabled: !!focusClientPhone && !focusIsCleanerCard, refetchOnWindowFocus: false, staleTime: 60_000 }
   );
-  const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0;
+  const progress = filteredCards.length > 0 ? ((cardIndex + 1) / filteredCards.length) * 100 : 0;
   const pct = cards.length > 0 ? Math.round((sessionDone / cards.length) * 100) : 0;
   const medals = ["🥇", "🥈", "🥉"];
   // After Send/Dismiss the queue shrinks — clamp index safely
   // Also: if new cards arrive while on Done screen, return to review automatically
   useEffect(() => {
-    if (cards.length > 0 && cardIndex >= cards.length) setCardIndex(cards.length - 1);
-    if (cards.length > 0 && view === "done") { setView("review"); setCardIndex(0); }
-    if (cards.length === 0 && view === "review") {
+    if (filteredCards.length > 0 && cardIndex >= filteredCards.length) setCardIndex(filteredCards.length - 1);
+    if (filteredCards.length > 0 && view === "done") { setView("review"); setCardIndex(0); }
+    if (filteredCards.length === 0 && view === "review") {
       // Before showing Done, do a fresh fetch to confirm queue is truly empty
       const checkAndDone = async () => {
         const fresh = await utils.opsChat.getFocusCards.fetch();
-        if (!fresh || fresh.length === 0) setView("done");
+        const freshFiltered = focusFilter === null ? fresh : (fresh ?? []).filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === focusFilter; } catch { return false; } });
+        if (!freshFiltered || freshFiltered.length === 0) setView("done");
         // else: fresh cards exist — stay in review, cards state will update via query
       };
       checkAndDone();
     }
-  }, [cards.length, cardIndex, view]);  // eslint-disable-line react-hooks/exhaustive-deps
-  const startReview = () => { if (cards.length > 0) { setCardIndex(0); setView("review"); } };
+  }, [filteredCards.length, cardIndex, view, focusFilter]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const startReview = (filter?: "lead" | "regular" | null) => {
+    const f = filter ?? null;
+    setFocusFilter(f);
+    const targetCards = f === null ? cards : cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === f; } catch { return false; } });
+    if (targetCards.length > 0) { setCardIndex(0); setView("review"); }
+  };
   const goNext = () => {
-    if (cardIndex < cards.length - 1) {
+    if (cardIndex < filteredCards.length - 1) {
       setCardIndex(i => i + 1);
     } else {
       // Before showing Done, do a fresh fetch to confirm queue is truly empty
       const checkAndDone = async () => {
         const fresh = await utils.opsChat.getFocusCards.fetch();
-        if (!fresh || fresh.length === 0) setView("done");
+        const freshFiltered = focusFilter === null ? fresh : (fresh ?? []).filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === focusFilter; } catch { return false; } });
+        if (!freshFiltered || freshFiltered.length === 0) setView("done");
         // else: fresh cards exist — stay in review, cards state will update via query
       };
       checkAndDone();
@@ -7449,9 +7462,19 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
               {smsCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: emailCount > 0 ? "1px solid #f0eeff" : undefined }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{smsCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div></div>}
               {emailCount > 0 && <div style={{ flex: 1, padding: "18px 24px" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{emailCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Email Drafts</div></div>}
               {(leadCount > 0 || regularCount > 0) && (
-                <div style={{ flex: 1, padding: "14px 24px", display: "flex", gap: 16, alignItems: "center", borderTop: "1px solid #f0eeff" }}>
-                  {leadCount > 0 && <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 20, fontWeight: 700, color: "#c2410c" }}>{leadCount}</span><span style={{ fontSize: 11, fontWeight: 700, color: "#c2410c", background: "#fff3e0", padding: "2px 7px", borderRadius: 999 }}>🔥 Leads</span></div>}
-                  {regularCount > 0 && <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 20, fontWeight: 700, color: "#6d5cff" }}>{regularCount}</span><span style={{ fontSize: 11, fontWeight: 700, color: "#6d5cff", background: "#ede9fe", padding: "2px 7px", borderRadius: 999 }}>✦ Madison</span></div>}
+                <div style={{ flex: 1, padding: "14px 24px", display: "flex", gap: 10, alignItems: "center", borderTop: "1px solid #f0eeff" }}>
+                  {leadCount > 0 && (
+                    <button onClick={() => startReview("lead")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff3e0", border: "1px solid #fed7aa", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: "#c2410c" }}>{leadCount}</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#c2410c" }}>🔥 Leads</span>
+                    </button>
+                  )}
+                  {regularCount > 0 && (
+                    <button onClick={() => startReview("regular")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#ede9fe", border: "1px solid #ddd6fe", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: "#6d5cff" }}>{regularCount}</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#6d5cff" }}>✦ Madison</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -7651,10 +7674,42 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
             {/* ── CENTER: Card ── */}
             <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, flex: 1, minHeight: 0 }}>
               {/* Top bar */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
-                <button onClick={backToHero} style={{ border: 0, background: "none", fontWeight: 700, color: "#4c4d63", cursor: "pointer", fontSize: 14, textAlign: "left" }}>× Exit Focus</button>
-                <div style={{ fontWeight: 800, fontSize: 14, color: "#17152d" }}>{cardIndex + 1} of {cards.length}</div>
-                <div style={{ textAlign: "right", color: "#7e829c", fontSize: 13 }}>Focus Mode 🎯</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
+                  <button onClick={backToHero} style={{ border: 0, background: "none", fontWeight: 700, color: "#4c4d63", cursor: "pointer", fontSize: 14, textAlign: "left" }}>× Exit Focus</button>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: "#17152d" }}>{cardIndex + 1} of {filteredCards.length}{focusFilter !== null ? ` (× filter)` : ""}</div>
+                  <div style={{ textAlign: "right", color: "#7e829c", fontSize: 13 }}>Focus Mode 🎯</div>
+                </div>
+                {/* Filter tabs */}
+                {(leadCount > 0 || regularCount > 0) && (
+                  <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                    <button
+                      onClick={() => { setFocusFilter(null); setCardIndex(0); }}
+                      style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                        background: focusFilter === null ? P : "#fff",
+                        color: focusFilter === null ? "#fff" : "#6b7280",
+                        borderColor: focusFilter === null ? P : "#e5e7eb" }}
+                    >All ({cards.length})</button>
+                    {leadCount > 0 && (
+                      <button
+                        onClick={() => { setFocusFilter("lead"); setCardIndex(0); }}
+                        style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                          background: focusFilter === "lead" ? "#c2410c" : "#fff3e0",
+                          color: focusFilter === "lead" ? "#fff" : "#c2410c",
+                          borderColor: focusFilter === "lead" ? "#c2410c" : "#fed7aa" }}
+                      >🔥 Leads ({leadCount})</button>
+                    )}
+                    {regularCount > 0 && (
+                      <button
+                        onClick={() => { setFocusFilter("regular"); setCardIndex(0); }}
+                        style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                          background: focusFilter === "regular" ? "#6d5cff" : "#ede9fe",
+                          color: focusFilter === "regular" ? "#fff" : "#6d5cff",
+                          borderColor: focusFilter === "regular" ? "#6d5cff" : "#ddd6fe" }}
+                      >✦ Madison ({regularCount})</button>
+                    )}
+                  </div>
+                )}
               </div>
               {/* Progress bar */}
               <div style={{ height: 8, borderRadius: 999, background: "#ece9fa", overflow: "hidden" }}>
@@ -7687,7 +7742,7 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", gap: 12 }}>
                     <button onClick={goPrev} disabled={cardIndex === 0} style={{ height: 54, border: "1px solid #ded9f5", background: "white", borderRadius: 14, fontWeight: 800, fontSize: 14, cursor: cardIndex === 0 ? "not-allowed" : "pointer", color: cardIndex === 0 ? "#d1d5db" : "#17152d" }}>← Prev</button>
-                    <button onClick={goNext} style={{ height: 54, border: 0, background: `linear-gradient(135deg,${P},#7d56ff)`, color: "#fff", borderRadius: 14, fontWeight: 800, fontSize: 14, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>{cardIndex < cards.length - 1 ? "Next →" : "Done ✓"}</button>
+                    <button onClick={goNext} style={{ height: 54, border: 0, background: `linear-gradient(135deg,${P},#7d56ff)`, color: "#fff", borderRadius: 14, fontWeight: 800, fontSize: 14, cursor: "pointer", boxShadow: `0 10px 22px ${P}33` }}>{cardIndex < filteredCards.length - 1 ? "Next →" : "Done ✓"}</button>
                   </div>
                   <div style={{ textAlign: "center", color: "#a0a3b5", fontSize: 12, marginTop: -4 }}>Next moves to the next card without acting. The card stays in your queue.</div>
                 </>
