@@ -146,7 +146,38 @@ export async function triggerMadisonSmsDraft(params: {
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
 
-    // ── Step 1: Classify ──────────────────────────────────────────────────────
+    // ── Step 0.5: Phase 1A Deterministic Auto-Reply ────────────────────────────────────────────────────────────────────
+    // Context-independent social acknowledgments — no LLM needed, fixed safe response.
+    // Brutally narrow: only phrases that are harmless regardless of prior conversation.
+    const phase1aResponse = pickPhase1AResponse(inboundText);
+    if (phase1aResponse) {
+      // Atomic claim: RECEIVED → SENDING (prevents duplicate send on webhook retry)
+      const [claimResult] = await db
+        .update(madisonSmsDrafts)
+        .set({ status: "SENDING", messageType: "CONVERSATION", intent: "social_acknowledgment",
+               generatedDraft: phase1aResponse, approvedText: phase1aResponse,
+               approvedBy: "madison_auto_template", approvedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(madisonSmsDrafts.id, draftId), eq(madisonSmsDrafts.status, "RECEIVED")));
+      const claimed = (claimResult as any).affectedRows ?? 0;
+      if (claimed === 0) {
+        console.log(`[MadisonSMS] Phase1A claim failed for draft ${draftId} — already owned`);
+        return;
+      }
+      // Send using the same path as approveSmsDraft
+      await sendSms({ to: fromPhone, content: phase1aResponse, fromNumberId: ENV.openPhoneCsNumberId || undefined });
+      await db.update(madisonSmsDrafts)
+        .set({ status: "SENT", sentAt: new Date(),
+               qualityScore: { intentConfidence: 1.0, draftConfidence: 1.0, autoSendReason: "deterministic_template" },
+               updatedAt: new Date() })
+        .where(eq(madisonSmsDrafts.id, draftId));
+      await postAutoSentCard({ draftId, sessionId, fromPhone,
+        senderName: senderName ?? fromPhone, inboundText,
+        autoReply: phase1aResponse, autoSendConfidence: 1.0, db });
+      console.log(`[MadisonSMS] Phase1A AUTO-SENT for ${fromPhone}: "${inboundText}" → "${phase1aResponse}"`);
+      return;
+    }
+
+    // ── Step 1: Classify ────────────────────────────────────────────────────────────────────
     const classification = await classifyMessage(inboundText);
     await db.update(madisonSmsDrafts)
       .set({ status: "CLASSIFIED", messageType: classification.type, updatedAt: new Date() })
@@ -1078,6 +1109,30 @@ async function postDraftCardToCommandChat(params: {
   // Broadcast SSE so Command Chat updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("new_message", { channel: "command" });
+}
+
+// ─── Phase 1A: Deterministic Template Responses ────────────────────────────────────────────────────────────────────
+
+/**
+ * Context-independent social acknowledgments — safe regardless of prior conversation.
+ * One fixed response per group. No LLM. No randomization.
+ */
+const PHASE1A_TEMPLATES: [RegExp, string][] = [
+  [/^(thanks|thank you|thank u|thx)[!.\s]*$/i,             "You're welcome! \uD83D\uDE0A"],
+  [/^(okay thanks|ok thanks|ok thank you|got it thanks)[!.\s]*$/i, "You're welcome! \uD83D\uDE0A"],
+  [/^(have a good day|have a great day)[!.\s]*$/i,          "You too! Have a great day \uD83D\uDE0A"],
+];
+
+/**
+ * Returns the fixed template response if the inbound text is a Phase 1A phrase,
+ * or null if it should go through the normal Madison pipeline.
+ */
+function pickPhase1AResponse(inboundText: string): string | null {
+  const normalised = inboundText.trim().replace(/[\u{1F300}-\u{1FFFF}]/gu, "").trim();
+  for (const [pattern, response] of PHASE1A_TEMPLATES) {
+    if (pattern.test(normalised)) return response;
+  }
+  return null;
 }
 
 // ─── Auto-Send Gate ──────────────────────────────────────────────────────────
