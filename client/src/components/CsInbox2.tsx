@@ -1,34 +1,40 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "@/hooks/useOpsStream";
 
 /* ─────────────────────────────────────────────────────────────────────────
-   CsInbox2 — pixel-perfect port of the user-supplied HTML/CSS design.
-   Layout: sidebar (260px) | main (topbar + toolbar + board + footer stats)
-   Card click → drawer slides in from the right (position:fixed)
-   All CSS is inline / <style> tag — zero Tailwind dependency for this file.
+   CsInbox2
+   • Board view: sidebar (260px) + 4-column Kanban
+   • Card selected: full detail view from user HTML/CSS
+   SMS send/receive: exact copy from CsInbox.tsx — no reinvention
 ───────────────────────────────────────────────────────────────────────── */
 
 const COLORS = ["#6d4aff","#10b981","#f97316","#3478f6","#ef4444","#a855f7"];
-const HEAD_COLORS: Record<string, string> = {
-  "At Risk":        "#ff9f1a",
-  "New":            "#3478f6",
-  "Needs Response": "#13b77a",
-  "On Customer":    "#8b5cf6",
+const HEAD_COLORS: Record<string,string> = {
+  "At Risk":"#ff9f1a","New":"#3478f6","Needs Response":"#13b77a","On Customer":"#8b5cf6"
 };
 
-type KanbanCard = {
+type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
+type RawMsg = { role: string; content: string; ts?: number; senderName?: string; media?: string[] };
+
+type LiveConv = {
   id: number;
   name: string;
   initials: string;
-  preview: string;
-  ago: string;
+  phone: string;
+  queue: string | null;
+  lastMessage: string;
+  wait: string;
+  lastMsgTs?: number;
+  hasUnanswered: boolean;
+  csResolvedAt?: string | null;
+  csStatusTier?: string | null;
+  lastSenderRole?: string | null;
+  messages: { sender: MsgSender; text: string; time: string; ts?: number; senderName?: string; media?: string[] }[];
   chips: string[];
   priority: string;
   amount: string;
-};
-
-type KanbanColumn = {
-  label: string;
-  cards: KanbanCard[];
+  ago: string;
 };
 
 function chipClass(c: string) {
@@ -40,7 +46,7 @@ function chipClass(c: string) {
 
 const STYLES = `
 *{box-sizing:border-box}
-.cs2-app{position:fixed;inset:0;display:grid;grid-template-columns:260px minmax(0,1fr);background:#f6f7fb;color:#181a24;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif}
+.cs2-app{position:fixed;inset:0;display:grid;grid-template-columns:260px minmax(0,1fr);background:#f6f7fb;color:#181a24;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px}
 .cs2-sidebar{background:#fff;border-right:1px solid #e5e7ee;padding:18px 14px;display:flex;flex-direction:column;overflow-y:auto;height:100%}
 .cs2-brand{display:flex;align-items:center;gap:11px;padding:2px 8px 22px}
 .cs2-logo{width:38px;height:38px;border-radius:11px;background:#11131a;color:#fff;display:grid;place-items:center;font-weight:900;font-size:15px;flex-shrink:0}
@@ -67,11 +73,10 @@ const STYLES = `
 .cs2-column{background:#f1f2f5;border:1px solid #e0e3e8;border-radius:14px;padding:10px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .cs2-colCards{flex:1;overflow-y:auto;overflow-x:hidden;padding-right:2px;scrollbar-width:none;-ms-overflow-style:none}
 .cs2-colCards::-webkit-scrollbar{display:none}
-.cs2-colHead{display:flex;align-items:center;gap:8px;padding:8px 4px 12px;font-weight:800;font-size:14px}
-.cs2-colHead small{color:#8e94a2;font-weight:600;margin-left:4px}.cs2-colHead span.chevron{margin-left:auto;color:#9aa0ab;font-weight:400}
+.cs2-colHead{display:flex;align-items:center;gap:8px;padding:8px 4px 12px;font-weight:800;font-size:14px;flex-shrink:0}
+.cs2-colHead small{color:#8e94a2;font-weight:600;margin-left:4px}.cs2-colHead .chevron{margin-left:auto;color:#9aa0ab;font-weight:400}
 .cs2-card{background:#fff;border:1px solid #dfe2e8;border-radius:12px;padding:13px;margin-bottom:9px;cursor:pointer;transition:.15s;text-align:left;width:100%}
 .cs2-card:hover{transform:translateY(-1px);border-color:#cfc7ff;box-shadow:0 8px 24px rgba(30,32,60,.06)}
-.cs2-card.selected{outline:2px solid #7356ff}
 .cs2-cardTop{display:flex;align-items:center;gap:8px}.cs2-cardTop strong{font-size:13px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs2-ago{margin-left:auto;color:#9aa0aa;font-size:11px;flex-shrink:0}
 .cs2-preview{font-size:13px;line-height:1.42;color:#3f4450;margin:10px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -82,24 +87,8 @@ const STYLES = `
 .cs2-mini{margin-left:auto;width:21px;height:21px;border-radius:50%;background:#252a36;color:#fff;display:grid;place-items:center;font-size:9px;flex-shrink:0}
 .cs2-stats{height:70px;background:#fff;border-top:1px solid #e5e7ee;display:grid;grid-template-columns:repeat(5,1fr);flex-shrink:0}
 .cs2-stat{padding:11px 20px;border-right:1px solid #eceef2}.cs2-stat small{color:#818795;font-size:11px}.cs2-stat b{display:block;font-size:19px;margin-top:3px;font-weight:800}
-.cs2-drawer{position:fixed;top:0;right:-430px;width:420px;height:100vh;background:#fff;border-left:1px solid #e3e5ea;box-shadow:-16px 0 40px rgba(20,24,40,.1);z-index:30;padding:22px;display:flex;flex-direction:column;transition:right .22s}
-.cs2-drawer.open{right:0}
-.cs2-drawerHead{display:flex;align-items:center;gap:10px;padding-bottom:16px;border-bottom:1px solid #e5e7ee}
-.cs2-drawerHead h3{margin:0;font-size:18px;font-weight:800}.cs2-close{margin-left:auto;border:0;background:#f1f2f5;width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:18px;display:grid;place-items:center}
-.cs2-thread{flex:1;overflow:auto;padding:18px 0}
-.bubble{max-width:82%;padding:10px 12px;border-radius:14px;margin:8px 0;line-height:1.4;font-size:13px}
-.bubble.customer{background:#eee9ff}
-.bubble.agent{background:#eff1f4;margin-left:auto}
-.cs2-composer{border:1px solid #e1e4ea;border-radius:14px;padding:10px;flex-shrink:0}
-.cs2-composer textarea{width:100%;height:72px;border:0;outline:0;resize:none;font-size:13px;font-family:inherit}
-.cs2-sendRow{text-align:right;margin-top:8px}
-.cs2-toast{position:fixed;left:50%;bottom:86px;transform:translate(-50%,18px);background:#151821;color:#fff;padding:10px 15px;border-radius:10px;opacity:0;transition:.2s;z-index:50;pointer-events:none}
-.cs2-toast.show{opacity:1;transform:translate(-50%,0)}
 .cs2-addConv{text-align:center;color:#9aa0aa;padding:14px;font-size:13px}
-`;
-
-const DETAIL_STYLES = `
-/* ── DETAIL VIEW — exact translation of user HTML/CSS ── */
+/* DETAIL VIEW */
 :root{--bg:#f4f5f7;--paper:#fff;--ink:#101116;--muted:#858b98;--line:#e7e9ee;--purple:#6b4eff;--soft:#f5f2ff;--red:#e44c42;--green:#138a64;--amber:#c98019}
 .cs2-shell{position:fixed;inset:0;display:grid;grid-template-columns:72px 310px minmax(580px,1fr) 370px;background:#fff;max-width:1800px;margin:auto;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;color:var(--ink)}
 .cs2-rail{background:#111219;color:#fff;padding:18px 13px;display:flex;flex-direction:column;align-items:center;gap:12px}
@@ -185,86 +174,205 @@ const DETAIL_STYLES = `
 .mission:last-child{border:0}.mission:hover{background:#faf9ff}
 .mico{width:27px;height:27px;border-radius:8px;background:#f0edff;display:grid;place-items:center;flex-shrink:0;font-size:13px}
 .mission b{font-size:10px;font-weight:800}.mission p{margin:3px 0 0;color:#9298a4;font-size:9px}
+.cs2-toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,6px);background:#151821;color:#fff;border-radius:9px;padding:9px 14px;font-size:11px;opacity:0;transition:.2s;z-index:999;pointer-events:none}
+.cs2-toast.show{opacity:1;transform:translate(-50%,0)}
 `;
 
 export default function CsInbox2() {
+  const utils = trpc.useUtils();
+
+  // ── Real inbox data (exact copy from CsInbox.tsx) ──────────────────────
+  const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery(
+    { showResolved: true },
+    { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 60_000 }
+  );
+
+  const allPhones = useMemo(() => {
+    if (!csData) return [];
+    return [...new Set(csData.map(r => (r.leadPhone ?? "").replace(/[^\d]/g, "").slice(-10)).filter(Boolean))];
+  }, [csData]);
+
+  const { data: nameMap } = trpc.leads.batchResolveNames.useQuery(
+    { phones: allPhones },
+    { enabled: allPhones.length > 0, staleTime: 60_000 }
+  );
+
+  // ── SSE: invalidate on new inbound (exact copy from CsInbox.tsx) ───────
+  const selectedIdRef = useRef<number | null>(null);
+  useOpsStream({
+    onLeadUpdate: () => {
+      utils.leads.listCsInbox.invalidate();
+      if (selectedIdRef.current != null) {
+        utils.leads.getCsConversation.invalidate({ sessionId: selectedIdRef.current });
+      }
+    },
+  }, { label: "CsInbox2" });
+
+  // ── Transform server rows → LiveConv (exact copy from CsInbox.tsx) ─────
+  const liveConvs: LiveConv[] = useMemo(() => {
+    if (!csData) return [];
+    return csData.map(row => {
+      let msgs: RawMsg[] = [];
+      try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
+      const lastMsg = msgs.slice(-1)[0];
+      const lastTs = lastMsg?.ts;
+      const waitMs = lastTs ? Date.now() - lastTs : 0;
+      const waitMin = Math.round(waitMs / 60000);
+      const waitDays = Math.floor(waitMs / 86_400_000);
+      const waitHours = Math.floor(waitMs / 3_600_000);
+      const waitStr = waitMin < 1 ? 'just now' : waitMin < 60 ? `${waitMin} min` : waitDays >= 1 ? `${waitDays}d ago` : `${waitHours}h ${waitMin % 60}m ago`;
+      const phone10 = (row.leadPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+      const name = (nameMap && phone10 && nameMap[phone10]) || row.leadName || row.leadPhone || "Unknown";
+      const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+      const hasUnanswered = (row as any).hasUnanswered ?? (msgs.length > 0 && msgs[msgs.length - 1].role === "user");
+      return {
+        id: row.id,
+        name,
+        initials,
+        phone: row.leadPhone || "",
+        queue: ((row as any).csQueue ?? null) as string | null,
+        lastMessage: lastMsg?.content || (row as any).lastMessageText || "",
+        wait: waitStr,
+        lastMsgTs: (row as any).lastMsgTs,
+        hasUnanswered,
+        csResolvedAt: (row as any).csResolvedAt ?? null,
+        csStatusTier: (row as any).csStatusTier ?? null,
+        lastSenderRole: (row as any).lastSenderRole ?? null,
+        messages: msgs.map(m => ({
+          sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
+          text: m.content,
+          time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+          ts: m.ts,
+          media: (m.media ?? []) as string[],
+          senderName: m.senderName,
+        })),
+        chips: [(row as any).csStatusTier ?? null, hasUnanswered ? "Needs Reply" : null].filter(Boolean) as string[],
+        priority: hasUnanswered ? "P1" : "P2",
+        amount: "",
+        ago: waitStr,
+      };
+    });
+  }, [csData, nameMap]);
+
+  // ── Kanban column assignment ────────────────────────────────────────────
+  const now = Date.now();
+  const THIRTY_MIN = 30 * 60 * 1000;
+  const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+
+  function getKanbanColumn(conv: LiveConv) {
+    const lastCustomerMessageTs = conv.messages.filter(m => m.sender === "client").slice(-1)[0]?.ts ?? 0;
+    const createdAtMs = conv.id > 0 ? 0 : 0; // no createdAt in shape, use id heuristic
+    const isAtRisk = conv.hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !conv.csResolvedAt;
+    const needsReply = conv.hasUnanswered && !conv.csResolvedAt;
+    if (isAtRisk) return "At Risk";
+    if (needsReply) return "Needs Response";
+    if (!conv.hasUnanswered && !conv.csResolvedAt) return "On Customer";
+    return "On Customer";
+  }
+
+  // ── Board state ─────────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const [toast, setToast] = useState(false);
-
-  const [selected, setSelected] = useState<KanbanCard | null>(null);
-  const INIT_MESSAGES = [
-    { out: true,  who: "Madison",  time: "9:12 AM", text: "Hi! 😊 Madison from Maids in Black. What day were you thinking for the cleaning?" },
-    { out: false, who: "Customer", time: "9:15 AM", text: "Tomorrow if possible. It's 4 bedrooms and 3 bathrooms." },
-    { out: true,  who: "Madison",  time: "9:17 AM", text: "Absolutely. For a deep clean, most homes that size land around $329–$369 depending on condition. Would morning or afternoon work better?" },
-    { out: false, who: "Customer", time: "9:31 AM", text: "Can you come tomorrow morning? I need the whole house cleaned." },
-  ];
-  const [messages, setMessages] = useState(INIT_MESSAGES);
-  const [reply, setReply] = useState("");
+  const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
+  const [compose, setCompose] = useState("");
+  const [toast, setToast] = useState("");
   const [missionDone, setMissionDone] = useState<Set<number>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
 
+  // Keep selectedIdRef in sync for SSE
+  useEffect(() => { selectedIdRef.current = selectedConv?.id ?? null; }, [selectedConv]);
+
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 1200); }
-  function sendReply() {
-    if (!reply.trim()) return;
-    setMessages(prev => [...prev, { out: true, who: "Madison", time: new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}), text: reply.trim() }]);
-    setReply("");
-    showToast("Reply sent ✓");
+
+  // ── Send mutation (exact copy from CsInbox.tsx) ─────────────────────────
+  const sendMessage = trpc.leads.sendMessage.useMutation({
+    onSuccess: (_data, variables) => {
+      setCompose("");
+      const nowTs = Date.now();
+      utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+        if (!old) return old;
+        return old.map(s => {
+          if (s.id !== variables.sessionId) return s;
+          let history: RawMsg[] = [];
+          try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { history = []; }
+          history = [...history, { role: "assistant", content: variables.message, ts: nowTs }];
+          return { ...s, messageHistory: JSON.stringify(history), hasUnanswered: false, lastSenderRole: "assistant" as const, lastMsgTs: nowTs };
+        });
+      });
+      utils.leads.getCsConversation.setData({ sessionId: variables.sessionId }, (old) => {
+        if (!old) return old;
+        let history: RawMsg[] = [];
+        try { history = JSON.parse(old.messageHistory ?? "[]"); } catch { history = []; }
+        history = [...history, { role: "assistant", content: variables.message, ts: nowTs }];
+        return { ...old, messageHistory: JSON.stringify(history) };
+      });
+    },
+  });
+
+  function doSend() {
+    if (!selectedConv || !compose.trim()) return;
+    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
   }
-  useEffect(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight; }, [messages, selected]);
 
-  // Static demo data matching the HTML exactly
-  const DATA: Record<string, KanbanCard[]> = useMemo(() => ({
-    "At Risk": [
-      { id: 1, name: "Diana Clark",  initials: "DC", preview: "No response yet — move-out request waiting.", ago: "1h",  chips: ["Move-Out","4bd / 3ba","No Reply"], priority: "P1", amount: "$30" },
-      { id: 2, name: "John Green",   initials: "JG", preview: "Customer has been waiting for a response.",   ago: "2h",  chips: ["Deep Clean","3bd / 2ba","Overdue"], priority: "P1", amount: "$25" },
-      { id: 3, name: "Lisa Miller",  initials: "LM", preview: "High-value recurring customer needs attention.", ago: "3h", chips: ["Recurring","2bd / 1ba","High Value"], priority: "P1", amount: "$15" },
-      { id: 4, name: "Paul Smith",   initials: "PS", preview: "Standard cleaning inquiry still unanswered.", ago: "4h",  chips: ["Standard","No Reply"], priority: "P2", amount: "$18" },
-    ],
-    "New": [
-      { id: 5, name: "Sarah Johnson",  initials: "SJ", preview: "Hi! I need a deep clean for my 3bd/2ba this weekend. Do you have availability?", ago: "2m ago", chips: ["3bd / 2ba","Deep Clean","One-time"], priority: "P1", amount: "$25" },
-      { id: 6, name: "David Martinez", initials: "DM", preview: "Move-out cleaning needed for my apartment. Need it by Friday.", ago: "5m ago", chips: ["Move-Out","1bd / 1ba"], priority: "P1", amount: "$22" },
-      { id: 7, name: "Karen Williams", initials: "KW", preview: "Regular cleaning for my 2 bed, 1 bath condo. Looking for weekly service.", ago: "12m ago", chips: ["2bd / 1ba","Recurring"], priority: "P2", amount: "$18" },
-      { id: 8, name: "James Taylor",   initials: "JT", preview: "Need quotes for post-construction cleaning. 2000 sq ft.", ago: "18m ago", chips: ["Post-Construction","Commercial"], priority: "P1", amount: "$30" },
-    ],
-    "Needs Response": [
-      { id: 9,  name: "Ashley Moore", initials: "AM", preview: "Can you come tomorrow morning? I need the whole house cleaned.", ago: "15m", chips: ["4bd / 3ba","Deep Clean","🔥 Hot"], priority: "P1", amount: "$25" },
-      { id: 10, name: "Robert Lee",   initials: "RL", preview: "What time can your team arrive on Saturday?", ago: "32m", chips: ["3bd / 2ba","Standard"], priority: "P2", amount: "$20" },
-      { id: 11, name: "Maria Garcia", initials: "MG", preview: "This is urgent! Need someone today if possible.", ago: "41m", chips: ["2bd / 1ba","Deep Clean","Urgent"], priority: "P1", amount: "$25" },
-      { id: 12, name: "Tom Wilson",   initials: "TW", preview: "Do you bring your own supplies and equipment?", ago: "1h", chips: ["General"], priority: "P3", amount: "$15" },
-    ],
-    "On Customer": [
-      { id: 13, name: "Brian Cooper",   initials: "BC", preview: "Thanks! That works for me. See you then.", ago: "1h", chips: ["Confirmed","Sat 10AM","3bd / 2ba"], priority: "P2", amount: "$20" },
-      { id: 14, name: "Samantha Lee",   initials: "SL", preview: "What's included in the deep cleaning service?", ago: "2h", chips: ["Deep Clean"], priority: "P2", amount: "$25" },
-      { id: 15, name: "Michael Patel",  initials: "MP", preview: "I'll send the access code for the lockbox.", ago: "3h", chips: ["Access Info"], priority: "P2", amount: "$18" },
-      { id: 16, name: "Emily Chen",     initials: "EC", preview: "Perfect! Looking forward to it.", ago: "4h", chips: ["Confirmed","Sun 2PM"], priority: "P2", amount: "$20" },
-    ],
-  }), []);
+  // ── Detail query: real thread messages (exact copy from CsInbox.tsx) ────
+  const { data: conversationDetail } = trpc.leads.getCsConversation.useQuery(
+    { sessionId: selectedConv?.id ?? 0 },
+    { enabled: !!selectedConv, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 }
+  );
 
-  const columns: KanbanColumn[] = useMemo(() => {
+  const detailMessages = useMemo(() => {
+    if (!conversationDetail?.messageHistory) return selectedConv?.messages ?? [];
+    let raw: RawMsg[] = [];
+    try { raw = JSON.parse(conversationDetail.messageHistory); } catch { raw = []; }
+    return raw.map(m => ({
+      sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
+      text: m.content,
+      time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      ts: m.ts,
+      media: (m.media ?? []) as string[],
+      senderName: m.senderName,
+    }));
+  }, [conversationDetail?.messageHistory, selectedConv?.messages]);
+
+  useEffect(() => {
+    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
+  }, [detailMessages, selectedConv]);
+
+  // ── Filtered columns ────────────────────────────────────────────────────
+  const clientConvs = useMemo(() => liveConvs.filter(c => c.queue !== "Teams"), [liveConvs]);
+  const teamConvs   = useMemo(() => liveConvs.filter(c => c.queue === "Teams"),  [liveConvs]);
+
+  const needsResponseCount = clientConvs.filter(c => c.hasUnanswered && !c.csResolvedAt).length;
+  const unansweredCount    = clientConvs.filter(c => {
+    const lastTs = c.messages.filter(m => m.sender === "client").slice(-1)[0]?.ts ?? 0;
+    return c.hasUnanswered && lastTs > 0 && (now - lastTs) >= THIRTY_MIN && !c.csResolvedAt;
+  }).length;
+  const hotLeadsCount = clientConvs.filter(c => c.csStatusTier === "hot_lead").length;
+
+  const columns = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return Object.entries(DATA).map(([label, cards]) => {
-      let filtered = cards.filter(c =>
-        (c.name + " " + c.preview).toLowerCase().includes(q)
-      );
-      if (filter !== "all" && filter !== "hot" && label !== filter) filtered = [];
-      if (filter === "hot") filtered = filtered.filter(c => c.chips.join(" ").includes("Hot"));
-      return { label, cards: filtered };
+    const colNames = ["At Risk", "New", "Needs Response", "On Customer"] as const;
+    return colNames.map(label => {
+      let convs = clientConvs.filter(c => {
+        if (!( (c.name + " " + c.lastMessage).toLowerCase().includes(q) )) return false;
+        if (filter === "needs-response") return c.hasUnanswered && !c.csResolvedAt;
+        if (filter === "unanswered") {
+          const lastTs = c.messages.filter(m => m.sender === "client").slice(-1)[0]?.ts ?? 0;
+          return c.hasUnanswered && lastTs > 0 && (now - lastTs) >= THIRTY_MIN && !c.csResolvedAt;
+        }
+        if (filter === "hot") return c.csStatusTier === "hot_lead";
+        return true;
+      }).filter(c => getKanbanColumn(c) === label);
+      return { label, convs };
     });
-  }, [DATA, query, filter]);
+  }, [clientConvs, query, filter, now]);
 
-
-
-
-
-  const totalCards = Object.values(DATA).flat().length;
-  const needsResponseCount = DATA["Needs Response"].length;
-
-  // ── DETAIL VIEW — exact translation of user HTML/CSS ──
-  if (selected) {
+  // ── DETAIL VIEW ─────────────────────────────────────────────────────────
+  if (selectedConv) {
+    const allConvs = [...clientConvs, ...teamConvs];
     return (
       <>
-        <style>{STYLES + DETAIL_STYLES}</style>
+        <style>{STYLES}</style>
         <div className="cs2-shell">
           <nav className="cs2-rail">
             <div className="logo">M</div>
@@ -273,12 +381,12 @@ export default function CsInbox2() {
             <button className="cs2-rbtn">✓</button>
             <button className="cs2-rbtn">⌁</button>
             <button className="cs2-rbtn">✦</button>
-            <button className="cs2-rbtn bottom" onClick={() => setSelected(null)}>←</button>
+            <button className="cs2-rbtn bottom" onClick={() => setSelectedConv(null)}>←</button>
           </nav>
           <aside className="cs2-list">
             <div className="cs2-listhead">
               <div className="eyebrow">Customer inbox</div>
-              <h1>Needs Response <span style={{color:"#a0a5af",fontWeight:500}}>{Object.values(DATA).flat().length}</span></h1>
+              <h1>Needs Response <span style={{color:"#a0a5af",fontWeight:500}}>{needsResponseCount}</span></h1>
               <div className="cs2-listsearch">⌕ <input placeholder="Search conversations" /></div>
               <div className="cs2-dtabs">
                 <button className="cs2-dtab on">All</button>
@@ -287,49 +395,67 @@ export default function CsInbox2() {
               </div>
             </div>
             <div className="cs2-tickets">
-              {Object.values(DATA).flat().map(card => (
-                <div key={card.id} className={`ticket${selected.id === card.id ? " on" : ""}`} onClick={() => { setSelected(card); setMessages(INIT_MESSAGES); }}>
+              {allConvs.map(conv => (
+                <div key={conv.id} className={`ticket${selectedConv.id === conv.id ? " on" : ""}`} onClick={() => { setSelectedConv(conv); setCompose(""); }}>
                   <div className="trow">
-                    <div className="mini">{card.initials}</div>
-                    <span className="tname">{card.name}</span>
-                    <span className={`age${card.priority === "P1" && card.chips.some(c => /No Reply|Overdue|Urgent|At Risk/.test(c)) ? " risk" : ""}`}>{card.ago}</span>
+                    <div className="mini">{conv.initials}</div>
+                    <span className="tname">{conv.name}</span>
+                    <span className={`age${conv.hasUnanswered && conv.priority === "P1" ? " risk" : ""}`}>{conv.ago}</span>
                   </div>
-                  <div className="preview2">{card.preview}</div>
-                  <div className="tags2">{card.chips.slice(0,2).map(c => <span key={c} className={`tag2${/Hot|Urgent|At Risk|No Reply/.test(c) ? " hot" : ""}`}>{c}</span>)}</div>
+                  <div className="preview2">{conv.lastMessage}</div>
+                  <div className="tags2">
+                    {conv.chips.slice(0,2).map(c => <span key={c} className={`tag2${/Hot|Urgent|At Risk|No Reply/.test(c) ? " hot" : ""}`}>{c}</span>)}
+                  </div>
                 </div>
               ))}
             </div>
           </aside>
           <main className="cs2-dmain">
             <header className="cs2-dtop">
-              <div className="cs2-davatar">{selected.initials}</div>
-              <div className="identity"><h2>{selected.name}</h2><span>+1 (202) 555-0148 · Washington, DC · New customer</span></div>
-              <div className="topActions"><button className="iconBtn">•••</button><button className="iconBtn resolve">✓ Resolve</button></div>
+              <div className="cs2-davatar">{selectedConv.initials}</div>
+              <div className="identity">
+                <h2>{selectedConv.name}</h2>
+                <span>{selectedConv.phone} · Customer</span>
+              </div>
+              <div className="topActions">
+                <button className="iconBtn">•••</button>
+                <button className="iconBtn resolve">✓ Resolve</button>
+              </div>
             </header>
             <div className="cs2-context">
-              <div className="ai"><strong>✦ Madison</strong>&nbsp; {selected.name} wants a deep clean for a 4 bed / 3 bath home tomorrow morning. She has been quoted $329–$369 and is ready to choose a slot.</div>
+              <div className="ai">
+                <strong>✦ Madison</strong>&nbsp; {selectedConv.lastMessage || "No recent messages."}
+              </div>
               <div className="chips2">
-                <span className="chip2 green">● Needs response</span>
-                {selected.chips.map(c => <span key={c} className="chip2">{c}</span>)}
+                {selectedConv.hasUnanswered && <span className="chip2 green">● Needs response</span>}
+                {selectedConv.chips.map(c => <span key={c} className="chip2">{c}</span>)}
               </div>
             </div>
             <section className="cs2-thread" ref={threadRef}>
-              <div className="day">TODAY</div>
-              {messages.map((m, i) => (
-                <div key={i} className={`msg${m.out ? " out" : ""}${i === messages.length - 1 ? " latest" : ""}`}>
-                  <div className="mmeta">{m.who} · {m.time}</div>
+              <div className="day">Conversation</div>
+              {detailMessages.map((m, i) => (
+                <div key={i} className={`msg${m.sender === "agent" ? " out" : ""}${i === detailMessages.length - 1 ? " latest" : ""}`}>
+                  <div className="mmeta">{m.sender === "agent" ? (m.senderName || "Agent") : selectedConv.name} · {m.time}</div>
                   <div className="bubble2">{m.text}</div>
                 </div>
               ))}
+              {detailMessages.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px",fontSize:"12px"}}>No messages yet</div>}
             </section>
             <footer className="cs2-composer">
               <div className="composeBox">
-                <textarea placeholder={`Reply to ${selected.name.split(" ")[0]}…`} value={reply} onChange={e => setReply(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendReply(); }} />
+                <textarea
+                  placeholder={`Reply to ${selectedConv.name.split(" ")[0]}…`}
+                  value={compose}
+                  onChange={e => setCompose(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doSend(); }}
+                />
                 <div className="composeRow">
-                  <button className="quick" onClick={() => setReply("Yes! We have a morning opening 😊")}>Morning opening</button>
-                  <button className="quick" onClick={() => setReply("Let me check with the team and get right back to you.")}>Check team</button>
+                  <button className="quick" onClick={() => setCompose("Yes! We have a morning opening 😊")}>Morning opening</button>
+                  <button className="quick" onClick={() => setCompose("Let me check with the team and get right back to you.")}>Check team</button>
                   <button className="quick">+ More</button>
-                  <button className="send2" onClick={sendReply}>Send ↗</button>
+                  <button className="send2" onClick={doSend} disabled={sendMessage.isPending}>
+                    {sendMessage.isPending ? "Sending…" : "Send ↗"}
+                  </button>
                 </div>
               </div>
             </footer>
@@ -337,23 +463,20 @@ export default function CsInbox2() {
           <aside className="cs2-side">
             <div className="sideTitle"><b>Customer command center</b><span>LIVE CONTEXT</span></div>
             <section className="scard">
-              <div className="cardHead">Customer <span className="link">Edit</span></div>
-              <div className="rows2">{[["Name",selected.name],["Phone","(202) 555-0148"],["Address","Washington, DC"],["Customer","New"],["Past jobs","0"],["Lead source","Thumbtack"]].map(([k,v]) => <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>)}</div>
-            </section>
-            <section className="scard">
-              <div className="cardHead">Today's / Next Job <span className="link">Open ↗</span></div>
-              <div className="job"><span className="live">SCHEDULED</span><b>Deep Clean</b><h3>Tomorrow · 9:00 AM</h3><p>4 bedrooms · 3 bathrooms</p><p>Washington, DC · $349</p></div>
-              <div className="actions2"><button className="act primary" onClick={() => showToast("ETA request started")}>Send ETA</button><button className="act">View booking</button></div>
-            </section>
-            <section className="scard">
-              <div className="cardHead">Team <span className="link">Change</span></div>
-              <div className="teamHero"><div className="teamAv">TP</div><div><b>Team Pilar</b><small>Last assigned team · 4.9 ★</small></div></div>
-              <div className="rows2">{[["Current ETA","Not requested"],["Last service","—"]].map(([k,v]) => <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>)}</div>
-              <div className="actions2"><button className="act" onClick={() => showToast("Team conversation opened")}>Text team</button><button className="act">Assign team</button></div>
+              <div className="cardHead">Customer</div>
+              <div className="rows2">
+                {[["Name",selectedConv.name],["Phone",selectedConv.phone],["Queue",selectedConv.queue||"—"],["Status",selectedConv.csStatusTier||"—"]].map(([k,v]) => (
+                  <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>
+                ))}
+              </div>
             </section>
             <section className="scard">
               <div className="cardHead">Missions <span className="link">+ Add</span></div>
-              {[{id:1,icon:"✦",title:"Confirm tomorrow's slot",desc:"Lock in the 9 AM opening."},{id:2,icon:"💳",title:"Get card on file",desc:"Required before appointment."},{id:3,icon:"📍",title:"Confirm full address",desc:"Street address still missing."}].map(m => (
+              {[
+                {id:1,icon:"✦",title:"Confirm slot",    desc:"Lock in the appointment."},
+                {id:2,icon:"💳",title:"Get card on file",desc:"Required before appointment."},
+                {id:3,icon:"📍",title:"Confirm address", desc:"Street address still missing."},
+              ].map(m => (
                 <div key={m.id} className="mission" style={{opacity:missionDone.has(m.id)?0.42:1}} onClick={() => { setMissionDone(prev => new Set([...prev,m.id])); showToast("Mission completed ✓"); }}>
                   <div className="mico">{m.icon}</div><div><b>{m.title}</b><p>{m.desc}</p></div>
                 </div>
@@ -361,7 +484,11 @@ export default function CsInbox2() {
             </section>
             <section className="scard">
               <div className="cardHead">Conversation</div>
-              <div className="rows2">{[["Status","Needs Response"],["Queue","Sales"],["Priority","🔥 Hot Lead"],["Waiting","15 minutes"]].map(([k,v]) => <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>)}</div>
+              <div className="rows2">
+                {[["Status",selectedConv.hasUnanswered?"Needs Response":"Waiting"],["Priority",selectedConv.priority],["Wait",selectedConv.wait]].map(([k,v]) => (
+                  <div key={k} className="row2"><span>{k}</span><strong>{v}</strong></div>
+                ))}
+              </div>
             </section>
           </aside>
         </div>
@@ -370,147 +497,102 @@ export default function CsInbox2() {
     );
   }
 
-
+  // ── BOARD VIEW ──────────────────────────────────────────────────────────
   return (
     <>
       <style>{STYLES}</style>
       <div className="cs2-app">
-        {/* ── SIDEBAR ── */}
         <aside className="cs2-sidebar">
           <div className="cs2-brand">
             <div className="cs2-logo">M</div>
-            <div>
-              <h1>Maids in Black</h1>
-              <p>Customer Inbox</p>
-            </div>
+            <div><h1>Maids in Black</h1><p>Customer Inbox</p></div>
           </div>
-
           <div className="cs2-section">Inbox</div>
           <div className="cs2-nav">
-            <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>
-              ▣ <span>All Conversations</span><span className="cs2-badge">{totalCards}</span>
+            <button className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>
+              ▣ <span>All Conversations</span><span className="cs2-badge">{clientConvs.length}</span>
             </button>
           </div>
-
           <div className="cs2-section">Views</div>
           <div className="cs2-nav">
-            <button className={filter === "Needs Response" ? "active" : ""} onClick={() => setFilter("Needs Response")}>
-              <span className="cs2-dot" style={{background:"#13b77a"}} />
-              <span>Needs Response</span>
-              <span className="cs2-badge">{needsResponseCount}</span>
+            <button className={filter==="needs-response"?"active":""} onClick={()=>setFilter("needs-response")}>
+              <span className="cs2-dot" style={{background:"#13b77a"}}/><span>Needs Response</span><span className="cs2-badge">{needsResponseCount}</span>
             </button>
-            <button className={filter === "At Risk" ? "active" : ""} onClick={() => setFilter("At Risk")}>
-              <span className="cs2-dot" style={{background:"#ff9f1a"}} />
-              <span>Unanswered</span>
-              <span className="cs2-badge">{DATA["At Risk"].length}</span>
+            <button className={filter==="unanswered"?"active":""} onClick={()=>setFilter("unanswered")}>
+              <span className="cs2-dot" style={{background:"#ff9f1a"}}/><span>Unanswered</span><span className="cs2-badge">{unansweredCount}</span>
             </button>
-            <button className={filter === "hot" ? "active" : ""} onClick={() => setFilter("hot")}>
-              <span className="cs2-dot" style={{background:"#ff5f8f"}} />
-              <span>Hot Leads</span>
-              <span className="cs2-badge">6</span>
-            </button>
-            <button>
-              <span className="cs2-dot" style={{background:"#5fa7ff"}} />
-              <span>Returning Customers</span>
-              <span className="cs2-badge">11</span>
-            </button>
-            <button>
-              <span className="cs2-dot" style={{background:"#9a7cff"}} />
-              <span>Move-Outs</span>
-              <span className="cs2-badge">5</span>
+            <button className={filter==="hot"?"active":""} onClick={()=>setFilter("hot")}>
+              <span className="cs2-dot" style={{background:"#ff5f8f"}}/><span>Hot Leads</span><span className="cs2-badge">{hotLeadsCount}</span>
             </button>
           </div>
-
           <div className="cs2-section">Teams</div>
           <div className="cs2-nav">
-            <button>▦ <span>Dispatch</span><span className="cs2-badge">6</span></button>
-            <button>▦ <span>Sales</span><span className="cs2-badge">8</span></button>
+            <button>▦ <span>Dispatch</span><span className="cs2-badge">{teamConvs.length}</span></button>
           </div>
-
           <div className="cs2-user">
             <div className="cs2-avatar" style={{background:"#222"}}>M</div>
-            <div>
-              <b>Madison</b>
-              <div style={{color:"#8b91a0",fontSize:"11px"}}>Support Agent</div>
-            </div>
+            <div><b>Madison</b><div style={{color:"#8b91a0",fontSize:"11px"}}>Support Agent</div></div>
           </div>
         </aside>
-
-        {/* ── MAIN ── */}
         <main className="cs2-main">
           <header className="cs2-topbar">
             <h2>All Conversations</h2>
-            <button className="cs2-btn">▦</button>
-            <button className="cs2-btn" onClick={() => setQuery("")}>↻</button>
+            <button className="cs2-btn" onClick={() => refetchInbox()}>↻</button>
             <button className="cs2-btn primary">✎ New Message</button>
           </header>
-
           <div className="cs2-toolbar">
-            <input
-              className="cs2-search"
-              placeholder="⌕  Search conversations..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
+            <input className="cs2-search" placeholder="⌕  Search conversations..." value={query} onChange={e=>setQuery(e.target.value)}/>
             <button className="cs2-btn">Last 90 days⌄</button>
             <button className="cs2-btn">Assignee: All⌄</button>
             <button className="cs2-btn">Team: All⌄</button>
             <button className="cs2-btn">☰ Filters</button>
           </div>
-
           <div className="cs2-boardWrap">
             <div className="cs2-board">
               {columns.map((col, ci) => (
                 <section key={col.label} className="cs2-column">
                   <div className="cs2-colHead">
-                    <span className="cs2-dot" style={{background: HEAD_COLORS[col.label] ?? "#888"}} />
+                    <span className="cs2-dot" style={{background:HEAD_COLORS[col.label]??"#888"}}/>
                     {col.label}
-                    <small>{col.cards.length}</small>
+                    <small>{col.convs.length}</small>
                     <span className="chevron">⌄</span>
                   </div>
                   <div className="cs2-colCards">
-                  {col.cards.map((card, i) => (
-                    <button
-                      key={card.id}
-                      className="cs2-card"
-                      onClick={() => { setSelected(card); setMessages(INIT_MESSAGES); }}
-                    >
-                      <div className="cs2-cardTop">
-                        <div className="cs2-avatar" style={{background: COLORS[i % COLORS.length]}}>{card.initials}</div>
-                        <strong>{card.name}</strong>
-                        <span className="cs2-ago">{card.ago}</span>
-                      </div>
-                      <div className="cs2-preview">{card.preview}</div>
-                      <div className="cs2-chips">
-                        {card.chips.map(c => (
-                          <span key={c} className={chipClass(c)}>{c}</span>
-                        ))}
-                      </div>
-                      <div className="cs2-meta">
-                        <span className={card.priority === "P1" ? "cs2-p1" : card.priority === "P2" ? "cs2-p2" : ""}>{card.priority}</span>
-                        &nbsp;·&nbsp;{card.amount}
-                        <span className="cs2-mini">M</span>
-                      </div>
-                    </button>
-                  ))}
-                  <div className="cs2-addConv">＋ Add Conversation</div>
+                    {col.convs.map((conv,i) => (
+                      <button key={conv.id} className="cs2-card" onClick={()=>{ setSelectedConv(conv); setCompose(""); }}>
+                        <div className="cs2-cardTop">
+                          <div className="cs2-avatar" style={{background:COLORS[i%COLORS.length]}}>{conv.initials}</div>
+                          <strong>{conv.name}</strong>
+                          <span className="cs2-ago">{conv.ago}</span>
+                        </div>
+                        <div className="cs2-preview">{conv.lastMessage}</div>
+                        <div className="cs2-chips">
+                          {conv.chips.map(c=><span key={c} className={chipClass(c)}>{c}</span>)}
+                        </div>
+                        <div className="cs2-meta">
+                          <span className={conv.priority==="P1"?"cs2-p1":"cs2-p2"}>{conv.priority}</span>
+                          &nbsp;·&nbsp;{conv.wait}
+                          <span className="cs2-mini">M</span>
+                        </div>
+                      </button>
+                    ))}
+                    {col.convs.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px 8px",fontSize:"12px"}}>No conversations</div>}
+                    <div className="cs2-addConv">＋ Add Conversation</div>
                   </div>
                 </section>
               ))}
             </div>
           </div>
-
           <footer className="cs2-stats">
-            <div className="cs2-stat"><small>Total Conversations</small><b>52</b></div>
-            <div className="cs2-stat"><small>Needs Response</small><b>18</b></div>
-            <div className="cs2-stat"><small>Avg Response Time</small><b>12m</b></div>
-            <div className="cs2-stat"><small>Conversion Rate</small><b>24%</b></div>
-            <div className="cs2-stat"><small>Revenue This Month</small><b>$28,450</b></div>
+            <div className="cs2-stat"><small>Total Conversations</small><b>{clientConvs.length}</b></div>
+            <div className="cs2-stat"><small>Needs Response</small><b>{needsResponseCount}</b></div>
+            <div className="cs2-stat"><small>Unanswered</small><b>{unansweredCount}</b></div>
+            <div className="cs2-stat"><small>Hot Leads</small><b>{hotLeadsCount}</b></div>
+            <div className="cs2-stat"><small>Teams</small><b>{teamConvs.length}</b></div>
           </footer>
         </main>
       </div>
-      {/* ── TOAST ── */}
-      <div className={`cs2-toast${toast ? " show" : ""}`}>Sent ✓</div>
+      <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>
     </>
   );
 }
