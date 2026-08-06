@@ -1344,6 +1344,40 @@ async function startServer() {
     }
   });
 
+  // One-time backfill: stamp isCleaner on active madison_sms_draft cards from cleaner sessions
+  app.post("/api/diag/backfill-iscleaner", async (req, res) => {
+    if (req.query.secret !== process.env.CRON_SECRET) return res.status(403).json({ error: 'forbidden' });
+    try {
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'no db' });
+      // Find all active madison_sms_draft cards joined to their session
+      const rows = await db.execute(
+        sql`SELECT ocm.id, ocm.metadata, cs.leadSource
+            FROM ops_chat_messages ocm
+            JOIN conversation_sessions cs ON cs.id = ocm.sessionId
+            WHERE ocm.quickAction = 'madison_sms_draft'
+              AND ocm.cardStatus = 'active'`
+      );
+      const cards = (rows as any)[0] ?? rows;
+      let updated = 0;
+      let skipped = 0;
+      for (const card of (Array.isArray(cards) ? cards : [])) {
+        const isCleaner = card.leadSource === 'cs-inbound-cleaner';
+        let meta: Record<string, unknown> = {};
+        try { meta = JSON.parse(card.metadata ?? '{}'); } catch { /* ignore */ }
+        if (meta.isCleaner !== undefined) { skipped++; continue; } // already stamped
+        meta.isCleaner = isCleaner;
+        await db.execute(
+          sql`UPDATE ops_chat_messages SET metadata = ${JSON.stringify(meta)} WHERE id = ${card.id}`
+        );
+        updated++;
+      }
+      return res.json({ ok: true, total: Array.isArray(cards) ? cards.length : 0, updated, skipped });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
     try {
