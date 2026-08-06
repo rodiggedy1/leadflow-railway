@@ -30,6 +30,9 @@ type LiveConv = {
   csResolvedAt?: string | null;
   csStatusTier?: string | null;
   lastSenderRole?: string | null;
+  lastCustomerMessageTs?: number | null;
+  messageCount?: number | null;
+  createdAt?: string | Date | null;
   messages: { sender: MsgSender; text: string; time: string; ts?: number; senderName?: string; media?: string[] }[];
   chips: string[];
   priority: string;
@@ -238,6 +241,9 @@ export default function CsInbox2() {
         csResolvedAt: (row as any).csResolvedAt ?? null,
         csStatusTier: (row as any).csStatusTier ?? null,
         lastSenderRole: (row as any).lastSenderRole ?? null,
+        lastCustomerMessageTs: (row as any).lastCustomerMessageTs ?? null,
+        messageCount: (row as any).messageCount ?? null,
+        createdAt: (row as any).createdAt ?? null,
         messages: msgs.map(m => ({
           sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
           text: m.content,
@@ -259,14 +265,29 @@ export default function CsInbox2() {
   const THIRTY_MIN = 30 * 60 * 1000;
   const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
 
-  function getKanbanColumn(conv: LiveConv) {
-    const lastCustomerMessageTs = conv.messages.filter(m => m.sender === "client").slice(-1)[0]?.ts ?? 0;
-    const createdAtMs = conv.id > 0 ? 0 : 0; // no createdAt in shape, use id heuristic
-    const isAtRisk = conv.hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !conv.csResolvedAt;
-    const needsReply = conv.hasUnanswered && !conv.csResolvedAt;
-    if (isAtRisk) return "At Risk";
-    if (needsReply) return "Needs Response";
-    if (!conv.hasUnanswered && !conv.csResolvedAt) return "On Customer";
+  function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "On Customer" {
+    // Filter out resolved conversations — they don't belong on the active board
+    if (conv.csResolvedAt) return "On Customer"; // won't show — filtered before columns
+
+    const needsReply = conv.lastSenderRole === "user";
+
+    const isAtRisk =
+      needsReply &&
+      conv.lastCustomerMessageTs != null &&
+      conv.lastCustomerMessageTs <= now - THIRTY_MIN;
+
+    const createdAtMs = conv.createdAt
+      ? (typeof conv.createdAt === "number" ? conv.createdAt : new Date(conv.createdAt).getTime())
+      : 0;
+    const isNew =
+      needsReply &&
+      !isAtRisk &&
+      createdAtMs >= now - TWENTY_FOUR_H &&
+      (conv.messageCount ?? 999) <= 2;
+
+    if (isAtRisk)    return "At Risk";
+    if (isNew)       return "New";
+    if (needsReply)  return "Needs Response";
     return "On Customer";
   }
 
@@ -342,10 +363,14 @@ export default function CsInbox2() {
   const clientConvs = useMemo(() => liveConvs.filter(c => c.queue !== "Teams"), [liveConvs]);
   const teamConvs   = useMemo(() => liveConvs.filter(c => c.queue === "Teams"),  [liveConvs]);
 
-  const needsResponseCount = clientConvs.filter(c => c.hasUnanswered && !c.csResolvedAt).length;
-  const unansweredCount    = clientConvs.filter(c => {
-    const lastTs = c.messages.filter(m => m.sender === "client").slice(-1)[0]?.ts ?? 0;
-    return c.hasUnanswered && lastTs > 0 && (now - lastTs) >= THIRTY_MIN && !c.csResolvedAt;
+  // Active (non-resolved) client conversations only
+  const activeClientConvs = useMemo(() => clientConvs.filter(c => !c.csResolvedAt), [clientConvs]);
+
+  // Sidebar counts — aligned with column logic
+  const needsResponseCount = activeClientConvs.filter(c => c.lastSenderRole === "user" && !c.csResolvedAt).length;
+  const unansweredCount    = activeClientConvs.filter(c => {
+    const needsReply = c.lastSenderRole === "user";
+    return needsReply && c.lastCustomerMessageTs != null && c.lastCustomerMessageTs <= now - THIRTY_MIN;
   }).length;
   const hotLeadsCount = clientConvs.filter(c => c.csStatusTier === "hot_lead").length;
 
@@ -353,19 +378,19 @@ export default function CsInbox2() {
     const q = query.trim().toLowerCase();
     const colNames = ["At Risk", "New", "Needs Response", "On Customer"] as const;
     return colNames.map(label => {
-      let convs = clientConvs.filter(c => {
+      // Only active (non-resolved) conversations on the board
+      let convs = activeClientConvs.filter(c => {
         if (!( (c.name + " " + c.lastMessage).toLowerCase().includes(q) )) return false;
-        if (filter === "needs-response") return c.hasUnanswered && !c.csResolvedAt;
+        if (filter === "needs-response") return c.lastSenderRole === "user";
         if (filter === "unanswered") {
-          const lastTs = c.messages.filter(m => m.sender === "client").slice(-1)[0]?.ts ?? 0;
-          return c.hasUnanswered && lastTs > 0 && (now - lastTs) >= THIRTY_MIN && !c.csResolvedAt;
+          return c.lastSenderRole === "user" && c.lastCustomerMessageTs != null && c.lastCustomerMessageTs <= now - THIRTY_MIN;
         }
         if (filter === "hot") return c.csStatusTier === "hot_lead";
         return true;
       }).filter(c => getKanbanColumn(c) === label);
       return { label, convs };
     });
-  }, [clientConvs, query, filter, now]);
+  }, [activeClientConvs, query, filter, now]);
 
   // ── DETAIL VIEW ─────────────────────────────────────────────────────────
   if (selectedConv) {
@@ -584,7 +609,7 @@ export default function CsInbox2() {
             </div>
           </div>
           <footer className="cs2-stats">
-            <div className="cs2-stat"><small>Total Conversations</small><b>{clientConvs.length}</b></div>
+            <div className="cs2-stat"><small>Total Conversations</small><b>{activeClientConvs.length}</b></div>
             <div className="cs2-stat"><small>Needs Response</small><b>{needsResponseCount}</b></div>
             <div className="cs2-stat"><small>Unanswered</small><b>{unansweredCount}</b></div>
             <div className="cs2-stat"><small>Hot Leads</small><b>{hotLeadsCount}</b></div>
