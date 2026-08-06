@@ -7,7 +7,9 @@ import {
   Brain, Tag, RefreshCw, Copy, CircleDot, Briefcase, MapPin,
   TrendingUp, Users, X, ClipboardList,
 } from "lucide-react";
-import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle } from "lucide-react";
+import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle, Link2, Copy, Loader2 } from "lucide-react";
+import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
+import { toast } from "sonner";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -47,6 +49,291 @@ interface ClientProfile {
     address?: string | null;
     l27Url?: string | null;
   }> | null;
+}
+
+const BEDROOM_BASE: Record<number, number> = {
+  1: 119, 2: 209, 3: 229, 4: 279, 5: 319, 6: 379, 7: 419,
+};
+const BATH_PRICE = 30;
+const SERVICE_SURCHARGES: Record<string, number> = {
+  "Standard Cleaning": 0,
+  "Deep Cleaning": 60,
+  "Move-In/Move-Out": 60,
+  "Post-Construction Cleaning": 60,
+};
+const SERVICE_TYPES = ["Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Post-Construction Cleaning"];
+const BATH_OPTIONS = [1, 1.5, 2, 2.5, 3, 3.5, 4];
+
+// Top extras to show in the widget (most common ones)
+const WIDGET_EXTRAS = [
+  "clean_inside_oven",
+  "clean_inside_cabinets",
+  "clean_inside_full_fridge",
+  "clean_interior_windows",
+  "clean_finished_basement",
+  "move_in_move_out",
+  "i_have_pets",
+  "same_day_booking",
+];
+
+function SendQuoteWidget({
+  mission,
+  sessionContext,
+  customerName,
+}: {
+  mission: CsMissionRow;
+  sessionContext: SessionContext | null;
+  customerName: string;
+}) {
+  // Parse pre-filled beds/baths from session context
+  const initBeds = useMemo(() => {
+    const raw = sessionContext?.bedrooms ?? "";
+    const m = String(raw).match(/(\d+)/);
+    const n = m ? parseInt(m[1], 10) : 1;
+    return Math.min(Math.max(n, 1), 7);
+  }, [sessionContext?.bedrooms]);
+
+  const initBaths = useMemo(() => {
+    const raw = sessionContext?.bathrooms ?? "";
+    const m = String(raw).match(/(\d+\.?\d*)/);
+    const n = m ? parseFloat(m[1]) : 1;
+    return BATH_OPTIONS.includes(n) ? n : 1;
+  }, [sessionContext?.bathrooms]);
+
+  const initServiceType = useMemo(() => {
+    const s = sessionContext?.serviceType ?? "";
+    return SERVICE_TYPES.find(t => t.toLowerCase().includes(s.toLowerCase().split(" ")[0])) ?? "Standard Cleaning";
+  }, [sessionContext?.serviceType]);
+
+  const [beds, setBeds] = useState(initBeds);
+  const [baths, setBaths] = useState(initBaths);
+  const [serviceType, setServiceType] = useState(initServiceType);
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+  const [smsText, setSmsText] = useState("");
+  const [step, setStep] = useState<"configure" | "compose">("configure");
+  const [notes, setNotes] = useState("");
+  const [finalPriceInput, setFinalPriceInput] = useState("");
+
+  const basePrice = (BEDROOM_BASE[beds] ?? 119) + baths * BATH_PRICE + (SERVICE_SURCHARGES[serviceType] ?? 0);
+  const extrasTotal = calculateExtrasTotal(selectedExtras);
+  const calculatedPrice = basePrice + extrasTotal;
+  const finalPrice = finalPriceInput !== "" ? Math.max(0, Number(finalPriceInput) || 0) : calculatedPrice;
+  const discount = calculatedPrice - finalPrice;
+  const totalPrice = finalPrice;
+
+  const firstName = (sessionContext?.leadName ?? customerName).split(" ")[0] || "there";
+  const welcomeUrl = (() => {
+    const base = `https://quote.maidinblack.com/welcome/${encodeURIComponent(firstName)}`;
+    const p = new URLSearchParams();
+    p.set("beds", String(beds));
+    p.set("baths", String(baths));
+    p.set("type", serviceType);
+    p.set("price", String(calculatedPrice));
+    if (finalPriceInput !== "") p.set("finalPrice", String(finalPrice));
+    if (discount > 0) p.set("discount", String(discount));
+    if (notes.trim()) p.set("notes", encodeURIComponent(notes.trim()));
+    if (selectedExtras.length > 0) p.set("extras", selectedExtras.join(","));
+    return `${base}?${p.toString()}`;
+  })();
+
+  const sendQuoteSms = trpc.csMissions.sendQuoteSms.useMutation({
+    onSuccess: () => {
+      toast.success("Quote sent to customer! ✨");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to send SMS");
+    },
+  });
+
+  function handleGenerate() {
+    const discountLine = discount > 0 ? `\nWe've included a special discount for you as well. 🎁` : "";
+    setSmsText(
+      `Hi ${firstName}! We put together a custom quote just for you 🖤${discountLine}\n\nTap the link to view your personalized pricing and book your first clean:\n\n${welcomeUrl}\n\nAny questions? Just reply here, we're happy to help!`
+    );
+    setStep("compose");
+  }
+
+  function handleSend() {
+    if (!smsText.trim()) return;
+    sendQuoteSms.mutate({
+      missionId: mission.id,
+      sessionId: mission.sessionId,
+      text: smsText.trim(),
+    });
+  }
+
+  function toggleExtra(key: string) {
+    setSelectedExtras(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pt-1">
+      {step === "configure" ? (
+        <>
+          {/* Beds / Baths / Service Type */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Beds</label>
+              <select
+                value={beds}
+                onChange={e => setBeds(Number(e.target.value))}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              >
+                {[1,2,3,4,5,6,7].map(n => (
+                  <option key={n} value={n}>{n} {n === 1 ? "Bed" : "Beds"}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Baths</label>
+              <select
+                value={baths}
+                onChange={e => setBaths(Number(e.target.value))}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              >
+                {BATH_OPTIONS.map(n => (
+                  <option key={n} value={n}>{n} {n === 1 ? "Bath" : "Baths"}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Type</label>
+              <select
+                value={serviceType}
+                onChange={e => setServiceType(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              >
+                {SERVICE_TYPES.map(t => (
+                  <option key={t} value={t}>{t.replace(" Cleaning", "").replace("Post-Construction", "Post-Const.")}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Extras */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Extras</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {WIDGET_EXTRAS.map(key => {
+                const extra = EXTRAS_LIST.find(e => e.key === key);
+                if (!extra) return null;
+                const selected = selectedExtras.includes(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleExtra(key)}
+                    className={`text-[11px] px-2 py-1 rounded-full border transition-all ${
+                      selected
+                        ? "bg-violet-600 text-white border-violet-600"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-violet-300"
+                    }`}
+                  >
+                    {extra.label} +${extra.price}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Price row: calculated + final price inline */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between flex-1 px-3 py-2 rounded-xl bg-violet-50 border border-violet-100">
+              <span className="text-xs font-semibold text-violet-700">Price</span>
+              <span className="text-sm font-bold text-violet-900">${calculatedPrice}</span>
+            </div>
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">Final $</span>
+              <input
+                type="number"
+                min="0"
+                placeholder={String(calculatedPrice)}
+                value={finalPriceInput}
+                onChange={e => setFinalPriceInput(e.target.value)}
+                className="w-full text-xs pl-14 pr-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+              />
+            </div>
+          </div>
+          {discount > 0 && (
+            <p className="text-[11px] text-emerald-600 font-semibold -mt-1 pl-1">🎁 Special discount for {firstName}: -${discount}</p>
+          )}
+
+          {/* Notes */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="e.g. First visit includes oven cleaning"
+              rows={2}
+              className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300 resize-none leading-relaxed"
+            />
+          </div>
+
+          {/* Generate button */}
+          <button
+            type="button"
+            onClick={handleGenerate}
+            className="w-full text-xs font-bold py-2.5 rounded-xl text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+            style={{ background: "linear-gradient(135deg, #7C5CFF, #6B4FE0)" }}
+          >
+            <Link2 className="w-3.5 h-3.5" /> Build Welcome Message
+          </button>
+        </>
+      ) : (
+        <>
+          {/* Welcome link display */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+            <span className="text-[11px] text-emerald-700 font-medium truncate flex-1">{welcomeUrl}</span>
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard.writeText(welcomeUrl); toast.success("Link copied!"); }}
+              className="flex-shrink-0 text-emerald-600 hover:text-emerald-800"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Editable SMS */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Message to Customer</label>
+            <textarea
+              value={smsText}
+              onChange={e => setSmsText(e.target.value)}
+              rows={6}
+              className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none leading-relaxed"
+            />
+          </div>
+
+          {/* Send + Back */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sendQuoteSms.isPending || !smsText.trim()}
+              className="flex-1 text-xs font-bold py-2.5 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+              style={{ background: "linear-gradient(135deg, #7C5CFF, #6B4FE0)" }}
+            >
+              {sendQuoteSms.isPending ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending...</>
+              ) : (
+                <><Send className="w-3.5 h-3.5" /> Send Quote</>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep("configure")}
+              className="text-xs font-semibold py-2 px-3 rounded-xl bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+            >
+              ← Back
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 interface Props {
@@ -103,6 +390,7 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
     recipientName: string; recipientPhone: string; paymentLinkUrl: string;
     success: boolean; error?: string;
   }
+  const [showQuoteWidget, setShowQuoteWidget] = useState(false);
   const [paymentCard, setPaymentCard] = useState<PaymentLinkConfirmCard | null>(null);
   const [paymentSentCard, setPaymentSentCard] = useState<PaymentLinkSentCard | null>(null);
   const [paymentSmsText, setPaymentSmsText] = useState("");
@@ -217,9 +505,10 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
               <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>💳</div>
               <div><b style={{fontSize:'10px',fontWeight:800}}>Send Payment Link</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Generate &amp; send a payment link via SMS.</p></div>
             </div>
-            <div style={{padding:'10px 12px',borderBottom:'1px solid #eff0f2',opacity:0.42,display:'flex',alignItems:'flex-start',gap:'9px'}}>
+            <div style={{padding:'10px 12px',borderBottom:'1px solid #eff0f2',cursor:'pointer',display:'flex',alignItems:'flex-start',gap:'9px'}}
+              onClick={() => setShowQuoteWidget(v => !v)}>
               <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>📋</div>
-              <div><b style={{fontSize:'10px',fontWeight:800}}>Send Quote</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Coming soon.</p></div>
+              <div><b style={{fontSize:'10px',fontWeight:800}}>Send Quote</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Build &amp; send a personalized quote.</p></div>
             </div>
             <div style={{padding:'10px 12px',opacity:0.42,display:'flex',alignItems:'flex-start',gap:'9px'}}>
               <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>🚗</div>
@@ -286,6 +575,16 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
                 {paymentSentCard.error && <p className="text-xs text-red-400">{paymentSentCard.error}</p>}
               </div>
             </div>
+          </div>
+        )}
+        {/* Send Quote widget — shown inline when Send Quote mission is clicked */}
+        {showQuoteWidget && (
+          <div className="mx-4 mb-3">
+            <SendQuoteWidget
+              mission={{ id: 0, sessionId: selected.id, agentId: 0, agentName: null, title: "Send Quote", emoji: "🧾", status: "active" as const, failureReason: null, stages: [], sortOrder: 0, createdAt: null, updatedAt: null, completedAt: null, customerName: selected.name }}
+              sessionContext={{ teamName: null, leadPhone: selected.phone, leadName: selected.name, bedrooms: null, bathrooms: null, serviceType: null }}
+              customerName={selected.name}
+            />
           </div>
         )}
         {/* CLIENT PROFILE metrics */}
