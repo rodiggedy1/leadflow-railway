@@ -7481,7 +7481,7 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
           )}
           {!isLoading && cards.length > 0 && (
             <div style={{ padding: "20px 24px" }}>
-              <button onClick={startReview} style={{ width: "100%", padding: "14px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Start Focus →</button>
+              <button onClick={() => startReview()} style={{ width: "100%", padding: "14px", background: `linear-gradient(135deg, ${P}, ${P2})`, color: "#fff", border: "none", borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Start Focus →</button>
             </div>
           )}
         </div>
