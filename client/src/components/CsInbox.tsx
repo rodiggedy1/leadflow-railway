@@ -1531,315 +1531,407 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     <>
     <div className="h-full overflow-hidden flex flex-col cs-inbox-scope" style={{color:'#101828', background:'transparent'}}>
       <div className="w-full flex flex-col flex-1 min-h-0" style={{padding:'20px'}}>
-        {/* ── FULL PAGE KANBAN LAYOUT ── */}
-        {(() => {
-          const now = Date.now();
-          const THIRTY_MIN = 30 * 60 * 1000;
-          const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '16px'}}>
+          {rail}
+          {/* ── COL 1: Revenue Lane (Client conversations) ── */}
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FCFCFD', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '24px 24px 24px'}}>
 
-          function getKanbanColumn(conv: (typeof clientConvs)[number]) {
-            const hasUnanswered = !!(conv as any).hasUnanswered;
-            const csResolvedAt = (conv as any).csResolvedAt ?? null;
-            const lastCustomerMessageTs = (conv as any).lastCustomerMessageTs ?? 0;
-            const createdAt = (conv as any).createdAt;
-            const createdAtMs = createdAt ? new Date(createdAt).getTime() : 0;
-            const messageCount = (conv as any).messageCount ?? 0;
-            const isAtRisk = hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-            const isNew = createdAtMs > 0 && (now - createdAtMs) < TWENTY_FOUR_H && messageCount <= 2 && !csResolvedAt && !isAtRisk;
-            const needsReply = hasUnanswered && !csResolvedAt && !isAtRisk;
-            if (isAtRisk) return "at-risk";
-            if (isNew) return "new";
-            if (needsReply) return "needs-response";
-            return "on-customer";
-          }
-
-          function matchesSidebarFilter(conv: (typeof clientConvs)[number], f: string) {
-            if (f === "all") return true;
-            const hasUnanswered = !!(conv as any).hasUnanswered;
-            const csResolvedAt = (conv as any).csResolvedAt ?? null;
-            const lastCustomerMessageTs = (conv as any).lastCustomerMessageTs ?? 0;
-            const isAtRisk = hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-            const needsReply = hasUnanswered && !csResolvedAt;
-            const csStatusTier = (conv as any).csStatusTier as string | null;
-            if (f === "needs-response") return needsReply && !isAtRisk;
-            if (f === "unanswered") return isAtRisk;
-            if (f === "hot") return csStatusTier === "hot_lead";
-            if (f === "teams") return conv.queue === "Teams";
-            return true;
-          }
-
-          const [kanbanFilter, setKanbanFilter] = React.useState<string>("all");
-
-          const needsResponseCount = clientConvs.filter(c => {
-            const hasUnanswered = !!(c as any).hasUnanswered;
-            const csResolvedAt = (c as any).csResolvedAt ?? null;
-            const lastCustomerMessageTs = (c as any).lastCustomerMessageTs ?? 0;
-            const isAtRisk = hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-            return hasUnanswered && !csResolvedAt && !isAtRisk;
-          }).length;
-          const unansweredCount = clientConvs.filter(c => {
-            const hasUnanswered = !!(c as any).hasUnanswered;
-            const csResolvedAt = (c as any).csResolvedAt ?? null;
-            const lastCustomerMessageTs = (c as any).lastCustomerMessageTs ?? 0;
-            return hasUnanswered && lastCustomerMessageTs > 0 && (now - lastCustomerMessageTs) >= THIRTY_MIN && !csResolvedAt;
-          }).length;
-          const hotLeadsCount = clientConvs.filter(c => (c as any).csStatusTier === "hot_lead").length;
-
-          const isTeamsView = kanbanFilter === "teams";
-          const sidebarFiltered = isTeamsView ? [] : clientConvs.filter(c => matchesSidebarFilter(c, kanbanFilter));
-
-          const kanbanColumns: { id: string; label: string; dotColor: string; convs: (typeof clientConvs) }[] = [
-            { id: "at-risk",        label: "At Risk",        dotColor: "#ff9f1a", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "at-risk") },
-            { id: "new",            label: "New",            dotColor: "#3478f6", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "new") },
-            { id: "needs-response", label: "Needs Response", dotColor: "#13b77a", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "needs-response") },
-            { id: "on-customer",    label: "On Customer",    dotColor: "#8b5cf6", convs: sidebarFiltered.filter(c => getKanbanColumn(c) === "on-customer") },
-          ];
-
-          function renderKanbanCard(conversation: (typeof clientConvs)[number]) {
-            const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
-            const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected?.id !== (conversation as any).id;
-            const isSelected = selected?.id === conversation.id;
-            const hasUnanswered = !!(conversation as any).hasUnanswered;
-            const isResolved = !!(conversation as any).csResolvedAt;
-            const gradientPalette = [
-              "linear-gradient(135deg,#7C4DFF,#C05CFF)",
-              "linear-gradient(135deg,#FF7242,#FF9D1C)",
-              "linear-gradient(135deg,#0EA76D,#24C98A)",
-              "linear-gradient(135deg,#5B6CFF,#4AA3FF)",
-              "linear-gradient(135deg,#E06B8B,#F4A0B0)",
-              "linear-gradient(135deg,#6B7CFF,#9B8CFF)",
-              "linear-gradient(135deg,#2EB8A6,#4DD9C5)",
-              "linear-gradient(135deg,#F5A623,#F7C35F)",
-            ];
-            const initials = conversation.initials || "?";
-            const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
-            const gradient = gradientPalette[hashIdx];
-            const csPriorityTag = (conversation as any).csPriorityTag;
-            const csQueue = (conversation as any).csQueue;
-            const lastSenderRole = (conversation as any).lastSenderRole as "user" | "assistant" | null;
-            const llmTier = (conversation as any).csStatusTier as string | null;
-            const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
-            const waitMinDisplay = Math.floor(waitMs / 60_000);
-            const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000;
-            const isBooked = csQueue === "Active jobs" || csQueue === "Hot leads";
-            type StatusKey = "new_inquiry" | "waiting_on_you" | "hot_lead" | "slow_response" | "scheduling" | "objection" | "post_job" | "happy_customer" | "cold_lead" | "solved" | "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
-            type StatusCfg = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
-            const statusCfg: Record<StatusKey, StatusCfg> = {
-              new_inquiry:     { label: "🟢 New Inquiry",       action: "Respond now · book this lead",           pill: "bg-emerald-50 text-emerald-700 border-emerald-200",  dot: "bg-emerald-500",  Icon: MessageSquare },
-              waiting_on_you:  { label: "🟡 Waiting on You",    action: "Follow up now · recommended",            pill: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500",    Icon: ShieldAlert },
-              hot_lead:        { label: "🔥 Hot Lead",           action: "Close now · send time + price",          pill: "bg-orange-50 text-orange-700 border-orange-200",    dot: "bg-orange-500",   Icon: TrendingUp },
-              slow_response:   { label: "⏱️ Slow Response",      action: `Nudge now · ${waitMinDisplay}m wait`,    pill: "bg-rose-50 text-rose-700 border-rose-200",          dot: "bg-rose-500",     Icon: Clock3 },
-              scheduling:      { label: "📅 Scheduling",         action: "Lock in time · confirm slot",            pill: "bg-sky-50 text-sky-700 border-sky-200",             dot: "bg-sky-500",      Icon: Clock3 },
-              objection:       { label: "❌ Objection",          action: "Overcome objection · use script",        pill: "bg-red-50 text-red-700 border-red-200",             dot: "bg-red-500",      Icon: ShieldAlert },
-              post_job:        { label: "🔁 Post-job",           action: "Push to recurring",                      pill: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-400",   Icon: CheckCircle2 },
-              happy_customer:  { label: "🌟 Happy Customer",     action: "Ask for review + rebook",               pill: "bg-yellow-50 text-yellow-700 border-yellow-200",    dot: "bg-yellow-400",   Icon: CheckCircle2 },
-              cold_lead:       { label: "🧊 Cold Lead",          action: "Reactivate · last-minute opening",       pill: "bg-slate-50 text-slate-500 border-slate-200",       dot: "bg-slate-400",    Icon: Clock3 },
-              solved:          { label: "✅ Solved",             action: "No action needed",                       pill: "bg-slate-50 text-slate-400 border-slate-200",       dot: "bg-slate-300",    Icon: CheckCircle2 },
-              act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500", Icon: ShieldAlert },
-              your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
-              their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", Icon: Clock3 },
-              monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
-              resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
-            };
-            const ACK_WORDS = /\b(ok|okay|sure|yes|yep|yup|alright|great|perfect|sounds good|got it|will do|noted|confirmed|received|on it|done|no problem|no worries|thank you|thanks|ty|np|appreciate it|see you|see you then|we'll be there|on my way|just finished|all set|all good|good to go|makes sense|understood|copy that|roger|10-4)\b/i;
-            const lastMsgText = (conversation.lastMessage || "").trim();
-            const wordCount = lastMsgText.split(/\s+/).filter(Boolean).length;
-            const isTerminalAck = !llmTier && wordCount <= 8 && ACK_WORDS.test(lastMsgText) && !lastMsgText.includes("?");
-            const validLlmKeys = new Set<string>(Object.keys(statusCfg));
-            const resolvedLlmKey = llmTier && validLlmKeys.has(llmTier) ? (llmTier as StatusKey) : null;
-            const statusKey: StatusKey =
-              isResolved ? "resolved" :
-              resolvedLlmKey ? resolvedLlmKey :
-              isTerminalAck ? "solved" :
-              (csPriorityTag || waitingTooLong) ? "act_now" :
-              lastSenderRole === "user" ? "your_turn" :
-              lastSenderRole === "assistant" ? "their_turn" :
-              "monitor";
-            const sc = statusCfg[statusKey];
-            const linkedSessionId = (conversation as any).linkedSessionId ?? null;
-            const isResolvingThis = resolvingId === conversation.id;
-            return (
-              <motion.div
-                key={conversation.id}
-                layout
-                animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
-                transition={{ duration: 0.16, ease: [.2,.8,.2,1] }}
-                className="group relative"
-                style={{borderRadius:'12px', marginBottom:'9px'}}
-              >
-                <motion.button
-                  whileHover={{ y: -1, transition: { duration: 0.12, ease: [.2,.8,.2,1] } }}
-                  onClick={() => {
-                    setSelectedId(conversation.id);
-                    userNavigatedToId.current = conversation.id;
-                    triggerAutoDraft(conversation);
-                  }}
-                  className="w-full text-left"
-                  style={{
-                    background: '#fff',
-                    border: isSelected ? '2px solid #7356ff' : '1px solid #dfe2e8',
-                    borderRadius: '12px',
-                    padding: '13px',
-                    cursor: 'pointer',
-                    transition: '.15s',
-                    boxShadow: isSelected ? '0 8px 24px rgba(30,32,60,.08)' : 'none',
-                    display: 'block',
-                    width: '100%',
-                  }}
-                >
-                  <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                    <div className="flex items-center justify-center font-bold text-white" style={{width:'32px', height:'32px', borderRadius:'50%', fontSize:'11px', fontWeight:800, flexShrink:0, background:gradient}}>
-                      {initials}
-                    </div>
-                    <strong style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, color: isUnread ? '#181a24' : '#424755', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.name}</strong>
-                    <span style={{marginLeft:'auto', color:'#9aa0aa', fontSize:'11px', flexShrink:0}}>
-                      {conversation.lastMsgTs
-                        ? (() => {
-                            const d = new Date(conversation.lastMsgTs);
-                            const nowD = new Date();
-                            const isToday = d.toDateString() === nowD.toDateString();
-                            const yesterday = new Date(nowD); yesterday.setDate(nowD.getDate() - 1);
-                            if (isToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-                            if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-                            return d.toLocaleDateString([], { month: "short", day: "numeric" });
-                          })()
-                        : conversation.wait
-                      }
-                    </span>
-                  </div>
-                  <div style={{fontSize:'13px', lineHeight:'1.42', color: isUnread ? '#3f4450' : '#8c929f', margin:'8px 0 0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: isUnread ? 600 : 400}}>{conversation.lastMessage || sc.action}</div>
-                  <div style={{display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'8px', alignItems:'center'}}>
-                    <span style={{
-                      fontSize:'10px', padding:'4px 7px', borderRadius:'7px',
-                      background: (statusKey === 'resolved' || statusKey === 'solved') ? '#e9f8f2' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#ffefed' : '#f2f3f5',
-                      color: (statusKey === 'resolved' || statusKey === 'solved') ? '#11815c' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#dd4435' : '#424755',
-                      fontWeight: 700,
-                    }}>
-                      {sc.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
-                    </span>
-                    {linkedSessionId && (
-                      <span style={{fontSize:'10px', padding:'4px 7px', borderRadius:'7px', background:'#f2f3f5', color:'#757b88', display:'inline-flex', alignItems:'center', gap:'3px'}}>
-                        <Link2 className="h-3 w-3" /> Linked
-                      </span>
-                    )}
-                  </div>
-                </motion.button>
-                {!isResolved && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); resolveSession.mutate({ sessionId: conversation.id }); }}
-                    className="absolute right-2 top-2 rounded-lg bg-white/90 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 opacity-0 group-hover:opacity-100 shadow-sm transition-all hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
-                  >
-                    Resolve
-                  </button>
-                )}
-                <AnimatePresence>
-                  {isResolvingThis && (
-                    <motion.div
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[12px]"
-                    >
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="absolute inset-0 bg-violet-400/10" />
-                      {[...Array(18)].map((_, i) => {
-                        const x = ((i % 6) - 2.5) * 28;
-                        const y = Math.floor(i / 6) * 10;
-                        return (
-                          <motion.div key={i} initial={{ x: 0, y: 0, opacity: 0, scale: 0.4, rotate: 0 }} animate={{ x, y: -40 - y, opacity: [0, 1, 0], scale: [0.4, 1, 0.8], rotate: 140 }} exit={{ opacity: 0 }} transition={{ duration: 0.8, delay: i * 0.015 }} className="absolute left-1/2 top-1/2 -ml-2 -mt-2 text-violet-500">
-                            <Sparkles className="h-4 w-4" />
-                          </motion.div>
-                        );
-                      })}
-                      <motion.div initial={{ scale: 0.6, opacity: 0, y: 6 }} animate={{ scale: [0.6, 1.08, 1], opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.45 }} className="absolute inset-0 flex items-center justify-center">
-                        <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">Resolved ✨</div>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          }
-
-          const hasSelection = effectiveSelectedId != null && effectiveSelectedId > 0;
-
-          return (
-            <div style={{display:'flex', height:'100%', overflow:'hidden', gap:'16px'}}>
-              {/* ── LEFT SIDEBAR ── */}
-              <div style={{width:'220px', flexShrink:0, background:'#fff', borderRadius:'18px', border:'1px solid #e5e7ee', display:'flex', flexDirection:'column', overflow:'hidden'}}>
-                {/* Brand / title */}
-                <div style={{padding:'18px 16px 14px', borderBottom:'1px solid #e5e7ee', flexShrink:0}}>
-                  <div style={{fontSize:'17px', fontWeight:900, letterSpacing:'-0.03em', color:'#181a24'}}>Customer Inbox</div>
-                  <div style={{fontSize:'12px', color:'#8b91a0', marginTop:'2px'}}>Maids in Black</div>
+              {/* Revenue Lane header */}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div style={{fontSize:'10px', fontWeight:900, letterSpacing:'.22em', color:'#98A2B3', textTransform:'uppercase', marginBottom:'6px'}}>Revenue Lane</div>
+                  <div style={{fontSize:'30px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Clients</div>
                 </div>
-                {/* Nav */}
-                <div style={{flex:1, overflowY:'auto', padding:'10px 8px'}}>
-                  <div style={{fontSize:'10px', color:'#959baa', fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', margin:'4px 8px 8px'}}>Inbox</div>
-                  {[
-                    { id: 'all',            label: 'All Conversations', count: clientConvs.length,  dot: null },
-                    { id: 'needs-response', label: 'Needs Response',    count: needsResponseCount,  dot: '#13b77a' },
-                    { id: 'unanswered',     label: 'Unanswered',        count: unansweredCount,     dot: '#ff9f1a' },
-                    { id: 'hot',            label: 'Hot Leads',         count: hotLeadsCount,       dot: '#ff5f8f' },
-                  ].map(item => (
-                    <button
-                      key={item.id}
-                      onClick={() => { setKanbanFilter(item.id); userPickedFilter.current = true; }}
-                      style={{
-                        border: 0,
-                        background: kanbanFilter === item.id ? '#f2efff' : 'transparent',
-                        color: kanbanFilter === item.id ? '#6345f5' : '#424755',
-                        textAlign: 'left', padding: '8px 10px', borderRadius: '9px',
-                        display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-                        fontSize: '13px', fontWeight: 600, width: '100%',
-                      }}
-                    >
-                      {item.dot
-                        ? <span style={{width:'8px', height:'8px', borderRadius:'50%', background:item.dot, flexShrink:0, display:'inline-block'}} />
-                        : <span style={{width:'8px', height:'8px', flexShrink:0, display:'inline-block'}} />
-                      }
-                      <span style={{flex:1, fontSize:'12px'}}>{item.label}</span>
-                      <span style={{background: kanbanFilter === item.id ? '#ede9ff' : '#f0f1f4', color: kanbanFilter === item.id ? '#6345f5' : '#757b88', borderRadius:'999px', padding:'2px 6px', fontSize:'10px', fontWeight:700}}>
-                        {item.count}
-                      </span>
-                    </button>
-                  ))}
-                  <div style={{fontSize:'10px', color:'#959baa', fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', margin:'14px 8px 8px'}}>Teams</div>
-                  <button
-                    onClick={() => { setKanbanFilter('teams'); userPickedFilter.current = true; }}
-                    style={{
-                      border: 0,
-                      background: kanbanFilter === 'teams' ? '#f2efff' : 'transparent',
-                      color: kanbanFilter === 'teams' ? '#6345f5' : '#424755',
-                      textAlign: 'left', padding: '8px 10px', borderRadius: '9px',
-                      display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-                      fontSize: '13px', fontWeight: 600, width: '100%',
-                    }}
-                  >
-                    <span style={{width:'8px', height:'8px', borderRadius:'50%', background:'#8b5cf6', flexShrink:0, display:'inline-block'}} />
-                    <span style={{flex:1, fontSize:'12px'}}>Dispatch</span>
-                    <span style={{background: kanbanFilter === 'teams' ? '#ede9ff' : '#f0f1f4', color: kanbanFilter === 'teams' ? '#6345f5' : '#757b88', borderRadius:'999px', padding:'2px 6px', fontSize:'10px', fontWeight:700}}>
-                      {teamConvs.length}
-                    </span>
-                  </button>
-                </div>
-                {/* Footer stats */}
-                <div style={{borderTop:'1px solid #e5e7ee', padding:'10px 12px', flexShrink:0}}>
-                  {[
-                    { label: 'Total',         value: clientConvs.length },
-                    { label: 'Needs Reply',    value: needsResponseCount },
-                    { label: 'At Risk',        value: unansweredCount },
-                  ].map((s, i) => (
-                    <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'3px 0'}}>
-                      <span style={{fontSize:'11px', color:'#818795'}}>{s.label}</span>
-                      <span style={{fontSize:'11px', fontWeight:800, color:'#181a24'}}>{s.value}</span>
-                    </div>
-                  ))}
+                <div style={{background:'#101828', color:'white', height:'28px', padding:'0 12px', borderRadius:'999px', fontSize:'12px', fontWeight:700, flexShrink:0, display:'flex', alignItems:'center'}}>
+                  {clientConvs.length} open
                 </div>
               </div>
 
-              {/* ── MAIN AREA: Kanban board OR Teams panel ── */}
-              {isTeamsView ? (
-                /* Teams view — reuse existing Teams panel */
-                <div style={{flex:1, minWidth:0, display:'flex', gap:'16px', overflow:'hidden'}}>
-                  <div style={{flex:'0 0 320px', minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+              {/* Search bar */}
+              <div className="relative" style={{marginTop:'16px'}}>
+                <Search className="h-4 w-4 absolute" style={{left:'20px', top:'50%', transform:'translateY(-50%)', color:'#9aa3b2'}} />
+                <Input
+                  value={clientQuery}
+                  onChange={(e) => setClientQuery(e.target.value)}
+                  placeholder="Search clients, leads, bookings"
+                  style={{height:'36px', borderRadius:'999px', background:'#FAFBFC', border:'1px solid #E6E9EE', paddingLeft:'34px', paddingRight:'12px', fontSize:'13px', fontWeight:600, color:'#101828', boxShadow:'none'}}
+                  className="placeholder:text-[#9aa3b2] focus-visible:ring-0"
+                />
+              </div>
+
+              {/* AI priority queue — collapsed by default, hover to expand */}
+              <div className="group cursor-default transition-all" style={{marginTop:'16px', borderRadius:'16px', padding:'12px 14px', background:'rgba(139,92,246,.04)', border:'1px solid rgba(139,92,246,.10)'}}>
+                <div className="flex flex-col" style={{gap:'8px'}}>
+                  <div className="flex items-center gap-2">
+                    <Sparkles style={{width:'13px',height:'13px',color:'#8B5CF6',flexShrink:0}} />
+                    <div style={{fontSize:'11px', fontWeight:900, color:'#6D28D9', letterSpacing:'.12em', textTransform:'uppercase'}}>Client priority queue</div>
+                    {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA',flexShrink:0}} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {priorityItems.length === 0 && !priorityLoading && (
+                      <div style={{marginTop:'4px', fontSize:'12px', fontWeight:500, color:'#7a8290', lineHeight:'1.4'}}>No urgent items right now.</div>
+                    )}
+                    {priorityItems.length > 0 && (
+                      <div style={{marginTop:'4px', fontSize:'12px', fontWeight:500, color:'#7a8290', lineHeight:'1.4'}}>
+                        {priorityItems.length} high-intent {priorityItems.length === 1 ? "opportunity" : "opportunities"}. {priorityItems.slice(0, 2).map(i => i.reason).join(" ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Expanded items — visible on hover */}
+                {priorityItems.length > 0 && (
+                  <div className="mt-3 space-y-1.5">
+                    {priorityItems.map((item, idx) => {
+                      const style = priorityTagStyle(item.tag);
+                      return (
+                        <div key={item.id} className="flex items-center gap-2">
+                          <button
+                            className="flex-1 flex items-center gap-2 text-left"
+                            onClick={() => {
+                              setActiveFilter("Priority");
+                              setSelectedId(item.id);
+                              userNavigatedToId.current = item.id;
+                              const found = displayConversations.find((c) => c.id === item.id);
+                              if (found) triggerAutoDraft(found);
+                            }}
+                          >
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
+                              <span className={`relative inline-flex rounded-full h-2 w-2 ${style.dot}`} />
+                            </span>
+                            <span className="text-xs font-semibold text-slate-800 truncate">{idx + 1}. {item.name}</span>
+                            <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); dismissPriority.mutate({ sessionId: item.id }); }}
+                            className="shrink-0 text-slate-300 hover:text-slate-500 transition-colors"
+                            title="Dismiss"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Active filter banner — shown when not viewing All */}
+              {activeFilter !== 'All' && (
+                <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'6px', padding:'6px 12px', borderRadius:'999px', background:'#101828', color:'white', fontSize:'12px', fontWeight:700}}>
+                  <span style={{flex:1}}>Showing: {activeFilter}</span>
+                  <button
+                    onClick={() => setActiveFilter('All')}
+                    style={{display:'flex', alignItems:'center', gap:'3px', fontSize:'11px', fontWeight:700, color:'rgba(255,255,255,0.7)', background:'none', border:'none', cursor:'pointer', padding:'0'}}
+                    title="Clear filter — show all"
+                  >
+                    <X className="h-3 w-3" /> All
+                  </button>
+                </div>
+              )}
+
+              {/* Client conversation list */}
+              <div style={{marginTop:'16px'}}>
+                <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                  {clientConvs.length === 0 && (
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'64px 24px',textAlign:'center'}}>
+                      <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
+                        <MessageSquare style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
+                      </div>
+                      <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>Inbox is clear</div>
+                      <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>New client conversations will appear here</div>
+                    </div>
+                  )}
+                  {clientConvs.map((conversation) => {
+                    const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
+                    const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
+                    const isSelected = selected.id === conversation.id;
+                    const hasUnanswered = !!(conversation as any).hasUnanswered;
+                    const isResolved = !!(conversation as any).csResolvedAt;
+
+                    // ── Color-hash gradient from initials ──
+                    // Softer, desaturated gradients — Stripe/Linear aesthetic
+                    const gradientPalette = [
+                      "linear-gradient(135deg,#7C4DFF,#C05CFF)",  // muted purple
+                      "linear-gradient(135deg,#FF7242,#FF9D1C)",  // warm orange
+                      "linear-gradient(135deg,#0EA76D,#24C98A)",  // soft green
+                      "linear-gradient(135deg,#5B6CFF,#4AA3FF)",  // slate blue
+                      "linear-gradient(135deg,#E06B8B,#F4A0B0)",  // dusty rose
+                      "linear-gradient(135deg,#6B7CFF,#9B8CFF)",  // periwinkle
+                      "linear-gradient(135deg,#2EB8A6,#4DD9C5)",  // teal
+                      "linear-gradient(135deg,#F5A623,#F7C35F)",  // amber
+                    ];
+                    const initials = conversation.initials || "?";
+                    const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
+                    const gradient = gradientPalette[hashIdx];
+
+                    // ── Status pill — full 21-state LLM-powered system ──
+                    const csPriorityTag = (conversation as any).csPriorityTag;
+                    const csQueue = (conversation as any).csQueue;
+                    const lastSenderRole = (conversation as any).lastSenderRole as "user" | "assistant" | null;
+                    const llmTier = (conversation as any).csStatusTier as string | null;
+                    const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
+                    const waitMinDisplay = Math.floor(waitMs / 60_000);
+                    const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000;
+                    const isBooked = csQueue === "Active jobs" || csQueue === "Hot leads";
+
+                    // Full 21-state config map (client lane)
+                    type StatusKey = "new_inquiry" | "waiting_on_you" | "hot_lead" | "slow_response" | "scheduling" | "objection" | "post_job" | "happy_customer" | "cold_lead" | "solved" | "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
+                    type StatusCfg = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
+                    const statusCfg: Record<StatusKey, StatusCfg> = {
+                      // LLM-scored client states
+                      new_inquiry:     { label: "🟢 New Inquiry",       action: "Respond now · book this lead",           pill: "bg-emerald-50 text-emerald-700 border-emerald-200",  dot: "bg-emerald-500",  Icon: MessageSquare },
+                      waiting_on_you:  { label: "🟡 Waiting on You",    action: "Follow up now · recommended",            pill: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500",    Icon: ShieldAlert },
+                      hot_lead:        { label: "🔥 Hot Lead",           action: "Close now · send time + price",          pill: "bg-orange-50 text-orange-700 border-orange-200",    dot: "bg-orange-500",   Icon: TrendingUp },
+                      slow_response:   { label: "⏱️ Slow Response",      action: `Nudge now · ${waitMinDisplay}m wait`,    pill: "bg-rose-50 text-rose-700 border-rose-200",          dot: "bg-rose-500",     Icon: Clock3 },
+                      scheduling:      { label: "📅 Scheduling",         action: "Lock in time · confirm slot",            pill: "bg-sky-50 text-sky-700 border-sky-200",             dot: "bg-sky-500",      Icon: Clock3 },
+                      objection:       { label: "❌ Objection",          action: "Overcome objection · use script",        pill: "bg-red-50 text-red-700 border-red-200",             dot: "bg-red-500",      Icon: ShieldAlert },
+                      post_job:        { label: "🔁 Post-job",           action: "Push to recurring",                      pill: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-400",   Icon: CheckCircle2 },
+                      happy_customer:  { label: "🌟 Happy Customer",     action: "Ask for review + rebook",               pill: "bg-yellow-50 text-yellow-700 border-yellow-200",    dot: "bg-yellow-400",   Icon: CheckCircle2 },
+                      cold_lead:       { label: "🧊 Cold Lead",          action: "Reactivate · last-minute opening",       pill: "bg-slate-50 text-slate-500 border-slate-200",       dot: "bg-slate-400",    Icon: Clock3 },
+                      solved:          { label: "✅ Solved",             action: "No action needed",                       pill: "bg-slate-50 text-slate-400 border-slate-200",       dot: "bg-slate-300",    Icon: CheckCircle2 },
+                      // Mechanical fallbacks (used when llmTier is null)
+                      act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
+                      your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
+                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", Icon: Clock3 },
+                      monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
+                      resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
+                    };
+
+                    // Client-side terminal-ack fast path (fires before mechanical fallback when LLM score not yet cached)
+                    // Strategy: short messages (≤8 words) that start or end with a clear ack word/phrase → Solved
+                    // Catches: "yes thanks", "ok no problem", "yes that works", "sounds good thanks", etc.
+                    const ACK_WORDS = /\b(ok|okay|sure|yes|yep|yup|alright|great|perfect|sounds good|got it|will do|noted|confirmed|received|on it|done|no problem|no worries|thank you|thanks|ty|np|appreciate it|see you|see you then|we'll be there|on my way|just finished|all set|all good|good to go|makes sense|understood|copy that|roger|10-4)\b/i;
+                    const lastMsgText = (conversation.lastMessage || "").trim();
+                    const wordCount = lastMsgText.split(/\s+/).filter(Boolean).length;
+                    // Short message (≤8 words) that contains at least one ack word and no question mark → Solved
+                    const isTerminalAck = !llmTier && wordCount <= 8 && ACK_WORDS.test(lastMsgText) && !lastMsgText.includes("?");
+
+                    // Resolve status key: LLM tier takes priority, terminal-ack fast path second, mechanical fallback if null
+                    const validLlmKeys = new Set<string>(Object.keys(statusCfg));
+                    const resolvedLlmKey = llmTier && validLlmKeys.has(llmTier) ? (llmTier as StatusKey) : null;
+                    const statusKey: StatusKey =
+                      isResolved ? "resolved" :
+                      resolvedLlmKey ? resolvedLlmKey :
+                      isTerminalAck ? "solved" :
+                      (csPriorityTag || waitingTooLong) ? "act_now" :
+                      lastSenderRole === "user" ? "your_turn" :
+                      lastSenderRole === "assistant" ? "their_turn" :
+                      "monitor";
+
+                    const sc = statusCfg[statusKey];
+
+                    // ── Priority badge (top-left of avatar) ──
+                    // VIP = 3+ jobs, Today = has a job scheduled today, Team = Teams queue
+                    type PriorityKey = "vip" | "today" | "revenue" | "normal";
+                    const jobCount = conversation.jobCount ?? 0;
+                    const hasTodayJob = conversation.hasTodayJob ?? false;
+                    const priorityKey: PriorityKey =
+                      jobCount >= 3 ? "vip" :
+                      hasTodayJob ? "today" :
+                      conversation.queue === "Teams" ? "revenue" :
+                      "normal";
+                    const priorityCfg: Record<PriorityKey, { label: string; className: string }> = {
+                      vip:     { label: "VIP",   className: "bg-violet-600 text-white" },
+                      today:   { label: "Booked", className: "bg-amber-500 text-white" },
+                      revenue: { label: "Team",  className: "bg-violet-600 text-white" },
+                      normal:  { label: "",      className: "" },
+                    };
+                    const pc = priorityCfg[priorityKey];
+
+                    // ── Activity strip (derived from message count, seeded by id) ──
+                    const msgCount = conversation.messages?.length ?? 0;
+                    const activityValues = Array.from({ length: 6 }, (_, i) =>
+                      Math.max(3, ((conversation.id * 7 + i * 13 + msgCount * 3) % 16) + 3)
+                    );
+
+                    // ── Unread count ──
+                    const unreadCount = (conversation as any).unreadCount ?? (isUnread ? 1 : 0);
+
+                    // ── Avatar ring color keyed to status ──
+                    const ringColorMap: Record<StatusKey, string> = {
+                      new_inquiry:    "ring-emerald-300 shadow-emerald-100",
+                      waiting_on_you: "ring-amber-400 shadow-amber-100",
+                      hot_lead:       "ring-orange-400 shadow-orange-100",
+                      slow_response:  "ring-rose-400 shadow-rose-100",
+                      scheduling:     "ring-sky-300 shadow-sky-100",
+                      objection:      "ring-red-400 shadow-red-100",
+                      post_job:       "ring-violet-300 shadow-violet-100",
+                      happy_customer: "ring-yellow-300 shadow-yellow-100",
+                      cold_lead:      "ring-slate-300 shadow-slate-100",
+                      solved:         "ring-slate-200 shadow-slate-100",
+                      act_now:        "ring-rose-300 shadow-rose-100",
+                      your_turn:      "ring-amber-400 shadow-amber-100",
+                      their_turn:     "ring-blue-300 shadow-blue-100",
+                      monitor:        "ring-slate-300 shadow-slate-100",
+                      resolved:       "ring-slate-200 shadow-slate-100",
+                    };
+                    const ringColor = ringColorMap[statusKey];
+                    // ── Note line: directional action hint ──
+                    const noteText = sc.action;
+                    const isResolvingThis = resolvingId === conversation.id;
+                    const linkedSessionId = (conversation as any).linkedSessionId ?? null;
+                    return (
+                      <motion.div
+                        key={conversation.id}
+                        layout
+                        animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.16, ease: [.2,.8,.2,1] }}
+                        className="group relative rounded-[22px]"
+                      >
+                      <motion.button
+                        whileHover={{ y: -1, transition: { duration: 0.12, ease: [.2,.8,.2,1] } }}
+                        onClick={() => {
+                          setSelectedId(conversation.id);
+                          userNavigatedToId.current = conversation.id;
+                          triggerAutoDraft(conversation);
+                        }}
+                        className="w-full text-left relative"
+                        style={{
+                          borderRadius: '22px',
+                          padding: '16px 14px 16px 16px',
+                          border: 'none',
+                          minHeight: 'unset',
+                          boxShadow: isSelected ? '0 18px 45px rgba(15,23,42,.09)' : isUnread ? '0 8px 22px rgba(15,23,42,.05)' : 'none',
+                          background: isSelected ? '#FFFFFF' : isUnread ? '#FFFFFF' : 'transparent',
+                        }}
+                      >
+                        {/* Selected accent bar */}
+                        {isSelected && (
+                          <div style={{position:'absolute', left:0, top:'16px', bottom:'16px', width:'4px', borderRadius:'999px', background:'linear-gradient(180deg,#FF5A1F,#FF8A4C)'}} />
+                        )}
+                        {/* Row grid: avatar | content | time */}
+                        <div style={{display:'grid', gridTemplateColumns:'36px 1fr auto', columnGap:'8px', alignItems:'start'}}>
+                          {/* Avatar */}
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'36px', height:'36px', borderRadius:'18px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.7) brightness(.97)'}}>
+                            {initials}
+                          </div>
+
+                          {/* Content: name + metadata + preview + status */}
+                          <div className="min-w-0">
+                            <div className="flex items-center" style={{gap:'6px'}}>
+                              <span style={{fontSize:'15px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
+                            </div>
+                            <div style={{marginTop:'2px', fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                              {conversation.service || conversation.location || ''}
+                            </div>
+                          </div>
+
+                          {/* Timestamp — top right */}
+                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0'}}>
+                            {conversation.lastMsgTs
+                              ? (() => {
+                                  const d = new Date(conversation.lastMsgTs);
+                                  const now = new Date();
+                                  const isToday = d.toDateString() === now.toDateString();
+                                  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+                                  const isYesterday = d.toDateString() === yesterday.toDateString();
+                                  if (isToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+                                  if (isYesterday) return "Yesterday";
+                                  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+                                })()
+                              : conversation.wait
+                            }
+                          </div>
+                        </div>
+
+                        {/* Row 2: Message preview — spans content + time columns */}
+                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#101828' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+
+                        {/* Row 3: Status pill — minimal outlined style matching target screenshot */}
+                        <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
+                          <div style={{
+                            height:'26px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:850, display:'inline-flex', alignItems:'center', gap:'4px',
+                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#0F8A52' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#C2410C' : '#475467',
+                            background: (statusKey === 'resolved' || statusKey === 'solved') ? '#EAF8F0' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#FFF1E8' : '#F2F4F7',
+                            border: 'none',
+                          }}>
+                            {(statusKey === 'resolved' || statusKey === 'solved') && <span style={{fontSize:'13px', lineHeight:1}}>✓</span>}
+                            {sc.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
+                          </div>
+                          {/* Job value */}
+                          {conversation.amount && (
+                            <span className="text-[12px] text-slate-500 font-medium">{conversation.amount} job</span>
+                          )}
+                          {/* Linked badge */}
+                          {linkedSessionId && (
+                            <div className="ml-auto inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                              <Link2 className="h-3 w-3" />
+                              Linked
+                            </div>
+                          )}
+                        </div>
+                      </motion.button>
+                      {/* Subtle resolve button — only on unresolved cards */}
+                      {!isResolved && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resolveSession.mutate({ sessionId: conversation.id });
+                          }}
+                          className="absolute right-3 top-3 rounded-lg bg-white/80 border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-500 opacity-0 group-hover:opacity-100 shadow-sm transition-all hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                        >
+                          Resolve
+                        </button>
+                      )}
+                      {/* Celebration overlay */}
+                      <AnimatePresence>
+                        {isResolvingThis && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[24px]"
+                          >
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.18 }}
+                              className="absolute inset-0 bg-violet-400/10"
+                            />
+                            {[...Array(18)].map((_, i) => {
+                              const x = ((i % 6) - 2.5) * 28;
+                              const y = Math.floor(i / 6) * 10;
+                              return (
+                                <motion.div
+                                  key={i}
+                                  initial={{ x: 0, y: 0, opacity: 0, scale: 0.4, rotate: 0 }}
+                                  animate={{ x, y: -40 - y, opacity: [0, 1, 0], scale: [0.4, 1, 0.8], rotate: 140 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.8, delay: i * 0.015 }}
+                                  className="absolute left-1/2 top-1/2 -ml-2 -mt-2 text-violet-500"
+                                >
+                                  <Sparkles className="h-4 w-4" />
+                                </motion.div>
+                              );
+                            })}
+                            <motion.div
+                              initial={{ scale: 0.6, opacity: 0, y: 6 }}
+                              animate={{ scale: [0.6, 1.08, 1], opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{ duration: 0.45 }}
+                              className="absolute inset-0 flex items-center justify-center"
+                            >
+                              <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">
+                                Resolved ✨
+                              </div>
+                            </motion.div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
           <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FCFCFD', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
@@ -2113,11 +2205,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
             </CardContent>
           </Card>
 
-
-                  </div>
-                  {hasSelection && (
-                    <>
-                      <div style={{flex:1, minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column'}}>
           {/* ── CENTER: Thread ── */}
           <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'linear-gradient(180deg,#FCFCFD 0%,#F8F9FC 100%)', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
@@ -3345,9 +3432,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
             </CardContent>
           </Card>
 
-                      </div>
-                      <div style={{flex:'0 0 280px', minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column'}}>
-
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
           <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FBFBFC', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
@@ -4061,2018 +4145,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </>
             )}
           </div></div>
-
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                /* Kanban view */
-                <div style={{flex:1, minWidth:0, display:'flex', gap:'16px', overflow:'hidden'}}>
-                  {/* Kanban board */}
-                  <div style={{flex:1, minWidth:0, display:'flex', flexDirection:'column', overflow:'hidden', background:'#fff', borderRadius:'18px', border:'1px solid #e5e7ee'}}>
-                    {/* Topbar */}
-                    <div style={{height:'56px', borderBottom:'1px solid #e5e7ee', padding:'0 18px', display:'flex', alignItems:'center', gap:'10px', flexShrink:0}}>
-                      <h2 style={{margin:0, fontSize:'18px', fontWeight:900, letterSpacing:'-0.03em', color:'#181a24', marginRight:'auto'}}>
-                        {kanbanFilter === 'all' ? 'All Conversations' : kanbanFilter === 'needs-response' ? 'Needs Response' : kanbanFilter === 'unanswered' ? 'Unanswered' : kanbanFilter === 'hot' ? 'Hot Leads' : 'All Conversations'}
-                      </h2>
-                      <div style={{background:'#11131a', color:'white', height:'24px', padding:'0 10px', borderRadius:'999px', fontSize:'11px', fontWeight:700, display:'flex', alignItems:'center'}}>
-                        {sidebarFiltered.length} open
-                      </div>
-                    </div>
-                    {/* Search */}
-                    <div style={{padding:'10px 14px', borderBottom:'1px solid #e5e7ee', flexShrink:0}}>
-                      <div style={{position:'relative'}}>
-                        <Search className="h-4 w-4 absolute" style={{left:'12px', top:'50%', transform:'translateY(-50%)', color:'#9aa3b2'}} />
-                        <Input
-                          value={clientQuery}
-                          onChange={(e) => setClientQuery(e.target.value)}
-                          placeholder="Search conversations..."
-                          style={{height:'34px', borderRadius:'9px', background:'#fff', border:'1px solid #e1e4ea', paddingLeft:'34px', paddingRight:'12px', fontSize:'13px', color:'#181a24', boxShadow:'none'}}
-                          className="placeholder:text-[#9aa3b2] focus-visible:ring-0"
-                        />
-                      </div>
-                    </div>
-                    {/* 4-column board */}
-                    <div style={{flex:1, overflowX:'auto', overflowY:'hidden', padding:'12px'}}>
-                      <div style={{display:'grid', gridTemplateColumns:'repeat(4, minmax(200px, 1fr))', gap:'10px', height:'100%'}}>
-                        {kanbanColumns.map((col) => (
-                          <div key={col.id} style={{background:'#f1f2f5', border:'1px solid #e0e3e8', borderRadius:'14px', padding:'10px', display:'flex', flexDirection:'column', minHeight:0, overflow:'hidden'}}>
-                            <div style={{display:'flex', alignItems:'center', gap:'8px', padding:'4px 4px 10px', flexShrink:0}}>
-                              <span style={{width:'8px', height:'8px', borderRadius:'50%', background:col.dotColor, flexShrink:0, display:'inline-block'}} />
-                              <span style={{fontSize:'13px', fontWeight:800, color:'#181a24'}}>{col.label}</span>
-                              <span style={{marginLeft:'auto', color:'#9aa0ab', fontSize:'12px', fontWeight:700}}>{col.convs.length}</span>
-                            </div>
-                            <div className="cs-inbox-scroll" style={{flex:1, overflowY:'auto', paddingRight:'2px'}}>
-                              {col.convs.length === 0 && (
-                                <div style={{textAlign:'center', color:'#9aa0aa', padding:'28px 8px', fontSize:'12px'}}>No conversations</div>
-                              )}
-                              {col.convs.map(conv => renderKanbanCard(conv))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Thread + Right rail — shown when a card is selected */}
-                  {hasSelection && (
-                    <>
-                      <div style={{flex:'0 0 minmax(0,1fr)', width:'clamp(320px, 30vw, 480px)', minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column'}}>
-          {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'linear-gradient(180deg,#FCFCFD 0%,#F8F9FC 100%)', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0}}>
-            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              {/* ── Chat header ── */}
-              <div style={{height:'88px',padding:'0 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'16px',flexShrink:0}}>
-                <div className="flex items-center justify-between gap-3 w-full">
-                  {/* Left: avatar + name stack */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    {/* Circular avatar */}
-                    {selected && (() => {
-                      const gradientPalette = [
-                        "from-violet-500 to-fuchsia-500",
-                        "from-rose-500 to-orange-400",
-                        "from-emerald-500 to-teal-500",
-                        "from-sky-500 to-cyan-500",
-                        "from-amber-500 to-yellow-400",
-                        "from-pink-500 to-rose-400",
-                        "from-indigo-500 to-blue-500",
-                        "from-teal-500 to-green-500",
-                      ];
-                      const ini = selected.initials || "?";
-                      const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
-                      return (
-                        <div className={`shrink-0 flex items-center justify-center bg-gradient-to-br ${gradientPalette[idx]} font-bold text-white`} style={{width:'44px',height:'44px',borderRadius:'18px',fontSize:'15px',fontWeight:700}}>
-                          {ini}
-                        </div>
-                      );
-                    })()}
-                    {/* Name + meta stack */}
-                    <div className="min-w-0">
-                      {/* Name with inline edit */}
-                      {editingName ? (
-                        <form
-                          className="flex items-center gap-2"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            if (selected.id > 0) updateCsName.mutate({ sessionId: selected.id, name: nameInput });
-                          }}
-                        >
-                          <Input
-                            autoFocus
-                            value={nameInput}
-                            onChange={(e) => setNameInput(e.target.value)}
-                            className="h-7 text-sm font-semibold w-40"
-                            placeholder="Enter name…"
-                          />
-                          <Button type="submit" size="icon" variant="ghost" className="h-6 w-6 text-emerald-600" disabled={updateCsName.isPending}>
-                            <Check className="h-3 w-3" />
-                          </Button>
-                          <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-slate-400" onClick={() => setEditingName(false)}>
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </form>
-                      ) : (
-                        <div className="flex items-center gap-1.5 group">
-                          <h2 style={{fontSize:'18px',fontWeight:900,color:'#101828',lineHeight:1.2,letterSpacing:'-0.03em'}} className="truncate">{selected.name}</h2>
-                          <button
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-500"
-                            onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
-                            title="Edit name"
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                        </div>
-                      )}
-                      {/* Sub-line: phone + queue badge */}
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {selected.phone && <span style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>{selected.phone}</span>}
-                        {selected.phone && selected.queue && <span style={{color:'#c0c6d0',fontSize:'12px'}}>·</span>}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Badge className={`rounded-full border cursor-pointer text-[10px] px-2 py-0 h-4 ${tone.tone} hover:opacity-80 transition-opacity`}>
-                              {selected.queue || "Set status"}
-                            </Badge>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-44">
-                            {QUEUES.map((q) => (
-                              <DropdownMenuItem
-                                key={q}
-                                onClick={() => {
-                                  if (selected.id > 0) updateCsQueue.mutate({ sessionId: selected.id, queue: q });
-                                }}
-                                className={selected.queue === q ? "font-semibold" : ""}
-                              >
-                                <span className={`mr-2 h-2 w-2 rounded-full inline-block ${queueStyles[q].dot}`} />
-                                {q}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        {selected.amount && <><span className="text-slate-200">·</span><span className="text-[11px] text-slate-400">{selected.amount}</span></>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: action icons in a compact rounded pill row */}
-                  <div style={{display:'flex',alignItems:'center',gap:'8px',flexShrink:0}}>
-                    {/* AI Call — soft green tint, phone+sparkle icon (Option B) */}
-                    {selected?.phone && (
-                      <>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => setShowAICall(v => !v)}
-                              style={{width:'44px',height:'44px',borderRadius:'14px',background:'#f0fdf4',border:'1px solid rgba(34,197,94,.2)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#16a34a',transition:'all 0.15s',position:'relative'}}
-                              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='#dcfce7';(e.currentTarget as HTMLElement).style.boxShadow='0 4px 14px rgba(34,197,94,.18)';}}
-                              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#f0fdf4';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
-                            >
-                              <Phone className="h-4 w-4" />
-                              <Sparkles style={{position:'absolute',top:'7px',right:'7px',width:'9px',height:'9px',color:'#16a34a'}} />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">AI call</TooltipContent>
-                        </Tooltip>
-                        <div style={{display:'none'}}>
-                          <CustomerMentionChip name={selected.name} phone={selected.phone} openToCall={showAICall} onClose={() => setShowAICall(false)} />
-                        </div>
-                      </>
-                    )}
-                    {/* Sync from OpenPhone */}
-                    {selected && selected.id > 0 && selected.phone && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
-                            disabled={syncOutbound.isPending}
-                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
-                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
-                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
-                          >
-                            <RefreshCw className={`h-4 w-4 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">{syncOutbound.isPending ? 'Syncing…' : 'Sync OpenPhone messages'}</TooltipContent>
-                      </Tooltip>
-                    )}
-                    {/* New SMS */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setNewConvOpen(true)}
-                          style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
-                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
-                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
-                        >
-                          <PenSquare className="h-4 w-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">New SMS conversation</TooltipContent>
-                    </Tooltip>
-                    {/* Resolve */}
-                    {selected && selected.id > 0 && !(selected as any).csResolvedAt && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => resolveSession.mutate({ sessionId: selected.id })}
-                            disabled={resolveSession.isPending}
-                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
-                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
-                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">{resolveSession.isPending ? 'Resolving…' : 'Resolve conversation'}</TooltipContent>
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'linear-gradient(180deg,#FCFCFD 0%,#F8F9FC 100%)',padding:'32px 32px 24px'}} ref={scrollRef}>
-                <motion.div
-                  key={selected?.id ?? 0}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.15 }}
-                  style={{display:'flex',flexDirection:'column',gap:'24px'}}
-                >
-                  {/* Merge SMS messages and call recordings into a single chronological timeline */}
-                  {(() => {
-                    type SmsItem = { kind: "sms"; ts: number; message: (typeof selected)["messages"][0]; idx: number };
-                    type CallItem = { kind: "call"; ts: number; rec: (typeof callRecordings)[0] };
-                    type AiCallItem = { kind: "aicall"; ts: number; rec: (typeof aiCallRecordings)[0] };
-                    type TimelineItem = SmsItem | CallItem | AiCallItem;
-
-                    // Build SMS items with real ts from messageHistory (already passed through)
-                    const smsMsgs = selectedWithDetail?.messages ?? [];
-                    const smsItems: SmsItem[] = smsMsgs.map((message, idx) => ({
-                      kind: "sms" as const,
-                      ts: message.ts ?? idx, // real epoch ms if available, else index
-                      message,
-                      idx,
-                    }));
-
-                    // Build call items with real epoch ms from callStartedAt
-                    const callItems: CallItem[] = (callRecordings ?? []).map((rec) => ({
-                      kind: "call" as const,
-                      ts: rec.callStartedAt instanceof Date ? rec.callStartedAt.getTime() : new Date(rec.callStartedAt as string).getTime(),
-                      rec,
-                    }));
-
-                    // Build AI call items from callLog (firedAt is epoch ms)
-                    const aiCallItems: AiCallItem[] = (aiCallRecordings ?? []).map((rec) => ({
-                      kind: "aicall" as const,
-                      ts: rec.firedAt ?? 0,
-                      rec,
-                    }));
-                    // Merge sort all lists by ts
-                    const allItems: TimelineItem[] = [...smsItems, ...callItems, ...aiCallItems].sort((a, b) => a.ts - b.ts);
-
-                    // Track last date for date separators
-                    let lastDateStr = "";
-
-                    return allItems.flatMap((item, i) => {
-                      const itemDate = new Date(item.ts);
-                      const dateStr = itemDate.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
-                      const today = new Date();
-                      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-                      const isToday = itemDate.toDateString() === today.toDateString();
-                      const isYesterday = itemDate.toDateString() === yesterday.toDateString();
-                      const displayDate = isToday ? "Today" : isYesterday ? "Yesterday" : dateStr;
-                      const showSeparator = item.ts > 100 && dateStr !== lastDateStr;
-                      if (showSeparator) lastDateStr = dateStr;
-                      const separator = showSeparator ? (
-                        <div key={`sep-${dateStr}`} className="flex items-center gap-3 my-6">
-                          <div className="flex-1 h-px" style={{background:'#E6E9EE'}} />
-                          <span style={{fontSize:'11px', fontWeight:900, letterSpacing:'.22em', textTransform:'uppercase', color:'#98A2B3', whiteSpace:'nowrap'}}>{displayDate}</span>
-                          <div className="flex-1 h-px" style={{background:'#E6E9EE'}} />
-                        </div>
-                      ) : null;
-                      const elements: React.ReactNode[] = separator ? [separator] : [];
-
-                      if (item.kind === "call") {
-                        const rec = item.rec;
-                        const durationStr = rec.durationSeconds
-                          ? rec.durationSeconds >= 60
-                            ? `${Math.floor(rec.durationSeconds / 60)}m ${rec.durationSeconds % 60}s`
-                            : `${rec.durationSeconds}s`
-                          : "";
-                        const callTime = rec.callStartedAt instanceof Date
-                          ? rec.callStartedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                          : new Date(rec.callStartedAt as string).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                        let debriefParsed: { grade?: string; wentWell?: string; improve?: string; nextLine?: string; summary?: string } | null = null;
-                        try { if (rec.callDebrief) debriefParsed = JSON.parse(rec.callDebrief as string); } catch { /* ignore */ }
-                        const summary = debriefParsed?.summary || debriefParsed?.wentWell || null;
-                        const grade = debriefParsed?.grade?.toUpperCase() ?? null;
-                        const gradeColor: Record<string, string> = { A: "bg-emerald-500", B: "bg-blue-500", C: "bg-amber-500", D: "bg-orange-500", F: "bg-red-500" };
-                        const gradeBg = grade ? (gradeColor[grade] ?? "bg-slate-500") : null;
-                        const hasRecording = !!(rec.recordingUrl && !(rec.recordingUrl as string).includes("synthetic-backfill"));
-
-                        // Parse transcript for expandable viewer
-                        type TranscriptTurn = { identifier: string; content: string; start?: number };
-                        let transcriptTurns: TranscriptTurn[] = [];
-                        try { if (rec.transcript) transcriptTurns = JSON.parse(rec.transcript as string); } catch { /* ignore */ }
-
-                        const isExpanded = expandedCallIds.has(rec.id);
-                        const isPlaying = playingCallId === rec.id;
-                        const isInbound = rec.direction === "incoming";
-
-                        // Static waveform bar heights — decorative, WhatsApp-style
-                        const waveHeights = [3,5,8,12,16,20,14,18,22,16,10,14,20,24,18,12,16,20,14,8,12,18,22,16,10,6,10,14,18,12,8,5];
-
-                        elements.push(
-                          <motion.div
-                            key={`call-${rec.id}`}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                            className="flex justify-start"
-                          >
-                            <div className="max-w-[72%] min-w-[220px]">
-                              {/* ── Compact bubble (always visible) ── */}
-                              <div
-                                className={`rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 ${
-                                  isInbound
-                                    ? "bg-blue-50 border border-blue-100 hover:bg-blue-100"
-                                    : "bg-slate-100 border border-slate-200 hover:bg-slate-200"
-                                }`}
-                                onClick={() => toggleCallExpanded(rec.id)}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  {/* Play/Pause button */}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (!hasRecording) return;
-                                      const audio = callAudioRefs.current[rec.id];
-                                      if (!audio) return;
-                                      if (isPlaying) {
-                                        audio.pause();
-                                        setPlayingCallId(null);
-                                      } else {
-                                        // Pause any other playing audio
-                                        Object.entries(callAudioRefs.current).forEach(([id, el]) => {
-                                          if (Number(id) !== rec.id && el) el.pause();
-                                        });
-                                        audio.play();
-                                        setPlayingCallId(rec.id);
-                                      }
-                                    }}
-                                    className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                                      hasRecording
-                                        ? isInbound
-                                          ? "bg-blue-500 hover:bg-blue-600 text-white"
-                                          : "bg-slate-600 hover:bg-slate-700 text-white"
-                                        : "bg-slate-300 text-slate-400 cursor-not-allowed"
-                                    }`}
-                                  >
-                                    {isPlaying
-                                      ? <Pause className="h-3.5 w-3.5" />
-                                      : <Play className="h-3.5 w-3.5 ml-0.5" />}
-                                  </button>
-
-                                  {/* Waveform */}
-                                  <div className="flex items-center gap-[2px] flex-1 h-7">
-                                    {waveHeights.map((h, wi) => (
-                                      <div
-                                        key={wi}
-                                        className={`rounded-full w-[3px] transition-all ${
-                                          isInbound ? "bg-blue-400" : "bg-slate-400"
-                                        }`}
-                                        style={{ height: `${h}px` }}
-                                      />
-                                    ))}
-                                  </div>
-
-                                  {/* Duration + expand chevron */}
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className={`text-[11px] font-medium tabular-nums ${
-                                      isInbound ? "text-blue-600" : "text-slate-500"
-                                    }`}>
-                                      {durationStr || "0:00"}
-                                    </span>
-                                    {isExpanded
-                                      ? <ChevronUp className={`h-3.5 w-3.5 ${isInbound ? "text-blue-400" : "text-slate-400"}`} />
-                                      : <ChevronDown className={`h-3.5 w-3.5 ${isInbound ? "text-blue-400" : "text-slate-400"}`} />}
-                                  </div>
-                                </div>
-
-                                {/* Hidden audio element */}
-                                {hasRecording && (
-                                  <audio
-                                    ref={(el) => { callAudioRefs.current[rec.id] = el; }}
-                                    src={proxyRecordingUrl(rec.recordingUrl)!}
-                                    onEnded={() => setPlayingCallId(null)}
-                                    onPause={() => { if (playingCallId === rec.id) setPlayingCallId(null); }}
-                                    className="hidden"
-                                  />
-                                )}
-                              </div>
-
-                              {/* ── Expanded detail panel ── */}
-                              <AnimatePresence>
-                                {isExpanded && (
-                                  <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "auto" }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    transition={{ duration: 0.18, ease: "easeOut" }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className={`mt-1 rounded-xl border px-3 py-2.5 ${
-                                      isInbound ? "bg-blue-50 border-blue-100" : "bg-slate-50 border-slate-200"
-                                    }`}>
-                                      {/* Call meta */}
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Phone className={`h-3 w-3 shrink-0 ${isInbound ? "text-blue-500" : "text-slate-500"}`} />
-                                        <span className="text-xs font-medium text-slate-700">
-                                          {isInbound ? "Inbound" : "Outbound"} call &middot; {rec.callerPhone}
-                                        </span>
-                                        {rec.status === "no-answer" && (
-                                          <span className="text-[10px] text-red-500 font-medium">No answer</span>
-                                        )}
-                                        {grade && (
-                                          <span className={`ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${gradeBg}`}>
-                                            {grade}
-                                          </span>
-                                        )}
-                                        <span className="ml-auto text-[10px] text-slate-400">{callTime}</span>
-                                      </div>
-
-                                      {/* AI summary */}
-                                      {summary && (
-                                        <p className="text-xs text-slate-600 leading-relaxed mb-2 border-t border-slate-100 pt-2">{summary}</p>
-                                      )}
-
-                                      {/* No-recording pill */}
-                                      {!hasRecording && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 mb-1.5">
-                                          <Phone className="h-2.5 w-2.5" /> No recording
-                                        </span>
-                                      )}
-
-                                      {/* Transcript */}
-                                      {transcriptTurns.length > 0 && (
-                                        <details className="mt-1">
-                                          <summary className={`cursor-pointer text-[10px] font-semibold uppercase tracking-widest select-none ${
-                                            isInbound ? "text-blue-600 hover:text-blue-800" : "text-violet-600 hover:text-violet-800"
-                                          }`}>
-                                            ▶ Transcript ({transcriptTurns.length} turns)
-                                          </summary>
-                                          <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                                            {transcriptTurns.map((turn, ti) => (
-                                              <div key={ti} className="text-xs">
-                                                <span className={`font-semibold mr-1 ${
-                                                  turn.identifier?.toLowerCase().includes("agent") || turn.identifier?.toLowerCase().includes("assistant")
-                                                    ? isInbound ? "text-blue-600" : "text-violet-600"
-                                                    : "text-slate-500"
-                                                }`}>
-                                                  {turn.identifier}:
-                                                </span>
-                                                <span className="text-slate-600">{turn.content}</span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </details>
-                                      )}
-
-                                      {!summary && !hasRecording && transcriptTurns.length === 0 && (
-                                        <p className="text-xs text-slate-400 italic">No details available yet</p>
-                                      )}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-
-                              {/* Timestamp below bubble */}
-                              <p className="text-[10px] text-slate-400 mt-1 ml-1">{callTime}</p>
-                            </div>
-                          </motion.div>
-                        );
-                                                return elements;
-                      }
-                      // AI call bubble
-                      if (item.kind === "aicall") {
-                        const aiRec = item.rec;
-                        const aiHasRecording = !!aiRec.recordingUrl;
-                        const aiDuration = aiRec.durationSeconds ?? 0;
-                        const aiDurStr = aiDuration > 0 ? `${Math.floor(aiDuration / 60)}:${String(aiDuration % 60).padStart(2, "0")}` : "0:00";
-                        const aiTime = aiRec.firedAt ? new Date(aiRec.firedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
-                        const aiIsExpanded = expandedAiCallId === `ai-${aiRec.id}`;
-                        const aiIsPlaying = playingAiCallId === `ai-${aiRec.id}`;
-                        const aiWaveHeights = [3, 5, 8, 6, 10, 7, 4, 9, 6, 5, 8, 4, 7, 6, 9, 5, 8, 4, 6, 7];
-                        // Bilingual transcript logic (non-English calls only)
-                        const isSpanishCall = (aiRec as any).transcriptLanguage === "es";
-                        const showingOriginal = showOriginalTranscript[aiRec.id] ?? false;
-                        // For Spanish calls: show English translation by default, fall back to original if not ready
-                        const displayTranscript: string | null = isSpanishCall && !showingOriginal
-                          ? ((aiRec as any).transcriptEnglish as string | null) ?? (aiRec.transcript as string | null)
-                          : (aiRec.transcript as string | null);
-                        let aiTranscriptTurns: { identifier: string; content: string }[] = [];
-                        let aiTranscriptRaw: string | null = null;
-                        try {
-                          if (displayTranscript) {
-                            const parsed = JSON.parse(displayTranscript);
-                            if (Array.isArray(parsed)) aiTranscriptTurns = parsed;
-                            else aiTranscriptRaw = displayTranscript;
-                          }
-                        } catch { aiTranscriptRaw = displayTranscript ?? null; }
-                        elements.push(
-                          <motion.div
-                            key={`aicall-${aiRec.id}`}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                            className="flex justify-end"
-                          >
-                            <div style={{ maxWidth: "72%" }}>
-                              <div
-                                className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 cursor-pointer select-none shadow-sm"
-                                onClick={() => setExpandedAiCallId(aiIsExpanded ? null : `ai-${aiRec.id}`)}
-                              >
-                                {/* Header row */}
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <Sparkles className="h-3 w-3 text-emerald-500 shrink-0" />
-                                    <span className="text-[11px] font-semibold text-emerald-700">AI Call</span>
-                                  </div>
-                                  {aiRec.status === "no_answer" && (
-                                    <span className="text-[10px] text-red-500 font-medium">No answer</span>
-                                  )}
-                                  {aiRec.status === "voicemail" && (
-                                    <span className="text-[10px] text-amber-500 font-medium">Voicemail</span>
-                                  )}
-                                </div>
-                                {/* Waveform + play + duration */}
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (!aiHasRecording) return;
-                                      const audio = aiCallAudioRefs.current[`ai-${aiRec.id}`];
-                                      if (!audio) return;
-                                      if (aiIsPlaying) { audio.pause(); setPlayingAiCallId(null); }
-                                      else { audio.play(); setPlayingAiCallId(`ai-${aiRec.id}`); }
-                                    }}
-                                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                                      aiHasRecording ? "bg-emerald-500 hover:bg-emerald-600" : "bg-slate-200 cursor-not-allowed"
-                                    }`}
-                                  >
-                                    {aiIsPlaying
-                                      ? <Pause className="h-3 w-3 text-white" />
-                                      : <Play className="h-3 w-3 text-white ml-0.5" />}
-                                  </button>
-                                  <div className="flex items-end gap-[2px] h-[18px]">
-                                    {aiWaveHeights.map((h, wi) => (
-                                      <div key={wi} className="rounded-full w-[3px] bg-emerald-400" style={{ height: `${h}px` }} />
-                                    ))}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className="text-[11px] font-medium tabular-nums text-emerald-600">{aiDurStr}</span>
-                                    {aiIsExpanded ? <ChevronUp className="h-3.5 w-3.5 text-emerald-400" /> : <ChevronDown className="h-3.5 w-3.5 text-emerald-400" />}
-                                  </div>
-                                </div>
-                                {aiHasRecording && (
-                                  <audio
-                                    ref={(el) => { aiCallAudioRefs.current[`ai-${aiRec.id}`] = el; }}
-                                    src={proxyRecordingUrl(aiRec.recordingUrl)!}
-                                    onEnded={() => setPlayingAiCallId(null)}
-                                    onPause={() => { if (playingAiCallId === `ai-${aiRec.id}`) setPlayingAiCallId(null); }}
-                                    className="hidden"
-                                  />
-                                )}
-                              </div>
-                              {/* Expanded detail */}
-                              <AnimatePresence>
-                                {aiIsExpanded && (
-                                  <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "auto" }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    transition={{ duration: 0.18, ease: "easeOut" }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="mt-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Sparkles className="h-3 w-3 text-emerald-500 shrink-0" />
-                                        <span className="text-xs font-medium text-slate-700">AI outbound call · {aiRec.calledPhone}</span>
-                                        <span className="ml-auto text-[10px] text-slate-400">{aiTime}</span>
-                                      </div>
-                                      {/* Spanish call badge + View Original toggle (non-English calls only) */}
-                                      {isSpanishCall && (
-                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                          <span className="text-[10px] text-slate-500">
-                                            🌎 Spanish call
-                                            {(aiRec as any).transcriptEnglish
-                                              ? (showingOriginal ? " · Showing original" : " · Showing English translation")
-                                              : ""}
-                                          </span>
-                                          {!(aiRec as any).transcriptEnglish && (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                translateCallTranscript.mutate({ callLogId: aiRec.id });
-                                              }}
-                                              disabled={translateCallTranscript.isPending}
-                                              className="text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2 shrink-0 disabled:opacity-50"
-                                            >
-                                              {translateCallTranscript.isPending ? "Translating..." : "Translate to English"}
-                                            </button>
-                                          )}
-                                          {(aiRec as any).transcriptEnglish && (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowOriginalTranscript((prev) => ({ ...prev, [aiRec.id]: !showingOriginal }));
-                                              }}
-                                              className="text-[10px] font-medium text-emerald-600 hover:text-emerald-800 underline underline-offset-2 shrink-0"
-                                            >
-                                              {showingOriginal ? "View English" : "View Original"}
-                                            </button>
-                                          )}
-                                        </div>
-                                      )}
-                                      {aiTranscriptTurns.length > 0 && (
-                                        <details className="mt-1">
-                                          <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest select-none text-emerald-600 hover:text-emerald-800">
-                                            ▶ Transcript ({aiTranscriptTurns.length} turns)
-                                          </summary>
-                                          <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                                            {aiTranscriptTurns.map((turn, ti) => (
-                                              <div key={ti} className="text-xs">
-                                                <span className="font-semibold mr-1 text-emerald-600">{turn.identifier}:</span>
-                                                <span className="text-slate-600">{turn.content}</span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </details>
-                                      )}
-                                      {aiTranscriptTurns.length === 0 && aiTranscriptRaw && (
-                                        <pre className="text-[11px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed mt-1">{aiTranscriptRaw}</pre>
-                                      )}
-                                      {aiTranscriptTurns.length === 0 && !aiTranscriptRaw && (
-                                        <p className="text-xs text-slate-400 italic">No transcript available yet</p>
-                                      )}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                              <p className="text-[10px] text-slate-400 mt-1 mr-1 text-right">{aiTime}</p>
-                            </div>
-                          </motion.div>
-                        );
-                        return elements;
-                      }
-                      // SMS bubble
-                      const { message, idx } = item;
-
-                      // Internal note — amber sticky-note bubble, centered, never sent to customer
-                      if (message.sender === "note") {
-                        elements.push(
-                          <motion.div
-                            key={`${message.time}-${idx}-note`}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                            className="flex justify-center"
-                          >
-                            <div className="max-w-[80%] rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm">
-                              <div className="flex items-center gap-1.5 mb-1.5">
-                                <Lock className="h-3 w-3 text-amber-600 shrink-0" />
-                                <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">Internal note</span>
-                                {message.senderName && (
-                                  <span className="text-[10px] text-amber-500 ml-1">· {message.senderName}</span>
-                                )}
-                                <span className="ml-auto text-[10px] text-amber-400">{message.time}</span>
-                              </div>
-                              <div className="text-sm text-amber-900 leading-relaxed" style={{wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>
-                            </div>
-                          </motion.div>
-                        );
-                        return elements;
-                      }
-
-                      const isClient = message.sender === "client";
-                      const displayName = message.senderName && message.senderName !== "OpenPhone"
-                        ? message.senderName
-                        : message.sender === "agent" ? "Agent" : message.sender === "client" ? "Customer" : (message.sender as string);
-                      const isAgent = message.sender === "agent";
-                      const photoUrl = isAgent && displayName !== "Agent" ? (agentPhotoMap[displayName] ?? null) : null;
-                      const initials = displayName.split(/\s+/).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                      const color = senderHex(displayName);
-
-                      if (isClient) {
-                        elements.push(
-                          <div key={`${message.time}-${idx}`} style={{maxWidth:'66%',display:'flex',flexDirection:'column',gap:'6px'}}>
-                            {/* Label outside bubble */}
-                            <div style={{fontSize:'10px',fontWeight:900,color:'#98A2B3',textTransform:'uppercase',letterSpacing:'.22em'}}>Customer</div>
-                            {/* Bubble */}
-                            <motion.div
-                              className="group"
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                              style={{background:'#FFFFFF',borderRadius:'22px',padding:'16px 20px',boxShadow:'0 8px 22px rgba(15,23,42,.05)',border:'1px solid rgba(16,24,40,.06)'}}
-                            >
-                              {message.text && <div style={{fontSize:'15px',lineHeight:1.55,color:'#101828',wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>}
-                              {message.media && message.media.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {message.media.map((url, mi) => (
-                                    <button key={mi} type="button" onClick={() => openLightbox(message.media!, mi)} className="focus:outline-none" title="Click to enlarge">
-                                      <img src={url} alt="MMS photo" className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity" />
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                              {message.text && message.text.trim().length > 0 && (
-                                <button
-                                  onClick={() => { setComplaintApplyCharge(true); setComplaintDialogMsg({ text: message.text!, cleanerJobId: clientProfile?.todayJob?.id ?? null }); }}
-                                  className="mt-2 flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition opacity-0 group-hover:opacity-100"
-                                  title="Flag as customer complaint"
-                                >
-                                  <MessageSquareWarning className="h-3 w-3" />
-                                  Flag complaint
-                                </button>
-                              )}
-                            </motion.div>
-                            {/* Timestamp outside bubble */}
-                            <div style={{fontSize:'13px',color:'#98a2b3'}}>{message.time}</div>
-                          </div>
-                        );
-                      } else if (isAgent) {
-                        elements.push(
-                          <div key={`${message.time}-${idx}`} style={{maxWidth:'66%',display:'flex',flexDirection:'column',gap:'6px',alignSelf:'flex-end',alignItems:'flex-end'}}>
-                            {/* Label outside bubble */}
-                            <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                              <div className="w-4 h-4 rounded-full overflow-hidden shrink-0" style={{boxShadow:'0 1px 3px rgba(0,0,0,.15)'}}>
-                                {photoUrl ? (
-                                  <img src={photoUrl} alt={displayName} className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: color }}>{initials}</div>
-                                )}
-                              </div>
-                              <span style={{fontSize:'10px',fontWeight:900,color:'#98A2B3',textTransform:'uppercase',letterSpacing:'.22em'}}>{displayName}</span>
-                            </div>
-                            {/* Bubble */}
-                            <motion.div
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                              style={{background:'linear-gradient(180deg,#1B2333 0%,#111827 100%)',borderRadius:'22px',padding:'16px 20px',boxShadow:'0 8px 24px rgba(15,23,42,.10)'}}
-                            >
-                              {message.text && <div style={{fontSize:'15px',fontWeight:500,color:'white',lineHeight:1.55,wordBreak:'break-word',overflowWrap:'anywhere',whiteSpace:'pre-wrap'}}>{linkifyText(message.text, false)}</div>}
-                              {message.media && message.media.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {message.media.map((url, mi) => (
-                                    <button key={mi} type="button" onClick={() => openLightbox(message.media!, mi)} className="focus:outline-none" title="Click to enlarge">
-                                      <img src={url} alt="MMS photo" className="max-w-[200px] max-h-[200px] rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity" />
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </motion.div>
-                            {/* Timestamp outside bubble */}
-                            <div style={{fontSize:'13px',color:'#98a2b3'}}>{message.time}</div>
-                          </div>
-                        );
-                      } else {
-                        elements.push(
-                          <motion.div
-                            key={`${message.time}-${idx}`}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                            className={`group max-w-[78%] rounded-[22px] border px-7 py-6 shadow-sm ${bubbleStyles(message.sender)}`}
-                          >
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-xs uppercase tracking-wide opacity-60">{displayName}</span>
-                            </div>
-                            {message.text && <div className="mt-1.5 text-sm leading-6" style={{wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>}
-                            {message.media && message.media.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {message.media.map((url, mi) => (
-                                  <button key={mi} type="button" onClick={() => openLightbox(message.media!, mi)} className="focus:outline-none" title="Click to enlarge">
-                                    <img src={url} alt="MMS photo" className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity" />
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            <div className="mt-2 flex items-center justify-between gap-2">
-                              <div className="text-xs opacity-60">{message.time}</div>
-                            </div>
-                          </motion.div>
-                        );
-                      }
-                      return elements;
-                    });
-                  })()}
-                  {/* ── Next Best Action — single contextual card ── */}
-                  {!isTeamsConv && (nbaLlmResult || nbaLlmLoading) && (() => {
-                    const ctaColorMap: Record<string, { bg: string; headerBg: string; border: string; icon: string; badge: string; iconBg: string; iconEl: React.ReactNode }> = {
-                      book:     { bg: "bg-emerald-50",  headerBg: "bg-emerald-600",  border: "border-emerald-500",  icon: "text-emerald-700",  badge: "bg-white/20 text-white",  iconBg: "bg-emerald-100",  iconEl: <CheckCircle2 className="h-5 w-5 text-emerald-700" /> },
-                      crm:      { bg: "bg-blue-50",     headerBg: "bg-blue-600",     border: "border-blue-500",     icon: "text-blue-700",     badge: "bg-white/20 text-white",  iconBg: "bg-blue-100",     iconEl: <ExternalLink className="h-5 w-5 text-blue-700" /> },
-                      call:     { bg: "bg-sky-50",      headerBg: "bg-sky-600",      border: "border-sky-500",      icon: "text-sky-700",      badge: "bg-white/20 text-white",  iconBg: "bg-sky-100",      iconEl: <Phone className="h-5 w-5 text-sky-700" /> },
-                      upsell:   { bg: "bg-violet-50",   headerBg: "bg-violet-600",   border: "border-violet-500",   icon: "text-violet-700",   badge: "bg-white/20 text-white",  iconBg: "bg-violet-100",   iconEl: <TrendingUp className="h-5 w-5 text-violet-700" /> },
-                      reply:    { bg: "bg-indigo-50",   headerBg: "bg-indigo-600",   border: "border-indigo-500",   icon: "text-indigo-700",   badge: "bg-white/20 text-white",  iconBg: "bg-indigo-100",   iconEl: <MessageSquare className="h-5 w-5 text-indigo-700" /> },
-                      review:   { bg: "bg-amber-50",    headerBg: "bg-amber-500",    border: "border-amber-400",    icon: "text-amber-700",    badge: "bg-white/20 text-white",  iconBg: "bg-amber-100",    iconEl: <Star className="h-5 w-5 text-amber-600" /> },
-                      referral: { bg: "bg-pink-50",     headerBg: "bg-pink-600",     border: "border-pink-500",     icon: "text-pink-700",     badge: "bg-white/20 text-white",  iconBg: "bg-pink-100",     iconEl: <Gift className="h-5 w-5 text-pink-600" /> },
-                      info:     { bg: "bg-slate-100",   headerBg: "bg-slate-600",    border: "border-slate-400",    icon: "text-slate-600",    badge: "bg-white/20 text-white",  iconBg: "bg-slate-200",    iconEl: <Brain className="h-5 w-5 text-slate-500" /> },
-                    };
-                    const cta = ctaColorMap[nbaLlmResult?.ctaType ?? "info"] ?? ctaColorMap.info;
-                    return (
-                      <div className={`mb-4 rounded-xl border-2 ${cta.border} overflow-hidden shadow-sm`}>
-                        {/* Solid colored header bar */}
-                        <div className={`px-3 py-2 ${cta.headerBg} flex items-center gap-2`}>
-                          <Brain className="h-3.5 w-3.5 text-white/80" />
-                          <span className="text-[10px] font-bold tracking-widest text-white uppercase">Next Best Action</span>
-                          {nbaLlmLoading && !nbaLlmResult && (
-                            <span className="ml-auto text-[9px] text-white/70 animate-pulse">Analyzing…</span>
-                          )}
-                        </div>
-                        {/* Content area */}
-                        {nbaLlmResult ? (
-                          <div className={`px-4 py-3 ${cta.bg} flex items-start gap-3`}>
-                            <div className={`shrink-0 mt-0.5 p-2 rounded-lg ${cta.iconBg}`}>{cta.iconEl}</div>
-                            <div className="flex-1 min-w-0">
-                              <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full mb-1.5 ${cta.headerBg} text-white`}>{nbaLlmResult.label}</span>
-                              <p className="text-[13px] font-semibold text-slate-900 leading-snug">{nbaLlmResult.instruction}</p>
-                              {nbaLlmResult.reason && (
-                                <p className="text-[11px] text-slate-500 mt-1.5 leading-snug italic">{nbaLlmResult.reason}</p>
-                              )}
-                              {nbaLlmResult.prefillScript && (
-                                <button
-                                  onClick={() => {
-                                    setCompose(nbaLlmResult.prefillScript!);
-                                    // scroll compose into view
-                                    setTimeout(() => {
-                                      const el = document.querySelector<HTMLTextAreaElement>('textarea[placeholder]');
-                                      el?.focus();
-                                    }, 50);
-                                  }}
-                                  className={`mt-2 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${cta.border} ${cta.headerBg} text-white hover:opacity-90 transition-opacity`}
-                                >
-                                  <PenSquare className="h-3 w-3" />
-                                  Use this script
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className={`px-4 py-4 ${cta.bg} flex items-center gap-3`}>
-                            <div className="h-8 w-8 bg-slate-200 rounded-lg animate-pulse shrink-0" />
-                            <div className="flex-1 space-y-2">
-                              <div className="h-3 w-28 bg-slate-200 rounded animate-pulse" />
-                              <div className="h-3.5 w-56 bg-slate-200 rounded animate-pulse" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  {/* ── Conversation Memory — horizontal pill chips ── */}
-                  {(memoryLoading || memoryBullets.length > 0) && (
-                    <div style={{paddingTop:'4px',paddingBottom:'16px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'10px'}}>
-                        <Sparkles style={{width:'11px',height:'11px',color:'#a78bfa',flexShrink:0}} />
-                        <span style={{fontSize:'10px',fontWeight:700,color:'#a78bfa',textTransform:'uppercase',letterSpacing:'.1em'}}>Conversation Memory</span>
-                        {memoryLoading && <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#c4b5fd',animation:'pulse 1.5s infinite',marginLeft:'2px'}} />}
-                      </div>
-                      {memoryLoading && memoryBullets.length === 0 ? (
-                        <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
-                          {[80,110,90].map((w,i) => (
-                            <div key={i} style={{height:'26px',width:`${w}px`,borderRadius:'100px',background:'#ede9fe',animation:'pulse 1.5s infinite'}} />
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
-                          {memoryBullets.map((bullet, i) => (
-                            <span key={i} style={{display:'inline-flex',alignItems:'center',height:'26px',padding:'0 10px',borderRadius:'100px',background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',fontSize:'12px',fontWeight:500,color:'#6d5acd',whiteSpace:'nowrap'}}>{bullet}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </motion.div>
-              </div>
-
-              {/* Typing indicator — shows when another agent is composing a reply */}
-              {typers.length > 0 && (
-                <div className="px-5 pb-1">
-                  <TypingBubble typers={typers} />
-                </div>
-              )}
-              {/* ── Compose area ── */}
-              <div
-                className={`shrink-0 transition-colors duration-200 ${composeMode === "note" ? "bg-amber-50/95" : "bg-white"}`}
-                style={{borderTop:`1px solid rgba(16,24,40,.06)`,padding:'16px 24px 24px'}}
-              >
-                {/* Floating panels (FAQ, Objections, WorldClass) */}
-                <div className="relative">
-                  <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
-                  <InsertResponseModal open={insertResponseOpen} onClose={() => setInsertResponseOpen(false)} onInsert={(text) => { setCompose(text); setInsertResponseOpen(false); }} customerFirstName={selected?.name ? selected.name.split(' ')[0] : undefined} />
-                  <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
-                  <WorldClassReplyPanel
-                    open={worldClassOpen}
-                    onClose={() => setWorldClassOpen(false)}
-                    onInsert={(text) => { setCompose(text); setWorldClassOpen(false); }}
-                    conversationContext={(selectedWithDetail?.messages ?? []).slice(-5).map(m =>
-                      `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`
-                    ).join("\n")}
-                    customerName={selected.name ?? ""}
-                    jobContext={jobContext}
-                  />
-                </div>
-
-                {/* Quick action chips */}
-                {selected.quickActions.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 px-5 pt-3 md:px-6">
-                    {selected.quickActions.map((action) => (
-                      <Button key={action} variant="outline" className="rounded-full h-7 text-xs px-3">
-                        {action}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Compose card */}
-                <div
-                  className="transition-all duration-200"
-                  style={{
-                    margin:'0',
-                    borderRadius:'28px',
-                    background: composeMode === 'note' ? '#fffbeb' : '#FAFBFC',
-                    boxShadow:'0 8px 22px rgba(15,23,42,.05)',
-                    border:`1px solid ${composeMode === 'note' ? 'rgba(251,191,36,.3)' : 'rgba(16,24,40,.06)'}`,
-                  }}
-                >
-
-                  {/* Top bar: note mode indicator OR world-class draft badge */}
-                  {composeMode === "note" && (
-                    <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">
-                      <StickyNote className="h-3.5 w-3.5 text-amber-600" />
-                      <span className="text-xs font-semibold text-amber-700">Internal note</span>
-                      <span className="text-xs text-amber-500">— only visible to agents, never sent to the customer</span>
-                    </div>
-                  )}
-                  {composeMode === "reply" && autoDraftLoading && (
-                    <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 text-xs font-medium text-violet-600">
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                      <span>AI is drafting a reply…</span>
-                    </div>
-                  )}
-                  {composeMode === "reply" && !autoDraftLoading && compose && (
-                    <div className="flex items-center gap-2 px-4 pt-3 pb-0">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
-                        <Sparkles className="h-3 w-3" />
-                        World-class draft
-                      </span>
-                      <span className="text-xs text-slate-400">Review before sending</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!selected) return;
-                          autoDraftedForId.current = null;
-                          triggerAutoDraft(selected);
-                        }}
-                        className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 hover:text-violet-600 transition-colors"
-                        title="Regenerate draft"
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        Regenerate
-                      </button>
-                      {/* Emoji + World-Class Reply buttons — right side of top bar */}
-                      <div className="flex items-center gap-0.5 ml-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => setShowEmojiPicker((v) => !v)}
-                              className="rounded-full h-6 w-6 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                            >
-                              <Smile className="h-3.5 w-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">Add emoji</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setWorldClassOpen((v) => !v);
-                                setFaqOpen(false);
-                                setObjectionsOpen(false);
-                              }}
-                              className={`rounded-full h-6 w-6 flex items-center justify-center transition-colors ${
-                                worldClassOpen
-                                  ? "bg-violet-100 text-violet-700"
-                                  : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
-                              }`}
-                            >
-                              <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">World-Class Reply</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Full-width textarea */}
-                  <div className="relative px-6 pt-3 pb-2">
-                    {/* Emoji picker popup — only in reply mode */}
-                    {showEmojiPicker && composeMode === "reply" && (
-                      <div ref={emojiPickerRef} className="absolute bottom-full mb-2 left-0 z-50 shadow-xl rounded-2xl overflow-hidden">
-                        <Picker
-                          data={data}
-                          onEmojiSelect={(emoji: { native: string }) => {
-                            setCompose((prev) => prev + emoji.native);
-                            setShowEmojiPicker(false);
-                          }}
-                          theme="light"
-                          previewPosition="none"
-                          skinTonePosition="none"
-                        />
-                      </div>
-                    )}
-                    <textarea
-                      className={`w-full bg-transparent border-0 px-0 py-1 min-h-[96px] resize-none focus:outline-none leading-relaxed ${
-                        composeMode === "note"
-                          ? "text-amber-900 placeholder:text-amber-400"
-                          : "text-slate-900 placeholder:text-slate-400"
-                      }`}
-                      placeholder={composeMode === "note" ? "Add an internal note…" : autoDraftLoading ? "" : "Type a message or use AI suggestion..."}
-                      value={compose}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCompose(val);
-                        if (composeMode === "reply") {
-                          if (sanityWarnings.length > 0) { setSanityWarnings([]); setSanityApprovedText(null); }
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (composeMode === "reply") onTypingKeyPress();
-                        if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
-                          e.preventDefault();
-                          if (composeMode === "note") {
-                            addCsNote.mutate({ sessionId: selected.id, note: compose.trim() });
-                          } else {
-                            handleCsSend();
-                          }
-                        }
-                      }}
-                      onBlur={composeMode === "reply" ? onTypingBlur : undefined}
-                    />
-                  </div>
-
-                  {/* Date/time sanity warning card */}
-                  {sanityWarnings.length > 0 && (
-                    <div className="mx-4 mb-2 px-3 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 font-semibold text-amber-700">
-                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                          <span>Date/time check</span>
-                        </div>
-                        <button
-                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
-                          className="text-amber-400 hover:text-amber-600 shrink-0"
-                        ><X className="h-3.5 w-3.5" /></button>
-                      </div>
-                      <ul className="space-y-1">
-                        {sanityWarnings.map((w, i) => (
-                          <li key={i} className="text-amber-800 leading-snug">{w.message}</li>
-                        ))}
-                      </ul>
-                      <div className="flex items-center gap-2 pt-0.5">
-                        <button
-                          onClick={() => {
-                            const text = compose.trim();
-                            setSanityWarnings([]);
-                            setSanityApprovedText(text);
-                            setTimeout(() => { setSanityApprovedText(text); }, 0);
-                            doSendCs();
-                          }}
-                          className="text-[11px] font-semibold text-amber-700 border border-amber-400 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap"
-                        >Send Anyway</button>
-                        <button
-                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
-                          className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 underline"
-                        >Edit message</button>
-                      </div>
-                    </div>
-                  )}
-
-
-                  {/* Bottom toolbar */}
-                  <div className="flex items-center justify-between gap-2 px-6 pb-4 pt-2">
-                    {/* Left: AI Suggest + FAQ + Objections */}
-                    <div className="flex items-center gap-1.5">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="rounded-full h-8 w-8 border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
-                            disabled={loadingAction !== null || !selected}
-                            onClick={() => fireQuickReply("ai_suggest")}
-                            type="button"
-                          >
-                            {loadingAction === "ai_suggest" ? (
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Bot className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top">AI Suggest — picks the best reply for this conversation</TooltipContent>
-                      </Tooltip>
-                      <div className="h-5 w-px bg-slate-200" />
-                      <Button
-                        variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                        onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}
-                        type="button"
-                      >
-                        <BookOpen className="h-3.5 w-3.5" />
-                        FAQ
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                        onClick={() => setInsertResponseOpen(true)}
-                        type="button"
-                      >
-                        <Sparkles className="h-3.5 w-3.5" />
-                        Responses
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
-                        onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}
-                        type="button"
-                      >
-                        <ShieldAlert className="h-3.5 w-3.5" />
-                        Objections
-                      </Button>
-                    </div>
-
-                    {/* Right: lock + Send */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Note toggle */}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            type="button"
-                            onClick={() => {
-                              if (composeMode === "note") {
-                                setComposeMode("reply");
-                              } else {
-                                setComposeMode("note");
-
-                              }
-                            }}
-                            className={`rounded-full h-8 w-8 transition-colors ${
-                              composeMode === "note"
-                                ? "bg-amber-100 text-amber-600 hover:bg-amber-200"
-                                : "text-slate-400 hover:text-amber-500 hover:bg-amber-50"
-                            }`}
-                          >
-                            <Lock className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          {composeMode === "note" ? "Switch to Reply mode" : "Switch to Note mode (internal only)"}
-                        </TooltipContent>
-                      </Tooltip>
-
-                      {/* Send button */}
-                      {composeMode === "note" ? (
-                        <Button
-                          className="rounded-full h-9 px-5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
-                          disabled={!compose.trim() || addCsNote.isPending || !selected}
-                          onClick={() => addCsNote.mutate({ sessionId: selected.id, note: compose.trim() })}
-                        >
-                          {addCsNote.isPending ? (
-                            <><RefreshCw className="h-4 w-4 animate-spin" /> Saving…</>
-                          ) : (
-                            <><Lock className="h-4 w-4" /> Save note</>
-                          )}
-                        </Button>
-                      ) : (
-                        <div className="flex items-stretch shrink-0">
-                          <Button
-                            className="rounded-l-full rounded-r-none h-9 px-5 bg-[#101828] hover:bg-[#1E2433] text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-[#1E2433]"
-                            disabled={!compose.trim() || sendMessage.isPending || !selected}
-                            onClick={() => handleCsSend()}
-                          >
-                            {sendMessage.isPending ? (
-                              <><Send className="h-4 w-4" /> Sending…</>
-                            ) : (
-                              <><Send className="h-4 w-4" /> Send</>
-                            )}
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                className="rounded-l-none rounded-r-full h-9 px-2.5 bg-[#101828] hover:bg-[#1E2433] text-white disabled:opacity-30 transition-all duration-150"
-                                disabled={!compose.trim() || sendMessage.isPending || !selected}
-                                onPointerDown={(e) => e.stopPropagation()}
-                              >
-                                <ChevronDown className="h-3.5 w-3.5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="end"
-                              className="w-56 rounded-xl shadow-lg border border-slate-200 p-1"
-                              onCloseAutoFocus={(e) => e.preventDefault()}
-                            >
-                              <DropdownMenuItem
-                                className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                                onSelect={(e) => { e.preventDefault(); requestAnimationFrame(() => handleCsSend()); }}
-                              >
-                                <Send className="h-4 w-4 text-slate-500 shrink-0" />
-                                <div>
-                                  <div className="font-semibold text-slate-900">Send</div>
-                                  <div className="text-[11px] text-slate-400 font-normal">Just send the message</div>
-                                </div>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator className="my-1" />
-                              <DropdownMenuItem
-                                className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-violet-50"
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  requestAnimationFrame(() => {
-                                    handleCsSend(() => setAddFollowUpOpen(true));
-                                  });
-                                }}
-                              >
-                                <Calendar className="h-4 w-4 text-violet-500 shrink-0" />
-                                <div>
-                                  <div className="font-semibold text-slate-900">Send + Schedule Follow-Up</div>
-                                  <div className="text-[11px] text-slate-400 font-normal">Send and open follow-up scheduler</div>
-                                </div>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50"
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  requestAnimationFrame(() => {
-                                    handleCsSend(() => { if (selected) resolveSession.mutate({ sessionId: selected.id }); });
-                                  });
-                                }}
-                              >
-                                <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-                                <div>
-                                  <div className="font-semibold text-slate-900">Send + Resolve</div>
-                                  <div className="text-[11px] text-slate-400 font-normal">Send and mark conversation resolved</div>
-                                </div>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-                      </div>
-                      <div style={{flex:'0 0 260px', minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column'}}>
-
-          {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FBFBFC', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
-            {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
-            {selected.queue === "Teams" ? (
-              <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
-                <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
-                  <div style={{width:'56px',height:'56px',borderRadius:'18px',background:'linear-gradient(135deg,#14b8a6,#10b981)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 20px rgba(16,185,129,.22)'}}>
-                    {selected.initials}
-                  </div>
-                  <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                    <div style={{fontSize:'20px',fontWeight:900,color:'#101828',lineHeight:1.15,letterSpacing:'-0.03em'}}>{selected.name}</div>
-                    <div style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>Team Member</div>
-                    <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
-                      <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
-                      <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
-                {(() => {
-                  const gradientPalette = [
-                    "from-violet-500 to-fuchsia-500",
-                    "from-rose-500 to-orange-400",
-                    "from-emerald-500 to-teal-500",
-                    "from-sky-500 to-cyan-500",
-                    "from-amber-500 to-yellow-400",
-                    "from-pink-500 to-rose-400",
-                    "from-indigo-500 to-blue-500",
-                    "from-teal-500 to-green-500",
-                  ];
-                  const ini = selected.initials || "?";
-                  const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
-                  const gradClass = gradientPalette[idx];
-                  const name = clientProfile?.name ?? selected.name;
-                  const since = clientProfile?.createdAt ? new Date(clientProfile.createdAt).getFullYear() : null;
-                  return (
-                    <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
-                      <div className={`bg-gradient-to-br ${gradClass}`} style={{width:'56px',height:'56px',borderRadius:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 20px rgba(0,0,0,.10)'}}>
-                        {ini}
-                      </div>
-                      <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                        <div style={{fontSize:'20px',fontWeight:900,color:'#101828',lineHeight:1.15,letterSpacing:'-0.03em'}}>{name}</div>
-                        <div style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>{since ? `Customer since ${since}` : 'Customer'}</div>
-                        <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
-                          <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
-                          <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-            <div className="cs-inbox-scroll overflow-y-auto flex-1">
-            {selected.queue === "Teams" ? (
-              /* ── TEAMS PANEL ── */
-              <>
-                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
-                  <CardContent className="p-0">
-
-                    {/* Today's jobs */}
-                    <div className="p-5 bg-white space-y-3">
-                      <div className="flex items-center gap-2" style={{fontSize:'10px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3'}}>
-                        <Briefcase className="h-3.5 w-3.5" /> Today's jobs
-                      </div>
-                      {!cleanerTodayJobs ? (
-                        <div className="text-sm text-slate-400 py-2">Loading jobs...</div>
-                      ) : cleanerTodayJobs.length === 0 ? (
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                          No jobs scheduled today
-                        </div>
-                      ) : (
-                        cleanerTodayJobs.map((job) => {
-                          const time = job.serviceDateTime
-                            ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                            : "—";
-                          const launch27Url = job.bookingId
-                            ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
-                            : null;
-                          const clientPhone10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
-                          const callHref = clientPhone10 ? `openphone://call?to=+1${clientPhone10}` : null;
-                          const smsHref = clientPhone10 ? `sms:+1${clientPhone10}` : null;
-                          return (
-                            <div
-                              key={job.id}
-                              className="rounded-[20px] border border-slate-200 bg-white shadow-sm overflow-hidden"
-                            >
-                              {/* Clickable main body */}
-                              <button
-                                type="button"
-                                className="w-full text-left p-4 space-y-3 hover:bg-slate-50 transition-colors"
-                                onClick={() => setSelectedJobDrawer(job)}
-                              >
-                                {/* Time + status row */}
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                                    <Clock3 className="h-4 w-4 text-slate-400" />
-                                    {time}
-                                  </div>
-                                  <Badge
-                                    className={`rounded-full border text-xs font-medium hover:bg-transparent ${
-                                      jobStatusStyle(job.jobStatus as JobStatus)
-                                    }`}
-                                  >
-                                    {jobStatusLabel(job.jobStatus as JobStatus)}
-                                  </Badge>
-                                </div>
-
-                                {/* Client name */}
-                                <div className="flex items-start gap-2 text-sm text-slate-700">
-                                  <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                  <span className="font-medium">{job.customerName || "—"}</span>
-                                </div>
-
-                                {/* Address */}
-                                {job.jobAddress && (
-                                  <div className="flex items-start gap-2 text-sm text-slate-500">
-                                    <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                    <span className="leading-5 text-left">{job.jobAddress}</span>
-                                  </div>
-                                )}
-
-                                {/* Service type */}
-                                {job.serviceType && (
-                                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-1.5 text-xs text-slate-600">
-                                    {job.serviceType}
-                                  </div>
-                                )}
-
-                                {/* Issue note */}
-                                {job.jobStatus === "issue_at_property" && job.issueNote && (
-                                  <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-800 flex items-start gap-2">
-                                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                                    {job.issueNote}
-                                  </div>
-                                )}
-
-                                {/* Running late note */}
-                                {job.jobStatus === "running_late" && job.delayMinutes && (
-                                  <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-                                    Running {job.delayMinutes} min late
-                                  </div>
-                                )}
-
-                                {/* Hint to open details */}
-                                <div className="flex items-center gap-1 text-xs text-slate-400 pt-0.5">
-                                  <FileText className="h-3 w-3" />
-                                  Tap to view details
-                                </div>
-                              </button>
-
-                              {/* Action bar */}
-                              <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-100 bg-slate-50">
-                                {callHref && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <a
-                                        href={callHref}
-                                        className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
-                                      >
-                                        <Phone className="h-3.5 w-3.5" />
-                                        Call client
-                                      </a>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Call {job.customerName}</TooltipContent>
-                                  </Tooltip>
-                                )}
-                                {clientPhone10 && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setNewConvPhone(job.customerPhone ?? "");
-                                          setNewConvMsg("");
-                                          setNewConvOpen(true);
-                                        }}
-                                      >
-                                        <MessageSquarePlus className="h-3.5 w-3.5" />
-                                        SMS client
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Text {job.customerName} via CS chat</TooltipContent>
-                                  </Tooltip>
-                                )}
-                                {launch27Url && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <a
-                                        href={launch27Url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="ml-auto flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                        L27
-                                      </a>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Open in Launch27</TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Team Actions — magic link */}
-                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
-                  <CardContent className="p-5">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-4">Team actions</div>
-                    <div className="space-y-3">
-                      {/* Send magic link via SMS */}
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl justify-start h-12 w-full border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800 transition-colors"
-                        onClick={() => handleMagicLink("send")}
-                        disabled={getMagicLink.isPending || !cleanerProfile?.id}
-                        title={cleanerProfile?.id ? "Send one-tap login link via SMS" : "No cleaner profile linked to this conversation"}
-                      >
-                        {getMagicLink.isPending && magicLinkAction === "send"
-                          ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                          : <Link2 className="h-4 w-4 mr-2" />
-                        }
-                        Send magic link
-                      </Button>
-                      {/* Copy magic link to clipboard */}
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl justify-start h-12 w-full border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
-                        onClick={() => handleMagicLink("copy")}
-                        disabled={getMagicLink.isPending || !cleanerProfile?.id}
-                        title={cleanerProfile?.id ? "Copy one-tap login link to clipboard" : "No cleaner profile linked to this conversation"}
-                      >
-                        {getMagicLink.isPending && magicLinkAction === "copy"
-                          ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                          : <Copy className="h-4 w-4 mr-2" />
-                        }
-                        Copy magic link
-                      </Button>
-                      {!cleanerProfile?.id && (
-                        <p className="text-xs text-slate-400 text-center">
-                          No cleaner profile found for this number
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Thread status for Teams */}
-                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
-                  <CardContent className="p-5">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
-                    <div className="mt-4 space-y-3">
-                      {[
-                        { label: "Teams", icon: AlertTriangle },
-                        { label: selected.status, icon: CircleDot },
-                        { label: `${selected.wait} since last message`, icon: Clock3 },
-                      ].map((item) => (
-                        <div
-                          key={item.label}
-                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
-                        >
-                          <div className="flex items-center gap-2 text-sm">
-                            <item.icon className="h-4 w-4 text-slate-400" />
-                            {item.label}
-                          </div>
-                          <ChevronRight className="h-4 w-4 text-slate-300" />
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            ) : (
-              /* ── CLIENT PANEL (enriched with real data) ── */
-              <>
-                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="p-6 space-y-0 bg-white">
-                      {/* CLIENT PROFILE label + metrics */}
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                        {/* Snapshot grid — 2 cols, label above value */}
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0', marginTop:'16px', borderTop:'1px solid rgba(17,24,39,.06)', borderBottom:'1px solid rgba(17,24,39,.06)'}}>
-                          {[
-                            { label: 'Frequency',      value: clientProfile?.frequency ?? selected.service ?? '—' },
-                            { label: 'Avg price',      value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
-                            { label: 'Total bookings', value: String(clientProfile ? clientProfile.totalBookings : selected.stats.bookings) },
-                            { label: 'Last booking',   value: (() => {
-                              const raw = clientProfile?.lastBookingDate;
-                              if (!raw) return '—';
-                              const d = new Date(raw);
-                              if (isNaN(d.getTime())) return raw;
-                              return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-                            })() },
-                          ].map(({ label, value }, i) => (
-                            <div key={label} style={{
-                              padding: '14px 12px',
-                              borderRight: i % 2 === 0 ? '1px solid rgba(17,24,39,.06)' : 'none',
-                              borderTop: i >= 2 ? '1px solid rgba(17,24,39,.06)' : 'none',
-                              minWidth: 0,
-                              overflow: 'hidden',
-                            }}>
-                              <div style={{fontSize:'11px', fontWeight:400, color:'#b0b8c4', marginBottom:'3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{label}</div>
-                              <div style={{fontSize:'13px', fontWeight:500, color:'#374151', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{value}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>{/* end CLIENT PROFILE wrapper */}
-
-                      {/* Today's job if any */}
-                      {clientProfile?.todayJob && (() => {
-                        const tj = clientProfile.todayJob;
-                        const tjUrl = tj.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${tj.bookingId}` : null;
-                        const TjCard = tjUrl ? "a" : "div";
-                        return (
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Today's job</div>
-                            <TjCard
-                              {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
-                              className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="font-semibold text-sm text-emerald-900">
-                                  {new Date(tj.serviceDateTime!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {tj.serviceType}
-                                </div>
-                                {tjUrl && <ExternalLink className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
-                              </div>
-                              <div className="text-xs text-emerald-700 flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />{tj.jobAddress}
-                              </div>
-                              {(tj as any).teamName && (
-                                <div className="text-xs text-emerald-700 flex items-center gap-1">
-                                  <Users className="h-3 w-3" />{(tj as any).teamName}
-                                </div>
-                              )}
-                              <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-800 border-emerald-200">
-                                {jobStatusLabel((tj.jobStatus ?? tj.bookingStatus ?? "assigned") as JobStatus)}
-                              </Badge>
-                            </TjCard>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Recent job history */}
-                      {clientProfile && clientProfile.recentJobs.length > 0 && (
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Recent history</div>
-                          <div className="space-y-2">
-                            {clientProfile.recentJobs.map((job: { date: string | null; address: string | null; serviceType: string | null; status: string; price: number | null; bookingId: string | null }, i: number) => {
-                              const l27Url = job.bookingId
-                                ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
-                                : null;
-                              const CardEl = l27Url ? "a" : "div";
-                              return (
-                                <CardEl
-                                  key={i}
-                                  {...(l27Url ? { href: l27Url, target: "_blank", rel: "noopener noreferrer" } : {})}
-                                  className={`rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2 ${l27Url ? "hover:border-slate-400 hover:bg-slate-100 cursor-pointer transition" : ""}`}
-                                >
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-medium text-slate-800 truncate">
-                                      {job.date} {job.serviceType ? `· ${job.serviceType}` : ""}
-                                    </div>
-                                    {job.address && (
-                                      <div className="text-xs text-slate-500 truncate">{job.address}</div>
-                                    )}
-                                  </div>
-                                  <div className="shrink-0 text-right flex flex-col items-end gap-1">
-                                    {job.price != null && (
-                                      <div className="text-sm font-semibold text-slate-700">${job.price}</div>
-                                    )}
-                                    <Badge className="text-xs rounded-full bg-slate-100 text-slate-600 border-slate-200">
-                                      {job.status}
-                                    </Badge>
-                                    {l27Url && <ExternalLink className="w-3 h-3 text-slate-400" />}
-                                  </div>
-                                </CardEl>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Context flags */}
-                      {!clientProfile && (
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100">Context flags</div>
-                          <div className="mt-4 space-y-3">
-                            {[
-                              selected.stats.bookings === 0
-                                ? "First-time customer"
-                                : `${selected.stats.bookings} prior bookings`,
-                              selected.stats.complaints > 0
-                                ? `${selected.stats.complaints} prior complaint`
-                                : "No complaint history",
-                              selected.queue === "New"
-                                ? "High-intent lead"
-                                : selected.queue === "Resolved" ? "Good review moment"
-                                : "Needs active handling",
-                            ].map((flag) => (
-                              <div
-                                key={flag}
-                                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
-                              >
-                                <Tag className="h-4 w-4 text-slate-400" />
-                                {flag}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ─── Customer Memory Card ───────────────────────── */}
-                      {customerMemory && (() => {
-                        const isHighRisk = (selected?.stats.complaints ?? 0) >= 2;
-                        return (
-                          <div className={`rounded-[24px] border p-4 ${
-                            isHighRisk
-                              ? "border-rose-300 bg-rose-50 ring-1 ring-rose-200"
-                              : "border-amber-200 bg-amber-50"
-                          }`}>
-                            <div className={`flex items-center gap-2 text-sm font-medium mb-3 ${
-                              isHighRisk ? "text-rose-800" : "text-amber-800"
-                            }`}>
-                              {isHighRisk
-                                ? <AlertTriangle className="h-4 w-4 text-rose-500" />
-                                : <Brain className="h-4 w-4" />
-                              }
-                              Know before you reply
-                              {isHighRisk && (
-                                <span className="ml-auto text-xs font-semibold bg-rose-100 text-rose-700 border border-rose-200 rounded-full px-2 py-0.5">
-                                  Escalate to senior rep
-                                </span>
-                              )}
-                            </div>
-                            <div className="space-y-2">
-                              <div className="flex items-start gap-2">
-                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
-                                  isHighRisk ? "text-rose-400" : "text-amber-500"
-                                }`}>Last job</span>
-                                <span className={`text-xs leading-4 ${
-                                  isHighRisk ? "text-rose-900" : "text-amber-900"
-                                }`}>{customerMemory.lastBooking}</span>
-                              </div>
-                              <div className="flex items-start gap-2">
-                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
-                                  isHighRisk ? "text-rose-400" : "text-amber-500"
-                                }`}>History</span>
-                                <span className={`text-xs leading-4 font-medium ${
-                                  isHighRisk ? "text-rose-800" : "text-amber-900"
-                                }`}>{customerMemory.complaintHistory}</span>
-                              </div>
-                              <div className="flex items-start gap-2">
-                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
-                                  isHighRisk ? "text-rose-400" : "text-amber-500"
-                                }`}>Profile</span>
-                                <span className={`text-xs leading-4 ${
-                                  isHighRisk ? "text-rose-900" : "text-amber-900"
-                                }`}>{customerMemory.careAbout}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      <div style={{marginTop:'24px',paddingTop:'20px',borderTop:'1px solid rgba(16,24,40,.06)',borderRadius:'20px',border:'1px solid rgba(139,92,246,.12)',background:'rgba(139,92,246,.04)',padding:'16px'}}>
-                        <div className="flex items-center gap-2 text-sm font-medium" style={{color:'#6D28D9'}}>
-                          <Bot className="h-4 w-4" /> AI insight
-                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA'}} />}
-                        </div>
-                        {insightLoading && !insightData?.insight ? (
-                          <div className="mt-2 space-y-1.5">
-                            <div className="h-3 w-full rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
-                            <div className="h-3 w-4/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
-                            <div className="h-3 w-3/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
-                          </div>
-                        ) : insightData?.insight ? (
-                          <div className="mt-2 text-sm leading-6" style={{color:'#4C1D95'}}>{insightData.insight}</div>
-                        ) : (
-                          <div className="mt-2 text-xs italic" style={{color:'#A78BFA'}}>Select a conversation with messages to generate insight.</div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* ─── AI Upsell Opportunity card ─────────────────── */}
-                {showUpsellCard && (
-                  <Card className="rounded-xl border border-emerald-200 bg-emerald-50 shadow-none mx-4 mb-4">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
-                        <TrendingUp className="h-4 w-4" /> Upsell opportunity
-                        {upsellLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-emerald-400" />}
-                        {showUpsell && (
-                          <button
-                            className="ml-auto text-emerald-400 hover:text-emerald-600 transition-colors"
-                            onClick={() => setUpsellDismissed(selected?.id ?? null)}
-                            title="Dismiss"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      {upsellLoading && !upsellData?.upsell ? (
-                        <div className="mt-2 space-y-1.5">
-                          <div className="h-3 w-full rounded bg-emerald-200/60 animate-pulse" />
-                          <div className="h-3 w-4/5 rounded bg-emerald-200/60 animate-pulse" />
-                        </div>
-                      ) : showUpsell && upsellData?.upsell ? (
-                        <div className="mt-2 space-y-2">
-                          <div className="text-xs text-emerald-600 font-medium">{upsellData.upsell.upsellType}</div>
-                          <div className="text-xs text-emerald-700 italic">{upsellData.upsell.signal}</div>
-                          <div className="rounded-xl bg-white border border-emerald-200 px-3 py-2 text-sm text-emerald-900 leading-5">
-                            &ldquo;{upsellData.upsell.pitch}&rdquo;
-                          </div>
-                          <Button
-                            size="sm"
-                            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
-                            onClick={() => {
-                              setCompose(upsellData.upsell!.pitch);
-                              toast.success("Upsell pitch copied to compose box");
-                            }}
-                          >
-                            Use this pitch
-                          </Button>
-                        </div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* ─── Post-call AI Debrief card ───────────────────── */}
-                {showDebrief && (() => {
-                  const grade = callDebrief!.grade;
-                  const gradeColors: Record<string, string> = {
-                    A: 'bg-green-100 text-green-700 border-green-300',
-                    B: 'bg-blue-100 text-blue-700 border-blue-300',
-                    C: 'bg-amber-100 text-amber-700 border-amber-300',
-                    D: 'bg-orange-100 text-orange-700 border-orange-300',
-                    F: 'bg-red-100 text-red-700 border-red-300',
-                  };
-                  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
-                  return (
-                    <Card className="rounded-xl border border-purple-200 bg-purple-50 shadow-none mx-4 mb-4">
-                      <CardContent className="p-5">
-                        {/* Header row */}
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-purple-100 border border-purple-200">
-                              <Phone className="h-3.5 w-3.5 text-purple-600" />
-                            </div>
-                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {grade && (
-                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full border-2 text-sm font-bold ${gradeColor}`}>
-                                {grade}
-                              </span>
-                            )}
-                            <button
-                              onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
-                              className="flex items-center justify-center w-6 h-6 rounded-full text-purple-300 hover:text-purple-600 hover:bg-purple-100 transition-colors text-base leading-none"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Audio player */}
-                        {callDebrief!.audioUrl && (
-                          <div className="mb-4">
-                            <audio
-                              controls
-                              src={callDebrief!.audioUrl}
-                              className="w-full h-8 rounded-xl"
-                              style={{ accentColor: '#7c3aed' }}
-                            />
-                          </div>
-                        )}
-
-                        {/* Divider */}
-                        <div className="border-t border-purple-200/70 mb-4" />
-
-                        {/* Went well */}
-                        <div className="mb-3">
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <span className="text-green-500 text-xs">✔</span>
-                            <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
-                          </div>
-                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.wentWell}</p>
-                        </div>
-
-                        {/* Divider */}
-                        <div className="border-t border-purple-200/50 mb-3" />
-
-                        {/* Improve */}
-                        <div className="mb-4">
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <span className="text-amber-500 text-xs">▲</span>
-                            <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
-                          </div>
-                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.improve}</p>
-                        </div>
-
-                        {/* Next line suggestion */}
-                        <div className="rounded-2xl bg-white border border-purple-200 px-4 py-3">
-                          <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1.5">Next time, say:</p>
-                          <p className="text-sm text-purple-900 italic leading-relaxed">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })()}
-
-                {/* ─── Actions card (merged: follow-up + call + share link) ─── */}
-                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
-                  <CardContent className="p-6">
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-4">Actions</div>
-                    <div className="flex flex-col gap-3">
-
-                      {/* Call client */}
-                      <button
-                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-violet-300 hover:bg-violet-50 transition-all duration-150"
-                        onClick={() => {
-                          const phone = selected?.phone?.replace(/\D/g, "").slice(-10);
-                          if (phone) window.location.href = `openphone://call?to=+1${phone}`;
-                        }}
-                      >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-violet-100 group-hover:bg-violet-200 transition-colors shrink-0">
-                          <Phone className="h-4 w-4 text-violet-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-slate-800">Call client</div>
-                          <div className="text-[11px] text-slate-400">Open in OpenPhone</div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-violet-400 transition-colors" />
-                      </button>
-
-                      {/* Share booking link */}
-                      <button
-                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-blue-300 hover:bg-blue-50 transition-all duration-150"
-                        onClick={() => {
-                          const link = `${window.location.origin}/book`;
-                          navigator.clipboard.writeText(link).then(() => {
-                            const btn = document.activeElement as HTMLButtonElement;
-                            if (btn) { const orig = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = orig; }, 1500); }
-                          });
-                        }}
-                      >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-blue-100 group-hover:bg-blue-200 transition-colors shrink-0">
-                          <Mail className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-slate-800">Share booking link</div>
-                          <div className="text-[11px] text-slate-400">Copy to clipboard</div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-blue-400 transition-colors" />
-                      </button>
-
-                      {/* Add follow-up */}
-                      <button
-                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-amber-300 hover:bg-amber-50 transition-all duration-150"
-                        onClick={() => setAddFollowUpOpen(true)}
-                      >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-amber-100 group-hover:bg-amber-200 transition-colors shrink-0">
-                          <ClipboardList className="h-4 w-4 text-amber-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-slate-800">Add follow-up</div>
-                          <div className="text-[11px] text-slate-400">Schedule a reminder</div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-amber-400 transition-colors" />
-                      </button>
-
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
-                  <CardContent className="p-6">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
-                    <div className="mt-4 space-y-3">
-                      {[
-                        { label: selected.queue, icon: AlertTriangle },
-                        { label: selected.status, icon: CircleDot },
-                        { label: `${selected.wait} since last client message`, icon: Clock3 },
-                      ].map((item) => (
-                        <div
-                          key={item.label}
-                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
-                        >
-                          <div className="flex items-center gap-2 text-sm">
-                            <item.icon className="h-4 w-4 text-slate-400" />
-                            {item.label}
-                          </div>
-                          <ChevronRight className="h-4 w-4 text-slate-300" />
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-          </div></div>
-
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
         </div>
       </div>
+    </div>
 
     {/* New Conversation dialog */}
     {newConvOpen && (
