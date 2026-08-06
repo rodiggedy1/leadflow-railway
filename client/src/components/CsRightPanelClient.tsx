@@ -7,7 +7,7 @@ import {
   Brain, Tag, RefreshCw, Copy, CircleDot, Briefcase, MapPin,
   TrendingUp, Users, X, ClipboardList,
 } from "lucide-react";
-import { Bot } from "lucide-react";
+import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -54,9 +54,10 @@ interface Props {
   setCompose: (v: string) => void;
   messages?: { sender: string; text: string; ts?: number }[];
   missionSection?: React.ReactNode;
+  onPaymentLink?: () => void;
 }
 
-export default function CsRightPanelClient({ selected, setCompose, messages = [], missionSection }: Props) {
+export default function CsRightPanelClient({ selected, setCompose, messages = [], missionSection, onPaymentLink }: Props) {
   const [debriefDismissed, setDebriefDismissed] = useState<Record<number, boolean>>({});
   const [upsellResult, setUpsellResult] = useState<{ upsell: { signal: string; pitch: string; upsellType: string } | null } | null>(null);
   const [upsellLoading, setUpsellLoading] = useState(false);
@@ -93,6 +94,43 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
     if (clientProfile.frequency) parts.push(`Frequency: ${clientProfile.frequency}`);
     return parts.join(", ");
   }, [clientProfile]);
+  // ── Payment link mission — exact copy from AiConcierge.tsx ─────────────────
+  interface PaymentLinkConfirmCard {
+    recipientName: string; recipientFirstName: string; recipientPhone: string;
+    paymentLinkUrl: string; expiresAt: number; smsText: string; command?: string;
+  }
+  interface PaymentLinkSentCard {
+    recipientName: string; recipientPhone: string; paymentLinkUrl: string;
+    success: boolean; error?: string;
+  }
+  const [paymentCard, setPaymentCard] = useState<PaymentLinkConfirmCard | null>(null);
+  const [paymentSentCard, setPaymentSentCard] = useState<PaymentLinkSentCard | null>(null);
+  const [paymentSmsText, setPaymentSmsText] = useState("");
+  const chatMutation = trpc.aiConcierge.chat.useMutation();
+  const sendPaymentLinkSms = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
+  function firePaymentLink() {
+    const name = selected.name ?? "Customer";
+    const phone = selected.phone;
+    setPaymentCard(null); setPaymentSentCard(null);
+    chatMutation.mutate(
+      { message: `Send payment link to ${name}`, resolvedClientPhone: phone, resolvedPaymentLink: true, resolvedClientName: name },
+      { onSuccess: (result: any) => {
+          if (result.type === "payment_link_confirm") {
+            setPaymentCard(result as PaymentLinkConfirmCard);
+            setPaymentSmsText(result.smsText);
+          }
+        }
+      }
+    );
+  }
+  function handleSendPaymentLink() {
+    if (!paymentCard) return;
+    sendPaymentLinkSms.mutate(
+      { recipientPhone: paymentCard.recipientPhone, recipientName: paymentCard.recipientName, smsText: paymentSmsText, paymentLinkUrl: paymentCard.paymentLinkUrl },
+      { onSuccess: (result: any) => { setPaymentSentCard(result); setPaymentCard(null); } }
+    );
+  }
+
   useEffect(() => {
     if (!selected || selected.id <= 0 || messages.length === 0) return;
     if (insightFetchedForId !== selected.id) setInsightData(null);
@@ -167,8 +205,89 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
       </div>
       {/* Scrollable body */}
       <div className="cs-inbox-scroll overflow-y-auto flex-1">
-        {/* Missions — rendered here (below header), passed from parent */}
-        {missionSection}
+        {/* Missions — inline so they can call firePaymentLink directly */}
+        <section style={{flexShrink:0,padding:'14px 16px',borderBottom:'1px solid #eff0f2',background:'#fff'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+            <span style={{fontSize:'11px',fontWeight:800,letterSpacing:'.04em',color:'#344054'}}>Missions</span>
+            <span style={{fontSize:'11px',color:'#6d4aff',fontWeight:600,cursor:'pointer'}}>+ Add</span>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:0}}>
+            <div style={{padding:'10px 12px',borderBottom:'1px solid #eff0f2',cursor:'pointer',display:'flex',alignItems:'flex-start',gap:'9px'}}
+              onClick={() => { setPaymentCard(null); setPaymentSentCard(null); firePaymentLink(); }}>
+              <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>💳</div>
+              <div><b style={{fontSize:'10px',fontWeight:800}}>Send Payment Link</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Generate &amp; send a payment link via SMS.</p></div>
+            </div>
+            <div style={{padding:'10px 12px',borderBottom:'1px solid #eff0f2',opacity:0.42,display:'flex',alignItems:'flex-start',gap:'9px'}}>
+              <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>📋</div>
+              <div><b style={{fontSize:'10px',fontWeight:800}}>Send Quote</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Coming soon.</p></div>
+            </div>
+            <div style={{padding:'10px 12px',opacity:0.42,display:'flex',alignItems:'flex-start',gap:'9px'}}>
+              <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>🚗</div>
+              <div><b style={{fontSize:'10px',fontWeight:800}}>Get ETA</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Coming soon.</p></div>
+            </div>
+          </div>
+        </section>
+        {/* Payment link confirm card — shown inline after clicking Send Payment Link mission */}
+        {chatMutation.isPending && !paymentCard && (
+          <div className="mx-4 mb-3 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-xs text-violet-600 flex items-center gap-2">
+            <div className="h-3 w-3 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
+            Generating payment link…
+          </div>
+        )}
+        {paymentCard && !paymentSentCard && (
+          <div className="mx-4 mb-3">
+            <div className="rounded-2xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+                <CreditCard className="w-4 h-4 flex-shrink-0" style={{color:"#7447f5"}} />
+                <p className="text-sm font-semibold" style={{color:"#202431"}}>Send Payment Link</p>
+              </div>
+              <div className="px-4 pt-3 pb-2 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:"rgba(116,71,245,0.12)"}}>
+                  <User className="w-4 h-4" style={{color:"#7447f5"}} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold" style={{color:"#202431"}}>{paymentCard.recipientName}</p>
+                  <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{paymentCard.recipientPhone}</p>
+                </div>
+                <a href={paymentCard.paymentLinkUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors flex-shrink-0">
+                  <ExternalLink className="w-3 h-3" /> View link
+                </a>
+              </div>
+              <div className="px-4 pb-2">
+                <span className="text-[11px]" style={{color:"#8a8a9a"}}>Link expires {new Date(paymentCard.expiresAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
+              </div>
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Edit3 className="w-3 h-3" style={{color:"#7447f5"}} />
+                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>Message to send</span>
+                </div>
+                <textarea value={paymentSmsText} onChange={(e) => setPaymentSmsText(e.target.value)} disabled={sendPaymentLinkSms.isPending} rows={8} className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039"}} />
+              </div>
+              <div className="px-4 pb-4">
+                <button onClick={handleSendPaymentLink} disabled={!paymentSmsText.trim() || sendPaymentLinkSms.isPending} className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}>
+                  {sendPaymentLinkSms.isPending ? (<><div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Sending…</>) : (<>Send to {paymentCard.recipientFirstName}</>)}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {paymentSentCard && (
+          <div className="mx-4 mb-3">
+            <div className="rounded-2xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+                <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${paymentSentCard.success ? "bg-green-500" : "bg-red-500"}`}>
+                  {paymentSentCard.success ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <XCircle className="w-3.5 h-3.5 text-white" />}
+                </span>
+                <p className="text-sm font-semibold" style={{color:"#202431"}}>{paymentSentCard.success ? `Payment link sent to ${paymentSentCard.recipientName}` : `Failed to send to ${paymentSentCard.recipientName}`}</p>
+              </div>
+              <div className="px-4 py-3 space-y-1.5">
+                <p className="text-xs text-gray-400">{paymentSentCard.recipientPhone}</p>
+                {paymentSentCard.success && <a href={paymentSentCard.paymentLinkUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"><ExternalLink className="w-3 h-3" /> View payment link</a>}
+                {paymentSentCard.error && <p className="text-xs text-red-400">{paymentSentCard.error}</p>}
+              </div>
+            </div>
+          </div>
+        )}
         {/* CLIENT PROFILE metrics */}
         <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
           <CardContent className="p-0">
