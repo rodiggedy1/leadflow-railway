@@ -1360,7 +1360,7 @@ async function startServer() {
             FROM ops_chat_messages ocm
             JOIN conversation_sessions cs ON cs.id = ocm.sessionId
             LEFT JOIN cleaner_profiles cp
-              ON cp.phone = REGEXP_REPLACE(cs.leadPhone, '^\\+1', '')
+              ON cp.phone = RIGHT(cs.leadPhone, 10)
               AND cp.isActive = 1
             WHERE ocm.quickAction = 'madison_sms_draft'
               AND ocm.cardStatus = 'active'`
@@ -1406,7 +1406,7 @@ async function startServer() {
         sql`SELECT COUNT(DISTINCT ocm.id) as cnt
             FROM ops_chat_messages ocm
             JOIN conversation_sessions cs ON cs.id = ocm.sessionId
-            JOIN cleaner_profiles cp ON cp.phone = REGEXP_REPLACE(cs.leadPhone, '^\\+1', '') AND cp.isActive = 1
+            JOIN cleaner_profiles cp ON cp.phone = RIGHT(cs.leadPhone, 10) AND cp.isActive = 1
             WHERE ocm.quickAction = 'madison_sms_draft' AND ocm.cardStatus = 'active'`
       ) as any)[0];
       return res.json({ sampleCleanerPhones: cpRows, sampleCleanerSessionPhones: csRows, matchCount: matchRow?.cnt ?? 0 });
