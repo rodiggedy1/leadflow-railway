@@ -4074,21 +4074,8 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
       setIsSending(false);
     }
   };
-  if (justActed) {
-    return (
-      <div style={{ padding: "4px 16px" }}>
-        <div style={{ background: justActed === "sent" ? "#f0fdf4" : "#fafafa", border: `1px solid ${justActed === "sent" ? "#bbf7d0" : "#e5e7eb"}`, borderRadius: 20, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 20 }}>{justActed === "sent" ? "✅" : "✓"}</span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: justActed === "sent" ? "#15803d" : "#6b7280" }}>
-              {justActed === "sent" ? "Sent" : "Marked — no reply needed"}
-            </div>
-            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>Alarm cleared</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // After acting, return null so the card disappears immediately (invalidate removes it from list)
+  if (justActed) return null;
   // accent bar + badge colors
   const accentColor = isOverdue ? "#ef4444" : "#f59e0b";
   const badgeColor = isOverdue ? "#d92d20" : "#b86600";
@@ -4111,12 +4098,15 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
             </span>
             {preview && <span style={{ display: "block", marginTop: 5, color: "#737b8e", fontSize: 14, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>"{preview}"</span>}
           </span>
-          {/* Right hint */}
-          <span style={{ fontSize: 12, lineHeight: 1.35, color: "#8b93a7", textAlign: "right" as const, whiteSpace: "nowrap" as const }}>
-            No one has responded yet.<br /><b style={{ color: badgeColor, fontWeight: 800 }}>Click to respond</b>
+          {/* Right: no-reply button + chevron */}
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={e => { e.stopPropagation(); handleNoReply(); }}
+              disabled={isSending}
+              style={{ fontSize: 11, fontWeight: 800, color: "#626a79", background: "#f4f5f7", border: "1px solid #dfe2ea", borderRadius: 10, padding: "6px 10px", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1, whiteSpace: "nowrap" as const }}
+            >✓ No reply needed</button>
+            <span style={{ fontSize: 23, color: "#a5acba", transition: "transform .2s", transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block" }}>›</span>
           </span>
-          {/* Chevron */}
-          <span style={{ fontSize: 23, color: "#a5acba", transition: "transform .2s", transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block" }}>›</span>
         </button>
         {/* Expanded detail */}
         {isExpanded && (
