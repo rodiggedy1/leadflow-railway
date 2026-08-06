@@ -258,7 +258,7 @@ export async function triggerMadisonSmsDraft(params: {
 
 
     // ── Step 7.6: Auto-Send Gate ─────────────────────────────────────────────
-    const autoSend = evaluateAutoSend({ classification, draftResponse, inboundText, isCleaner });
+    const autoSend = evaluateAutoSend({ classification, draftResponse, inboundText });
     if (autoSend.eligible) {
       // Atomically claim the draft (same pattern as approveSmsDraft)
       const [claimResult] = await db
@@ -1125,10 +1125,9 @@ function evaluateAutoSend(params: {
   classification: ClassificationResult;
   draftResponse: DraftResponse;
   inboundText: string;
-  isCleaner: boolean;
 }): { eligible: boolean; reason: string } {
   try {
-    const { classification, draftResponse, inboundText, isCleaner } = params;
+    const { classification, draftResponse, inboundText } = params;
     const normalised = inboundText.trim().replace(/[\u{1F300}-\u{1FFFF}]/gu, "").trim();
 
     // Gate 1: positive allowlist
@@ -1140,10 +1139,7 @@ function evaluateAutoSend(params: {
     if (classification.intentConfidence < 0.98) return { eligible: false, reason: "low_intent_confidence" };
     if (draftResponse.draftConfidence < 0.98) return { eligible: false, reason: "low_draft_confidence" };
 
-    // Gate 3: not a cleaner
-    if (isCleaner) return { eligible: false, reason: "is_cleaner" };
-
-    // Gate 4: inbound exclusion keywords
+    // Gate 3: inbound exclusion keywords
     const lowerInbound = inboundText.toLowerCase();
     for (const kw of AUTO_SEND_INBOUND_EXCLUSIONS) {
       if (lowerInbound.includes(kw)) return { eligible: false, reason: `inbound_exclusion:${kw}` };
