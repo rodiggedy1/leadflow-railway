@@ -1003,11 +1003,13 @@ async function postDraftCardToCommandChat(params: {
   } catch { /* no existing card — start fresh */ }
   // Only include leadCategory in metadata when classification succeeded (non-null).
   // On technical failure, omit the key entirely so old cards stay visually unchanged.
+  // isCleaner is always written — it is a deterministic boolean, never ambiguous.
   const metadataJson = JSON.stringify({
     ...existingMeta,
     draftId,
     quickActionVersion: 1,
     sessionId,
+    isCleaner,
     ...(leadCategory !== null ? { leadCategory } : {}),
     ...(unansweredMinutes !== undefined ? { unansweredMinutes } : {}),
   });

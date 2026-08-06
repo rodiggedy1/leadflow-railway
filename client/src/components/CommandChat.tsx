@@ -1748,12 +1748,13 @@ export function MadisonSmsDraftCard({ msg, callerName, onSelectSession, onActed,
               <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
                 <span style={{ font: "700 18px Georgia,serif", color: "#1a1a2e", lineHeight: 1 }}>Madison</span>
                 <span style={{ font: "800 11px Inter,system-ui", color: "#6d5cff" }}>✶ AI</span>
-                {meta.leadCategory === "lead" && (
+                {meta.isCleaner === true ? (
+                  <span style={{ font: "700 10px Inter,system-ui", color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>🚧 Team</span>
+                ) : meta.leadCategory === "lead" ? (
                   <span style={{ font: "700 10px Inter,system-ui", color: "#c2410c", background: "#fff3e0", border: "1px solid #fed7aa", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>🔥 Lead</span>
-                )}
-                {meta.leadCategory === "regular" && (
+                ) : meta.leadCategory === "regular" ? (
                   <span style={{ font: "700 10px Inter,system-ui", color: "#6d5cff", background: "#ede9fe", border: "1px solid #ddd6fe", borderRadius: 999, padding: "2px 7px", letterSpacing: "0.04em" }}>✦ Madison</span>
-                )}
+                ) : null}
                 <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 2 }}>{msgTime}</span>
               </div>
               {/* Copy — human summary */}
@@ -7320,7 +7321,7 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
   const [view, setView] = useState<"hero" | "review" | "done">("hero");
   const [cardIndex, setCardIndex] = useState(0);
   // null = show all cards; "lead" | "regular" = filtered mode
-  const [focusFilter, setFocusFilter] = useState<"lead" | "regular" | null>(null);
+  const [focusFilter, setFocusFilter] = useState<"lead" | "regular" | "cleaner" | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const actedCardIdRef = React.useRef<number | null>(null);
   const [sessionStreak, setSessionStreak] = useState(0);
@@ -7334,13 +7335,22 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
   const callCount = cards.filter(c => c.quickAction === "madison_call_summary").length;
   const smsCount = cards.filter(c => c.quickAction === "madison_sms_draft").length;
   const emailCount = cards.filter(c => c.quickAction === "madison_email_draft").length;
-  // Lead classification counts — only explicitly classified cards; missing/null not counted
-  const leadCount = cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === "lead"; } catch { return false; } }).length;
-  const regularCount = cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === "regular"; } catch { return false; } }).length;
+  // Lead classification counts — mutually exclusive buckets
+  // Teams: isCleaner === true (regardless of leadCategory)
+  // Leads: leadCategory === "lead" && !isCleaner
+  // Madison: leadCategory === "regular" && !isCleaner
+  const getMeta = (c: typeof cards[0]) => { try { return JSON.parse(c.metadata ?? "{}"); } catch { return {}; } };
+  const teamCount = cards.filter(c => getMeta(c).isCleaner === true).length;
+  const leadCount = cards.filter(c => { const m = getMeta(c); return m.leadCategory === "lead" && !m.isCleaner; }).length;
+  const regularCount = cards.filter(c => { const m = getMeta(c); return m.leadCategory === "regular" && !m.isCleaner; }).length;
   // Filtered card list — used in review mode
   const filteredCards = focusFilter === null
     ? cards
-    : cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === focusFilter; } catch { return false; } });
+    : focusFilter === "cleaner"
+      ? cards.filter(c => getMeta(c).isCleaner === true)
+      : focusFilter === "lead"
+        ? cards.filter(c => { const m = getMeta(c); return m.leadCategory === "lead" && !m.isCleaner; })
+        : cards.filter(c => { const m = getMeta(c); return m.leadCategory === "regular" && !m.isCleaner; });
   const currentCard = filteredCards[cardIndex];
   const { data: focusCardCtx, isLoading: ctxLoading } = trpc.opsChat.getFocusCardContext.useQuery(
     { quickAction: currentCard?.quickAction ?? '', metadata: currentCard?.metadata ?? null },
@@ -7379,17 +7389,26 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
       // Before showing Done, do a fresh fetch to confirm queue is truly empty
       const checkAndDone = async () => {
         const fresh = await utils.opsChat.getFocusCards.fetch();
-        const freshFiltered = focusFilter === null ? fresh : (fresh ?? []).filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === focusFilter; } catch { return false; } });
+        const applyFilter = (f: typeof focusFilter, arr: typeof cards) => {
+        if (f === null) return arr;
+        if (f === "cleaner") return arr.filter(c => getMeta(c).isCleaner === true);
+        if (f === "lead") return arr.filter(c => { const m = getMeta(c); return m.leadCategory === "lead" && !m.isCleaner; });
+        return arr.filter(c => { const m = getMeta(c); return m.leadCategory === "regular" && !m.isCleaner; });
+      };
+      const freshFiltered = applyFilter(focusFilter, fresh ?? []);
         if (!freshFiltered || freshFiltered.length === 0) setView("done");
         // else: fresh cards exist — stay in review, cards state will update via query
       };
       checkAndDone();
     }
   }, [filteredCards.length, cardIndex, view, focusFilter]);  // eslint-disable-line react-hooks/exhaustive-deps
-  const startReview = (filter?: "lead" | "regular" | null) => {
+  const startReview = (filter?: "lead" | "regular" | "cleaner" | null) => {
     const f = filter ?? null;
     setFocusFilter(f);
-    const targetCards = f === null ? cards : cards.filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === f; } catch { return false; } });
+    const targetCards = f === null ? cards
+      : f === "cleaner" ? cards.filter(c => getMeta(c).isCleaner === true)
+      : f === "lead" ? cards.filter(c => { const m = getMeta(c); return m.leadCategory === "lead" && !m.isCleaner; })
+      : cards.filter(c => { const m = getMeta(c); return m.leadCategory === "regular" && !m.isCleaner; });
     if (targetCards.length > 0) { setCardIndex(0); setView("review"); }
   };
   const goNext = () => {
@@ -7399,7 +7418,13 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
       // Before showing Done, do a fresh fetch to confirm queue is truly empty
       const checkAndDone = async () => {
         const fresh = await utils.opsChat.getFocusCards.fetch();
-        const freshFiltered = focusFilter === null ? fresh : (fresh ?? []).filter(c => { try { return JSON.parse(c.metadata ?? "{}").leadCategory === focusFilter; } catch { return false; } });
+        const applyFilter2 = (f: typeof focusFilter, arr: typeof cards) => {
+          if (f === null) return arr;
+          if (f === "cleaner") return arr.filter(c => getMeta(c).isCleaner === true);
+          if (f === "lead") return arr.filter(c => { const m = getMeta(c); return m.leadCategory === "lead" && !m.isCleaner; });
+          return arr.filter(c => { const m = getMeta(c); return m.leadCategory === "regular" && !m.isCleaner; });
+        };
+        const freshFiltered = applyFilter2(focusFilter, fresh ?? []);
         if (!freshFiltered || freshFiltered.length === 0) setView("done");
         // else: fresh cards exist — stay in review, cards state will update via query
       };
@@ -7461,8 +7486,8 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
               {callCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #f0eeff" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{callCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Inbound Calls</div></div>}
               {smsCount > 0 && <div style={{ flex: 1, padding: "18px 24px", borderRight: emailCount > 0 ? "1px solid #f0eeff" : undefined }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{smsCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>SMS Drafts</div></div>}
               {emailCount > 0 && <div style={{ flex: 1, padding: "18px 24px" }}><div style={{ fontSize: 28, fontWeight: 700, color: P }}>{emailCount}</div><div style={{ fontSize: 12, color: "#7a8092", fontWeight: 600, marginTop: 2 }}>Email Drafts</div></div>}
-              {(leadCount > 0 || regularCount > 0) && (
-                <div style={{ flex: 1, padding: "14px 24px", display: "flex", gap: 10, alignItems: "center", borderTop: "1px solid #f0eeff" }}>
+              {(leadCount > 0 || regularCount > 0 || teamCount > 0) && (
+                <div style={{ flex: 1, padding: "14px 24px", display: "flex", gap: 10, alignItems: "center", borderTop: "1px solid #f0eeff", flexWrap: "wrap" }}>
                   {leadCount > 0 && (
                     <button onClick={() => startReview("lead")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff3e0", border: "1px solid #fed7aa", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: "#c2410c" }}>{leadCount}</span>
@@ -7473,6 +7498,12 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
                     <button onClick={() => startReview("regular")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#ede9fe", border: "1px solid #ddd6fe", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: "#6d5cff" }}>{regularCount}</span>
                       <span style={{ fontSize: 11, fontWeight: 800, color: "#6d5cff" }}>✦ Madison</span>
+                    </button>
+                  )}
+                  {teamCount > 0 && (
+                    <button onClick={() => startReview("cleaner")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: "#15803d" }}>{teamCount}</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#15803d" }}>🚧 Teams</span>
                     </button>
                   )}
                 </div>
@@ -7707,6 +7738,15 @@ function DebriefModal({ onClose, onCallBack, onTextBack }: { onClose: () => void
                           color: focusFilter === "regular" ? "#fff" : "#6d5cff",
                           borderColor: focusFilter === "regular" ? "#6d5cff" : "#ddd6fe" }}
                       >✦ Madison ({regularCount})</button>
+                    )}
+                    {teamCount > 0 && (
+                      <button
+                        onClick={() => { setFocusFilter("cleaner"); setCardIndex(0); }}
+                        style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, border: "1px solid", cursor: "pointer",
+                          background: focusFilter === "cleaner" ? "#15803d" : "#f0fdf4",
+                          color: focusFilter === "cleaner" ? "#fff" : "#15803d",
+                          borderColor: focusFilter === "cleaner" ? "#15803d" : "#bbf7d0" }}
+                      >🚧 Teams ({teamCount})</button>
                     )}
                   </div>
                 )}
