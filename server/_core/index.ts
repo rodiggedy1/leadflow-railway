@@ -1365,7 +1365,7 @@ async function startServer() {
         const isCleaner = card.leadSource === 'cs-inbound-cleaner';
         let meta: Record<string, unknown> = {};
         try { meta = JSON.parse(card.metadata ?? '{}'); } catch { /* ignore */ }
-        if (meta.isCleaner !== undefined) { skipped++; continue; } // already stamped
+        if (meta.isCleaner === isCleaner) { skipped++; continue; } // already correct
         meta.isCleaner = isCleaner;
         await db.execute(
           sql`UPDATE ops_chat_messages SET metadata = ${JSON.stringify(meta)} WHERE id = ${card.id}`
