@@ -3666,7 +3666,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         console.log('[RESOLVE_DIAG] JOIN_result:', JSON.stringify(diagJoin));
 
         // Dismiss active Madison SMS draft cards + underlying pending drafts
-        const activeSmsCards = await db.execute(
+        const [activeSmsCards] = await db.execute(
           sql`SELECT id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')) AS UNSIGNED) AS draftId
               FROM ops_chat_messages
               WHERE sessionId = ${input.sessionId}
@@ -3709,7 +3709,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           }
         }
         // Dismiss active Madison email draft cards + underlying pending drafts
-        const activeEmailCards = await db.execute(
+        const [activeEmailCards] = await db.execute(
           sql`SELECT id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')) AS UNSIGNED) AS draftId
               FROM ops_chat_messages
               WHERE sessionId = ${input.sessionId}
