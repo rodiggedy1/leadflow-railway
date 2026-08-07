@@ -211,4 +211,19 @@ export function registerCsDraftEnrichRoute(app: Express): void {
       res.status(500).json({ ok: false, error: msg });
     }
   });
+  // GET handler so the endpoint can be triggered from a browser
+  app.get("/api/cron/cs-draft-enrich", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) { res.status(503).json({ error: "CRON_SECRET not configured" }); return; }
+    const provided = req.headers["x-cron-secret"] ?? req.query.secret;
+    if (provided !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const result = await runCsDraftEnrichment();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[CS_DRAFT_ENRICH] Error:", msg);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
 }
