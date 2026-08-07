@@ -94,7 +94,7 @@ function formatTime(serviceDateTime: string | null | undefined): string {
  * Sets cardStatus = 'dismissed' so the activeDedupKey generated column becomes NULL,
  * freeing the unique index slot for the next inbound message from the same session.
  */
-async function deactivateOpsSmsCard(draftId: number): Promise<void> {
+export async function deactivateOpsSmsCard(draftId: number): Promise<void> {
   try {
     const db = await getDb();
     if (!db) return;
@@ -110,6 +110,25 @@ async function deactivateOpsSmsCard(draftId: number): Promise<void> {
   }
 }
 
+
+/**
+ * Deactivate the active ops_chat_messages card for a madison_email_draft.
+ */
+export async function deactivateOpsEmailCard(draftId: number): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(
+      sql`UPDATE ops_chat_messages
+          SET cardStatus = 'dismissed', activeDedupKey = NULL
+          WHERE quickAction = 'madison_email_draft'
+            AND JSON_EXTRACT(metadata, '$.draftId') = ${draftId}
+            AND cardStatus = 'active'`
+    );
+  } catch (err) {
+    console.error('[deactivateOpsEmailCard] failed for draftId', draftId, err);
+  }
+}
 // ── router ────────────────────────────────────────────────────────────────────
 // In-memory typing presence store (ephemeral, no DB needed)
 const typingStore = new Map<string, Map<string, { name: string; expiresAt: number }>>();

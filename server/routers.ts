@@ -57,6 +57,8 @@ import { computeSessionSummary } from './sessionSummary';
 import { responseTemplatesRouter } from './responseTemplatesRouter';
 import { aiConciergeRouter } from './aiConciergeRouter';
 import { csMissionsRouter } from './csMissionsRouter';
+import { deactivateOpsSmsCard, deactivateOpsEmailCard } from './opsChatRouter';
+import { madisonSmsDrafts, madisonEmailDrafts } from '../drizzle/schema';
 import { normalizePhoneLegacy as normalizePhone, isValidUSPhone, extractUSDigits } from './utils/phone';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -3638,10 +3640,52 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             lastReadAt: sql`lastCustomerReplyAt`,
           } as any)
           .where(eq(conversationSessions.id, input.sessionId));
-        // Cancel all active Madison missions for this session
+        // Cancel all active CS missions for this session
         await db.execute(
           sql`UPDATE cs_missions SET status = 'cancelled', updatedAt = ${Date.now()} WHERE sessionId = ${input.sessionId} AND status IN ('active', 'waiting', 'ready', 'needs_attention')`
         );
+        // Dismiss active Madison SMS draft cards + underlying pending drafts
+        const activeSmsCards = await db.execute(
+          sql`SELECT id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')) AS UNSIGNED) AS draftId
+              FROM ops_chat_messages
+              WHERE sessionId = ${input.sessionId}
+                AND quickAction = 'madison_sms_draft'
+                AND cardStatus = 'active'
+                AND JSON_VALID(metadata) = 1`
+        );
+        for (const row of (activeSmsCards as any[])) {
+          const draftId = Number(row.draftId);
+          if (draftId) {
+            await deactivateOpsSmsCard(draftId);
+            await db.update(madisonSmsDrafts)
+              .set({ status: 'DISMISSED' } as any)
+              .where(and(
+                eq(madisonSmsDrafts.id, draftId),
+                notInArray(madisonSmsDrafts.status, ['SENT', 'DELIVERED'])
+              ));
+          }
+        }
+        // Dismiss active Madison email draft cards + underlying pending drafts
+        const activeEmailCards = await db.execute(
+          sql`SELECT id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')) AS UNSIGNED) AS draftId
+              FROM ops_chat_messages
+              WHERE sessionId = ${input.sessionId}
+                AND quickAction = 'madison_email_draft'
+                AND cardStatus = 'active'
+                AND JSON_VALID(metadata) = 1`
+        );
+        for (const row of (activeEmailCards as any[])) {
+          const draftId = Number(row.draftId);
+          if (draftId) {
+            await deactivateOpsEmailCard(draftId);
+            await db.update(madisonEmailDrafts)
+              .set({ status: 'DISMISSED' } as any)
+              .where(and(
+                eq(madisonEmailDrafts.id, draftId),
+                notInArray(madisonEmailDrafts.status, ['SENT', 'DELIVERED'])
+              ));
+          }
+        }
         // Broadcast so CS badge updates immediately on all connected clients
         const { broadcastOpsUpdate: bcastResolve } = await import("./sseBroadcast");
         bcastResolve("lead_update");
