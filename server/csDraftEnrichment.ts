@@ -121,7 +121,7 @@ ${JSON.stringify(pairsInput, null, 2)}`;
 }
 
 export async function runCsDraftEnrichment(): Promise<{ processed: number; inserted: number; skipped: number }> {
-  const db = getDb();
+  const db = await getDb();
   if (!db) throw new Error("Database unavailable");
 
   const cutoffTs = Date.now() - NINETY_DAYS_MS;

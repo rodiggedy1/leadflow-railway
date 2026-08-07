@@ -43,7 +43,7 @@ async function getCandidatePool(): Promise<CandidateExample[]> {
   if (candidateCache && Date.now() - candidateCacheTs < CANDIDATE_CACHE_TTL_MS) {
     return candidateCache;
   }
-  const db = getDb();
+  const db = await getDb();
   if (!db) return [];
   try {
     const [rows] = await db.execute(sql`
