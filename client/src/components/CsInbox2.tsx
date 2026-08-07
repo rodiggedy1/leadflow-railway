@@ -141,8 +141,8 @@ const STYLES = `
 .cs2-thread{flex:1;overflow:auto;padding:17px 30px 12px;scrollbar-width:none}
 .cs2-thread::-webkit-scrollbar{display:none}
 .day{text-align:center;color:#aaaeb7;font-size:9px;margin:7px;text-transform:uppercase;letter-spacing:.08em}
-.msg{max-width:68%;margin:14px 0}
-.msg.out{margin-left:auto}
+.msg{max-width:68%;margin:14px 0;display:flex;flex-direction:column;align-items:flex-start}
+.msg.out{margin-left:auto;align-items:flex-end}
 .mmeta{font-size:9px;color:#9ba0aa;margin:0 4px 4px}
 .msg.out .mmeta{text-align:right}
 .bubble2{padding:11px 13px;border-radius:16px;background:#f0ecff;line-height:1.48;font-size:12px}
