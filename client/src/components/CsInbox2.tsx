@@ -523,7 +523,7 @@ export default function CsInbox2() {
   }
   // Auto-draft when conversation becomes selected
   useEffect(() => {
-    if (!selectedConv || detailMessages.length === 0) return;
+    if (!selectedConv) return;
     selectedConvRef.current = selectedConv.id;
     triggerAutoDraft(selectedConv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
