@@ -352,7 +352,7 @@ export default function CsInbox2() {
       setResolvingId(variables.sessionId);
       window.setTimeout(() => {
         setResolvingId(null);
-        setSelectedId(null);
+        setSelectedConv(null);
         const resolvedAt = new Date();
         utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
           if (!old) return old;
@@ -515,16 +515,18 @@ export default function CsInbox2() {
                   <button className="quick" onClick={() => setCompose("Yes! We have a morning opening 😊")}>Morning opening</button>
                   <button className="quick" onClick={() => setCompose("Let me check with the team and get right back to you.")}>Check team</button>
                   <button className="quick">+ More</button>
-                  <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:'9px 0 0 9px',paddingRight:'12px'}}>
-                    {sendMessage.isPending ? "Sending…" : "Send ↗"}
-                  </button>
-                  <button
-                    className="send2"
-                    style={{borderRadius:'0 9px 9px 0',borderLeft:'1px solid rgba(255,255,255,.2)',padding:'8px 10px',fontSize:'11px'}}
-                    onClick={() => doSend(() => resolveSession.mutate({ sessionId: selectedConv.id }))}
-                    disabled={sendMessage.isPending || resolveSession.isPending}
-                    title="Send and resolve"
-                  >✓</button>
+                  <div style={{display:'flex',marginLeft:'auto',borderRadius:'9px',overflow:'hidden',boxShadow:'0 5px 13px rgba(104,75,250,.2)'}}>
+                    <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
+                      {sendMessage.isPending ? "Sending…" : "Send ↗"}
+                    </button>
+                    <button
+                      className="send2"
+                      style={{borderRadius:0,boxShadow:'none',borderLeft:'1px solid rgba(255,255,255,.25)',padding:'8px 10px',fontSize:'12px',margin:0}}
+                      onClick={() => doSend(() => resolveSession.mutate({ sessionId: selectedConv.id }))}
+                      disabled={sendMessage.isPending || resolveSession.isPending}
+                      title="Send and resolve"
+                    >✓</button>
+                  </div>
                 </div>
               </div>
             </footer>
