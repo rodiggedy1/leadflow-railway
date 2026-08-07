@@ -527,7 +527,7 @@ export default function CsInbox2() {
     selectedConvRef.current = selectedConv.id;
     triggerAutoDraft(selectedConv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConv?.id, detailMessages.length]);
+  }, [selectedConv?.id]);
 
 
   useEffect(() => {
