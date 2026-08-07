@@ -3638,6 +3638,10 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             lastReadAt: sql`lastCustomerReplyAt`,
           } as any)
           .where(eq(conversationSessions.id, input.sessionId));
+        // Cancel all active Madison missions for this session
+        await db.execute(
+          sql`UPDATE cs_missions SET status = 'cancelled', updatedAt = ${Date.now()} WHERE sessionId = ${input.sessionId} AND status IN ('active', 'waiting', 'ready', 'needs_attention')`
+        );
         // Broadcast so CS badge updates immediately on all connected clients
         const { broadcastOpsUpdate: bcastResolve } = await import("./sseBroadcast");
         bcastResolve("lead_update");
