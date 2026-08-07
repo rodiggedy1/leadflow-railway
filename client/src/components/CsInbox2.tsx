@@ -397,6 +397,19 @@ export default function CsInbox2() {
     { phone: selectedConv?.phone ?? "" },
     { enabled: !!selectedConv && !selectedConv.queue, staleTime: 60_000, refetchOnWindowFocus: false }
   );
+  const detailMessages = useMemo(() => {
+    if (!conversationDetail?.messageHistory) return selectedConv?.messages ?? [];
+    let raw: RawMsg[] = [];
+    try { raw = JSON.parse(conversationDetail.messageHistory); } catch { raw = []; }
+    return raw.map(m => ({
+      sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
+      text: m.content,
+      time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      ts: m.ts,
+      media: (m.media ?? []) as string[],
+      senderName: m.senderName,
+    }));
+  }, [conversationDetail?.messageHistory, selectedConv?.messages]);
   const jobContext = useMemo(() => {
     if (!clientProfile) return "";
     const tj = clientProfile.todayJob;
@@ -516,19 +529,6 @@ export default function CsInbox2() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConv?.id, detailMessages.length]);
 
-  const detailMessages = useMemo(() => {
-    if (!conversationDetail?.messageHistory) return selectedConv?.messages ?? [];
-    let raw: RawMsg[] = [];
-    try { raw = JSON.parse(conversationDetail.messageHistory); } catch { raw = []; }
-    return raw.map(m => ({
-      sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
-      text: m.content,
-      time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
-      ts: m.ts,
-      media: (m.media ?? []) as string[],
-      senderName: m.senderName,
-    }));
-  }, [conversationDetail?.messageHistory, selectedConv?.messages]);
 
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
