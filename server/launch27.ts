@@ -297,3 +297,122 @@ interface RawBooking {
   staff_notes?: string;
   preferred_cleaner?: { id: number; name: string } | null;
 }
+
+// ── Charge data types ─────────────────────────────────────────────────────────
+export interface L27ChargeEntry {
+  id: number;
+  transactionId: string;
+  amountCents: number;
+  cardLast4: string | null;
+  description: string;
+  status: string;
+  chargedDate: string;
+}
+
+export interface L27BookingCharges {
+  bookingId: number;
+  customerName: string;
+  serviceDate: string;
+  charged: L27ChargeEntry[];
+  refunded: L27ChargeEntry[];
+  outstandingCents: number;
+  totalChargedCents: number;
+  totalRefundedCents: number;
+}
+
+export interface L27ChargesResult {
+  date: string;
+  bookings: L27BookingCharges[];
+  error?: string;
+}
+
+/**
+ * Fetch charge data for all completed bookings on a specific date.
+ * Returns charged, refunded, and outstanding per booking.
+ * Live L27 API call — not cached — so data is always current.
+ */
+export async function getChargesForDate(date: string): Promise<L27ChargesResult> {
+  const baseUrl = getBaseUrl();
+  const bearer = getBearer();
+  const allBookings: L27BookingCharges[] = [];
+  let offset = 0;
+  const limit = 20;
+
+  type RawChargeEntry = {
+    id: number;
+    transaction_id?: string;
+    amount?: number;
+    payment_method_info?: { text?: string };
+    description?: string;
+    status?: string;
+    charged_date?: string;
+  };
+  type RawChargesBooking = {
+    id: number;
+    user?: { name?: string };
+    service_date?: string;
+    charges?: {
+      charged?: RawChargeEntry[];
+      refunded?: RawChargeEntry[];
+      outstanding?: number;
+    };
+  };
+
+  while (true) {
+    const params = new URLSearchParams({
+      from: date,
+      to: date,
+      options: "completed,exclude_forecasted",
+      limit: String(limit),
+      offset: String(offset),
+      sort: "asc",
+    });
+    const url = `${baseUrl}/v1/staff/bookings?${params.toString()}`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${bearer}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      });
+    } catch (err) {
+      return { date, bookings: [], error: `Network error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (!response.ok) {
+      const body = await response.text();
+      return { date, bookings: [], error: `L27 API error ${response.status}: ${body.substring(0, 200)}` };
+    }
+    const raw = await response.json() as RawChargesBooking[];
+    if (!Array.isArray(raw) || raw.length === 0) break;
+
+    for (const b of raw) {
+      const charges = b.charges ?? {};
+      const mapEntry = (c: RawChargeEntry): L27ChargeEntry => ({
+        id: c.id,
+        transactionId: c.transaction_id ?? "",
+        amountCents: Math.round(Number(c.amount ?? 0) * 100),
+        cardLast4: c.payment_method_info?.text ?? null,
+        description: c.description ?? "",
+        status: c.status ?? "",
+        chargedDate: c.charged_date ?? "",
+      });
+      const charged = (charges.charged ?? []).map(mapEntry);
+      const refunded = (charges.refunded ?? []).map(mapEntry);
+      allBookings.push({
+        bookingId: b.id,
+        customerName: b.user?.name ?? "Unknown",
+        serviceDate: b.service_date ?? date,
+        charged,
+        refunded,
+        outstandingCents: Math.round(Number(charges.outstanding ?? 0) * 100),
+        totalChargedCents: charged.reduce((s, c) => s + c.amountCents, 0),
+        totalRefundedCents: refunded.reduce((s, c) => s + c.amountCents, 0),
+      });
+    }
+    if (raw.length < limit) break;
+    offset += limit;
+  }
+  return { date, bookings: allBookings };
+}

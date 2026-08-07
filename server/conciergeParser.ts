@@ -64,7 +64,7 @@ interface ParsedResponse {
 
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
-  "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta",
+  "call_client", "eta_update", "get_eta_for_customer", "card_status", "charge_status", "rank_teams", "list_no_eta",
   "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "email_client", "unknown",
 ] as const;
 
@@ -261,6 +261,7 @@ Choose ONE of:
 - "eta_update" — user wants to trigger an ETA call to a team
 - "get_eta_for_customer" — user wants the ETA for a specific customer's job
 - "card_status" — user wants to see credit card / payment hold status for jobs on a specific date (e.g. "show cards on hold for tomorrow", "card status for July 21", "which customers have pre-auth today")
+- "charge_status" — user wants to see which customers were actually charged (captured) for a date or period, and how much (e.g. "charge status for today", "what was charged yesterday", "show charges for August 6", "how much did we collect today")
 - "rank_teams" — user wants to rank or compare teams/cleaners by their customer rating (e.g. "rank teams by rating", "who has the best rating", "team ratings", "best cleaners", "worst rated team")
 - "list_no_eta" — user wants to see which teams/cleaners have not yet submitted an ETA today (e.g. "which teams have no ETA", "who hasn't submitted ETA", "missing ETA", "no ETA teams", "teams with no ETA", "who still needs to send ETA")
 - "job_status_stream" — user wants to see the live status stream of all today's jobs and alerts (e.g. "show me today's jobs", "job status", "what's going on today", "status stream", "show all jobs", "live status", "team status")
@@ -344,6 +345,10 @@ Classify who the action targets:
 "Send an email to Cindy about her appointment" → action: "email_client", clientName: "Cindy", messageHint: "appointment", targetType: "customer", requestedFields: []
 "Show me cards on hold for tomorrow" → action: "card_status", timeScope: {type: "tomorrow"}, requestedFields: []
 "Card status for today" → action: "card_status", timeScope: {type: "today"}, requestedFields: []
+"Charge status for today" → action: "charge_status", timeScope: {type: "today"}, requestedFields: []
+"What was charged yesterday" → action: "charge_status", timeScope: {type: "yesterday"}, requestedFields: []
+"Show charges for August 6" → action: "charge_status", timeScope: {type: "specific_date", date: "2026-08-06"}, requestedFields: []
+"How much did we collect today" → action: "charge_status", timeScope: {type: "today"}, requestedFields: []
 "Rank teams by rating" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
 "Who has the best rating?" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
 "Team ratings" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
@@ -388,7 +393,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "email_client", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "charge_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "generate_invoice", "email_client", "unknown"],
             },
             entities: {
               type: "object",
@@ -498,7 +503,7 @@ function fallbackPlan(message: string): QueryPlan {
 // every handler in this PR.
 
 export interface LegacyIntent {
-  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unanswered_sms" | "generate_invoice" | "email_client" | "unknown";
+  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "charge_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unanswered_sms" | "generate_invoice" | "email_client" | "unknown";
   teamHint?: string | null;
   targetHint?: string | null;
   clientName?: string | null;

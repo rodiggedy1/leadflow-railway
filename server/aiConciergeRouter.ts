@@ -28,6 +28,7 @@ import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { parseConciergeRequest, validateAndNormalizePlan } from "./conciergeParser";
+import { getChargesForDate } from "./launch27";
 import { generateInvoicePdf } from "./invoiceRouter";
 import { buildSystemPrompt } from "./csReplyStream";
 import { resolveQuery } from "./conciergeResolvers";
@@ -380,6 +381,20 @@ export interface CardStatusResult {
   }>;
 }
 
+export interface ChargeStatusResult {
+  type: "charge_status";
+  date: string;
+  rows: Array<{
+    customerName: string;
+    totalChargedCents: number;
+    totalRefundedCents: number;
+    outstandingCents: number;
+    cardLast4: string | null;
+    chargedAt: string | null;
+  }>;
+  grandTotalChargedCents: number;
+  grandTotalRefundedCents: number;
+}
 export interface CustomerProfileResult {
   type: "customer_profile";
   profile: {
@@ -454,6 +469,7 @@ type ConciergeResult =
   | EmailClientConfirmResult
   | QueryResultResult
   | CardStatusResult
+  | ChargeStatusResult
   | TeamRatingsResult
   | NoEtaResult
   | ConfirmationTextsResult
@@ -2719,6 +2735,9 @@ export async function handleConciergeRequest({
   if (plan.action === "card_status") {
     return await handleCardStatus(plan, db);
   }
+  if (plan.action === "charge_status") {
+    return await handleChargeStatus(plan);
+  }
   if (plan.action === "rank_teams") {
     return await handleRankTeams(db);
   }
@@ -2769,6 +2788,35 @@ export async function handleConciergeRequest({
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
+
+// ── Charge status handler ─────────────────────────────────────────────────────
+async function handleChargeStatus(
+  plan: QueryPlan,
+): Promise<ChargeStatusResult> {
+  const { startDate } = resolveServiceDateRange(plan.timeScope);
+  const result = await getChargesForDate(startDate);
+  if (result.error) {
+    console.error("[handleChargeStatus] L27 error:", result.error);
+  }
+  // Build one row per booking that has any charge activity
+  const rows = result.bookings
+    .filter(b => b.totalChargedCents > 0 || b.outstandingCents > 0)
+    .map(b => ({
+      customerName: b.customerName,
+      totalChargedCents: b.totalChargedCents,
+      totalRefundedCents: b.totalRefundedCents,
+      outstandingCents: b.outstandingCents,
+      // Use last4 from first charged entry if available
+      cardLast4: b.charged[0]?.cardLast4 ?? null,
+      chargedAt: b.charged[0]?.chargedDate ?? null,
+    }));
+  // Sort: charged first (desc by amount), then outstanding only
+  rows.sort((a, b) => b.totalChargedCents - a.totalChargedCents);
+  const grandTotalChargedCents = rows.reduce((s, r) => s + r.totalChargedCents, 0);
+  const grandTotalRefundedCents = rows.reduce((s, r) => s + r.totalRefundedCents, 0);
+  return { type: "charge_status", date: startDate, rows, grandTotalChargedCents, grandTotalRefundedCents };
+}
+
 export const aiConciergeRouter = router({
   /**
    * Main chat endpoint for the AI Concierge panel.

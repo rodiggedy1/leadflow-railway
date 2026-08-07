@@ -257,6 +257,19 @@ interface CardStatusCard {
     amountCents: number;
   }>;
 }
+interface ChargeStatusCard {
+  date: string;
+  rows: Array<{
+    customerName: string;
+    totalChargedCents: number;
+    totalRefundedCents: number;
+    outstandingCents: number;
+    cardLast4: string | null;
+    chargedAt: string | null;
+  }>;
+  grandTotalChargedCents: number;
+  grandTotalRefundedCents: number;
+}
 interface CustomerProfileCard {
   name: string;
   phone: string;
@@ -290,6 +303,7 @@ type MessageContent =
   | { type: "call_client_pending"; card: CallClientPendingCard }
   | { type: "query_result"; card: QueryResultCard }
   | { type: "card_status"; card: CardStatusCard }
+  | { type: "charge_status"; card: ChargeStatusCard }
   | { type: "rank_teams"; card: TeamRatingsCard }
   | { type: "list_no_eta"; card: NoEtaCard }
   | { type: "confirmation_texts"; card: ConfirmationTextsCard }
@@ -1169,6 +1183,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "charge_status" && (
+          <div>
+            <ChargeStatusCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "rank_teams" && (
           <div>
             <TeamRatingsCardView card={msg.content.card} />
@@ -1636,6 +1656,93 @@ function CardStatusCardView({ card }: { card: CardStatusCard }) {
       <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47" }}>
         <button onClick={downloadCsv} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7447f5", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           <ExternalLink className="w-3 h-3" /> Download CSV
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Charge status card ──────────────────────────────────────────────────────
+function ChargeStatusCardView({ card }: { card: ChargeStatusCard }) {
+  function formatAmount(cents: number) {
+    return `$${(cents / 100).toFixed(2)}`;
+  }
+  function formatDate(iso: string | null) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+    } catch { return iso; }
+  }
+  function downloadCsv() {
+    const headers = ["Customer", "Charged", "Refunded", "Outstanding", "Card", "Charged At"];
+    const csvRows = card.rows.map(r => [
+      r.customerName,
+      formatAmount(r.totalChargedCents),
+      r.totalRefundedCents > 0 ? formatAmount(r.totalRefundedCents) : "",
+      r.outstandingCents > 0 ? formatAmount(r.outstandingCents) : "",
+      r.cardLast4 ? `****${r.cardLast4}` : "",
+      formatDate(r.chargedAt),
+    ]);
+    const csv = [headers, ...csvRows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `charge-status-${card.date}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+  const charged = card.rows.filter(r => r.totalChargedCents > 0);
+  const outstanding = card.rows.filter(r => r.outstandingCents > 0);
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #10b981, #059669)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: 13 }}>💳</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Charge Status</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8", marginBottom: 6 }}>{card.date} · {card.rows.length} booking{card.rows.length !== 1 ? "s" : ""}</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {charged.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{charged.length} charged · {formatAmount(card.grandTotalChargedCents)}</span>}
+            {card.grandTotalRefundedCents > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>Refunded · {formatAmount(card.grandTotalRefundedCents)}</span>}
+            {outstanding.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{outstanding.length} outstanding</span>}
+          </div>
+        </div>
+      </div>
+      {/* Table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid #2a2e47" }}>
+              {["Customer", "Charged", "Outstanding", "Card", "When"].map(h => (
+                <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {card.rows.map((row, i) => (
+              <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.customerName}</td>
+                <td style={{ padding: "9px 14px", fontSize: 12, color: row.totalChargedCents > 0 ? "#34d399" : "#6b7280", fontWeight: 600 }}>
+                  {row.totalChargedCents > 0 ? formatAmount(row.totalChargedCents) : "—"}
+                  {row.totalRefundedCents > 0 && <span style={{ fontSize: 11, color: "#f87171", marginLeft: 4 }}>-{formatAmount(row.totalRefundedCents)}</span>}
+                </td>
+                <td style={{ padding: "9px 14px", fontSize: 12, color: row.outstandingCents > 0 ? "#fbbf24" : "#6b7280" }}>
+                  {row.outstandingCents > 0 ? formatAmount(row.outstandingCents) : "—"}
+                </td>
+                <td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa", fontFamily: "monospace" }}>
+                  {row.cardLast4 ? `****${row.cardLast4}` : "—"}
+                </td>
+                <td style={{ padding: "9px 14px", fontSize: 11, color: "#8a8aaa" }}>{formatDate(row.chargedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* Footer */}
+      <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47" }}>
+        <button onClick={downloadCsv} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7447f5", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <span style={{ fontSize: 11 }}>↓</span> Download CSV
         </button>
       </div>
     </div>
@@ -4092,6 +4199,15 @@ function buildAiMessage(result: ServerResult): Message[] {
       ts,
     };
     return [_msg, { id: uid(), role: "ai" as const, content: { type: "post_to_cc_prompt" as const, rawText: _msg.content.type === "text" ? (_msg.content as any).text : _msg.content.type === "query_result" ? (_msg.content as any).card.answer : _msg.content.type, resultType: _msg.content.type }, ts: nowTime() }];
+  }
+  if (result.type === "charge_status") {
+    const _msg = {
+      id: uid(),
+      role: "ai",
+      content: { type: "charge_status" as const, card: { date: result.date, rows: result.rows, grandTotalChargedCents: result.grandTotalChargedCents, grandTotalRefundedCents: result.grandTotalRefundedCents } },
+      ts,
+    };
+    return [_msg];
   }
   if (result.type === "rank_teams") {
     const _msg = {
