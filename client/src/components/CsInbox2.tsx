@@ -531,8 +531,6 @@ export default function CsInbox2() {
                 />
               )}
             </div>
-              />
-            </div>
           </aside>
         </div>
         <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>
