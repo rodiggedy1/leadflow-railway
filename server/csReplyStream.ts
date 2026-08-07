@@ -2,18 +2,18 @@
  * csReplyStream.ts — Streaming SSE endpoint for the CS Inbox auto-draft.
  *
  * POST /api/cs-reply-stream
- *   Body: { conversationContext, customerName?, jobContext?, scenario? }
+ *   Body: { conversationContext, classifyContext?, customerName?, jobContext?, scenario?, sessionId? }
  *   Auth: agent session cookie OR Manus OAuth owner session
  *
- * Streams the Forge API response token-by-token as SSE events so the compose
- * box fills up live (like someone typing), instead of the text popping in all at once.
+ * Pipeline:
+ *   full 20-msg context + jobContext
+ *   → analyzeConversationState (unified: intent + state)
+ *   → SQL prefilter (primaryIntent + customerType)
+ *   → reranker (full state object)
+ *   → source-priority prompt injection
+ *   → draft (streaming SSE)
  *
- *   data: {"token":"Hey"}
- *   data: {"token":" Kate"}
- *   ...
- *   data: [DONE]
- *
- * On error: data: {"error":"..."}
+ * Fail-closed: if state analysis fails → skip retrieval, draft from raw context only.
  */
 
 import type { Express, Request, Response } from "express";
@@ -61,52 +61,113 @@ async function getCandidatePool(): Promise<CandidateExample[]> {
   }
 }
 
-// ── Classify current conversation ────────────────────────────────────────────
-interface ConvClassification {
+// ── Unified conversation-state analysis ──────────────────────────────────────
+interface ConversationState {
   primaryIntent: string;
-  customerType: string;
+  secondaryIntents: string[];
+  customerType: "new_lead" | "existing_customer" | "booked_customer" | "unknown";
   customerGoal: string;
-  situation: string;
+  conversationStage: string;
+  lastAgentAction: string;
+  waitingOn: "customer" | "agent" | "team" | "nobody";
+  outstandingItems: string[];
+  serviceCompleted: boolean;
+  nextBestAction: string;
+  doNotAssume: string[];
 }
 
-async function classifyCurrentConversation(recentMessages: string, forgeApiUrl: string): Promise<ConvClassification | null> {
+const REQUIRED_STATE_FIELDS: (keyof ConversationState)[] = [
+  "primaryIntent", "customerType", "customerGoal", "conversationStage",
+  "lastAgentAction", "waitingOn", "serviceCompleted", "nextBestAction",
+];
+
+async function analyzeConversationState(
+  conversationContext: string,
+  jobContext: string,
+  forgeApiUrl: string
+): Promise<ConversationState | null> {
   try {
+    const contextBlock = [
+      conversationContext,
+      jobContext ? `\nCurrent booking/job facts:\n${jobContext}` : "",
+    ].filter(Boolean).join("\n");
+
     const res = await fetch(forgeApiUrl, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${ENV.forgeApiKey}` },
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         model: "gemini-2.5-flash",
         stream: false,
         messages: [{
           role: "user",
-          content: `Classify this customer service SMS conversation for a residential cleaning company.\nReturn ONLY a JSON object with these fields:\n- primaryIntent: one of: reschedule, complaint, pricing_question, booking_inquiry, confirmation, cancel, compliment, eta_question, payment, address_question, general_question, other\n- customerType: "new_lead" | "existing_customer" | "booked_customer" | "unknown"\n- customerGoal: short phrase (max 10 words) describing what the customer wants\n- situation: one sentence (max 20 words) describing the situation\n\nConversation:\n${recentMessages}`,
+          content: `You are analyzing a customer service SMS conversation for a residential cleaning company.
+Return ONLY a JSON object with ALL of these fields (no extra text):
+
+{
+  "primaryIntent": one of: reschedule, complaint, pricing_question, booking_inquiry, confirmation, cancel, compliment, eta_question, payment, address_question, general_question, other,
+  "secondaryIntents": [],
+  "customerType": "new_lead" | "existing_customer" | "booked_customer" | "unknown",
+  "customerGoal": "short phrase (max 10 words) describing what the customer wants",
+  "conversationStage": "one of: initial_inquiry, quote_sent, booking_in_progress, booking_confirmed, pre_service, service_day, post_service, complaint_open, complaint_resolved, follow_up, other",
+  "lastAgentAction": "one sentence describing the last thing the agent did or said",
+  "waitingOn": "customer" | "agent" | "team" | "nobody",
+  "outstandingItems": ["list of things still needed to move forward"],
+  "serviceCompleted": true | false,
+  "nextBestAction": "one sentence describing what the reply should accomplish",
+  "doNotAssume": ["list of things the model must NOT assume based on this conversation"]
+}
+
+Conversation:
+${contextBlock}`,
         }],
-        max_tokens: 256,
+        max_tokens: 512,
         response_format: { type: "json_object" },
       }),
     });
+
     if (!res.ok) return null;
     const data = await res.json() as { choices: Array<{ message: { content: string } }> };
     const content = data.choices?.[0]?.message?.content ?? "{}";
-    return JSON.parse(content) as ConvClassification;
+    const parsed = JSON.parse(content) as Partial<ConversationState>;
+
+    // Fail closed: require all critical fields to be present and non-empty
+    for (const field of REQUIRED_STATE_FIELDS) {
+      const val = parsed[field];
+      if (val === undefined || val === null || val === "") return null;
+    }
+
+    return {
+      primaryIntent: parsed.primaryIntent ?? "other",
+      secondaryIntents: Array.isArray(parsed.secondaryIntents) ? parsed.secondaryIntents : [],
+      customerType: parsed.customerType ?? "unknown",
+      customerGoal: parsed.customerGoal ?? "",
+      conversationStage: parsed.conversationStage ?? "other",
+      lastAgentAction: parsed.lastAgentAction ?? "",
+      waitingOn: parsed.waitingOn ?? "nobody",
+      outstandingItems: Array.isArray(parsed.outstandingItems) ? parsed.outstandingItems : [],
+      serviceCompleted: Boolean(parsed.serviceCompleted),
+      nextBestAction: parsed.nextBestAction ?? "",
+      doNotAssume: Array.isArray(parsed.doNotAssume) ? parsed.doNotAssume : [],
+    };
   } catch {
     return null;
   }
 }
 
-// ── SQL prefilter + reranker ──────────────────────────────────────────────────
+// ── SQL prefilter + semantic reranker ─────────────────────────────────────────
 async function retrieveExamples(
-  classification: ConvClassification,
+  state: ConversationState,
   sessionId: number | undefined,
   forgeApiUrl: string
 ): Promise<{ examples: CandidateExample[]; selectedIds: number[] }> {
   const pool = await getCandidatePool();
   if (pool.length === 0) return { examples: [], selectedIds: [] };
 
-  // Priority ordering: intent+type > intent > type > recency
+  // SQL prefilter: prioritize intent+type > intent > type > recency
   const scored = pool.map(c => {
-    const intentMatch = c.primaryIntent === classification.primaryIntent;
-    const typeMatch = c.customerType === classification.customerType;
+    const intentMatch = c.primaryIntent === state.primaryIntent;
+    const typeMatch = c.customerType === state.customerType;
     let score = 3;
     if (intentMatch && typeMatch) score = 0;
     else if (intentMatch) score = 1;
@@ -118,14 +179,19 @@ async function retrieveExamples(
 
   if (candidates.length === 0) return { examples: [], selectedIds: [] };
 
-  // Reranker LLM call
+  // Reranker: receives full state object for semantic selection
   try {
     const rerankerInput = {
-      current: {
-        primaryIntent: classification.primaryIntent,
-        customerType: classification.customerType,
-        customerGoal: classification.customerGoal,
-        situation: classification.situation,
+      currentState: {
+        primaryIntent: state.primaryIntent,
+        customerType: state.customerType,
+        customerGoal: state.customerGoal,
+        conversationStage: state.conversationStage,
+        lastAgentAction: state.lastAgentAction,
+        waitingOn: state.waitingOn,
+        outstandingItems: state.outstandingItems,
+        serviceCompleted: state.serviceCompleted,
+        nextBestAction: state.nextBestAction,
       },
       candidates: candidates.map(c => ({
         id: c.id,
@@ -139,12 +205,13 @@ async function retrieveExamples(
     const res = await fetch(forgeApiUrl, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${ENV.forgeApiKey}` },
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         model: "gemini-2.5-flash",
         stream: false,
         messages: [{
           role: "system",
-          content: "You are selecting the most relevant historical customer service examples to help an agent draft a reply. Given the current conversation context and a list of candidate examples, return a JSON object with a `selected` array containing the IDs of the most relevant examples (up to 8, preferably 5-8, but return fewer if the remaining examples are weak — never select an example merely to reach a quota), and a `confidence` field (\"high\", \"medium\", or \"low\"). Only use IDs from the provided candidates list. Return only valid JSON.",
+          content: "You are selecting the most relevant historical customer service examples to help an agent draft a reply. Use the full conversation state (stage, waitingOn, outstandingItems, nextBestAction) — not just intent — to find examples where the agent faced a similar situation. Return a JSON object with a `selected` array of IDs (up to 8, preferably 5-8, but return fewer if remaining examples are weak — never select merely to reach a quota), and a `confidence` field (\"high\", \"medium\", or \"low\"). Only use IDs from the provided candidates list. Return only valid JSON.",
         }, {
           role: "user",
           content: JSON.stringify(rerankerInput),
@@ -162,7 +229,7 @@ async function retrieveExamples(
     const selectedSet = new Set(selectedIds);
     const examples = candidates.filter(c => selectedSet.has(c.id));
 
-    console.log(`[DRAFT_EXAMPLES] sessionId=${sessionId ?? "?"} intent=${classification.primaryIntent} confidence=${parsed.confidence ?? "?"} examples=[${selectedIds.join(",")}]`);
+    console.log(`[DRAFT_EXAMPLES] sessionId=${sessionId ?? "?"} intent=${state.primaryIntent} stage=${state.conversationStage} waitingOn=${state.waitingOn} confidence=${parsed.confidence ?? "?"} examples=[${selectedIds.join(",")}]`);
     return { examples, selectedIds };
   } catch (err) {
     console.warn("[DRAFT_EXAMPLES] reranker failed, using top candidates:", err);
@@ -178,7 +245,40 @@ function formatFewShotExamples(examples: CandidateExample[]): string {
     const situationLine = e.situation ? `[Situation: ${e.situation}]` : "";
     return `${situationLine}\nCustomer: "${e.userMsg}"\nAgent: "${e.agentReply}"`;
   });
-  return `=== REAL EXAMPLES FROM YOUR TEAM ===\nThese are actual responses your team sent that worked well. Use them to calibrate tone, length, and style — not to copy verbatim.\n\n${lines.join("\n---\n")}`;
+  return `=== REAL EXAMPLES FROM YOUR TEAM ===\nThese are actual responses your team sent that worked well. Use them to calibrate tone, length, and style — not to copy verbatim. They are style/strategy references only and must never override current conversation facts.\n\n${lines.join("\n---\n")}`;
+}
+
+// ── Build per-request context block (state + source priority) ─────────────────
+function buildContextBlock(state: ConversationState, jobContext: string): string {
+  const outstanding = state.outstandingItems.length > 0
+    ? state.outstandingItems.join(", ")
+    : "none";
+  const doNotAssume = state.doNotAssume.length > 0
+    ? state.doNotAssume.join("; ")
+    : "none";
+
+  return `=== CURRENT CONVERSATION STATE ===
+Customer goal: ${state.customerGoal}
+Conversation stage: ${state.conversationStage}
+Last agent action: ${state.lastAgentAction}
+Waiting on: ${state.waitingOn}
+Outstanding items: ${outstanding}
+Service completed: ${state.serviceCompleted}
+Next best action: ${state.nextBestAction}
+Do NOT assume: ${doNotAssume}
+
+=== CURRENT BOOKING/JOB FACTS ===
+${jobContext || "No active booking on file"}
+
+=== SOURCE PRIORITY — follow this order strictly ===
+1. Current conversation facts (the messages below)
+2. Current booking/job facts (above)
+3. Conversation-state analysis (above)
+4. Business rules
+5. Historical examples — tone/strategy reference ONLY. Never copy facts, timing, booking status, or assumptions from them. They cannot override current conversation facts.
+
+NEXT BEST ACTION: ${state.nextBestAction}
+Write the most natural customer-facing message that accomplishes this. Do not repeat it mechanically.`;
 }
 
 async function isAuthorizedOpsUser(req: Request): Promise<boolean> {
@@ -254,7 +354,7 @@ When you catch yourself writing something like the above — stop. Start over. A
 === MAIDS IN BLACK KNOWLEDGE BASE ===
 ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}
 
-Write the exact SMS the agent should send for the scenario described.`;
+Write the exact SMS the agent should send for the scenario described.${fewShotExamples ? `\n\n${fewShotExamples}` : ""}`;
 }
 
 export function registerCsReplyStreamRoute(app: Express) {
@@ -265,24 +365,34 @@ export function registerCsReplyStreamRoute(app: Express) {
       return;
     }
 
-    const { conversationContext, customerName, jobContext, scenario, sessionId: reqSessionId, classifyContext } = req.body ?? {};
+    const { conversationContext, customerName, jobContext, scenario, sessionId: reqSessionId } = req.body ?? {};
 
-    // Retrieve few-shot examples (non-blocking — if it fails, draft still works)
+    const forgeApiUrl = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+      ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
+      : "https://forge.manus.im/v1/chat/completions";
+
+    const jobContextStr = typeof jobContext === "string" ? jobContext : "";
+    const conversationContextStr = typeof conversationContext === "string" ? conversationContext : "";
+    const sessionIdNum = typeof reqSessionId === "number" ? reqSessionId : undefined;
+
+    // ── State analysis + retrieval (fail-closed) ──────────────────────────────
     let fewShotExamples = "";
+    let contextBlock = "";
     try {
-      const forgeApiUrlForRetrieval = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-        ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-        : "https://forge.manus.im/v1/chat/completions";
-      const classificationInput = classifyContext ?? conversationContext ?? "";
-      if (classificationInput) {
-        const classification = await classifyCurrentConversation(classificationInput, forgeApiUrlForRetrieval);
-        if (classification) {
-          const { examples } = await retrieveExamples(classification, typeof reqSessionId === "number" ? reqSessionId : undefined, forgeApiUrlForRetrieval);
+      if (conversationContextStr) {
+        const state = await analyzeConversationState(conversationContextStr, jobContextStr, forgeApiUrl);
+        if (state) {
+          // State analysis succeeded — retrieve semantically relevant examples
+          const { examples } = await retrieveExamples(state, sessionIdNum, forgeApiUrl);
           fewShotExamples = formatFewShotExamples(examples);
+          contextBlock = buildContextBlock(state, jobContextStr);
+        } else {
+          // State analysis failed — fail closed: no retrieval, no state injection
+          console.warn(`[DRAFT_STATE] analyzeConversationState returned null for sessionId=${sessionIdNum ?? "?"} — falling back to raw context`);
         }
       }
     } catch (err) {
-      console.warn("[DRAFT_EXAMPLES] retrieval failed (non-fatal):", err);
+      console.warn("[DRAFT_STATE] state analysis/retrieval failed (non-fatal):", err);
     }
 
     // SSE headers
@@ -295,18 +405,15 @@ export function registerCsReplyStreamRoute(app: Express) {
     const systemPrompt = buildSystemPrompt(fewShotExamples || undefined);
     const firstName = customerName ? String(customerName).trim().split(/\s+/)[0] : "";
     const userParts: string[] = [];
+    if (contextBlock) userParts.push(contextBlock);
     if (firstName) userParts.push(`Customer's first name: ${firstName}`);
-    if (jobContext) userParts.push(`Upcoming job details:\n${jobContext}`);
-    if (conversationContext) userParts.push(`Recent conversation with this customer:\n${conversationContext}`);
+    if (!contextBlock && jobContextStr) userParts.push(`Upcoming job details:\n${jobContextStr}`);
+    if (conversationContextStr) userParts.push(`Recent conversation with this customer:\n${conversationContextStr}`);
     if (scenario) {
       userParts.push(`Customer service scenario: ${scenario}`);
     } else {
       userParts.push("Based on the conversation above, write the best reply to send to the customer now.");
     }
-
-    const forgeApiUrl = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-      ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-      : "https://forge.manus.im/v1/chat/completions";
 
     const payload = {
       model: "gemini-2.5-flash",

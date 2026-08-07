@@ -521,13 +521,19 @@ export default function CsInbox2() {
       .join("\n");
     streamAutoDraft({ conversationContext, classifyContext, customerName: conv.name ?? "", jobContext: jobContext ?? "", sessionId: conv.id });
   }
-  // Auto-draft when conversation becomes selected
+  // detailReady: true only when the loaded detail belongs to the currently selected session.
+  // Prevents drafting Customer B using Customer A's stale detail during a switch.
+  const detailReady =
+    !!conversationDetail &&
+    conversationDetail.sessionId === selectedConv?.id;
+
+  // Auto-draft when full conversation detail for the correct session is loaded
   useEffect(() => {
-    if (!selectedConv) return;
+    if (!selectedConv || !detailReady) return;
     selectedConvRef.current = selectedConv.id;
     triggerAutoDraft(selectedConv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConv?.id]);
+  }, [selectedConv?.id, detailReady]);
 
 
   useEffect(() => {
