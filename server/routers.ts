@@ -3642,7 +3642,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .where(eq(conversationSessions.id, input.sessionId));
         // Cancel all active CS missions for this session
         await db.execute(
-          sql`UPDATE cs_missions SET status = 'cancelled', updatedAt = ${Date.now()} WHERE sessionId = ${input.sessionId} AND status IN ('active', 'waiting', 'ready', 'needs_attention')`
+          sql`UPDATE cs_missions SET status = 'cancelled', updatedAt = NOW() WHERE sessionId = ${input.sessionId} AND status IN ('active', 'waiting', 'ready', 'needs_attention')`
         );
         // DIAGNOSTIC: dump all ops_chat_messages for this session
         const diagOcm = await db.execute(
