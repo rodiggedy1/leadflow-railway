@@ -1692,6 +1692,8 @@ function ChargeStatusCardView({ card }: { card: ChargeStatusCard }) {
   }
   const charged = card.rows.filter(r => r.totalChargedCents > 0);
   const outstanding = card.rows.filter(r => r.outstandingCents > 0);
+  const grandTotalOutstandingCents = outstanding.reduce((s, r) => s + r.outstandingCents, 0);
+  const grandTotalIfAllChargedCents = card.grandTotalChargedCents + grandTotalOutstandingCents;
   return (
     <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
       {/* Header */}
@@ -1705,7 +1707,8 @@ function ChargeStatusCardView({ card }: { card: ChargeStatusCard }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
             {charged.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{charged.length} charged · {formatAmount(card.grandTotalChargedCents)}</span>}
             {card.grandTotalRefundedCents > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>Refunded · {formatAmount(card.grandTotalRefundedCents)}</span>}
-            {outstanding.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{outstanding.length} outstanding</span>}
+            {outstanding.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{outstanding.length} outstanding · {formatAmount(grandTotalOutstandingCents)}</span>}
+            {grandTotalOutstandingCents > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#a78bfa", background: "#a78bfa22", padding: "2px 7px", borderRadius: 8 }}>Total if all charged · {formatAmount(grandTotalIfAllChargedCents)}</span>}
           </div>
         </div>
       </div>
