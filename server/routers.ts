@@ -3645,6 +3645,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // Broadcast so CS badge updates immediately on all connected clients
         const { broadcastOpsUpdate: bcastResolve } = await import("./sseBroadcast");
         bcastResolve("lead_update");
+        // Also broadcast cs_mission_update so OperationsPanel refetches missions for this session
+        bcastResolve("cs_mission_update", { sessionId: input.sessionId });
         return { success: true };
       }),
     /**
