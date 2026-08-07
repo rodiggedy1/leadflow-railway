@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
+import CsRightPanelTeam from "@/components/CsRightPanelTeam";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
@@ -501,20 +502,35 @@ export default function CsInbox2() {
           <aside className="cs2-side" style={{overflow:'hidden',display:'flex',flexDirection:'column',gap:0,padding:0}}>
             {/* Client/Team profile panel */}
             <div style={{flex:1,minHeight:0,overflow:'hidden'}}>
-              <CsRightPanelClient
-                selected={{
-                  id: selectedConv.id,
-                  name: selectedConv.name,
-                  initials: selectedConv.initials,
-                  phone: selectedConv.phone,
-                  queue: selectedConv.queue,
-                  wait: selectedConv.wait,
-                  status: selectedConv.csStatusTier ?? undefined,
-                  stats: { bookings: 0, complaints: 0 },
-                }}
-                setCompose={setCompose}
-                messages={detailMessages}
-
+              {selectedConv.queue === "Teams" ? (
+                <CsRightPanelTeam
+                  selected={{
+                    id: selectedConv.id,
+                    name: selectedConv.name,
+                    initials: selectedConv.initials,
+                    phone: selectedConv.phone,
+                    queue: selectedConv.queue,
+                    wait: selectedConv.wait,
+                    status: selectedConv.csStatusTier ?? undefined,
+                  }}
+                />
+              ) : (
+                <CsRightPanelClient
+                  selected={{
+                    id: selectedConv.id,
+                    name: selectedConv.name,
+                    initials: selectedConv.initials,
+                    phone: selectedConv.phone,
+                    queue: selectedConv.queue,
+                    wait: selectedConv.wait,
+                    status: selectedConv.csStatusTier ?? undefined,
+                    stats: { bookings: 0, complaints: 0 },
+                  }}
+                  setCompose={setCompose}
+                  messages={detailMessages}
+                />
+              )}
+            </div>
               />
             </div>
           </aside>
