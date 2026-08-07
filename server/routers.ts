@@ -3644,6 +3644,27 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         await db.execute(
           sql`UPDATE cs_missions SET status = 'cancelled', updatedAt = ${Date.now()} WHERE sessionId = ${input.sessionId} AND status IN ('active', 'waiting', 'ready', 'needs_attention')`
         );
+        // DIAGNOSTIC: dump all ops_chat_messages for this session
+        const diagOcm = await db.execute(
+          sql`SELECT id, sessionId, quickAction, cardStatus, activeDedupKey, metadata
+              FROM ops_chat_messages
+              WHERE sessionId = ${input.sessionId}
+                AND quickAction IN ('madison_sms_draft', 'madison_email_draft')`
+        );
+        console.log('[RESOLVE_DIAG] sessionId:', input.sessionId, 'ocm_rows_by_sessionId:', JSON.stringify(diagOcm));
+
+        // DIAGNOSTIC: also query via JOIN through madison_sms_drafts.sessionId
+        const diagJoin = await db.execute(
+          sql`SELECT ocm.id AS cardId, ocm.sessionId AS cardSessionId, ocm.metadata, ocm.cardStatus, ocm.activeDedupKey,
+                     msd.id AS draftId, msd.sessionId AS draftSessionId, msd.status AS draftStatus
+              FROM ops_chat_messages ocm
+              JOIN madison_sms_drafts msd
+                ON CAST(JSON_UNQUOTE(JSON_EXTRACT(ocm.metadata, '$.draftId')) AS UNSIGNED) = msd.id
+              WHERE msd.sessionId = ${input.sessionId}
+                AND ocm.quickAction = 'madison_sms_draft'`
+        );
+        console.log('[RESOLVE_DIAG] JOIN_result:', JSON.stringify(diagJoin));
+
         // Dismiss active Madison SMS draft cards + underlying pending drafts
         const activeSmsCards = await db.execute(
           sql`SELECT id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')) AS UNSIGNED) AS draftId
@@ -3653,6 +3674,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
                 AND cardStatus = 'active'
                 AND JSON_VALID(metadata) = 1`
         );
+        console.log('[RESOLVE_DIAG] activeSmsCards_by_sessionId:', JSON.stringify(activeSmsCards));
         for (const row of (activeSmsCards as any[])) {
           const draftId = Number(row.draftId);
           if (draftId) {
@@ -3674,6 +3696,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
                 AND cardStatus = 'active'
                 AND JSON_VALID(metadata) = 1`
         );
+        console.log('[RESOLVE_DIAG] activeEmailCards_by_sessionId:', JSON.stringify(activeEmailCards));
         for (const row of (activeEmailCards as any[])) {
           const draftId = Number(row.draftId);
           if (draftId) {
