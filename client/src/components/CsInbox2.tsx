@@ -307,6 +307,7 @@ export default function CsInbox2() {
 
   // ── Board state ─────────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
   const [compose, setCompose] = useState("");
@@ -344,9 +345,31 @@ export default function CsInbox2() {
     },
   });
 
-  function doSend() {
+  // ── resolveSession (exact copy from CsInbox.tsx) ────────────────────────
+  const resolveSession = trpc.leads.resolveSession.useMutation({
+    onSuccess: (_data, variables) => {
+      utils.leads.getUnansweredCsCount.invalidate();
+      setResolvingId(variables.sessionId);
+      window.setTimeout(() => {
+        setResolvingId(null);
+        setSelectedId(null);
+        const resolvedAt = new Date();
+        utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+          if (!old) return old;
+          return old.map((s) =>
+            s.id === variables.sessionId ? { ...s, csResolvedAt: resolvedAt } : s
+          );
+        });
+        utils.opsChat.getCsResolvedCount.invalidate();
+      }, 900);
+    },
+  });
+
+  function doSend(afterSend?: () => void) {
     if (!selectedConv || !compose.trim()) return;
-    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" }, {
+      onSuccess: () => { if (afterSend) afterSend(); }
+    });
   }
 
   // ── Detail query: real thread messages (exact copy from CsInbox.tsx) ────
@@ -458,7 +481,7 @@ export default function CsInbox2() {
               </div>
               <div className="topActions">
                 <button className="iconBtn">•••</button>
-                <button className="iconBtn resolve">✓ Resolve</button>
+                <button className="iconBtn resolve" onClick={() => resolveSession.mutate({ sessionId: selectedConv.id })} disabled={resolveSession.isPending}>{resolveSession.isPending ? "Resolving…" : "✓ Resolve"}</button>
               </div>
             </header>
             <div className="cs2-context">
@@ -492,9 +515,16 @@ export default function CsInbox2() {
                   <button className="quick" onClick={() => setCompose("Yes! We have a morning opening 😊")}>Morning opening</button>
                   <button className="quick" onClick={() => setCompose("Let me check with the team and get right back to you.")}>Check team</button>
                   <button className="quick">+ More</button>
-                  <button className="send2" onClick={doSend} disabled={sendMessage.isPending}>
+                  <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:'9px 0 0 9px',paddingRight:'12px'}}>
                     {sendMessage.isPending ? "Sending…" : "Send ↗"}
                   </button>
+                  <button
+                    className="send2"
+                    style={{borderRadius:'0 9px 9px 0',borderLeft:'1px solid rgba(255,255,255,.2)',padding:'8px 10px',fontSize:'11px'}}
+                    onClick={() => doSend(() => resolveSession.mutate({ sessionId: selectedConv.id }))}
+                    disabled={sendMessage.isPending || resolveSession.isPending}
+                    title="Send and resolve"
+                  >✓</button>
                 </div>
               </div>
             </footer>
@@ -599,7 +629,13 @@ export default function CsInbox2() {
                     <span className="chevron">⌄</span>
                   </div>
                   <div className="cs2-colCards">
-                    {col.convs.map((conv,i) => (
+                   {col.convs.map((conv,i) => (
+                      resolvingId === conv.id ? (
+                        <div key={conv.id} className="cs2-card" style={{background:'linear-gradient(135deg,#d1fae5,#a7f3d0)',border:'1px solid #6ee7b7',display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80px',pointerEvents:'none'}}>
+                          <span style={{fontSize:'22px',marginRight:'8px'}}>🎉</span>
+                          <span style={{fontWeight:800,color:'#065f46',fontSize:'13px'}}>Resolved!</span>
+                        </div>
+                      ) : (
                       <button key={conv.id} className="cs2-card" onClick={()=>{ setSelectedConv(conv); setCompose(""); }}>
                         <div className="cs2-cardTop">
                           <div className="cs2-avatar" style={{background:COLORS[i%COLORS.length]}}>{conv.initials}</div>
@@ -616,6 +652,7 @@ export default function CsInbox2() {
                           <span className="cs2-mini">M</span>
                         </div>
                       </button>
+                      )
                     ))}
                     {col.convs.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px 8px",fontSize:"12px"}}>No conversations</div>}
                     <div className="cs2-addConv">＋ Add Conversation</div>
