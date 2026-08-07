@@ -18,6 +18,7 @@ import { registerSseTestRoutes } from "../sseTest";
 import { registerOpsStreamRoute } from "../opsStream";
 import { registerCsElevateStreamRoute } from "../csElevateStream";
 import { registerCsReplyStreamRoute } from "../csReplyStream";
+import { registerCsDraftEnrichRoute } from "../csDraftEnrichment";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -1639,6 +1640,8 @@ async function startServer() {
   registerCsElevateStreamRoute(app);
   // Streaming SSE endpoint for CS Inbox auto-draft (fills compose box live)
   registerCsReplyStreamRoute(app);
+  // CS draft examples enrichment — manually triggered to populate the few-shot library
+  registerCsDraftEnrichRoute(app);
   // Nightly cron endpoint for Launch27 auto-sync
   registerCronRoutes(app);
   // Follow-up cron endpoints (5-min silence nudge + scheduled circle-back)

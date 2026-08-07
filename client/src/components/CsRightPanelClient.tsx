@@ -624,16 +624,26 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
                     {...(l27Url ? { href: l27Url, target: "_blank", rel: "noopener noreferrer" } : {})}
                     className="rounded-2xl border border-slate-200 bg-white p-4 block hover:shadow-sm transition-shadow"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Clock3 className="h-4 w-4 text-slate-400" />
-                        <span className="text-sm font-bold text-slate-800">{tj.jobTime ?? "—"}</span>
+                   <div className="flex items-center justify-between mb-2">
+                     <div className="flex items-center gap-2">
+                       <Clock3 className="h-4 w-4 text-slate-400" />
+                        <span className="text-sm font-bold text-slate-800">
+                          {(tj as any).serviceDateTime
+                            ? new Date((tj as any).serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : "—"}
+                        </span>
+                     </div>
+                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${tj.jobStatus === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                       {tj.jobStatus ?? "Scheduled"}
+                     </span>
+                   </div>
+                    {(tj as any).teamName && (
+                      <div className="flex items-center gap-1.5 mt-1 mb-1">
+                        <Users className="h-3 w-3 text-slate-400" />
+                        <span className="text-xs text-slate-500">{(tj as any).teamName}</span>
                       </div>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${tj.jobStatus === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
-                        {tj.jobStatus ?? "Scheduled"}
-                      </span>
-                    </div>
-                    {tj.jobAddress && (
+                    )}
+                   {tj.jobAddress && (
                       <div className="flex items-start gap-2 mt-2">
                         <MapPin className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
                         <span className="text-xs text-slate-600 leading-snug">{tj.jobAddress}</span>

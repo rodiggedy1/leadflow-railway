@@ -3642,10 +3642,31 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .where(eq(conversationSessions.id, input.sessionId));
         // Cancel all active CS missions for this session
         await db.execute(
-          sql`UPDATE cs_missions SET status = 'cancelled', updatedAt = ${Date.now()} WHERE sessionId = ${input.sessionId} AND status IN ('active', 'waiting', 'ready', 'needs_attention')`
+          sql`UPDATE cs_missions SET status = 'cancelled', updatedAt = NOW() WHERE sessionId = ${input.sessionId} AND status IN ('active', 'waiting', 'ready', 'needs_attention')`
         );
+        // DIAGNOSTIC: dump all ops_chat_messages for this session
+        const diagOcm = await db.execute(
+          sql`SELECT id, sessionId, quickAction, cardStatus, activeDedupKey, metadata
+              FROM ops_chat_messages
+              WHERE sessionId = ${input.sessionId}
+                AND quickAction IN ('madison_sms_draft', 'madison_email_draft')`
+        );
+        console.log('[RESOLVE_DIAG] sessionId:', input.sessionId, 'ocm_rows_by_sessionId:', JSON.stringify(diagOcm));
+
+        // DIAGNOSTIC: also query via JOIN through madison_sms_drafts.sessionId
+        const diagJoin = await db.execute(
+          sql`SELECT ocm.id AS cardId, ocm.sessionId AS cardSessionId, ocm.metadata, ocm.cardStatus, ocm.activeDedupKey,
+                     msd.id AS draftId, msd.sessionId AS draftSessionId, msd.status AS draftStatus
+              FROM ops_chat_messages ocm
+              JOIN madison_sms_drafts msd
+                ON CAST(JSON_UNQUOTE(JSON_EXTRACT(ocm.metadata, '$.draftId')) AS UNSIGNED) = msd.id
+              WHERE msd.sessionId = ${input.sessionId}
+                AND ocm.quickAction = 'madison_sms_draft'`
+        );
+        console.log('[RESOLVE_DIAG] JOIN_result:', JSON.stringify(diagJoin));
+
         // Dismiss active Madison SMS draft cards + underlying pending drafts
-        const activeSmsCards = await db.execute(
+        const [activeSmsCards] = await db.execute(
           sql`SELECT id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')) AS UNSIGNED) AS draftId
               FROM ops_chat_messages
               WHERE sessionId = ${input.sessionId}
@@ -3653,20 +3674,42 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
                 AND cardStatus = 'active'
                 AND JSON_VALID(metadata) = 1`
         );
+        console.log('[RESOLVE_DIAG] activeSmsCards_by_sessionId:', JSON.stringify((activeSmsCards as any[]).map((r: any) => ({ id: r.id, draftId: r.draftId }))));
         for (const row of (activeSmsCards as any[])) {
           const draftId = Number(row.draftId);
+          const cardId = Number(row.id);
+          console.log('[RESOLVE_DIAG] calling deactivateOpsSmsCard draftId:', draftId, 'cardId:', cardId);
           if (draftId) {
-            await deactivateOpsSmsCard(draftId);
-            await db.update(madisonSmsDrafts)
-              .set({ status: 'DISMISSED' } as any)
-              .where(and(
-                eq(madisonSmsDrafts.id, draftId),
-                notInArray(madisonSmsDrafts.status, ['SENT', 'DELIVERED'])
-              ));
+            try {
+              await deactivateOpsSmsCard(draftId);
+              console.log('[RESOLVE_DIAG] deactivateOpsSmsCard completed for draftId:', draftId);
+            } catch (e) {
+              console.error('[RESOLVE_DIAG] deactivateOpsSmsCard THREW:', e);
+            }
+            try {
+              const draftUpdateResult = await db.update(madisonSmsDrafts)
+                .set({ status: 'DISMISSED' } as any)
+                .where(and(
+                  eq(madisonSmsDrafts.id, draftId),
+                  notInArray(madisonSmsDrafts.status, ['SENT', 'DELIVERED'])
+                ));
+              console.log('[RESOLVE_DIAG] madisonSmsDrafts update result:', JSON.stringify(draftUpdateResult));
+            } catch (e) {
+              console.error('[RESOLVE_DIAG] madisonSmsDrafts update THREW:', e);
+            }
+            // Post-mutation verification
+            const postOcm = await db.execute(
+              sql`SELECT id, cardStatus, activeDedupKey FROM ops_chat_messages WHERE id = ${cardId}`
+            );
+            console.log('[RESOLVE_DIAG] POST_MUTATION ops_chat_messages id=' + cardId + ':', JSON.stringify((postOcm as any[]).map((r: any) => ({ id: r.id, cardStatus: r.cardStatus, activeDedupKey: r.activeDedupKey }))));
+            const postDraft = await db.execute(
+              sql`SELECT id, status FROM madison_sms_drafts WHERE id = ${draftId}`
+            );
+            console.log('[RESOLVE_DIAG] POST_MUTATION madison_sms_drafts id=' + draftId + ':', JSON.stringify((postDraft as any[]).map((r: any) => ({ id: r.id, status: r.status }))));
           }
         }
         // Dismiss active Madison email draft cards + underlying pending drafts
-        const activeEmailCards = await db.execute(
+        const [activeEmailCards] = await db.execute(
           sql`SELECT id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.draftId')) AS UNSIGNED) AS draftId
               FROM ops_chat_messages
               WHERE sessionId = ${input.sessionId}
@@ -3674,6 +3717,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
                 AND cardStatus = 'active'
                 AND JSON_VALID(metadata) = 1`
         );
+        console.log('[RESOLVE_DIAG] activeEmailCards_by_sessionId:', JSON.stringify((activeEmailCards as any[]).map((r: any) => ({ id: r.id, draftId: r.draftId }))));
         for (const row of (activeEmailCards as any[])) {
           const draftId = Number(row.draftId);
           if (draftId) {

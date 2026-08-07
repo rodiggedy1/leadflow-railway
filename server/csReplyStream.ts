@@ -23,6 +23,163 @@ import { sdk } from "./_core/sdk";
 import { ENV } from "./_core/env";
 import { COOKIE_NAME } from "@shared/const";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
+import { getDb } from "./db";
+import { sql } from "drizzle-orm";
+
+// ── In-memory candidate pool cache (1 hour) ──────────────────────────────────
+interface CandidateExample {
+  id: number;
+  userMsg: string;
+  agentReply: string;
+  situation: string | null;
+  primaryIntent: string | null;
+  customerType: string | null;
+}
+let candidateCache: CandidateExample[] | null = null;
+let candidateCacheTs = 0;
+const CANDIDATE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+async function getCandidatePool(): Promise<CandidateExample[]> {
+  if (candidateCache && Date.now() - candidateCacheTs < CANDIDATE_CACHE_TTL_MS) {
+    return candidateCache;
+  }
+  const db = getDb();
+  if (!db) return [];
+  try {
+    const [rows] = await db.execute(sql`
+      SELECT id, userMsg, agentReply, situation, primaryIntent, customerType
+      FROM cs_draft_examples
+      WHERE primaryIntent IS NOT NULL
+      ORDER BY msgTs DESC
+      LIMIT 2000
+    `);
+    candidateCache = rows as CandidateExample[];
+    candidateCacheTs = Date.now();
+    return candidateCache;
+  } catch {
+    return [];
+  }
+}
+
+// ── Classify current conversation ────────────────────────────────────────────
+interface ConvClassification {
+  primaryIntent: string;
+  customerType: string;
+  customerGoal: string;
+  situation: string;
+}
+
+async function classifyCurrentConversation(recentMessages: string, forgeApiUrl: string): Promise<ConvClassification | null> {
+  try {
+    const res = await fetch(forgeApiUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${ENV.forgeApiKey}` },
+      body: JSON.stringify({
+        model: "gemini-2.5-flash",
+        stream: false,
+        messages: [{
+          role: "user",
+          content: `Classify this customer service SMS conversation for a residential cleaning company.\nReturn ONLY a JSON object with these fields:\n- primaryIntent: one of: reschedule, complaint, pricing_question, booking_inquiry, confirmation, cancel, compliment, eta_question, payment, address_question, general_question, other\n- customerType: "new_lead" | "existing_customer" | "booked_customer" | "unknown"\n- customerGoal: short phrase (max 10 words) describing what the customer wants\n- situation: one sentence (max 20 words) describing the situation\n\nConversation:\n${recentMessages}`,
+        }],
+        max_tokens: 256,
+        response_format: { type: "json_object" },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
+    const content = data.choices?.[0]?.message?.content ?? "{}";
+    return JSON.parse(content) as ConvClassification;
+  } catch {
+    return null;
+  }
+}
+
+// ── SQL prefilter + reranker ──────────────────────────────────────────────────
+async function retrieveExamples(
+  classification: ConvClassification,
+  sessionId: number | undefined,
+  forgeApiUrl: string
+): Promise<{ examples: CandidateExample[]; selectedIds: number[] }> {
+  const pool = await getCandidatePool();
+  if (pool.length === 0) return { examples: [], selectedIds: [] };
+
+  // Priority ordering: intent+type > intent > type > recency
+  const scored = pool.map(c => {
+    const intentMatch = c.primaryIntent === classification.primaryIntent;
+    const typeMatch = c.customerType === classification.customerType;
+    let score = 3;
+    if (intentMatch && typeMatch) score = 0;
+    else if (intentMatch) score = 1;
+    else if (typeMatch) score = 2;
+    return { ...c, score };
+  });
+  scored.sort((a, b) => a.score - b.score || b.id - a.id);
+  const candidates = scored.slice(0, 40);
+
+  if (candidates.length === 0) return { examples: [], selectedIds: [] };
+
+  // Reranker LLM call
+  try {
+    const rerankerInput = {
+      current: {
+        primaryIntent: classification.primaryIntent,
+        customerType: classification.customerType,
+        customerGoal: classification.customerGoal,
+        situation: classification.situation,
+      },
+      candidates: candidates.map(c => ({
+        id: c.id,
+        userMsg: c.userMsg.slice(0, 200),
+        agentReply: c.agentReply.slice(0, 300),
+        situation: c.situation ?? "",
+        customerType: c.customerType ?? "",
+      })),
+    };
+
+    const res = await fetch(forgeApiUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${ENV.forgeApiKey}` },
+      body: JSON.stringify({
+        model: "gemini-2.5-flash",
+        stream: false,
+        messages: [{
+          role: "system",
+          content: "You are selecting the most relevant historical customer service examples to help an agent draft a reply. Given the current conversation context and a list of candidate examples, return a JSON object with a `selected` array containing the IDs of the most relevant examples (up to 8, preferably 5-8, but return fewer if the remaining examples are weak — never select an example merely to reach a quota), and a `confidence` field (\"high\", \"medium\", or \"low\"). Only use IDs from the provided candidates list. Return only valid JSON.",
+        }, {
+          role: "user",
+          content: JSON.stringify(rerankerInput),
+        }],
+        max_tokens: 256,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!res.ok) throw new Error(`reranker HTTP ${res.status}`);
+    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
+    const content = data.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(content) as { selected?: number[]; confidence?: string };
+    const selectedIds = (parsed.selected ?? []).filter((id: unknown) => typeof id === "number").slice(0, 8);
+    const selectedSet = new Set(selectedIds);
+    const examples = candidates.filter(c => selectedSet.has(c.id));
+
+    console.log(`[DRAFT_EXAMPLES] sessionId=${sessionId ?? "?"} intent=${classification.primaryIntent} confidence=${parsed.confidence ?? "?"} examples=[${selectedIds.join(",")}]`);
+    return { examples, selectedIds };
+  } catch (err) {
+    console.warn("[DRAFT_EXAMPLES] reranker failed, using top candidates:", err);
+    const fallback = candidates.slice(0, 5);
+    return { examples: fallback, selectedIds: fallback.map(c => c.id) };
+  }
+}
+
+// ── Format few-shot examples for injection ───────────────────────────────────
+function formatFewShotExamples(examples: CandidateExample[]): string {
+  if (examples.length === 0) return "";
+  const lines = examples.map(e => {
+    const situationLine = e.situation ? `[Situation: ${e.situation}]` : "";
+    return `${situationLine}\nCustomer: "${e.userMsg}"\nAgent: "${e.agentReply}"`;
+  });
+  return `=== REAL EXAMPLES FROM YOUR TEAM ===\nThese are actual responses your team sent that worked well. Use them to calibrate tone, length, and style — not to copy verbatim.\n\n${lines.join("\n---\n")}`;
+}
 
 async function isAuthorizedOpsUser(req: Request): Promise<boolean> {
   const agent = await getAgentFromRequest(req);
@@ -38,7 +195,7 @@ async function isAuthorizedOpsUser(req: Request): Promise<boolean> {
 }
 
 /** Exact same system prompt as the tRPC csReply procedure */
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(fewShotExamples?: string): string {
   return `You are a customer service agent for Maids in Black, a residential cleaning company in Washington DC. Your job is to write the exact SMS the agent should send — not advice, the actual text message.
 
 === TONE ===
@@ -108,7 +265,25 @@ export function registerCsReplyStreamRoute(app: Express) {
       return;
     }
 
-    const { conversationContext, customerName, jobContext, scenario } = req.body ?? {};
+    const { conversationContext, customerName, jobContext, scenario, sessionId: reqSessionId, classifyContext } = req.body ?? {};
+
+    // Retrieve few-shot examples (non-blocking — if it fails, draft still works)
+    let fewShotExamples = "";
+    try {
+      const forgeApiUrlForRetrieval = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+        ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
+        : "https://forge.manus.im/v1/chat/completions";
+      const classificationInput = classifyContext ?? conversationContext ?? "";
+      if (classificationInput) {
+        const classification = await classifyCurrentConversation(classificationInput, forgeApiUrlForRetrieval);
+        if (classification) {
+          const { examples } = await retrieveExamples(classification, typeof reqSessionId === "number" ? reqSessionId : undefined, forgeApiUrlForRetrieval);
+          fewShotExamples = formatFewShotExamples(examples);
+        }
+      }
+    } catch (err) {
+      console.warn("[DRAFT_EXAMPLES] retrieval failed (non-fatal):", err);
+    }
 
     // SSE headers
     res.setHeader("Content-Type", "text/event-stream");
@@ -117,7 +292,7 @@ export function registerCsReplyStreamRoute(app: Express) {
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
-    const systemPrompt = buildSystemPrompt();
+    const systemPrompt = buildSystemPrompt(fewShotExamples || undefined);
     const firstName = customerName ? String(customerName).trim().split(/\s+/)[0] : "";
     const userParts: string[] = [];
     if (firstName) userParts.push(`Customer's first name: ${firstName}`);

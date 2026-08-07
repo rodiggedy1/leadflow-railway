@@ -4177,3 +4177,30 @@ export const focusPoints = mysqlTable("focus_points", {
   index("idx_focus_points_week").on(t.weekStart),
 ]);
 export type FocusPoints = typeof focusPoints.$inferSelect;
+
+// ── CS Draft Examples (AI few-shot library) ───────────────────────────────────
+// Enriched historical customer→agent SMS pairs used as few-shot examples
+// for the AI auto-draft system. Populated by the 6-hour enrichment Heartbeat job.
+export const csDraftExamples = mysqlTable("cs_draft_examples", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  pairIndex: int("pairIndex").notNull(),
+  userMsg: text("userMsg").notNull(),
+  agentReply: text("agentReply").notNull(),
+  /** Unix ms timestamp of the user message (from messageHistory) */
+  msgTs: bigint("msgTs", { mode: "number" }).notNull(),
+  primaryIntent: varchar("primaryIntent", { length: 64 }),
+  secondaryIntents: json("secondaryIntents").$type<string[]>(),
+  customerGoal: varchar("customerGoal", { length: 255 }),
+  customerType: varchar("customerType", { length: 32 }),
+  situation: varchar("situation", { length: 255 }),
+  enrichedAt: bigint("enrichedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("uq_cs_draft_examples_session_pair").on(t.sessionId, t.pairIndex),
+  index("idx_cs_draft_examples_intent").on(t.primaryIntent),
+  index("idx_cs_draft_examples_customer_type").on(t.customerType),
+  index("idx_cs_draft_examples_msg_ts").on(t.msgTs),
+]);
+export type CsDraftExample = typeof csDraftExamples.$inferSelect;
+export type InsertCsDraftExample = typeof csDraftExamples.$inferInsert;

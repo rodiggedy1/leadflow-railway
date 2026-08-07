@@ -214,6 +214,11 @@ export default function CsInbox2() {
 
   // ── SSE: invalidate on new inbound (exact copy from CsInbox.tsx) ───────
   const selectedIdRef = useRef<number | null>(null);
+  // ── Auto-draft refs (exact copy from CsInbox.tsx) ──────────────────────
+  const autoDraftedForId = useRef<number | null>(null);
+  const autoDraftAbortRef = useRef<AbortController | null>(null);
+  const autoDraftInflightSessionIdRef = useRef<number | null>(null);
+  const selectedConvRef = useRef<number | null>(null);
   useOpsStream({
     onLeadUpdate: () => {
       utils.leads.listCsInbox.invalidate();
@@ -310,8 +315,17 @@ export default function CsInbox2() {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
+  // Reset auto-draft tracking when conversation changes
+  const setSelectedConvWithReset = (conv: LiveConv | null) => {
+    if (conv?.id !== selectedConv?.id) {
+      autoDraftedForId.current = null;
+      selectedConvRef.current = conv?.id ?? null;
+    }
+    setSelectedConvWithReset(conv);
+  };
   const [compose, setCompose] = useState("");
   const [toast, setToast] = useState("");
+  const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const [missionDone, setMissionDone] = useState<Set<number>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
 
@@ -352,7 +366,7 @@ export default function CsInbox2() {
       setResolvingId(variables.sessionId);
       window.setTimeout(() => {
         setResolvingId(null);
-        setSelectedConv(null);
+        setSelectedConvWithReset(null);
         const resolvedAt = new Date();
         utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
           if (!old) return old;
@@ -377,6 +391,130 @@ export default function CsInbox2() {
     { sessionId: selectedConv?.id ?? 0 },
     { enabled: !!selectedConv, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 }
   );
+
+  // ── Client profile query for jobContext (same as CsInbox.tsx, cached by tRPC) ──
+  const { data: clientProfile } = trpc.leads.getClientProfile.useQuery(
+    { phone: selectedConv?.phone ?? "" },
+    { enabled: !!selectedConv && !selectedConv.queue, staleTime: 60_000, refetchOnWindowFocus: false }
+  );
+  const jobContext = useMemo(() => {
+    if (!clientProfile) return "";
+    const tj = clientProfile.todayJob;
+    if (tj) {
+      const parts: string[] = [];
+      if (tj.serviceType) parts.push(`Service: ${tj.serviceType}`);
+      if (tj.serviceDateTime) {
+        try {
+          const d = new Date(tj.serviceDateTime);
+          parts.push(`Date/Time: ${d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`);
+        } catch { /* ignore */ }
+      }
+      const teamOrCleaner = (tj as any).teamName || (tj as any).cleanerName;
+      if (teamOrCleaner) parts.push(`Cleaner/Team: ${teamOrCleaner}`);
+      if (tj.jobAddress) parts.push(`Address: ${tj.jobAddress}`);
+      if (tj.jobStatus) parts.push(`Status: ${tj.jobStatus}`);
+      return parts.join("\n");
+    }
+    return "";
+  }, [clientProfile]);
+  // ── csAutoDraft fallback mutation (exact copy from CsInbox.tsx) ─────────
+  const csAutoDraft = trpc.opsChat.csReply.useMutation({
+    onSuccess: (data) => {
+      if (autoDraftInflightSessionIdRef.current !== selectedConvRef.current) {
+        setAutoDraftLoading(false);
+        return;
+      }
+      const replyText = typeof data.reply === "string" ? data.reply : "";
+      if (replyText) setCompose(replyText);
+      setAutoDraftLoading(false);
+    },
+    onError: () => { setAutoDraftLoading(false); },
+  });
+  // ── streamAutoDraft (exact copy from CsInbox.tsx, last 20 messages) ─────
+  async function streamAutoDraft(params: {
+    conversationContext: string;
+    classifyContext: string;
+    customerName: string;
+    jobContext: string;
+    sessionId?: number;
+  }) {
+    const { sessionId, ...fetchParams } = params;
+    if (autoDraftAbortRef.current) autoDraftAbortRef.current.abort();
+    const controller = new AbortController();
+    autoDraftAbortRef.current = controller;
+    setCompose("");
+    setAutoDraftLoading(true);
+    try {
+      const res = await fetch("/api/cs-reply-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ...fetchParams, sessionId }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let accumulated = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (sessionId != null && sessionId !== selectedConvRef.current) {
+          reader.cancel();
+          setAutoDraftLoading(false);
+          autoDraftAbortRef.current = null;
+          return;
+        }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === "[DONE]") { setAutoDraftLoading(false); autoDraftAbortRef.current = null; continue; }
+          let parsed: { token?: string; error?: string };
+          try { parsed = JSON.parse(dataStr); } catch { continue; }
+          if (parsed.error) throw new Error(parsed.error);
+          if (parsed.token) { accumulated += parsed.token; setCompose(accumulated); }
+        }
+      }
+      setAutoDraftLoading(false);
+      autoDraftAbortRef.current = null;
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      console.warn("[auto-draft stream] falling back to tRPC:", err);
+      setCompose("");
+      setAutoDraftLoading(false);
+      csAutoDraft.mutate(fetchParams);
+      setAutoDraftLoading(true);
+    }
+  }
+  // ── triggerAutoDraft (exact copy from CsInbox.tsx, last 20 messages) ────
+  function triggerAutoDraft(conv: typeof selectedConv) {
+    if (!conv) return;
+    if (autoDraftedForId.current === conv.id) return;
+    autoDraftedForId.current = conv.id;
+    autoDraftInflightSessionIdRef.current = conv.id;
+    if (autoDraftAbortRef.current) { autoDraftAbortRef.current.abort(); autoDraftAbortRef.current = null; }
+    const recentMsgs = detailMessages.slice(-20);
+    const conversationContext = recentMsgs
+      .map(m => `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`)
+      .join("\n");
+    // classifyContext uses last 5 messages for the classification LLM call
+    const classifyContext = detailMessages.slice(-5)
+      .map(m => `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`)
+      .join("\n");
+    streamAutoDraft({ conversationContext, classifyContext, customerName: conv.name ?? "", jobContext: jobContext ?? "", sessionId: conv.id });
+  }
+  // Auto-draft when conversation becomes selected
+  useEffect(() => {
+    if (!selectedConv || detailMessages.length === 0) return;
+    selectedConvRef.current = selectedConv.id;
+    triggerAutoDraft(selectedConv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConv?.id, detailMessages.length]);
 
   const detailMessages = useMemo(() => {
     if (!conversationDetail?.messageHistory) return selectedConv?.messages ?? [];
@@ -443,7 +581,7 @@ export default function CsInbox2() {
             <button className="cs2-rbtn">✓</button>
             <button className="cs2-rbtn">⌁</button>
             <button className="cs2-rbtn">✦</button>
-            <button className="cs2-rbtn bottom" onClick={() => setSelectedConv(null)}>←</button>
+            <button className="cs2-rbtn bottom" onClick={() => setSelectedConvWithReset(null)}>←</button>
           </nav>
           <aside className="cs2-list">
             <div className="cs2-listhead">
@@ -458,7 +596,7 @@ export default function CsInbox2() {
             </div>
             <div className="cs2-tickets">
               {allConvs.map(conv => (
-                <div key={conv.id} className={`ticket${selectedConv.id === conv.id ? " on" : ""}`} onClick={() => { setSelectedConv(conv); setCompose(""); }}>
+                <div key={conv.id} className={`ticket${selectedConv.id === conv.id ? " on" : ""}`} onClick={() => { setSelectedConvWithReset(conv); setCompose(""); }}>
                   <div className="trow">
                     <div className="mini">{conv.initials}</div>
                     <span className="tname">{conv.name}</span>
@@ -638,7 +776,7 @@ export default function CsInbox2() {
                           <span style={{fontWeight:800,color:'#065f46',fontSize:'13px'}}>Resolved!</span>
                         </div>
                       ) : (
-                      <button key={conv.id} className="cs2-card" onClick={()=>{ setSelectedConv(conv); setCompose(""); }}>
+                      <button key={conv.id} className="cs2-card" onClick={()=>{ setSelectedConvWithReset(conv); setCompose(""); }}>
                         <div className="cs2-cardTop">
                           <div className="cs2-avatar" style={{background:COLORS[i%COLORS.length]}}>{conv.initials}</div>
                           <strong>{conv.name}</strong>
