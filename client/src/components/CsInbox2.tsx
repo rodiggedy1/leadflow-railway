@@ -41,6 +41,16 @@ type LiveConv = {
   ago: string;
 };
 
+function linkify(text: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) =>
+    urlRegex.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{color:'#6b4eff',textDecoration:'underline',wordBreak:'break-all'}}>{part}</a>
+      : part
+  );
+}
+
 function chipClass(c: string) {
   if (/Hot|Urgent|High Value/.test(c)) return "chip hot";
   if (/Confirmed/.test(c)) return "chip ok";
@@ -464,7 +474,7 @@ export default function CsInbox2() {
               {detailMessages.map((m, i) => (
                 <div key={i} className={`msg${m.sender === "agent" ? " out" : ""}${i === detailMessages.length - 1 ? " latest" : ""}`}>
                   <div className="mmeta">{m.sender === "agent" ? (m.senderName || "Agent") : selectedConv.name} · {m.time}</div>
-                  <div className="bubble2">{m.text}</div>
+                  <div className="bubble2">{linkify(m.text)}</div>
                 </div>
               ))}
               {detailMessages.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px",fontSize:"12px"}}>No messages yet</div>}
