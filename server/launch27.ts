@@ -362,7 +362,6 @@ export async function getChargesForDate(date: string): Promise<L27ChargesResult>
     const params = new URLSearchParams({
       from: date,
       to: date,
-      options: "completed,exclude_forecasted",
       limit: String(limit),
       offset: String(offset),
       sort: "asc",
