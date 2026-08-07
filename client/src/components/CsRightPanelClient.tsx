@@ -496,23 +496,23 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
         {/* Missions — inline so they can call firePaymentLink directly */}
         <section style={{flexShrink:0,padding:'14px 16px',borderBottom:'1px solid #eff0f2',background:'#fff'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
-            <span style={{fontSize:'11px',fontWeight:800,letterSpacing:'.04em',color:'#344054'}}>Missions</span>
-            <span style={{fontSize:'11px',color:'#6d4aff',fontWeight:600,cursor:'pointer'}}>+ Add</span>
+            <span style={{fontSize:'13px',fontWeight:800,letterSpacing:'.04em',color:'#344054'}}>Missions</span>
+            <span style={{fontSize:'13px',color:'#6d4aff',fontWeight:600,cursor:'pointer'}}>+ Add</span>
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:0}}>
             <div style={{padding:'10px 12px',borderBottom:'1px solid #eff0f2',cursor:'pointer',display:'flex',alignItems:'flex-start',gap:'9px'}}
               onClick={() => { setPaymentCard(null); setPaymentSentCard(null); firePaymentLink(); }}>
-              <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>💳</div>
-              <div><b style={{fontSize:'10px',fontWeight:800}}>Send Payment Link</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Generate &amp; send a payment link via SMS.</p></div>
+              <div style={{width:'32px',height:'32px',borderRadius:'9px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>💳</div>
+              <div><b style={{fontSize:'13px',fontWeight:700}}>Send Payment Link</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'11px'}}>Generate &amp; send a payment link via SMS.</p></div>
             </div>
             <div style={{padding:'10px 12px',borderBottom:'1px solid #eff0f2',cursor:'pointer',display:'flex',alignItems:'flex-start',gap:'9px'}}
               onClick={() => setShowQuoteWidget(v => !v)}>
-              <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>📋</div>
-              <div><b style={{fontSize:'10px',fontWeight:800}}>Send Quote</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Build &amp; send a personalized quote.</p></div>
+              <div style={{width:'32px',height:'32px',borderRadius:'9px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>📋</div>
+              <div><b style={{fontSize:'13px',fontWeight:700}}>Send Quote</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'11px'}}>Build &amp; send a personalized quote.</p></div>
             </div>
             <div style={{padding:'10px 12px',opacity:0.42,display:'flex',alignItems:'flex-start',gap:'9px'}}>
-              <div style={{width:'28px',height:'28px',borderRadius:'8px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>🚗</div>
-              <div><b style={{fontSize:'10px',fontWeight:800}}>Get ETA</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'9px'}}>Coming soon.</p></div>
+              <div style={{width:'32px',height:'32px',borderRadius:'9px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>🚗</div>
+              <div><b style={{fontSize:'13px',fontWeight:700}}>Get ETA</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'11px'}}>Coming soon.</p></div>
             </div>
           </div>
         </section>
@@ -591,7 +591,7 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
         <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
           <CardContent className="p-0">
             <div className="p-5 bg-white">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-4">Client profile</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-4">Client profile</div>
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: "Frequency", value: clientProfile?.frequency ?? "—" },
@@ -600,7 +600,7 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
                   { label: "Last booking", value: clientProfile?.recentJobs?.[0]?.date ?? "—" },
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">{label}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-1">{label}</div>
                     <div className="text-sm font-bold text-slate-800">{String(value)}</div>
                   </div>
                 ))}
@@ -612,7 +612,7 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
         {clientProfile?.todayJob && (
           <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
             <CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-4" style={{fontSize:'10px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3'}}>
+              <div className="flex items-center gap-2 mb-4" style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3'}}>
                 <Briefcase className="h-3.5 w-3.5" /> Today's job
               </div>
               {(() => {
@@ -719,10 +719,10 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
                     >
                       <div className="min-w-0">
                         <div className="text-xs font-semibold text-slate-700 truncate">{job.serviceType ?? "Cleaning"}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{job.date ?? "—"}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{job.date ?? "—"}</div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${job.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}>{job.status ?? "—"}</span>
+                        <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${job.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}>{job.status ?? "—"}</span>
                         {l27Url && <ExternalLink className="w-3 h-3 text-slate-400" />}
                       </div>
                     </CardEl>
