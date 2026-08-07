@@ -321,7 +321,7 @@ export default function CsInbox2() {
       autoDraftedForId.current = null;
       selectedConvRef.current = conv?.id ?? null;
     }
-    setSelectedConvWithReset(conv);
+    setSelectedConv(conv);
   };
   const [compose, setCompose] = useState("");
   const [toast, setToast] = useState("");
