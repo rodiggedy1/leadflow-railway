@@ -141,6 +141,12 @@ export async function runCsDraftEnrichment(): Promise<{ processed: number; inser
 
   const sessionRows = sessions as Array<{ id: number; messageHistory: string }>;
   console.log(`[CS_DRAFT_ENRICH] Found ${sessionRows.length} candidate sessions`);
+  // Diagnostic: count sessions at each filter level
+  const [diagResolved] = await db.execute(sql`SELECT COUNT(*) as cnt FROM conversation_sessions WHERE csResolvedAt IS NOT NULL`);
+  const [diagMsgCount] = await db.execute(sql`SELECT COUNT(*) as cnt FROM conversation_sessions WHERE csResolvedAt IS NOT NULL AND messageCount >= 4`);
+  const [diagRole] = await db.execute(sql`SELECT COUNT(*) as cnt FROM conversation_sessions WHERE csResolvedAt IS NOT NULL AND messageCount >= 4 AND lastMessageRole = 'assistant'`);
+  const [diagDate] = await db.execute(sql`SELECT COUNT(*) as cnt FROM conversation_sessions WHERE csResolvedAt IS NOT NULL AND messageCount >= 4 AND lastMessageRole = 'assistant' AND updatedAt >= ${cutoffDate}`);
+  console.log(`[CS_DRAFT_ENRICH_DIAG] resolved=${(diagResolved as any[])[0]?.cnt} msgCount4=${(diagMsgCount as any[])[0]?.cnt} roleAssistant=${(diagRole as any[])[0]?.cnt} withinDate=${(diagDate as any[])[0]?.cnt}`);
 
   // Get already-processed pairs to skip
   const [existingRows] = await db.execute(sql`
