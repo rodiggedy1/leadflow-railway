@@ -206,6 +206,7 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
   const [step, setStep] = React.useState<"paste" | "loading" | "review">("paste");
   const [extracted, setExtracted] = React.useState<any>(null);
   const [leadPhone, setLeadPhone] = React.useState("");
+  const [leadNameInput, setLeadNameInput] = React.useState("");
   const [draft, setDraft] = React.useState("");
   const analyzeMut = trpc.tools.generateFirstMessage.useMutation();
 
@@ -233,7 +234,7 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
   function handleSendLead() {
     const phone = leadPhone.trim() || extracted?.phone;
     if (!phone || !draft.trim()) return;
-    sendWorkspaceMsg.mutate({ phone, message: draft.trim() }, {
+    sendWorkspaceMsg.mutate({ phone, message: draft.trim(), name: leadNameInput.trim() || undefined }, {
       onSuccess: () => { onConvOpened(phone); onClose(); },
     });
   }
@@ -314,11 +315,17 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
                 <span style={{color:"#6d4aff",cursor:"pointer"}} onClick={handleAnalyze}>✦ Regenerate</span>
               </div>
               <div style={{border:"1.5px solid #dedfe5",borderRadius:"12px",padding:"11px"}}>
-                <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={5} style={{width:"100%",border:0,outline:"none",resize:"none",lineHeight:1.45,fontSize:"13px",fontFamily:"inherit"}} />
+                <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={8} style={{width:"100%",border:0,outline:"none",resize:"none",lineHeight:1.45,fontSize:"13px",fontFamily:"inherit"}} />
               </div>
-              <div style={{marginTop:"10px"}}>
-                <label style={{fontSize:"11px",fontWeight:800,color:"#777b84",display:"block",marginBottom:"5px"}}>PHONE NUMBER</label>
-                <input value={leadPhone} onChange={e=>setLeadPhone(e.target.value)} placeholder="+1 (555) 000-0000" style={{width:"100%",border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"10px",padding:"9px 12px",fontSize:"13px",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}} />
+              <div style={{marginTop:"10px",display:"flex",gap:"10px"}}>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:"11px",fontWeight:800,color:"#777b84",display:"block",marginBottom:"5px"}}>CUSTOMER NAME</label>
+                  <input value={leadNameInput} onChange={e=>setLeadNameInput(e.target.value)} placeholder="First Last" style={{width:"100%",border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"10px",padding:"9px 12px",fontSize:"13px",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}} />
+                </div>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:"11px",fontWeight:800,color:"#777b84",display:"block",marginBottom:"5px"}}>PHONE NUMBER</label>
+                  <input value={leadPhone} onChange={e=>setLeadPhone(e.target.value)} placeholder="+1 (555) 000-0000" style={{width:"100%",border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"10px",padding:"9px 12px",fontSize:"13px",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}} />
+                </div>
               </div>
             </div>
           )}
