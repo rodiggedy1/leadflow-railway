@@ -3146,7 +3146,7 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
 
     await (tx as any)
       .update(conversationSessions)
-      .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() } as any)
+      .set({ messageHistory: JSON.stringify(history), updatedAt: new Date(), ...computeSessionSummary(history) } as any)
       .where(eq(conversationSessions.id, sessionId));
   });
 
