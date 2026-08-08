@@ -6189,7 +6189,7 @@ Return JSON with exactly these fields:
         await db
           .update(conversationSessions)
           .set({ messageHistory: JSON.stringify(history), lastReadAt: ts, ...computeSessionSummary(history) } as any)
-          .where(eq(conversationSessions.id, canonicalSession.id));
+          .where(eq(conversationSessions.id, sessionId));
 
         return { success: true, ts };
       }),
