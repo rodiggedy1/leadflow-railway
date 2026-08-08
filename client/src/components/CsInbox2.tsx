@@ -229,7 +229,6 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
       onError: () => setStep("paste"),
     });
   }
-  }
 
   function handleSendLead() {
     const phone = leadPhone.trim() || extracted?.phone;
