@@ -6223,6 +6223,33 @@ Return JSON with exactly these fields:
         return { success: true, stage: newStage };
       }),
 
+    /**
+     * leads.analyzeAndDraftLead — parse raw pasted lead text (Thumbtack/Bark/etc),
+     * extract structured fields, and generate a suggested first SMS.
+     * Reuses extractBarkQA + buildBarkIntroSms from barkWebhook.ts.
+     */
+    analyzeAndDraftLead: publicProcedure
+      .input(z.object({ rawText: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        const { extractBarkQA, buildBarkIntroSms } = await import('./barkWebhook');
+        const { estimatePrice } = await import('./openphone');
+        let extracted;
+        try {
+          extracted = await extractBarkQA(input.rawText);
+        } catch (err) {
+          console.error('[analyzeAndDraftLead] extraction failed:', err);
+          return { success: false as const, error: 'Extraction failed — please try again or edit manually.', extracted: null, suggestedFirstMessage: null };
+        }
+        const bedrooms = extracted.bedrooms ?? null;
+        const bathrooms = extracted.bathrooms ?? null;
+        const serviceType = extracted.serviceType ?? 'Standard Cleaning';
+        const frequency = extracted.frequency ?? null;
+        const price = estimatePrice({ bedrooms: bedrooms ?? '3 Bedrooms', bathrooms: bathrooms ?? '2 Bathrooms', serviceType });
+        const firstName = (extracted.name ?? 'there').split(' ')[0];
+        const suggestedFirstMessage = buildBarkIntroSms(firstName, serviceType, bedrooms, bathrooms, price, frequency);
+        return { success: true as const, extracted, suggestedFirstMessage, error: null };
+      }),
+
   }),
   /**
    * agents — agent auth + lead action procedures..

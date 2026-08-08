@@ -13,7 +13,7 @@ import { useOpsStream } from "@/hooks/useOpsStream";
 
 const COLORS = ["#6d4aff","#10b981","#f97316","#3478f6","#ef4444","#a855f7"];
 const HEAD_COLORS: Record<string,string> = {
-  "New":"#3478f6","Needs Response":"#13b77a","On Customer":"#8b5cf6","At Risk":"#ff9f1a"
+  "New":"#3478f6","Needs Response":"#13b77a","Waiting on Customer":"#8b5cf6","At Risk":"#ff9f1a"
 };
 
 type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
@@ -189,9 +189,165 @@ const STYLES = `
 .mission:last-child{border:0}.mission:hover{background:#faf9ff}
 .mico{width:27px;height:27px;border-radius:8px;background:#f0edff;display:grid;place-items:center;flex-shrink:0;font-size:13px}
 .mission b{font-size:10px;font-weight:800}.mission p{margin:3px 0 0;color:#9298a4;font-size:9px}
+@keyframes cs2spin{to{transform:rotate(360deg)}}
 .cs2-toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,6px);background:#151821;color:#fff;border-radius:9px;padding:9px 14px;font-size:11px;opacity:0;transition:.2s;z-index:999;pointer-events:none}
 .cs2-toast.show{opacity:1;transform:translate(-50%,0)}
 `;
+
+
+// ── New Message Modal ─────────────────────────────────────────────────────────
+function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onConvOpened: (phone: string) => void }) {
+  const [tab, setTab] = React.useState<"customer" | "lead">("customer");
+  const [custPhone, setCustPhone] = React.useState("");
+  const [custName, setCustName] = React.useState("");
+  const [custMsg, setCustMsg] = React.useState("");
+  const sendWorkspaceMsg = trpc.leads.sendWorkspaceMessage.useMutation();
+  const [rawText, setRawText] = React.useState("");
+  const [step, setStep] = React.useState<"paste" | "loading" | "review">("paste");
+  const [extracted, setExtracted] = React.useState<any>(null);
+  const [draft, setDraft] = React.useState("");
+  const analyzeMut = trpc.leads.analyzeAndDraftLead.useMutation();
+
+  function handleSendCustomer() {
+    const phone = custPhone.trim();
+    const msg = custMsg.trim();
+    if (!phone || !msg) return;
+    sendWorkspaceMsg.mutate({ phone, message: msg }, {
+      onSuccess: () => { onConvOpened(phone); onClose(); },
+    });
+  }
+
+  function handleAnalyze() {
+    if (!rawText.trim()) return;
+    setStep("loading");
+    analyzeMut.mutate({ rawText }, {
+      onSuccess: (res) => {
+        if (!res.success) { setStep("paste"); return; }
+        setExtracted(res.extracted);
+        setDraft(res.suggestedFirstMessage ?? "");
+        setStep("review");
+      },
+      onError: () => setStep("paste"),
+    });
+  }
+
+  function handleSendLead() {
+    const phone = extracted?.phone;
+    if (!phone || !draft.trim()) return;
+    sendWorkspaceMsg.mutate({ phone, message: draft.trim() }, {
+      onSuccess: () => { onConvOpened(phone); onClose(); },
+    });
+  }
+
+  const ext = extracted ?? {};
+  const chips = [
+    ext.bedrooms, ext.bathrooms, ext.serviceType, ext.frequency,
+    ext.pets ? "Pets" : null,
+    ...(Array.isArray(ext.extras) ? ext.extras : []),
+  ].filter(Boolean);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(19,20,25,.42)",display:"grid",placeItems:"center",padding:"20px",zIndex:9999}} onClick={onClose}>
+      <div style={{width:"min(650px,100%)",background:"white",borderRadius:"20px",boxShadow:"0 28px 90px rgba(0,0,0,.22)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"20px 22px 16px",borderBottom:"1px solid #ececf0",display:"flex",justifyContent:"space-between",alignItems:"start"}}>
+          <div>
+            <h2 style={{fontSize:"19px",margin:"0 0 4px",fontFamily:"Inter,sans-serif"}}>New Message</h2>
+            <p style={{fontSize:"12px",color:"#858892",margin:0}}>Start a new customer conversation or create a lead.</p>
+          </div>
+          <button onClick={onClose} style={{border:0,background:"#f4f4f6",width:"32px",height:"32px",borderRadius:"9px",cursor:"pointer",fontSize:"14px"}}>✕</button>
+        </div>
+        <div style={{padding:"20px 22px"}}>
+          <div style={{display:"flex",background:"#f3f3f6",padding:"4px",borderRadius:"11px",width:"max-content",marginBottom:"19px"}}>
+            <button onClick={()=>setTab("customer")} style={{border:0,background:tab==="customer"?"white":"transparent",borderRadius:"8px",padding:"8px 13px",fontWeight:700,color:tab==="customer"?"#17181c":"#777b84",cursor:"pointer",boxShadow:tab==="customer"?"0 2px 7px rgba(0,0,0,.07)":"none",fontFamily:"inherit"}}>Customer</button>
+            <button onClick={()=>setTab("lead")} style={{border:0,background:tab==="lead"?"white":"transparent",borderRadius:"8px",padding:"8px 13px",fontWeight:700,color:tab==="lead"?"#17181c":"#777b84",cursor:"pointer",boxShadow:tab==="lead"?"0 2px 7px rgba(0,0,0,.07)":"none",fontFamily:"inherit"}}>🔥 New Lead</button>
+          </div>
+
+          {tab === "customer" && (
+            <div>
+              <div style={{display:"flex",gap:"10px",marginBottom:"12px"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"11px",fontWeight:800,color:"#777b84",marginBottom:"7px",letterSpacing:".04em"}}>PHONE NUMBER</div>
+                  <input value={custPhone} onChange={e=>setCustPhone(e.target.value)} placeholder="+1 (555) 000-0000" style={{width:"100%",border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"13px",padding:"10px 12px",fontSize:"13px",outline:"none",fontFamily:"inherit"}} />
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"11px",fontWeight:800,color:"#777b84",marginBottom:"7px",letterSpacing:".04em"}}>NAME (OPTIONAL)</div>
+                  <input value={custName} onChange={e=>setCustName(e.target.value)} placeholder="Customer name" style={{width:"100%",border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"13px",padding:"10px 12px",fontSize:"13px",outline:"none",fontFamily:"inherit"}} />
+                </div>
+              </div>
+              <div style={{fontSize:"11px",fontWeight:800,color:"#777b84",marginBottom:"7px",letterSpacing:".04em"}}>MESSAGE</div>
+              <div style={{border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"13px",padding:"12px"}}>
+                <textarea value={custMsg} onChange={e=>setCustMsg(e.target.value)} placeholder="Type your message…" rows={5} style={{width:"100%",border:0,outline:"none",resize:"none",background:"transparent",lineHeight:1.5,fontSize:"13px",fontFamily:"inherit"}} />
+              </div>
+            </div>
+          )}
+
+          {tab === "lead" && step === "paste" && (
+            <div>
+              <div style={{fontSize:"11px",fontWeight:800,color:"#777b84",marginBottom:"7px",letterSpacing:".04em"}}>PASTE LEAD DETAILS</div>
+              <div style={{border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"13px",padding:"12px"}}>
+                <textarea value={rawText} onChange={e=>setRawText(e.target.value)} placeholder={"Paste the lead exactly as received (Thumbtack, Bark, Yelp, email, etc.)\nMadison will extract the details and write the first message."} rows={9} style={{width:"100%",border:0,outline:"none",resize:"none",background:"transparent",lineHeight:1.5,fontSize:"13px",fontFamily:"inherit"}} />
+                <div style={{fontSize:"11px",color:"#999ca4",borderTop:"1px solid #ebebee",paddingTop:"9px"}}>Paste it exactly as you received it. Missing information stays blank.</div>
+              </div>
+            </div>
+          )}
+
+          {tab === "lead" && step === "loading" && (
+            <div style={{textAlign:"center",padding:"42px 10px"}}>
+              <div style={{width:"28px",height:"28px",border:"3px solid #eee",borderTopColor:"#6d4aff",borderRadius:"50%",margin:"auto",animation:"cs2spin .7s linear infinite"}} />
+              <p style={{fontSize:"12px",color:"#858892",marginTop:"12px"}}>Madison is reading the lead and writing the first message…</p>
+            </div>
+          )}
+
+          {tab === "lead" && step === "review" && (
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",border:"1px solid #e7e7eb",borderRadius:"13px",padding:"14px",marginBottom:"12px"}}>
+                <div>
+                  <h3 style={{margin:"0 0 4px",fontSize:"16px",fontFamily:"inherit"}}>{ext.name ?? "Unknown"}</h3>
+                  <p style={{margin:0,color:"#858892",fontSize:"12px"}}>{ext.location ?? ""}</p>
+                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"11px"}}>
+                    {chips.map((c: any,i: number)=><span key={i} style={{background:"#f4f4f7",borderRadius:"7px",padding:"6px 8px",fontSize:"11px",fontWeight:700}}>{c}</span>)}
+                  </div>
+                </div>
+                <span style={{background:"#fff0e9",color:"#d6531c",borderRadius:"99px",padding:"5px 8px",fontSize:"10px",fontWeight:850,flexShrink:0}}>🔥 NEW LEAD</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",margin:"0 2px 7px",fontSize:"11px",fontWeight:800,color:"#777b84"}}>
+                <span>MADISON'S FIRST MESSAGE</span>
+                <span style={{color:"#6d4aff",cursor:"pointer"}} onClick={handleAnalyze}>✦ Regenerate</span>
+              </div>
+              <div style={{border:"1.5px solid #dedfe5",borderRadius:"12px",padding:"11px"}}>
+                <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={5} style={{width:"100%",border:0,outline:"none",resize:"none",lineHeight:1.45,fontSize:"13px",fontFamily:"inherit"}} />
+              </div>
+              {!ext.phone && <p style={{fontSize:"11px",color:"#d6531c",marginTop:"8px"}}>⚠ No phone number extracted — add it manually before sending.</p>}
+            </div>
+          )}
+        </div>
+
+        {tab === "customer" && (
+          <div style={{display:"flex",justifyContent:"flex-end",gap:"9px",padding:"15px 22px",borderTop:"1px solid #ececf0"}}>
+            <button onClick={onClose} style={{border:"1px solid #dedfe4",background:"white",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+            <button onClick={handleSendCustomer} disabled={!custPhone.trim()||!custMsg.trim()||sendWorkspaceMsg.isPending} style={{background:"#6d4aff",color:"white",border:"1px solid #6d4aff",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit",opacity:(!custPhone.trim()||!custMsg.trim()||sendWorkspaceMsg.isPending)?0.5:1}}>
+              {sendWorkspaceMsg.isPending ? "Sending…" : "Send Message"}
+            </button>
+          </div>
+        )}
+        {tab === "lead" && step === "paste" && (
+          <div style={{display:"flex",justifyContent:"flex-end",gap:"9px",padding:"15px 22px",borderTop:"1px solid #ececf0"}}>
+            <button onClick={onClose} style={{border:"1px solid #dedfe4",background:"white",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+            <button onClick={handleAnalyze} disabled={!rawText.trim()||analyzeMut.isPending} style={{background:"#6d4aff",color:"white",border:"1px solid #6d4aff",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit",opacity:(!rawText.trim()||analyzeMut.isPending)?0.5:1}}>Analyze Lead ✦</button>
+          </div>
+        )}
+        {tab === "lead" && step === "review" && (
+          <div style={{display:"flex",justifyContent:"space-between",gap:"9px",padding:"15px 22px",borderTop:"1px solid #ececf0"}}>
+            <button onClick={()=>setStep("paste")} style={{border:"1px solid #dedfe4",background:"white",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit"}}>← Edit Paste</button>
+            <button onClick={handleSendLead} disabled={!ext.phone||!draft.trim()||sendWorkspaceMsg.isPending} style={{background:"#6d4aff",color:"white",border:"1px solid #6d4aff",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit",opacity:(!ext.phone||!draft.trim()||sendWorkspaceMsg.isPending)?0.5:1}}>
+              {sendWorkspaceMsg.isPending ? "Sending…" : "Send & Create Lead"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function CsInbox2() {
   const utils = trpc.useUtils();
@@ -284,9 +440,9 @@ export default function CsInbox2() {
   const THIRTY_MIN = 30 * 60 * 1000;
   const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
 
-  function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "On Customer" {
+  function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "Waiting on Customer" {
     // Filter out resolved conversations — they don't belong on the active board
-    if (conv.csResolvedAt) return "On Customer"; // won't show — filtered before columns
+    if (conv.csResolvedAt) return "Waiting on Customer"; // won't show — filtered before columns
 
     const needsReply = conv.lastSenderRole === "user";
 
@@ -307,13 +463,14 @@ export default function CsInbox2() {
     if (isAtRisk)    return "At Risk";
     if (isNew)       return "New";
     if (needsReply)  return "Needs Response";
-    return "On Customer";
+    return "Waiting on Customer";
   }
 
   // ── Board state ─────────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
+  const [showNewMsg, setShowNewMsg] = useState(false);
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
@@ -557,7 +714,7 @@ export default function CsInbox2() {
 
   const columns = useMemo(() => {
     const q = query.trim().toLowerCase();
-      const colNames = ["New", "Needs Response", "On Customer", "At Risk"] as const;
+      const colNames = ["New", "Needs Response", "Waiting on Customer", "At Risk"] as const;
     return colNames.map(label => {
       // Only active (non-resolved) conversations on the board
       let convs = activeClientConvs.filter(c => {
@@ -755,7 +912,7 @@ export default function CsInbox2() {
           <header className="cs2-topbar">
             <h2>All Conversations</h2>
             <button className="cs2-btn" onClick={() => refetchInbox()}>↻</button>
-            <button className="cs2-btn primary">✎ New Message</button>
+            <button className="cs2-btn primary" onClick={()=>setShowNewMsg(true)}>✎ New Message</button>
           </header>
           <div className="cs2-toolbar">
             <input className="cs2-search" placeholder="⌕  Search conversations..." value={query} onChange={e=>setQuery(e.target.value)}/>
@@ -817,6 +974,7 @@ export default function CsInbox2() {
         </main>
       </div>
       <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>
+      {showNewMsg && <NewMessageModal onClose={()=>setShowNewMsg(false)} onConvOpened={(phone)=>{ refetchInbox(); }} />}
     </>
   );
 }
