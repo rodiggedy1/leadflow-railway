@@ -212,7 +212,7 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
     const phone = custPhone.trim();
     const msg = custMsg.trim();
     if (!phone || !msg) return;
-    sendWorkspaceMsg.mutate({ phone, message: msg }, {
+    sendWorkspaceMsg.mutate({ phone, message: msg, name: custName.trim() || undefined }, {
       onSuccess: () => { onConvOpened(phone); onClose(); },
     });
   }
@@ -974,7 +974,7 @@ export default function CsInbox2() {
         </main>
       </div>
       <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>
-      {showNewMsg && <NewMessageModal onClose={()=>setShowNewMsg(false)} onConvOpened={(phone)=>{ refetchInbox(); }} />}
+      {showNewMsg && <NewMessageModal onClose={()=>setShowNewMsg(false)} onConvOpened={(phone)=>{ setTimeout(()=>refetchInbox(), 600); }} />}
     </>
   );
 }

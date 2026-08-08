@@ -6121,6 +6121,7 @@ Return JSON with exactly these fields:
       .input(z.object({
         phone: z.string().min(7),
         message: z.string().min(1).max(1600),
+        name: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -6161,7 +6162,7 @@ Return JSON with exactly these fields:
           const newPhone = norm ?? input.phone;
           const insertResult = await db.insert(conversationSessions).values({
             leadPhone: newPhone,
-            leadName: null,
+            leadName: input.name ?? null,
             leadEmail: null,
             leadSource: 'cs-inbound' as any,
             messageHistory: '[]',
@@ -6175,7 +6176,7 @@ Return JSON with exactly these fields:
           sessionId = canonicalSession.id;
           toPhone = norm ?? canonicalSession.leadPhone;
         }
-        const smsResult = await sendSms({ to: toPhone, content: input.message });
+        const smsResult = await sendSms({ to: toPhone, content: input.message, fromNumberId: "PN0wVLcpCq" });
         if (!smsResult.success) {
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: smsResult.error ?? 'SMS send failed' });
         }
