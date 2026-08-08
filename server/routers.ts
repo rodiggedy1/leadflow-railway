@@ -6154,11 +6154,27 @@ Return JSON with exactly these fields:
           s.stage !== 'INTERVIEW_NUDGE_2'
         ) ?? sessions[0];
 
+        let sessionId: number;
+        let toPhone: string;
         if (!canonicalSession) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'No conversation found for this phone number' });
+          // New customer — create a fresh cs-inbound session
+          const newPhone = norm ?? input.phone;
+          const insertResult = await db.insert(conversationSessions).values({
+            leadPhone: newPhone,
+            leadName: null,
+            leadEmail: null,
+            leadSource: 'cs-inbound' as any,
+            messageHistory: '[]',
+            stage: 'OPEN',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as any);
+          sessionId = (insertResult as any)[0]?.insertId ?? (insertResult as any).insertId;
+          toPhone = newPhone;
+        } else {
+          sessionId = canonicalSession.id;
+          toPhone = norm ?? canonicalSession.leadPhone;
         }
-
-        const toPhone = norm ?? canonicalSession.leadPhone;
         const smsResult = await sendSms({ to: toPhone, content: input.message });
         if (!smsResult.success) {
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: smsResult.error ?? 'SMS send failed' });
@@ -6166,7 +6182,7 @@ Return JSON with exactly these fields:
 
         // Append to message history
         let history: Array<{ role: string; content: string; ts: number }> = [];
-        try { history = JSON.parse(canonicalSession.messageHistory ?? '[]'); } catch { history = []; }
+        try { history = JSON.parse(canonicalSession?.messageHistory ?? '[]'); } catch { history = []; }
         const ts = Date.now();
         history.push({ role: 'assistant', content: input.message, ts });
 
