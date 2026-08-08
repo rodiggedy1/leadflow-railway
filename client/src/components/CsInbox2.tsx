@@ -205,8 +205,9 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
   const [rawText, setRawText] = React.useState("");
   const [step, setStep] = React.useState<"paste" | "loading" | "review">("paste");
   const [extracted, setExtracted] = React.useState<any>(null);
+  const [leadPhone, setLeadPhone] = React.useState("");
   const [draft, setDraft] = React.useState("");
-  const analyzeMut = trpc.leads.analyzeAndDraftLead.useMutation();
+  const analyzeMut = trpc.tools.generateFirstMessage.useMutation();
 
   function handleSendCustomer() {
     const phone = custPhone.trim();
@@ -220,19 +221,18 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
   function handleAnalyze() {
     if (!rawText.trim()) return;
     setStep("loading");
-    analyzeMut.mutate({ rawText }, {
+    analyzeMut.mutate({ bookingDetails: rawText }, {
       onSuccess: (res) => {
-        if (!res.success) { setStep("paste"); return; }
-        setExtracted(res.extracted);
-        setDraft(res.suggestedFirstMessage ?? "");
+        setDraft(res.message ?? "");
         setStep("review");
       },
       onError: () => setStep("paste"),
     });
   }
+  }
 
   function handleSendLead() {
-    const phone = extracted?.phone;
+    const phone = leadPhone.trim() || extracted?.phone;
     if (!phone || !draft.trim()) return;
     sendWorkspaceMsg.mutate({ phone, message: draft.trim() }, {
       onSuccess: () => { onConvOpened(phone); onClose(); },
@@ -317,7 +317,10 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
               <div style={{border:"1.5px solid #dedfe5",borderRadius:"12px",padding:"11px"}}>
                 <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={5} style={{width:"100%",border:0,outline:"none",resize:"none",lineHeight:1.45,fontSize:"13px",fontFamily:"inherit"}} />
               </div>
-              {!ext.phone && <p style={{fontSize:"11px",color:"#d6531c",marginTop:"8px"}}>⚠ No phone number extracted — add it manually before sending.</p>}
+              <div style={{marginTop:"10px"}}>
+                <label style={{fontSize:"11px",fontWeight:800,color:"#777b84",display:"block",marginBottom:"5px"}}>PHONE NUMBER</label>
+                <input value={leadPhone} onChange={e=>setLeadPhone(e.target.value)} placeholder="+1 (555) 000-0000" style={{width:"100%",border:"1.5px solid #dedfe5",background:"#fbfbfc",borderRadius:"10px",padding:"9px 12px",fontSize:"13px",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}} />
+              </div>
             </div>
           )}
         </div>
@@ -339,7 +342,7 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
         {tab === "lead" && step === "review" && (
           <div style={{display:"flex",justifyContent:"space-between",gap:"9px",padding:"15px 22px",borderTop:"1px solid #ececf0"}}>
             <button onClick={()=>setStep("paste")} style={{border:"1px solid #dedfe4",background:"white",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit"}}>← Edit Paste</button>
-            <button onClick={handleSendLead} disabled={!ext.phone||!draft.trim()||sendWorkspaceMsg.isPending} style={{background:"#6d4aff",color:"white",border:"1px solid #6d4aff",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit",opacity:(!ext.phone||!draft.trim()||sendWorkspaceMsg.isPending)?0.5:1}}>
+            <button onClick={handleSendLead} disabled={!leadPhone.trim()||!draft.trim()||sendWorkspaceMsg.isPending} style={{background:"#6d4aff",color:"white",border:"1px solid #6d4aff",borderRadius:"10px",padding:"10px 14px",fontWeight:750,cursor:"pointer",fontFamily:"inherit",opacity:(!ext.phone||!draft.trim()||sendWorkspaceMsg.isPending)?0.5:1}}>
               {sendWorkspaceMsg.isPending ? "Sending…" : "Send & Create Lead"}
             </button>
           </div>
