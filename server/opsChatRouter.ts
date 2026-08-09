@@ -5930,6 +5930,61 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       broadcastOpsUpdate("email_draft_dismissed", { draftId: input.draftId });
       return { ok: true };
     }),
+
+  /**
+   * listActiveEmailDraftCards — returns active Madison email draft work items for Inbox2 Email tab.
+   * Same population as Command Chat email cards: excludes SENT and DISMISSED.
+   * Returns structured fields from both opsChatMessages and madisonEmailDrafts.
+   */
+  listActiveEmailDraftCards: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          id: opsChatMessages.id,
+          body: opsChatMessages.body,
+          metadata: opsChatMessages.metadata,
+          createdAt: opsChatMessages.createdAt,
+          draftId: madisonEmailDrafts.id,
+          threadId: madisonEmailDrafts.threadId,
+          senderName: madisonEmailDrafts.senderName,
+          fromEmail: madisonEmailDrafts.fromEmail,
+          subject: madisonEmailDrafts.subject,
+          status: madisonEmailDrafts.status,
+        })
+        .from(opsChatMessages)
+        .innerJoin(
+          madisonEmailDrafts,
+          and(
+            eq(
+              sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`,
+              madisonEmailDrafts.id
+            ),
+            notInArray(madisonEmailDrafts.status, ['SENT', 'DISMISSED'])
+          )
+        )
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          eq(opsChatMessages.quickAction as any, 'madison_email_draft'),
+          eq(opsChatMessages.cardStatus as any, 'active'),
+          sql`JSON_VALID(${opsChatMessages.metadata}) = 1`
+        ))
+        .orderBy(desc(opsChatMessages.createdAt));
+      return rows.map(r => ({
+        id: r.id,
+        body: r.body ?? "",
+        metadata: r.metadata ?? null,
+        createdAt: r.createdAt,
+        draftId: r.draftId,
+        threadId: r.threadId ?? "",
+        senderName: r.senderName ?? null,
+        fromEmail: r.fromEmail ?? "",
+        subject: r.subject ?? "(no subject)",
+        status: r.status,
+      }));
+    }),
+
   /**
    * Count unresolved Madison cards:
    *   - madison_sms_draft: draft status is DRAFT_READY

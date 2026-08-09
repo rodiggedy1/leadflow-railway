@@ -4,6 +4,7 @@ import { Sparkles, Play, Pause, ChevronUp, ChevronDown } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
+import { MadisonEmailDraftCard } from "@/components/CommandChat";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
@@ -544,12 +545,22 @@ export default function CsInbox2() {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [showNewMsg, setShowNewMsg] = useState(false);
+  const [channel, setChannel] = useState<"inbox" | "email">("inbox");
+  const [selectedEmail, setSelectedEmail] = useState<{ id: number; body: string; metadata: string | null; createdAt: Date } | null>(null);
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
   // AI call audio state (exact copy from CsInbox.tsx)
   const [expandedAiCallId, setExpandedAiCallId] = useState<string | null>(null);
   const [playingAiCallId, setPlayingAiCallId] = useState<string | null>(null);
   const aiCallAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const [showOriginalTranscript, setShowOriginalTranscript] = useState<Record<number, boolean>>({});
+  // Email draft cards query
+  const emailDraftCards = trpc.opsChat.listActiveEmailDraftCards.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    enabled: channel === "email",
+  });
+  const emailUtils = trpc.useUtils();
+
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {
@@ -1148,6 +1159,12 @@ export default function CsInbox2() {
         <main className="cs2-main">
           <header className="cs2-topbar">
             <h2>All Conversations</h2>
+            <div style={{display:"flex",gap:"4px",background:"#f1f3f6",borderRadius:"8px",padding:"3px"}}>
+              <button onClick={()=>{setChannel("inbox");setSelectedEmail(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="inbox"?"#fff":"transparent",color:channel==="inbox"?"#1a1a2e":"#6b7280",boxShadow:channel==="inbox"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s"}}>Inbox</button>
+              <button onClick={()=>{setChannel("email");setSelectedConv(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="email"?"#fff":"transparent",color:channel==="email"?"#1a1a2e":"#6b7280",boxShadow:channel==="email"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s",display:"flex",alignItems:"center",gap:"5px"}}>
+                ✉ Email{(emailDraftCards.data?.length ?? 0) > 0 && <span style={{background:"#3478f6",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontSize:"10px",fontWeight:800}}>{emailDraftCards.data?.length}</span>}
+              </button>
+            </div>
             <button className="cs2-btn" onClick={() => refetchInbox()}>↻</button>
             <button className="cs2-btn primary" onClick={()=>setShowNewMsg(true)}>✎ New Message</button>
           </header>
@@ -1158,6 +1175,54 @@ export default function CsInbox2() {
             <button className="cs2-btn">Team: All⌄</button>
             <button className="cs2-btn">☰ Filters</button>
           </div>
+          {channel === "email" ? (
+            <div style={{flex:1,minHeight:0,overflow:"auto",padding:"16px 20px",display:"flex",gap:"16px"}}>
+              {/* Email list */}
+              <div style={{width:"340px",flexShrink:0,display:"flex",flexDirection:"column",gap:"8px"}}>
+                {emailDraftCards.isLoading && <div style={{color:"#9aa0aa",fontSize:"13px",padding:"20px 0",textAlign:"center"}}>Loading emails…</div>}
+                {!emailDraftCards.isLoading && (emailDraftCards.data?.length ?? 0) === 0 && (
+                  <div style={{color:"#9aa0aa",fontSize:"13px",padding:"40px 0",textAlign:"center"}}>No active email drafts</div>
+                )}
+                {emailDraftCards.data?.map(card => (
+                  <button key={card.id} onClick={()=>setSelectedEmail({ id: card.id, body: card.body, metadata: card.metadata, createdAt: new Date(card.createdAt) })}
+                    style={{textAlign:"left",background:selectedEmail?.id===card.id?"#f0edff":"#fff",border:selectedEmail?.id===card.id?"1.5px solid #6b4eff":"1px solid #e8eaf0",borderRadius:"12px",padding:"12px 14px",cursor:"pointer",transition:"all .15s"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
+                      <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"#3478f6",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"13px",fontWeight:700,flexShrink:0}}>
+                        {(card.senderName ?? card.fromEmail ?? "?")[0].toUpperCase()}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:700,fontSize:"13px",color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.senderName ?? card.fromEmail}</div>
+                        <div style={{fontSize:"11px",color:"#9aa0aa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.fromEmail}</div>
+                      </div>
+                      <div style={{fontSize:"10px",color:"#9aa0aa",flexShrink:0}}>{new Date(card.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+                    </div>
+                    <div style={{fontWeight:600,fontSize:"12px",color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:"3px"}}>{card.subject}</div>
+                    <div style={{fontSize:"11px",color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.body.split("\n").find(l=>l.startsWith('"'))?.slice(1,80) ?? card.body.slice(0,80)}</div>
+                    {card.status === "FAILED" && <div style={{marginTop:"5px",fontSize:"10px",fontWeight:700,color:"#dc2626",background:"#fef2f2",padding:"2px 7px",borderRadius:"6px",display:"inline-block"}}>Draft failed · Needs attention</div>}
+                    {card.status === "DRAFT_READY" && <div style={{marginTop:"5px",fontSize:"10px",fontWeight:700,color:"#2563eb",background:"#eff6ff",padding:"2px 7px",borderRadius:"6px",display:"inline-block"}}>Awaiting approval</div>}
+                    {["RECEIVED","CLASSIFIED","TOOLS_RUNNING"].includes(card.status ?? "") && <div style={{marginTop:"5px",fontSize:"10px",fontWeight:700,color:"#6b7280",background:"#f3f4f6",padding:"2px 7px",borderRadius:"6px",display:"inline-block"}}>Drafting…</div>}
+                  </button>
+                ))}
+              </div>
+              {/* Email detail */}
+              <div style={{flex:1,minWidth:0,background:"#fff",borderRadius:"16px",border:"1px solid #e8eaf0",overflow:"auto"}}>
+                {selectedEmail ? (
+                  <div style={{padding:"8px 0"}}>
+                    <MadisonEmailDraftCard
+                      msg={selectedEmail}
+                      callerName="Agent"
+                      onActed={() => {
+                        setSelectedEmail(null);
+                        emailUtils.opsChat.listActiveEmailDraftCards.invalidate();
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#9aa0aa",fontSize:"13px"}}>Select an email to review</div>
+                )}
+              </div>
+            </div>
+          ) : (
           <div className="cs2-boardWrap">
             <div className="cs2-board">
               {columns.map((col, ci) => (
@@ -1223,6 +1288,7 @@ export default function CsInbox2() {
               ))}
             </div>
           </div>
+          )}
           <footer className="cs2-stats">
             <div className="cs2-stat"><small>Total Conversations</small><b>{activeClientConvs.length}</b></div>
             <div className="cs2-stat"><small>Needs Response</small><b>{needsResponseCount}</b></div>
