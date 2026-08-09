@@ -3257,7 +3257,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
                     eq(conversationSessions.leadSource, 'cs_initiated')
                   ),
               // Any session with an inbound AI call — no leadSource or csResolvedAt restriction
-              sql`EXISTS (SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id} AND vc.createdAt >= NOW() - INTERVAL 30 DAY)`
+              sql`EXISTS (SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id})`
             )
           )
           .orderBy(desc(conversationSessions.updatedAt));
