@@ -490,6 +490,14 @@ export default function CsInbox2() {
   const THIRTY_MIN = 30 * 60 * 1000;
   const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
 
+  // Single canonical timestamp for both display and sorting
+  function getEffectiveInteractionTs(c: LiveConv): number {
+    if (c.latestInteractionType === "call" && c.latestCallCreatedAt) {
+      return c.latestCallCreatedAt;
+    }
+    return (c as any).lastMsgTs ?? 0;
+  }
+
   function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "Waiting on Customer" {
     // ── Call-aware column assignment (MUST come before csResolvedAt guard) ─
     // A new inbound call reactivates the customer even if the old SMS session was resolved.
@@ -849,6 +857,13 @@ export default function CsInbox2() {
         if (filter === "hot") return c.csStatusTier === "hot_lead";
         return true;
       }).filter(c => getKanbanColumn(c) === label);
+      // At Risk: longest wait first (oldest effective ts at top)
+      // All other columns: newest activity first
+      if (label === "At Risk") {
+        convs = convs.sort((a, b) => getEffectiveInteractionTs(a) - getEffectiveInteractionTs(b));
+      } else {
+        convs = convs.sort((a, b) => getEffectiveInteractionTs(b) - getEffectiveInteractionTs(a));
+      }
       return { label, convs };
     });
   }, [activeClientConvs, query, filter, now]);
