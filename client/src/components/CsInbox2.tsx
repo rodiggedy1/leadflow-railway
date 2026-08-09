@@ -57,12 +57,12 @@ function deriveCallActionState(outcome: string): "needs_response" | "on_customer
   switch (outcome) {
     case "booked":         return "handled";
     case "faq_answered":   return "handled";
-    case "transferred":    return "handled";
+    case "transferred":    return "needs_response";
     case "callback_requested": return "needs_response";
     case "no_answer":      return "needs_response";
     case "missed":         return "needs_response";
     case "quote_given":    return "on_customer";
-    case "answered":       return "on_customer";
+    case "answered":       return "needs_response";
     case "no_action":
     default:               return "needs_response";
   }

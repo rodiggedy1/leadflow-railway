@@ -3483,6 +3483,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             latestInteractionType,
           };
         });
+        // TEMP DIAG — remove after
+        const _diagRow = resultWithCalls.find((r: any) => (r.leadPhone || "").includes("3029816191"));
+        console.log("[listCsInbox DIAG 302]", _diagRow ? JSON.stringify({id:_diagRow.id,leadPhone:_diagRow.leadPhone,csResolvedAt:_diagRow.csResolvedAt,latestCallId:_diagRow.latestCallId,latestCallCreatedAt:_diagRow.latestCallCreatedAt,latestCallOutcome:_diagRow.latestCallOutcome,latestInteractionType:_diagRow.latestInteractionType}) : "NOT IN RESULT (total=" + resultWithCalls.length + ")");
         return resultWithCalls;
       }),
     /**
