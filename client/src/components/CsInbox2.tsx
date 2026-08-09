@@ -485,9 +485,8 @@ export default function CsInbox2() {
   const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
 
   function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "Waiting on Customer" {
-    // Filter out resolved conversations — they don't belong on the active board
-    if (conv.csResolvedAt) return "Waiting on Customer"; // won't show — filtered before columns
-    // ── Call-aware column assignment ─────────────────────────────────────
+    // ── Call-aware column assignment (MUST come before csResolvedAt guard) ─
+    // A new inbound call reactivates the customer even if the old SMS session was resolved.
     if (conv.latestInteractionType === "call" && conv.latestCallCreatedAt) {
       const callAgeMs = Date.now() - conv.latestCallCreatedAt;
       const actionState = deriveCallActionState(conv.latestCallOutcome ?? "no_action");
@@ -500,6 +499,8 @@ export default function CsInbox2() {
       if (actionState === "needs_response") return "Needs Response";
       return "Waiting on Customer";
     }
+    // ── Resolved SMS sessions don't belong on the active board ───────────
+    if (conv.csResolvedAt) return "Waiting on Customer";
     // ── SMS column assignment (unchanged) ────────────────────────────────
 
     const needsReply = conv.lastSenderRole === "user";
@@ -791,29 +792,6 @@ export default function CsInbox2() {
   }), [clientConvs]);
 
   // Sidebar counts — aligned with column logic
-  // TEMP DIAG — remove after debugging
-  useEffect(() => {
-    const TARGET_ID = 5610001;
-    const queryState = (window as any).__REACT_QUERY_DEVTOOLS_GLOBAL_STORE__?.getQueryCache?.()?.find?.({ queryKey: ['leads', 'listCsInbox'] });
-    const rawContains = (csData ?? []).some((r: any) => r.id === TARGET_ID);
-    const rawObj = (csData ?? []).find((r: any) => r.id === TARGET_ID);
-    const clientContains = clientConvs.some(c => c.id === TARGET_ID);
-    const activeContains = activeClientConvs.some(c => c.id === TARGET_ID);
-    const clientObj = clientConvs.find(c => c.id === TARGET_ID);
-    console.log("[INBOX2_DIAG]", {
-      listCsInboxExecuted: !!csData,
-      rawQueryContains5610001: rawContains,
-      rawObject: rawObj ? { id: rawObj.id, leadPhone: (rawObj as any).leadPhone, csResolvedAt: (rawObj as any).csResolvedAt, latestCallId: (rawObj as any).latestCallId, latestCallCreatedAt: (rawObj as any).latestCallCreatedAt, latestCallOutcome: (rawObj as any).latestCallOutcome, latestInteractionType: (rawObj as any).latestInteractionType } : null,
-      clientConvsContains5610001: clientContains,
-      activeClientConvsContains5610001: activeContains,
-      clientObjCsResolvedAt: clientObj?.csResolvedAt,
-      clientObjLatestInteractionType: clientObj?.latestInteractionType,
-      clientObjLatestCallCreatedAt: clientObj?.latestCallCreatedAt,
-      totalCsData: (csData ?? []).length,
-      totalClientConvs: clientConvs.length,
-      totalActiveClientConvs: activeClientConvs.length,
-    });
-  }, [csData, clientConvs, activeClientConvs]);
   const needsResponseCount = activeClientConvs.filter(c => c.lastSenderRole === "user" && !c.csResolvedAt).length;
   const unansweredCount    = activeClientConvs.filter(c => {
     const needsReply = c.lastSenderRole === "user";
