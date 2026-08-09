@@ -1146,6 +1146,12 @@ export default function CsInbox2() {
             <button className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>
               ▣ <span>All Conversations</span><span className="cs2-badge">{clientConvs.length}</span>
             </button>
+            <button className={channel==="inbox"?"active":""} onClick={()=>{setChannel("inbox");setSelectedEmailThreadId(null);}}>
+              ✉ <span>Inbox (SMS + Calls)</span>
+            </button>
+            <button className={channel==="email"?"active":""} onClick={()=>{setChannel("email");setSelectedConv(null);setSelectedEmailThreadId(null);}}>
+              ✉ <span>Email</span>{(emailInbox.data?.threads.length ?? 0) > 0 && <span className="cs2-badge">{emailInbox.data?.threads.length}</span>}
+            </button>
           </div>
           <div className="cs2-section">Views</div>
           <div className="cs2-nav">
@@ -1171,12 +1177,6 @@ export default function CsInbox2() {
         <main className="cs2-main">
           <header className="cs2-topbar">
             <h2>All Conversations</h2>
-            <div style={{display:"flex",gap:"4px",background:"#f1f3f6",borderRadius:"8px",padding:"3px"}}>
-              <button onClick={()=>{setChannel("inbox");setSelectedEmailThreadId(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="inbox"?"#fff":"transparent",color:channel==="inbox"?"#1a1a2e":"#6b7280",boxShadow:channel==="inbox"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s"}}>Inbox</button>
-              <button onClick={()=>{setChannel("email");setSelectedConv(null);setSelectedEmailThreadId(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="email"?"#fff":"transparent",color:channel==="email"?"#1a1a2e":"#6b7280",boxShadow:channel==="email"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s",display:"flex",alignItems:"center",gap:"5px"}}>
-                ✉ Email{(emailInbox.data?.threads.length ?? 0) > 0 && <span style={{background:"#3478f6",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontSize:"10px",fontWeight:800}}>{emailInbox.data?.threads.length}</span>}
-              </button>
-            </div>
             <button className="cs2-btn" onClick={() => refetchInbox()}>↻</button>
             <button className="cs2-btn primary" onClick={()=>setShowNewMsg(true)}>✎ New Message</button>
           </header>
