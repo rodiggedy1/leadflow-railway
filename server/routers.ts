@@ -3286,6 +3286,23 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // Sort: most recent last message first
         augmented.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
+        // ── Stage 3b: voice_calls latest-call lookup (for dedup ranking) ────────
+        // Fetch MAX(createdAt) per session so Stage 4 can rank by max(smsTs, callTs).
+        const allSessionIds = sessions.map(s => s.id).filter(Boolean);
+        const preCallMap = new Map<number, number>(); // sessionId -> latestCallTs (ms)
+        if (allSessionIds.length > 0) {
+          try {
+            const preCallRows = await db.execute(sql`
+              SELECT sessionId, MAX(UNIX_TIMESTAMP(createdAt)*1000) AS latestCallTs
+              FROM voice_calls
+              WHERE sessionId IN (${sql.raw(allSessionIds.join(','))})
+              GROUP BY sessionId
+            `);
+            for (const row of (preCallRows as any)[0] as any[]) {
+              if (row.sessionId) preCallMap.set(Number(row.sessionId), Number(row.latestCallTs));
+            }
+          } catch { /* non-fatal */ }
+        }
         // ── Stage 4: dedupe/group by phone — canonical session selection ────────
         // For phones with multiple sessions, select the canonical session (newest lastMessageTs).
         // No history merging here — that belongs in getCsConversation() when the user opens a conversation.
@@ -3302,7 +3319,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           // Pick the single canonical session: the one with the most recent lastMessageTs.
           // All fields come from this one row — no mixing, no hybrid objects.
           return group.reduce((a, b) =>
-            (b.lastMessageTs ?? 0) > (a.lastMessageTs ?? 0) ? b : a
+            Math.max(b.lastMessageTs ?? 0, preCallMap.get(b.id) ?? 0) > Math.max(a.lastMessageTs ?? 0, preCallMap.get(a.id) ?? 0) ? b : a
           );
         });
         deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
