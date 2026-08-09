@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, Play, Pause, ChevronUp, ChevronDown } from "lucide-react";
+import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
 import { trpc } from "@/lib/trpc";
@@ -534,6 +537,11 @@ export default function CsInbox2() {
   const [filter, setFilter] = useState("all");
   const [showNewMsg, setShowNewMsg] = useState(false);
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
+  // AI call audio state (exact copy from CsInbox.tsx)
+  const [expandedAiCallId, setExpandedAiCallId] = useState<string | null>(null);
+  const [playingAiCallId, setPlayingAiCallId] = useState<string | null>(null);
+  const aiCallAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
+  const [showOriginalTranscript, setShowOriginalTranscript] = useState<Record<number, boolean>>({});
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {
@@ -888,27 +896,124 @@ export default function CsInbox2() {
               <div className="day">Conversation</div>
               {timeline.map((entry, i) => {
                 if (entry.type === "call") {
-                  const c = entry.call;
-                  const dur = c.durationSeconds > 0 ? `${Math.floor(c.durationSeconds/60)}m ${c.durationSeconds%60}s` : "";
-                  const callTime = new Date(c.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                  const actionState = deriveCallActionState(c.outcome);
-                  const outcomeColor = actionState === "needs_response" ? "#ef4444" : actionState === "on_customer" ? "#8b5cf6" : "#10b981";
-                  const outcomeLabel = c.outcome === "booked" ? "Booked ✓" : c.outcome === "faq_answered" ? "FAQ Answered" : c.outcome === "transferred" ? "Transferred" : c.outcome === "callback_requested" ? "Callback Requested" : c.outcome === "no_answer" ? "No Answer" : c.outcome === "missed" ? "Missed" : c.outcome === "quote_given" ? "Quote Given" : c.outcome === "answered" ? "Answered" : "No Action";
+                  const aiRec = entry.call;
+                  const aiHasRecording = !!aiRec.recordingUrl;
+                  const aiDuration = aiRec.durationSeconds ?? 0;
+                  const aiDurStr = aiDuration > 0 ? `${Math.floor(aiDuration / 60)}:${String(aiDuration % 60).padStart(2, "0")}` : "0:00";
+                  const aiTime = aiRec.createdAt ? new Date(aiRec.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+                  const aiIsExpanded = expandedAiCallId === `ai-${aiRec.id}`;
+                  const aiIsPlaying = playingAiCallId === `ai-${aiRec.id}`;
+                  const aiWaveHeights = [3, 5, 8, 6, 10, 7, 4, 9, 6, 5, 8, 4, 7, 6, 9, 5, 8, 4, 6, 7];
+                  const showingOriginal = showOriginalTranscript[aiRec.id] ?? false;
+                  const displayTranscript: string | null = aiRec.transcript as string | null;
+                  let aiTranscriptTurns: { identifier: string; content: string }[] = [];
+                  let aiTranscriptRaw: string | null = null;
+                  try {
+                    if (displayTranscript) {
+                      const parsed = JSON.parse(displayTranscript);
+                      if (Array.isArray(parsed)) aiTranscriptTurns = parsed;
+                      else aiTranscriptRaw = displayTranscript;
+                    }
+                  } catch { aiTranscriptRaw = displayTranscript ?? null; }
                   return (
-                    <div key={`call-${c.id}`} style={{margin:"14px 0",background:"#f8f7ff",border:"1px solid #e8e4ff",borderRadius:"14px",padding:"12px 14px"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}}>
-                        <span style={{fontSize:"16px"}}>☎</span>
-                        <span style={{fontWeight:800,fontSize:"11px",color:"#6b4eff",textTransform:"uppercase",letterSpacing:".06em"}}>AI Call</span>
-                        {dur && <span style={{fontSize:"10px",color:"#9aa0aa"}}>· {dur}</span>}
-                        <span style={{marginLeft:"auto",fontSize:"10px",color:"#9aa0aa"}}>{callTime}</span>
-                        <span style={{fontSize:"9px",fontWeight:700,padding:"3px 7px",borderRadius:"999px",background:outcomeColor+"22",color:outcomeColor}}>{outcomeLabel}</span>
+                    <motion.div
+                      key={`aicall-${aiRec.id}`}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                      className="flex justify-end"
+                    >
+                      <div style={{ maxWidth: "72%" }}>
+                        <div
+                          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 cursor-pointer select-none shadow-sm"
+                          onClick={() => setExpandedAiCallId(aiIsExpanded ? null : `ai-${aiRec.id}`)}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Sparkles className="h-3 w-3 text-emerald-500 shrink-0" />
+                              <span className="text-[11px] font-semibold text-emerald-700">AI Call</span>
+                            </div>
+                            {aiRec.outcome === "no_answer" && <span className="text-[10px] text-red-500 font-medium">No answer</span>}
+                            {aiRec.outcome === "callback_requested" && <span className="text-[10px] text-amber-500 font-medium">Callback requested</span>}
+                            {aiRec.outcome === "booked" && <span className="text-[10px] text-emerald-600 font-medium">Booked ✓</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!aiHasRecording) return;
+                                const audio = aiCallAudioRefs.current[`ai-${aiRec.id}`];
+                                if (!audio) return;
+                                if (aiIsPlaying) { audio.pause(); setPlayingAiCallId(null); }
+                                else { audio.play(); setPlayingAiCallId(`ai-${aiRec.id}`); }
+                              }}
+                              className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                                aiHasRecording ? "bg-emerald-500 hover:bg-emerald-600" : "bg-slate-200 cursor-not-allowed"
+                              }`}
+                            >
+                              {aiIsPlaying
+                                ? <Pause className="h-3 w-3 text-white" />
+                                : <Play className="h-3 w-3 text-white ml-0.5" />}
+                            </button>
+                            <div className="flex items-end gap-[2px] h-[18px]">
+                              {aiWaveHeights.map((h, wi) => (
+                                <div key={wi} className="rounded-full w-[3px] bg-emerald-400" style={{ height: `${h}px` }} />
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[11px] font-medium tabular-nums text-emerald-600">{aiDurStr}</span>
+                              {aiIsExpanded ? <ChevronUp className="h-3.5 w-3.5 text-emerald-400" /> : <ChevronDown className="h-3.5 w-3.5 text-emerald-400" />}
+                            </div>
+                          </div>
+                          {aiHasRecording && (
+                            <audio
+                              ref={(el) => { aiCallAudioRefs.current[`ai-${aiRec.id}`] = el; }}
+                              src={proxyRecordingUrl(aiRec.recordingUrl)!}
+                              onEnded={() => setPlayingAiCallId(null)}
+                              onPause={() => { if (playingAiCallId === `ai-${aiRec.id}`) setPlayingAiCallId(null); }}
+                            />
+                          )}
+                        </div>
+                        <AnimatePresence>
+                          {aiIsExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="rounded-b-2xl border border-t-0 border-emerald-200 bg-emerald-50 px-3 pb-3 pt-2">
+                                {aiRec.summary && (
+                                  <p className="text-[12px] text-slate-700 leading-relaxed mb-2">{aiRec.summary}</p>
+                                )}
+                                {aiTranscriptTurns.length > 0 && (
+                                  <details className="mt-1">
+                                    <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest select-none text-emerald-600 hover:text-emerald-800">
+                                      ▶ Transcript ({aiTranscriptTurns.length} turns)
+                                    </summary>
+                                    <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                      {aiTranscriptTurns.map((turn, ti) => (
+                                        <div key={ti} className="text-xs">
+                                          <span className="font-semibold mr-1 text-emerald-600">{turn.identifier}:</span>
+                                          <span className="text-slate-600">{turn.content}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                )}
+                                {aiTranscriptTurns.length === 0 && aiTranscriptRaw && (
+                                  <pre className="text-[11px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed mt-1">{aiTranscriptRaw}</pre>
+                                )}
+                                {aiTranscriptTurns.length === 0 && !aiTranscriptRaw && (
+                                  <p className="text-xs text-slate-400 italic">No transcript available yet</p>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                        <p className="text-[10px] text-slate-400 mt-1 mr-1 text-right">{aiTime}</p>
                       </div>
-                      {c.summary && <div style={{fontSize:"12px",color:"#3f4450",lineHeight:1.5,marginBottom:"8px"}}>{c.summary}</div>}
-                      <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                        {c.recordingUrl && <a href={c.recordingUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:"10px",color:"#6b4eff",textDecoration:"none",border:"1px solid #ddd8ff",borderRadius:"7px",padding:"4px 9px"}}>▶ Recording</a>}
-                        {c.transcript && <button style={{fontSize:"10px",color:"#6b4eff",background:"none",border:"1px solid #ddd8ff",borderRadius:"7px",padding:"4px 9px",cursor:"pointer"}} onClick={()=>alert(c.transcript)}>📄 Transcript</button>}
-                      </div>
-                    </div>
+                    </motion.div>
                   );
                 }
                 const m = entry.msg;
