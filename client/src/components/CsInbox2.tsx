@@ -1146,9 +1146,6 @@ export default function CsInbox2() {
             <button className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>
               ▣ <span>All Conversations</span><span className="cs2-badge">{clientConvs.length}</span>
             </button>
-            <button className={channel==="inbox"?"active":""} onClick={()=>{setChannel("inbox");setSelectedEmailThreadId(null);}}>
-              ✉ <span>Inbox (SMS + Calls)</span>
-            </button>
             <button className={channel==="email"?"active":""} onClick={()=>{setChannel("email");setSelectedConv(null);setSelectedEmailThreadId(null);}}>
               ✉ <span>Email</span>{(emailInbox.data?.threads.length ?? 0) > 0 && <span className="cs2-badge">{emailInbox.data?.threads.length}</span>}
             </button>
