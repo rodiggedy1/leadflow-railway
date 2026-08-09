@@ -140,6 +140,21 @@ Before sending any SMS, you MUST confirm the number with the caller (see "Confir
 2. If the caller is interested in booking, collect the information needed to give them a quote and schedule their cleaning.
 3. If the caller needs a human: during business hours, transfer them live to the team. Outside business hours, schedule a callback for the next morning.
 
+## Existing customer detection (IMPORTANT — do this first)
+When {{customer.number}} is available (not blank), call the lookupCustomer tool immediately at the start of the call to check if this is an existing customer with an upcoming appointment.
+
+If lookupCustomer returns found=true:
+- Greet them by name: "Hi [name]! How can I help you today?"
+- You now know their upcoming booking details. Use this context to answer their questions naturally.
+- If they ask about their appointment time, ETA, or "when is my cleaner coming": answer directly from the booking data.
+- If they want to reschedule: call rescheduleRequest (do NOT start a new booking flow).
+- If they want to cancel: call cancelRequest (do NOT start a new booking flow).
+- If they have a complaint about a past cleaning: call complaintRequest.
+- For reschedule/cancel/complaint: after calling the tool, say "I've submitted your request and our team will call you back shortly to confirm."
+
+If lookupCustomer returns found=false:
+- Treat them as a new caller and proceed with your normal goals below.
+
 ## PRICING — calculate this yourself, do not call any tool for the price
 
 Base price by home size:
@@ -404,7 +419,284 @@ function buildToolDefinitions(webhookUrl: string) {
       },
       server: { url: webhookUrl },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "lookupCustomer",
+        description: "Look up an existing customer's upcoming booking using their phone number. Call this at the start of every call when {{customer.number}} is available to check if the caller is an existing customer with an upcoming appointment.",
+        parameters: {
+          type: "object",
+          properties: {
+            phone: { type: "string", description: "Caller's phone number — use {{customer.number}}" },
+          },
+          required: ["phone"],
+        },
+      },
+      server: { url: webhookUrl },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "rescheduleRequest",
+        description: "Submit a reschedule request for an existing customer who wants to change their cleaning appointment date. Use this instead of the new booking flow when the caller already has a booking.",
+        parameters: {
+          type: "object",
+          properties: {
+            callerName: { type: "string", description: "Caller's name" },
+            phone: { type: "string", description: "Caller's phone number — use {{customer.number}}" },
+            currentDate: { type: "string", description: "Their current appointment date if known" },
+            preferredNewDate: { type: "string", description: "The date/time they want to reschedule to, in their own words" },
+            notes: { type: "string", description: "Any additional context" },
+          },
+          required: ["phone"],
+        },
+      },
+      server: { url: webhookUrl },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "cancelRequest",
+        description: "Submit a cancellation request for an existing customer who wants to cancel their cleaning appointment. Use this instead of the new booking flow.",
+        parameters: {
+          type: "object",
+          properties: {
+            callerName: { type: "string", description: "Caller's name" },
+            phone: { type: "string", description: "Caller's phone number — use {{customer.number}}" },
+            bookingDate: { type: "string", description: "The appointment date they want to cancel" },
+            reason: { type: "string", description: "Reason for cancellation if provided" },
+          },
+          required: ["phone"],
+        },
+      },
+      server: { url: webhookUrl },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "complaintRequest",
+        description: "Log a complaint from an existing customer about a past cleaning service. Use this when the caller expresses dissatisfaction, reports a missed area, or describes a problem with their service.",
+        parameters: {
+          type: "object",
+          properties: {
+            callerName: { type: "string", description: "Caller's name" },
+            phone: { type: "string", description: "Caller's phone number — use {{customer.number}}" },
+            bookingDate: { type: "string", description: "The date of the cleaning they are complaining about" },
+            issue: { type: "string", description: "Description of the issue or complaint" },
+          },
+          required: ["phone", "issue"],
+        },
+      },
+      server: { url: webhookUrl },
+    },
   ];
+}
+
+// ─── New tool handler exports ──────────────────────────────────────────────────
+
+/** Look up an existing customer's upcoming booking from our DB using their phone number */
+export async function handleLookupCustomer(args: {
+  phone: string;
+}): Promise<{ found: boolean; customerName?: string; jobDate?: string; serviceTime?: string; serviceType?: string; address?: string; teamName?: string; bookingStatus?: string; etaInfo?: string; message: string }> {
+  try {
+    const db = await getDb();
+    if (!db) return { found: false, message: "Database unavailable" };
+    const { cleanerJobs } = await import("../drizzle/schema");
+    const { sql: sqlFn } = await import("drizzle-orm");
+    const digits10 = args.phone.replace(/[^\d]/g, "").slice(-10);
+    if (!digits10 || digits10.length < 7) return { found: false, message: "Invalid phone number" };
+    // Look up upcoming or today's job for this customer
+    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayET = nowET.toISOString().slice(0, 10);
+    const rows = await db
+      .select({
+        customerName: cleanerJobs.customerName,
+        jobDate: cleanerJobs.jobDate,
+        serviceDateTime: cleanerJobs.serviceDateTime,
+        serviceType: cleanerJobs.serviceType,
+        jobAddress: cleanerJobs.jobAddress,
+        teamName: cleanerJobs.teamName,
+        bookingStatus: cleanerJobs.bookingStatus,
+        etaTimestamp: cleanerJobs.etaTimestamp,
+        etaTimeStr: cleanerJobs.etaTimeStr,
+        jobStatus: cleanerJobs.jobStatus,
+      })
+      .from(cleanerJobs)
+      .where(sqlFn`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${'%' + digits10}
+        AND ${cleanerJobs.jobDate} >= ${todayET}
+        AND ${cleanerJobs.bookingStatus} != 'cancelled'`)
+      .orderBy(cleanerJobs.jobDate)
+      .limit(1);
+    if (!rows.length) {
+      return { found: false, message: "No upcoming booking found for this phone number." };
+    }
+    const job = rows[0];
+    let serviceTime = "time not confirmed";
+    if (job.serviceDateTime) {
+      try {
+        serviceTime = new Date(job.serviceDateTime).toLocaleTimeString("en-US", {
+          timeZone: "America/New_York",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } catch { /* keep default */ }
+    }
+    let etaInfo: string | undefined;
+    if (job.etaTimeStr) {
+      etaInfo = `ETA: ${job.etaTimeStr}`;
+    } else if (job.etaTimestamp) {
+      try {
+        etaInfo = `ETA: ${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true })}`;
+      } catch { /* ignore */ }
+    }
+    const jobDateDisplay = job.jobDate === todayET ? "today" : job.jobDate ?? "upcoming";
+    return {
+      found: true,
+      customerName: job.customerName ?? undefined,
+      jobDate: jobDateDisplay,
+      serviceTime,
+      serviceType: job.serviceType ?? undefined,
+      address: job.jobAddress ?? undefined,
+      teamName: job.teamName ?? undefined,
+      bookingStatus: job.bookingStatus ?? undefined,
+      etaInfo,
+      message: `Found booking for ${job.customerName ?? "customer"}: ${job.serviceType ?? "cleaning"} on ${jobDateDisplay} at ${serviceTime}${job.teamName ? ` with ${job.teamName}` : ""}${etaInfo ? `. ${etaInfo}` : ""}.`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Vapi] lookupCustomer failed:", msg);
+    return { found: false, message: "Unable to look up booking at this time." };
+  }
+}
+
+/** Handle a reschedule request from an existing customer — creates a callback task flagged as reschedule */
+export async function handleRescheduleRequest(args: {
+  callerName?: string;
+  phone: string;
+  currentDate?: string;
+  preferredNewDate?: string;
+  notes?: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const normalizedPhone = args.phone.startsWith("+") ? args.phone : `+1${args.phone.replace(/\D/g, "")}`;
+    const notesText = [
+      "🔄 RESCHEDULE REQUEST",
+      args.currentDate ? `Current date: ${args.currentDate}` : "",
+      args.preferredNewDate ? `Preferred new date: ${args.preferredNewDate}` : "",
+      args.notes ?? "",
+    ].filter(Boolean).join("\n");
+    await db.insert(callbackTasks).values({
+      voiceCallId: null,
+      sessionId: null,
+      callerPhone: normalizedPhone,
+      callerName: args.callerName ?? null,
+      preferredCallbackTime: "as soon as possible",
+      notes: notesText,
+      completed: 0,
+    });
+    await notifyOwner({
+      title: `🔄 Reschedule request: ${args.callerName ?? normalizedPhone}`,
+      content: [
+        `Phone: ${normalizedPhone}`,
+        args.currentDate ? `Current date: ${args.currentDate}` : "",
+        args.preferredNewDate ? `Preferred new date: ${args.preferredNewDate}` : "",
+        args.notes ?? "",
+      ].filter(Boolean).join("\n"),
+    }).catch(() => {});
+    console.log(`[Vapi] Reschedule request: phone=${normalizedPhone}`);
+    return { success: true, message: "Reschedule request submitted. Our team will call you back shortly to confirm the new date." };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Vapi] rescheduleRequest failed:", msg);
+    return { success: false, message: "Unable to process reschedule request. Please call us at 202-888-5362." };
+  }
+}
+
+/** Handle a cancellation request from an existing customer */
+export async function handleCancelRequest(args: {
+  callerName?: string;
+  phone: string;
+  bookingDate?: string;
+  reason?: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const normalizedPhone = args.phone.startsWith("+") ? args.phone : `+1${args.phone.replace(/\D/g, "")}`;
+    const notesText = [
+      "❌ CANCELLATION REQUEST",
+      args.bookingDate ? `Booking date: ${args.bookingDate}` : "",
+      args.reason ? `Reason: ${args.reason}` : "",
+    ].filter(Boolean).join("\n");
+    await db.insert(callbackTasks).values({
+      voiceCallId: null,
+      sessionId: null,
+      callerPhone: normalizedPhone,
+      callerName: args.callerName ?? null,
+      preferredCallbackTime: "as soon as possible",
+      notes: notesText,
+      completed: 0,
+    });
+    await notifyOwner({
+      title: `❌ Cancellation request: ${args.callerName ?? normalizedPhone}`,
+      content: [
+        `Phone: ${normalizedPhone}`,
+        args.bookingDate ? `Booking date: ${args.bookingDate}` : "",
+        args.reason ? `Reason: ${args.reason}` : "",
+      ].filter(Boolean).join("\n"),
+    }).catch(() => {});
+    console.log(`[Vapi] Cancellation request: phone=${normalizedPhone}`);
+    return { success: true, message: "Cancellation request submitted. Our team will follow up with you shortly to confirm." };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Vapi] cancelRequest failed:", msg);
+    return { success: false, message: "Unable to process cancellation. Please call us at 202-888-5362." };
+  }
+}
+
+/** Handle a complaint from an existing customer */
+export async function handleComplaintRequest(args: {
+  callerName?: string;
+  phone: string;
+  bookingDate?: string;
+  issue: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const normalizedPhone = args.phone.startsWith("+") ? args.phone : `+1${args.phone.replace(/\D/g, "")}`;
+    const notesText = [
+      "⚠️ COMPLAINT",
+      args.bookingDate ? `Booking date: ${args.bookingDate}` : "",
+      `Issue: ${args.issue}`,
+    ].filter(Boolean).join("\n");
+    await db.insert(callbackTasks).values({
+      voiceCallId: null,
+      sessionId: null,
+      callerPhone: normalizedPhone,
+      callerName: args.callerName ?? null,
+      preferredCallbackTime: "as soon as possible",
+      notes: notesText,
+      completed: 0,
+    });
+    await notifyOwner({
+      title: `⚠️ Complaint: ${args.callerName ?? normalizedPhone}`,
+      content: [
+        `Phone: ${normalizedPhone}`,
+        args.bookingDate ? `Booking date: ${args.bookingDate}` : "",
+        `Issue: ${args.issue}`,
+      ].filter(Boolean).join("\n"),
+    }).catch(() => {});
+    console.log(`[Vapi] Complaint: phone=${normalizedPhone}, issue=${args.issue.slice(0, 100)}`);
+    return { success: true, message: "I've logged your concern and our team will reach out to you shortly to make it right." };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Vapi] complaintRequest failed:", msg);
+    return { success: false, message: "Unable to log complaint. Please call us directly at 202-888-5362." };
+  }
 }
 
 // ─── Assistant configuration ───────────────────────────────────────────────────

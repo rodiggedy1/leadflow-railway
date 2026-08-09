@@ -19,6 +19,10 @@ import {
   handleCreateLead,
   handleSendSms,
   handleScheduleCallback,
+  handleLookupCustomer,
+  handleRescheduleRequest,
+  handleCancelRequest,
+  handleComplaintRequest,
   processEndOfCallReport,
   type VapiEndOfCallReport,
 } from "./vapiService";
@@ -202,6 +206,42 @@ export function registerVapiWebhookRoute(app: Express): void {
                 preferredCallbackTime: cbArgs.preferredCallbackTime,
                 notes: cbArgs.notes,
                 sessionId: batchSessionId,
+              });
+              break;
+            }
+            case "lookupCustomer": {
+              const lcArgs = args as { phone?: string };
+              result = await handleLookupCustomer({ phone: lcArgs.phone ?? callerPhone });
+              break;
+            }
+            case "rescheduleRequest": {
+              const rrArgs = args as { callerName?: string; phone?: string; currentDate?: string; preferredNewDate?: string; notes?: string };
+              result = await handleRescheduleRequest({
+                callerName: rrArgs.callerName,
+                phone: rrArgs.phone ?? callerPhone,
+                currentDate: rrArgs.currentDate,
+                preferredNewDate: rrArgs.preferredNewDate,
+                notes: rrArgs.notes,
+              });
+              break;
+            }
+            case "cancelRequest": {
+              const crArgs = args as { callerName?: string; phone?: string; bookingDate?: string; reason?: string };
+              result = await handleCancelRequest({
+                callerName: crArgs.callerName,
+                phone: crArgs.phone ?? callerPhone,
+                bookingDate: crArgs.bookingDate,
+                reason: crArgs.reason,
+              });
+              break;
+            }
+            case "complaintRequest": {
+              const compArgs = args as { callerName?: string; phone?: string; bookingDate?: string; issue: string };
+              result = await handleComplaintRequest({
+                callerName: compArgs.callerName,
+                phone: compArgs.phone ?? callerPhone,
+                bookingDate: compArgs.bookingDate,
+                issue: compArgs.issue ?? "No details provided",
               });
               break;
             }
