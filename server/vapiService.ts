@@ -151,6 +151,9 @@ If lookupCustomer returns found=true:
 - If they want to cancel: call cancelRequest (do NOT start a new booking flow).
 - If they have a complaint about a past cleaning: call complaintRequest.
 - For reschedule/cancel/complaint: after calling the tool, say "I've submitted your request and our team will call you back shortly to confirm."
+- If they ask when their cleaner is arriving / what time they're coming / ETA:
+  - If etaInfo was returned by lookupCustomer: answer directly — "Your cleaner is expected at [time]."
+  - If no etaInfo: call requestEtaCall, then say "I'm checking with your cleaner right now — you'll get a text with their ETA shortly."
 
 If lookupCustomer returns found=false:
 - Treat them as a new caller and proceed with your normal goals below.
@@ -489,10 +492,93 @@ function buildToolDefinitions(webhookUrl: string) {
       },
       server: { url: webhookUrl },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "requestEtaCall",
+        description: "Request an ETA from the cleaner for the customer's today job. Use this when the customer asks when their cleaner is arriving and no ETA is already known. This calls the cleaner and the customer will receive a text with the ETA shortly.",
+        parameters: {
+          type: "object",
+          properties: {
+            phone: { type: "string", description: "Customer's phone number — use {{customer.number}}" },
+          },
+          required: ["phone"],
+        },
+      },
+      server: { url: webhookUrl },
+    },
   ];
 }
 
 // ─── New tool handler exports ──────────────────────────────────────────────────
+
+/** Request an ETA call to the cleaner for the customer's today job */
+export async function handleRequestEtaCall(args: {
+  phone: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const db = await getDb();
+    if (!db) return { success: false, message: "Database unavailable" };
+    const { cleanerJobs, cleanerProfiles } = await import("../drizzle/schema");
+    const { eq, and, ne, like, sql: sqlFn } = await import("drizzle-orm");
+    const { placeEtaCall, parseServiceDateTime, formatTimeET } = await import("./fieldMgmtEngine");
+    const digits10 = args.phone.replace(/[^\d]/g, "").slice(-10);
+    if (!digits10 || digits10.length < 7) return { success: false, message: "Invalid phone number" };
+    // Get today's date in ET
+    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayET = nowET.toISOString().slice(0, 10);
+    // Look up today's job for this customer
+    const [job] = await db
+      .select({
+        id: cleanerJobs.id,
+        customerName: cleanerJobs.customerName,
+        teamName: cleanerJobs.teamName,
+        cleanerName: cleanerJobs.cleanerName,
+        serviceDateTime: cleanerJobs.serviceDateTime,
+        cleanerPhone: cleanerProfiles.phone,
+      })
+      .from(cleanerJobs)
+      .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+      .where(sqlFn`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${'%' + digits10}
+        AND ${cleanerJobs.jobDate} = ${todayET}
+        AND ${cleanerJobs.bookingStatus} != 'cancelled'`)
+      .orderBy(cleanerJobs.serviceDateTime)
+      .limit(1);
+    if (!job) {
+      return { success: false, message: "No job scheduled for today for this customer." };
+    }
+    if (!job.cleanerPhone) {
+      return { success: false, message: "Found the job but no cleaner phone number on file. Our team will follow up." };
+    }
+    if (!job.serviceDateTime) {
+      return { success: false, message: "Found the job but no service time set. Our team will follow up." };
+    }
+    const serviceTime = parseServiceDateTime(job.serviceDateTime);
+    if (!serviceTime) return { success: false, message: "Could not parse service time. Our team will follow up." };
+    const scheduledTimeET = formatTimeET(serviceTime);
+    const cleanerFirstName = (job.cleanerName ?? "there").split(" ")[0];
+    const customerFirstName = (job.customerName ?? "there").split(" ")[0];
+    const result = await placeEtaCall({
+      cleanerJobId: job.id,
+      step: "eta_call_1",
+      cleanerPhone: job.cleanerPhone,
+      cleanerFirstName,
+      customerFirstName,
+      scheduledTimeET,
+      bypassStepLock: true,
+    });
+    if (!result.success) {
+      console.warn(`[Vapi] requestEtaCall failed for job ${job.id}: ${result.reason}`);
+      return { success: false, message: "Unable to reach the cleaner right now. Our team will follow up." };
+    }
+    console.log(`[Vapi] requestEtaCall placed for job ${job.id}, vapiCallId=${result.vapiCallId}`);
+    return { success: true, message: `ETA call placed to ${job.teamName ?? job.cleanerName ?? "your cleaner"}. The customer will receive a text with the ETA shortly.` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Vapi] requestEtaCall failed:", msg);
+    return { success: false, message: "Unable to check ETA right now. Our team will follow up." };
+  }
+}
 
 /** Look up an existing customer's upcoming booking from our DB using their phone number */
 export async function handleLookupCustomer(args: {

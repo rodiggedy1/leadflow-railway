@@ -13,7 +13,6 @@
  * We handle both.
  */
 
-import type { Express, Request, Response } from "express";
 import {
   handleGetQuote,
   handleCreateLead,
@@ -23,6 +22,7 @@ import {
   handleRescheduleRequest,
   handleCancelRequest,
   handleComplaintRequest,
+  handleRequestEtaCall,
   processEndOfCallReport,
   type VapiEndOfCallReport,
 } from "./vapiService";
@@ -243,6 +243,11 @@ export function registerVapiWebhookRoute(app: Express): void {
                 bookingDate: compArgs.bookingDate,
                 issue: compArgs.issue ?? "No details provided",
               });
+              break;
+            }
+            case "requestEtaCall": {
+              const etaArgs = args as { phone?: string };
+              result = await handleRequestEtaCall({ phone: etaArgs.phone ?? callerPhone });
               break;
             }
             default: {
