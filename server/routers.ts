@@ -3323,7 +3323,6 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           );
         });
         deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
-        }
         const _d4 = performance.now() - _t4;
 
         // ── Stage 5: cleanerJobs lookup (REGEXP_REPLACE) ──────────────────────
