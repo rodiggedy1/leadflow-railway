@@ -428,7 +428,10 @@ export default function CsInbox2() {
       const lastMsg = msgs.slice(-1)[0];
       // Use server-computed lastMsgTs (same as CsInbox.tsx) — more reliable than parsing ts from messageHistory
       const serverLastMsgTs = (row as any).lastMsgTs as number | undefined;
-      const lastTs = serverLastMsgTs ?? lastMsg?.ts;
+      const effectiveTs = ((row as any).latestInteractionType === "call" && (row as any).latestCallCreatedAt)
+        ? (row as any).latestCallCreatedAt as number
+        : serverLastMsgTs ?? lastMsg?.ts;
+      const lastTs = effectiveTs;
       const waitMs = lastTs ? Date.now() - lastTs : 0;
       const waitMin = Math.round(waitMs / 60000);
       const waitDays = Math.floor(waitMs / 86_400_000);
@@ -496,7 +499,6 @@ export default function CsInbox2() {
       const isNewCallSession = callAgeMs < TWENTY_FOUR_H && createdAtMs >= Date.now() - TWENTY_FOUR_H && (conv.messageCount ?? 999) <= 2;
       if (actionState === "needs_response" && callAgeMs > THIRTY_MIN) return "At Risk";
       if (actionState === "needs_response" && isNewCallSession) return "New";
-      if (conv.id === 5610001) console.log("[KANBAN_DIAG 5610001]", {callAgeMs, actionState, isNewCallSession, callTs: conv.latestCallCreatedAt, outcome: conv.latestCallOutcome});
       if (actionState === "needs_response") return "Needs Response";
       return "Waiting on Customer";
     }
@@ -814,7 +816,6 @@ export default function CsInbox2() {
         if (filter === "hot") return c.csStatusTier === "hot_lead";
         return true;
       }).filter(c => getKanbanColumn(c) === label);
-      if (label === "Needs Response") { const has = convs.some(c => c.id === 5610001); console.log("[COLUMNS_DIAG] Needs Response has 5610001:", has, "total:", convs.length); }
       return { label, convs };
     });
   }, [activeClientConvs, query, filter, now]);
