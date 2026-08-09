@@ -835,7 +835,7 @@ export default function CsInbox2() {
       // At Risk: longest wait first (oldest effective ts at top)
       // All other columns: newest activity first
       if (label === "At Risk") {
-        convs = convs.sort((a, b) => getEffectiveInteractionTs(a) - getEffectiveInteractionTs(b));
+        convs = convs.sort((a, b) => getEffectiveInteractionTs(b) - getEffectiveInteractionTs(a));
       } else {
         convs = convs.sort((a, b) => getEffectiveInteractionTs(b) - getEffectiveInteractionTs(a));
       }
