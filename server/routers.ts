@@ -3151,7 +3151,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const sourceFilter = or(
           eq(conversationSessions.leadSource, "cs-inbound"),
           eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
-          eq(conversationSessions.leadSource, "cs_initiated")
+          eq(conversationSessions.leadSource, "cs_initiated"),
           eq(conversationSessions.leadSource, "ai_call")
         );
         const resolvedFilter = input.showResolved
@@ -3647,7 +3647,6 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           leadName: primary.leadName,
           messageHistory: JSON.stringify(merged),
           calls: calls2,
-        };
         };
       }),
     /**
