@@ -783,7 +783,12 @@ export default function CsInbox2() {
   const teamConvs   = useMemo(() => liveConvs.filter(c => c.queue === "Teams"),  [liveConvs]);
 
   // Active (non-resolved) client conversations only
-  const activeClientConvs = useMemo(() => clientConvs.filter(c => !c.csResolvedAt), [clientConvs]);
+  const activeClientConvs = useMemo(() => clientConvs.filter(c => {
+    if (!c.csResolvedAt) return true;
+    // Exception: resolved session with a NEW inbound call after it was resolved is active again
+    const latestCallTs = c.latestCallCreatedAt ?? 0;
+    return c.latestInteractionType === "call" && latestCallTs > (c.csResolvedAt as unknown as number);
+  }), [clientConvs]);
 
   // Sidebar counts — aligned with column logic
   const needsResponseCount = activeClientConvs.filter(c => c.lastSenderRole === "user" && !c.csResolvedAt).length;
