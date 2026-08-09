@@ -1292,14 +1292,12 @@ export default function CsInbox2() {
                       style={{flex:1,border:"1px solid #e8eaf0",borderRadius:"8px",padding:"8px 10px",fontSize:"12px",resize:"none",minHeight:"60px",fontFamily:"inherit"}}
                       onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()){
                         const t = emailThread.data;
-                        if(t) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/
-/g,"<br>") });
+                        if(t) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/\n/g,"<br>") });
                       }}}
                     />
                     <button onClick={()=>{
                       const t = emailThread.data;
-                      if(t && emailReply.trim()) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/
-/g,"<br>") });
+                      if(t && emailReply.trim()) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/\n/g,"<br>") });
                     }} disabled={!emailReply.trim() || sendEmailReply.isPending}
                       style={{background:"#3478f6",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"12px",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
                       {sendEmailReply.isPending ? "Sending…" : "Send ↵"}
