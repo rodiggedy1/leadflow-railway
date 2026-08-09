@@ -803,6 +803,31 @@ export default function CsInbox2() {
   }), [clientConvs]);
 
   // Sidebar counts — aligned with column logic
+  // ── DIAGNOSTIC: trace session 5610001 through every filter ──────────────
+  useEffect(() => {
+    const TARGET = 5610001;
+    const rawObj = csData?.find((r: any) => r.id === TARGET);
+    const inLiveConvs = liveConvs.find(c => c.id === TARGET);
+    const inClientConvs = clientConvs.find(c => c.id === TARGET);
+    const inActiveClientConvs = activeClientConvs.find(c => c.id === TARGET);
+    const kanbanCol = inActiveClientConvs ? getKanbanColumn(inActiveClientConvs) : "N/A";
+    const inNeedsResponse = columns.find(col => col.label === "Needs Response")?.convs.find(c => c.id === TARGET);
+    console.log("[INBOX2_DIAG]", {
+      totalCsData: csData?.length ?? 0,
+      rawQueryContains5610001: !!rawObj,
+      rawObj: rawObj ? { id: rawObj.id, leadPhone: (rawObj as any).leadPhone, csResolvedAt: (rawObj as any).csResolvedAt, latestCallId: (rawObj as any).latestCallId, latestCallCreatedAt: (rawObj as any).latestCallCreatedAt, latestInteractionType: (rawObj as any).latestInteractionType } : null,
+      inLiveConvs: !!inLiveConvs,
+      inClientConvs: !!inClientConvs,
+      inActiveClientConvs: !!inActiveClientConvs,
+      activeClientConvsTotal: activeClientConvs.length,
+      kanbanColumn: kanbanCol,
+      inNeedsResponseColumn: !!inNeedsResponse,
+      csResolvedAt: inLiveConvs?.csResolvedAt,
+      latestCallCreatedAt: inLiveConvs?.latestCallCreatedAt,
+      latestInteractionType: inLiveConvs?.latestInteractionType,
+    });
+  }, [csData, liveConvs, clientConvs, activeClientConvs, columns]);
+  // ── END DIAGNOSTIC ───────────────────────────────────────────────────────
   const needsResponseCount = activeClientConvs.filter(c => c.lastSenderRole === "user" && !c.csResolvedAt).length;
   const unansweredCount    = activeClientConvs.filter(c => {
     const needsReply = c.lastSenderRole === "user";
