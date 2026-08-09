@@ -18,6 +18,7 @@ import type { CsMissionStage } from "../drizzle/schema";
 import { eq, and, inArray, asc, desc, sql } from "drizzle-orm";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { ENV } from "./_core/env";
+import { computeSessionSummary } from "./sessionSummary";
 
 const stageSchema = z.object({
   id: z.string(),
@@ -473,6 +474,21 @@ export const csMissionsRouter = router({
         sql`UPDATE cs_missions SET status = 'completed', completedAt = ${now}, updatedAt = ${now} WHERE id = ${input.missionId}`
       );
       broadcastOpsUpdate("cs_mission_update", { sessionId: input.sessionId });
+      // Append sent message to messageHistory so it shows in Inbox2 and updates card preview
+      const [fullSession] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      let history: Array<{ role: string; content: string; ts: number }> = [];
+      try { history = JSON.parse(fullSession?.messageHistory ?? "[]"); } catch { history = []; }
+      const ts = Date.now();
+      history.push({ role: "assistant", content: input.text, ts });
+      await db
+        .update(conversationSessions)
+        .set({ messageHistory: JSON.stringify(history), lastReadAt: ts, ...computeSessionSummary(history) } as any)
+        .where(eq(conversationSessions.id, input.sessionId));
+      broadcastOpsUpdate("lead_update");
       return { ok: true };
     }),
 

@@ -139,6 +139,8 @@ function SendQuoteWidget({
   const sendQuoteSms = trpc.csMissions.sendQuoteSms.useMutation({
     onSuccess: () => {
       toast.success("Quote sent to customer! ✨");
+      setStep("configure");
+      setSmsText("");
     },
     onError: (err) => {
       toast.error(err.message || "Failed to send SMS");
