@@ -1508,6 +1508,7 @@ Rules:
       });
       const { broadcastOpsUpdate } = await import("./sseBroadcast");
       broadcastOpsUpdate("new_message", { channel: "command" });
+      broadcastOpsUpdate("lead_update"); // Notify Inbox2 to refetch
     }
   } catch (err) {
     console.error("[Vapi] Failed to post Madison call summary card:", err);

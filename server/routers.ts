@@ -3261,9 +3261,6 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             )
           )
           .orderBy(desc(conversationSessions.updatedAt));
-        // TEMP DIAG
-        const _diagSession = sessions.find(s => s.id === 5610001);
-        console.log('[listCsInbox DIAG] session 5610001 in Stage1 results:', !!_diagSession, 'total sessions:', sessions.length);
         const _d1 = performance.now() - _t1;
 
         // ── Stage 2: summary columns (no JSON parse) ──────────────────────────
@@ -3326,12 +3323,6 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           );
         });
         deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
-        const _diagDeduped = deduped.find(s => s.id === 5610001);
-        console.log('[listCsInbox DIAG] session 5610001 survived Stage4 dedup:', !!_diagDeduped, 'total deduped:', deduped.length);
-        if (!_diagDeduped) {
-          const _diagPhone = sessions.find(s => s.id === 5610001)?.leadPhone;
-          const _diagGroup = _diagPhone ? Array.from(phoneGroups.get(_diagPhone?.trim() || '') || []).map(s => ({ id: s.id, smsTs: s.lastMessageTs, callTs: preCallMap.get(s.id) ?? 0 })) : [];
-          console.log('[listCsInbox DIAG] phone group for 5610001:', JSON.stringify(_diagGroup));
         }
         const _d4 = performance.now() - _t4;
 
