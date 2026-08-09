@@ -3647,7 +3647,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         };
         let calls2: VoiceCallEntry2[] = [];
         try {
-          const siblingIds2 = siblings.map((s: any) => s.id);
+          const siblingIds2 = [...new Set([primary.id, ...siblings.map((s: any) => s.id)])];
           if (siblingIds2.length > 0) {
             const callRows2 = await db.execute(sql`
               SELECT id, vapiCallId, sessionId, callerPhone, durationSeconds,
