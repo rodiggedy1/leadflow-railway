@@ -496,6 +496,7 @@ export default function CsInbox2() {
       const isNewCallSession = callAgeMs < TWENTY_FOUR_H && createdAtMs >= Date.now() - TWENTY_FOUR_H && (conv.messageCount ?? 999) <= 2;
       if (actionState === "needs_response" && callAgeMs > THIRTY_MIN) return "At Risk";
       if (actionState === "needs_response" && isNewCallSession) return "New";
+      if (conv.id === 5610001) console.log("[KANBAN_DIAG 5610001]", {callAgeMs, actionState, isNewCallSession, callTs: conv.latestCallCreatedAt, outcome: conv.latestCallOutcome});
       if (actionState === "needs_response") return "Needs Response";
       return "Waiting on Customer";
     }
@@ -813,6 +814,7 @@ export default function CsInbox2() {
         if (filter === "hot") return c.csStatusTier === "hot_lead";
         return true;
       }).filter(c => getKanbanColumn(c) === label);
+      if (label === "Needs Response") { const has = convs.some(c => c.id === 5610001); console.log("[COLUMNS_DIAG] Needs Response has 5610001:", has, "total:", convs.length); }
       return { label, convs };
     });
   }, [activeClientConvs, query, filter, now]);
