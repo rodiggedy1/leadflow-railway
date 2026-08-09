@@ -912,15 +912,14 @@ async function handleTextClient(
 
 // ── Payment link handler ─────────────────────────────────────────────────────
 
-const PAYMENT_LINK_SMS_TEMPLATE = `Hi {first_name}! 👋 
-
-This is Madison from Maids in Black. You're all scheduled for your cleaning service appointment, we just need a card on file via our secure Stripe link: {link}
+const PAYMENT_LINK_SMS_TEMPLATE = `Hi {first_name}! 👋
+Everything's all set for your service, we just need a card on file before the day of service via our secure Stripe link (Keeps things super simple and it's so our crew doesn't have to travel around the DC area with loads of cash): {link}
 
 🔒 100% secure – no one on our team sees your card info
 ✅ Pre-auth only – you're NOT charged until after service.
 💳 Your card is not saved on our servers and is processed by Stripe.
 
-Reply if you have any questions! See you soon 🧹✨`;
+Reply if you have any questions! Look forward to seeing you soon and it has been lovely chatting with you.  🧹✨`;
 
 function buildPaymentSms(firstName: string, linkUrl: string): string {
   return PAYMENT_LINK_SMS_TEMPLATE
