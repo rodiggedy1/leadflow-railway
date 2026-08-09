@@ -4,7 +4,6 @@ import { Sparkles, Play, Pause, ChevronUp, ChevronDown } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
-import { MadisonEmailDraftCard } from "@/components/CommandChat";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
@@ -546,20 +545,33 @@ export default function CsInbox2() {
   const [filter, setFilter] = useState("all");
   const [showNewMsg, setShowNewMsg] = useState(false);
   const [channel, setChannel] = useState<"inbox" | "email">("inbox");
-  const [selectedEmail, setSelectedEmail] = useState<{ id: number; body: string; metadata: string | null; createdAt: Date } | null>(null);
+  const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
   // AI call audio state (exact copy from CsInbox.tsx)
   const [expandedAiCallId, setExpandedAiCallId] = useState<string | null>(null);
   const [playingAiCallId, setPlayingAiCallId] = useState<string | null>(null);
   const aiCallAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const [showOriginalTranscript, setShowOriginalTranscript] = useState<Record<number, boolean>>({});
-  // Email draft cards query
-  const emailDraftCards = trpc.opsChat.listActiveEmailDraftCards.useQuery(undefined, {
+  // Email inbox threads query (4-column Kanban)
+  const emailInbox = trpc.opsChat.listEmailInboxThreads.useQuery(undefined, {
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     enabled: channel === "email",
   });
   const emailUtils = trpc.useUtils();
+  // Email thread detail query
+  const emailThread = trpc.gmail.getThread.useQuery(
+    { threadId: selectedEmailThreadId! },
+    { enabled: !!selectedEmailThreadId, staleTime: 60_000, refetchOnWindowFocus: false }
+  );
+  const [emailReply, setEmailReply] = useState("");
+  const sendEmailReply = trpc.gmail.sendReply.useMutation({
+    onSuccess: () => {
+      setEmailReply("");
+      emailUtils.opsChat.listEmailInboxThreads.invalidate();
+      emailUtils.gmail.getThread.invalidate({ threadId: selectedEmailThreadId! });
+    },
+  });
 
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
@@ -1160,9 +1172,9 @@ export default function CsInbox2() {
           <header className="cs2-topbar">
             <h2>All Conversations</h2>
             <div style={{display:"flex",gap:"4px",background:"#f1f3f6",borderRadius:"8px",padding:"3px"}}>
-              <button onClick={()=>{setChannel("inbox");setSelectedEmail(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="inbox"?"#fff":"transparent",color:channel==="inbox"?"#1a1a2e":"#6b7280",boxShadow:channel==="inbox"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s"}}>Inbox</button>
-              <button onClick={()=>{setChannel("email");setSelectedConv(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="email"?"#fff":"transparent",color:channel==="email"?"#1a1a2e":"#6b7280",boxShadow:channel==="email"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s",display:"flex",alignItems:"center",gap:"5px"}}>
-                ✉ Email{(emailDraftCards.data?.length ?? 0) > 0 && <span style={{background:"#3478f6",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontSize:"10px",fontWeight:800}}>{emailDraftCards.data?.length}</span>}
+              <button onClick={()=>{setChannel("inbox");setSelectedEmailThreadId(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="inbox"?"#fff":"transparent",color:channel==="inbox"?"#1a1a2e":"#6b7280",boxShadow:channel==="inbox"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s"}}>Inbox</button>
+              <button onClick={()=>{setChannel("email");setSelectedConv(null);setSelectedEmailThreadId(null);}} style={{padding:"4px 14px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:700,background:channel==="email"?"#fff":"transparent",color:channel==="email"?"#1a1a2e":"#6b7280",boxShadow:channel==="email"?"0 1px 3px rgba(0,0,0,.1)":"none",transition:"all .15s",display:"flex",alignItems:"center",gap:"5px"}}>
+                ✉ Email{(emailInbox.data?.threads.length ?? 0) > 0 && <span style={{background:"#3478f6",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontSize:"10px",fontWeight:800}}>{emailInbox.data?.threads.length}</span>}
               </button>
             </div>
             <button className="cs2-btn" onClick={() => refetchInbox()}>↻</button>
@@ -1176,51 +1188,125 @@ export default function CsInbox2() {
             <button className="cs2-btn">☰ Filters</button>
           </div>
           {channel === "email" ? (
-            <div style={{flex:1,minHeight:0,overflow:"auto",padding:"16px 20px",display:"flex",gap:"16px"}}>
-              {/* Email list */}
-              <div style={{width:"340px",flexShrink:0,display:"flex",flexDirection:"column",gap:"8px"}}>
-                {emailDraftCards.isLoading && <div style={{color:"#9aa0aa",fontSize:"13px",padding:"20px 0",textAlign:"center"}}>Loading emails…</div>}
-                {!emailDraftCards.isLoading && (emailDraftCards.data?.length ?? 0) === 0 && (
-                  <div style={{color:"#9aa0aa",fontSize:"13px",padding:"40px 0",textAlign:"center"}}>No active email drafts</div>
-                )}
-                {emailDraftCards.data?.map(card => (
-                  <button key={card.id} onClick={()=>setSelectedEmail({ id: card.id, body: card.body, metadata: card.metadata, createdAt: new Date(card.createdAt) })}
-                    style={{textAlign:"left",background:selectedEmail?.id===card.id?"#f0edff":"#fff",border:selectedEmail?.id===card.id?"1.5px solid #6b4eff":"1px solid #e8eaf0",borderRadius:"12px",padding:"12px 14px",cursor:"pointer",transition:"all .15s"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-                      <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"#3478f6",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"13px",fontWeight:700,flexShrink:0}}>
-                        {(card.senderName ?? card.fromEmail ?? "?")[0].toUpperCase()}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:700,fontSize:"13px",color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.senderName ?? card.fromEmail}</div>
-                        <div style={{fontSize:"11px",color:"#9aa0aa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.fromEmail}</div>
-                      </div>
-                      <div style={{fontSize:"10px",color:"#9aa0aa",flexShrink:0}}>{new Date(card.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+            <div style={{flex:1,minHeight:0,overflow:"hidden",display:"flex",gap:0}}>
+              {/* Email 4-column Kanban */}
+              <div style={{flex:1,minWidth:0,overflow:"auto",padding:"0 12px"}}>
+                {(() => {
+                  const threads = emailInbox.data?.threads ?? [];
+                  const inboxEmail = emailInbox.data?.inboxEmail?.toLowerCase() ?? "";
+                  const now = Date.now();
+                  const THIRTY_MIN = 30 * 60 * 1000;
+                  const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+                  const getEmailColumn = (t: typeof threads[0]) => {
+                    const isOutbound = inboxEmail && t.senderEmail?.toLowerCase() === inboxEmail;
+                    if (isOutbound) return "Waiting on Customer";
+                    const waitMs = now - (t.lastMessageAt ?? 0);
+                    const isAtRisk = waitMs >= THIRTY_MIN;
+                    const isNew = !isAtRisk && (now - (t.lastMessageAt ?? 0)) < TWENTY_FOUR_H && (t.messageCount ?? 999) <= 2;
+                    if (isAtRisk) return "At Risk";
+                    if (isNew) return "New";
+                    return "Needs Response";
+                  };
+                  const emailCols = ["New","Needs Response","Waiting on Customer","At Risk"].map(label => ({
+                    label,
+                    threads: threads.filter(t => getEmailColumn(t) === label).sort((a,b) => {
+                      if (label === "At Risk") return (a.lastMessageAt ?? 0) - (b.lastMessageAt ?? 0);
+                      return (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0);
+                    }),
+                  }));
+                  if (emailInbox.isLoading) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>Loading emails…</div>;
+                  if (threads.length === 0) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>No email conversations yet</div>;
+                  return (
+                    <div className="cs2-board">
+                      {emailCols.map(col => (
+                        <section key={col.label} className="cs2-column">
+                          <div className="cs2-colHead">
+                            <span className="cs2-dot" style={{background:HEAD_COLORS[col.label]??"#888"}}/>
+                            {col.label}
+                            <small>{col.threads.length}</small>
+                            <span className="chevron">⌄</span>
+                          </div>
+                          <div className="cs2-colCards">
+                            {col.threads.map(t => {
+                              const ago = (() => {
+                                const ms = now - (t.lastMessageAt ?? 0);
+                                if (ms < 60000) return "<1m ago";
+                                if (ms < 3600000) return `${Math.floor(ms/60000)}m ago`;
+                                if (ms < 86400000) return `${Math.floor(ms/3600000)}h ago`;
+                                return `${Math.floor(ms/86400000)}d ago`;
+                              })();
+                              const initials = (t.senderName ?? t.senderEmail ?? "?").slice(0,2).toUpperCase();
+                              return (
+                                <button key={t.threadId} className="cs2-card" onClick={()=>setSelectedEmailThreadId(t.threadId)}
+                                  style={{background:selectedEmailThreadId===t.threadId?"#f0edff":"",border:selectedEmailThreadId===t.threadId?"1.5px solid #6b4eff":""}}>
+                                  <div className="cs2-cardTop">
+                                    <div className="cs2-avatar" style={{background:"#3478f6",fontSize:"11px"}}>{initials}</div>
+                                    <strong style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.senderName ?? t.senderEmail}</strong>
+                                    <span className="cs2-ago">{ago}</span>
+                                  </div>
+                                  <div style={{fontSize:"11px",fontWeight:600,color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"3px 0 2px"}}>
+                                    ✉ {t.subject}
+                                  </div>
+                                  <div className="cs2-preview">{t.snippet}</div>
+                                  <div className="cs2-meta">
+                                    {t.isUnread && <span style={{fontSize:"9px",fontWeight:800,color:"#3478f6",background:"#eff6ff",padding:"2px 6px",borderRadius:"5px",marginRight:"4px"}}>UNREAD</span>}
+                                    <span style={{fontSize:"9px",color:"#9aa0aa"}}>{t.messageCount} msg{(t.messageCount??0)!==1?"s":""}</span>
+                                    <span className="cs2-mini">M</span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                            {col.threads.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px 8px",fontSize:"12px"}}>No conversations</div>}
+                          </div>
+                        </section>
+                      ))}
                     </div>
-                    <div style={{fontWeight:600,fontSize:"12px",color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:"3px"}}>{card.subject}</div>
-                    <div style={{fontSize:"11px",color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.body.split("\n").find(l=>l.startsWith('"'))?.slice(1,80) ?? card.body.slice(0,80)}</div>
-                    {card.status === "FAILED" && <div style={{marginTop:"5px",fontSize:"10px",fontWeight:700,color:"#dc2626",background:"#fef2f2",padding:"2px 7px",borderRadius:"6px",display:"inline-block"}}>Draft failed · Needs attention</div>}
-                    {card.status === "DRAFT_READY" && <div style={{marginTop:"5px",fontSize:"10px",fontWeight:700,color:"#2563eb",background:"#eff6ff",padding:"2px 7px",borderRadius:"6px",display:"inline-block"}}>Awaiting approval</div>}
-                    {["RECEIVED","CLASSIFIED","TOOLS_RUNNING"].includes(card.status ?? "") && <div style={{marginTop:"5px",fontSize:"10px",fontWeight:700,color:"#6b7280",background:"#f3f4f6",padding:"2px 7px",borderRadius:"6px",display:"inline-block"}}>Drafting…</div>}
-                  </button>
-                ))}
+                  );
+                })()}
               </div>
-              {/* Email detail */}
-              <div style={{flex:1,minWidth:0,background:"#fff",borderRadius:"16px",border:"1px solid #e8eaf0",overflow:"auto"}}>
-                {selectedEmail ? (
-                  <div style={{padding:"8px 0"}}>
-                    <MadisonEmailDraftCard
-                      msg={selectedEmail}
-                      callerName="Agent"
-                      onActed={() => {
-                        setSelectedEmail(null);
-                        emailUtils.opsChat.listActiveEmailDraftCards.invalidate();
-                      }}
-                    />
+              {/* Email thread detail panel */}
+              {selectedEmailThreadId && (
+                <div style={{width:"420px",flexShrink:0,borderLeft:"1px solid #e8eaf0",display:"flex",flexDirection:"column",background:"#fff",overflow:"hidden"}}>
+                  <div style={{padding:"12px 16px",borderBottom:"1px solid #e8eaf0",display:"flex",alignItems:"center",gap:"8px"}}>
+                    <button onClick={()=>setSelectedEmailThreadId(null)} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",color:"#6b7280",padding:"0 4px"}}>←</button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,fontSize:"13px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emailThread.data?.subject ?? "Loading…"}</div>
+                    </div>
                   </div>
-                ) : (
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#9aa0aa",fontSize:"13px"}}>Select an email to review</div>
-                )}
-              </div>
+                  <div style={{flex:1,minHeight:0,overflow:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:"10px"}}>
+                    {emailThread.isLoading && <div style={{color:"#9aa0aa",textAlign:"center",padding:"20px"}}>Loading thread…</div>}
+                    {emailThread.data?.messages?.map((msg: any, i: number) => {
+                      const isOutbound = emailInbox.data?.inboxEmail && msg.fromEmail?.toLowerCase() === emailInbox.data.inboxEmail.toLowerCase();
+                      return (
+                        <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isOutbound?"flex-end":"flex-start"}}>
+                          <div style={{maxWidth:"85%",background:isOutbound?"#eff6ff":"#f9fafb",border:`1px solid ${isOutbound?"#bfdbfe":"#e5e7eb"}`,borderRadius:"12px",padding:"8px 12px"}}>
+                            <div style={{fontSize:"10px",color:"#9aa0aa",marginBottom:"4px",fontWeight:600}}>{msg.from ?? msg.fromEmail} · {msg.date ? new Date(msg.date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}</div>
+                            <div style={{fontSize:"12px",color:"#1a1a2e",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{msg.body ?? msg.snippet}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{borderTop:"1px solid #e8eaf0",padding:"10px 12px",display:"flex",gap:"8px",alignItems:"flex-end"}}>
+                    <textarea value={emailReply} onChange={e=>setEmailReply(e.target.value)} placeholder="Write a reply…"
+                      style={{flex:1,border:"1px solid #e8eaf0",borderRadius:"8px",padding:"8px 10px",fontSize:"12px",resize:"none",minHeight:"60px",fontFamily:"inherit"}}
+                      onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()){
+                        const t = emailThread.data;
+                        if(t) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/
+/g,"<br>") });
+                      }}}
+                    />
+                    <button onClick={()=>{
+                      const t = emailThread.data;
+                      if(t && emailReply.trim()) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/
+/g,"<br>") });
+                    }} disabled={!emailReply.trim() || sendEmailReply.isPending}
+                      style={{background:"#3478f6",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"12px",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                      {sendEmailReply.isPending ? "Sending…" : "Send ↵"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
           <div className="cs2-boardWrap">

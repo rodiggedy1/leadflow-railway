@@ -41,12 +41,13 @@ import {
   madisonSmsDrafts,
   madisonEmailDrafts,
   focusPoints,
+  gmailThreadMeta,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
-import { sendGmailReply } from "./gmailService";
+import { sendGmailReply, getInboxEmailAddress } from "./gmailService";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { invokeLLM } from "./_core/llm";
@@ -5986,6 +5987,51 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+  /**
+   * listEmailInboxThreads — returns Gmail threads that have ever had a Madison email draft.
+   * Used by Inbox2 Email tab for 4-column Kanban. No Gmail API calls — uses cached gmailThreadMeta.
+   * Admission rule: EXISTS(madison_email_drafts.threadId). No isInInbox filter.
+   */
+  listEmailInboxThreads: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return { threads: [], inboxEmail: null };
+      const inboxEmail = await getInboxEmailAddress().catch(() => null);
+      const rows = await db
+        .select({
+          threadId: gmailThreadMeta.threadId,
+          senderName: gmailThreadMeta.senderName,
+          senderEmail: gmailThreadMeta.senderEmail,
+          subject: gmailThreadMeta.subject,
+          snippet: gmailThreadMeta.snippet,
+          lastMessageAt: gmailThreadMeta.lastMessageAt,
+          messageCount: gmailThreadMeta.messageCount,
+          isUnread: gmailThreadMeta.isUnread,
+        })
+        .from(gmailThreadMeta)
+        .where(
+          sql`EXISTS (
+            SELECT 1 FROM madison_email_drafts med
+            WHERE med.threadId = ${gmailThreadMeta.threadId}
+          )`
+        )
+        .orderBy(desc(gmailThreadMeta.lastMessageAt));
+      return {
+        threads: rows.map(r => ({
+          threadId: r.threadId,
+          senderName: r.senderName ?? null,
+          senderEmail: r.senderEmail ?? null,
+          subject: r.subject ?? "(no subject)",
+          snippet: r.snippet ?? "",
+          lastMessageAt: r.lastMessageAt ?? 0,
+          messageCount: r.messageCount ?? 0,
+          isUnread: r.isUnread === 1,
+        })),
+        inboxEmail,
+      };
+    }),
+
+
    * Count unresolved Madison cards:
    *   - madison_sms_draft: draft status is DRAFT_READY
    *   - madison_email_draft: draft status is DRAFT_READY
