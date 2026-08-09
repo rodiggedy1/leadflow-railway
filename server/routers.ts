@@ -3239,7 +3239,27 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             messageCount: conversationSessions.messageCount,
           })
           .from(conversationSessions)
-          .where(resolvedFilter ? and(sourceFilter, resolvedFilter) : sourceFilter)
+          .where(
+            or(
+              // Normal SMS sessions: must match leadSource rules AND be unresolved
+              resolvedFilter
+                ? and(
+                    or(
+                      eq(conversationSessions.leadSource, 'cs-inbound'),
+                      eq(conversationSessions.leadSource, 'cs-inbound-cleaner'),
+                      eq(conversationSessions.leadSource, 'cs_initiated')
+                    ),
+                    resolvedFilter
+                  )
+                : or(
+                    eq(conversationSessions.leadSource, 'cs-inbound'),
+                    eq(conversationSessions.leadSource, 'cs-inbound-cleaner'),
+                    eq(conversationSessions.leadSource, 'cs_initiated')
+                  ),
+              // Any session with an inbound AI call — no leadSource or csResolvedAt restriction
+              sql`EXISTS (SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id})`
+            )
+          )
           .orderBy(desc(conversationSessions.updatedAt));
         const _d1 = performance.now() - _t1;
 
