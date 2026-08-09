@@ -508,10 +508,6 @@ export async function handleLookupCustomer(args: {
     // Look up upcoming or today's job for this customer
     const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
     const todayET = nowET.toISOString().slice(0, 10);
-    // Look back 2 days so yesterday's cleaning (complaint/follow-up) and today's are included
-    const twoDaysAgo = new Date(nowET);
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-    const lookbackDate = twoDaysAgo.toISOString().slice(0, 10);
     const rows = await db
       .select({
         customerName: cleanerJobs.customerName,
@@ -526,9 +522,7 @@ export async function handleLookupCustomer(args: {
         jobStatus: cleanerJobs.jobStatus,
       })
       .from(cleanerJobs)
-      .where(sqlFn`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${'%' + digits10}
-        AND ${cleanerJobs.jobDate} >= ${lookbackDate}
-        AND ${cleanerJobs.bookingStatus} != 'cancelled'`)
+      .where(sqlFn`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${'%' + digits10}`)
       .orderBy(sqlFn`${cleanerJobs.jobDate} DESC`)
       .limit(1);
     if (!rows.length) {
@@ -554,21 +548,18 @@ export async function handleLookupCustomer(args: {
         etaInfo = `ETA: ${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true })}`;
       } catch { /* ignore */ }
     }
-    const yesterdayET = new Date(nowET);
-    yesterdayET.setDate(yesterdayET.getDate() - 1);
-    const yesterdayStr = yesterdayET.toISOString().slice(0, 10);
-    const jobDateDisplay2 = job.jobDate === todayET ? "today" : job.jobDate === yesterdayStr ? "yesterday" : job.jobDate ?? "upcoming";
+    const jobDateDisplay = job.jobDate === todayET ? "today" : job.jobDate ?? "recent";
     return {
       found: true,
       customerName: job.customerName ?? undefined,
-      jobDate: jobDateDisplay2,
+      jobDate: jobDateDisplay,
       serviceTime,
       serviceType: job.serviceType ?? undefined,
       address: job.jobAddress ?? undefined,
       teamName: job.teamName ?? undefined,
       bookingStatus: job.bookingStatus ?? undefined,
       etaInfo,
-      message: `Found booking for ${job.customerName ?? "customer"}: ${job.serviceType ?? "cleaning"} on ${jobDateDisplay2} at ${serviceTime}${job.teamName ? ` with ${job.teamName}` : ""}${etaInfo ? `. ${etaInfo}` : ""}.`,
+      message: `Found booking for ${job.customerName ?? "customer"}: ${job.serviceType ?? "cleaning"} on ${jobDateDisplay} at ${serviceTime}${job.teamName ? ` with ${job.teamName}` : ""}${etaInfo ? `. ${etaInfo}` : ""}.`,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
