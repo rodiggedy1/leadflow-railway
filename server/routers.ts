@@ -3152,6 +3152,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           eq(conversationSessions.leadSource, "cs-inbound"),
           eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
           eq(conversationSessions.leadSource, "cs_initiated")
+          eq(conversationSessions.leadSource, "ai_call")
         );
         const resolvedFilter = input.showResolved
           ? undefined  // show all
@@ -3382,7 +3383,70 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           }
         }).catch(() => { /* silent */ });
 
-        return result;
+        // ── Stage 8: latest voice_calls per session ─────────────────────────
+        const sessionIds = result.map(s => s.id).filter(Boolean);
+        let voiceCallMap = new Map<number, {
+          latestCallId: number;
+          latestCallOutcome: string;
+          latestCallSummary: string | null;
+          latestCallDuration: number;
+          latestCallRecordingUrl: string | null;
+          latestCallCreatedAt: number;
+          latestCallStructuredData: string | null;
+          latestCallCallerPhone: string;
+        }>();
+        if (sessionIds.length > 0) {
+          try {
+            const callRows = await db.execute(sql`
+              SELECT vc.id, vc.sessionId, vc.outcome, vc.summary, vc.durationSeconds,
+                     vc.recordingUrl, vc.createdAt, vc.structuredData, vc.callerPhone
+              FROM voice_calls vc
+              INNER JOIN (
+                SELECT sessionId, MAX(id) AS maxId
+                FROM voice_calls
+                WHERE sessionId IN (${sql.raw(sessionIds.join(','))})
+                GROUP BY sessionId
+              ) latest ON vc.id = latest.maxId
+            `);
+            const rows = (callRows as any)[0] as any[];
+            for (const row of rows) {
+              if (!row.sessionId) continue;
+              voiceCallMap.set(Number(row.sessionId), {
+                latestCallId: Number(row.id),
+                latestCallOutcome: row.outcome ?? 'no_action',
+                latestCallSummary: row.summary ?? null,
+                latestCallDuration: Number(row.durationSeconds ?? 0),
+                latestCallRecordingUrl: row.recordingUrl ?? null,
+                latestCallCreatedAt: new Date(row.createdAt).getTime(),
+                latestCallStructuredData: row.structuredData ?? null,
+                latestCallCallerPhone: row.callerPhone ?? '',
+              });
+            }
+          } catch (err) {
+            console.error('[listCsInbox] voice_calls lookup failed:', err);
+          }
+        }
+        const resultWithCalls = result.map(s => {
+          const callData = voiceCallMap.get(s.id);
+          const lastMsgTs = (s as any).lastMsgTs ?? 0;
+          const latestCallCreatedAt = callData?.latestCallCreatedAt ?? 0;
+          const latestInteractionType: 'call' | 'sms' = (callData && latestCallCreatedAt > lastMsgTs) ? 'call' : 'sms';
+          return {
+            ...s,
+            ...(callData ?? {
+              latestCallId: null,
+              latestCallOutcome: null,
+              latestCallSummary: null,
+              latestCallDuration: null,
+              latestCallRecordingUrl: null,
+              latestCallCreatedAt: null,
+              latestCallStructuredData: null,
+              latestCallCallerPhone: null,
+            }),
+            latestInteractionType,
+          };
+        });
+        return resultWithCalls;
       }),
     /**
      * getCsConversation — returns the merged messageHistory for a single CS session.
@@ -3467,6 +3531,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             leadPhone: primary.leadPhone,
             leadName: primary.leadName,
             messageHistory: primary.messageHistory ?? "[]",
+            calls: [] as any[],
           };
         }
 
@@ -3485,11 +3550,34 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           );
 
         if (siblings.length <= 1) {
+          // Still fetch voice_calls for single-session case
+          let singleCalls: any[] = [];
+          try {
+            const singleCallRows = await db.execute(sql`
+              SELECT id, vapiCallId, sessionId, callerPhone, durationSeconds,
+                     transcript, summary, recordingUrl, outcome, structuredData,
+                     endedReason, successEvaluation, createdAt
+              FROM voice_calls WHERE sessionId = ${primary.id}
+              ORDER BY createdAt ASC, id ASC
+            `);
+            const rawRows = (singleCallRows as any)[0] as any[];
+            singleCalls = rawRows.map((row: any) => ({
+              id: Number(row.id), vapiCallId: row.vapiCallId ?? '',
+              sessionId: row.sessionId ? Number(row.sessionId) : null,
+              callerPhone: row.callerPhone ?? '', durationSeconds: Number(row.durationSeconds ?? 0),
+              transcript: row.transcript ?? null, summary: row.summary ?? null,
+              recordingUrl: row.recordingUrl ?? null, outcome: row.outcome ?? 'no_action',
+              structuredData: row.structuredData ?? null, endedReason: row.endedReason ?? null,
+              successEvaluation: row.successEvaluation ?? null,
+              createdAt: new Date(row.createdAt).getTime(),
+            }));
+          } catch { /* ignore */ }
           return {
             sessionId: primary.id,
             leadPhone: primary.leadPhone,
             leadName: primary.leadName,
             messageHistory: primary.messageHistory ?? "[]",
+            calls: singleCalls,
           };
         }
 
@@ -3513,12 +3601,53 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           merged.push(m);
         }
         merged.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-
+        // ── Fetch voice_calls for all sibling sessions ────────────────────────
+        type VoiceCallEntry2 = {
+          id: number; vapiCallId: string; sessionId: number | null; callerPhone: string;
+          durationSeconds: number; transcript: string | null; summary: string | null;
+          recordingUrl: string | null; outcome: string; structuredData: string | null;
+          endedReason: string | null; successEvaluation: string | null; createdAt: number;
+        };
+        let calls2: VoiceCallEntry2[] = [];
+        try {
+          const siblingIds2 = siblings.map((s: any) => s.id);
+          if (siblingIds2.length > 0) {
+            const callRows2 = await db.execute(sql`
+              SELECT id, vapiCallId, sessionId, callerPhone, durationSeconds,
+                     transcript, summary, recordingUrl, outcome, structuredData,
+                     endedReason, successEvaluation, createdAt
+              FROM voice_calls
+              WHERE sessionId IN (${sql.raw(siblingIds2.join(','))})
+              ORDER BY createdAt ASC, id ASC
+            `);
+            const rawRows2 = (callRows2 as any)[0] as any[];
+            const seenCallIds2 = new Set<number>();
+            for (const row of rawRows2) {
+              const callId = Number(row.id);
+              if (seenCallIds2.has(callId)) continue;
+              seenCallIds2.add(callId);
+              calls2.push({
+                id: callId, vapiCallId: row.vapiCallId ?? '',
+                sessionId: row.sessionId ? Number(row.sessionId) : null,
+                callerPhone: row.callerPhone ?? '', durationSeconds: Number(row.durationSeconds ?? 0),
+                transcript: row.transcript ?? null, summary: row.summary ?? null,
+                recordingUrl: row.recordingUrl ?? null, outcome: row.outcome ?? 'no_action',
+                structuredData: row.structuredData ?? null, endedReason: row.endedReason ?? null,
+                successEvaluation: row.successEvaluation ?? null,
+                createdAt: new Date(row.createdAt).getTime(),
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[getCsConversation] voice_calls fetch failed:', err);
+        }
         return {
           sessionId: primary.id,
           leadPhone: primary.leadPhone,
           leadName: primary.leadName,
           messageHistory: JSON.stringify(merged),
+          calls: calls2,
+        };
         };
       }),
     /**

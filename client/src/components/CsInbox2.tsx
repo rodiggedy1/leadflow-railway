@@ -40,7 +40,33 @@ type LiveConv = {
   priority: string;
   amount: string;
   ago: string;
+  // AI call fields
+  latestInteractionType?: "call" | "sms";
+  latestCallId?: number | null;
+  latestCallOutcome?: string | null;
+  latestCallSummary?: string | null;
+  latestCallDuration?: number | null;
+  latestCallRecordingUrl?: string | null;
+  latestCallCreatedAt?: number | null;
+  latestCallStructuredData?: string | null;
+  latestCallCallerPhone?: string | null;
 };
+
+// ── AI call action state helper ──────────────────────────────────────────────
+function deriveCallActionState(outcome: string): "needs_response" | "on_customer" | "handled" {
+  switch (outcome) {
+    case "booked":         return "handled";
+    case "faq_answered":   return "handled";
+    case "transferred":    return "handled";
+    case "callback_requested": return "needs_response";
+    case "no_answer":      return "needs_response";
+    case "missed":         return "needs_response";
+    case "quote_given":    return "on_customer";
+    case "answered":       return "on_customer";
+    case "no_action":
+    default:               return "needs_response";
+  }
+}
 
 function linkify(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -440,6 +466,15 @@ export default function CsInbox2() {
         priority: hasUnanswered ? "P1" : "P2",
         amount: "",
         ago: waitStr,
+        latestInteractionType: ((row as any).latestInteractionType ?? "sms") as "call" | "sms",
+        latestCallId: (row as any).latestCallId ?? null,
+        latestCallOutcome: (row as any).latestCallOutcome ?? null,
+        latestCallSummary: (row as any).latestCallSummary ?? null,
+        latestCallDuration: (row as any).latestCallDuration ?? null,
+        latestCallRecordingUrl: (row as any).latestCallRecordingUrl ?? null,
+        latestCallCreatedAt: (row as any).latestCallCreatedAt ?? null,
+        latestCallStructuredData: (row as any).latestCallStructuredData ?? null,
+        latestCallCallerPhone: (row as any).latestCallCallerPhone ?? null,
       };
     });
   }, [csData, nameMap]);
@@ -452,6 +487,20 @@ export default function CsInbox2() {
   function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "Waiting on Customer" {
     // Filter out resolved conversations — they don't belong on the active board
     if (conv.csResolvedAt) return "Waiting on Customer"; // won't show — filtered before columns
+    // ── Call-aware column assignment ─────────────────────────────────────
+    if (conv.latestInteractionType === "call" && conv.latestCallCreatedAt) {
+      const callAgeMs = Date.now() - conv.latestCallCreatedAt;
+      const actionState = deriveCallActionState(conv.latestCallOutcome ?? "no_action");
+      const createdAtMs = conv.createdAt
+        ? (typeof conv.createdAt === "number" ? conv.createdAt : new Date(conv.createdAt as string).getTime())
+        : 0;
+      const isNewCallSession = callAgeMs < TWENTY_FOUR_H && createdAtMs >= Date.now() - TWENTY_FOUR_H && (conv.messageCount ?? 999) <= 2;
+      if (actionState === "needs_response" && callAgeMs > THIRTY_MIN) return "At Risk";
+      if (actionState === "needs_response" && isNewCallSession) return "New";
+      if (actionState === "needs_response") return "Needs Response";
+      return "Waiting on Customer";
+    }
+    // ── SMS column assignment (unchanged) ────────────────────────────────
 
     const needsReply = conv.lastSenderRole === "user";
 
@@ -576,6 +625,29 @@ export default function CsInbox2() {
       senderName: m.senderName,
     }));
   }, [conversationDetail?.messageHistory, selectedConv?.messages]);
+
+  // ── Call entries from getCsConversation ──────────────────────────────────
+  type CallEntry = {
+    id: number; outcome: string; summary: string | null; durationSeconds: number;
+    recordingUrl: string | null; transcript: string | null; createdAt: number;
+    structuredData: string | null;
+  };
+  const detailCalls = useMemo((): CallEntry[] => {
+    if (!conversationDetail) return [];
+    return ((conversationDetail as any).calls ?? []) as CallEntry[];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(conversationDetail as any)?.calls]);
+
+  // ── Merged timeline: SMS messages + call entries sorted by timestamp ──────
+  type TimelineEntry =
+    | { type: "sms"; msg: typeof detailMessages[number]; ts: number }
+    | { type: "call"; call: CallEntry; ts: number };
+  const timeline = useMemo((): TimelineEntry[] => {
+    const smsEntries: TimelineEntry[] = detailMessages.map(m => ({ type: "sms" as const, msg: m, ts: m.ts ?? 0 }));
+    const callEntries: TimelineEntry[] = detailCalls.map(c => ({ type: "call" as const, call: c, ts: c.createdAt }));
+    return [...smsEntries, ...callEntries].sort((a, b) => a.ts - b.ts);
+  }, [detailMessages, detailCalls]);
+
   const jobContext = useMemo(() => {
     if (!clientProfile) return "";
     const tj = clientProfile.todayJob;
@@ -805,13 +877,40 @@ export default function CsInbox2() {
             </div>
             <section className="cs2-thread" ref={threadRef}>
               <div className="day">Conversation</div>
-              {detailMessages.map((m, i) => (
-                <div key={i} className={`msg${m.sender === "agent" ? " out" : ""}${i === detailMessages.length - 1 ? " latest" : ""}`}>
-                  <div className="mmeta">{m.sender === "agent" ? (m.senderName || "Agent") : selectedConv.name} · {m.time}</div>
-                  <div className="bubble2">{linkify(m.text)}</div>
-                </div>
-              ))}
-              {detailMessages.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px",fontSize:"12px"}}>No messages yet</div>}
+              {timeline.map((entry, i) => {
+                if (entry.type === "call") {
+                  const c = entry.call;
+                  const dur = c.durationSeconds > 0 ? `${Math.floor(c.durationSeconds/60)}m ${c.durationSeconds%60}s` : "";
+                  const callTime = new Date(c.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  const actionState = deriveCallActionState(c.outcome);
+                  const outcomeColor = actionState === "needs_response" ? "#ef4444" : actionState === "on_customer" ? "#8b5cf6" : "#10b981";
+                  const outcomeLabel = c.outcome === "booked" ? "Booked ✓" : c.outcome === "faq_answered" ? "FAQ Answered" : c.outcome === "transferred" ? "Transferred" : c.outcome === "callback_requested" ? "Callback Requested" : c.outcome === "no_answer" ? "No Answer" : c.outcome === "missed" ? "Missed" : c.outcome === "quote_given" ? "Quote Given" : c.outcome === "answered" ? "Answered" : "No Action";
+                  return (
+                    <div key={`call-${c.id}`} style={{margin:"14px 0",background:"#f8f7ff",border:"1px solid #e8e4ff",borderRadius:"14px",padding:"12px 14px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}}>
+                        <span style={{fontSize:"16px"}}>☎</span>
+                        <span style={{fontWeight:800,fontSize:"11px",color:"#6b4eff",textTransform:"uppercase",letterSpacing:".06em"}}>AI Call</span>
+                        {dur && <span style={{fontSize:"10px",color:"#9aa0aa"}}>· {dur}</span>}
+                        <span style={{marginLeft:"auto",fontSize:"10px",color:"#9aa0aa"}}>{callTime}</span>
+                        <span style={{fontSize:"9px",fontWeight:700,padding:"3px 7px",borderRadius:"999px",background:outcomeColor+"22",color:outcomeColor}}>{outcomeLabel}</span>
+                      </div>
+                      {c.summary && <div style={{fontSize:"12px",color:"#3f4450",lineHeight:1.5,marginBottom:"8px"}}>{c.summary}</div>}
+                      <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                        {c.recordingUrl && <a href={c.recordingUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:"10px",color:"#6b4eff",textDecoration:"none",border:"1px solid #ddd8ff",borderRadius:"7px",padding:"4px 9px"}}>▶ Recording</a>}
+                        {c.transcript && <button style={{fontSize:"10px",color:"#6b4eff",background:"none",border:"1px solid #ddd8ff",borderRadius:"7px",padding:"4px 9px",cursor:"pointer"}} onClick={()=>alert(c.transcript)}>📄 Transcript</button>}
+                      </div>
+                    </div>
+                  );
+                }
+                const m = entry.msg;
+                return (
+                  <div key={i} className={`msg${m.sender === "agent" ? " out" : ""}${i === timeline.length - 1 ? " latest" : ""}`}>
+                    <div className="mmeta">{m.sender === "agent" ? (m.senderName || "Agent") : selectedConv.name} · {m.time}</div>
+                    <div className="bubble2">{linkify(m.text)}</div>
+                  </div>
+                );
+              })}
+              {timeline.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px",fontSize:"12px"}}>No messages yet</div>}
             </section>
             <footer className="cs2-composer">
               <div className="composeBox">
@@ -949,20 +1048,42 @@ export default function CsInbox2() {
                         </div>
                       ) : (
                       <button key={conv.id} className="cs2-card" onClick={()=>{ setSelectedConvWithReset(conv); setCompose(""); }}>
-                        <div className="cs2-cardTop">
-                          <div className="cs2-avatar" style={{background:COLORS[i%COLORS.length]}}>{conv.initials}</div>
-                          <strong>{conv.name}</strong>
-                          <span className="cs2-ago">{conv.ago}</span>
-                        </div>
-                        <div className="cs2-preview">{conv.lastMessage}</div>
-                        <div className="cs2-chips">
-                          {conv.chips.map(c=><span key={c} className={chipClass(c)}>{c}</span>)}
-                        </div>
-                        <div className="cs2-meta">
-                          <span className={conv.priority==="P1"?"cs2-p1":"cs2-p2"}>{conv.priority}</span>
-                          &nbsp;·&nbsp;{conv.wait}
-                          <span className="cs2-mini">M</span>
-                        </div>
+                        {conv.latestInteractionType === "call" ? (
+                          <>
+                            <div className="cs2-cardTop">
+                              <div className="cs2-avatar" style={{background:"#6b4eff",fontSize:"14px"}}>☎</div>
+                              <strong>{conv.name}</strong>
+                              <span className="cs2-ago">{conv.ago}</span>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",gap:"6px",margin:"6px 0 4px"}}>
+                              <span style={{fontSize:"9px",fontWeight:800,color:"#6b4eff",textTransform:"uppercase",letterSpacing:".06em",background:"#f0edff",padding:"3px 7px",borderRadius:"6px"}}>AI Call</span>
+                              {conv.latestCallDuration != null && conv.latestCallDuration > 0 && <span style={{fontSize:"10px",color:"#9aa0aa"}}>{Math.floor(conv.latestCallDuration/60)}m {conv.latestCallDuration%60}s</span>}
+                            </div>
+                            <div className="cs2-preview">{conv.latestCallSummary || "AI call — tap to view"}</div>
+                            <div className="cs2-meta">
+                              <span style={{fontSize:"9px",fontWeight:700,color:"#6b4eff"}}>☎ AI CALL</span>
+                              &nbsp;·&nbsp;{conv.wait}
+                              <span className="cs2-mini">M</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="cs2-cardTop">
+                              <div className="cs2-avatar" style={{background:COLORS[i%COLORS.length]}}>{conv.initials}</div>
+                              <strong>{conv.name}</strong>
+                              <span className="cs2-ago">{conv.ago}</span>
+                            </div>
+                            <div className="cs2-preview">{conv.lastMessage}</div>
+                            <div className="cs2-chips">
+                              {conv.chips.map(c=><span key={c} className={chipClass(c)}>{c}</span>)}
+                            </div>
+                            <div className="cs2-meta">
+                              <span className={conv.priority==="P1"?"cs2-p1":"cs2-p2"}>{conv.priority}</span>
+                              &nbsp;·&nbsp;{conv.wait}
+                              <span className="cs2-mini">M</span>
+                            </div>
+                          </>
+                        )}
                       </button>
                       )
                     ))}
