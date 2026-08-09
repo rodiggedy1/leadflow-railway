@@ -791,6 +791,29 @@ export default function CsInbox2() {
   }), [clientConvs]);
 
   // Sidebar counts — aligned with column logic
+  // TEMP DIAG — remove after debugging
+  useEffect(() => {
+    const TARGET_ID = 5610001;
+    const queryState = (window as any).__REACT_QUERY_DEVTOOLS_GLOBAL_STORE__?.getQueryCache?.()?.find?.({ queryKey: ['leads', 'listCsInbox'] });
+    const rawContains = (csData ?? []).some((r: any) => r.id === TARGET_ID);
+    const rawObj = (csData ?? []).find((r: any) => r.id === TARGET_ID);
+    const clientContains = clientConvs.some(c => c.id === TARGET_ID);
+    const activeContains = activeClientConvs.some(c => c.id === TARGET_ID);
+    const clientObj = clientConvs.find(c => c.id === TARGET_ID);
+    console.log("[INBOX2_DIAG]", {
+      listCsInboxExecuted: !!csData,
+      rawQueryContains5610001: rawContains,
+      rawObject: rawObj ? { id: rawObj.id, leadPhone: (rawObj as any).leadPhone, csResolvedAt: (rawObj as any).csResolvedAt, latestCallId: (rawObj as any).latestCallId, latestCallCreatedAt: (rawObj as any).latestCallCreatedAt, latestCallOutcome: (rawObj as any).latestCallOutcome, latestInteractionType: (rawObj as any).latestInteractionType } : null,
+      clientConvsContains5610001: clientContains,
+      activeClientConvsContains5610001: activeContains,
+      clientObjCsResolvedAt: clientObj?.csResolvedAt,
+      clientObjLatestInteractionType: clientObj?.latestInteractionType,
+      clientObjLatestCallCreatedAt: clientObj?.latestCallCreatedAt,
+      totalCsData: (csData ?? []).length,
+      totalClientConvs: clientConvs.length,
+      totalActiveClientConvs: activeClientConvs.length,
+    });
+  }, [csData, clientConvs, activeClientConvs]);
   const needsResponseCount = activeClientConvs.filter(c => c.lastSenderRole === "user" && !c.csResolvedAt).length;
   const unansweredCount    = activeClientConvs.filter(c => {
     const needsReply = c.lastSenderRole === "user";
