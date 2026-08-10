@@ -1317,6 +1317,7 @@ export const appRouter = router({
         message: z.string().min(1).max(1600),
         fromNumberId: z.string().optional(), // Optional override for CS line replies
         isVoiceCommand: z.boolean().optional(), // Set true when triggered from voice command card
+        source: z.enum(["cs_inbox"]).optional(), // Set by CsInbox2 to reactivate historical sessions
       }))
       .mutation(async ({ input, ctx }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
@@ -1367,7 +1368,11 @@ export const appRouter = router({
           console.error(`[sendMessage] Failed to send SMS to ${session.leadPhone}:`, smsResult.error);
           // Don't throw — message is already stored in history
         }
-        // Broadcast so CS badge updates immediately on all connected clients
+        // When sent from Inbox2, mark session as active CS queue regardless of prior state
+        // Covers both resolved sessions and sessions that were never in Inbox2
+        if (input.source === "cs_inbox") {
+          await db.update(conversationSessions).set({ csQueue: 'CS' as any, csResolvedAt: null }).where(eq(conversationSessions.id, input.sessionId));
+        }
         const { broadcastOpsUpdate: bcastSend } = await import("./sseBroadcast");
         bcastSend("lead_update");
 

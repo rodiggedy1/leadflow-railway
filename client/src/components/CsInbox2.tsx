@@ -671,7 +671,7 @@ export default function CsInbox2() {
 
   function doSend(afterSend?: () => void) {
     if (!selectedConv || !compose.trim()) return;
-    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" }, {
+    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq", source: "cs_inbox" }, {
       onSuccess: () => { if (afterSend) afterSend(); }
     });
   }
