@@ -112,6 +112,19 @@ const STYLES = `
 .cs2-toolbar{display:flex;gap:9px;padding:16px 22px 14px;flex-wrap:wrap;flex-shrink:0;background:#f6f7fb}
 .cs2-search{width:260px;height:40px;border:1px solid #e1e4ea;border-radius:10px;padding:0 13px;background:#fff;font-size:13px;outline:none}
 .cs2-search:focus{border-color:#a78bfa}
+.cs2-hsearch{flex:1;max-width:340px;height:40px;border:1.5px solid #a78bfa;border-radius:10px;padding:0 13px 0 36px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 11px center;font-size:13px;outline:none}
+.cs2-hsearch:focus{border-color:#6b4eff;box-shadow:0 0 0 3px rgba(107,78,255,.1)}
+.cs2-hresults{padding:16px 22px;flex:1;overflow-y:auto}
+.cs2-hresults h3{font-size:12px;font-weight:700;color:#8b91a0;text-transform:uppercase;letter-spacing:.08em;margin:0 0 12px}
+.cs2-hcard{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid #e5e7ee;background:#fff;cursor:pointer;margin-bottom:8px;transition:.12s;text-align:left;width:100%}
+.cs2-hcard:hover{border-color:#cfc7ff;box-shadow:0 4px 16px rgba(30,32,60,.06);transform:translateY(-1px)}
+.cs2-havatar{width:38px;height:38px;border-radius:10px;background:#eae6ff;color:#6249e9;display:grid;place-items:center;font-weight:800;font-size:13px;flex-shrink:0}
+.cs2-hinfo{flex:1;min-width:0}
+.cs2-hname{font-weight:700;font-size:13px;color:#101116}
+.cs2-hphone{font-size:11px;color:#8b91a0;margin-top:1px}
+.cs2-hpreview{font-size:12px;color:#555b6a;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs2-htime{font-size:11px;color:#9aa0aa;flex-shrink:0;margin-left:auto;padding-left:8px}
+.cs2-hempty{text-align:center;color:#9aa0aa;padding:40px 0;font-size:13px}
 .cs2-boardWrap{padding:0 22px 16px;overflow-x:auto;overflow-y:hidden;flex:1;min-height:0;display:flex;flex-direction:column}
 .cs2-board{min-width:1160px;display:grid;grid-template-columns:repeat(4,minmax(270px,1fr));gap:12px;flex:1;min-height:0;align-items:stretch}
 .cs2-column{background:#f1f2f5;border:1px solid #e0e3e8;border-radius:14px;padding:10px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
@@ -690,6 +703,20 @@ export default function CsInbox2() {
 
   // ── Board state ─────────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historySearchDebounced, setHistorySearchDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setHistorySearchDebounced(historySearch), 300);
+    return () => clearTimeout(t);
+  }, [historySearch]);
+  const hsDigits = historySearchDebounced.replace(/[^\d]/g, "");
+  const hsNonDigitNonSep = historySearchDebounced.replace(/[\d\s\-().+]/g, "");
+  const hsIsPhone = hsDigits.length >= 4 && hsNonDigitNonSep.length === 0;
+  const hsEnabled = historySearchDebounced.trim().length >= 2 && (hsIsPhone ? hsDigits.length >= 4 : true);
+  const customerSearch = trpc.opsChat.searchCsCustomers.useQuery(
+    { query: historySearchDebounced.trim() },
+    { enabled: hsEnabled, staleTime: 30_000, refetchOnWindowFocus: false }
+  );
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [showNewMsg, setShowNewMsg] = useState(false);
@@ -1558,11 +1585,16 @@ export default function CsInbox2() {
             <button className="cs2-btn primary" onClick={()=>setShowNewMsg(true)}>✎ New Message</button>
           </header>
           <div className="cs2-toolbar">
-            <input className="cs2-search" placeholder="⌕  Search conversations..." value={query} onChange={e=>setQuery(e.target.value)}/>
-            <button className="cs2-btn">Last 90 days⌄</button>
-            <button className="cs2-btn">Assignee: All⌄</button>
-            <button className="cs2-btn">Team: All⌄</button>
-            <button className="cs2-btn">☰ Filters</button>
+            <input className="cs2-hsearch" placeholder="🔍 Search any customer, phone..." value={historySearch} onChange={e=>{setHistorySearch(e.target.value);if(!e.target.value)setHistorySearchDebounced("");}}/>
+            {historySearch ? (
+              <button className="cs2-btn" style={{color:"#8b91a0"}} onClick={()=>{setHistorySearch("");setHistorySearchDebounced("");}}>✕ Clear</button>
+            ) : (
+              <>
+                <input className="cs2-search" placeholder="⌕  Filter active..." value={query} onChange={e=>setQuery(e.target.value)}/>
+                <button className="cs2-btn">Last 90 days⌄</button>
+                <button className="cs2-btn">☰ Filters</button>
+              </>
+            )}
           </div>
           {channel === "email" ? (
             (
@@ -1645,6 +1677,54 @@ export default function CsInbox2() {
             </div>
             )
           ) : (
+          historySearch && historySearchDebounced && hsEnabled ? (
+            <div className="cs2-hresults">
+              <h3>{customerSearch.isFetching ? "Searching..." : customerSearch.data ? `${customerSearch.data.length} result${customerSearch.data.length===1?"":"s"} for "${historySearchDebounced}"` : `Searching for "${historySearchDebounced}"...`}</h3>
+              {customerSearch.data && customerSearch.data.length === 0 && (
+                <div className="cs2-hempty">No customers found for "{historySearchDebounced}"</div>
+              )}
+              {(customerSearch.data ?? []).map(r => {
+                const initials = (r.name || r.phone).slice(0,2).toUpperCase();
+                const timeAgo = r.lastInteractionAt ? (() => {
+                  const ms = Date.now() - r.lastInteractionAt;
+                  const d = Math.floor(ms/86400000);
+                  const h = Math.floor(ms/3600000);
+                  const m = Math.floor(ms/60000);
+                  return d >= 1 ? `${d}d ago` : h >= 1 ? `${h}h ago` : `${m}m ago`;
+                })() : "";
+                return (
+                  <button key={r.sessionId} className="cs2-hcard" onClick={() => {
+                    const conv: LiveConv = {
+                      id: r.sessionId,
+                      name: r.name || r.phone,
+                      initials,
+                      phone: r.phone,
+                      queue: null,
+                      lastMessage: r.lastMsgPreview,
+                      wait: timeAgo,
+                      lastMsgTs: r.lastInteractionAt || undefined,
+                      hasUnanswered: r.lastMsgRole === "user",
+                      messages: [],
+                      chips: [],
+                      priority: "P2",
+                      amount: "",
+                      ago: timeAgo,
+                    };
+                    setSelectedConv(conv);
+                    setChannel("inbox");
+                  }}>
+                    <div className="cs2-havatar">{initials}</div>
+                    <div className="cs2-hinfo">
+                      <div className="cs2-hname">{r.name || "Unknown"}</div>
+                      <div className="cs2-hphone">{r.phone}</div>
+                      {r.lastMsgPreview && <div className="cs2-hpreview">{r.lastMsgPreview}</div>}
+                    </div>
+                    <div className="cs2-htime">{timeAgo}</div>
+                  </button>
+                );
+              })}
+            </div>
+          ) :
           <div className="cs2-boardWrap">
             <div className="cs2-board">
               {columns.map((col, ci) => (

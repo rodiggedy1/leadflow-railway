@@ -6381,6 +6381,79 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       }
       return { cleanerName: null, cleanerPhone: null, todayJobs: [] };
     }),
+
+  /**
+   * searchCsCustomers — searches ALL historical conversation_sessions by name or phone.
+   * Deduplicates by normalized phone (last 10 digits).
+   * For each phone group returns the actual newest session row (updatedAt DESC, id DESC).
+   * No Inbox2 admission filters — this is a historical CRM search.
+   */
+  searchCsCustomers: opsChatProcedure
+    .input(z.object({ query: z.string().min(1).max(100) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const q = input.query.trim();
+      if (!q) return [];
+
+      // Detect phone-style query: mostly digits/separators
+      const digits = q.replace(/[^\d]/g, "");
+      const nonDigitNonSep = q.replace(/[\d\s\-().+]/g, "");
+      const isPhoneSearch = digits.length >= 4 && nonDigitNonSep.length === 0;
+
+      const whereClause = isPhoneSearch
+        ? sql`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) LIKE ${`%${digits.slice(-10)}%`}`
+        : sql`(${conversationSessions.leadName} LIKE ${`%${q}%`} OR (${digits.length} >= 4 AND RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) LIKE ${`%${digits}%`}))`;
+
+      const rows = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+          leadSource: conversationSessions.leadSource,
+          updatedAt: conversationSessions.updatedAt,
+          messageHistory: conversationSessions.messageHistory,
+        })
+        .from(conversationSessions)
+        .where(whereClause)
+        .orderBy(desc(conversationSessions.updatedAt), desc(conversationSessions.id))
+        .limit(200);
+
+      // Deduplicate by normalized phone — first row per phone is the newest (guaranteed by ORDER BY)
+      const seen = new Map<string, typeof rows[0]>();
+      for (const row of rows) {
+        const normPhone = row.leadPhone
+          ? row.leadPhone.replace(/[^\d]/g, "").slice(-10)
+          : `__nophone_${row.id}`;
+        if (!seen.has(normPhone)) {
+          seen.set(normPhone, row);
+        }
+      }
+
+      const deduped = Array.from(seen.values()).slice(0, 20);
+
+      return deduped.map((row) => {
+        let lastMsgPreview = "";
+        let lastMsgRole = "";
+        try {
+          const history = JSON.parse(row.messageHistory ?? "[]");
+          if (Array.isArray(history) && history.length > 0) {
+            const last = history[history.length - 1];
+            lastMsgPreview = (typeof last?.content === "string" ? last.content : "").slice(0, 80);
+            lastMsgRole = last?.role ?? "";
+          }
+        } catch {}
+        return {
+          sessionId: row.id,
+          name: row.leadName ?? "",
+          phone: row.leadPhone ?? "",
+          lastInteractionAt: row.updatedAt ? new Date(row.updatedAt).getTime() : 0,
+          lastMsgPreview,
+          lastMsgRole,
+          leadSource: row.leadSource ?? "",
+        };
+      });
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
