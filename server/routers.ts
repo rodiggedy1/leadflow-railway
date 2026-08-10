@@ -4563,6 +4563,7 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
 
         // Today's job from cleanerJobs
         const todayJob = cleanerJobRows.find((j) => j.jobDate === todayET) ?? null;
+        console.log(`[getClientProfile DEBUG] phone10=${phone10} todayET=${todayET} cleanerJobRows=${cleanerJobRows.length} jobDates=[${cleanerJobRows.map(j=>j.jobDate).join(',')}] todayJob=${todayJob ? 'YES teamName='+todayJob.teamName : 'NULL'}`);
 
         // Recent jobs: last 5 from cleanerJobs + last 5 from completedJobs, sorted by date desc
         const recentFromCleaner = cleanerJobRows.slice(0, 5).map((j) => ({
