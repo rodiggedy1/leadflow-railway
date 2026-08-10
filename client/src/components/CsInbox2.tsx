@@ -1337,8 +1337,7 @@ export default function CsInbox2() {
                         </div>
                         <textarea placeholder="Type your reply..." value={emailReply} onChange={e=>setEmailReply(e.target.value)}
                           onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()&&t){
-                            sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/
-/g,"<br>")});
+                            sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});
                           }}}
                         />
                         <div className="em-compose-actions">
@@ -1353,8 +1352,7 @@ export default function CsInbox2() {
                           </div>
                           <div className="em-send-wrap">
                             <button className="em-btn">Templates</button>
-                            <button className="em-send" onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/
-/g,"<br>")});}} disabled={!emailReply.trim()||sendEmailReply.isPending}>
+                            <button className="em-send" onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});}} disabled={!emailReply.trim()||sendEmailReply.isPending}>
                               {sendEmailReply.isPending ? "Sending…" : "Send Reply ▾"}
                             </button>
                           </div>
