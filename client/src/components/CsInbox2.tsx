@@ -53,7 +53,6 @@ type LiveConv = {
   latestCallCreatedAt?: number | null;
   latestCallStructuredData?: string | null;
   latestCallCallerPhone?: string | null;
-  personType?: "team" | "customer";
 };
 
 // ── AI call action state helper ──────────────────────────────────────────────
@@ -487,7 +486,6 @@ export default function CsInbox2() {
         amount: "",
         ago: waitStr,
         latestInteractionType: ((row as any).latestInteractionType ?? "sms") as "call" | "sms",
-        personType: ((row as any).personType ?? "customer") as "team" | "customer",
         latestCallId: (row as any).latestCallId ?? null,
         latestCallOutcome: (row as any).latestCallOutcome ?? null,
         latestCallSummary: (row as any).latestCallSummary ?? null,
@@ -857,7 +855,7 @@ export default function CsInbox2() {
 
   // ── Filtered columns ────────────────────────────────────────────────────
   const clientConvs = useMemo(() => liveConvs, [liveConvs]);
-  const teamConvs   = useMemo(() => liveConvs.filter(c => c.personType === "team"),  [liveConvs]);
+  const teamConvs   = useMemo(() => liveConvs.filter(c => c.queue === "Teams"),  [liveConvs]);
 
   // Active (non-resolved) client conversations only
   const activeClientConvs = useMemo(() => clientConvs.filter(c => {
@@ -1129,7 +1127,7 @@ export default function CsInbox2() {
           <aside className="cs2-side" style={{overflow:'hidden',display:'flex',flexDirection:'column',gap:0,padding:0}}>
             {/* Client/Team profile panel */}
             <div style={{flex:1,minHeight:0,overflow:'hidden'}}>
-              {selectedConv.personType === "team" ? (
+              {selectedConv.queue === "Teams" ? (
                 <CsRightPanelTeam
                   selected={{
                     id: selectedConv.id,

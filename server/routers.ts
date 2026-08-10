@@ -3332,27 +3332,6 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
         const _d4 = performance.now() - _t4;
 
-        // ── Stage 4b: cleaner identity lookup — phone → active cleaner profile ──
-        // One batch query. personType is stable regardless of which session wins dedup.
-        // Uses same last-10-digits normalization and isActive=1 filter as getCleanerProfileByPhone.
-        const phones4b = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
-        const digits10_4b = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
-        const cleanerPhoneSet = new Set<string>();
-        if (phones4b.length > 0) {
-          const d10s = phones4b.map(digits10_4b).filter(Boolean);
-          if (d10s.length > 0) {
-            const [cleanerRows] = await db.execute(
-              sql`SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) as phone10
-                  FROM cleaner_profiles
-                  WHERE isActive = 1
-                  AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) IN (${sql.raw(d10s.map(p => `'${p}'`).join(','))})`
-            );
-            for (const row of (cleanerRows as any[])) {
-              if (row.phone10) cleanerPhoneSet.add(row.phone10);
-            }
-          }
-        }
-
         // ── Stage 5: cleanerJobs lookup (REGEXP_REPLACE) ──────────────────────
         const phones = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
         const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
@@ -3407,7 +3386,6 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             ...s,
             jobCount: jobCountMap.get(d10) ?? 0,
             hasTodayJob: todayJobMap.get(d10) ?? false,
-            personType: cleanerPhoneSet.has(d10) ? "team" as const : "customer" as const,
           };
         });
         const _d7 = performance.now() - _t7;
