@@ -221,6 +221,60 @@ const STYLES = `
 @keyframes cs2spin{to{transform:rotate(360deg)}}
 .cs2-toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,6px);background:#151821;color:#fff;border-radius:9px;padding:9px 14px;font-size:11px;opacity:0;transition:.2s;z-index:999;pointer-events:none}
 .cs2-toast.show{opacity:1;transform:translate(-50%,0)}
+/* Email detail — from user design */
+.em-main{background:#fff;display:flex;flex-direction:column;overflow:hidden;flex:1;min-width:0}
+.em-main-head{padding:18px 22px 10px;border-bottom:1px solid #e5e8ef}
+.em-back{border:0;background:none;color:#555e6f;padding:0;margin-bottom:14px;font-size:13px;cursor:pointer}
+.em-title-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.em-title-wrap{display:flex;align-items:center;gap:10px;min-width:0}
+.em-subject{font-size:21px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.em-badge{font-size:11px;padding:6px 9px;border-radius:999px;border:1px solid #f0c163;background:#fff8e7;color:#a76600;font-weight:800}
+.em-head-actions{display:flex;gap:8px}
+.em-sender-row{display:flex;align-items:center;justify-content:space-between;padding-top:16px}
+.em-sender-left{display:flex;gap:12px;align-items:center}
+.em-avatar{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#8e82ff,#6857ec);color:#fff;font-weight:800;flex-shrink:0}
+.em-sender-name{font-size:14px;font-weight:800}
+.em-sender-email{font-weight:500;color:#7b8291;margin-left:6px}
+.em-to-line{font-size:12px;color:#8b92a0;margin-top:4px}
+.em-message-age{font-size:12px;color:#7d8493}
+.em-main-tabs{display:flex;gap:34px;padding:0 22px;border-bottom:1px solid #e5e8ef}
+.em-main-tab{border:0;background:none;padding:14px 3px 12px;color:#626a79;font-size:13px;border-bottom:2px solid transparent;cursor:pointer}
+.em-main-tab.active{color:#246bfe;border-bottom-color:#246bfe;font-weight:800}
+.em-thread{flex:1;overflow:auto;padding:18px 22px 24px}
+.em-message{border:1px solid #e3e6ec;border-radius:14px;padding:18px;margin-bottom:16px;background:#fff}
+.em-message.outgoing{margin-left:22%;background:#f7faff;border-color:#cddcff}
+.em-msg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.em-msg-who{display:flex;align-items:center;gap:10px}
+.em-small-avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#8273f7;color:#fff;font-size:12px;font-weight:800;flex-shrink:0}
+.em-small-avatar.out{background:#246bfe}
+.em-msg-name{font-size:13px;font-weight:800}
+.em-msg-email{font-size:11px;color:#7c8390;margin-left:5px}
+.em-msg-time{font-size:11px;color:#8a91a0}
+.em-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px;white-space:pre-wrap;word-break:break-word}
+.em-composer{border-top:1px solid #e5e8ef;background:#fff;padding:12px 14px 16px}
+.em-compose-box{border:1px solid #dfe3e9;border-radius:14px;overflow:hidden}
+.em-compose-tabs{display:flex;border-bottom:1px solid #e5e8ef}
+.em-compose-tab{border:0;background:none;padding:11px 14px;color:#6d7481;font-size:12px;cursor:pointer}
+.em-compose-tab.active{color:#246bfe;font-weight:800;border-bottom:2px solid #246bfe}
+.em-compose-actions{display:flex;justify-content:space-between;align-items:center;padding:10px 12px 12px}
+.em-tools{display:flex;gap:5px}
+.em-icon-btn{border:0;background:transparent;width:31px;height:31px;border-radius:8px;cursor:pointer}
+.em-icon-btn:hover{background:#f1f3f6}
+.em-send-wrap{display:flex;gap:8px}
+.em-send{border:0;background:#246bfe;color:#fff;border-radius:10px;padding:10px 15px;font-size:12px;font-weight:800;cursor:pointer}
+.em-btn{border:1px solid #dfe3ea;background:#fff;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:700;color:#3d4451;cursor:pointer}
+.em-right{width:320px;flex-shrink:0;border-left:1px solid #e5e8ef;background:#fbfbfd;overflow:auto}
+.em-right-section{padding:18px;border-bottom:1px solid #e5e8ef}
+.em-profile{display:flex;align-items:center;gap:12px}
+.em-profile-avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#8e82ff,#6857ec);color:#fff;font-weight:800;font-size:16px;flex-shrink:0}
+.em-profile-name{font-weight:800}
+.em-profile-email{font-size:12px;color:#707786;margin-top:5px}
+.em-section-title{display:flex;justify-content:space-between;font-size:14px;font-weight:800;margin-bottom:14px}
+.em-kv{margin-bottom:14px}
+.em-k{font-size:11px;color:#8a91a0;margin-bottom:5px}
+.em-v{font-size:13px;color:#303641}
+.em-action-stack{display:grid;gap:8px}
+.em-action-btn{border:1px solid #dfe3e8;background:#fff;border-radius:10px;padding:10px 12px;text-align:left;font-size:12px;font-weight:700;cursor:pointer}
 `;
 
 
@@ -1199,8 +1253,15 @@ export default function CsInbox2() {
               const initials = senderName.replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "??";
               const subject = t?.subject ?? "Email Thread";
               const msgCount = t?.messages?.length ?? 0;
+              const lastMsg = t?.messages?.[t.messages.length - 1];
+              const lastMsgAgo = lastMsg?.date ? (() => {
+                const d = Date.now() - lastMsg.date;
+                if (d < 60000) return "just now";
+                if (d < 3600000) return Math.floor(d/60000)+"m ago";
+                if (d < 86400000) return Math.floor(d/3600000)+"h ago";
+                return Math.floor(d/86400000)+"d ago";
+              })() : "";
               const colLabel = (() => {
-                const lastMsg = t?.messages?.[t.messages.length - 1];
                 if (!lastMsg) return "Needs Response";
                 const isOut = inboxEmail && lastMsg.fromEmail?.toLowerCase() === inboxEmail;
                 if (isOut) return "Waiting on Customer";
@@ -1209,37 +1270,42 @@ export default function CsInbox2() {
                 if (msgCount <= 2) return "New";
                 return "Needs Response";
               })();
-              const colColor: Record<string,string> = {"New":"#2fb66d","Needs Response":"#f3a72f","Waiting on Customer":"#246bfe","At Risk":"#ef5a5a"};
               return (
-                <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden",background:"#fff"}}>
-                  <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",overflow:"hidden",background:"#fff"}}>
-                    <div style={{padding:"18px 22px 0",borderBottom:"1px solid #e5e8ef"}}>
-                      <button onClick={()=>setSelectedEmailThreadId(null)} style={{border:0,background:"none",color:"#555e6f",padding:0,marginBottom:"14px",fontSize:"13px",cursor:"pointer"}}>← &nbsp; Back to list</button>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px",marginBottom:"16px"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:"10px",minWidth:0}}>
-                          <div style={{fontSize:"21px",fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{subject}</div>
-                          <span style={{fontSize:"11px",padding:"6px 9px",borderRadius:"999px",border:"1px solid #f0c163",background:"#fff8e7",color:"#a76600",fontWeight:800,flexShrink:0}}>{colLabel}</span>
+                <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}>
+                  {/* main — mechanical translation of user HTML */}
+                  <div className="em-main">
+                    <div className="em-main-head">
+                      <button className="em-back" onClick={()=>setSelectedEmailThreadId(null)}>← &nbsp; Back to list</button>
+                      <div className="em-title-row">
+                        <div className="em-title-wrap">
+                          <div className="em-subject">{subject}</div>
+                          <span className="em-badge">{colLabel}</span>
                         </div>
-                        <div style={{display:"flex",gap:"8px",flexShrink:0}}>
-                          <button style={{border:"1px solid #dfe3ea",background:"#fff",borderRadius:"10px",padding:"9px 12px",fontSize:"12px",fontWeight:700,color:"#3d4451",cursor:"pointer"}} onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                        <div className="em-head-actions">
+                          <button className="em-btn" onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
                             {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve"}
                           </button>
+                          <button className="em-btn">•••</button>
                         </div>
                       </div>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingBottom:"16px"}}>
-                        <div style={{display:"flex",gap:"12px",alignItems:"center"}}>
-                          <div style={{width:"42px",height:"42px",borderRadius:"50%",display:"grid",placeItems:"center",background:"linear-gradient(145deg,#8e82ff,#6857ec)",color:"#fff",fontWeight:800,fontSize:"15px",flexShrink:0}}>{initials}</div>
+                      <div className="em-sender-row">
+                        <div className="em-sender-left">
+                          <div className="em-avatar">{initials}</div>
                           <div>
-                            <div style={{fontSize:"14px",fontWeight:800}}>{senderName} <span style={{fontWeight:500,color:"#7b8291",marginLeft:"6px"}}>{"<"}{senderEmail}{">"}</span></div>
-                            <div style={{fontSize:"12px",color:"#8b92a0",marginTop:"4px"}}>to: {inboxEmail || "inbox"}</div>
+                            <div className="em-sender-name">{senderName} <span className="em-sender-email">{"<"}{senderEmail}{">"}</span></div>
+                            <div className="em-to-line">to: {inboxEmail || "inbox"}</div>
                           </div>
                         </div>
-                        <div style={{fontSize:"12px",color:"#7d8493"}}>
-                          {t?.messages?.[t.messages.length-1]?.date ? new Date(t.messages[t.messages.length-1].date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}
-                        </div>
+                        <div className="em-message-age">{lastMsgAgo}</div>
                       </div>
                     </div>
-                    <div style={{flex:1,minHeight:0,overflow:"auto",padding:"18px 22px 24px"}}>
+                    <div className="em-main-tabs">
+                      <button className="em-main-tab active">Thread</button>
+                      <button className="em-main-tab">Headers</button>
+                      <button className="em-main-tab">Notes (0)</button>
+                      <button className="em-main-tab">Activity</button>
+                    </div>
+                    <section className="em-thread">
                       {emailThread.isLoading && <div style={{color:"#9aa0aa",textAlign:"center",padding:"40px"}}>Loading thread…</div>}
                       {t?.messages?.map((msg: any, i: number) => {
                         const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
@@ -1247,82 +1313,84 @@ export default function CsInbox2() {
                         const msgText = msg.bodyText?.trim() || msg.snippet || "";
                         const msgTime = msg.date ? new Date(msg.date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "";
                         return (
-                          <div key={msg.id ?? i} style={{border:"1px solid",borderColor:isOut?"#cddcff":"#e3e6ec",borderRadius:"14px",padding:"18px",marginBottom:"16px",background:isOut?"#f7faff":"#fff",marginLeft:isOut?"22%":"0"}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-                              <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                                <div style={{width:"32px",height:"32px",borderRadius:"50%",display:"grid",placeItems:"center",background:isOut?"#246bfe":"#8273f7",color:"#fff",fontSize:"12px",fontWeight:800,flexShrink:0}}>{isOut?"Y":msgInit}</div>
+                          <div key={msg.id ?? i} className={"em-message" + (isOut ? " outgoing" : "")}>
+                            <div className="em-msg-head">
+                              <div className="em-msg-who">
+                                <div className={"em-small-avatar" + (isOut ? " out" : "")}>{isOut ? "Y" : msgInit}</div>
                                 <div>
-                                  <span style={{fontSize:"13px",fontWeight:800}}>{isOut?"You":msg.from}</span>
-                                  <span style={{fontSize:"11px",color:"#7c8390",marginLeft:"5px"}}>{"<"}{msg.fromEmail}{">"}</span>
+                                  <span className="em-msg-name">{isOut ? "You" : msg.from}</span>
+                                  <span className="em-msg-email">{"<"}{msg.fromEmail}{">"}</span>
                                 </div>
                               </div>
-                              <div style={{fontSize:"11px",color:"#8a91a0"}}>{msgTime}</div>
+                              <div className="em-msg-time">{msgTime}</div>
                             </div>
-                            <div style={{fontSize:"14px",lineHeight:1.7,color:"#303641",paddingLeft:"42px",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{msgText}</div>
+                            <div className="em-msg-body">{msgText}</div>
                           </div>
                         );
                       })}
-                    </div>
-                    <div style={{borderTop:"1px solid #e5e8ef",background:"#fff",padding:"12px 14px 16px"}}>
-                      <div style={{border:"1px solid #dfe3e9",borderRadius:"14px",overflow:"hidden"}}>
-                        <div style={{display:"flex",borderBottom:"1px solid #e5e8ef"}}>
-                          <button style={{border:0,background:"none",padding:"11px 14px",color:"#246bfe",fontSize:"12px",fontWeight:800,borderBottom:"2px solid #246bfe",cursor:"pointer"}}>Reply</button>
-                          <button style={{border:0,background:"none",padding:"11px 14px",color:"#6d7481",fontSize:"12px",cursor:"pointer"}}>Internal Note</button>
+                    </section>
+                    <section className="em-composer">
+                      <div className="em-compose-box">
+                        <div className="em-compose-tabs">
+                          <button className="em-compose-tab active">Reply</button>
+                          <button className="em-compose-tab">Internal Note</button>
                         </div>
-                        <textarea value={emailReply} onChange={e=>setEmailReply(e.target.value)} placeholder={"Reply to "+senderName.split(" ")[0]+"…"}
-                          style={{width:"100%",minHeight:"92px",resize:"none",border:0,outline:0,padding:"14px",fontSize:"13px",fontFamily:"inherit"}}
+                        <textarea placeholder="Type your reply..." value={emailReply} onChange={e=>setEmailReply(e.target.value)}
                           onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()&&t){
                             sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/
 /g,"<br>")});
                           }}}
                         />
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px 12px"}}>
-                          <div style={{display:"flex",gap:"5px"}}>
-                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Bold"><b>B</b></button>
-                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Italic"><i>I</i></button>
-                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Link">🔗</button>
-                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Attach">📎</button>
+                        <div className="em-compose-actions">
+                          <div className="em-tools">
+                            <button className="em-icon-btn"><b>B</b></button>
+                            <button className="em-icon-btn"><i>I</i></button>
+                            <button className="em-icon-btn">☷</button>
+                            <button className="em-icon-btn">🔗</button>
+                            <button className="em-icon-btn">🖼</button>
+                            <button className="em-icon-btn">📎</button>
+                            <button className="em-icon-btn">☺</button>
                           </div>
-                          <div style={{display:"flex",gap:"8px"}}>
-                            <button style={{border:"1px solid #dfe3ea",background:"#fff",borderRadius:"10px",padding:"9px 12px",fontSize:"12px",fontWeight:700,color:"#3d4451",cursor:"pointer"}}>Templates</button>
-                            <button onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/
-/g,"<br>")});}}
-                              disabled={!emailReply.trim()||sendEmailReply.isPending}
-                              style={{border:0,background:"#246bfe",color:"#fff",borderRadius:"10px",padding:"10px 15px",fontSize:"12px",fontWeight:800,cursor:"pointer"}}>
-                              {sendEmailReply.isPending?"Sending…":"Send Reply ▾"}
+                          <div className="em-send-wrap">
+                            <button className="em-btn">Templates</button>
+                            <button className="em-send" onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/
+/g,"<br>")});}} disabled={!emailReply.trim()||sendEmailReply.isPending}>
+                              {sendEmailReply.isPending ? "Sending…" : "Send Reply ▾"}
                             </button>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </section>
                   </div>
-                  <div style={{width:"320px",flexShrink:0,borderLeft:"1px solid #e5e8ef",background:"#fbfbfd",overflow:"auto"}}>
-                    <div style={{padding:"18px",borderBottom:"1px solid #e5e8ef"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
-                        <div style={{width:"48px",height:"48px",borderRadius:"50%",display:"grid",placeItems:"center",background:"linear-gradient(145deg,#8e82ff,#6857ec)",color:"#fff",fontWeight:800,fontSize:"16px",flexShrink:0}}>{initials}</div>
+                  {/* right panel — mechanical translation of user HTML */}
+                  <aside className="em-right">
+                    <div className="em-right-section">
+                      <div className="em-profile">
+                        <div className="em-profile-avatar">{initials}</div>
                         <div>
-                          <div style={{fontWeight:800}}>{senderName}</div>
-                          <div style={{fontSize:"12px",color:"#707786",marginTop:"5px"}}>{senderEmail}</div>
+                          <div className="em-profile-name">{senderName}</div>
+                          <div className="em-profile-email">{senderEmail}</div>
                         </div>
                       </div>
                     </div>
-                    <div style={{padding:"18px",borderBottom:"1px solid #e5e8ef"}}>
-                      <div style={{fontSize:"14px",fontWeight:800,marginBottom:"14px"}}>Thread Details</div>
-                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Subject</div><div style={{fontSize:"13px",color:"#303641"}}>{subject}</div></div>
-                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Messages</div><div style={{fontSize:"13px",color:"#303641"}}>{msgCount}</div></div>
-                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Status</div><div style={{fontSize:"13px"}}><span style={{color:colColor[colLabel]??""}}>{colLabel}</span></div></div>
-                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Thread ID</div><div style={{fontSize:"11px",color:"#303641",fontFamily:"monospace",wordBreak:"break-all"}}>{selectedEmailThreadId}</div></div>
+                    <div className="em-right-section">
+                      <div className="em-section-title">Thread Details <span>⌃</span></div>
+                      <div className="em-kv"><div className="em-k">Thread ID</div><div className="em-v" style={{fontFamily:"monospace",fontSize:"11px",wordBreak:"break-all"}}>{selectedEmailThreadId}</div></div>
+                      <div className="em-kv"><div className="em-k">Subject</div><div className="em-v">{subject}</div></div>
+                      <div className="em-kv"><div className="em-k">Last Message</div><div className="em-v">{lastMsgAgo}</div></div>
+                      <div className="em-kv"><div className="em-k">Messages</div><div className="em-v">{msgCount}</div></div>
+                      <div className="em-kv"><div className="em-k">Status</div><div className="em-v">{colLabel}</div></div>
                     </div>
-                    <div style={{padding:"18px"}}>
-                      <div style={{fontSize:"14px",fontWeight:800,marginBottom:"14px"}}>Actions</div>
-                      <div style={{display:"grid",gap:"8px"}}>
-                        <button onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending} style={{border:"1px solid #dfe3e8",background:"#fff",borderRadius:"10px",padding:"10px 12px",textAlign:"left",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>
-                          {resolveEmailThread.isPending?"…":"Resolve Thread"}
+                    <div className="em-right-section">
+                      <div className="em-section-title">Actions <span>⌃</span></div>
+                      <div className="em-action-stack">
+                        <button className="em-action-btn" onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                          {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve Thread"}
                         </button>
-                        <button onClick={()=>setSelectedEmailThreadId(null)} style={{border:"1px solid #dfe3e8",background:"#fff",borderRadius:"10px",padding:"10px 12px",textAlign:"left",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>← Back to Inbox</button>
+                        <button className="em-action-btn" onClick={()=>setSelectedEmailThreadId(null)}>← Back to list</button>
                       </div>
                     </div>
-                  </div>
+                  </aside>
                 </div>
               );
             })() : (
