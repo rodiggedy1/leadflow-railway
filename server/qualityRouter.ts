@@ -660,70 +660,89 @@ export async function handleRatingReply(
 /**
  * Resolves (or creates) a cleaner_profiles row for a given Launch27 team.
  *
- * Lookup order (inside a single transaction to prevent concurrent self-heals):
- *   1. By launch27TeamId (exact, ID-based) — fast path once self-heal has run
- *   2. By name (legacy rows where launch27TeamId IS NULL) + self-heal
- *   3. Create ghost profile as last resort (logs a structured warning)
+ * Lookup order:
+ *   team.id > 0 (valid Launch27 ID):
+ *     1. Exact launch27TeamId match → return
+ *     2. Normalized name lookup (active profiles only):
+ *        - Exactly one match, launch27TeamId IS NULL → backfill ID, return
+ *        - Exactly one match, same launch27TeamId → return
+ *        - Exactly one match, DIFFERENT non-null launch27TeamId → CONFLICT: log, skip
+ *        - Multiple matches → AMBIGUOUS: log, skip
+ *        - No match → create ghost profile with team.id
  *
- * Returns { id, payPercent } of the resolved profile.
+ *   team.id = 0/null (Launch27 omitted the team ID):
+ *     1. Normalized name lookup regardless of launch27TeamId (active profiles only):
+ *        - Exactly one match → return, preserve existing launch27TeamId
+ *        - Multiple matches → AMBIGUOUS: log, skip
+ *        - No match → create ghost profile with launch27TeamId=null
  */
 export async function resolveCleanerProfile(
   db: Awaited<ReturnType<typeof getDb>>,
   team: { id: number; title: string; share: number }
 ): Promise<{ id: number; payPercent: string | null; language: string }> {
   if (!db) throw new Error("DB unavailable");
-  // ── Step 1: ID-based lookup (only for real teams) ──────────────────────────
+  const normalizedTitle = team.title.trim().toLowerCase();
+
+  // ── Path A: valid Launch27 team ID ────────────────────────────────────────
   if (team.id > 0) {
+    // Step A1: exact ID match (active profiles only)
     const [byId] = await db
       .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent, language: cleanerProfiles.language })
       .from(cleanerProfiles)
-      .where(eq(cleanerProfiles.launch27TeamId, team.id))
+      .where(and(eq(cleanerProfiles.launch27TeamId, team.id), eq(cleanerProfiles.isActive, 1)))
       .limit(1);
     if (byId) return byId;
-  }
-  // ── Step 2: Name fallback + transactional self-heal ───────────────────────
-  // Wrapped in a transaction so two concurrent sync workers can't both try to
-  // write launch27TeamId to the same row simultaneously.
-  const healed = await (db as any).transaction(async (tx: typeof db) => {
-    const normalizedTitle = team.title.trim().toLowerCase();
-    const [nameMatch] = await (tx as any)
-      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent, language: cleanerProfiles.language })
+
+    // Step A2: name fallback (active profiles only, any launch27TeamId value)
+    const nameMatchesA = await db
+      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent, language: cleanerProfiles.language, existingTeamId: cleanerProfiles.launch27TeamId })
       .from(cleanerProfiles)
-      .where(and(sql`LOWER(TRIM(${cleanerProfiles.name})) = ${normalizedTitle}`, isNull(cleanerProfiles.launch27TeamId)))
-      .limit(1);
+      .where(and(sql`LOWER(TRIM(${cleanerProfiles.name})) = ${normalizedTitle}`, eq(cleanerProfiles.isActive, 1)));
 
-    if (!nameMatch) return null;
-
-    if (team.id > 0) {
-      // Self-heal: write launch27TeamId so future syncs skip this fallback
-      await (tx as any)
-        .update(cleanerProfiles)
-        .set({ launch27TeamId: team.id })
-        .where(eq(cleanerProfiles.id, nameMatch.id));
-      console.log(
-        `[Sync] Self-healed: Launch27 team id=${team.id} title='${team.title}' → ` +
-        `matched legacy profile id=${nameMatch.id} — backfilled launch27TeamId=${team.id}`
-      );
+    if (nameMatchesA.length > 1) {
+      console.warn(`[Sync] AMBIGUOUS_NAME: team id=${team.id} title='${team.title}' matched ${nameMatchesA.length} active profiles — skipping assignment`);
+      throw new Error(`AMBIGUOUS_NAME: ${team.title}`);
     }
-    return nameMatch;
-  });
+    if (nameMatchesA.length === 1) {
+      const match = nameMatchesA[0];
+      if (match.existingTeamId !== null && match.existingTeamId !== team.id) {
+        // Conflict: profile already has a different Launch27 ID — do not overwrite, do not create duplicate
+        console.warn(`[Sync] TEAM_ID_CONFLICT: team id=${team.id} title='${team.title}' matched profile id=${match.id} which already has launch27TeamId=${match.existingTeamId} — skipping`);
+        throw new Error(`TEAM_ID_CONFLICT: profile ${match.id} has launch27TeamId=${match.existingTeamId}`);
+      }
+      // Backfill launch27TeamId if null
+      if (match.existingTeamId === null) {
+        await db.update(cleanerProfiles).set({ launch27TeamId: team.id }).where(eq(cleanerProfiles.id, match.id));
+        console.log(`[Sync] Self-healed: Launch27 team id=${team.id} title='${team.title}' → matched profile id=${match.id} — backfilled launch27TeamId=${team.id}`);
+      }
+      return { id: match.id, payPercent: match.payPercent, language: match.language };
+    }
 
-  if (healed) return healed;
+    // No match — create ghost profile with team.id
+    console.warn(`[Sync] GHOST_PROFILE_CREATED:\n  Launch27 team id=${team.id} title='${team.title}'\n  No ID match, no name match.\n  Creating ghost profile — ACTION REQUIRED.`);
+    const [insA] = await db.insert(cleanerProfiles).values({ name: team.title, payPercent: team.share > 0 ? String(team.share) : null, isActive: 1, launch27TeamId: team.id });
+    return { id: (insA as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null, language: 'en' };
+  }
 
-  // ── Step 3: Ghost profile creation (last resort) ──────────────────────────
-  console.warn(
-    `[Sync] GHOST_PROFILE_CREATED:\n` +
-    `  Launch27 team id=${team.id} title='${team.title}'\n` +
-    `  No launch27TeamId match, no name match.\n` +
-    `  Creating ghost profile — ACTION REQUIRED: link via Portal Diagnostic tool.`
-  );
-  const [ins] = await db.insert(cleanerProfiles).values({
-    name: team.title,
-    payPercent: team.share > 0 ? String(team.share) : null,
-    isActive: 1,
-    launch27TeamId: team.id > 0 ? team.id : null,
-  });
-  return { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null, language: 'en' };
+  // ── Path B: missing/zero team ID — name lookup regardless of launch27TeamId ─
+  const nameMatchesB = await db
+    .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent, language: cleanerProfiles.language })
+    .from(cleanerProfiles)
+    .where(and(sql`LOWER(TRIM(${cleanerProfiles.name})) = ${normalizedTitle}`, eq(cleanerProfiles.isActive, 1)));
+
+  if (nameMatchesB.length > 1) {
+    console.warn(`[Sync] AMBIGUOUS_NAME (no-id): title='${team.title}' matched ${nameMatchesB.length} active profiles — skipping`);
+    throw new Error(`AMBIGUOUS_NAME: ${team.title}`);
+  }
+  if (nameMatchesB.length === 1) {
+    console.log(`[Sync] matched_by_name_fallback (no-id): title='${team.title}' → profile id=${nameMatchesB[0].id}`);
+    return nameMatchesB[0];
+  }
+
+  // No match — create ghost profile with null team ID
+  console.warn(`[Sync] GHOST_PROFILE_CREATED (no-id):\n  title='${team.title}'\n  No name match. Creating ghost profile.`);
+  const [insB] = await db.insert(cleanerProfiles).values({ name: team.title, payPercent: team.share > 0 ? String(team.share) : null, isActive: 1, launch27TeamId: null });
+  return { id: (insB as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null, language: 'en' };
 }
 
 /**
