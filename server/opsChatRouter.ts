@@ -6411,6 +6411,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           leadName: conversationSessions.leadName,
           leadPhone: conversationSessions.leadPhone,
           leadSource: conversationSessions.leadSource,
+          csQueue: conversationSessions.csQueue,
           updatedAt: conversationSessions.updatedAt,
           messageHistory: conversationSessions.messageHistory,
         })
@@ -6431,6 +6432,24 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       }
 
       const deduped = Array.from(seen.values()).slice(0, 20);
+      // Batch cleaner identity lookup — same logic as Stage 4b in listCsInbox
+      const searchPhones = deduped.map(r => r.leadPhone ? r.leadPhone.replace(/[^\d]/g, '').slice(-10) : '').filter(Boolean);
+      const searchCleanerSet = new Set<string>();
+      if (searchPhones.length > 0) {
+        try {
+          const [cleanerRows] = await db.execute(
+            sql`SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) as phone10
+                FROM cleaner_profiles
+                WHERE isActive = 1
+                AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) IN (${sql.raw(searchPhones.map(p => `'${p}'`).join(','))})`
+          );
+          for (const row of (cleanerRows as any[])) {
+            if (row.phone10) searchCleanerSet.add(String(row.phone10));
+          }
+        } catch (err) {
+          console.warn('[searchCsCustomers] cleaner lookup failed:', err);
+        }
+      }
 
       return deduped.map((row) => {
         let lastMsgPreview = "";
@@ -6451,6 +6470,8 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           lastMsgPreview,
           lastMsgRole,
           leadSource: row.leadSource ?? "",
+          csQueue: row.csQueue ?? null,
+          personType: (row.csQueue === "Teams" || searchCleanerSet.has(row.leadPhone ? row.leadPhone.replace(/[^\d]/g, '').slice(-10) : '')) ? "team" as const : "customer" as const,
         };
       });
     }),

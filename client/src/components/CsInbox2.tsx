@@ -596,6 +596,7 @@ export default function CsInbox2() {
   const liveConvs: LiveConv[] = useMemo(() => {
     if (!csData) return [];
     return csData.map(row => {
+      if ((row as any).id === 1530005) console.log("[CSDATA_ROW_1530005]", { id: (row as any).id, csQueue: (row as any).csQueue, personType: (row as any).personType });
       let msgs: RawMsg[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
       const lastMsg = msgs.slice(-1)[0];
@@ -1285,6 +1286,7 @@ export default function CsInbox2() {
           </main>
           <aside className="cs2-side" style={{overflow:'hidden',display:'flex',flexDirection:'column',gap:0,padding:0}}>
             {/* Client/Team profile panel */}
+            {selectedConv && (() => { console.log("[TEAM_IDENTITY_DIAG]", { id: selectedConv.id, name: selectedConv.name, phone: selectedConv.phone, queue: selectedConv.queue, personType: selectedConv.personType, isTeamMember: isTeamMember(selectedConv) }); return null; })()}
             <div style={{flex:1,minHeight:0,overflow:'hidden'}}>
               {isTeamMember(selectedConv) ? (
                 <CsRightPanelTeam
