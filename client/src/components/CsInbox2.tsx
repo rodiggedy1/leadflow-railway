@@ -596,6 +596,7 @@ export default function CsInbox2() {
   const liveConvs: LiveConv[] = useMemo(() => {
     if (!csData) return [];
     return csData.map(row => {
+      if ((row as any).id === 1530005) console.log("[CSDATA_ROW_1530005]", { id: (row as any).id, csQueue: (row as any).csQueue, personType: (row as any).personType });
       let msgs: RawMsg[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
       const lastMsg = msgs.slice(-1)[0];
@@ -614,7 +615,7 @@ export default function CsInbox2() {
       const name = (nameMap && phone10 && nameMap[phone10]) || row.leadName || row.leadPhone || "Unknown";
       const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
       const hasUnanswered = (row as any).hasUnanswered ?? (msgs.length > 0 && msgs[msgs.length - 1].role === "user");
-      return {
+      const mapped: LiveConv = {
         id: row.id,
         name,
         initials,
@@ -653,6 +654,8 @@ export default function CsInbox2() {
         latestCallStructuredData: (row as any).latestCallStructuredData ?? null,
         latestCallCallerPhone: (row as any).latestCallCallerPhone ?? null,
       };
+      if (mapped.id === 1530005) console.log("[LIVECONV_ROW_1530005]", { id: mapped.id, queue: mapped.queue, personType: mapped.personType });
+      return mapped;
     });
   }, [csData, nameMap]);
 
