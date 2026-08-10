@@ -6359,7 +6359,8 @@ Return JSON with exactly these fields:
           .set({ messageHistory: JSON.stringify(history), lastReadAt: ts, ...computeSessionSummary(history) } as any)
           .where(eq(conversationSessions.id, sessionId));
         // Mark session as CS-touched so it appears in Inbox2 regardless of leadSource
-        await db.update(conversationSessions).set({ csQueue: 'CS' as any }).where(eq(conversationSessions.id, sessionId));
+        // Also clear csResolvedAt so a previously-resolved historical session reactivates in Inbox2
+        await db.update(conversationSessions).set({ csQueue: 'CS' as any, csResolvedAt: null }).where(eq(conversationSessions.id, sessionId));
         const { broadcastOpsUpdate: bcastWs } = await import("./sseBroadcast");
         bcastWs("lead_update", { sessionId });
 
