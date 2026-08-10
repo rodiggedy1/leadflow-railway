@@ -3247,14 +3247,16 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
                     or(
                       eq(conversationSessions.leadSource, 'cs-inbound'),
                       eq(conversationSessions.leadSource, 'cs-inbound-cleaner'),
-                      eq(conversationSessions.leadSource, 'cs_initiated')
+                      eq(conversationSessions.leadSource, 'cs_initiated'),
+                      eq(conversationSessions.csQueue as any, 'CS')
                     ),
                     resolvedFilter
                   )
                 : or(
                     eq(conversationSessions.leadSource, 'cs-inbound'),
                     eq(conversationSessions.leadSource, 'cs-inbound-cleaner'),
-                    eq(conversationSessions.leadSource, 'cs_initiated')
+                    eq(conversationSessions.leadSource, 'cs_initiated'),
+                    eq(conversationSessions.csQueue as any, 'CS')
                   ),
               // Any session with an inbound AI call — no leadSource or csResolvedAt restriction
               sql`EXISTS (SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id})`
@@ -4538,7 +4540,7 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
           })
           .from(cleanerJobs)
           .where(
-            sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phone10}`
+            sql`RIGHT(REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone10}`
           )
           .orderBy(desc(cleanerJobs.serviceDateTime))
           .limit(10);
@@ -6356,6 +6358,8 @@ Return JSON with exactly these fields:
           .update(conversationSessions)
           .set({ messageHistory: JSON.stringify(history), lastReadAt: ts, ...computeSessionSummary(history) } as any)
           .where(eq(conversationSessions.id, sessionId));
+        // Mark session as CS-touched so it appears in Inbox2 regardless of leadSource
+        await db.update(conversationSessions).set({ csQueue: 'CS' as any }).where(eq(conversationSessions.id, sessionId));
         const { broadcastOpsUpdate: bcastWs } = await import("./sseBroadcast");
         bcastWs("lead_update", { sessionId });
 

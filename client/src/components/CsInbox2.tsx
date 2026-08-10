@@ -727,7 +727,6 @@ export default function CsInbox2() {
       emailUtils.opsChat.listEmailInboxThreads.invalidate();
     },
   });
-
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {

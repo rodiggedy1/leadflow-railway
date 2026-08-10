@@ -589,27 +589,6 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
             />
           </div>
         )}
-        {/* CLIENT PROFILE metrics */}
-        <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
-          <CardContent className="p-0">
-            <div className="p-5 bg-white">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-4">Client profile</div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Frequency", value: clientProfile?.frequency ?? "—" },
-                  { label: "Avg price", value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : "—" },
-                  { label: "Total bookings", value: clientProfile?.totalBookings ?? 0 },
-                  { label: "Last booking", value: clientProfile?.recentJobs?.[0]?.date ?? "—" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-1">{label}</div>
-                    <div className="text-sm font-bold text-slate-800">{String(value)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
         {/* Today's job for client */}
         {clientProfile?.todayJob && (
           <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
@@ -640,9 +619,9 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
                      </span>
                    </div>
                     {(tj as any).teamName && (
-                      <div className="flex items-center gap-1.5 mt-1 mb-1">
-                        <Users className="h-3 w-3 text-slate-400" />
-                        <span className="text-xs text-slate-500">{(tj as any).teamName}</span>
+                      <div className="flex items-center gap-1.5 mt-2 mb-1 rounded-xl px-2.5 py-1.5" style={{background:"linear-gradient(135deg,#eef2ff,#f0fdf4)",border:"1px solid #c7d2fe"}}>
+                        <Users className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                        <span className="text-xs font-semibold text-indigo-700">{(tj as any).teamName}</span>
                       </div>
                     )}
                    {tj.jobAddress && (
@@ -661,6 +640,28 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
             </CardContent>
           </Card>
         )}
+        {/* CLIENT PROFILE metrics */}
+        <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
+          <CardContent className="p-0">
+            <div className="p-5 bg-white">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-4">Client profile</div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Frequency", value: clientProfile?.frequency ?? "—" },
+                  { label: "Avg price", value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : "—" },
+                  { label: "Total bookings", value: clientProfile?.totalBookings ?? 0 },
+                  { label: "Last booking", value: clientProfile?.recentJobs?.[0]?.date ?? "—" },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-1">{label}</div>
+                    <div className="text-sm font-bold text-slate-800">{String(value)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Know before you reply */}
         {customerMemory && (() => {
           const isHighRisk = (selected?.stats?.complaints ?? 0) >= 2;
