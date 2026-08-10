@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Phone, Briefcase, Clock3, Building2, MapPin, AlertTriangle,
-  ExternalLink, RefreshCw, Link2, Copy, CircleDot, ChevronRight
+  Phone, MessageSquare, Briefcase, Clock3, Building2, MapPin, AlertTriangle,
+  ExternalLink, RefreshCw, Link2, Copy, CircleDot, ChevronRight, X
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -52,6 +52,18 @@ interface Props {
 
 export default function CsRightPanelTeam({ selected }: Props) {
   // ── Two-step route from skill: getCleanerProfileByPhone → getCleanerTodayJobs ──
+  // ── Text client popup ──────────────────────────────────────────────────────────
+  const [textPopup, setTextPopup] = React.useState<{ phone: string; name: string } | null>(null);
+  const [textMsg, setTextMsg] = React.useState("");
+  const sendTextMsg = trpc.leads.sendWorkspaceMessage.useMutation({
+    onSuccess: () => {
+      toast.success("Message sent!");
+      setTextPopup(null);
+      setTextMsg("");
+    },
+    onError: (err) => toast.error(err.message || "Failed to send message"),
+  });
+
   const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
     { phone: selected.phone },
     { enabled: !!selected.phone, refetchOnWindowFocus: false }
@@ -193,9 +205,17 @@ export default function CsRightPanelTeam({ selected }: Props) {
                           {callHref && (
                             <a href={callHref} className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors">
                               <Phone className="h-3.5 w-3.5" /> Call client
-                            </a>
+                           </a>
+                         )}
+                          {clientPhone10 && (
+                            <button
+                              onClick={() => { setTextPopup({ phone: "+1" + clientPhone10, name: job.customerName ?? "" }); setTextMsg(""); }}
+                              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" /> Text client
+                            </button>
                           )}
-                          {launch27Url && (
+                         {launch27Url && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <a href={launch27Url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors">
@@ -275,7 +295,37 @@ export default function CsRightPanelTeam({ selected }: Props) {
           </CardContent>
         </Card>
 
-      </div>
     </div>
+      {textPopup && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={() => setTextPopup(null)}>
+          <div style={{background:"#fff",borderRadius:"16px",padding:"24px",width:"360px",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e => e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:"15px"}}>{textPopup.name || "Client"}</div>
+                <div style={{fontSize:"12px",color:"#6b7280",marginTop:"2px"}}>{textPopup.phone}</div>
+              </div>
+              <button onClick={() => setTextPopup(null)} style={{border:0,background:"none",cursor:"pointer",padding:"4px"}}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <textarea
+              value={textMsg}
+              onChange={e => setTextMsg(e.target.value)}
+              placeholder={"Message to " + (textPopup.name?.split(" ")[0] || "client") + "..."}
+              style={{width:"100%",minHeight:"100px",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"10px 12px",fontSize:"13px",fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}}
+              autoFocus
+            />
+            <div style={{display:"flex",justifyContent:"flex-end",gap:"8px",marginTop:"12px"}}>
+              <button onClick={() => setTextPopup(null)} style={{border:"1px solid #e5e7eb",background:"#fff",borderRadius:"10px",padding:"9px 16px",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+              <button
+                disabled={!textMsg.trim() || sendTextMsg.isPending}
+                onClick={() => sendTextMsg.mutate({ phone: textPopup.phone, message: textMsg.trim(), name: textPopup.name || undefined })}
+                style={{border:0,background:"#10b981",color:"#fff",borderRadius:"10px",padding:"9px 16px",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(!textMsg.trim()||sendTextMsg.isPending)?0.5:1}}
+              >
+                {sendTextMsg.isPending ? "Sending..." : "Send \u2197"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+  </div>
   );
 }
