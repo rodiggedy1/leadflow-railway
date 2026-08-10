@@ -572,6 +572,18 @@ export default function CsInbox2() {
       emailUtils.gmail.getThread.invalidate({ threadId: selectedEmailThreadId! });
     },
   });
+  const resolveEmailThread = trpc.gmail.completeThread.useMutation({
+    onSuccess: () => {
+      setSelectedEmailThreadId(null);
+      emailUtils.opsChat.listEmailInboxThreads.invalidate();
+    },
+  });
+  const resolveEmailThread = trpc.gmail.completeThread.useMutation({
+    onSuccess: () => {
+      setSelectedEmailThreadId(null);
+      emailUtils.opsChat.listEmailInboxThreads.invalidate();
+    },
+  });
 
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
@@ -1185,6 +1197,106 @@ export default function CsInbox2() {
             <button className="cs2-btn">☰ Filters</button>
           </div>
           {channel === "email" ? (
+            selectedEmailThreadId ? (() => {
+              const t = emailThread.data;
+              const inboxEmail = emailInbox.data?.inboxEmail?.toLowerCase() ?? "";
+              const senderName = t?.from ?? t?.fromEmail ?? "Unknown";
+              const senderEmail = t?.fromEmail ?? "";
+              const initials = senderName.slice(0,2).toUpperCase();
+              return (
+                <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}>
+                  <main className="cs2-dmain">
+                    <header className="cs2-dtop">
+                      <div className="cs2-davatar" style={{background:"#3478f6"}}>{initials}</div>
+                      <div className="identity">
+                        <h2>{senderName}</h2>
+                        <span>{senderEmail} · Email</span>
+                      </div>
+                      <div className="topActions">
+                        <button className="iconBtn" onClick={()=>setSelectedEmailThreadId(null)}>← Back</button>
+                        <button className="iconBtn resolve" onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                          {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve"}
+                        </button>
+                      </div>
+                    </header>
+                    <div className="cs2-context">
+                      <div className="ai"><strong>✦ Subject</strong>&nbsp; {t?.subject ?? "Loading…"}</div>
+                    </div>
+                    <section className="cs2-thread" ref={threadRef}>
+                      <div className="day">Email Thread</div>
+                      {emailThread.isLoading && <div style={{color:"#9aa0aa",textAlign:"center",padding:"20px"}}>Loading…</div>}
+                      {t?.messages?.map((msg: any, i: number) => {
+                        const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
+                        const msgText = msg.bodyText?.trim() || msg.snippet || "";
+                        return (
+                          <div key={i} className={isOut ? "bubble out" : "bubble in"}>
+                            <div className="btext">{msgText}</div>
+                            <div className="bmeta">{msg.from} · {msg.date ? new Date(msg.date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}</div>
+                          </div>
+                        );
+                      })}
+                    </section>
+                    <footer className="cs2-composer">
+                      <div className="composeBox">
+                        <textarea className="composeArea"
+                          placeholder={`Reply to ${senderName.split(" ")[0]}…`}
+                          value={emailReply}
+                          onChange={e=>setEmailReply(e.target.value)}
+                          onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()&&t){
+                            sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});
+                          }}}
+                        />
+                        <div className="composeRow">
+                          <button className="quick" onClick={()=>setEmailReply("Good day! Thank you for reaching out to Maids in Black.")}>Greeting</button>
+                          <button className="quick" onClick={()=>setEmailReply("Thank you for your email! Let me check on this and get right back to you.")}>Check team</button>
+                          <div style={{display:"flex",marginLeft:"auto",borderRadius:"9px",overflow:"hidden",boxShadow:"0 5px 13px rgba(104,75,250,.2)"}}>
+                            <button className="send2" style={{borderRadius:0,boxShadow:"none",paddingRight:"12px",margin:0}}
+                              onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});}}
+                              disabled={!emailReply.trim()||sendEmailReply.isPending}>
+                              {sendEmailReply.isPending?"Sending…":"Send ↗"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </footer>
+                  </main>
+                  <aside className="cs2-side" style={{overflow:"hidden",display:"flex",flexDirection:"column",gap:0,padding:0}}>
+                    <div style={{flex:1,minHeight:0,overflow:"hidden"}}>
+                      <CsRightPanelClient
+                        selected={{
+                          id: 0,
+                          phone: senderEmail,
+                          name: senderName,
+                          queue: null,
+                          messages: [],
+                          chips: [],
+                          lastMessage: t?.snippet ?? "",
+                          ago: "",
+                          wait: "",
+                          waitMs: 0,
+                          hasUnanswered: false,
+                          priority: "P2" as const,
+                          initials,
+                          lastMsgTs: t?.date ?? 0,
+                          latestInteractionType: "sms" as const,
+                          latestCallId: null,
+                          latestCallCreatedAt: null,
+                          latestCallSummary: null,
+                          latestCallOutcome: null,
+                          latestCallDuration: null,
+                          latestCallRecordingUrl: null,
+                          latestCallStructuredData: null,
+                          csResolvedAt: null,
+                        }}
+                        missionDone={missionDone}
+                        setMissionDone={setMissionDone}
+                        showToast={showToast}
+                      />
+                    </div>
+                  </aside>
+                </div>
+              );
+            })() : (
             <div style={{flex:1,minHeight:0,overflow:"hidden",display:"flex",gap:0}}>
               {/* Email 4-column Kanban */}
               <div style={{flex:1,minWidth:0,overflow:"auto",padding:"0 12px"}}>
@@ -1261,48 +1373,8 @@ export default function CsInbox2() {
                   );
                 })()}
               </div>
-              {/* Email thread detail panel */}
-              {selectedEmailThreadId && (
-                <div style={{width:"420px",flexShrink:0,borderLeft:"1px solid #e8eaf0",display:"flex",flexDirection:"column",background:"#fff",overflow:"hidden"}}>
-                  <div style={{padding:"12px 16px",borderBottom:"1px solid #e8eaf0",display:"flex",alignItems:"center",gap:"8px"}}>
-                    <button onClick={()=>setSelectedEmailThreadId(null)} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",color:"#6b7280",padding:"0 4px"}}>←</button>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:700,fontSize:"13px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emailThread.data?.subject ?? "Loading…"}</div>
-                    </div>
-                  </div>
-                  <div style={{flex:1,minHeight:0,overflow:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:"10px"}}>
-                    {emailThread.isLoading && <div style={{color:"#9aa0aa",textAlign:"center",padding:"20px"}}>Loading thread…</div>}
-                    {emailThread.data?.messages?.map((msg: any, i: number) => {
-                      const isOutbound = emailInbox.data?.inboxEmail && msg.fromEmail?.toLowerCase() === emailInbox.data.inboxEmail.toLowerCase();
-                      return (
-                        <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isOutbound?"flex-end":"flex-start"}}>
-                          <div style={{maxWidth:"85%",background:isOutbound?"#eff6ff":"#f9fafb",border:`1px solid ${isOutbound?"#bfdbfe":"#e5e7eb"}`,borderRadius:"12px",padding:"8px 12px"}}>
-                            <div style={{fontSize:"10px",color:"#9aa0aa",marginBottom:"4px",fontWeight:600}}>{msg.from ?? msg.fromEmail} · {msg.date ? new Date(msg.date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}</div>
-                            <div style={{fontSize:"12px",color:"#1a1a2e",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{msg.body ?? msg.snippet}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{borderTop:"1px solid #e8eaf0",padding:"10px 12px",display:"flex",gap:"8px",alignItems:"flex-end"}}>
-                    <textarea value={emailReply} onChange={e=>setEmailReply(e.target.value)} placeholder="Write a reply…"
-                      style={{flex:1,border:"1px solid #e8eaf0",borderRadius:"8px",padding:"8px 10px",fontSize:"12px",resize:"none",minHeight:"60px",fontFamily:"inherit"}}
-                      onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()){
-                        const t = emailThread.data;
-                        if(t) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/\n/g,"<br>") });
-                      }}}
-                    />
-                    <button onClick={()=>{
-                      const t = emailThread.data;
-                      if(t && emailReply.trim()) sendEmailReply.mutate({ threadId: selectedEmailThreadId, to: t.fromEmail ?? "", subject: t.subject ?? "", bodyHtml: emailReply.replace(/\n/g,"<br>") });
-                    }} disabled={!emailReply.trim() || sendEmailReply.isPending}
-                      style={{background:"#3478f6",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"12px",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                      {sendEmailReply.isPending ? "Sending…" : "Send ↵"}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
+            )
           ) : (
           <div className="cs2-boardWrap">
             <div className="cs2-board">
