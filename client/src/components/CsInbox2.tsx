@@ -578,12 +578,6 @@ export default function CsInbox2() {
       emailUtils.opsChat.listEmailInboxThreads.invalidate();
     },
   });
-  const resolveEmailThread = trpc.gmail.completeThread.useMutation({
-    onSuccess: () => {
-      setSelectedEmailThreadId(null);
-      emailUtils.opsChat.listEmailInboxThreads.invalidate();
-    },
-  });
 
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
@@ -1199,101 +1193,136 @@ export default function CsInbox2() {
           {channel === "email" ? (
             selectedEmailThreadId ? (() => {
               const t = emailThread.data;
-              const inboxEmail = emailInbox.data?.inboxEmail?.toLowerCase() ?? "";
+              const inboxEmail = (emailInbox.data?.inboxEmail ?? t?.inboxEmail ?? "").toLowerCase();
               const senderName = t?.from ?? t?.fromEmail ?? "Unknown";
               const senderEmail = t?.fromEmail ?? "";
-              const initials = senderName.slice(0,2).toUpperCase();
+              const initials = senderName.replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "??";
+              const subject = t?.subject ?? "Email Thread";
+              const msgCount = t?.messages?.length ?? 0;
+              const colLabel = (() => {
+                const lastMsg = t?.messages?.[t.messages.length - 1];
+                if (!lastMsg) return "Needs Response";
+                const isOut = inboxEmail && lastMsg.fromEmail?.toLowerCase() === inboxEmail;
+                if (isOut) return "Waiting on Customer";
+                const waitMs = Date.now() - (lastMsg.date ?? 0);
+                if (waitMs >= 30*60*1000) return "At Risk";
+                if (msgCount <= 2) return "New";
+                return "Needs Response";
+              })();
+              const colColor: Record<string,string> = {"New":"#2fb66d","Needs Response":"#f3a72f","Waiting on Customer":"#246bfe","At Risk":"#ef5a5a"};
               return (
-                <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}>
-                  <main className="cs2-dmain">
-                    <header className="cs2-dtop">
-                      <div className="cs2-davatar" style={{background:"#3478f6"}}>{initials}</div>
-                      <div className="identity">
-                        <h2>{senderName}</h2>
-                        <span>{senderEmail} · Email</span>
+                <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden",background:"#fff"}}>
+                  <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",overflow:"hidden",background:"#fff"}}>
+                    <div style={{padding:"18px 22px 0",borderBottom:"1px solid #e5e8ef"}}>
+                      <button onClick={()=>setSelectedEmailThreadId(null)} style={{border:0,background:"none",color:"#555e6f",padding:0,marginBottom:"14px",fontSize:"13px",cursor:"pointer"}}>← &nbsp; Back to list</button>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px",marginBottom:"16px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"10px",minWidth:0}}>
+                          <div style={{fontSize:"21px",fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{subject}</div>
+                          <span style={{fontSize:"11px",padding:"6px 9px",borderRadius:"999px",border:"1px solid #f0c163",background:"#fff8e7",color:"#a76600",fontWeight:800,flexShrink:0}}>{colLabel}</span>
+                        </div>
+                        <div style={{display:"flex",gap:"8px",flexShrink:0}}>
+                          <button style={{border:"1px solid #dfe3ea",background:"#fff",borderRadius:"10px",padding:"9px 12px",fontSize:"12px",fontWeight:700,color:"#3d4451",cursor:"pointer"}} onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                            {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve"}
+                          </button>
+                        </div>
                       </div>
-                      <div className="topActions">
-                        <button className="iconBtn" onClick={()=>setSelectedEmailThreadId(null)}>← Back</button>
-                        <button className="iconBtn resolve" onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
-                          {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve"}
-                        </button>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingBottom:"16px"}}>
+                        <div style={{display:"flex",gap:"12px",alignItems:"center"}}>
+                          <div style={{width:"42px",height:"42px",borderRadius:"50%",display:"grid",placeItems:"center",background:"linear-gradient(145deg,#8e82ff,#6857ec)",color:"#fff",fontWeight:800,fontSize:"15px",flexShrink:0}}>{initials}</div>
+                          <div>
+                            <div style={{fontSize:"14px",fontWeight:800}}>{senderName} <span style={{fontWeight:500,color:"#7b8291",marginLeft:"6px"}}>{"<"}{senderEmail}{">"}</span></div>
+                            <div style={{fontSize:"12px",color:"#8b92a0",marginTop:"4px"}}>to: {inboxEmail || "inbox"}</div>
+                          </div>
+                        </div>
+                        <div style={{fontSize:"12px",color:"#7d8493"}}>
+                          {t?.messages?.[t.messages.length-1]?.date ? new Date(t.messages[t.messages.length-1].date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}
+                        </div>
                       </div>
-                    </header>
-                    <div className="cs2-context">
-                      <div className="ai"><strong>✦ Subject</strong>&nbsp; {t?.subject ?? "Loading…"}</div>
                     </div>
-                    <section className="cs2-thread" ref={threadRef}>
-                      <div className="day">Email Thread</div>
-                      {emailThread.isLoading && <div style={{color:"#9aa0aa",textAlign:"center",padding:"20px"}}>Loading…</div>}
+                    <div style={{flex:1,minHeight:0,overflow:"auto",padding:"18px 22px 24px"}}>
+                      {emailThread.isLoading && <div style={{color:"#9aa0aa",textAlign:"center",padding:"40px"}}>Loading thread…</div>}
                       {t?.messages?.map((msg: any, i: number) => {
                         const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
+                        const msgInit = (msg.from ?? msg.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
                         const msgText = msg.bodyText?.trim() || msg.snippet || "";
+                        const msgTime = msg.date ? new Date(msg.date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "";
                         return (
-                          <div key={i} className={isOut ? "bubble out" : "bubble in"}>
-                            <div className="btext">{msgText}</div>
-                            <div className="bmeta">{msg.from} · {msg.date ? new Date(msg.date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}</div>
+                          <div key={msg.id ?? i} style={{border:"1px solid",borderColor:isOut?"#cddcff":"#e3e6ec",borderRadius:"14px",padding:"18px",marginBottom:"16px",background:isOut?"#f7faff":"#fff",marginLeft:isOut?"22%":"0"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                                <div style={{width:"32px",height:"32px",borderRadius:"50%",display:"grid",placeItems:"center",background:isOut?"#246bfe":"#8273f7",color:"#fff",fontSize:"12px",fontWeight:800,flexShrink:0}}>{isOut?"Y":msgInit}</div>
+                                <div>
+                                  <span style={{fontSize:"13px",fontWeight:800}}>{isOut?"You":msg.from}</span>
+                                  <span style={{fontSize:"11px",color:"#7c8390",marginLeft:"5px"}}>{"<"}{msg.fromEmail}{">"}</span>
+                                </div>
+                              </div>
+                              <div style={{fontSize:"11px",color:"#8a91a0"}}>{msgTime}</div>
+                            </div>
+                            <div style={{fontSize:"14px",lineHeight:1.7,color:"#303641",paddingLeft:"42px",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{msgText}</div>
                           </div>
                         );
                       })}
-                    </section>
-                    <footer className="cs2-composer">
-                      <div className="composeBox">
-                        <textarea className="composeArea"
-                          placeholder={`Reply to ${senderName.split(" ")[0]}…`}
-                          value={emailReply}
-                          onChange={e=>setEmailReply(e.target.value)}
+                    </div>
+                    <div style={{borderTop:"1px solid #e5e8ef",background:"#fff",padding:"12px 14px 16px"}}>
+                      <div style={{border:"1px solid #dfe3e9",borderRadius:"14px",overflow:"hidden"}}>
+                        <div style={{display:"flex",borderBottom:"1px solid #e5e8ef"}}>
+                          <button style={{border:0,background:"none",padding:"11px 14px",color:"#246bfe",fontSize:"12px",fontWeight:800,borderBottom:"2px solid #246bfe",cursor:"pointer"}}>Reply</button>
+                          <button style={{border:0,background:"none",padding:"11px 14px",color:"#6d7481",fontSize:"12px",cursor:"pointer"}}>Internal Note</button>
+                        </div>
+                        <textarea value={emailReply} onChange={e=>setEmailReply(e.target.value)} placeholder={"Reply to "+senderName.split(" ")[0]+"…"}
+                          style={{width:"100%",minHeight:"92px",resize:"none",border:0,outline:0,padding:"14px",fontSize:"13px",fontFamily:"inherit"}}
                           onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()&&t){
-                            sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});
+                            sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/
+/g,"<br>")});
                           }}}
                         />
-                        <div className="composeRow">
-                          <button className="quick" onClick={()=>setEmailReply("Good day! Thank you for reaching out to Maids in Black.")}>Greeting</button>
-                          <button className="quick" onClick={()=>setEmailReply("Thank you for your email! Let me check on this and get right back to you.")}>Check team</button>
-                          <div style={{display:"flex",marginLeft:"auto",borderRadius:"9px",overflow:"hidden",boxShadow:"0 5px 13px rgba(104,75,250,.2)"}}>
-                            <button className="send2" style={{borderRadius:0,boxShadow:"none",paddingRight:"12px",margin:0}}
-                              onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});}}
-                              disabled={!emailReply.trim()||sendEmailReply.isPending}>
-                              {sendEmailReply.isPending?"Sending…":"Send ↗"}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px 12px"}}>
+                          <div style={{display:"flex",gap:"5px"}}>
+                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Bold"><b>B</b></button>
+                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Italic"><i>I</i></button>
+                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Link">🔗</button>
+                            <button style={{border:0,background:"transparent",width:"31px",height:"31px",borderRadius:"8px",cursor:"pointer",fontSize:"13px"}} title="Attach">📎</button>
+                          </div>
+                          <div style={{display:"flex",gap:"8px"}}>
+                            <button style={{border:"1px solid #dfe3ea",background:"#fff",borderRadius:"10px",padding:"9px 12px",fontSize:"12px",fontWeight:700,color:"#3d4451",cursor:"pointer"}}>Templates</button>
+                            <button onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/
+/g,"<br>")});}}
+                              disabled={!emailReply.trim()||sendEmailReply.isPending}
+                              style={{border:0,background:"#246bfe",color:"#fff",borderRadius:"10px",padding:"10px 15px",fontSize:"12px",fontWeight:800,cursor:"pointer"}}>
+                              {sendEmailReply.isPending?"Sending…":"Send Reply ▾"}
                             </button>
                           </div>
                         </div>
                       </div>
-                    </footer>
-                  </main>
-                  <aside className="cs2-side" style={{overflow:"hidden",display:"flex",flexDirection:"column",gap:0,padding:0}}>
-                    <div style={{flex:1,minHeight:0,overflow:"hidden"}}>
-                      <CsRightPanelClient
-                        selected={{
-                          id: 0,
-                          phone: senderEmail,
-                          name: senderName,
-                          queue: null,
-                          messages: [],
-                          chips: [],
-                          lastMessage: t?.snippet ?? "",
-                          ago: "",
-                          wait: "",
-                          waitMs: 0,
-                          hasUnanswered: false,
-                          priority: "P2" as const,
-                          initials,
-                          lastMsgTs: t?.date ?? 0,
-                          latestInteractionType: "sms" as const,
-                          latestCallId: null,
-                          latestCallCreatedAt: null,
-                          latestCallSummary: null,
-                          latestCallOutcome: null,
-                          latestCallDuration: null,
-                          latestCallRecordingUrl: null,
-                          latestCallStructuredData: null,
-                          csResolvedAt: null,
-                        }}
-                        missionDone={missionDone}
-                        setMissionDone={setMissionDone}
-                        showToast={showToast}
-                      />
                     </div>
-                  </aside>
+                  </div>
+                  <div style={{width:"320px",flexShrink:0,borderLeft:"1px solid #e5e8ef",background:"#fbfbfd",overflow:"auto"}}>
+                    <div style={{padding:"18px",borderBottom:"1px solid #e5e8ef"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+                        <div style={{width:"48px",height:"48px",borderRadius:"50%",display:"grid",placeItems:"center",background:"linear-gradient(145deg,#8e82ff,#6857ec)",color:"#fff",fontWeight:800,fontSize:"16px",flexShrink:0}}>{initials}</div>
+                        <div>
+                          <div style={{fontWeight:800}}>{senderName}</div>
+                          <div style={{fontSize:"12px",color:"#707786",marginTop:"5px"}}>{senderEmail}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{padding:"18px",borderBottom:"1px solid #e5e8ef"}}>
+                      <div style={{fontSize:"14px",fontWeight:800,marginBottom:"14px"}}>Thread Details</div>
+                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Subject</div><div style={{fontSize:"13px",color:"#303641"}}>{subject}</div></div>
+                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Messages</div><div style={{fontSize:"13px",color:"#303641"}}>{msgCount}</div></div>
+                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Status</div><div style={{fontSize:"13px"}}><span style={{color:colColor[colLabel]??""}}>{colLabel}</span></div></div>
+                      <div style={{marginBottom:"14px"}}><div style={{fontSize:"11px",color:"#8a91a0",marginBottom:"5px"}}>Thread ID</div><div style={{fontSize:"11px",color:"#303641",fontFamily:"monospace",wordBreak:"break-all"}}>{selectedEmailThreadId}</div></div>
+                    </div>
+                    <div style={{padding:"18px"}}>
+                      <div style={{fontSize:"14px",fontWeight:800,marginBottom:"14px"}}>Actions</div>
+                      <div style={{display:"grid",gap:"8px"}}>
+                        <button onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending} style={{border:"1px solid #dfe3e8",background:"#fff",borderRadius:"10px",padding:"10px 12px",textAlign:"left",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>
+                          {resolveEmailThread.isPending?"…":"Resolve Thread"}
+                        </button>
+                        <button onClick={()=>setSelectedEmailThreadId(null)} style={{border:"1px solid #dfe3e8",background:"#fff",borderRadius:"10px",padding:"10px 12px",textAlign:"left",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>← Back to Inbox</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               );
             })() : (
