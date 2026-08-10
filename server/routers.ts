@@ -4481,7 +4481,7 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
         const [profile] = await db
           .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
           .from(cleanerProfiles)
-          .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${digits10}`)
+          .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${digits10} AND ${cleanerProfiles.isActive} = 1`)
           .limit(1);
         return profile ?? null;
       }),
