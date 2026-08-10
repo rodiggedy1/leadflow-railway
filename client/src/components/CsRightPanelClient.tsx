@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Phone, ChevronRight, Clock3, AlertTriangle, ExternalLink,
   Brain, Tag, RefreshCw, Copy, CircleDot, Briefcase, MapPin,
-  TrendingUp, Users, X, ClipboardList,
+  TrendingUp, Users, X, ClipboardList, MessageSquare,
 } from "lucide-react";
 import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle, Link2, Copy, Loader2, Send } from "lucide-react";
 import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
@@ -396,6 +396,12 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
   const [paymentCard, setPaymentCard] = useState<PaymentLinkConfirmCard | null>(null);
   const [paymentSentCard, setPaymentSentCard] = useState<PaymentLinkSentCard | null>(null);
   const [paymentSmsText, setPaymentSmsText] = useState("");
+  const [textTeamPopup, setTextTeamPopup] = React.useState<{ phone: string; name: string } | null>(null);
+  const [textTeamMsg, setTextTeamMsg] = React.useState("");
+  const sendTextTeam = trpc.leads.sendWorkspaceMessage.useMutation({
+    onSuccess: () => { toast.success("Message sent!"); setTextTeamPopup(null); setTextTeamMsg(""); },
+    onError: (err) => toast.error(err.message || "Failed to send message"),
+  });
   const chatMutation = trpc.aiConcierge.chat.useMutation();
   const sendPaymentLinkSms = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
   function firePaymentLink() {
@@ -643,6 +649,14 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
                       <div className="flex items-center gap-1.5 mt-1 mb-1">
                         <Users className="h-3 w-3 text-slate-400" />
                         <span className="text-xs text-slate-500">{(tj as any).teamName}</span>
+                        {(tj as any).teamPhone && (
+                          <button
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTextTeamPopup({ phone: (tj as any).teamPhone, name: (tj as any).teamName }); setTextTeamMsg(""); }}
+                            className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                          >
+                            <MessageSquare className="h-3 w-3" /> Text team
+                          </button>
+                        )}
                       </div>
                     )}
                    {tj.jobAddress && (
@@ -767,5 +781,35 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
         </Card>
       </div>
     </div>
+      {textTeamPopup && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={() => setTextTeamPopup(null)}>
+          <div style={{background:"#fff",borderRadius:"16px",padding:"24px",width:"360px",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e => e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:"15px"}}>{textTeamPopup.name || "Team"}</div>
+                <div style={{fontSize:"12px",color:"#6b7280",marginTop:"2px"}}>{textTeamPopup.phone}</div>
+              </div>
+              <button onClick={() => setTextTeamPopup(null)} style={{border:0,background:"none",cursor:"pointer",padding:"4px"}}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <textarea
+              value={textTeamMsg}
+              onChange={e => setTextTeamMsg(e.target.value)}
+              placeholder={"Message to " + (textTeamPopup.name?.split(" ")[1] || "team") + "..."}
+              style={{width:"100%",minHeight:"100px",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"10px 12px",fontSize:"13px",fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}}
+              autoFocus
+            />
+            <div style={{display:"flex",justifyContent:"flex-end",gap:"8px",marginTop:"12px"}}>
+              <button onClick={() => setTextTeamPopup(null)} style={{border:"1px solid #e5e7eb",background:"#fff",borderRadius:"10px",padding:"9px 16px",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+              <button
+                disabled={!textTeamMsg.trim() || sendTextTeam.isPending}
+                onClick={() => sendTextTeam.mutate({ phone: textTeamPopup.phone, message: textTeamMsg.trim(), name: textTeamPopup.name || undefined })}
+                style={{border:0,background:"#10b981",color:"#fff",borderRadius:"10px",padding:"9px 16px",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(!textTeamMsg.trim()||sendTextTeam.isPending)?0.5:1}}
+              >
+                {sendTextTeam.isPending ? "Sending..." : "Send ↗"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
   );
 }

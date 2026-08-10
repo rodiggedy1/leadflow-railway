@@ -4563,6 +4563,16 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
 
         // Today's job from cleanerJobs
         const todayJob = cleanerJobRows.find((j) => j.jobDate === todayET) ?? null;
+        // Team phone: look up one cleaner profile for the today job's team
+        let teamPhone: string | null = null;
+        if (todayJob?.teamName) {
+          const [teamMember] = await db
+            .select({ phone: cleanerProfiles.phone })
+            .from(cleanerProfiles)
+            .where(eq(cleanerProfiles.teamName, todayJob.teamName))
+            .limit(1);
+          teamPhone = teamMember?.phone ?? null;
+        }
 
         // Recent jobs: last 5 from cleanerJobs + last 5 from completedJobs, sorted by date desc
         const recentFromCleaner = cleanerJobRows.slice(0, 5).map((j) => ({
@@ -4606,7 +4616,7 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
           firstBookingDate,
           lastBookingDate,
           avgPrice,
-          todayJob,
+          todayJob: todayJob ? { ...todayJob, teamPhone } : null,
           recentJobs,
         };
       }),
