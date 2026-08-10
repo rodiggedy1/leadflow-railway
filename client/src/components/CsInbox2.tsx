@@ -1191,6 +1191,166 @@ export default function CsInbox2() {
     );
   }
 
+  // ── EMAIL DETAIL VIEW ─────────────────────────────────────────────────
+  if (selectedEmailThreadId && channel === "email") {
+    const t = emailThread.data;
+    const inboxEmail = (emailInbox.data?.inboxEmail ?? t?.inboxEmail ?? "").toLowerCase();
+    const senderName = t?.from ?? t?.fromEmail ?? "Unknown";
+    const senderEmail = t?.fromEmail ?? "";
+    const initials = senderName.replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "??";
+    const subject = t?.subject ?? "Email Thread";
+    const msgCount = t?.messages?.length ?? 0;
+    const lastMsg = t?.messages?.[t.messages.length - 1];
+    const lastMsgAgo = lastMsg?.date ? (() => {
+      const d = Date.now() - lastMsg.date;
+      if (d < 60000) return "just now";
+      if (d < 3600000) return Math.floor(d/60000)+"m ago";
+      if (d < 86400000) return Math.floor(d/3600000)+"h ago";
+      return Math.floor(d/86400000)+"d ago";
+    })() : "";
+    const colLabel = (() => {
+      if (!lastMsg) return "Needs Response";
+      const isOut = inboxEmail && lastMsg.fromEmail?.toLowerCase() === inboxEmail;
+      if (isOut) return "Waiting on Customer";
+      const waitMs = Date.now() - (lastMsg.date ?? 0);
+      if (waitMs >= 30*60*1000) return "At Risk";
+      if (msgCount <= 2) return "New";
+      return "Needs Response";
+    })();
+    const COL_COLORS: Record<string,string> = {"Needs Response":"#22c55e","New":"#6b4eff","Waiting on Customer":"#3b82f6","At Risk":"#f59e0b"};
+    const threads = emailInbox.data?.threads ?? [];
+    return (
+      <>
+        <style>{STYLES}</style>
+        <div className="cs2-shell">
+          <nav className="cs2-rail">
+            <div className="logo">M</div>
+            <button className="cs2-rbtn">⌂</button>
+            <button className="cs2-rbtn on">✉</button>
+            <button className="cs2-rbtn">✓</button>
+            <button className="cs2-rbtn">⌁</button>
+            <button className="cs2-rbtn">✦</button>
+            <button className="cs2-rbtn bottom" onClick={() => setSelectedEmailThreadId(null)}>←</button>
+          </nav>
+          <aside className="cs2-list">
+            <div className="cs2-listhead">
+              <div className="eyebrow">Email inbox</div>
+              <h1>Email <span style={{color:"#a0a5af",fontWeight:500}}>{threads.length}</span></h1>
+              <div className="cs2-listsearch">⌕ <input placeholder="Search emails" /></div>
+            </div>
+            <div className="cs2-tickets">
+              {threads.map(th => {
+                const thInitials = (th.senderName ?? th.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
+                const thAgo = th.lastMessageAt ? (() => {
+                  const d = Date.now() - th.lastMessageAt;
+                  if (d < 60000) return "just now";
+                  if (d < 3600000) return Math.floor(d/60000)+"m ago";
+                  if (d < 86400000) return Math.floor(d/3600000)+"h ago";
+                  return Math.floor(d/86400000)+"d ago";
+                })() : "";
+                return (
+                  <div key={th.threadId} className={`ticket${selectedEmailThreadId === th.threadId ? " on" : ""}`} onClick={() => setSelectedEmailThreadId(th.threadId)}>
+                    <div className="trow">
+                      <div className="mini">{thInitials}</div>
+                      <span className="tname">{th.senderName ?? th.fromEmail ?? "Unknown"}</span>
+                      <span className="age">{thAgo}</span>
+                    </div>
+                    <div className="preview2">{th.subject ?? "(no subject)"}</div>
+                    <div className="preview2" style={{color:"#9ca3af",fontSize:"11px",marginTop:"2px"}}>{th.snippet ?? ""}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+          <main className="cs2-dmain">
+            <header className="cs2-dtop">
+              <div className="cs2-davatar">{initials}</div>
+              <div className="identity">
+                <h2>{senderName}</h2>
+                <span>{senderEmail} · Email</span>
+              </div>
+              <div className="topActions">
+                <button className="iconBtn">•••</button>
+                <button className="iconBtn resolve" onClick={() => resolveEmailThread.mutate({threadId: selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                  {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve"}
+                </button>
+              </div>
+            </header>
+            <div className="cs2-dhead2">
+              <strong>❆ Madison</strong>&nbsp; {subject}
+              <span style={{marginLeft:"10px",padding:"2px 8px",borderRadius:"99px",fontSize:"11px",fontWeight:700,background:COL_COLORS[colLabel]+"22",color:COL_COLORS[colLabel]}}>{colLabel}</span>
+            </div>
+            <div className="cs2-thread" ref={threadRef}>
+              {!t && <div style={{padding:"40px",textAlign:"center",color:"#9ca3af"}}>Loading thread…</div>}
+              {t?.messages?.map((msg) => {
+                const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
+                const msgAgo = msg.date ? (() => {
+                  const d = Date.now() - msg.date;
+                  if (d < 60000) return "just now";
+                  if (d < 3600000) return Math.floor(d/60000)+"m ago";
+                  if (d < 86400000) return Math.floor(d/3600000)+"h ago";
+                  return Math.floor(d/86400000)+"d ago";
+                })() : "";
+                return (
+                  <div key={msg.id} className={"msg" + (isOut ? " out" : "")}>
+                    <div className="mmeta">{isOut ? (msg.from || "Agent") : senderName} · {msgAgo}</div>
+                    <div className="mbubble" style={{whiteSpace:"pre-wrap"}}>{msg.bodyText || msg.snippet || "(no content)"}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="cs2-compose">
+              <textarea
+                className="cs2-composeBox"
+                placeholder={"Reply to " + senderName.split(" ")[0] + "…"}
+                value={emailReply}
+                onChange={e => setEmailReply(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && emailReply.trim()) { sendEmailReply.mutate({threadId: selectedEmailThreadId, to: senderEmail, subject: subject, bodyHtml: emailReply.replace(/
+/g,"<br>")}); } }}
+              />
+              <div className="cs2-composeRow">
+                <div style={{display:"flex",gap:"6px"}}>
+                  <button className="chip2">Greeting</button>
+                  <button className="chip2">Check team</button>
+                </div>
+                <button className="cs2-send" disabled={!emailReply.trim() || sendEmailReply.isPending} onClick={() => { if (emailReply.trim()) sendEmailReply.mutate({threadId: selectedEmailThreadId, to: senderEmail, subject: subject, bodyHtml: emailReply.replace(/
+/g,"<br>")}); }}>
+                  {sendEmailReply.isPending ? "Sending…" : "Send ↗"}
+                </button>
+              </div>
+            </div>
+          </main>
+          <aside className="cs2-side" style={{overflow:"hidden",display:"flex",flexDirection:"column",gap:0,padding:0}}>
+            <div style={{padding:"16px",borderBottom:"1px solid #e5e7ee"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}>
+                <div style={{width:"42px",height:"42px",borderRadius:"50%",background:"linear-gradient(135deg,#6b4eff,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:"15px"}}>{initials}</div>
+                <div>
+                  <div style={{fontWeight:700,fontSize:"14px"}}>{senderName}</div>
+                  <div style={{fontSize:"12px",color:"#9ca3af"}}>{senderEmail}</div>
+                </div>
+              </div>
+              <div style={{fontSize:"11px",color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"6px"}}>Thread Details</div>
+              <div style={{fontSize:"12px",color:"#374151",marginBottom:"4px"}}><strong>Subject:</strong> {subject}</div>
+              <div style={{fontSize:"12px",color:"#374151",marginBottom:"4px"}}><strong>Messages:</strong> {msgCount}</div>
+              <div style={{fontSize:"12px",color:"#374151",marginBottom:"4px"}}><strong>Status:</strong> <span style={{color:COL_COLORS[colLabel],fontWeight:600}}>{colLabel}</span></div>
+              {lastMsgAgo && <div style={{fontSize:"12px",color:"#374151"}}><strong>Last message:</strong> {lastMsgAgo}</div>}
+            </div>
+            <div style={{padding:"16px"}}>
+              <div style={{fontSize:"11px",color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"10px"}}>Actions</div>
+              <button style={{width:"100%",padding:"8px 12px",borderRadius:"8px",border:"1px solid #e5e7ee",background:"#fff",fontSize:"13px",cursor:"pointer",marginBottom:"8px",textAlign:"left"}} onClick={() => resolveEmailThread.mutate({threadId: selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                ✓ Resolve Thread
+              </button>
+              <button style={{width:"100%",padding:"8px 12px",borderRadius:"8px",border:"1px solid #e5e7ee",background:"#fff",fontSize:"13px",cursor:"pointer",textAlign:"left"}} onClick={() => setSelectedEmailThreadId(null)}>
+                ← Back to Inbox
+              </button>
+            </div>
+          </aside>
+        </div>
+        <div className={"cs2-toast" + (toast ? " show" : "")}>{toast}</div>
+      </>
+    );
+  }
+
   // ── BOARD VIEW ──────────────────────────────────────────────────────────
   return (
     <>
@@ -1245,153 +1405,7 @@ export default function CsInbox2() {
             <button className="cs2-btn">☰ Filters</button>
           </div>
           {channel === "email" ? (
-            selectedEmailThreadId ? (() => {
-              const t = emailThread.data;
-              const inboxEmail = (emailInbox.data?.inboxEmail ?? t?.inboxEmail ?? "").toLowerCase();
-              const senderName = t?.from ?? t?.fromEmail ?? "Unknown";
-              const senderEmail = t?.fromEmail ?? "";
-              const initials = senderName.replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "??";
-              const subject = t?.subject ?? "Email Thread";
-              const msgCount = t?.messages?.length ?? 0;
-              const lastMsg = t?.messages?.[t.messages.length - 1];
-              const lastMsgAgo = lastMsg?.date ? (() => {
-                const d = Date.now() - lastMsg.date;
-                if (d < 60000) return "just now";
-                if (d < 3600000) return Math.floor(d/60000)+"m ago";
-                if (d < 86400000) return Math.floor(d/3600000)+"h ago";
-                return Math.floor(d/86400000)+"d ago";
-              })() : "";
-              const colLabel = (() => {
-                if (!lastMsg) return "Needs Response";
-                const isOut = inboxEmail && lastMsg.fromEmail?.toLowerCase() === inboxEmail;
-                if (isOut) return "Waiting on Customer";
-                const waitMs = Date.now() - (lastMsg.date ?? 0);
-                if (waitMs >= 30*60*1000) return "At Risk";
-                if (msgCount <= 2) return "New";
-                return "Needs Response";
-              })();
-              return (
-                <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}>
-                  {/* main — mechanical translation of user HTML */}
-                  <div className="em-main">
-                    <div className="em-main-head">
-                      <button className="em-back" onClick={()=>setSelectedEmailThreadId(null)}>← &nbsp; Back to list</button>
-                      <div className="em-title-row">
-                        <div className="em-title-wrap">
-                          <div className="em-subject">{subject}</div>
-                          <span className="em-badge">{colLabel}</span>
-                        </div>
-                        <div className="em-head-actions">
-                          <button className="em-btn" onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
-                            {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve"}
-                          </button>
-                          <button className="em-btn">•••</button>
-                        </div>
-                      </div>
-                      <div className="em-sender-row">
-                        <div className="em-sender-left">
-                          <div className="em-avatar">{initials}</div>
-                          <div>
-                            <div className="em-sender-name">{senderName} <span className="em-sender-email">{"<"}{senderEmail}{">"}</span></div>
-                            <div className="em-to-line">to: {inboxEmail || "inbox"}</div>
-                          </div>
-                        </div>
-                        <div className="em-message-age">{lastMsgAgo}</div>
-                      </div>
-                    </div>
-                    <div className="em-main-tabs">
-                      <button className="em-main-tab active">Thread</button>
-                      <button className="em-main-tab">Headers</button>
-                      <button className="em-main-tab">Notes (0)</button>
-                      <button className="em-main-tab">Activity</button>
-                    </div>
-                    <section className="em-thread">
-                      {emailThread.isLoading && <div style={{color:"#9aa0aa",textAlign:"center",padding:"40px"}}>Loading thread…</div>}
-                      {t?.messages?.map((msg: any, i: number) => {
-                        const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
-                        const msgInit = (msg.from ?? msg.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
-                        const msgText = msg.bodyText?.trim() || msg.snippet || "";
-                        const msgTime = msg.date ? new Date(msg.date).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "";
-                        return (
-                          <div key={msg.id ?? i} className={"em-message" + (isOut ? " outgoing" : "")}>
-                            <div className="em-msg-head">
-                              <div className="em-msg-who">
-                                <div className={"em-small-avatar" + (isOut ? " out" : "")}>{isOut ? "Y" : msgInit}</div>
-                                <div>
-                                  <span className="em-msg-name">{isOut ? "You" : msg.from}</span>
-                                  <span className="em-msg-email">{"<"}{msg.fromEmail}{">"}</span>
-                                </div>
-                              </div>
-                              <div className="em-msg-time">{msgTime}</div>
-                            </div>
-                            <div className="em-msg-body">{msgText}</div>
-                          </div>
-                        );
-                      })}
-                    </section>
-                    <section className="em-composer">
-                      <div className="em-compose-box">
-                        <div className="em-compose-tabs">
-                          <button className="em-compose-tab active">Reply</button>
-                          <button className="em-compose-tab">Internal Note</button>
-                        </div>
-                        <textarea placeholder="Type your reply..." value={emailReply} onChange={e=>setEmailReply(e.target.value)}
-                          onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)&&emailReply.trim()&&t){
-                            sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});
-                          }}}
-                        />
-                        <div className="em-compose-actions">
-                          <div className="em-tools">
-                            <button className="em-icon-btn"><b>B</b></button>
-                            <button className="em-icon-btn"><i>I</i></button>
-                            <button className="em-icon-btn">☷</button>
-                            <button className="em-icon-btn">🔗</button>
-                            <button className="em-icon-btn">🖼</button>
-                            <button className="em-icon-btn">📎</button>
-                            <button className="em-icon-btn">☺</button>
-                          </div>
-                          <div className="em-send-wrap">
-                            <button className="em-btn">Templates</button>
-                            <button className="em-send" onClick={()=>{if(t&&emailReply.trim())sendEmailReply.mutate({threadId:selectedEmailThreadId,to:senderEmail,subject:t.subject??"",bodyHtml:emailReply.replace(/\n/g,"<br>")});}} disabled={!emailReply.trim()||sendEmailReply.isPending}>
-                              {sendEmailReply.isPending ? "Sending…" : "Send Reply ▾"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-                  {/* right panel — mechanical translation of user HTML */}
-                  <aside className="em-right">
-                    <div className="em-right-section">
-                      <div className="em-profile">
-                        <div className="em-profile-avatar">{initials}</div>
-                        <div>
-                          <div className="em-profile-name">{senderName}</div>
-                          <div className="em-profile-email">{senderEmail}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="em-right-section">
-                      <div className="em-section-title">Thread Details <span>⌃</span></div>
-                      <div className="em-kv"><div className="em-k">Thread ID</div><div className="em-v" style={{fontFamily:"monospace",fontSize:"11px",wordBreak:"break-all"}}>{selectedEmailThreadId}</div></div>
-                      <div className="em-kv"><div className="em-k">Subject</div><div className="em-v">{subject}</div></div>
-                      <div className="em-kv"><div className="em-k">Last Message</div><div className="em-v">{lastMsgAgo}</div></div>
-                      <div className="em-kv"><div className="em-k">Messages</div><div className="em-v">{msgCount}</div></div>
-                      <div className="em-kv"><div className="em-k">Status</div><div className="em-v">{colLabel}</div></div>
-                    </div>
-                    <div className="em-right-section">
-                      <div className="em-section-title">Actions <span>⌃</span></div>
-                      <div className="em-action-stack">
-                        <button className="em-action-btn" onClick={()=>resolveEmailThread.mutate({threadId:selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
-                          {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve Thread"}
-                        </button>
-                        <button className="em-action-btn" onClick={()=>setSelectedEmailThreadId(null)}>← Back to list</button>
-                      </div>
-                    </div>
-                  </aside>
-                </div>
-              );
-            })() : (
+            (
             <div style={{flex:1,minHeight:0,overflow:"hidden",display:"flex",gap:0}}>
               {/* Email 4-column Kanban */}
               <div style={{flex:1,minWidth:0,overflow:"auto",padding:"0 12px"}}>
