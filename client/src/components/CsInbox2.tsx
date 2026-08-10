@@ -53,7 +53,15 @@ type LiveConv = {
   latestCallCreatedAt?: number | null;
   latestCallStructuredData?: string | null;
   latestCallCallerPhone?: string | null;
+  personType?: "team" | "customer";
 };
+
+// Single helper — used everywhere Inbox2 decides Team vs Customer.
+// queue==="Teams" is the existing working signal (cannot demote).
+// personType==="team" is the new phone-based identity signal (can promote).
+function isTeamMember(c: LiveConv): boolean {
+  return c.queue === "Teams" || c.personType === "team";
+}
 
 // ── AI call action state helper ──────────────────────────────────────────────
 function deriveCallActionState(outcome: string): "needs_response" | "on_customer" | "handled" {
@@ -635,6 +643,7 @@ export default function CsInbox2() {
         amount: "",
         ago: waitStr,
         latestInteractionType: ((row as any).latestInteractionType ?? "sms") as "call" | "sms",
+        personType: ((row as any).personType ?? "customer") as "team" | "customer",
         latestCallId: (row as any).latestCallId ?? null,
         latestCallOutcome: (row as any).latestCallOutcome ?? null,
         latestCallSummary: (row as any).latestCallSummary ?? null,
@@ -820,7 +829,7 @@ export default function CsInbox2() {
 
   function doSend(afterSend?: () => void) {
     if (!selectedConv || !compose.trim()) return;
-    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" }, {
+    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq", source: "cs_inbox" }, {
       onSuccess: () => { if (afterSend) afterSend(); }
     });
   }
@@ -1004,7 +1013,7 @@ export default function CsInbox2() {
 
   // ── Filtered columns ────────────────────────────────────────────────────
   const clientConvs = useMemo(() => liveConvs, [liveConvs]);
-  const teamConvs   = useMemo(() => liveConvs.filter(c => c.queue === "Teams"),  [liveConvs]);
+  const teamConvs   = useMemo(() => liveConvs.filter(c => isTeamMember(c)),  [liveConvs]);
 
   // Active (non-resolved) client conversations only
   const activeClientConvs = useMemo(() => clientConvs.filter(c => {
@@ -1276,7 +1285,7 @@ export default function CsInbox2() {
           <aside className="cs2-side" style={{overflow:'hidden',display:'flex',flexDirection:'column',gap:0,padding:0}}>
             {/* Client/Team profile panel */}
             <div style={{flex:1,minHeight:0,overflow:'hidden'}}>
-              {selectedConv.queue === "Teams" ? (
+              {isTeamMember(selectedConv) ? (
                 <CsRightPanelTeam
                   selected={{
                     id: selectedConv.id,

@@ -1317,6 +1317,7 @@ export const appRouter = router({
         message: z.string().min(1).max(1600),
         fromNumberId: z.string().optional(), // Optional override for CS line replies
         isVoiceCommand: z.boolean().optional(), // Set true when triggered from voice command card
+        source: z.enum(["cs_inbox"]).optional(), // Set by CsInbox2 to reactivate historical sessions
       }))
       .mutation(async ({ input, ctx }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
@@ -1367,7 +1368,11 @@ export const appRouter = router({
           console.error(`[sendMessage] Failed to send SMS to ${session.leadPhone}:`, smsResult.error);
           // Don't throw — message is already stored in history
         }
-        // Broadcast so CS badge updates immediately on all connected clients
+        // When sent from Inbox2, mark session as active CS queue regardless of prior state
+        // Covers both resolved sessions and sessions that were never in Inbox2
+        if (input.source === "cs_inbox") {
+          await db.update(conversationSessions).set({ csQueue: 'CS' as any, csResolvedAt: null }).where(eq(conversationSessions.id, input.sessionId));
+        }
         const { broadcastOpsUpdate: bcastSend } = await import("./sseBroadcast");
         bcastSend("lead_update");
 
@@ -3327,6 +3332,31 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
         const _d4 = performance.now() - _t4;
 
+        // ── Stage 4b: cleaner identity lookup — phone → active cleaner profile ──
+        // One batch query. personType is additive — promotes unknown sessions to "team".
+        // Fail-safe: csQueue==="Teams" is also checked in Stage 7, so existing Teams cannot be demoted.
+        const phones4b = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
+        const digits10_4b = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+        const cleanerPhoneSet = new Set<string>();
+        if (phones4b.length > 0) {
+          try {
+            const d10s = phones4b.map(digits10_4b).filter(Boolean);
+            if (d10s.length > 0) {
+              const cleanerResult = await db.execute(
+                sql`SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) as phone10
+                    FROM cleaner_profiles
+                    WHERE isActive = 1
+                    AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) IN (${sql.raw(d10s.map(p => `'${p}'`).join(','))})`
+              );
+              for (const row of (cleanerResult as any)[0] as any[]) {
+                if (row.phone10) cleanerPhoneSet.add(String(row.phone10));
+              }
+            }
+          } catch (err) {
+            console.warn('[listCsInbox Stage 4b] cleaner lookup failed, falling back to csQueue only:', err);
+          }
+        }
+
         // ── Stage 5: cleanerJobs lookup (REGEXP_REPLACE) ──────────────────────
         const phones = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
         const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
@@ -3381,6 +3411,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             ...s,
             jobCount: jobCountMap.get(d10) ?? 0,
             hasTodayJob: todayJobMap.get(d10) ?? false,
+            // Fail-safe: csQueue==="Teams" preserves existing team sessions even if cleaner lookup fails
+            personType: (s.csQueue === "Teams" || cleanerPhoneSet.has(d10)) ? "team" as const : "customer" as const,
           };
         });
         const _d7 = performance.now() - _t7;
@@ -6359,7 +6391,8 @@ Return JSON with exactly these fields:
           .set({ messageHistory: JSON.stringify(history), lastReadAt: ts, ...computeSessionSummary(history) } as any)
           .where(eq(conversationSessions.id, sessionId));
         // Mark session as CS-touched so it appears in Inbox2 regardless of leadSource
-        await db.update(conversationSessions).set({ csQueue: 'CS' as any }).where(eq(conversationSessions.id, sessionId));
+        // Also clear csResolvedAt so a previously-resolved historical session reactivates in Inbox2
+        await db.update(conversationSessions).set({ csQueue: 'CS' as any, csResolvedAt: null }).where(eq(conversationSessions.id, sessionId));
         const { broadcastOpsUpdate: bcastWs } = await import("./sseBroadcast");
         bcastWs("lead_update", { sessionId });
 
