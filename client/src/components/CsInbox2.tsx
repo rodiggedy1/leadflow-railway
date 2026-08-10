@@ -1712,7 +1712,7 @@ export default function CsInbox2() {
                       name: r.name || r.phone,
                       initials,
                       phone: r.phone,
-                      queue: null,
+                      queue: (r as any).csQueue ?? null,
                       lastMessage: r.lastMsgPreview,
                       wait: timeAgo,
                       lastMsgTs: r.lastInteractionAt || undefined,
@@ -1722,6 +1722,7 @@ export default function CsInbox2() {
                       priority: "P2",
                       amount: "",
                       ago: timeAgo,
+                      personType: (r as any).personType,
                     };
                     setSelectedConv(conv);
                     setChannel("inbox");
