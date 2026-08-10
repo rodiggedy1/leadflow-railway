@@ -482,6 +482,7 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
   const since = clientProfile?.createdAt ? new Date(clientProfile.createdAt as string).getFullYear() : null;
 
   return (
+    <>
     <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FBFBFC', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
       {/* Header */}
       <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
@@ -811,5 +812,6 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
           </div>
         </div>
       )}
+    </>
   );
 }
