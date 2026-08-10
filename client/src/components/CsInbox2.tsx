@@ -275,6 +275,101 @@ const STYLES = `
 .em-v{font-size:13px;color:#303641}
 .em-action-stack{display:grid;gap:8px}
 .em-action-btn{border:1px solid #dfe3e8;background:#fff;border-radius:10px;padding:10px 12px;text-align:left;font-size:12px;font-weight:700;cursor:pointer}
+.em2-app{height:100vh;display:grid;grid-template-columns:58px 335px minmax(560px,1fr) 320px;overflow:hidden}
+.em2-rail{background:#fff;border-right:1px solid #e5e8ef;display:flex;flex-direction:column;align-items:center;padding:16px 8px;gap:16px}
+.em2-logo{width:36px;height:36px;border-radius:12px;background:#246bfe;display:grid;place-items:center;color:white;font-size:18px}
+.em2-rail-btn{width:40px;height:40px;border:0;background:transparent;border-radius:11px;color:#70798a;font-size:18px;cursor:pointer;font-family:inherit}
+.em2-rail-btn.active,.em2-rail-btn:hover{background:#eef4ff;color:#246bfe}
+.em2-spacer{flex:1}
+.em2-sidebar{border-right:1px solid #e5e8ef;background:#fbfbfd;overflow:auto}
+.em2-side-top{background:white;border-bottom:1px solid #e5e8ef;padding:18px 18px 0;position:sticky;top:0;z-index:2}
+.em2-brand-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.em2-brand{font-size:20px;font-weight:800}
+.em2-btn{border:1px solid #dfe3ea;background:#fff;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:700;color:#3d4451;cursor:pointer;font-family:inherit}
+.em2-tabs{display:flex;gap:24px}
+.em2-tab{padding:10px 2px 12px;border:0;background:none;color:#72798a;font-weight:700;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit}
+.em2-tab.active{color:#246bfe;border-bottom-color:#246bfe}
+.em2-side-body{padding:16px}
+.em2-kanban-title{font-size:18px;font-weight:800;margin-bottom:16px}
+.em2-count{font-size:11px;background:#eef0f4;padding:3px 8px;border-radius:999px;color:#68707e}
+.em2-column{background:#f5f6f8;border:1px solid #eef0f3;border-radius:14px;margin-bottom:12px;overflow:hidden}
+.em2-column-head{display:flex;justify-content:space-between;align-items:center;padding:13px 14px;font-size:14px;font-weight:800}
+.em2-col-left{display:flex;align-items:center;gap:9px}
+.em2-dot{width:9px;height:9px;border-radius:50%}
+.em2-dot-new{background:#2fb66d}
+.em2-dot-needs{background:#f3a72f}
+.em2-dot-wait{background:#246bfe}
+.em2-dot-risk{background:#ef5a5a}
+.em2-thread-list{padding:0 10px 10px;display:grid;gap:10px}
+.em2-thread-card{background:#fff;border:1px solid #e2e5eb;border-radius:14px;padding:14px;transition:.15s;cursor:pointer}
+.em2-thread-card:hover{transform:translateY(-1px);box-shadow:0 8px 24px #0000000d}
+.em2-thread-card.active{border-color:#5b86ff;box-shadow:0 0 0 1px #5b86ff inset}
+.em2-tc-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px}
+.em2-tc-name{font-size:14px;font-weight:800}
+.em2-tc-time{font-size:12px;color:#8a91a0}
+.em2-tc-subject{font-size:13px;font-weight:700;margin-bottom:6px}
+.em2-tc-snippet{font-size:12px;color:#69707f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.em2-unread{width:7px;height:7px;background:#246bfe;border-radius:50%;display:inline-block;margin-left:4px}
+.em2-main{background:#fff;display:flex;flex-direction:column;overflow:hidden}
+.em2-main-head{padding:18px 22px 10px;border-bottom:1px solid #e5e8ef}
+.em2-back{border:0;background:none;color:#555e6f;padding:0;margin-bottom:14px;font-size:13px;cursor:pointer;font-family:inherit}
+.em2-title-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.em2-title-wrap{display:flex;align-items:center;gap:10px;min-width:0}
+.em2-subject{font-size:21px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.em2-badge{font-size:11px;padding:6px 9px;border-radius:999px;border:1px solid #f0c163;background:#fff8e7;color:#a76600;font-weight:800}
+.em2-head-actions{display:flex;gap:8px}
+.em2-sender-row{display:flex;align-items:center;justify-content:space-between;padding-top:16px}
+.em2-sender-left{display:flex;gap:12px;align-items:center}
+.em2-avatar{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#8e82ff,#6857ec);color:#fff;font-weight:800}
+.em2-profile-avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#8e82ff,#6857ec);color:#fff;font-weight:800}
+.em2-sender-name{font-size:14px;font-weight:800}
+.em2-sender-email{font-weight:500;color:#7b8291;margin-left:6px}
+.em2-to-line{font-size:12px;color:#8b92a0;margin-top:4px}
+.em2-message-age{font-size:12px;color:#7d8493}
+.em2-main-tabs{display:flex;gap:34px;padding:0 22px;border-bottom:1px solid #e5e8ef}
+.em2-main-tab{border:0;background:none;padding:14px 3px 12px;color:#626a79;font-size:13px;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit}
+.em2-main-tab.active{color:#246bfe;border-bottom-color:#246bfe;font-weight:800}
+.em2-thread{flex:1;overflow:auto;padding:18px 22px 24px}
+.em2-email-message{border:1px solid #e3e6ec;border-radius:14px;padding:18px;margin-bottom:16px;background:#fff}
+.em2-email-message.outgoing{margin-left:22%;background:#f7faff;border-color:#cddcff}
+.em2-msg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.em2-msg-who{display:flex;align-items:center;gap:10px}
+.em2-small-avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#8273f7;color:#fff;font-size:12px;font-weight:800}
+.em2-small-avatar.out{background:#246bfe}
+.em2-msg-name{font-size:13px;font-weight:800}
+.em2-msg-email{font-size:11px;color:#7c8390;margin-left:5px}
+.em2-msg-time{font-size:11px;color:#8a91a0}
+.em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px}
+.em2-new-line{display:flex;align-items:center;gap:12px;margin:22px 0;color:#246bfe;font-size:11px}
+.em2-composer{border-top:1px solid #e5e8ef;background:#fff;padding:12px 14px 16px}
+.em2-ai-draft{border:1px solid #e8e3ff;background:#f3f0ff;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#5b4ecb;display:flex;justify-content:space-between;gap:12px;align-items:center}
+.em2-ai-draft-btn{border:0;background:#fff;color:#5b4ecb;border-radius:8px;padding:6px 9px;font-weight:800;cursor:pointer;font-family:inherit}
+.em2-compose-box{border:1px solid #dfe3e9;border-radius:14px;overflow:hidden}
+.em2-compose-tabs{display:flex;border-bottom:1px solid #e5e8ef}
+.em2-compose-tab{border:0;background:none;padding:11px 14px;color:#6d7481;font-size:12px;cursor:pointer;font-family:inherit}
+.em2-compose-tab.active{color:#246bfe;font-weight:800;border-bottom:2px solid #246bfe}
+.em2-compose-textarea{width:100%;min-height:92px;resize:none;border:0;outline:0;padding:14px;font-size:13px;font-family:inherit}
+.em2-compose-actions{display:flex;justify-content:space-between;align-items:center;padding:10px 12px 12px}
+.em2-tools{display:flex;gap:5px}
+.em2-icon-btn{border:0;background:transparent;width:31px;height:31px;border-radius:8px;cursor:pointer;font-family:inherit}
+.em2-icon-btn:hover{background:#f1f3f6}
+.em2-send-wrap{display:flex;gap:8px}
+.em2-send{border:0;background:#246bfe;color:#fff;border-radius:10px;padding:10px 15px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+.em2-right{border-left:1px solid #e5e8ef;background:#fbfbfd;overflow:auto}
+.em2-right-section{padding:18px;border-bottom:1px solid #e5e8ef}
+.em2-profile{display:flex;align-items:center;gap:12px}
+.em2-profile-name{font-weight:800}
+.em2-profile-email,.em2-profile-phone{font-size:12px;color:#707786;margin-top:5px}
+.em2-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+.em2-chip{font-size:10px;font-weight:800;padding:5px 8px;border-radius:999px;border:1px solid}
+.em2-chip-green{background:#ecf9f2;border-color:#b8e6c9;color:#2c7c4c}
+.em2-chip-purple{background:#f3f0ff;border-color:#d5cdfd;color:#5a48ce}
+.em2-section-title{display:flex;justify-content:space-between;font-size:14px;font-weight:800;margin-bottom:14px}
+.em2-kv{margin-bottom:14px}
+.em2-k{font-size:11px;color:#8a91a0;margin-bottom:5px}
+.em2-v{font-size:13px;color:#303641}
+.em2-action-stack{display:grid;gap:8px}
+.em2-action-btn{border:1px solid #dfe3e8;background:#fff;border-radius:10px;padding:10px 12px;text-align:left;font-size:12px;font-weight:700;cursor:pointer;width:100%;font-family:inherit}
 `;
 
 
@@ -1201,13 +1296,8 @@ export default function CsInbox2() {
     const subject = t?.subject ?? "Email Thread";
     const msgCount = t?.messages?.length ?? 0;
     const lastMsg = t?.messages?.[t.messages.length - 1];
-    const lastMsgAgo = lastMsg?.date ? (() => {
-      const d = Date.now() - lastMsg.date;
-      if (d < 60000) return "just now";
-      if (d < 3600000) return Math.floor(d/60000)+"m ago";
-      if (d < 86400000) return Math.floor(d/3600000)+"h ago";
-      return Math.floor(d/86400000)+"d ago";
-    })() : "";
+    const ago = (ts: number) => { const d = Date.now()-ts; if(d<60000) return "just now"; if(d<3600000) return Math.floor(d/60000)+"m ago"; if(d<86400000) return Math.floor(d/3600000)+"h ago"; return Math.floor(d/86400000)+"d ago"; };
+    const lastMsgAgo = lastMsg?.date ? ago(lastMsg.date) : "";
     const colLabel = (() => {
       if (!lastMsg) return "Needs Response";
       const isOut = inboxEmail && lastMsg.fromEmail?.toLowerCase() === inboxEmail;
@@ -1217,132 +1307,203 @@ export default function CsInbox2() {
       if (msgCount <= 2) return "New";
       return "Needs Response";
     })();
-    const COL_COLORS: Record<string,string> = {"Needs Response":"#22c55e","New":"#6b4eff","Waiting on Customer":"#3b82f6","At Risk":"#f59e0b"};
     const threads = emailInbox.data?.threads ?? [];
+    const THIRTY_MIN2 = 30*60*1000;
+    const TWENTY_FOUR_H2 = 24*60*60*1000;
+    const now3 = Date.now();
+    const getEmailCol2 = (th: typeof threads[0]) => {
+      const isOut2 = inboxEmail && th.senderEmail?.toLowerCase() === inboxEmail;
+      if (isOut2) return "Waiting on Customer";
+      const w = now3 - (th.lastMessageAt ?? 0);
+      if (w >= THIRTY_MIN2) return "At Risk";
+      if (w < TWENTY_FOUR_H2 && (th.messageCount ?? 999) <= 2) return "New";
+      return "Needs Response";
+    };
+    const emailCols2 = [
+      { label: "New", dotClass: "em2-dot-new", items: threads.filter(th => getEmailCol2(th) === "New") },
+      { label: "Needs Response", dotClass: "em2-dot-needs", items: threads.filter(th => getEmailCol2(th) === "Needs Response") },
+      { label: "Waiting on Customer", dotClass: "em2-dot-wait", items: threads.filter(th => getEmailCol2(th) === "Waiting on Customer") },
+      { label: "At Risk", dotClass: "em2-dot-risk", items: threads.filter(th => getEmailCol2(th) === "At Risk") },
+    ];
     return (
       <>
         <style>{STYLES}</style>
-        <div className="cs2-shell">
-          <nav className="cs2-rail">
-            <div className="logo">M</div>
-            <button className="cs2-rbtn">⌂</button>
-            <button className="cs2-rbtn on">✉</button>
-            <button className="cs2-rbtn">✓</button>
-            <button className="cs2-rbtn">⌁</button>
-            <button className="cs2-rbtn">✦</button>
-            <button className="cs2-rbtn bottom" onClick={() => setSelectedEmailThreadId(null)}>←</button>
-          </nav>
-          <aside className="cs2-list">
-            <div className="cs2-listhead">
-              <div className="eyebrow">Email inbox</div>
-              <h1>Email <span style={{color:"#a0a5af",fontWeight:500}}>{threads.length}</span></h1>
-              <div className="cs2-listsearch">⌕ <input placeholder="Search emails" /></div>
-            </div>
-            <div className="cs2-tickets">
-              {threads.map(th => {
-                const thInitials = (th.senderName ?? th.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
-                const thAgo = th.lastMessageAt ? (() => {
-                  const d = Date.now() - th.lastMessageAt;
-                  if (d < 60000) return "just now";
-                  if (d < 3600000) return Math.floor(d/60000)+"m ago";
-                  if (d < 86400000) return Math.floor(d/3600000)+"h ago";
-                  return Math.floor(d/86400000)+"d ago";
-                })() : "";
-                return (
-                  <div key={th.threadId} className={`ticket${selectedEmailThreadId === th.threadId ? " on" : ""}`} onClick={() => setSelectedEmailThreadId(th.threadId)}>
-                    <div className="trow">
-                      <div className="mini">{thInitials}</div>
-                      <span className="tname">{th.senderName ?? th.fromEmail ?? "Unknown"}</span>
-                      <span className="age">{thAgo}</span>
-                    </div>
-                    <div className="preview2">{th.subject ?? "(no subject)"}</div>
-                    <div className="preview2" style={{color:"#9ca3af",fontSize:"11px",marginTop:"2px"}}>{th.snippet ?? ""}</div>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="em2-app">
+          <aside className="em2-rail">
+            <div className="em2-logo">M</div>
+            <button className="em2-rail-btn">&#8962;</button>
+            <button className="em2-rail-btn">&#128101;</button>
+            <button className="em2-rail-btn">&#9711;</button>
+            <button className="em2-rail-btn">&#9742;</button>
+            <button className="em2-rail-btn active">&#9993;</button>
+            <button className="em2-rail-btn">&#9635;</button>
+            <div className="em2-spacer" />
+            <button className="em2-rail-btn" onClick={() => setSelectedEmailThreadId(null)}>&#8592;</button>
           </aside>
-          <main className="cs2-dmain">
-            <header className="cs2-dtop">
-              <div className="cs2-davatar">{initials}</div>
-              <div className="identity">
-                <h2>{senderName}</h2>
-                <span>{senderEmail} · Email</span>
+          <section className="em2-sidebar">
+            <div className="em2-side-top">
+              <div className="em2-brand-row">
+                <div className="em2-brand">Inbox2</div>
+                <button className="em2-btn">+ New</button>
               </div>
-              <div className="topActions">
-                <button className="iconBtn">•••</button>
-                <button className="iconBtn resolve" onClick={() => resolveEmailThread.mutate({threadId: selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
-                  {resolveEmailThread.isPending ? "Resolving…" : "✓ Resolve"}
-                </button>
+              <div className="em2-tabs">
+                <button className="em2-tab" onClick={() => { setChannel("inbox"); setSelectedEmailThreadId(null); }}>Inbox</button>
+                <button className="em2-tab active">Email</button>
               </div>
-            </header>
-            <div className="cs2-dhead2">
-              <strong>❆ Madison</strong>&nbsp; {subject}
-              <span style={{marginLeft:"10px",padding:"2px 8px",borderRadius:"99px",fontSize:"11px",fontWeight:700,background:COL_COLORS[colLabel]+"22",color:COL_COLORS[colLabel]}}>{colLabel}</span>
             </div>
-            <div className="cs2-thread" ref={threadRef}>
-              {!t && <div style={{padding:"40px",textAlign:"center",color:"#9ca3af"}}>Loading thread…</div>}
+            <div className="em2-side-body">
+              <div className="em2-kanban-title">Email Kanban <span className="em2-count">{threads.length}</span></div>
+              {emailCols2.map(col => (
+                <div key={col.label} className="em2-column">
+                  <div className="em2-column-head">
+                    <div className="em2-col-left"><span className={"em2-dot " + col.dotClass} />{col.label}</div>
+                    <div>{col.items.length}&#8964;</div>
+                  </div>
+                  {col.items.length > 0 && (
+                    <div className="em2-thread-list">
+                      {col.items.map(th => (
+                        <div key={th.threadId} className={"em2-thread-card" + (selectedEmailThreadId === th.threadId ? " active" : "")} onClick={() => setSelectedEmailThreadId(th.threadId)}>
+                          <div className="em2-tc-top">
+                            <div className="em2-tc-name">{th.senderName ?? th.fromEmail ?? "Unknown"}{th.isUnread && <span className="em2-unread" />}</div>
+                            <div className="em2-tc-time">{th.lastMessageAt ? ago(th.lastMessageAt) : ""}</div>
+                          </div>
+                          <div className="em2-tc-subject">{th.subject ?? "(no subject)"}</div>
+                          <div className="em2-tc-snippet">{th.snippet ?? ""}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+          <main className="em2-main">
+            <div className="em2-main-head">
+              <button className="em2-back" onClick={() => setSelectedEmailThreadId(null)}>&#8592; &nbsp; Back to list</button>
+              <div className="em2-title-row">
+                <div className="em2-title-wrap">
+                  <div className="em2-subject">{subject}</div>
+                  <span className="em2-badge">{colLabel}</span>
+                </div>
+                <div className="em2-head-actions">
+                  <button className="em2-btn" onClick={() => resolveEmailThread.mutate({threadId: selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                    {resolveEmailThread.isPending ? "Resolving..." : "&#10003; Resolve"}
+                  </button>
+                  <button className="em2-btn">&#8226;&#8226;&#8226;</button>
+                </div>
+              </div>
+              <div className="em2-sender-row">
+                <div className="em2-sender-left">
+                  <div className="em2-avatar">{initials}</div>
+                  <div>
+                    <div className="em2-sender-name">{senderName} <span className="em2-sender-email">&lt;{senderEmail}&gt;</span></div>
+                    <div className="em2-to-line">to: {inboxEmail || "inbox"}&#8964;</div>
+                  </div>
+                </div>
+                <div className="em2-message-age">{lastMsgAgo}</div>
+              </div>
+            </div>
+            <div className="em2-main-tabs">
+              <button className="em2-main-tab active">Thread</button>
+              <button className="em2-main-tab">Headers</button>
+              <button className="em2-main-tab">Notes (0)</button>
+              <button className="em2-main-tab">Activity</button>
+            </div>
+            <div className="em2-thread" ref={threadRef}>
+              {!t && <div style={{padding:"40px",textAlign:"center",color:"#9ca3af"}}>Loading thread...</div>}
               {t?.messages?.map((msg) => {
                 const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
-                const msgAgo = msg.date ? (() => {
-                  const d = Date.now() - msg.date;
-                  if (d < 60000) return "just now";
-                  if (d < 3600000) return Math.floor(d/60000)+"m ago";
-                  if (d < 86400000) return Math.floor(d/3600000)+"h ago";
-                  return Math.floor(d/86400000)+"d ago";
-                })() : "";
+                const msgInitials = (msg.from ?? msg.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
                 return (
-                  <div key={msg.id} className={"msg" + (isOut ? " out" : "")}>
-                    <div className="mmeta">{isOut ? (msg.from || "Agent") : senderName} · {msgAgo}</div>
-                    <div className="mbubble" style={{whiteSpace:"pre-wrap"}}>{msg.bodyText || msg.snippet || "(no content)"}</div>
+                  <div key={msg.id} className={"em2-email-message" + (isOut ? " outgoing" : "")}>
+                    <div className="em2-msg-head">
+                      <div className="em2-msg-who">
+                        <div className={"em2-small-avatar" + (isOut ? " out" : "")}>{isOut ? "Y" : msgInitials}</div>
+                        <div>
+                          <span className="em2-msg-name">{isOut ? "You" : (msg.from || senderName)}</span>
+                          <span className="em2-msg-email">&lt;{msg.fromEmail ?? ""}&gt;</span>
+                        </div>
+                      </div>
+                      <div className="em2-msg-time">{msg.date ? ago(msg.date) : ""}</div>
+                    </div>
+                    <div className="em2-msg-body" style={{whiteSpace:"pre-wrap"}}>{msg.bodyText || msg.snippet || "(no content)"}</div>
                   </div>
                 );
               })}
             </div>
-            <div className="cs2-compose">
-              <textarea
-                className="cs2-composeBox"
-                placeholder={"Reply to " + senderName.split(" ")[0] + "…"}
-                value={emailReply}
-                onChange={e => setEmailReply(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && emailReply.trim()) { sendEmailReply.mutate({threadId: selectedEmailThreadId, to: senderEmail, subject: subject, bodyHtml: emailReply.replace(/
-/g,"<br>")}); } }}
-              />
-              <div className="cs2-composeRow">
-                <div style={{display:"flex",gap:"6px"}}>
-                  <button className="chip2">Greeting</button>
-                  <button className="chip2">Check team</button>
+            <section className="em2-composer">
+              <div className="em2-compose-box">
+                <div className="em2-compose-tabs">
+                  <button className="em2-compose-tab active">Reply</button>
+                  <button className="em2-compose-tab">Internal Note</button>
                 </div>
-                <button className="cs2-send" disabled={!emailReply.trim() || sendEmailReply.isPending} onClick={() => { if (emailReply.trim()) sendEmailReply.mutate({threadId: selectedEmailThreadId, to: senderEmail, subject: subject, bodyHtml: emailReply.replace(/
-/g,"<br>")}); }}>
-                  {sendEmailReply.isPending ? "Sending…" : "Send ↗"}
-                </button>
+                <textarea
+                  className="em2-compose-textarea"
+                  placeholder="Type your reply..."
+                  value={emailReply}
+                  onChange={e => setEmailReply(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && emailReply.trim()) {
+                      sendEmailReply.mutate({threadId: selectedEmailThreadId, to: senderEmail, subject: subject, bodyHtml: emailReply.split("\n").join("<br>")});
+                    }
+                  }}
+                />
+                <div className="em2-compose-actions">
+                  <div className="em2-tools">
+                    <button className="em2-icon-btn"><b>B</b></button>
+                    <button className="em2-icon-btn"><i>I</i></button>
+                    <button className="em2-icon-btn">&#9783;</button>
+                    <button className="em2-icon-btn">&#128279;</button>
+                    <button className="em2-icon-btn">&#128444;</button>
+                    <button className="em2-icon-btn">&#128206;</button>
+                    <button className="em2-icon-btn">&#9786;</button>
+                  </div>
+                  <div className="em2-send-wrap">
+                    <button className="em2-btn">Templates</button>
+                    <button
+                      className="em2-send"
+                      disabled={!emailReply.trim() || sendEmailReply.isPending}
+                      onClick={() => {
+                        if (emailReply.trim()) sendEmailReply.mutate({threadId: selectedEmailThreadId, to: senderEmail, subject: subject, bodyHtml: emailReply.split("\n").join("<br>")});
+                      }}
+                    >
+                      {sendEmailReply.isPending ? "Sending..." : "Send Reply \u25be"}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            </section>
           </main>
-          <aside className="cs2-side" style={{overflow:"hidden",display:"flex",flexDirection:"column",gap:0,padding:0}}>
-            <div style={{padding:"16px",borderBottom:"1px solid #e5e7ee"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}>
-                <div style={{width:"42px",height:"42px",borderRadius:"50%",background:"linear-gradient(135deg,#6b4eff,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:"15px"}}>{initials}</div>
+          <aside className="em2-right">
+            <div className="em2-right-section">
+              <div className="em2-profile">
+                <div className="em2-profile-avatar">{initials}</div>
                 <div>
-                  <div style={{fontWeight:700,fontSize:"14px"}}>{senderName}</div>
-                  <div style={{fontSize:"12px",color:"#9ca3af"}}>{senderEmail}</div>
+                  <div className="em2-profile-name">{senderName}</div>
+                  <div className="em2-profile-email">{senderEmail}</div>
                 </div>
               </div>
-              <div style={{fontSize:"11px",color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"6px"}}>Thread Details</div>
-              <div style={{fontSize:"12px",color:"#374151",marginBottom:"4px"}}><strong>Subject:</strong> {subject}</div>
-              <div style={{fontSize:"12px",color:"#374151",marginBottom:"4px"}}><strong>Messages:</strong> {msgCount}</div>
-              <div style={{fontSize:"12px",color:"#374151",marginBottom:"4px"}}><strong>Status:</strong> <span style={{color:COL_COLORS[colLabel],fontWeight:600}}>{colLabel}</span></div>
-              {lastMsgAgo && <div style={{fontSize:"12px",color:"#374151"}}><strong>Last message:</strong> {lastMsgAgo}</div>}
+              <div className="em2-chips">
+                <span className="em2-chip em2-chip-green">Customer</span>
+                <span className="em2-chip em2-chip-purple">Email</span>
+              </div>
             </div>
-            <div style={{padding:"16px"}}>
-              <div style={{fontSize:"11px",color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"10px"}}>Actions</div>
-              <button style={{width:"100%",padding:"8px 12px",borderRadius:"8px",border:"1px solid #e5e7ee",background:"#fff",fontSize:"13px",cursor:"pointer",marginBottom:"8px",textAlign:"left"}} onClick={() => resolveEmailThread.mutate({threadId: selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
-                ✓ Resolve Thread
-              </button>
-              <button style={{width:"100%",padding:"8px 12px",borderRadius:"8px",border:"1px solid #e5e7ee",background:"#fff",fontSize:"13px",cursor:"pointer",textAlign:"left"}} onClick={() => setSelectedEmailThreadId(null)}>
-                ← Back to Inbox
-              </button>
+            <div className="em2-right-section">
+              <div className="em2-section-title">Thread Details <span>&#8963;</span></div>
+              <div className="em2-kv"><div className="em2-k">Thread ID</div><div className="em2-v" style={{fontFamily:"monospace",fontSize:"11px",wordBreak:"break-all"}}>{selectedEmailThreadId}</div></div>
+              <div className="em2-kv"><div className="em2-k">Subject</div><div className="em2-v">{subject}</div></div>
+              <div className="em2-kv"><div className="em2-k">Last Message</div><div className="em2-v">{lastMsgAgo}</div></div>
+              <div className="em2-kv"><div className="em2-k">Messages</div><div className="em2-v">{msgCount}</div></div>
+              <div className="em2-kv"><div className="em2-k">Status</div><div className="em2-v">{colLabel}</div></div>
+            </div>
+            <div className="em2-right-section">
+              <div className="em2-section-title">Actions <span>&#8963;</span></div>
+              <div className="em2-action-stack">
+                <button className="em2-action-btn" onClick={() => resolveEmailThread.mutate({threadId: selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
+                  &#10003; {resolveEmailThread.isPending ? "Resolving..." : "Resolve Thread"}
+                </button>
+                <button className="em2-action-btn" onClick={() => setSelectedEmailThreadId(null)}>&#8592; Back to Inbox</button>
+              </div>
             </div>
           </aside>
         </div>
