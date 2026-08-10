@@ -1174,6 +1174,9 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       // Process the reply through the LLM-first AI engine
       // Wrapped in its own try/catch so an AI crash never silently drops the message.
       // The user's message is already saved to DB above — this only handles the reply.
+      // AI auto-replies disabled — all inbound messages handled by human agents via Inbox2
+      console.log(`[Webhook] AI engine disabled — skipping auto-reply for session ${session.id} (stage=${session.stage}) from ${fromPhone}`);
+      return;
       let result: Awaited<ReturnType<typeof processLeadReplyV2>>;
       try {
         result = await processLeadReplyV2(inboundText, context);

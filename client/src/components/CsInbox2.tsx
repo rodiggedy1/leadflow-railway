@@ -654,7 +654,6 @@ export default function CsInbox2() {
         latestCallStructuredData: (row as any).latestCallStructuredData ?? null,
         latestCallCallerPhone: (row as any).latestCallCallerPhone ?? null,
       };
-      if (mapped.id === 1530005) console.log("[LIVECONV_ROW_1530005]", { id: mapped.id, queue: mapped.queue, personType: mapped.personType });
       return mapped;
     });
   }, [csData, nameMap]);
