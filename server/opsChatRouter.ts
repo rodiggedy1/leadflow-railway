@@ -48,6 +48,7 @@ import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArr
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { sendGmailReply, getInboxEmailAddress } from "./gmailService";
+import { keepLatestEmailThreadPerSender } from "./utils/emailInbox";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { invokeLLM } from "./_core/llm";
@@ -6043,22 +6044,18 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           )`
         )
         .orderBy(desc(gmailThreadMeta.lastMessageAt));
-      const threads = rows.map(r => ({
-        threadId: r.threadId,
-        senderName: r.senderName ?? null,
-        senderEmail: r.senderEmail ?? null,
-        subject: r.subject ?? "(no subject)",
-        snippet: r.snippet ?? "",
-        lastMessageAt: r.lastMessageAt ?? 0,
-        messageCount: r.messageCount ?? 0,
-        isUnread: r.isUnread === 1,
-      }));
-      const rohanReturnRows = threads
-        .filter(thread => thread.senderEmail?.trim().toLowerCase() === "rohan@innclusive.com")
-        .map(({ threadId, subject, lastMessageAt }) => ({ threadId, subject, lastMessageAt }));
-      console.info(`[EMAIL_INBOX_RETURN_ROHAN] ${JSON.stringify(rohanReturnRows)}`);
+      const latestRows = keepLatestEmailThreadPerSender(rows);
       return {
-        threads,
+        threads: latestRows.map(r => ({
+          threadId: r.threadId,
+          senderName: r.senderName ?? null,
+          senderEmail: r.senderEmail ?? null,
+          subject: r.subject ?? "(no subject)",
+          snippet: r.snippet ?? "",
+          lastMessageAt: r.lastMessageAt ?? 0,
+          messageCount: r.messageCount ?? 0,
+          isUnread: r.isUnread === 1,
+        })),
         inboxEmail,
       };
     }),
