@@ -789,7 +789,8 @@ export default function CsInbox2() {
     if (emailAiDraft.data?.generatedDraft && !emailReply.trim()) {
       setEmailReply(emailAiDraft.data.generatedDraft);
     }
-  }, [emailAiDraft.data?.id, selectedEmailThreadId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailAiDraft.data?.generatedDraft, selectedEmailThreadId]);
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {
