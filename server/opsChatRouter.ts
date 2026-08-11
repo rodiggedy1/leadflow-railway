@@ -41,6 +41,7 @@ import {
   madisonSmsDrafts,
   madisonEmailDrafts,
   focusPoints,
+  gmailSentLog,
   gmailThreadMeta,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
@@ -6032,11 +6033,20 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           senderEmail: gmailThreadMeta.senderEmail,
           subject: gmailThreadMeta.subject,
           snippet: gmailThreadMeta.snippet,
+          latestMessageId: gmailThreadMeta.latestMessageId,
+          latestSentMessageId: gmailSentLog.messageId,
           lastMessageAt: gmailThreadMeta.lastMessageAt,
           messageCount: gmailThreadMeta.messageCount,
           isUnread: gmailThreadMeta.isUnread,
         })
         .from(gmailThreadMeta)
+        .leftJoin(
+          gmailSentLog,
+          and(
+            eq(gmailSentLog.threadId, gmailThreadMeta.threadId),
+            eq(gmailSentLog.messageId, gmailThreadMeta.latestMessageId),
+          ),
+        )
         .where(
           sql`EXISTS (
             SELECT 1 FROM madison_email_drafts med
@@ -6053,6 +6063,8 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           senderEmail: r.senderEmail ?? null,
           subject: r.subject ?? "(no subject)",
           snippet: r.snippet ?? "",
+          latestMessageId: r.latestMessageId ?? null,
+          latestSentMessageId: r.latestSentMessageId ?? null,
           lastMessageAt: r.lastMessageAt ?? 0,
           messageCount: r.messageCount ?? 0,
           isUnread: r.isUnread === 1,
