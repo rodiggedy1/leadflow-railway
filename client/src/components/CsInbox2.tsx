@@ -779,30 +779,19 @@ export default function CsInbox2() {
     },
   });
   // AI draft for selected email thread
-  const [emailAiDraftData, setEmailAiDraftData] = useState<{id:number;generatedDraft:string;intentSummary:string|null;status:string}|null>(null);
+  const emailAiDraft = trpc.opsChat.getEmailDraftByThreadId.useQuery(
+    { threadId: selectedEmailThreadId! },
+    { enabled: !!selectedEmailThreadId, staleTime: 20_000, refetchInterval: 15_000, refetchOnWindowFocus: true }
+  );
   const [dismissedEmailDrafts, setDismissedEmailDrafts] = useState<Set<string>>(new Set());
-  React.useEffect(() => {
-    if (!selectedEmailThreadId) { setEmailAiDraftData(null); return; }
-    let cancelled = false;
-    const fetchDraft = async () => {
-      try {
-        const res = await fetch(`/api/trpc/opsChat.getEmailDraftByThreadId?input=${encodeURIComponent(JSON.stringify({json:{threadId:selectedEmailThreadId}}))}`, { credentials: "include" });
-        if (!res.ok || cancelled) return;
-        const json = await res.json();
-        if (!cancelled) setEmailAiDraftData(json?.result?.data?.json ?? null);
-      } catch { /* non-fatal */ }
-    };
-    fetchDraft();
-    const interval = setInterval(fetchDraft, 10_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [selectedEmailThreadId]);
   // Auto-fill textarea with AI draft when thread opens and draft loads
   React.useEffect(() => {
-    if (emailAiDraftData?.generatedDraft && !emailReply.trim()) {
-      setEmailReply(emailAiDraftData.generatedDraft);
+    console.log("[EMAIL_DRAFT_DIAG]", { selectedEmailThreadId, status: emailAiDraft.status, data: emailAiDraft.data, error: emailAiDraft.error });
+    if (emailAiDraft.data?.generatedDraft && !emailReply.trim()) {
+      setEmailReply(emailAiDraft.data.generatedDraft);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emailAiDraftData?.generatedDraft, selectedEmailThreadId]);
+  }, [emailAiDraft.data?.generatedDraft, selectedEmailThreadId]);
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {
@@ -1532,10 +1521,10 @@ export default function CsInbox2() {
                   <button className="em2-compose-tab">Internal Note</button>
                 </div>
                 {/* AI Draft Banner */}
-                {emailAiDraftData && !dismissedEmailDrafts.has(selectedEmailThreadId ?? "") && (
+                {emailAiDraft.data && !dismissedEmailDrafts.has(selectedEmailThreadId ?? "") && (
                   <div className="em2-ai-draft" onClick={() => {
-                    if (emailAiDraftData?.generatedDraft) {
-                      setEmailReply(emailAiDraftData.generatedDraft);
+                    if (emailAiDraft.data?.generatedDraft) {
+                      setEmailReply(emailAiDraft.data.generatedDraft);
                       setDismissedEmailDrafts(prev => new Set([...prev, selectedEmailThreadId ?? ""]));
                     }
                   }}>
@@ -1545,8 +1534,8 @@ export default function CsInbox2() {
                       </div>
                       <div className="em2-ai-draft-actions" onClick={e => e.stopPropagation()}>
                         <button className="em2-ai-draft-use" onClick={() => {
-                          if (emailAiDraftData?.generatedDraft) {
-                            setEmailReply(emailAiDraftData.generatedDraft);
+                          if (emailAiDraft.data?.generatedDraft) {
+                            setEmailReply(emailAiDraft.data.generatedDraft);
                             setDismissedEmailDrafts(prev => new Set([...prev, selectedEmailThreadId ?? ""]));
                           }
                         }}>Use Draft</button>
@@ -1555,10 +1544,10 @@ export default function CsInbox2() {
                         }}>✕</button>
                       </div>
                     </div>
-                    {emailAiDraftData.intentSummary && (
-                      <div className="em2-ai-draft-intent">{emailAiDraftData.intentSummary}</div>
+                    {emailAiDraft.data.intentSummary && (
+                      <div className="em2-ai-draft-intent">{emailAiDraft.data.intentSummary}</div>
                     )}
-                    <div className="em2-ai-draft-preview">{emailAiDraftData.generatedDraft ?? ""}</div>
+                    <div className="em2-ai-draft-preview">{emailAiDraft.data.generatedDraft ?? ""}</div>
                   </div>
                 )}
                 <textarea
