@@ -5861,6 +5861,34 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+   * Fetch the active DRAFT_READY Madison email draft for a given threadId.
+   * Used by the email detail composer to show the AI draft banner.
+   */
+  getEmailDraftByThreadId: opsChatProcedure
+    .input(z.object({ threadId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [draft] = await db
+        .select({
+          id: madisonEmailDrafts.id,
+          threadId: madisonEmailDrafts.threadId,
+          generatedDraft: madisonEmailDrafts.generatedDraft,
+          intentSummary: madisonEmailDrafts.intentSummary,
+          observations: madisonEmailDrafts.observations,
+          status: madisonEmailDrafts.status,
+          draftConfidence: madisonEmailDrafts.draftConfidence,
+        })
+        .from(madisonEmailDrafts)
+        .where(and(
+          eq(madisonEmailDrafts.threadId, input.threadId),
+          eq(madisonEmailDrafts.status, "DRAFT_READY"),
+        ))
+        .limit(1);
+      return draft ?? null;
+    }),
+
+  /**
    * Approve an email draft and send it via Gmail reply.
    * Atomic: transitions DRAFT_READY → SENDING → SENT.
    */
