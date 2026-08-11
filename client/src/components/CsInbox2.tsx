@@ -322,7 +322,7 @@ const STYLES = `
 .em2-dot-wait{background:#246bfe}
 .em2-dot-risk{background:#ef5a5a}
 .em2-thread-list{padding:0 10px 10px;display:grid;gap:10px}
-.em2-thread-card{background:#fff;border:1px solid #e2e5eb;border-radius:14px;padding:14px;transition:.15s;cursor:pointer}
+.em2-thread-card{background:#fff;border:1px solid #e2e5eb;border-radius:14px;padding:14px;transition:.15s;cursor:pointer;width:100%;max-width:100%;min-width:0;overflow:hidden;box-sizing:border-box}
 .em2-thread-card:hover{transform:translateY(-1px);box-shadow:0 8px 24px #0000000d}
 .em2-thread-card.active{border-color:#5b86ff;box-shadow:0 0 0 1px #5b86ff inset}
 .em2-tc-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;min-width:0}
