@@ -13,7 +13,7 @@
  */
 import { getDb } from "./db";
 import { madisonEmailDrafts, opsChatMessages, completedJobs, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
-import { eq, and, like, ne } from "drizzle-orm";
+import { eq, and, like, ne, sql } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
@@ -139,6 +139,33 @@ export async function triggerMadisonEmailDraft(params: {
     // ── Step 0: Claim thread (insert RECEIVED row) ────────────────────────────
     console.log(`[email-draft] candidate threadId=${threadId} fromEmail=${fromEmail}`);
 
+    // ── Step 0a: Atomically claim a FAILED row for retry ─────────────────────
+    // UNIQUE(threadId) prevents a second INSERT, so FAILED rows must be reset in-place.
+    const retryResult = await db.execute(
+      sql`UPDATE madison_email_drafts
+          SET status = 'RECEIVED',
+              generatedDraft = NULL,
+              intentSummary = NULL,
+              observations = NULL,
+              capabilityResult = NULL,
+              resolvedContext = NULL,
+              updatedAt = NOW()
+          WHERE threadId = ${threadId}
+            AND status = 'FAILED'`
+    );
+    const retryAffected = (retryResult as any)[0]?.affectedRows ?? 0;
+    if (retryAffected > 0) {
+      // Fetch the row id we just reset
+      const [retryRow] = await db
+        .select({ id: madisonEmailDrafts.id })
+        .from(madisonEmailDrafts)
+        .where(eq(madisonEmailDrafts.threadId, threadId))
+        .limit(1);
+      if (!retryRow) return; // race condition — another worker took it
+      draftId = retryRow.id;
+      console.log(`[email-draft] retry_claimed threadId=${threadId} draftId=${draftId} elapsed=${Date.now() - pipelineStart}ms`);
+    } else {
+    // ── Step 0b: Normal INSERT for new threads ────────────────────────────────
     const insertResult = await db.insert(madisonEmailDrafts).values({
       threadId,
       inboundMessageId,
@@ -163,6 +190,7 @@ export async function triggerMadisonEmailDraft(params: {
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
     console.log(`[email-draft] claim_inserted threadId=${threadId} draftId=${draftId} elapsed=${Date.now() - pipelineStart}ms`);
+    } // end normal INSERT branch
 
     // ── Step 1: Mark CLASSIFIED ───────────────────────────────────────────────
     await db.update(madisonEmailDrafts)
