@@ -135,17 +135,16 @@ const STYLES = `
 .cs2-hempty{text-align:center;color:#9aa0aa;padding:40px 0;font-size:13px}
 .cs2-boardWrap{padding:0 22px 16px;overflow-x:auto;overflow-y:hidden;flex:1;min-height:0;display:flex;flex-direction:column}
 .cs2-board{min-width:1160px;display:grid;grid-template-columns:repeat(4,minmax(270px,1fr));gap:12px;flex:1;min-height:0;align-items:stretch}
-.cs2-email-board{display:flex;flex-direction:column;gap:8px;width:100%;padding:8px 0}
 .cs2-column{background:#f1f2f5;border:1px solid #e0e3e8;border-radius:14px;padding:10px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .cs2-colCards{flex:1;overflow-y:auto;overflow-x:hidden;padding-right:2px;scrollbar-width:none;-ms-overflow-style:none}
 .cs2-colCards::-webkit-scrollbar{display:none}
 .cs2-colHead{display:flex;align-items:center;gap:8px;padding:8px 4px 12px;font-weight:800;font-size:14px;flex-shrink:0}
 .cs2-colHead small{color:#8e94a2;font-weight:600;margin-left:4px}.cs2-colHead .chevron{margin-left:auto;color:#9aa0ab;font-weight:400}
-.cs2-card{background:#fff;border:1px solid #dfe2e8;border-radius:12px;padding:13px;margin-bottom:9px;cursor:pointer;transition:.15s;text-align:left;width:100%;max-width:100%;min-width:0;overflow:hidden;box-sizing:border-box}
+.cs2-card{background:#fff;border:1px solid #dfe2e8;border-radius:12px;padding:13px;margin-bottom:9px;cursor:pointer;transition:.15s;text-align:left;width:100%}
 .cs2-card:hover{transform:translateY(-1px);border-color:#cfc7ff;box-shadow:0 8px 24px rgba(30,32,60,.06)}
-.cs2-cardTop{display:flex;align-items:center;gap:8px;min-width:0}.cs2-cardTop strong{font-size:13px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs2-cardTop{display:flex;align-items:center;gap:8px}.cs2-cardTop strong{font-size:13px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs2-ago{margin-left:auto;color:#9aa0aa;font-size:11px;flex-shrink:0}
-.cs2-preview{font-size:13px;line-height:1.42;color:#3f4450;margin:10px 0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cs2-preview{font-size:13px;line-height:1.42;color:#3f4450;margin:10px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs2-chips{display:flex;gap:5px;flex-wrap:wrap}.chip{font-size:10px;padding:4px 7px;border-radius:7px;background:#f2f3f5;color:#424755}
 .chip.hot{background:#ffefed;color:#dd4435}.chip.ok{background:#e9f8f2;color:#11815c}.chip.warn{background:#fff2dd;color:#bd7200}
 .cs2-meta{margin-top:12px;color:#8c929f;font-size:11px;display:flex;align-items:center}
@@ -326,10 +325,10 @@ const STYLES = `
 .em2-thread-card{background:#fff;border:1px solid #e2e5eb;border-radius:14px;padding:14px;transition:.15s;cursor:pointer}
 .em2-thread-card:hover{transform:translateY(-1px);box-shadow:0 8px 24px #0000000d}
 .em2-thread-card.active{border-color:#5b86ff;box-shadow:0 0 0 1px #5b86ff inset}
-.em2-tc-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px}
-.em2-tc-name{font-size:14px;font-weight:800}
-.em2-tc-time{font-size:12px;color:#8a91a0}
-.em2-tc-subject{font-size:13px;font-weight:700;margin-bottom:6px}
+.em2-tc-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;min-width:0}
+.em2-tc-name{font-size:14px;font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.em2-tc-time{font-size:12px;color:#8a91a0;flex-shrink:0}
+.em2-tc-subject{font-size:13px;font-weight:700;margin-bottom:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .em2-tc-snippet{font-size:12px;color:#69707f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .em2-unread{width:7px;height:7px;background:#246bfe;border-radius:50%;display:inline-block;margin-left:4px}
 .em2-main{background:#fff;display:flex;flex-direction:column;overflow:hidden}
@@ -1640,7 +1639,7 @@ export default function CsInbox2() {
                   if (emailInbox.isLoading) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>Loading emails…</div>;
                   if (threads.length === 0) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>No email conversations yet</div>;
                   return (
-                    <div className="cs2-email-board">
+                    <div className="cs2-board">
                       {emailCols.map(col => (
                         <section key={col.label} className="cs2-column">
                           <div className="cs2-colHead">
@@ -1667,7 +1666,7 @@ export default function CsInbox2() {
                                     <strong style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.senderName ?? t.senderEmail}</strong>
                                     <span className="cs2-ago">{ago}</span>
                                   </div>
-                                  <div style={{fontSize:"11px",fontWeight:600,color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"3px 0 2px",minWidth:0}}>
+                                  <div style={{fontSize:"11px",fontWeight:600,color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"3px 0 2px"}}>
                                     ✉ {t.subject}
                                   </div>
                                   <div className="cs2-preview">{t.snippet}</div>
