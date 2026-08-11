@@ -325,10 +325,10 @@ const STYLES = `
 .em2-thread-card{background:#fff;border:1px solid #e2e5eb;border-radius:14px;padding:14px;transition:.15s;cursor:pointer}
 .em2-thread-card:hover{transform:translateY(-1px);box-shadow:0 8px 24px #0000000d}
 .em2-thread-card.active{border-color:#5b86ff;box-shadow:0 0 0 1px #5b86ff inset}
-.em2-tc-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px}
-.em2-tc-name{font-size:14px;font-weight:800}
-.em2-tc-time{font-size:12px;color:#8a91a0}
-.em2-tc-subject{font-size:13px;font-weight:700;margin-bottom:6px}
+.em2-tc-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;min-width:0}
+.em2-tc-name{font-size:14px;font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.em2-tc-time{font-size:12px;color:#8a91a0;flex-shrink:0}
+.em2-tc-subject{font-size:13px;font-weight:700;margin-bottom:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .em2-tc-snippet{font-size:12px;color:#69707f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .em2-unread{width:7px;height:7px;background:#246bfe;border-radius:50%;display:inline-block;margin-left:4px}
 .em2-main{background:#fff;display:flex;flex-direction:column;overflow:hidden}
