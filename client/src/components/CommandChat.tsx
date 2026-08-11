@@ -6151,6 +6151,8 @@ const MessageList = memo(function MessageList({
                 }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
+                  return null; // Hidden from main feed — visible in Focus view only
+                  // eslint-disable-next-line no-unreachable
                   return (
                     <div
                       key={`${msg.id}:${msg.lastActivityAt ?? 0}`}
@@ -6203,6 +6205,8 @@ const MessageList = memo(function MessageList({
                 }
                 // ── Madison Call Summary card ──────────────────────────────────────────
                 if (msg.quickAction === "madison_call_summary") {
+                  return null; // Hidden from main feed — visible in Focus view only
+                  // eslint-disable-next-line no-unreachable
                   return (
                     <div
                       key={msg.id}
