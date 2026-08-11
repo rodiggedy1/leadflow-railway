@@ -135,7 +135,6 @@ const STYLES = `
 .cs2-hempty{text-align:center;color:#9aa0aa;padding:40px 0;font-size:13px}
 .cs2-boardWrap{padding:0 22px 16px;overflow-x:auto;overflow-y:hidden;flex:1;min-height:0;display:flex;flex-direction:column}
 .cs2-board{min-width:1160px;display:grid;grid-template-columns:repeat(4,minmax(270px,1fr));gap:12px;flex:1;min-height:0;align-items:stretch}
-.cs2-email-board{display:flex;flex-direction:column;gap:8px;width:100%;padding:8px 0}
 .cs2-column{background:#f1f2f5;border:1px solid #e0e3e8;border-radius:14px;padding:10px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .cs2-colCards{flex:1;overflow-y:auto;overflow-x:hidden;padding-right:2px;scrollbar-width:none;-ms-overflow-style:none}
 .cs2-colCards::-webkit-scrollbar{display:none}
@@ -1640,7 +1639,7 @@ export default function CsInbox2() {
                   if (emailInbox.isLoading) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>Loading emails…</div>;
                   if (threads.length === 0) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>No email conversations yet</div>;
                   return (
-                    <div className="cs2-email-board">
+                    <div className="cs2-board">
                       {emailCols.map(col => (
                         <section key={col.label} className="cs2-column">
                           <div className="cs2-colHead">
