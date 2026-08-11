@@ -54,7 +54,6 @@ import { invokeLLM } from "./_core/llm";
 import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
-import { keepLatestEmailThreadPerSender } from "./utils/emailInbox";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
@@ -6044,10 +6043,8 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           )`
         )
         .orderBy(desc(gmailThreadMeta.lastMessageAt));
-      const latestRows = keepLatestEmailThreadPerSender(rows);
-
       return {
-        threads: latestRows.map(r => ({
+        threads: rows.map(r => ({
           threadId: r.threadId,
           senderName: r.senderName ?? null,
           senderEmail: r.senderEmail ?? null,
