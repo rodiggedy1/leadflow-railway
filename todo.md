@@ -1600,5 +1600,8 @@
 - [x] CsInbox2 Email: deduplicate Kanban cards by normalized sender email, retaining only the newest existing thread per address; leave the detail page and reply behavior untouched
 - [x] CsInbox2 Email: verify and correct Email Kanban card ordering so the most recently active deduplicated sender card appears at the top
 - [x] CsInbox2 Email: explicitly sort every Email Kanban column newest-first with timestamp-safe non-mutating client-side ordering
+- [ ] CsInbox2 Email: trace and correct the mismatch between the card sort timestamp and the displayed relative-message age
+- [ ] CsInbox2 Email: trace sort and display-age timestamp fields for Eva Smit, Mahesh Nani, Jane Young, and Indeed before any ordering change
+- [ ] CsInbox2 Email: add temporary preview-only At Risk diagnostics for sort input, sort output, and rendered DOM order
 - [ ] Payload reduction — investigate reducing listChannelMessages response size (field selection, pagination)
 - [ ] Memoization/profiling — profile CommandChat with React DevTools after Madison SMS ships to identify remaining re-render hotspots
