@@ -7,6 +7,7 @@ import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import { sortEmailKanbanCardsNewestFirst } from "@/lib/emailKanban";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2
@@ -1392,11 +1393,12 @@ export default function CsInbox2() {
       if (w < TWENTY_FOUR_H2 && (th.messageCount ?? 999) <= 2) return "New";
       return "Needs Response";
     };
+    const atRiskInput = threads.filter(th => getEmailCol2(th) === "At Risk");
     const emailCols2 = [
-      { label: "New", dotClass: "em2-dot-new", items: threads.filter(th => getEmailCol2(th) === "New") },
-      { label: "Needs Response", dotClass: "em2-dot-needs", items: threads.filter(th => getEmailCol2(th) === "Needs Response") },
-      { label: "Waiting on Customer", dotClass: "em2-dot-wait", items: threads.filter(th => getEmailCol2(th) === "Waiting on Customer") },
-      { label: "At Risk", dotClass: "em2-dot-risk", items: threads.filter(th => getEmailCol2(th) === "At Risk") },
+      { label: "New", dotClass: "em2-dot-new", items: sortEmailKanbanCardsNewestFirst(threads.filter(th => getEmailCol2(th) === "New")) },
+      { label: "Needs Response", dotClass: "em2-dot-needs", items: sortEmailKanbanCardsNewestFirst(threads.filter(th => getEmailCol2(th) === "Needs Response")) },
+      { label: "Waiting on Customer", dotClass: "em2-dot-wait", items: sortEmailKanbanCardsNewestFirst(threads.filter(th => getEmailCol2(th) === "Waiting on Customer")) },
+      { label: "At Risk", dotClass: "em2-dot-risk", items: atRiskInput },
     ];
     return (
       <>
