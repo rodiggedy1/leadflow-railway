@@ -141,11 +141,11 @@ const STYLES = `
 .cs2-colCards::-webkit-scrollbar{display:none}
 .cs2-colHead{display:flex;align-items:center;gap:8px;padding:8px 4px 12px;font-weight:800;font-size:14px;flex-shrink:0}
 .cs2-colHead small{color:#8e94a2;font-weight:600;margin-left:4px}.cs2-colHead .chevron{margin-left:auto;color:#9aa0ab;font-weight:400}
-.cs2-card{background:#fff;border:1px solid #dfe2e8;border-radius:12px;padding:13px;margin-bottom:9px;cursor:pointer;transition:.15s;text-align:left;width:100%}
+.cs2-card{background:#fff;border:1px solid #dfe2e8;border-radius:12px;padding:13px;margin-bottom:9px;cursor:pointer;transition:.15s;text-align:left;width:100%;max-width:100%;min-width:0;overflow:hidden;box-sizing:border-box}
 .cs2-card:hover{transform:translateY(-1px);border-color:#cfc7ff;box-shadow:0 8px 24px rgba(30,32,60,.06)}
-.cs2-cardTop{display:flex;align-items:center;gap:8px}.cs2-cardTop strong{font-size:13px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs2-cardTop{display:flex;align-items:center;gap:8px;min-width:0}.cs2-cardTop strong{font-size:13px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs2-ago{margin-left:auto;color:#9aa0aa;font-size:11px;flex-shrink:0}
-.cs2-preview{font-size:13px;line-height:1.42;color:#3f4450;margin:10px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs2-preview{font-size:13px;line-height:1.42;color:#3f4450;margin:10px 0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cs2-chips{display:flex;gap:5px;flex-wrap:wrap}.chip{font-size:10px;padding:4px 7px;border-radius:7px;background:#f2f3f5;color:#424755}
 .chip.hot{background:#ffefed;color:#dd4435}.chip.ok{background:#e9f8f2;color:#11815c}.chip.warn{background:#fff2dd;color:#bd7200}
 .cs2-meta{margin-top:12px;color:#8c929f;font-size:11px;display:flex;align-items:center}
@@ -1667,7 +1667,7 @@ export default function CsInbox2() {
                                     <strong style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.senderName ?? t.senderEmail}</strong>
                                     <span className="cs2-ago">{ago}</span>
                                   </div>
-                                  <div style={{fontSize:"11px",fontWeight:600,color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"3px 0 2px"}}>
+                                  <div style={{fontSize:"11px",fontWeight:600,color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"3px 0 2px",minWidth:0}}>
                                     ✉ {t.subject}
                                   </div>
                                   <div className="cs2-preview">{t.snippet}</div>
