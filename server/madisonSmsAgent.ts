@@ -542,7 +542,7 @@ async function resolveContext(
 
 // ─── Step 4a: Capability — get_eta ───────────────────────────────────────────
 
-async function executeGetEta(
+export async function executeGetEta(
   context: ResolvedContext,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<CapabilityResult> {
@@ -627,7 +627,7 @@ async function executeGetEta(
 
 // ─── Step 4b: Capability — card_status ───────────────────────────────────────
 
-async function executeCardStatus(
+export async function executeCardStatus(
   context: ResolvedContext,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<CapabilityResult> {

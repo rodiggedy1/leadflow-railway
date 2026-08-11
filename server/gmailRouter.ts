@@ -194,15 +194,16 @@ export const gmailRouter = router({
                   const replyToEmail = latestInbound?.replyToEmail ?? null;
                   const resolvedTo = replyToEmail ?? row.senderEmail!;
                   console.log(`[listThreads] firing draft threadId=${row.threadId} fromEmail=${row.senderEmail} replyToEmail=${replyToEmail ?? 'none'} resolvedTo=${resolvedTo}`);
-                  triggerMadisonEmailDraft({
-                    threadId: row.threadId,
-                    inboundMessageId: latestInbound?.id ?? row.threadId,
-                    fromEmail: row.senderEmail!,
-                    replyToEmail,
-                    senderName: row.senderName ?? undefined,
-                    subject: row.subject ?? undefined,
-                    inboundText: latestInbound?.bodyText || latestInbound?.snippet || row.snippet!,
-                  }).catch((e) => console.error("[listThreads] MadisonEmailAgent error:", e));
+                 triggerMadisonEmailDraft({
+                   threadId: row.threadId,
+                   inboundMessageId: latestInbound?.id ?? row.threadId,
+                   fromEmail: row.senderEmail!,
+                   replyToEmail,
+                   senderName: row.senderName ?? undefined,
+                   subject: row.subject ?? undefined,
+                   inboundText: latestInbound?.bodyText || latestInbound?.snippet || row.snippet!,
+                   threadMessages: thread.messages as any,
+                 }).catch((e) => console.error("[listThreads] MadisonEmailAgent error:", e));
                 }).catch((e) => {
                   // Fallback: fire without replyToEmail if thread fetch fails
                   console.warn(`[listThreads] thread fetch failed for ${row.threadId}, falling back:`, e?.message);
