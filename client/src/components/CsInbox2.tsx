@@ -1394,36 +1394,11 @@ export default function CsInbox2() {
       return "Needs Response";
     };
     const atRiskInput = threads.filter(th => getEmailCol2(th) === "At Risk");
-    const atRiskItems = sortEmailKanbanCardsNewestFirst(atRiskInput);
-    const traceAtRiskDom = (node: HTMLDivElement | null) => {
-      if (!node) return;
-      requestAnimationFrame(() => {
-        console.log("[EMAIL_SORT_INPUT]", atRiskInput.map(th => ({
-          name: th.senderName,
-          threadId: th.threadId,
-          lastMessageAt: th.lastMessageAt,
-        })));
-        console.log("[EMAIL_SORT_OUTPUT]", atRiskItems.map(th => ({
-          name: th.senderName,
-          threadId: th.threadId,
-          lastMessageAt: th.lastMessageAt,
-        })));
-        console.log("[EMAIL_SORT_DOM]", [...node.querySelectorAll<HTMLElement>(".em2-thread-card")].map((card, index) => ({
-          index,
-          name: card.querySelector<HTMLElement>(".em2-tc-name")?.innerText ?? null,
-          displayedAge: card.querySelector<HTMLElement>(".em2-tc-time")?.innerText ?? null,
-          cssOrder: getComputedStyle(card).order,
-          parentDisplay: getComputedStyle(node).display,
-          parentFlexDirection: getComputedStyle(node).flexDirection,
-          parentDirection: getComputedStyle(node).direction,
-        })));
-      });
-    };
     const emailCols2 = [
       { label: "New", dotClass: "em2-dot-new", items: sortEmailKanbanCardsNewestFirst(threads.filter(th => getEmailCol2(th) === "New")) },
       { label: "Needs Response", dotClass: "em2-dot-needs", items: sortEmailKanbanCardsNewestFirst(threads.filter(th => getEmailCol2(th) === "Needs Response")) },
       { label: "Waiting on Customer", dotClass: "em2-dot-wait", items: sortEmailKanbanCardsNewestFirst(threads.filter(th => getEmailCol2(th) === "Waiting on Customer")) },
-      { label: "At Risk", dotClass: "em2-dot-risk", items: atRiskItems },
+      { label: "At Risk", dotClass: "em2-dot-risk", items: atRiskInput },
     ];
     return (
       <>
@@ -1460,7 +1435,7 @@ export default function CsInbox2() {
                     <div>{col.items.length}&#8964;</div>
                   </div>
                   {col.items.length > 0 && (
-                    <div className="em2-thread-list" ref={col.label === "At Risk" ? traceAtRiskDom : undefined}>
+                    <div className="em2-thread-list">
                       {col.items.map(th => (
                         <div key={th.threadId} className={"em2-thread-card" + (selectedEmailThreadId === th.threadId ? " active" : "")} onClick={() => setSelectedEmailThreadId(th.threadId)}>
                           <div className="em2-tc-top">
