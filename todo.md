@@ -1597,5 +1597,23 @@
 ## Performance Sprint (post-Madison SMS)
 - [ ] Replace commandMsgsForSound with lightweight sound-notification endpoint — current listChannelMessages pulls ~340 KB per 15s poll just to detect new messages for audio notification; replace with a minimal endpoint returning { hasNew: boolean, latestId: number }
 - [ ] Polling audit — review all refetchInterval values across OpsChat.tsx and CommandChat.tsx for payload size vs. frequency tradeoffs
+- [x] CsInbox2 Email: deduplicate Kanban cards by normalized sender email, retaining only the newest existing thread per address; leave the detail page and reply behavior untouched
+- [x] CsInbox2 Email: verify and correct Email Kanban card ordering so the most recently active deduplicated sender card appears at the top
+- [x] CsInbox2 Email: explicitly sort every Email Kanban column newest-first with timestamp-safe non-mutating client-side ordering
+- [x] CsInbox2 Email: trace and correct the mismatch between the card sort timestamp and the displayed relative-message age
+- [x] CsInbox2 Email: trace sort and display-age timestamp fields for Eva Smit, Mahesh Nani, Jane Young, and Indeed before any ordering change
+- [x] CsInbox2 Email: add temporary preview-only At Risk diagnostics for sort input, sort output, and rendered DOM order
+- [x] CsInbox2 Email: compare the pre-deduplication Email Kanban ordering implementation with the current implementation before any correction or revert
+- [x] CsInbox2 Email: isolate the ordering correction to At Risk only; leave New, Needs Response, and Waiting on Customer untouched
+- [x] CsInbox2 Email: remove the proven active-board At Risk ascending comparator so cards render newest-first
+- [x] CsInbox2 Email: trace and correct the reply-state update so a sent reply moves the card to Waiting on Customer
+- [x] CsInbox2 Email: read-only trace the current direction classifier and post-send metadata before proposing any new field or migration
+- [ ] CsInbox2 Email: persist latest-message direction, reconcile legacy rows, and use that state for Waiting on Customer classification
+- [ ] CsInbox2 Email: assess and, if proven sufficient, use existing gmail_sent_log history rather than adding redundant reply-direction schema state
+- [ ] CsInbox2 Email: verify one real outbound-to-inbound lifecycle across sent-log timestamps, Gmail metadata, and Gmail message identity before implementation
+- [x] CsInbox2 Email: use the verified latest Gmail message ID rather than timestamp inference to classify reply state
+- [x] CsInbox2 Email: verify all relevant outbound send paths write gmail_sent_log and confirm the exact-ID lookup is indexed
+- [x] CsInbox2 Email: implement and code-validate the additive latestMessageId migration without altering the preview database
+- [x] CsInbox2 Email: invalidate the Email Kanban query on the existing gmail_new_messages event so later customer replies visibly transition the card
 - [ ] Payload reduction — investigate reducing listChannelMessages response size (field selection, pagination)
 - [ ] Memoization/profiling — profile CommandChat with React DevTools after Madison SMS ships to identify remaining re-render hotspots

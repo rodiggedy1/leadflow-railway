@@ -2946,6 +2946,8 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   subject: varchar("subject", { length: 500 }),
   /** Latest message snippet. Written by worker on every processThread. */
   snippet: text("snippet"),
+  /** Exact Gmail ID of the latest message. Written with lastMessageAt by the worker. */
+  latestMessageId: varchar("latestMessageId", { length: 255 }),
   /** Unix ms timestamp of the latest message. Written by worker on every processThread. */
   lastMessageAt: bigint("lastMessageAt", { mode: "number" }),
   /** Total number of messages in the thread. Written by worker on every processThread. */
