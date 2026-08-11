@@ -367,8 +367,17 @@ const STYLES = `
 .em2-html-email-body table{max-width:100%}
 .em2-new-line{display:flex;align-items:center;gap:12px;margin:22px 0;color:#246bfe;font-size:11px}
 .em2-composer{border-top:1px solid #e5e8ef;background:#fff;padding:12px 14px 16px}
-.em2-ai-draft{border:1px solid #e8e3ff;background:#f3f0ff;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#5b4ecb;display:flex;justify-content:space-between;gap:12px;align-items:center}
-.em2-ai-draft-btn{border:0;background:#fff;color:#5b4ecb;border-radius:8px;padding:6px 9px;font-weight:800;cursor:pointer;font-family:inherit}
+.em2-ai-draft{border:1px solid #d4c8ff;background:linear-gradient(135deg,#f5f0ff 0%,#ede8ff 100%);border-radius:14px;padding:14px 16px;margin-bottom:12px;cursor:pointer;transition:.15s}
+.em2-ai-draft:hover{border-color:#a78bfa;box-shadow:0 2px 12px #7c3aed18}
+.em2-ai-draft-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.em2-ai-draft-label{font-size:11px;font-weight:800;color:#7c3aed;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:5px}
+.em2-ai-draft-actions{display:flex;gap:6px;align-items:center}
+.em2-ai-draft-use{border:0;background:#7c3aed;color:#fff;border-radius:8px;padding:5px 12px;font-weight:800;cursor:pointer;font-size:12px;font-family:inherit;transition:.1s}
+.em2-ai-draft-use:hover{background:#6d28d9}
+.em2-ai-draft-dismiss{border:0;background:none;color:#9ca3af;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;font-family:inherit;line-height:1}
+.em2-ai-draft-dismiss:hover{color:#6b7280;background:#f3f4f6}
+.em2-ai-draft-preview{font-size:13px;color:#4c3d8a;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.em2-ai-draft-intent{font-size:11px;color:#8b7ec8;margin-top:4px;font-style:italic}
 .em2-compose-box{border:1px solid #dfe3e9;border-radius:14px;overflow:hidden}
 .em2-compose-tabs{display:flex;border-bottom:1px solid #e5e8ef}
 .em2-compose-tab{border:0;background:none;padding:11px 14px;color:#6d7481;font-size:12px;cursor:pointer;font-family:inherit}
@@ -769,6 +778,12 @@ export default function CsInbox2() {
       emailUtils.opsChat.listEmailInboxThreads.invalidate();
     },
   });
+  // AI draft for selected email thread
+  const emailAiDraft = trpc.opsChat.getEmailDraftByThreadId.useQuery(
+    { threadId: selectedEmailThreadId! },
+    { enabled: !!selectedEmailThreadId, staleTime: 20_000, refetchInterval: 15_000, refetchOnWindowFocus: true }
+  );
+  const [dismissedEmailDrafts, setDismissedEmailDrafts] = useState<Set<string>>(new Set());
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {
@@ -1497,6 +1512,36 @@ export default function CsInbox2() {
                   <button className="em2-compose-tab active">Reply</button>
                   <button className="em2-compose-tab">Internal Note</button>
                 </div>
+                {/* AI Draft Banner */}
+                {emailAiDraft.data && !dismissedEmailDrafts.has(selectedEmailThreadId ?? "") && (
+                  <div className="em2-ai-draft" onClick={() => {
+                    if (emailAiDraft.data?.generatedDraft) {
+                      setEmailReply(emailAiDraft.data.generatedDraft);
+                      setDismissedEmailDrafts(prev => new Set([...prev, selectedEmailThreadId ?? ""]));
+                    }
+                  }}>
+                    <div className="em2-ai-draft-header">
+                      <div className="em2-ai-draft-label">
+                        <span>✦</span> Madison drafted a reply
+                      </div>
+                      <div className="em2-ai-draft-actions" onClick={e => e.stopPropagation()}>
+                        <button className="em2-ai-draft-use" onClick={() => {
+                          if (emailAiDraft.data?.generatedDraft) {
+                            setEmailReply(emailAiDraft.data.generatedDraft);
+                            setDismissedEmailDrafts(prev => new Set([...prev, selectedEmailThreadId ?? ""]));
+                          }
+                        }}>Use Draft</button>
+                        <button className="em2-ai-draft-dismiss" title="Dismiss" onClick={() => {
+                          setDismissedEmailDrafts(prev => new Set([...prev, selectedEmailThreadId ?? ""]));
+                        }}>✕</button>
+                      </div>
+                    </div>
+                    {emailAiDraft.data.intentSummary && (
+                      <div className="em2-ai-draft-intent">{emailAiDraft.data.intentSummary}</div>
+                    )}
+                    <div className="em2-ai-draft-preview">{emailAiDraft.data.generatedDraft ?? ""}</div>
+                  </div>
+                )}
                 <textarea
                   className="em2-compose-textarea"
                   placeholder="Type your reply..."
