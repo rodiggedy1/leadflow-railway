@@ -6151,6 +6151,8 @@ const MessageList = memo(function MessageList({
                 }
                 // ── Madison SMS Draft card ─────────────────────────────────────────────
                 if (msg.quickAction === "madison_sms_draft") {
+                  return null; // Hidden from main feed — visible in Focus view only
+                  // eslint-disable-next-line no-unreachable
                   return (
                     <div
                       key={`${msg.id}:${msg.lastActivityAt ?? 0}`}
@@ -6197,20 +6199,14 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
-                // ── Madison Email Draft card
+                // ── Madison Email Draft card — hidden from main feed, visible in Inbox2 Email tab
                 if (msg.quickAction === "madison_email_draft") {
-                  return (
-                    <div
-                      key={msg.id}
-                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
-                      className={cn("w-full transition-colors duration-300", highlightedCmdMsgId === msg.id ? "bg-blue-50 rounded-2xl" : "")}
-                    >
-                      <MadisonEmailDraftCard msg={msg} callerName={callerName} />
-                    </div>
-                  );
+                  return null;
                 }
                 // ── Madison Call Summary card ──────────────────────────────────────────
                 if (msg.quickAction === "madison_call_summary") {
+                  return null; // Hidden from main feed — visible in Focus view only
+                  // eslint-disable-next-line no-unreachable
                   return (
                     <div
                       key={msg.id}
