@@ -784,14 +784,6 @@ export default function CsInbox2() {
     { enabled: !!selectedEmailThreadId, staleTime: 20_000, refetchInterval: 15_000, refetchOnWindowFocus: true }
   );
   const [dismissedEmailDrafts, setDismissedEmailDrafts] = useState<Set<string>>(new Set());
-  // Auto-fill textarea with AI draft when thread opens and draft loads
-  React.useEffect(() => {
-    console.log("[EMAIL_DRAFT_DIAG]", { selectedEmailThreadId, status: emailAiDraft.status, data: emailAiDraft.data, error: emailAiDraft.error });
-    if (emailAiDraft.data?.generatedDraft && !emailReply.trim()) {
-      setEmailReply(emailAiDraft.data.generatedDraft);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emailAiDraft.data?.generatedDraft, selectedEmailThreadId]);
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {
@@ -1893,3 +1885,4 @@ export default function CsInbox2() {
     </>
   );
 }
+                        }}>Insert Draft</button>
