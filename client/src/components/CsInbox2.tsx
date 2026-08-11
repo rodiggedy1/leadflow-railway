@@ -360,8 +360,7 @@ const STYLES = `
 .em2-msg-name{font-size:13px;font-weight:800}
 .em2-msg-email{font-size:11px;color:#7c8390;margin-left:5px}
 .em2-msg-time{font-size:11px;color:#8a91a0}
-.em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px;max-width:820px}
-.em2-show-quoted{background:none;border:none;color:#246bfe;font-size:12px;cursor:pointer;padding:4px 0;margin-top:6px;display:block}
+.em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px;white-space:pre-wrap;overflow:visible;max-height:none;height:auto}
 .em2-new-line{display:flex;align-items:center;gap:12px;margin:22px 0;color:#246bfe;font-size:11px}
 .em2-composer{border-top:1px solid #e5e8ef;background:#fff;padding:12px 14px 16px}
 .em2-ai-draft{border:1px solid #e8e3ff;background:#f3f0ff;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#5b4ecb;display:flex;justify-content:space-between;gap:12px;align-items:center}
@@ -753,7 +752,6 @@ export default function CsInbox2() {
     { enabled: !!selectedEmailThreadId, staleTime: 60_000, refetchOnWindowFocus: false }
   );
   const [emailReply, setEmailReply] = useState("");
-  const [showQuoted, setShowQuoted] = useState<Record<string,boolean>>({});
   const sendEmailReply = trpc.gmail.sendReply.useMutation({
     onSuccess: () => {
       setEmailReply("");
@@ -1465,13 +1463,6 @@ export default function CsInbox2() {
               {t?.messages?.map((msg) => {
                 const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
                 const msgInitials = (msg.from ?? msg.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
-                const rawBody = msg.bodyText || msg.snippet || "(no content)";
-                // Detect quote boundary: "On ... wrote:", "-----Original Message-----", or lines starting with ">"
-                const quoteBoundaryMatch = rawBody.match(/\n(On .+?wrote:|-----Original Message-----|^>)/ms);
-                const hasQuote = !!quoteBoundaryMatch;
-                const quoteIdx = hasQuote ? (quoteBoundaryMatch!.index ?? rawBody.length) : rawBody.length;
-                const bodyVisible = hasQuote ? rawBody.slice(0, quoteIdx).trim() : rawBody;
-                const isQuoteExpanded = !!(showQuoted as Record<string,boolean>)[msg.id];
                 return (
                   <div key={msg.id} className={"em2-email-message" + (isOut ? " outgoing" : "")}>
                     <div className="em2-msg-head">
@@ -1484,14 +1475,7 @@ export default function CsInbox2() {
                       </div>
                       <div className="em2-msg-time">{msg.date ? ago(msg.date) : ""}</div>
                     </div>
-                    <div className="em2-msg-body" style={{whiteSpace:"pre-wrap"}}>
-                      {isQuoteExpanded ? rawBody : bodyVisible}
-                      {hasQuote && (
-                        <button className="em2-show-quoted" onClick={() => setShowQuoted((prev: Record<string,boolean>) => ({...prev, [msg.id]: !prev[msg.id]}))}>
-                          {isQuoteExpanded ? "Hide quoted text" : "••• Show quoted text"}
-                        </button>
-                      )}
-                    </div>
+                    <div className="em2-msg-body">{msg.bodyText || msg.snippet || "(no content)"}</div>
                   </div>
                 );
               })}
