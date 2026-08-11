@@ -332,14 +332,14 @@ const STYLES = `
 .em2-tc-snippet{font-size:12px;color:#69707f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .em2-unread{width:7px;height:7px;background:#246bfe;border-radius:50%;display:inline-block;margin-left:4px}
 .em2-main{background:#fff;display:flex;flex-direction:column;overflow:hidden}
-.em2-main-head{padding:18px 22px 10px;border-bottom:1px solid #e5e8ef}
+.em2-main-head{padding:12px 22px 8px;border-bottom:1px solid #e5e8ef}
 .em2-back{border:0;background:none;color:#555e6f;padding:0;margin-bottom:14px;font-size:13px;cursor:pointer;font-family:inherit}
 .em2-title-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .em2-title-wrap{display:flex;align-items:center;gap:10px;min-width:0}
 .em2-subject{font-size:21px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .em2-badge{font-size:11px;padding:6px 9px;border-radius:999px;border:1px solid #f0c163;background:#fff8e7;color:#a76600;font-weight:800}
 .em2-head-actions{display:flex;gap:8px}
-.em2-sender-row{display:flex;align-items:center;justify-content:space-between;padding-top:16px}
+.em2-sender-row{display:flex;align-items:center;justify-content:space-between;padding-top:10px}
 .em2-sender-left{display:flex;gap:12px;align-items:center}
 .em2-avatar{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#8e82ff,#6857ec);color:#fff;font-weight:800}
 .em2-profile-avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#8e82ff,#6857ec);color:#fff;font-weight:800}
@@ -360,7 +360,8 @@ const STYLES = `
 .em2-msg-name{font-size:13px;font-weight:800}
 .em2-msg-email{font-size:11px;color:#7c8390;margin-left:5px}
 .em2-msg-time{font-size:11px;color:#8a91a0}
-.em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px}
+.em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px;max-width:820px}
+.em2-show-quoted{background:none;border:none;color:#246bfe;font-size:12px;cursor:pointer;padding:4px 0;margin-top:6px;display:block}
 .em2-new-line{display:flex;align-items:center;gap:12px;margin:22px 0;color:#246bfe;font-size:11px}
 .em2-composer{border-top:1px solid #e5e8ef;background:#fff;padding:12px 14px 16px}
 .em2-ai-draft{border:1px solid #e8e3ff;background:#f3f0ff;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#5b4ecb;display:flex;justify-content:space-between;gap:12px;align-items:center}
@@ -752,6 +753,7 @@ export default function CsInbox2() {
     { enabled: !!selectedEmailThreadId, staleTime: 60_000, refetchOnWindowFocus: false }
   );
   const [emailReply, setEmailReply] = useState("");
+  const [showQuoted, setShowQuoted] = useState<Record<string,boolean>>({});
   const sendEmailReply = trpc.gmail.sendReply.useMutation({
     onSuccess: () => {
       setEmailReply("");
@@ -1328,10 +1330,21 @@ export default function CsInbox2() {
   if (selectedEmailThreadId && channel === "email") {
     const t = emailThread.data;
     const inboxEmail = (emailInbox.data?.inboxEmail ?? t?.inboxEmail ?? "").toLowerCase();
-    const senderName = t?.from ?? t?.fromEmail ?? "Unknown";
-    const senderEmail = t?.fromEmail ?? "";
-    const initials = senderName.replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "??";
-    const subject = t?.subject ?? "Email Thread";
+    // Fix sender identity: t.from is display name (may be email addr), t.fromEmail is extracted <...> addr (may be relay)
+    const RELAY_DOMAINS = ["launch27mail.com","maidsinblacksupport.com"];
+    const rawFrom = t?.from ?? "";
+    const rawFromEmail = t?.fromEmail ?? "";
+    const isRelay = RELAY_DOMAINS.some(d => rawFromEmail.toLowerCase().includes(d));
+    // If t.from looks like an email address, use it as the external email; otherwise use t.fromEmail if not a relay
+    const fromLooksLikeEmail = /\S+@\S+/.test(rawFrom);
+    const extEmail = fromLooksLikeEmail ? rawFrom : (isRelay ? rawFrom : rawFromEmail);
+    const extName = fromLooksLikeEmail ? rawFrom.split("@")[0] : (rawFrom || rawFromEmail.split("@")[0] || "Unknown");
+    const senderName = extName;
+    const senderEmail = extEmail;
+    const initials = extName.replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "??";
+    // Fix subject: strip [From: "..." <...>] prefix if present
+    const rawSubject = t?.subject ?? "Email Thread";
+    const subject = rawSubject.replace(/^\[From:[^\]]*\]\s*/i, "").trim() || rawSubject;
     const msgCount = t?.messages?.length ?? 0;
     const lastMsg = t?.messages?.[t.messages.length - 1];
     const ago = (ts: number) => { const d = Date.now()-ts; if(d<60000) return "just now"; if(d<3600000) return Math.floor(d/60000)+"m ago"; if(d<86400000) return Math.floor(d/3600000)+"h ago"; return Math.floor(d/86400000)+"d ago"; };
@@ -1425,7 +1438,7 @@ export default function CsInbox2() {
                 </div>
                 <div className="em2-head-actions">
                   <button className="em2-btn" onClick={() => resolveEmailThread.mutate({threadId: selectedEmailThreadId})} disabled={resolveEmailThread.isPending}>
-                    {resolveEmailThread.isPending ? "Resolving..." : "&#10003; Resolve"}
+                    {resolveEmailThread.isPending ? "Resolving..." : "\u2713 Resolve"}
                   </button>
                   <button className="em2-btn">&#8226;&#8226;&#8226;</button>
                 </div>
@@ -1452,6 +1465,13 @@ export default function CsInbox2() {
               {t?.messages?.map((msg) => {
                 const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
                 const msgInitials = (msg.from ?? msg.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
+                const rawBody = msg.bodyText || msg.snippet || "(no content)";
+                // Detect quote boundary: "On ... wrote:", "-----Original Message-----", or lines starting with ">"
+                const quoteBoundaryMatch = rawBody.match(/\n(On .+?wrote:|-----Original Message-----|^>)/ms);
+                const hasQuote = !!quoteBoundaryMatch;
+                const quoteIdx = hasQuote ? (quoteBoundaryMatch!.index ?? rawBody.length) : rawBody.length;
+                const bodyVisible = hasQuote ? rawBody.slice(0, quoteIdx).trim() : rawBody;
+                const isQuoteExpanded = !!(showQuoted as Record<string,boolean>)[msg.id];
                 return (
                   <div key={msg.id} className={"em2-email-message" + (isOut ? " outgoing" : "")}>
                     <div className="em2-msg-head">
@@ -1464,7 +1484,14 @@ export default function CsInbox2() {
                       </div>
                       <div className="em2-msg-time">{msg.date ? ago(msg.date) : ""}</div>
                     </div>
-                    <div className="em2-msg-body" style={{whiteSpace:"pre-wrap"}}>{msg.bodyText || msg.snippet || "(no content)"}</div>
+                    <div className="em2-msg-body" style={{whiteSpace:"pre-wrap"}}>
+                      {isQuoteExpanded ? rawBody : bodyVisible}
+                      {hasQuote && (
+                        <button className="em2-show-quoted" onClick={() => setShowQuoted((prev: Record<string,boolean>) => ({...prev, [msg.id]: !prev[msg.id]}))}>
+                          {isQuoteExpanded ? "Hide quoted text" : "••• Show quoted text"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
