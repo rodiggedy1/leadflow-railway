@@ -6053,12 +6053,10 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         messageCount: r.messageCount ?? 0,
         isUnread: r.isUnread === 1,
       }));
-      console.info(
-        "[EMAIL_INBOX_RETURN_ROHAN]",
-        threads
-          .filter(thread => thread.senderEmail?.trim().toLowerCase() === "rohan@innclusive.com")
-          .map(({ threadId, subject, lastMessageAt }) => ({ threadId, subject, lastMessageAt })),
-      );
+      const rohanReturnRows = threads
+        .filter(thread => thread.senderEmail?.trim().toLowerCase() === "rohan@innclusive.com")
+        .map(({ threadId, subject, lastMessageAt }) => ({ threadId, subject, lastMessageAt }));
+      console.info(`[EMAIL_INBOX_RETURN_ROHAN] ${JSON.stringify(rohanReturnRows)}`);
       return {
         threads,
         inboxEmail,
