@@ -361,6 +361,7 @@ const STYLES = `
 .em2-msg-email{font-size:11px;color:#7c8390;margin-left:5px}
 .em2-msg-time{font-size:11px;color:#8a91a0}
 .em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px;white-space:pre-wrap;overflow:visible;max-height:none;height:auto}
+.em2-show-quoted{background:none;border:none;color:#246bfe;font-size:12px;cursor:pointer;padding:4px 0;margin-top:6px;display:block;padding-left:0}
 .em2-new-line{display:flex;align-items:center;gap:12px;margin:22px 0;color:#246bfe;font-size:11px}
 .em2-composer{border-top:1px solid #e5e8ef;background:#fff;padding:12px 14px 16px}
 .em2-ai-draft{border:1px solid #e8e3ff;background:#f3f0ff;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#5b4ecb;display:flex;justify-content:space-between;gap:12px;align-items:center}
@@ -752,6 +753,7 @@ export default function CsInbox2() {
     { enabled: !!selectedEmailThreadId, staleTime: 60_000, refetchOnWindowFocus: false }
   );
   const [emailReply, setEmailReply] = useState("");
+  const [showInboundQuoted, setShowInboundQuoted] = useState<Record<string,boolean>>({});
   const sendEmailReply = trpc.gmail.sendReply.useMutation({
     onSuccess: () => {
       setEmailReply("");
@@ -1463,6 +1465,24 @@ export default function CsInbox2() {
               {t?.messages?.map((msg) => {
                 const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
                 const msgInitials = (msg.from ?? msg.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
+                // Inbound only: split authored text from quoted chain
+                const rawBody = (() => { const bt = msg.bodyText?.trim(); if (bt) return bt; const bh = msg.bodyHtml?.trim(); if (bh) { try { return new DOMParser().parseFromString(bh, "text/html").body?.innerText ?? ""; } catch { return ""; } } return msg.snippet ?? "(no content)"; })();
+                let authoredBody = rawBody;
+                let quotedBody: string | null = null;
+                if (!isOut) {
+                  const qm = rawBody.match(/\r?\nOn .{0,200}wrote:\s*/s) ?? rawBody.match(/\r?\n-{3,}Original Message-{3,}/i);
+                  if (qm && qm.index !== undefined) {
+                    const raw = rawBody.slice(0, qm.index).trim();
+                    // Artifact cleanup on authored portion only: remove pipe-only lines, collapse 3+ blank lines to 2
+                    authoredBody = raw
+                      .split("\n")
+                      .filter(line => !/^\s*\|[\s|]*$/.test(line))
+                      .join("\n")
+                      .replace(/(\r?\n){3,}/g, "\n\n");
+                    quotedBody = rawBody.slice(qm.index).trim();
+                  }
+                }
+                const isQuoteShown = !!showInboundQuoted[msg.id];
                 return (
                   <div key={msg.id} className={"em2-email-message" + (isOut ? " outgoing" : "")}>
                     <div className="em2-msg-head">
@@ -1475,7 +1495,17 @@ export default function CsInbox2() {
                       </div>
                       <div className="em2-msg-time">{msg.date ? ago(msg.date) : ""}</div>
                     </div>
-                    <div className="em2-msg-body">{(() => { const bt = msg.bodyText?.trim(); if (bt) return bt; const bh = msg.bodyHtml?.trim(); if (bh) { try { return new DOMParser().parseFromString(bh, "text/html").body?.innerText ?? ""; } catch { return ""; } } return msg.snippet ?? "(no content)"; })()}</div>
+                    <div className="em2-msg-body">
+                      {authoredBody}
+                      {quotedBody && (
+                        <>
+                          <button className="em2-show-quoted" onClick={() => setShowInboundQuoted(prev => ({...prev, [msg.id]: !prev[msg.id]}))}>
+                            {isQuoteShown ? "Hide quoted message" : "••• Show quoted message"}
+                          </button>
+                          {isQuoteShown && <div style={{marginTop:"8px",color:"#6b7280",fontSize:"13px",whiteSpace:"pre-wrap"}}>{quotedBody}</div>}
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}
