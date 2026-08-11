@@ -784,6 +784,12 @@ export default function CsInbox2() {
     { enabled: !!selectedEmailThreadId, staleTime: 20_000, refetchInterval: 15_000, refetchOnWindowFocus: true }
   );
   const [dismissedEmailDrafts, setDismissedEmailDrafts] = useState<Set<string>>(new Set());
+  // Auto-fill textarea with AI draft when thread opens and draft loads
+  React.useEffect(() => {
+    if (emailAiDraft.data?.generatedDraft && !emailReply.trim()) {
+      setEmailReply(emailAiDraft.data.generatedDraft);
+    }
+  }, [emailAiDraft.data?.id, selectedEmailThreadId]);
   // Reset auto-draft tracking when conversation changes
   const setSelectedConvWithReset = (conv: LiveConv | null) => {
     if (conv?.id !== selectedConv?.id) {
