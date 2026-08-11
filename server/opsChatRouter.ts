@@ -6043,17 +6043,24 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           )`
         )
         .orderBy(desc(gmailThreadMeta.lastMessageAt));
+      const threads = rows.map(r => ({
+        threadId: r.threadId,
+        senderName: r.senderName ?? null,
+        senderEmail: r.senderEmail ?? null,
+        subject: r.subject ?? "(no subject)",
+        snippet: r.snippet ?? "",
+        lastMessageAt: r.lastMessageAt ?? 0,
+        messageCount: r.messageCount ?? 0,
+        isUnread: r.isUnread === 1,
+      }));
+      console.info(
+        "[EMAIL_INBOX_RETURN_ROHAN]",
+        threads
+          .filter(thread => thread.senderEmail?.trim().toLowerCase() === "rohan@innclusive.com")
+          .map(({ threadId, subject, lastMessageAt }) => ({ threadId, subject, lastMessageAt })),
+      );
       return {
-        threads: rows.map(r => ({
-          threadId: r.threadId,
-          senderName: r.senderName ?? null,
-          senderEmail: r.senderEmail ?? null,
-          subject: r.subject ?? "(no subject)",
-          snippet: r.snippet ?? "",
-          lastMessageAt: r.lastMessageAt ?? 0,
-          messageCount: r.messageCount ?? 0,
-          isUnread: r.isUnread === 1,
-        })),
+        threads,
         inboxEmail,
       };
     }),
