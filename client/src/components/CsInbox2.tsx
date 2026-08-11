@@ -786,6 +786,7 @@ export default function CsInbox2() {
   const [dismissedEmailDrafts, setDismissedEmailDrafts] = useState<Set<string>>(new Set());
   // Auto-fill textarea with AI draft when thread opens and draft loads
   React.useEffect(() => {
+    console.log("[EMAIL_DRAFT_DIAG]", { selectedEmailThreadId, status: emailAiDraft.status, data: emailAiDraft.data, error: emailAiDraft.error });
     if (emailAiDraft.data?.generatedDraft && !emailReply.trim()) {
       setEmailReply(emailAiDraft.data.generatedDraft);
     }
