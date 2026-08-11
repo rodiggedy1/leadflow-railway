@@ -1470,7 +1470,7 @@ export default function CsInbox2() {
                 let authoredBody = rawBody;
                 let quotedBody: string | null = null;
                 if (!isOut) {
-                  const qm = rawBody.match(/\r?\nOn .{0,200}wrote:\s*/s) ?? rawBody.match(/\r?\n-{3,}Original Message-{3,}/i);
+                  const qm = rawBody.match(/\r?\n\s*On .{0,200}wrote:\s*/s) ?? rawBody.match(/\r?\n-{3,}Original Message-{3,}/i);
                   if (qm && qm.index !== undefined) {
                     const raw = rawBody.slice(0, qm.index).trim();
                     // Artifact cleanup on authored portion only: remove pipe-only lines, collapse 3+ blank lines to 2
