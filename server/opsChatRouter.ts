@@ -5877,7 +5877,6 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           intentSummary: madisonEmailDrafts.intentSummary,
           observations: madisonEmailDrafts.observations,
           status: madisonEmailDrafts.status,
-          draftConfidence: madisonEmailDrafts.draftConfidence,
         })
         .from(madisonEmailDrafts)
         .where(and(
