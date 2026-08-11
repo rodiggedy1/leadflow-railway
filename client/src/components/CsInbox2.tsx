@@ -7,7 +7,6 @@ import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
-import { getEmailKanbanColumn, sortEmailKanbanCardsNewestFirst } from "@/lib/emailKanban";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2
@@ -603,9 +602,6 @@ export default function CsInbox2() {
       if (selectedIdRef.current != null) {
         utils.leads.getCsConversation.invalidate({ sessionId: selectedIdRef.current });
       }
-    },
-    onGmailNewMessages: () => {
-      utils.opsChat.listEmailInboxThreads.invalidate();
     },
   }, { label: "CsInbox2" });
 
@@ -1375,10 +1371,10 @@ export default function CsInbox2() {
     const lastMsg = t?.messages?.[t.messages.length - 1];
     const ago = (ts: number) => { const d = Date.now()-ts; if(d<60000) return "just now"; if(d<3600000) return Math.floor(d/60000)+"m ago"; if(d<86400000) return Math.floor(d/3600000)+"h ago"; return Math.floor(d/86400000)+"d ago"; };
     const lastMsgAgo = lastMsg?.date ? ago(lastMsg.date) : "";
-    const selectedKanbanThread = emailInbox.data?.threads.find((thread) => thread.threadId === selectedEmailThreadId);
     const colLabel = (() => {
       if (!lastMsg) return "Needs Response";
-      if (selectedKanbanThread && getEmailKanbanColumn(selectedKanbanThread) === "Waiting on Customer") return "Waiting on Customer";
+      const isOut = inboxEmail && lastMsg.fromEmail?.toLowerCase() === inboxEmail;
+      if (isOut) return "Waiting on Customer";
       const waitMs = Date.now() - (lastMsg.date ?? 0);
       if (waitMs >= 30*60*1000) return "At Risk";
       if (msgCount <= 2) return "New";
@@ -1389,7 +1385,12 @@ export default function CsInbox2() {
     const TWENTY_FOUR_H2 = 24*60*60*1000;
     const now3 = Date.now();
     const getEmailCol2 = (th: typeof threads[0]) => {
-      return getEmailKanbanColumn(th, now3);
+      const isOut2 = inboxEmail && th.senderEmail?.toLowerCase() === inboxEmail;
+      if (isOut2) return "Waiting on Customer";
+      const w = now3 - (th.lastMessageAt ?? 0);
+      if (w >= THIRTY_MIN2) return "At Risk";
+      if (w < TWENTY_FOUR_H2 && (th.messageCount ?? 999) <= 2) return "New";
+      return "Needs Response";
     };
     const emailCols2 = [
       { label: "New", dotClass: "em2-dot-new", items: threads.filter(th => getEmailCol2(th) === "New") },
@@ -1686,13 +1687,24 @@ export default function CsInbox2() {
               <div style={{flex:1,minWidth:0,overflow:"auto",padding:"0 12px"}}>
                 {(() => {
                   const threads = emailInbox.data?.threads ?? [];
+                  const inboxEmail = emailInbox.data?.inboxEmail?.toLowerCase() ?? "";
                   const now = Date.now();
+                  const THIRTY_MIN = 30 * 60 * 1000;
+                  const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
                   const getEmailColumn = (t: typeof threads[0]) => {
-                    return getEmailKanbanColumn(t, now);
+                    const isOutbound = inboxEmail && t.senderEmail?.toLowerCase() === inboxEmail;
+                    if (isOutbound) return "Waiting on Customer";
+                    const waitMs = now - (t.lastMessageAt ?? 0);
+                    const isAtRisk = waitMs >= THIRTY_MIN;
+                    const isNew = !isAtRisk && (now - (t.lastMessageAt ?? 0)) < TWENTY_FOUR_H && (t.messageCount ?? 999) <= 2;
+                    if (isAtRisk) return "At Risk";
+                    if (isNew) return "New";
+                    return "Needs Response";
                   };
                   const emailCols = ["New","Needs Response","Waiting on Customer","At Risk"].map(label => ({
                     label,
                     threads: threads.filter(t => getEmailColumn(t) === label).sort((a,b) => {
+                      if (label === "At Risk") return (a.lastMessageAt ?? 0) - (b.lastMessageAt ?? 0);
                       return (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0);
                     }),
                   }));

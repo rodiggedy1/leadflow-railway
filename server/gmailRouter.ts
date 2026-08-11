@@ -334,15 +334,6 @@ export const gmailRouter = router({
             agentName: ctx.agent.agentName ?? "Agent",
             agentPhotoUrl: agentRow?.profilePhotoUrl ?? null,
           }).onDuplicateKeyUpdate({ set: { agentName: ctx.agent.agentName ?? "Agent" } });
-
-          // The confirmed Gmail message is now the thread's latest message.
-          // processThread later reconciles this exact ID when Gmail records a
-          // later customer reply; senderEmail remains customer identity only.
-          await db.update(gmailThreadMeta).set({
-            latestMessageId: result.messageId,
-            lastMessageAt: Date.now(),
-            isUnread: 0,
-          }).where(eq(gmailThreadMeta.threadId, input.threadId));
         }
       } catch (logErr) {
         console.error("[sendReply] Failed to log agent attribution (non-fatal):", logErr);

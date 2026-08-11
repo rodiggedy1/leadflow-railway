@@ -41,7 +41,6 @@ import {
   madisonSmsDrafts,
   madisonEmailDrafts,
   focusPoints,
-  gmailSentLog,
   gmailThreadMeta,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
@@ -6015,6 +6014,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     }),
 
   /**
+  /**
    * listEmailInboxThreads — returns Gmail threads that have ever had a Madison email draft.
    * Used by Inbox2 Email tab for 4-column Kanban. No Gmail API calls — uses cached gmailThreadMeta.
    * Admission rule: EXISTS(madison_email_drafts.threadId). No isInInbox filter.
@@ -6031,20 +6031,11 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           senderEmail: gmailThreadMeta.senderEmail,
           subject: gmailThreadMeta.subject,
           snippet: gmailThreadMeta.snippet,
-          latestMessageId: gmailThreadMeta.latestMessageId,
-          latestSentMessageId: gmailSentLog.messageId,
           lastMessageAt: gmailThreadMeta.lastMessageAt,
           messageCount: gmailThreadMeta.messageCount,
           isUnread: gmailThreadMeta.isUnread,
         })
         .from(gmailThreadMeta)
-        .leftJoin(
-          gmailSentLog,
-          and(
-            eq(gmailSentLog.threadId, gmailThreadMeta.threadId),
-            eq(gmailSentLog.messageId, gmailThreadMeta.latestMessageId),
-          ),
-        )
         .where(
           sql`EXISTS (
             SELECT 1 FROM madison_email_drafts med
@@ -6052,20 +6043,22 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           )`
         )
         .orderBy(desc(gmailThreadMeta.lastMessageAt));
-      const latestRows = keepLatestEmailThreadPerSender(rows);
+      const threads = rows.map(r => ({
+        threadId: r.threadId,
+        senderName: r.senderName ?? null,
+        senderEmail: r.senderEmail ?? null,
+        subject: r.subject ?? "(no subject)",
+        snippet: r.snippet ?? "",
+        lastMessageAt: r.lastMessageAt ?? 0,
+        messageCount: r.messageCount ?? 0,
+        isUnread: r.isUnread === 1,
+      }));
+      const rohanReturnRows = threads
+        .filter(thread => thread.senderEmail?.trim().toLowerCase() === "rohan@innclusive.com")
+        .map(({ threadId, subject, lastMessageAt }) => ({ threadId, subject, lastMessageAt }));
+      console.info(`[EMAIL_INBOX_RETURN_ROHAN] ${JSON.stringify(rohanReturnRows)}`);
       return {
-        threads: latestRows.map(r => ({
-          threadId: r.threadId,
-          senderName: r.senderName ?? null,
-          senderEmail: r.senderEmail ?? null,
-          subject: r.subject ?? "(no subject)",
-          snippet: r.snippet ?? "",
-          latestMessageId: r.latestMessageId ?? null,
-          latestSentMessageId: r.latestSentMessageId ?? null,
-          lastMessageAt: r.lastMessageAt ?? 0,
-          messageCount: r.messageCount ?? 0,
-          isUnread: r.isUnread === 1,
-        })),
+        threads,
         inboxEmail,
       };
     }),

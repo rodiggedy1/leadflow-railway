@@ -26,7 +26,6 @@ import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { google } from "googleapis";
 import { gmailState } from "../drizzle/schema";
-import { getLatestGmailMessageMetadata } from "./utils/gmailThreadMetadata";
 
 // ── Category definitions ──────────────────────────────────────────────────────
 export type GlanceCategory =
@@ -276,10 +275,8 @@ export async function processThread(threadId: string): Promise<void> {
     const latestMsg = messages[messages.length - 1];
     const snippet = latestMsg?.snippet ?? "";
 
-    // Persist exact newest-message identity with its timestamp. Direction is
-    // determined later by an exact gmail_sent_log.messageId match, never by
-    // senderEmail or timestamp approximation.
-    const { latestMessageId, lastMessageAt } = getLatestGmailMessageMetadata(messages);
+    // lastMessageAt: internalDate of the latest message (Unix ms)
+    const lastMessageAt = parseInt(latestMsg?.internalDate ?? "0") || 0;
 
     // messageCount: total messages in thread
     const messageCount = messages.length;
@@ -317,7 +314,6 @@ export async function processThread(threadId: string): Promise<void> {
         senderEmail: gmailThreadMeta.senderEmail,
         subject: gmailThreadMeta.subject,
         snippet: gmailThreadMeta.snippet,
-        latestMessageId: gmailThreadMeta.latestMessageId,
         lastMessageAt: gmailThreadMeta.lastMessageAt,
         messageCount: gmailThreadMeta.messageCount,
       })
@@ -327,7 +323,6 @@ export async function processThread(threadId: string): Promise<void> {
     const historyChanged = !existing?.aiHistoryId || existing.aiHistoryId !== currentHistoryId;
     const metadataComplete = !!(existing?.senderName && existing?.senderEmail &&
       existing?.subject && existing?.snippet &&
-      existing?.latestMessageId &&
       existing?.lastMessageAt && existing?.messageCount);
 
     if (!historyChanged) {
@@ -359,7 +354,6 @@ export async function processThread(threadId: string): Promise<void> {
         senderEmail,
         subject,
         snippet,
-        latestMessageId,
         lastMessageAt,
         messageCount,
         aiStatus: "pending",
@@ -372,7 +366,6 @@ export async function processThread(threadId: string): Promise<void> {
           senderEmail,
           subject,
           snippet,
-          latestMessageId,
           lastMessageAt,
           messageCount,
           updatedAt: new Date(),
@@ -726,7 +719,6 @@ export async function backfillGlanceQueue(): Promise<void> {
             isNull(gmailThreadMeta.senderEmail),
             isNull(gmailThreadMeta.subject),
             isNull(gmailThreadMeta.snippet),
-            isNull(gmailThreadMeta.latestMessageId),
             isNull(gmailThreadMeta.lastMessageAt),
             isNull(gmailThreadMeta.messageCount),
           )
