@@ -250,6 +250,35 @@ export const gmailRouter = router({
         sentBy: sentByMap[msg.id] ?? null,
       }));
 
+
+      // Fire-and-forget: trigger Madison draft if none exists yet for this thread
+      db.select({ id: madisonEmailDrafts.id })
+        .from(madisonEmailDrafts)
+        .where(eq(madisonEmailDrafts.threadId, input.threadId))
+        .limit(1)
+        .then(async (existing) => {
+          if (existing.length > 0) return;
+          const inboxEmailLower = (thread.inboxEmail ?? "").toLowerCase();
+          const latestInbound = [...thread.messages].reverse().find(
+            (m: any) => !inboxEmailLower || (m.fromEmail ?? "").toLowerCase() !== inboxEmailLower
+          ) as any;
+          if (!latestInbound) return;
+          const bodyText = latestInbound.bodyText || latestInbound.snippet || "";
+          if (!bodyText.trim()) return;
+          const { triggerMadisonEmailDraft } = await import("./madisonEmailAgent");
+          triggerMadisonEmailDraft({
+            threadId: input.threadId,
+            inboundMessageId: latestInbound.id ?? input.threadId,
+            fromEmail: latestInbound.fromEmail ?? thread.from ?? "",
+            replyToEmail: latestInbound.replyToEmail ?? null,
+            senderName: latestInbound.from ?? thread.from ?? undefined,
+            subject: thread.subject ?? undefined,
+            inboundText: bodyText.slice(0, 2000),
+            threadMessages: thread.messages as any,
+          }).catch((e: any) => console.error("[getThread] MadisonEmailAgent error:", e));
+        })
+        .catch(() => {});
+
       return { ...thread, messages: messagesWithAgent };
     }),
 
