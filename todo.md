@@ -1605,5 +1605,6 @@
 - [x] CsInbox2 Email: add temporary preview-only At Risk diagnostics for sort input, sort output, and rendered DOM order
 - [x] CsInbox2 Email: compare the pre-deduplication Email Kanban ordering implementation with the current implementation before any correction or revert
 - [x] CsInbox2 Email: isolate the ordering correction to At Risk only; leave New, Needs Response, and Waiting on Customer untouched
+- [x] CsInbox2 Email: remove the proven active-board At Risk ascending comparator so cards render newest-first
 - [ ] Payload reduction — investigate reducing listChannelMessages response size (field selection, pagination)
 - [ ] Memoization/profiling — profile CommandChat with React DevTools after Madison SMS ships to identify remaining re-render hotspots
