@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import DOMPurify from "dompurify";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Play, Pause, ChevronUp, ChevronDown } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
@@ -360,7 +361,10 @@ const STYLES = `
 .em2-msg-name{font-size:13px;font-weight:800}
 .em2-msg-email{font-size:11px;color:#7c8390;margin-left:5px}
 .em2-msg-time{font-size:11px;color:#8a91a0}
-.em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px;white-space:pre-wrap;overflow:visible;max-height:none;height:auto}
+.em2-msg-body{font-size:14px;line-height:1.7;color:#303641;padding-left:42px;overflow:visible;max-height:none;height:auto}
+.em2-html-email-body{width:100%;max-width:100%;overflow-x:auto;font-size:14px;line-height:1.6;color:#303641}
+.em2-html-email-body img{max-width:100%;height:auto}
+.em2-html-email-body table{max-width:100%}
 .em2-new-line{display:flex;align-items:center;gap:12px;margin:22px 0;color:#246bfe;font-size:11px}
 .em2-composer{border-top:1px solid #e5e8ef;background:#fff;padding:12px 14px 16px}
 .em2-ai-draft{border:1px solid #e8e3ff;background:#f3f0ff;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#5b4ecb;display:flex;justify-content:space-between;gap:12px;align-items:center}
@@ -1463,19 +1467,7 @@ export default function CsInbox2() {
               {t?.messages?.map((msg) => {
                 const isOut = inboxEmail && msg.fromEmail?.toLowerCase() === inboxEmail;
                 const msgInitials = (msg.from ?? msg.fromEmail ?? "?").replace(/[^A-Za-z ]/g,"").split(" ").filter(Boolean).slice(0,2).map((w:string)=>w[0].toUpperCase()).join("") || "?";
-                const displayBody = (() => {
-                  const bh = msg.bodyHtml?.trim();
-                  if (bh) {
-                    try {
-                      const doc = new DOMParser().parseFromString(bh, "text/html");
-                      doc.querySelectorAll("script,style,noscript").forEach((el: Element) => el.remove());
-                      return (doc.body?.innerText ?? "").replace(/\u00a0/g, " ").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-                    } catch { /* fall through */ }
-                  }
-                  const bt = msg.bodyText?.trim();
-                  if (bt) return bt;
-                  return msg.snippet ?? "(no content)";
-                })();
+                const sanitizedHtml = msg.bodyHtml ? DOMPurify.sanitize(msg.bodyHtml, { USE_PROFILES: { html: true } }) : null;
                 return (
                   <div key={msg.id} className={"em2-email-message" + (isOut ? " outgoing" : "")}>
                     <div className="em2-msg-head">
@@ -1489,7 +1481,11 @@ export default function CsInbox2() {
                       <div className="em2-msg-time">{msg.date ? ago(msg.date) : ""}</div>
                     </div>
                     <div className="em2-msg-body">
-                      {displayBody}
+                      {sanitizedHtml ? (
+                        <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
+                      ) : (
+                        <div style={{whiteSpace:"pre-wrap"}}>{msg.bodyText || msg.snippet || "(no content)"}</div>
+                      )}
                     </div>
                   </div>
                 );
