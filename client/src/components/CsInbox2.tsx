@@ -772,8 +772,13 @@ export default function CsInbox2() {
       emailUtils.gmail.getThread.invalidate({ threadId: selectedEmailThreadId! });
     },
   });
+  const dismissEmailDraftMut = trpc.opsChat.dismissEmailDraft.useMutation();
   const resolveEmailThread = trpc.gmail.completeThread.useMutation({
     onSuccess: () => {
+      // Dismiss the AI draft if one exists
+      if (emailAiDraft.data?.id) {
+        dismissEmailDraftMut.mutate({ draftId: emailAiDraft.data.id, dismissedBy: "agent" });
+      }
       setSelectedEmailThreadId(null);
       emailUtils.opsChat.listEmailInboxThreads.invalidate();
     },
