@@ -1530,7 +1530,7 @@ export default function CsInbox2() {
                             setEmailReply(emailAiDraft.data.generatedDraft);
                             setDismissedEmailDrafts(prev => new Set([...prev, selectedEmailThreadId ?? ""]));
                           }
-                        }}>Use Draft</button>
+                        }}>Insert Draft</button>
                         <button className="em2-ai-draft-dismiss" title="Dismiss" onClick={() => {
                           setDismissedEmailDrafts(prev => new Set([...prev, selectedEmailThreadId ?? ""]));
                         }}>✕</button>
@@ -1885,4 +1885,3 @@ export default function CsInbox2() {
     </>
   );
 }
-                        }}>Insert Draft</button>
