@@ -1475,6 +1475,8 @@ export default function CsInbox2() {
                       </div>
                       <div className="em2-msg-time">{msg.date ? ago(msg.date) : ""}</div>
                     </div>
+                    {/* DIAG: remove after confirming body data */}
+                    {(() => { console.log("[BODY_DIAG]", msg.id, {snipLen: (msg.snippet??'').length, textLen: (msg.bodyText??'').length, htmlLen: (msg.bodyHtml??'').length, snip: msg.snippet, textFirst300: (msg.bodyText??'').slice(0,300), htmlFirst300: (msg.bodyHtml??'').slice(0,300), htmlLast300: (msg.bodyHtml??'').slice(-300)}); return null; })()}
                     <div className="em2-msg-body">{msg.bodyText || msg.snippet || "(no content)"}</div>
                   </div>
                 );
