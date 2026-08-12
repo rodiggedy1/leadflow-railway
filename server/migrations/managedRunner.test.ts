@@ -82,10 +82,22 @@ describe("managed versioned migration runner", () => {
 
   it("creates a missing focus_points table, verifies it, and records applied", async () => {
     const fake = createFakeDb();
-    const results = await runManagedMigrations({ db: fake.db, migrationsDirectory: migrationDirectory, logger: console });
+    const events: string[] = [];
+    const logger = {
+      info: (event: string) => events.push(event),
+      error: () => undefined,
+    };
+    const results = await runManagedMigrations({ db: fake.db, migrationsDirectory: migrationDirectory, logger });
     expect(results).toEqual([{ id: "0001_create_focus_points", outcome: "applied" }]);
     expect(fake.state()).toEqual({ tableExists: true, ledgerState: "applied" });
     expect(fake.calls.some(sql => sql.includes("RELEASE_LOCK"))).toBe(true);
+    expect(events).toEqual([
+      "migration_lock_acquired",
+      "migration_started",
+      "migration_postconditions_passed",
+      "migration_applied",
+      "migration_lock_released",
+    ]);
   });
 
   it("recovers a correct existing table without rerunning CREATE TABLE", async () => {

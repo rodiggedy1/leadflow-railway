@@ -286,6 +286,7 @@ async function runOneMigration(
         `Postconditions failed for ${migration.id}: ${after.differences.join("; ")}`,
       );
     }
+    logger.info("migration_postconditions_passed", { migrationId: migration.id });
     await markApplied(db, migration);
     logger.info("migration_applied", { migrationId: migration.id });
     return { id: migration.id, outcome: "applied" };
