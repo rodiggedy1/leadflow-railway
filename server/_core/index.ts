@@ -41,6 +41,7 @@ import { startDbWatchdog } from "../dbWatchdog";
 import { registerStorageProxy } from "./storageProxy";
 import { sql, isNotNull, count } from "drizzle-orm";
 import { gmailThreadMeta } from "../../drizzle/schema";
+import { runNormalStartup } from "../normalStartup";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -969,12 +970,9 @@ async function runStartupMigrations() {
   }
 }
 async function startServer() {
-  // Run startup migrations before anything else touches the DB
-  await runStartupMigrations();
-
-  // Verify SMS campaign schema is up to date — exits with a clear error if not
+  // Normal application boot deliberately executes no schema DDL and no data repairs.
   const { checkSmsCampaignSchema } = await import("../sms/schemaCheck");
-  await checkSmsCampaignSchema();
+  await runNormalStartup({ checkSmsCampaignSchema });
 
   const app = express();
   const server = createServer(app);
