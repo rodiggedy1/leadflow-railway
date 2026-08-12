@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "table": "focus_points",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "agentName", "columnType": "varchar(128)", "nullable": false },
+    { "name": "points", "columnType": "int", "nullable": false, "default": "0" },
+    { "name": "weekStart", "columnType": "varchar(10)", "nullable": false },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "uq_focus_points_agent_week", "unique": true, "columns": ["agentName", "weekStart"] },
+    { "name": "idx_focus_points_week", "unique": false, "columns": ["weekStart"] }
+  ]
+}

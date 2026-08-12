@@ -4,6 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
+    "preDeployCommand": ["node dist/runVersionedMigrations.js"],
     "startCommand": "node dist/index.js",
     "healthcheckPath": "/api/health",
     "restartPolicyType": "ON_FAILURE",

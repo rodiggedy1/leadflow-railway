@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "migrations": [
+    {
+      "id": "0001_create_focus_points",
+      "sqlFile": "0001_create_focus_points.sql",
+      "sha256": "5caaaf2b058c48caff1561e9e8d571a5fbad5f67f9888df037f93eff0b0cd5f4",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0001_create_focus_points.postconditions.json"
+    }
+  ]
+}
