@@ -3214,6 +3214,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             smsOptOut: conversationSessions.smsOptOut,
             smsFlow: conversationSessions.smsFlow,
             lastProcessedMessageId: conversationSessions.lastProcessedMessageId,
+            lastInboundPhoneNumberId: conversationSessions.lastInboundPhoneNumberId,
             csResolvedAt: conversationSessions.csResolvedAt,
             csQueue: conversationSessions.csQueue,
             aiClosingRecCache: conversationSessions.aiClosingRecCache,

@@ -7,6 +7,7 @@ import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2
@@ -54,6 +55,7 @@ type LiveConv = {
   latestCallCreatedAt?: number | null;
   latestCallStructuredData?: string | null;
   latestCallCallerPhone?: string | null;
+  lastInboundPhoneNumberId?: string | null;
   personType?: "team" | "customer";
 };
 
@@ -666,10 +668,23 @@ export default function CsInbox2() {
         latestCallCreatedAt: (row as any).latestCallCreatedAt ?? null,
         latestCallStructuredData: (row as any).latestCallStructuredData ?? null,
         latestCallCallerPhone: (row as any).latestCallCallerPhone ?? null,
+        lastInboundPhoneNumberId: (row as any).lastInboundPhoneNumberId ?? null,
       };
       return mapped;
     });
   }, [csData, nameMap]);
+
+  // A customer may text a different CS-treated number while this conversation
+  // is open. Keep the exact persisted reply source current for the next send.
+  useEffect(() => {
+    if (!selectedConv) return;
+    const refreshed = liveConvs.find(conv => conv.id === selectedConv.id);
+    if (!refreshed || refreshed.lastInboundPhoneNumberId === selectedConv.lastInboundPhoneNumberId) return;
+    setSelectedConv(current => current?.id === refreshed.id
+      ? { ...current, lastInboundPhoneNumberId: refreshed.lastInboundPhoneNumberId }
+      : current
+    );
+  }, [liveConvs, selectedConv?.id, selectedConv?.lastInboundPhoneNumberId]);
 
   // ── Kanban column assignment ────────────────────────────────────────────
   const now = Date.now();
@@ -855,7 +870,13 @@ export default function CsInbox2() {
 
   function doSend(afterSend?: () => void) {
     if (!selectedConv || !compose.trim()) return;
-    sendMessage.mutate({ sessionId: selectedConv.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq", source: "cs_inbox" }, {
+    const fromNumberId = getCsInboxReplyPhoneNumberIdForSelectedConversation(selectedConv, liveConvs);
+    sendMessage.mutate({
+      sessionId: selectedConv.id,
+      message: compose.trim(),
+      fromNumberId,
+      source: "cs_inbox",
+    }, {
       onSuccess: () => { if (afterSend) afterSend(); }
     });
   }

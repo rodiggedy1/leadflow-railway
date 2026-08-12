@@ -64,6 +64,9 @@ function validateManifest(manifest: ManagedMigrationManifest): void {
     if (migration.replayMode !== "verified-idempotent") {
       throw new ManagedMigrationError(`Unsupported replay mode for ${migration.id}`);
     }
+    if (migration.mode && migration.mode !== "create-table" && migration.mode !== "additive-columns-existing-table") {
+      throw new ManagedMigrationError(`Unsupported migration mode for ${migration.id}`);
+    }
     ids.add(migration.id);
   }
 }
@@ -238,6 +241,130 @@ async function executeMigrationSql(db: MigrationDb, sql: string): Promise<void> 
   for (const statement of splitStatements(sql)) await db.query(statement);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Keep additive-columns-existing-table intentionally narrow: every statement
+ * must add exactly one declared column to the declared table with the
+ * idempotent ADD COLUMN IF NOT EXISTS form. The postcondition contract then
+ * validates the real column semantics after execution.
+ */
+function validateAdditiveColumnsSql(sql: string, postconditions: TablePostconditions): void {
+  if (!postconditions.columns.length) {
+    throw new ManagedMigrationError("additive-columns-existing-table requires at least one declared column");
+  }
+
+  const statements = splitStatements(sql);
+  if (statements.length !== postconditions.columns.length) {
+    throw new ManagedMigrationError("additive-columns-existing-table requires exactly one ADD COLUMN statement per declared column");
+  }
+
+  const expectedColumns = new Set(postconditions.columns.map(column => column.name));
+  const seenColumns = new Set<string>();
+  const statementPattern = new RegExp(
+    "^ALTER\\s+TABLE\\s+`" + escapeRegExp(postconditions.table) + "`\\s+ADD\\s+COLUMN\\s+IF\\s+NOT\\s+EXISTS\\s+`([A-Za-z0-9_]+)`\\s+",
+    "i",
+  );
+
+  for (const statement of statements) {
+    const match = statement.match(statementPattern);
+    if (!match || /,\s*(?:ADD|DROP|MODIFY|CHANGE|RENAME)\b/i.test(statement) || /\b(?:DROP|MODIFY|CHANGE|RENAME)\s+(?:COLUMN|INDEX|KEY|CONSTRAINT)\b/i.test(statement)) {
+      throw new ManagedMigrationError(
+        `additive-columns-existing-table only permits single ALTER TABLE ADD COLUMN IF NOT EXISTS statements for ${postconditions.table}`,
+      );
+    }
+    const columnName = match[1];
+    if (!expectedColumns.has(columnName) || seenColumns.has(columnName)) {
+      throw new ManagedMigrationError(`Unexpected additive column statement for ${columnName}`);
+    }
+    seenColumns.add(columnName);
+  }
+
+  if (seenColumns.size !== expectedColumns.size) {
+    throw new ManagedMigrationError("Missing additive column statement for a declared postcondition column");
+  }
+}
+
+async function failAdditiveMigration(
+  db: MigrationDb,
+  migration: ManagedMigration,
+  message: string,
+): Promise<never> {
+  const error = new ManagedMigrationError(message);
+  await markStarted(db, migration);
+  await markFailed(db, migration, error);
+  throw error;
+}
+
+async function runAdditiveColumnsExistingTableMigration(
+  db: MigrationDb,
+  migration: ManagedMigration,
+  sql: string,
+  postconditions: TablePostconditions,
+  existing: LedgerRow | undefined,
+  before: Awaited<ReturnType<typeof verifyPostconditions>>,
+  logger: Pick<Console, "info" | "error">,
+): Promise<MigrationRunResult> {
+  // verifyPostconditions reports only declared columns and indexes. That lets
+  // this mode ignore unrelated legacy table metadata while preserving strict
+  // semantics for every declared migration-owned object.
+  const missingColumns = before.differences
+    .map(difference => /^missing column (.+)$/.exec(difference)?.[1])
+    .filter((name): name is string => Boolean(name));
+  const nonMissingDifferences = before.differences.filter(difference => !/^missing column /.test(difference));
+
+  if (!before.tableExists) {
+    return failAdditiveMigration(db, migration, `Target table ${postconditions.table} is missing for ${migration.id}`);
+  }
+  if (nonMissingDifferences.length) {
+    return failAdditiveMigration(
+      db,
+      migration,
+      `Existing table for ${migration.id} is divergent: ${nonMissingDifferences.join("; ")}`,
+    );
+  }
+  if (existing?.state === "applied") {
+    if (!before.valid) {
+      throw new ManagedMigrationError(
+        `Applied migration ${migration.id} has schema drift: ${before.differences.join("; ")}`,
+      );
+    }
+    logger.info("migration_skipped", { migrationId: migration.id, reason: "already_applied" });
+    return { id: migration.id, outcome: "skipped" };
+  }
+  if (!missingColumns.length) {
+    await markStarted(db, migration);
+    await markApplied(db, migration);
+    logger.info("migration_recovered", { migrationId: migration.id, reason: "existing_schema_verified" });
+    return { id: migration.id, outcome: "recovered" };
+  }
+
+  // The declared table already exists and all present declared metadata is exact.
+  // Only now may this explicit additive mode execute its constrained DDL.
+  validateAdditiveColumnsSql(sql, postconditions);
+  await markStarted(db, migration);
+  try {
+    logger.info("migration_started", { migrationId: migration.id });
+    await executeMigrationSql(db, sql);
+    const after = await verifyPostconditions(db, postconditions);
+    if (!after.valid) {
+      throw new ManagedMigrationError(
+        `Postconditions failed for ${migration.id}: ${after.differences.join("; ")}`,
+      );
+    }
+    logger.info("migration_postconditions_passed", { migrationId: migration.id });
+    await markApplied(db, migration);
+    logger.info("migration_applied", { migrationId: migration.id });
+    return { id: migration.id, outcome: "applied" };
+  } catch (error) {
+    await markFailed(db, migration, error);
+    logger.error("migration_failed", { migrationId: migration.id, error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+}
+
 async function runOneMigration(
   db: MigrationDb,
   migration: ManagedMigration,
@@ -251,6 +378,9 @@ async function runOneMigration(
   }
 
   const before = await verifyPostconditions(db, postconditions);
+  if (migration.mode === "additive-columns-existing-table") {
+    return runAdditiveColumnsExistingTableMigration(db, migration, sql, postconditions, existing, before, logger);
+  }
   if (existing?.state === "applied") {
     if (!before.valid) {
       throw new ManagedMigrationError(

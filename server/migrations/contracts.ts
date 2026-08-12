@@ -6,6 +6,8 @@ export interface ManagedMigration {
   sha256: string;
   replayMode: "verified-idempotent";
   postconditionsFile: string;
+  /** Defaults to create-table so existing manifests remain immutable and unchanged. */
+  mode?: "create-table" | "additive-columns-existing-table";
 }
 
 export interface ManagedMigrationManifest {

@@ -7,6 +7,14 @@
       "sha256": "5caaaf2b058c48caff1561e9e8d571a5fbad5f67f9888df037f93eff0b0cd5f4",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0001_create_focus_points.postconditions.json"
+    },
+    {
+      "id": "0002_last_inbound_phone_number_id",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0002_last_inbound_phone_number_id.sql",
+      "sha256": "bdc3df313709305907ba61739c25d83f6f64ed5c5d044abfbae942723cdbfdea",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0002_last_inbound_phone_number_id.postconditions.json"
     }
   ]
 }

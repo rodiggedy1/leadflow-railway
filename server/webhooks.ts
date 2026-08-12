@@ -41,6 +41,7 @@ import { processLeadReply as processReactivationReply } from "./conversationEngi
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
+import { getInboundPhoneNumberId } from "../shared/csInboxPhoneNumberRouting";
 import { sendPushToAll } from "./webPush";
 import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerTwilioProxyWebhookRoute } from "./twilioProxyWebhook";
@@ -2146,6 +2147,7 @@ async function handleCsInboundMessage(msg: any) {
   }
 
   const fromPhone = msg.from;
+  const inboundPhoneNumberId = getInboundPhoneNumberId(msg.phoneNumberId);
   const rawInboundTextCs = msg.text ?? msg.body ?? "";
   // ── Thumbtack relay message stripping ────────────────────────────────────
   // Strip the Thumbtack header ("Name replied to you on Thumbtack...---") so
@@ -2385,7 +2387,12 @@ async function handleCsInboundMessage(msg: any) {
     // Also backfill leadName if it was previously null and we now resolved one.
     // If this is a cleaner texting into a cs_initiated session, permanently upgrade
     // the leadSource to cs-inbound-cleaner so it always appears in the Teams column.
-    const updatePayload: Record<string, unknown> = { messageHistory: JSON.stringify(history), updatedAt: new Date(), ...csInboundSummary };
+    const updatePayload: Record<string, unknown> = {
+      messageHistory: JSON.stringify(history),
+      updatedAt: new Date(),
+      ...csInboundSummary,
+      ...(inboundPhoneNumberId ? { lastInboundPhoneNumberId: inboundPhoneNumberId } : {}),
+    };
     if (resolvedName && !existingSession.leadName) {
       updatePayload.leadName = resolvedName;
     }
@@ -2448,7 +2455,11 @@ async function handleCsInboundMessage(msg: any) {
       hiringHistory.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
       await db
         .update(conversationSessions)
-        .set({ messageHistory: JSON.stringify(hiringHistory), updatedAt: new Date() } as any)
+        .set({
+          messageHistory: JSON.stringify(hiringHistory),
+          updatedAt: new Date(),
+          ...(inboundPhoneNumberId ? { lastInboundPhoneNumberId: inboundPhoneNumberId } : {}),
+        } as any)
         .where(eq(conversationSessions.id, hiringSession.id));
       console.log(`[CS→Hiring] Routed inbound from ${fromPhone} to hiring session ${hiringSession.id} instead of creating new cs-inbound`);
     } else {
@@ -2461,6 +2472,7 @@ async function handleCsInboundMessage(msg: any) {
           leadName: resolvedName,
           leadEmail: null,
           leadSource: sessionSource,
+          lastInboundPhoneNumberId: inboundPhoneNumberId,
           messageHistory: JSON.stringify(history),
           stage: "OPEN",
           createdAt: new Date(),

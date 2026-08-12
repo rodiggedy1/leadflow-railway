@@ -313,7 +313,9 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * Used as an idempotency key to prevent duplicate processing when OpenPhone
    * delivers the same webhook event more than once (at-least-once delivery).
    */
-   lastProcessedMessageId: varchar("lastProcessedMessageId", { length: 100 }),
+  lastProcessedMessageId: varchar("lastProcessedMessageId", { length: 100 }),
+  /** Exact OpenPhone number ID that received the latest inbound CS/Leads SMS. */
+  lastInboundPhoneNumberId: varchar("lastInboundPhoneNumberId", { length: 64 }),
   /**
    * Timestamp (ms) when a CS agent resolved/archived this CS inbox session. NULL = open.
    * Only set for cs-inbound and cs-inbound-cleaner sessions.
