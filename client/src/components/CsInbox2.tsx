@@ -674,18 +674,6 @@ export default function CsInbox2() {
     });
   }, [csData, nameMap]);
 
-  // A customer may text a different CS-treated number while this conversation
-  // is open. Keep the exact persisted reply source current for the next send.
-  useEffect(() => {
-    if (!selectedConv) return;
-    const refreshed = liveConvs.find(conv => conv.id === selectedConv.id);
-    if (!refreshed || refreshed.lastInboundPhoneNumberId === selectedConv.lastInboundPhoneNumberId) return;
-    setSelectedConv(current => current?.id === refreshed.id
-      ? { ...current, lastInboundPhoneNumberId: refreshed.lastInboundPhoneNumberId }
-      : current
-    );
-  }, [liveConvs, selectedConv?.id, selectedConv?.lastInboundPhoneNumberId]);
-
   // ── Kanban column assignment ────────────────────────────────────────────
   const now = Date.now();
   const THIRTY_MIN = 30 * 60 * 1000;
@@ -762,6 +750,17 @@ export default function CsInbox2() {
   const [channel, setChannel] = useState<"inbox" | "email">("inbox");
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
+  // A customer may text a different CS-treated number while this conversation
+  // is open. Keep the exact persisted reply source current for the next send.
+  useEffect(() => {
+    if (!selectedConv) return;
+    const refreshed = liveConvs.find(conv => conv.id === selectedConv.id);
+    if (!refreshed || refreshed.lastInboundPhoneNumberId === selectedConv.lastInboundPhoneNumberId) return;
+    setSelectedConv(current => current?.id === refreshed.id
+      ? { ...current, lastInboundPhoneNumberId: refreshed.lastInboundPhoneNumberId }
+      : current
+    );
+  }, [liveConvs, selectedConv?.id, selectedConv?.lastInboundPhoneNumberId]);
   // AI call audio state (exact copy from CsInbox.tsx)
   const [expandedAiCallId, setExpandedAiCallId] = useState<string | null>(null);
   const [playingAiCallId, setPlayingAiCallId] = useState<string | null>(null);
