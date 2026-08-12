@@ -1703,10 +1703,9 @@ export default function CsInbox2() {
                   };
                   const emailCols = ["New","Needs Response","Waiting on Customer","At Risk"].map(label => ({
                     label,
-                    threads: threads.filter(t => getEmailColumn(t) === label).sort((a,b) => {
-                      if (label === "At Risk") return (a.lastMessageAt ?? 0) - (b.lastMessageAt ?? 0);
-                      return (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0);
-                    }),
+                    threads: threads.filter(t => getEmailColumn(t) === label).sort((a,b) =>
+                      (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0)
+                    ),
                   }));
                   if (emailInbox.isLoading) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>Loading emails…</div>;
                   if (threads.length === 0) return <div style={{padding:"40px",color:"#9aa0aa",textAlign:"center"}}>No email conversations yet</div>;
