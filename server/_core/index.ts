@@ -11,7 +11,6 @@ import { registerFollowUpCronRoutes } from "../followUpCron";
 import { registerVapiWebhookRoute } from "../vapiWebhook";
 import { registerThumbTackBridgeRoute } from "../thumbtackBridgeRoute";
 import { registerCallCenterCronRoute } from "../callCommandCenterCron";
-import { registerQuoOutboundRecoveryRoute } from "../quoOutboundReconciliation";
 import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
@@ -1651,7 +1650,6 @@ async function startServer() {
   registerThumbTackBridgeRoute(app);
   // Call Command Center: auto-raise no-checkin issues (Heartbeat cron)
   registerCallCenterCronRoute(app);
-  registerQuoOutboundRecoveryRoute(app);
   // Plain REST login — bypasses /api/trpc to avoid platform rate limit on that path
   registerAgentLoginRoute(app as any);
   // Gmail OAuth + Pub/Sub webhook routes
