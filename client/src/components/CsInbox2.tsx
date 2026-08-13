@@ -820,6 +820,24 @@ export default function CsInbox2() {
   // Keep selectedIdRef in sync for SSE
   useEffect(() => { selectedIdRef.current = selectedConv?.id ?? null; }, [selectedConv]);
 
+  // Mirror Inbox1: Quo does not emit outbound-message webhooks, so merge any
+  // direct Quo reply when an agent opens the corresponding CS conversation.
+  const syncQuoOutbound = trpc.opsChat.syncCsOutboundMessages.useMutation({
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        utils.leads.listCsInbox.invalidate({ showResolved: true }),
+        utils.leads.getCsConversation.invalidate({ sessionId: variables.sessionId }),
+      ]);
+    },
+  });
+
+  useEffect(() => {
+    if (!selectedConv || selectedConv.id <= 0 || !selectedConv.phone.trim()) return;
+    syncQuoOutbound.mutate({ sessionId: selectedConv.id, leadPhone: selectedConv.phone });
+  // The selected session/phone are the only sync inputs; mutation identity is stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConv?.id, selectedConv?.phone]);
+
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 1200); }
 
   // ── Send mutation (exact copy from CsInbox.tsx) ─────────────────────────
