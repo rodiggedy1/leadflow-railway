@@ -52,6 +52,7 @@ import { pauseEnrollment, endEnrollment } from "./nurtureSequence";
 import { ENV } from "./_core/env";
 import { enqueueScoring } from "./csStatusScorer";
 import { computeSessionSummary } from "./sessionSummary";
+import { getConfiguredCsPhoneNumberIds, getCsOutboundDeliveryRecipient, reconcileDeliveredCsOutbound } from "./quoOutboundReconciliation";
 
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
@@ -132,6 +133,22 @@ export function registerWebhookRoutes(app: Express) {
           handleSmsDeliveryUpdate(messageId, status).catch((e: unknown) =>
             console.error("[Webhook] handleSmsDeliveryUpdate error:", e)
           );
+        }
+        if (event?.type === "message.delivered") {
+          const configuredCsPhoneNumberIds = getConfiguredCsPhoneNumberIds([
+            ENV.openPhoneCsNumberId,
+            ENV.openPhoneNumberId,
+          ]);
+          const recipient = getCsOutboundDeliveryRecipient(msgObj, configuredCsPhoneNumberIds);
+          if (recipient) {
+            // The response above has already acknowledged Quo. Reconciliation can make
+            // provider calls and must never delay the webhook response or retry cycle.
+            setImmediate(() => {
+              reconcileDeliveredCsOutbound(recipient)
+                .then(result => console.log(`[QuoOutboundWebhook] recipient=${recipient} matched=${result.matched} added=${result.added}`))
+                .catch(error => console.error("[QuoOutboundWebhook] deferred reconciliation failed:", error));
+            });
+          }
         }
         return;
       }
