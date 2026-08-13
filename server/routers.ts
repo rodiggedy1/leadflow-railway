@@ -3518,6 +3518,26 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             latestInteractionType,
           };
         });
+        // Temporary direct-Quo card diagnostic. Logs the exact canonical response
+        // row returned to CsInbox2 for the production test session; no data changes.
+        const directQuoCardTraceSessionId = 1170002;
+        const directQuoCardTrace = resultWithCalls.find(s => s.id === directQuoCardTraceSessionId);
+        console.log("[CSINBOX_DIRECT_QUO_CARD_TRACE]", JSON.stringify({
+          sessionId: directQuoCardTraceSessionId,
+          returnedToClient: Boolean(directQuoCardTrace),
+          rawSessionPresent: sessions.some(s => s.id === directQuoCardTraceSessionId),
+          canonicalSessionIdForPhone: directQuoCardTrace?.id ?? null,
+          leadPhone: directQuoCardTrace?.leadPhone ?? null,
+          leadSource: directQuoCardTrace?.leadSource ?? null,
+          csResolvedAt: directQuoCardTrace?.csResolvedAt ?? null,
+          lastMessageRole: directQuoCardTrace?.lastMessageRole ?? null,
+          lastSenderRole: directQuoCardTrace?.lastSenderRole ?? null,
+          lastMsgTs: directQuoCardTrace?.lastMsgTs ?? null,
+          lastCustomerMessageTs: directQuoCardTrace?.lastCustomerMessageTs ?? null,
+          lastMessageText: directQuoCardTrace?.lastMessageText ?? null,
+          latestInteractionType: directQuoCardTrace?.latestInteractionType ?? null,
+          latestCallCreatedAt: directQuoCardTrace?.latestCallCreatedAt ?? null,
+        }));
         return resultWithCalls;
       }),
     /**
