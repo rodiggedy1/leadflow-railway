@@ -6038,10 +6038,13 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         })
         .from(gmailThreadMeta)
         .where(
-          sql`EXISTS (
-            SELECT 1 FROM madison_email_drafts med
-            WHERE med.threadId = ${gmailThreadMeta.threadId}
-          )`
+          and(
+            isNull(gmailThreadMeta.aiResolvedAt),
+            sql`EXISTS (
+              SELECT 1 FROM madison_email_drafts med
+              WHERE med.threadId = ${gmailThreadMeta.threadId}
+            )`
+          )
         )
         .orderBy(desc(gmailThreadMeta.lastMessageAt));
       const latestRows = keepLatestEmailThreadPerSender(rows);
