@@ -5,9 +5,11 @@
  * Pay week: Sunday (inclusive) → Saturday (inclusive), stored as YYYY-MM-DD strings.
  * All monetary values are returned as numbers (dollars, 2 decimal places).
  *
- * Pay calculation matches Jobs Board and Cleaning Portal:
- *   finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanPenalty
- * Photo adjustment: use DB photoAdjustment if set; otherwise for past jobs with 0 photos → -10.
+ * Pay calculation uses the shared effective-dated calculator:
+ *   - legacy jobs retain the existing additive formula
+ *   - jobs dated 2026-08-16+ use revenue less 13% operations cost, the
+ *     existing stored payout percentage, and manual adjustment only
+ * Photo adjustment remains an operational record and legacy display input.
  */
 
 import { z } from "zod";
@@ -16,6 +18,7 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cleanerJobs, cleanerJobCustomRules } from "../drizzle/schema";
+import { calculateCleanerJobPayroll, isNewPayrollPeriod } from "./payrollCalculator";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -66,6 +69,8 @@ function getTodayET(): string {
  */
 function calcEffectivePay(
   j: {
+    jobRevenue: string | null;
+    payPercent: string | null;
     basePay: string | null;
     ratingAdjustment: string | null;
     photoAdjustment: string | null;
@@ -78,11 +83,6 @@ function calcEffectivePay(
   },
   today: string
 ): { finalPay: number; photoAdj: number } {
-  const basePay = parseFloat(j.basePay ?? "0") || 0;
-  const ratingAdj = parseFloat(j.ratingAdjustment ?? "0") || 0;
-  const streakBonus = parseFloat(j.streakBonus ?? "0") || 0;
-  const manualAdj = parseFloat(j.manualAdjustment ?? "0") || 0;
-  const reclean = j.recleanPenalty !== null ? parseFloat(j.recleanPenalty) : 0;
   let photoAdj: number;
   if (j.photoAdjustment !== null) {
     photoAdj = parseFloat(j.photoAdjustment);
@@ -93,8 +93,11 @@ function calcEffectivePay(
   } else {
     photoAdj = 0;
   }
-  const finalPay = Math.round((basePay + ratingAdj + photoAdj + streakBonus + manualAdj + reclean) * 100) / 100;
-  return { finalPay, photoAdj };
+  const payroll = calculateCleanerJobPayroll({
+    ...j,
+    photoAdjustment: String(photoAdj),
+  });
+  return { finalPay: payroll.finalPay, photoAdj };
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -203,8 +206,8 @@ export const teamPayRouter = router({
         let totalBasePay = 0;
         let totalFinalPay = 0;
         for (const j of teamJobs) {
-          const base = parseFloat(j.basePay ?? "0");
-          totalBasePay += base;
+          const payroll = calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" });
+          totalBasePay += payroll.basePay;
           const { finalPay } = calcEffectivePay(j, today);
           totalFinalPay += finalPay;
         }
@@ -243,7 +246,7 @@ export const teamPayRouter = router({
 
         // Per-job data for Job impact tab
         const jobRows = teamJobs.map((j) => {
-          const basePay = parseFloat(j.basePay ?? "0");
+          const basePay = calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).basePay;
           const ratingAdj = parseFloat(j.ratingAdjustment ?? "0");
           const streakBonus = parseFloat(j.streakBonus ?? "0");
           const manualAdj = parseFloat(j.manualAdjustment ?? "0");
@@ -384,7 +387,15 @@ export const teamPayRouter = router({
         const basePayout = parseFloat(team.payPercent ?? "50");
 
         // Summed monetary adjustments — live calculation
-        const totalBasePay = tj.reduce((s, j) => s + parseFloat(j.basePay ?? "0"), 0);
+        const calculatedJobs = tj.map((j) => ({ j, effective: calcEffectivePay(j, today) }));
+        const totalBasePay = calculatedJobs.reduce((s, { j }) => s + calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).basePay, 0);
+        const totalJobRevenue = tj.reduce((s, j) => s + parseFloat(j.jobRevenue ?? "0"), 0);
+        const totalOperationalCost = calculatedJobs.reduce((s, { j }) => {
+          return s + calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).operationalCost;
+        }, 0);
+        const totalNetJobAmount = calculatedJobs.reduce((s, { j }) => {
+          return s + calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).netJobAmount;
+        }, 0);
         const totalRatingAdj = tj.reduce((s, j) => s + parseFloat(j.ratingAdjustment ?? "0"), 0);
         const totalStreakBonus = tj.reduce((s, j) => s + parseFloat(j.streakBonus ?? "0"), 0);
         const totalManualAdj = tj.reduce((s, j) => s + parseFloat(j.manualAdjustment ?? "0"), 0);
@@ -403,20 +414,18 @@ export const teamPayRouter = router({
         const missedCheckins = tj.filter((j) => j.jobStatus === null && j.jobDate < today && !INACTIVE.includes((j.bookingStatus ?? "").toLowerCase())).length;
 
         // Photo adj — live calc per job
-        const totalPhotoAdj = tj.reduce((s, j) => {
-          const { photoAdj } = calcEffectivePay(j, today);
-          return s + photoAdj;
-        }, 0);
+        const totalPhotoAdj = calculatedJobs.reduce((s, { effective }) => s + effective.photoAdj, 0);
 
         // Final pay — live calc per job
-        const totalFinalPay = tj.reduce((s, j) => {
-          const { finalPay } = calcEffectivePay(j, today);
-          return s + finalPay;
-        }, 0);
+        const totalFinalPay = calculatedJobs.reduce((s, { effective }) => s + effective.finalPay, 0);
 
         return {
           teamName: team.teamName,
           jobs: tj.length,
+          payrollMode: input.weekStart >= "2026-08-16" ? "2026-08-16" : "legacy",
+          jobRevenue: Math.round(totalJobRevenue * 100) / 100,
+          operationalCost: Math.round(totalOperationalCost * 100) / 100,
+          netJobAmount: Math.round(totalNetJobAmount * 100) / 100,
           basePay: Math.round(totalBasePay * 100) / 100,
           ratingAdj: Math.round(totalRatingAdj * 100) / 100,
           photoAdj: Math.round(totalPhotoAdj * 100) / 100,
@@ -460,15 +469,17 @@ export const teamPayRouter = router({
       // Recalculate finalPay: add or remove the -$20 complaint charge
       const currentFinalPay = parseFloat(job.finalPay ?? job.basePay ?? "0");
       const hadCharge = job.complaintChargeApplied === 1;
-      let newFinalPay = currentFinalPay;
+      let newFinalPay = isNewPayrollPeriod(job.jobDate)
+        ? calculateCleanerJobPayroll(job).finalPay
+        : currentFinalPay;
 
-      if (clearing) {
+      if (!isNewPayrollPeriod(job.jobDate) && clearing) {
         // Remove charge if it was applied
         if (hadCharge) newFinalPay = Math.round((currentFinalPay + 20) * 100) / 100;
-      } else if (input.applyCharge && !hadCharge) {
+      } else if (!isNewPayrollPeriod(job.jobDate) && input.applyCharge && !hadCharge) {
         // Apply new -$20 charge
         newFinalPay = Math.round((currentFinalPay - 20) * 100) / 100;
-      } else if (!input.applyCharge && hadCharge) {
+      } else if (!isNewPayrollPeriod(job.jobDate) && !input.applyCharge && hadCharge) {
         // Remove charge (toggled off)
         newFinalPay = Math.round((currentFinalPay + 20) * 100) / 100;
       }
@@ -514,7 +525,8 @@ export const teamPayRouter = router({
         .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
 
       const jobRows = jobs.map((j) => {
-        const basePay = parseFloat(j.basePay ?? "0") || 0;
+        const payroll = calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" });
+        const basePay = payroll.basePay;
         const ratingAdj = parseFloat(j.ratingAdjustment ?? "0") || 0;
         const streakBonus = parseFloat(j.streakBonus ?? "0") || 0;
         const manualAdj = parseFloat(j.manualAdjustment ?? "0") || 0;
@@ -544,6 +556,11 @@ export const teamPayRouter = router({
           address: j.jobAddress ?? "",
           service: serviceLabel,
           status,
+          payrollMode: isNewPayrollPeriod(j.jobDate) ? "2026-08-16" : "legacy",
+          jobRevenue: payroll.jobRevenue,
+          operationalCost: payroll.operationalCost,
+          netJobAmount: payroll.netJobAmount,
+          payoutPct: payroll.payPercent,
           basePay: Math.round(basePay * 100) / 100,
           photoAdj: Math.round(photoAdj * 100) / 100,
           ratingAdj: Math.round(ratingAdj * 100) / 100,
@@ -612,10 +629,15 @@ export const teamPayRouter = router({
       for (const j of jobs) {
         const { finalPay } = calcEffectivePay(j, today);
         payrollTotal += finalPay;
-        // Jobs Board also includes googleReviewBonus and applied custom rules
-        const googleReview = j.googleReviewBonus !== null ? parseFloat(j.googleReviewBonus) : 0;
-        const custom = customTotals.get(j.id) ?? 0;
-        jobsBoardTotal += finalPay + googleReview + custom;
+        if (isNewPayrollPeriod(j.jobDate)) {
+          // New-period payroll is base plus manual adjustment only.
+          jobsBoardTotal += finalPay;
+        } else {
+          // Preserve legacy Jobs Board behavior unchanged.
+          const googleReview = j.googleReviewBonus !== null ? parseFloat(j.googleReviewBonus) : 0;
+          const custom = customTotals.get(j.id) ?? 0;
+          jobsBoardTotal += finalPay + googleReview + custom;
+        }
       }
 
       payrollTotal = Math.round(payrollTotal * 100) / 100;

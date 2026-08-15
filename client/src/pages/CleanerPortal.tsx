@@ -522,6 +522,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   }, [job.id, job.completedJobId, uploadMutation]);
 
   const isComplete = job.bookingStatus === "completed";
+  const isNewPayrollPeriod = (job.jobDate ?? "") >= "2026-08-16";
   const basePay = parseFloat(job.basePay ?? "0") || 0;
   const ratingAdj = parseFloat(job.ratingAdjustment ?? "0") || 0;
   // photoAdjustment is written to DB by the server when rating is finalized or photo is uploaded
@@ -539,7 +540,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   // Active custom pay rules — shown on every job (e.g. Google Review bonus, Late penalty)
   const shownCustomRules = activeCustomRules ?? [];
   // Always recalculate display total from components — stored finalPay may be stale
-  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj;
+  const finalPay = isNewPayrollPeriod
+    ? (parseFloat(job.finalPay ?? "0") || 0)
+    : basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj;
   const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
 
   // ── 4-tile summary calculations ──────────────────────────────────────────
@@ -548,12 +551,12 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   // LIKELY PAY: basePay + photoBonus + fiveStarBonus (best-case standard bonuses, no streak/manual/reclean)
   const photoBonus = payRules?.photoBonus ?? 5;
   const fiveStarBonus = payRules?.fiveStarBonus ?? 10;
-  const summaryLikelyPay = basePay + photoBonus + fiveStarBonus;
+  const summaryLikelyPay = isNewPayrollPeriod ? finalPay : basePay + photoBonus + fiveStarBonus;
   // POTENTIAL EARNINGS: likely pay + all active custom bonus rules
   const customBonusTotal = shownCustomRules
     .filter(r => r.type === "bonus")
     .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
-  const summaryPotentialPay = summaryLikelyPay + customBonusTotal;
+  const summaryPotentialPay = isNewPayrollPeriod ? finalPay : summaryLikelyPay + customBonusTotal;
   // RISK FLOOR: base + no-photo penalty + low-rating penalty + reclean penalty + custom deductions
   const noPhotoPenalty = payRules?.noPhotoPenalty ?? 10;
   const lowRatingDeduction = payRules?.lowRatingDeduction ?? 20;
@@ -561,7 +564,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   const customDeductionTotal = shownCustomRules
     .filter(r => r.type === "deduction")
     .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
-  const summaryRiskFloor = basePay - noPhotoPenalty - lowRatingDeduction - recleanPenaltyAmt - customDeductionTotal + manualAdj;
+  const summaryRiskFloor = isNewPayrollPeriod ? finalPay : basePay - noPhotoPenalty - lowRatingDeduction - recleanPenaltyAmt - customDeductionTotal + manualAdj;
   // Streak progress
   const streakTarget = payRules?.streakTarget ?? 10;
   const currentStreak = streakInfo?.currentStreak ?? 0;
@@ -2459,7 +2462,8 @@ export default function CleanerPortal() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null; jobDate?: string | null }) => {
+  const calcJobPay = (j: { basePay?: string | null; finalPay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null; jobDate?: string | null }) => {
+    if ((j.jobDate ?? "") >= "2026-08-16") return parseFloat(j.finalPay ?? "0") || 0;
     const base = parseFloat(j.basePay ?? "0") || 0;
     const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
     // If photoAdjustment is in DB, use it directly (manual overrides respected).

@@ -68,6 +68,10 @@ function triggerCsvDownload(csv: string, filename: string) {
 type SummaryRow = {
   teamName: string;
   jobs: number;
+  payrollMode?: "legacy" | "2026-08-16";
+  jobRevenue?: number;
+  operationalCost?: number;
+  netJobAmount?: number;
   basePay: number;
   ratingAdj: number;
   photoAdj: number;
@@ -85,6 +89,28 @@ type SummaryRow = {
 // ─── Summary CSV ──────────────────────────────────────────────────────────────
 
 function buildSummaryCsv(rows: SummaryRow[], weekStart: string, weekEnd: string): string {
+  if (rows[0]?.payrollMode === "2026-08-16") {
+    const headers = ["Team", "Jobs", "Job Amount", "Operations Cost (13%)", "Net Job Amount", "Payout %", "Base Pay", "Manual Adj", "Final Pay"];
+    const dataRows = rows.map((r) => [
+      r.teamName, r.jobs, (r.jobRevenue ?? 0).toFixed(2), (r.operationalCost ?? 0).toFixed(2),
+      (r.netJobAmount ?? 0).toFixed(2), `${r.payoutPct}%`, r.basePay.toFixed(2), r.manualAdj.toFixed(2), r.finalPay.toFixed(2),
+    ]);
+    dataRows.push([
+      "TOTAL", rows.reduce((s, r) => s + r.jobs, 0),
+      rows.reduce((s, r) => s + (r.jobRevenue ?? 0), 0).toFixed(2),
+      rows.reduce((s, r) => s + (r.operationalCost ?? 0), 0).toFixed(2),
+      rows.reduce((s, r) => s + (r.netJobAmount ?? 0), 0).toFixed(2), "",
+      rows.reduce((s, r) => s + r.basePay, 0).toFixed(2),
+      rows.reduce((s, r) => s + r.manualAdj, 0).toFixed(2),
+      rows.reduce((s, r) => s + r.finalPay, 0).toFixed(2),
+    ]);
+    return [
+      [`Payroll Summary — ${weekStart} to ${weekEnd}`].map((v) => `"${v}"`).join(","), "",
+      headers.map((v) => `"${v}"`).join(","),
+      ...dataRows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+  }
+
   const headers = [
     "Team", "Jobs", "Base Pay", "Rating Adj", "Photo Adj", "Streak Bonus",
     "Google Review Bonus", "Reclean Penalty", "Complaint Charge", "Manual Adj",
@@ -135,6 +161,11 @@ type TeamDetailJob = {
   address: string;
   service: string;
   status: string;
+  payrollMode?: "legacy" | "2026-08-16";
+  jobRevenue?: number;
+  operationalCost?: number;
+  netJobAmount?: number;
+  payoutPct?: number;
   basePay: number;
   photoAdj: number;
   ratingAdj: number;
@@ -152,6 +183,28 @@ function buildTeamDetailCsv(
   jobs: TeamDetailJob[],
   totalFinalPay: number
 ): string {
+  if (jobs[0]?.payrollMode === "2026-08-16") {
+    const headers = ["Date", "Time", "Customer", "Address", "Service", "Status", "Job Amount", "Operations Cost (13%)", "Net Job Amount", "Payout %", "Base Pay", "Manual Adj", "Final Pay"];
+    const dataRows = jobs.map((j) => [
+      j.jobDate, j.time, j.customer, j.address, j.service, j.status,
+      (j.jobRevenue ?? 0).toFixed(2), (j.operationalCost ?? 0).toFixed(2), (j.netJobAmount ?? 0).toFixed(2),
+      `${j.payoutPct ?? 0}%`, j.basePay.toFixed(2), j.manualAdj.toFixed(2), j.finalPay.toFixed(2),
+    ]);
+    dataRows.push([
+      "TOTAL", "", "", "", "", "",
+      jobs.reduce((s, j) => s + (j.jobRevenue ?? 0), 0).toFixed(2),
+      jobs.reduce((s, j) => s + (j.operationalCost ?? 0), 0).toFixed(2),
+      jobs.reduce((s, j) => s + (j.netJobAmount ?? 0), 0).toFixed(2), "",
+      jobs.reduce((s, j) => s + j.basePay, 0).toFixed(2),
+      jobs.reduce((s, j) => s + j.manualAdj, 0).toFixed(2), totalFinalPay.toFixed(2),
+    ]);
+    return [
+      [`${teamName} — Payroll Detail — ${weekStart} to ${weekEnd}`].map((v) => `"${v}"`).join(","), "",
+      headers.map((v) => `"${v}"`).join(","),
+      ...dataRows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+  }
+
   const headers = [
     "Date", "Time", "Customer", "Address", "Service", "Status",
     "Base Pay", "Photo Adj", "Rating Adj", "Streak Bonus",
@@ -246,6 +299,15 @@ export default function PayrollSummary() {
   const { data, isLoading, error } = trpc.teamPay.getPayrollSummary.useQuery({ weekStart });
 
   const rows = data?.rows ?? [];
+  const isNewPayrollPeriod = rows[0]?.payrollMode === "2026-08-16";
+  const totals = useMemo(() => ({
+    revenue: rows.reduce((s, r) => s + (r.jobRevenue ?? 0), 0),
+    operations: rows.reduce((s, r) => s + (r.operationalCost ?? 0), 0),
+    net: rows.reduce((s, r) => s + (r.netJobAmount ?? 0), 0),
+    base: rows.reduce((s, r) => s + r.basePay, 0),
+    manual: rows.reduce((s, r) => s + r.manualAdj, 0),
+    final: rows.reduce((s, r) => s + r.finalPay, 0),
+  }), [rows]);
 
   // ─── Integrity check ─────────────────────────────────────────────────────────
   const { mutate: runIntegrityCheck, data: checkData, isPending: checkLoading } =
@@ -392,7 +454,60 @@ export default function PayrollSummary() {
           })()}
         </div>
 
-        {/* Table */}
+        {isNewPayrollPeriod && rows.length > 0 && (
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ["Job Amount", totals.revenue, "text-slate-900"],
+              ["13% Ops Cost", -totals.operations, "text-rose-700"],
+              ["Net Amount", totals.net, "text-slate-900"],
+              ["Base Pay", totals.base, "text-slate-900"],
+              ["Manual Adj.", totals.manual, moneyColor(totals.manual)],
+              ["Final Payroll", totals.final, "text-emerald-800"],
+            ].map(([label, amount, className]) => (
+              <div key={label as string} className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label as string}</div>
+                <div className={cx("mt-0.5 text-base font-bold", className as string)}>{fmtMoneyAbs(Math.abs(amount as number))}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isNewPayrollPeriod && !isLoading && !error && rows.length > 0 && (
+          <div className="mb-4 overflow-x-auto rounded-[28px] border border-slate-200 bg-white shadow-sm">
+            <table className="w-full text-sm border-collapse">
+              <thead><tr className="border-b border-slate-100 bg-slate-50">
+                {["Team", "Jobs", "Job Amount", "13% Ops", "Net Amount", "Payout %", "Base Pay", "Manual Adj.", "Final Pay"].map((label, i) => (
+                  <th key={label} className={cx("px-3 py-3 font-semibold text-slate-700 whitespace-nowrap", i < 2 ? "text-left" : "text-right")}>{label}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={row.teamName} className={cx("group/row border-b border-slate-100", i % 2 === 0 ? "bg-white" : "bg-slate-50/30")}>
+                    <td className="px-3 py-3 text-left"><div className="flex items-center"><span className="font-semibold text-slate-900">{row.teamName}</span><TeamDownloadButton teamName={row.teamName} weekStart={weekStart} weekEnd={weekEnd} /></div></td>
+                    <td className="px-3 py-3 text-left text-slate-700">{row.jobs}</td>
+                    <td className="px-3 py-3 text-right">{fmtMoneyAbs(row.jobRevenue ?? 0)}</td>
+                    <td className="px-3 py-3 text-right text-rose-700">−{fmtMoneyAbs(row.operationalCost ?? 0)}</td>
+                    <td className="px-3 py-3 text-right font-medium">{fmtMoneyAbs(row.netJobAmount ?? 0)}</td>
+                    <td className="px-3 py-3 text-right">{row.payoutPct}%</td>
+                    <td className="px-3 py-3 text-right font-medium">{fmtMoneyAbs(row.basePay)}</td>
+                    <td className={cx("px-3 py-3 text-right", moneyColor(row.manualAdj))}>{fmtMoney(row.manualAdj)}</td>
+                    <td className="px-3 py-3 text-right text-base font-bold text-emerald-800">{fmtMoneyAbs(row.finalPay)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
+                  <td className="px-3 py-3">TOTAL</td><td className="px-3 py-3">{rows.reduce((s, r) => s + r.jobs, 0)}</td>
+                  <td className="px-3 py-3 text-right">{fmtMoneyAbs(totals.revenue)}</td><td className="px-3 py-3 text-right text-rose-700">−{fmtMoneyAbs(totals.operations)}</td>
+                  <td className="px-3 py-3 text-right">{fmtMoneyAbs(totals.net)}</td><td />
+                  <td className="px-3 py-3 text-right">{fmtMoneyAbs(totals.base)}</td><td className={cx("px-3 py-3 text-right", moneyColor(totals.manual))}>{fmtMoney(totals.manual)}</td>
+                  <td className="px-3 py-3 text-right text-base text-emerald-800">{fmtMoneyAbs(totals.final)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Legacy table */}
+        {!isNewPayrollPeriod &&
         <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
@@ -567,7 +682,7 @@ export default function PayrollSummary() {
               </table>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Period total callout */}
         {rows.length > 0 && (
