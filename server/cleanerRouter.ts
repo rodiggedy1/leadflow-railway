@@ -27,6 +27,7 @@ import { getPayRules } from "./settingsRouter";
 import { getOrCreateProxySession, closeProxySession } from "./twilioProxy";
 import { invokeLLM } from "./_core/llm";
 import { parseChecklistEnvelope } from "./qualityRouter";
+import { calculateCleanerJobPayroll, isNewPayrollPeriod } from "./payrollCalculator";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -403,8 +404,10 @@ export const cleanerRouter = router({
           const { calculatePayAdjustments } = await import("./qualityRouter");
           const rules = await getPayRules();
           const adj = calculatePayAdjustments({
+            jobDate: job.jobDate,
             jobRevenue: parseFloat(job.jobRevenue ?? "0"),
             payPercent: parseFloat(job.payPercent ?? "0"),
+            manualAdjustment: parseFloat(job.manualAdjustment ?? "0"),
             customerRating: job.customerRating,
             missedSomething: job.missedSomething === 1,
             currentStreakAfterJob: 0, // streak already applied at rating time; don't re-apply
@@ -538,7 +541,9 @@ export const cleanerRouter = router({
         }
         payUpdate.photoAdjustment = String(photoAdj);
         // Only set finalPay here if no rating yet; rating webhook will overwrite with full calc
-        if (job.customerRating === null) {
+        if (isNewPayrollPeriod(job.jobDate)) {
+          payUpdate.finalPay = String(calculateCleanerJobPayroll(job).finalPay);
+        } else if (job.customerRating === null) {
           const basePay = parseFloat(job.basePay ?? "0");
           payUpdate.finalPay = String(Math.round((basePay + photoAdj) * 100) / 100);
         }

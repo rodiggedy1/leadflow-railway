@@ -43,6 +43,7 @@ import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
 import { invokeLLM } from "./_core/llm";
 import { getPayRules, DEFAULT_PAY_RULES, type PayRules } from "./settingsRouter";
+import { calculateCleanerJobPayroll, calculateEffectivePayroll, isNewPayrollPeriod } from "./payrollCalculator";
 
 /** Generate a URL-safe random tracker token (32 chars). */
 function generateTrackerToken(): string {
@@ -208,8 +209,10 @@ export function parseMissedReply(text: string): boolean | null {
  * Pass `rules` from getPayRules() for live DB values; omit to use defaults.
  */
 export function calculatePayAdjustments(params: {
+  jobDate: string;
   jobRevenue: number;
   payPercent: number;
+  manualAdjustment?: number;
   customerRating: number | null;
   missedSomething: boolean | null;
   currentStreakAfterJob: number;
@@ -223,7 +226,7 @@ export function calculatePayAdjustments(params: {
   finalPay: number;
 } {
   const rules = params.rules ?? DEFAULT_PAY_RULES;
-  const basePay = Math.round(params.jobRevenue * params.payPercent * 100) / 100;
+  const legacyBasePay = Math.round(params.jobRevenue * params.payPercent * 100) / 100;
   let ratingAdjustment = 0;
   if (params.customerRating === 5) {
     ratingAdjustment = rules.fiveStarBonus;
@@ -241,7 +244,16 @@ export function calculatePayAdjustments(params: {
     params.currentStreakAfterJob % rules.streakTarget === 0
       ? rules.streakBonus
       : 0;
-  const finalPay = Math.round((basePay + ratingAdjustment + photoAdjustment + streakBonus) * 100) / 100;
+  const payroll = calculateEffectivePayroll({
+    jobDate: params.jobDate,
+    jobRevenue: params.jobRevenue,
+    payPercent: params.payPercent,
+    manualAdjustment: params.manualAdjustment ?? 0,
+  });
+  const basePay = isNewPayrollPeriod(params.jobDate) ? payroll.basePay : legacyBasePay;
+  const finalPay = isNewPayrollPeriod(params.jobDate)
+    ? payroll.finalPay
+    : Math.round((legacyBasePay + ratingAdjustment + photoAdjustment + streakBonus) * 100) / 100;
   return { basePay, ratingAdjustment, photoAdjustment, streakBonus, finalPay };
 }
 
@@ -467,18 +479,18 @@ export async function handleRatingReply(
           const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, cleanerJobId)).limit(1);
           const cj = cjRow[0];
           if (cj && cj.cleanerProfileId) {
-            const profileRow = await db.select().from(cleanerProfiles).where(eq(cleanerProfiles.id, cj.cleanerProfileId)).limit(1);
-            const profile = profileRow[0];
-            if (profile) {
-              const payPct = parseFloat(profile.payPercent ?? "0");
+            const payPct = parseFloat(cj.payPercent ?? "0");
+            if (payPct > 0) {
               const revenue = parseFloat(cj.jobRevenue ?? "0");
               if (payPct > 0 && revenue > 0) {
                 const isGoodJob = rating >= 4;
                 const newStreak = await updateCleanerStreak(cj.cleanerProfileId, isGoodJob);
                 const rules = await getPayRules();
                 const adj = calculatePayAdjustments({
+                  jobDate: cj.jobDate,
                   jobRevenue: revenue,
                   payPercent: payPct,
+                  manualAdjustment: parseFloat(cj.manualAdjustment ?? "0"),
                   customerRating: rating,
                   missedSomething: cj.missedSomething === 1,
                   currentStreakAfterJob: newStreak,
@@ -570,15 +582,8 @@ export async function handleRatingReply(
 
         // Recalculate pay with updated data
         if (cj.cleanerProfileId && cj.customerRating !== null) {
-          const profileRow = await db
-            .select()
-            .from(cleanerProfiles)
-            .where(eq(cleanerProfiles.id, cj.cleanerProfileId))
-            .limit(1);
-
-          if (profileRow.length > 0) {
-            const profile = profileRow[0]!;
-            const payPct = parseFloat(profile.payPercent ?? "0");
+          const payPct = parseFloat(cj.payPercent ?? "0");
+          if (payPct > 0) {
             const revenue = parseFloat(cj.jobRevenue ?? "0");
 
             if (payPct > 0 && revenue > 0) {
@@ -590,8 +595,10 @@ export async function handleRatingReply(
               );
               const rules = await getPayRules();
               const adj = calculatePayAdjustments({
+                jobDate: cj.jobDate,
                 jobRevenue: revenue,
                 payPercent: payPct,
+                manualAdjustment: parseFloat(cj.manualAdjustment ?? "0"),
                 customerRating: cj.customerRating,
                 missedSomething: missed,
                 currentStreakAfterJob: newStreak,
@@ -778,10 +785,18 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
         }
         const revenue = booking.totalRevenue;
         const payPct = parseFloat(profile.payPercent ?? String(team.share) ?? "0");
-        const basePay = payPct > 0 ? ((revenue * payPct) / 100).toFixed(2) : null;
+        const payroll = calculateEffectivePayroll({
+          jobDate: dateStr,
+          jobRevenue: revenue,
+          payPercent: payPct,
+          manualAdjustment: 0,
+          legacyBasePay: payPct > 0 ? (revenue * payPct) / 100 : 0,
+        });
+        const basePay = payPct > 0 ? String(payroll.basePay) : null;
+        const initialFinalPay = isNewPayrollPeriod(dateStr) && payPct > 0 ? String(payroll.finalPay) : undefined;
         const serviceNames = booking.serviceNames.join(", ") || "";
         const [existing] = await db
-          .select({ id: cleanerJobs.id, bookingStatus: cleanerJobs.bookingStatus })
+          .select({ id: cleanerJobs.id, bookingStatus: cleanerJobs.bookingStatus, manualAdjustment: cleanerJobs.manualAdjustment })
           .from(cleanerJobs)
           .where(and(eq(cleanerJobs.bookingId, booking.id), eq(cleanerJobs.cleanerProfileId, profile.id)))
           .limit(1);
@@ -809,6 +824,7 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           jobRevenue: String(revenue),
           payPercent: payPct > 0 ? String(payPct) : null,
           basePay,
+          ...(initialFinalPay !== undefined ? { finalPay: initialFinalPay } : {}),
           checklistItems: parsedChecklist ? JSON.stringify(parsedChecklist) : null,
           requestedTeam: booking.requestedTeam || null,
           extras: booking.extras.length > 0 ? JSON.stringify(booking.extras) : null,
@@ -827,6 +843,14 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           // incorrectly marked it). Always allow L27 to override "rescheduled" back to active.
           const isTerminalStatus = previousStatus === "completed" || previousStatus === "cancelled";
           const syncData = isTerminalStatus ? (({ bookingStatus, ...rest }) => rest)(jobData) : jobData;
+          if (isNewPayrollPeriod(dateStr) && payPct > 0) {
+            (syncData as any).finalPay = String(calculateEffectivePayroll({
+              jobDate: dateStr,
+              jobRevenue: revenue,
+              payPercent: payPct,
+              manualAdjustment: existing.manualAdjustment,
+            }).finalPay);
+          }
           await db.update(cleanerJobs).set(syncData).where(eq(cleanerJobs.id, existing.id));
           updated++;
           // If L27 is marking this job as rescheduled (or cancelled), remove its schedule_assignments
@@ -1614,7 +1638,9 @@ export const qualityRouter = router({
           const basePay = parseFloat(cj.basePay ?? "0");
           const existingRatingAdj = parseFloat(cj.ratingAdjustment ?? "0");
           const existingStreakBonus = parseFloat(cj.streakBonus ?? "0");
-          const newFinalPay = Math.round((basePay + photoBonus + existingRatingAdj + existingStreakBonus) * 100) / 100;
+          const newFinalPay = isNewPayrollPeriod(cj.jobDate)
+            ? calculateCleanerJobPayroll(cj).finalPay
+            : Math.round((basePay + photoBonus + existingRatingAdj + existingStreakBonus) * 100) / 100;
           await db
             .update(cleanerJobs)
             .set({
@@ -1626,8 +1652,10 @@ export const qualityRouter = router({
                 const revenue = parseFloat(cj.jobRevenue ?? "0");
                 if (payPct > 0 && revenue > 0) {
                   const adj = calculatePayAdjustments({
+                    jobDate: cj.jobDate,
                     jobRevenue: revenue,
                     payPercent: payPct,
+                    manualAdjustment: parseFloat(cj.manualAdjustment ?? "0"),
                     customerRating: cj.customerRating,
                     missedSomething: cj.missedSomething === 1,
                     currentStreakAfterJob: existingStreakBonus > 0 ? 1 : 0,
@@ -1845,17 +1873,25 @@ export const qualityRouter = router({
               profile.payPercent = String(team.share);
             }
 
-            // Calculate base pay
+            const jobDate = dateStr;
+            // Keep the existing Launch27 revenue and job-level team share sources;
+            // only the approved effective-dated arithmetic differs for new-period jobs.
             const revenue = booking.totalRevenue;
             const payPct = parseFloat(profile.payPercent ?? String(team.share) ?? "0");
-            const basePay = payPct > 0 ? ((revenue * payPct) / 100).toFixed(2) : null;
-
-            const jobDate = dateStr;
+            const payroll = calculateEffectivePayroll({
+              jobDate,
+              jobRevenue: revenue,
+              payPercent: payPct,
+              manualAdjustment: 0,
+              legacyBasePay: payPct > 0 ? (revenue * payPct) / 100 : 0,
+            });
+            const basePay = payPct > 0 ? String(payroll.basePay) : null;
+            const initialFinalPay = isNewPayrollPeriod(jobDate) && payPct > 0 ? String(payroll.finalPay) : undefined;
             const serviceNames = booking.serviceNames.join(", ") || "";
 
             // Check if a cleanerJob already exists for this booking + team
             const [existing] = await db
-              .select({ id: cleanerJobs.id, bookingStatus: cleanerJobs.bookingStatus })
+            .select({ id: cleanerJobs.id, bookingStatus: cleanerJobs.bookingStatus, manualAdjustment: cleanerJobs.manualAdjustment })
               .from(cleanerJobs)
               .where(
                 and(
@@ -1892,6 +1928,7 @@ export const qualityRouter = router({
               jobRevenue: String(revenue),
               payPercent: payPct > 0 ? String(payPct) : null,
               basePay,
+              ...(initialFinalPay !== undefined ? { finalPay: initialFinalPay } : {}),
               checklistItems: parsedChecklist ? JSON.stringify(parsedChecklist) : null,
               requestedTeam: booking.requestedTeam || null,
               extras: booking.extras.length > 0 ? JSON.stringify(booking.extras) : null,
@@ -1916,6 +1953,14 @@ export const qualityRouter = router({
               const syncData = isTerminalStatus
                 ? (({ bookingStatus, ...rest }) => rest)(jobData)  // strip bookingStatus from update
                 : jobData;
+              if (isNewPayrollPeriod(jobDate) && payPct > 0) {
+                (syncData as any).finalPay = String(calculateEffectivePayroll({
+                  jobDate,
+                  jobRevenue: revenue,
+                  payPercent: payPct,
+                  manualAdjustment: existing.manualAdjustment,
+                }).finalPay);
+              }
                             // Update existing record with latest data from Launch27
               await db
                 .update(cleanerJobs)
@@ -2145,11 +2190,19 @@ export const qualityRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
+      const jobRows = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      const job = jobRows[0];
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      const nextFinalPay = isNewPayrollPeriod(job.jobDate)
+        ? String(calculateCleanerJobPayroll(job, { manualAdjustment: input.amount }).finalPay)
+        : undefined;
+
       await db
         .update(cleanerJobs)
         .set({
           manualAdjustment: input.amount ?? null,
           manualAdjustmentNote: input.note ?? null,
+          ...(nextFinalPay !== undefined ? { finalPay: nextFinalPay } : {}),
         })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
@@ -2209,7 +2262,9 @@ export const qualityRouter = router({
       const manualAdj = parseFloat(cj.manualAdjustment ?? "0");
       const googleBonus = parseFloat(cj.googleReviewBonus ?? "0");
       const recleanAmt = penaltyValue ? parseFloat(penaltyValue) : 0;
-      const newFinalPay = Math.round((base + ratingAdj + photoAdj + streakB + manualAdj + googleBonus + recleanAmt) * 100) / 100;
+      const newFinalPay = isNewPayrollPeriod(cj.jobDate)
+        ? calculateCleanerJobPayroll(cj, { recleanPenalty: penaltyValue }).finalPay
+        : Math.round((base + ratingAdj + photoAdj + streakB + manualAdj + googleBonus + recleanAmt) * 100) / 100;
       await db
         .update(cleanerJobs)
         .set({ recleanPenalty: penaltyValue, finalPay: String(newFinalPay) })
@@ -2247,7 +2302,9 @@ export const qualityRouter = router({
       const manual = parseFloat(cj.manualAdjustment ?? "0");
       const reclean = parseFloat(cj.recleanPenalty ?? "0");
       const reviewBonus = bonusValue !== null ? parseFloat(bonusValue) : 0;
-      const newFinalPay = Math.round((base + ratingAdj + photoAdj + streak + manual + reclean + reviewBonus) * 100) / 100;
+      const newFinalPay = isNewPayrollPeriod(cj.jobDate)
+        ? calculateCleanerJobPayroll(cj, { googleReviewBonus: bonusValue }).finalPay
+        : Math.round((base + ratingAdj + photoAdj + streak + manual + reclean + reviewBonus) * 100) / 100;
       await db
         .update(cleanerJobs)
         .set({
@@ -2361,7 +2418,9 @@ export const qualityRouter = router({
       const streak = parseFloat(cj.streakBonus ?? "0");
       const manual = parseFloat(cj.manualAdjustment ?? "0");
       const reclean = cj.recleanPenalty != null ? parseFloat(cj.recleanPenalty) : 0;
-      const newFinalPay = Math.round((base + newRatingAdj + photoAdj + streak + manual + reclean) * 100) / 100;
+      const newFinalPay = isNewPayrollPeriod(cj.jobDate)
+        ? calculateCleanerJobPayroll(cj, { ratingAdjustment: input.amount !== null ? String(newRatingAdj) : null }).finalPay
+        : Math.round((base + newRatingAdj + photoAdj + streak + manual + reclean) * 100) / 100;
       await db.update(cleanerJobs).set({
         ratingAdjustment: input.amount !== null ? String(newRatingAdj) : null,
         finalPay: String(newFinalPay),
@@ -2389,7 +2448,9 @@ export const qualityRouter = router({
       const streak = parseFloat(cj.streakBonus ?? "0");
       const manual = parseFloat(cj.manualAdjustment ?? "0");
       const reclean = cj.recleanPenalty != null ? parseFloat(cj.recleanPenalty) : 0;
-      const newFinalPay = Math.round((base + ratingAdj + newPhotoAdj + streak + manual + reclean) * 100) / 100;
+      const newFinalPay = isNewPayrollPeriod(cj.jobDate)
+        ? calculateCleanerJobPayroll(cj, { photoAdjustment: input.amount !== null ? String(newPhotoAdj) : null }).finalPay
+        : Math.round((base + ratingAdj + newPhotoAdj + streak + manual + reclean) * 100) / 100;
       await db.update(cleanerJobs).set({
         photoAdjustment: input.amount !== null ? String(newPhotoAdj) : null,
         finalPay: String(newFinalPay),
@@ -2417,7 +2478,9 @@ export const qualityRouter = router({
       const photoAdj = parseFloat(cj.photoAdjustment ?? "0");
       const manual = parseFloat(cj.manualAdjustment ?? "0");
       const reclean = cj.recleanPenalty != null ? parseFloat(cj.recleanPenalty) : 0;
-      const newFinalPay = Math.round((base + ratingAdj + photoAdj + newStreak + manual + reclean) * 100) / 100;
+      const newFinalPay = isNewPayrollPeriod(cj.jobDate)
+        ? calculateCleanerJobPayroll(cj, { streakBonus: input.amount !== null ? String(newStreak) : null }).finalPay
+        : Math.round((base + ratingAdj + photoAdj + newStreak + manual + reclean) * 100) / 100;
       await db.update(cleanerJobs).set({
         streakBonus: input.amount !== null ? String(newStreak) : null,
         finalPay: String(newFinalPay),
@@ -2447,7 +2510,9 @@ export const qualityRouter = router({
       const currentFinalPay = parseFloat(job.finalPay ?? job.basePay ?? "0");
       let newFinalPay = currentFinalPay;
 
-      if (input.applyCharge && !hadCharge) {
+      if (isNewPayrollPeriod(job.jobDate)) {
+        newFinalPay = calculateCleanerJobPayroll(job).finalPay;
+      } else if (input.applyCharge && !hadCharge) {
         newFinalPay = Math.round((currentFinalPay - 20) * 100) / 100;
       }
 
