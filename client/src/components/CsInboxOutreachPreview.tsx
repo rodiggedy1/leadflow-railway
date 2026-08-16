@@ -18,6 +18,7 @@ const OUTREACH_STYLES = `
   .cs2-outreach-label{font-size:10px;color:#858b98;font-weight:850;letter-spacing:.05em}.cs2-outreach-message{width:100%;margin-top:7px;background:#f4f5f7;border:0;border-radius:13px;padding:15px;font:14px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#3f4350;min-height:82px;outline:none;resize:vertical}.cs2-outreach-message:focus{box-shadow:0 0 0 2px #d9ccff}
   .cs2-outreach-actions{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:13px}.cs2-outreach-send{border:0;border-radius:11px;background:#7047eb;color:#fff;padding:13px;font-weight:850;cursor:pointer;font:inherit}.cs2-outreach-skip{border:1px solid #e1e3e8;background:#fff;border-radius:11px;padding:13px 16px;font-weight:750;cursor:pointer;font:inherit;color:#343741}.cs2-outreach-send:hover{background:#6238dc}.cs2-outreach-skip:hover,.cs2-outreach-icon:hover{background:#fafafd}.cs2-outreach-send:disabled,.cs2-outreach-skip:disabled{opacity:.5;cursor:default}
   .cs2-outreach-after{text-align:center;color:#8b909c;font-size:11px;margin-top:13px}.cs2-outreach-next{max-width:760px;margin:17px auto 0;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 18px;color:#7e8490;font-size:12px}.cs2-outreach-next b{color:#343741}.cs2-outreach-error{max-width:760px;margin:12px auto;color:#b42318;background:#fef3f2;border:1px solid #fecdca;border-radius:10px;padding:10px 13px;font-size:12px}.cs2-outreach-caught{max-width:760px;margin:auto;background:#fff;border:1px solid #e3e5eb;border-radius:20px;padding:46px 26px;text-align:center;box-shadow:0 12px 40px #23233a0a}.cs2-outreach-caught h2{font:700 25px Georgia,serif;margin:0 0 8px}.cs2-outreach-caught p{margin:0;color:#777d89}
+  .cs2-outreach-query-error{max-width:760px;margin:auto;background:#fff;border:1px solid #fecdca;border-radius:20px;padding:42px 26px;text-align:center;box-shadow:0 12px 40px #23233a0a}.cs2-outreach-query-error h2{font:700 25px Georgia,serif;margin:0 0 8px;color:#79251b}.cs2-outreach-query-error p{margin:0;color:#777d89}.cs2-outreach-retry{margin-top:18px;border:0;border-radius:10px;background:#7047eb;color:#fff;padding:11px 17px;font:750 13px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}.cs2-outreach-retry:disabled{opacity:.5;cursor:default}
   @media (max-width:720px){.cs2-outreach-shell{padding:20px 16px 48px}.cs2-outreach-intro h1{font-size:29px}.cs2-outreach-card{border-radius:16px}.cs2-outreach-top,.cs2-outreach-body{padding:18px}.cs2-outreach-next{padding:12px 0}.cs2-outreach-actions{grid-template-columns:1fr}.cs2-outreach-skip{padding:12px}}
 `;
 
@@ -173,7 +174,7 @@ export default function CsInboxOutreachPreview() {
           <h1>Focus on the conversation that matters most.</h1>
           <p>One lead at a time. Madison ranks existing conversations so the next human action stays clear.</p>
           <div className="cs2-outreach-progress" aria-label="Outreach queue status">
-            <span className="cs2-outreach-pill"><strong>{queue.data?.eligibleCount ?? 0}</strong> eligible</span>
+            {!queue.isError && <span className="cs2-outreach-pill"><strong>{queue.data?.eligibleCount ?? 0}</strong> eligible</span>}
             <span className="cs2-outreach-pill">Follow-up after <strong>2 hours</strong></span>
             <span className="cs2-outreach-pill">Skip for <strong>4 hours</strong></span>
           </div>
@@ -181,6 +182,12 @@ export default function CsInboxOutreachPreview() {
 
         {queue.isLoading ? (
           <div className="cs2-outreach-caught"><h2>Loading Madison…</h2><p>Finding the next best conversation.</p></div>
+        ) : queue.isError ? (
+          <div className="cs2-outreach-query-error" role="alert">
+            <h2>Madison couldn&apos;t load.</h2>
+            <p>The outreach queue is unavailable right now. Please retry.</p>
+            <button className="cs2-outreach-retry" onClick={() => void queue.refetch()} disabled={queue.isFetching}>Retry</button>
+          </div>
         ) : !current ? (
           <div className="cs2-outreach-caught"><h2>You&apos;re caught up.</h2><p>No eligible conversations need a manual outreach action right now.</p></div>
         ) : (
