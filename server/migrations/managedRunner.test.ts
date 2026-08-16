@@ -33,6 +33,8 @@ const additivePostconditions = {
   columns: [{ name: "lastInboundPhoneNumberId", columnType: "varchar(64)", nullable: true }],
   indexes: [],
 };
+const madisonAdditiveSql = "ALTER TABLE `conversation_sessions`\n  ADD COLUMN IF NOT EXISTS `madisonDeferredUntil` bigint NULL;\n";
+const madisonAdditiveSha256 = createHash("sha256").update(madisonAdditiveSql).digest("hex");
 
 async function withAdditiveMigrationDirectory<T>(run: (directory: string) => Promise<T>): Promise<T> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "managed-additive-columns-"));
@@ -198,6 +200,7 @@ function createFakeDb(options: { tableExists?: boolean; divergent?: boolean; led
 
 function createApplied0001Pending0002FakeDb() {
   let phoneColumnState: "missing" | "correct" = "missing";
+  let madisonColumnState: "missing" | "correct" = "missing";
   const ledger = new Map<string, "started" | "applied" | "failed">([["0001_create_focus_points", "applied"]]);
   const calls: string[] = [];
   const db: MigrationDb = {
@@ -210,22 +213,33 @@ function createApplied0001Pending0002FakeDb() {
         const state = ledger.get(id);
         const sha256 = id === "0001_create_focus_points"
           ? "5caaaf2b058c48caff1561e9e8d571a5fbad5f67f9888df037f93eff0b0cd5f4"
-          : additiveSha256;
+          : id === "0002_last_inbound_phone_number_id"
+            ? additiveSha256
+            : madisonAdditiveSha256;
         return [state ? [{ migration_id: id, sha256, state, attempt_count: 1 }] : []];
       }
       if (sql.includes("information_schema.tables")) return [[{ table_name: String(params?.[0]) }]];
       if (sql.includes("information_schema.columns")) {
         return [String(params?.[0]) === "focus_points"
           ? validColumns
-          : phoneColumnState === "correct"
-            ? [{ column_name: "lastInboundPhoneNumberId", column_type: "varchar(64)", is_nullable: "YES", extra: "", column_default: null }]
-            : []];
+          : [
+              ...(phoneColumnState === "correct"
+                ? [{ column_name: "lastInboundPhoneNumberId", column_type: "varchar(64)", is_nullable: "YES", extra: "", column_default: null }]
+                : []),
+              ...(madisonColumnState === "correct"
+                ? [{ column_name: "madisonDeferredUntil", column_type: "bigint", is_nullable: "YES", extra: "", column_default: null }]
+                : []),
+            ]];
       }
       if (sql.includes("information_schema.statistics")) {
         return [String(params?.[0]) === "focus_points" ? validIndexes : []];
       }
       if (sql.includes("ADD COLUMN IF NOT EXISTS `lastInboundPhoneNumberId`")) {
         phoneColumnState = "correct";
+        return [[]];
+      }
+      if (sql.includes("ADD COLUMN IF NOT EXISTS `madisonDeferredUntil`")) {
+        madisonColumnState = "correct";
         return [[]];
       }
       if (sql.includes("INSERT INTO `app_versioned_migration_ledger`")) {
@@ -243,7 +257,7 @@ function createApplied0001Pending0002FakeDb() {
       return [[]];
     },
   };
-  return { db, calls, state: () => ({ phoneColumnState, ledger: new Map(ledger) }) };
+  return { db, calls, state: () => ({ phoneColumnState, madisonColumnState, ledger: new Map(ledger) }) };
 }
 
 describe("managed versioned migration runner", () => {
@@ -324,18 +338,22 @@ describe("managed versioned migration runner", () => {
     });
   });
 
-  it("skips and re-verifies applied 0001 before executing one additive ALTER for pending 0002", async () => {
+  it("skips and re-verifies applied 0001 before executing the two pending additive ALTERs", async () => {
     const fake = createApplied0001Pending0002FakeDb();
     const results = await runManagedMigrations({ db: fake.db, migrationsDirectory: migrationDirectory, logger: console });
     expect(results).toEqual([
       { id: "0001_create_focus_points", outcome: "skipped" },
       { id: "0002_last_inbound_phone_number_id", outcome: "applied" },
+      { id: "0003_madison_deferred_until", outcome: "applied" },
     ]);
     expect(fake.calls.some(sql => sql.includes("CREATE TABLE IF NOT EXISTS `focus_points`"))).toBe(false);
     expect(fake.calls.filter(sql => sql.includes("ADD COLUMN IF NOT EXISTS `lastInboundPhoneNumberId`")).length).toBe(1);
+    expect(fake.calls.filter(sql => sql.includes("ADD COLUMN IF NOT EXISTS `madisonDeferredUntil`")).length).toBe(1);
     expect(fake.state().phoneColumnState).toBe("correct");
+    expect(fake.state().madisonColumnState).toBe("correct");
     expect(fake.state().ledger.get("0001_create_focus_points")).toBe("applied");
     expect(fake.state().ledger.get("0002_last_inbound_phone_number_id")).toBe("applied");
+    expect(fake.state().ledger.get("0003_madison_deferred_until")).toBe("applied");
   });
 
   it("executes additive SQL only for an existing table with a missing declared column", async () => {

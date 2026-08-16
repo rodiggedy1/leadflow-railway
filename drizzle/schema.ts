@@ -316,6 +316,8 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   lastProcessedMessageId: varchar("lastProcessedMessageId", { length: 100 }),
   /** Exact OpenPhone number ID that received the latest inbound CS/Leads SMS. */
   lastInboundPhoneNumberId: varchar("lastInboundPhoneNumberId", { length: 64 }),
+  /** Unix ms until which a human Skip hides this session from Madison unless the customer speaks last. */
+  madisonDeferredUntil: bigint("madisonDeferredUntil", { mode: "number" }),
   /**
    * Timestamp (ms) when a CS agent resolved/archived this CS inbox session. NULL = open.
    * Only set for cs-inbound and cs-inbound-cleaner sessions.

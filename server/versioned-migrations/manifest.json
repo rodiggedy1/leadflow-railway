@@ -15,6 +15,14 @@
       "sha256": "bdc3df313709305907ba61739c25d83f6f64ed5c5d044abfbae942723cdbfdea",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0002_last_inbound_phone_number_id.postconditions.json"
+    },
+    {
+      "id": "0003_madison_deferred_until",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0003_madison_deferred_until.sql",
+      "sha256": "dc6c46dce7a7beaebf8529711c5f383a5abf756e2f2ca8b4db38e7e727c0e25d",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0003_madison_deferred_until.postconditions.json"
     }
   ]
 }
