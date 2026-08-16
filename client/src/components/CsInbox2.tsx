@@ -563,7 +563,7 @@ export default function CsInbox2() {
   // ── Real inbox data (exact copy from CsInbox.tsx) ──────────────────────
   const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery(
     { showResolved: true },
-    { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 60_000 }
+    { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 5_000 }
   );
 
   const allPhones = useMemo(() => {
