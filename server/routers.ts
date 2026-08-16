@@ -35,6 +35,7 @@ import { metricsRouter } from "./metricsRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { schedulingRouter } from "./schedulingRouter";
 import { opsChatRouter } from "./opsChatRouter";
+import { madisonRouter } from "./madisonRouter";
 import { followUpsRouter } from "./followUpsRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { invokeLLM } from "./_core/llm";
@@ -7465,6 +7466,7 @@ Return JSON with exactly these fields:
   csMissions: csMissionsRouter,
   scheduling: schedulingRouter,
   opsChat: opsChatRouter,
+  madison: madisonRouter,
   followUps: followUpsRouter,
   teamPay: teamPayRouter,
     calls: callsRouter,

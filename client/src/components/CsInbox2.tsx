@@ -5,6 +5,7 @@ import { Sparkles, Play, Pause, ChevronUp, ChevronDown } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
+import CsInboxOutreachPreview from "@/components/CsInboxOutreachPreview";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
@@ -747,7 +748,7 @@ export default function CsInbox2() {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [showNewMsg, setShowNewMsg] = useState(false);
-  const [channel, setChannel] = useState<"inbox" | "email">("inbox");
+  const [channel, setChannel] = useState<"inbox" | "email" | "outreach">("inbox");
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
   // A customer may text a different CS-treated number while this conversation
@@ -1679,15 +1680,21 @@ export default function CsInbox2() {
               ✉ <span>Email</span>{(emailInbox.data?.threads.length ?? 0) > 0 && <span className="cs2-badge">{emailInbox.data?.threads.length}</span>}
             </button>
           </div>
+          <div className="cs2-section">Outreach</div>
+          <div className="cs2-nav">
+            <button className={channel==="outreach"?"active":""} onClick={()=>{setChannel("outreach");setSelectedConv(null);setSelectedEmailThreadId(null);}}>
+              ✦ <span>Next Best Action</span><span className="cs2-badge">Preview</span>
+            </button>
+          </div>
           <div className="cs2-section">Views</div>
           <div className="cs2-nav">
-            <button className={filter==="needs-response"?"active":""} onClick={()=>setFilter("needs-response")}>
+            <button className={filter==="needs-response" && channel==="inbox"?"active":""} onClick={()=>{setFilter("needs-response");setChannel("inbox");}}>
               <span className="cs2-dot" style={{background:"#13b77a"}}/><span>Needs Response</span><span className="cs2-badge">{needsResponseCount}</span>
             </button>
-            <button className={filter==="unanswered"?"active":""} onClick={()=>setFilter("unanswered")}>
+            <button className={filter==="unanswered" && channel==="inbox"?"active":""} onClick={()=>{setFilter("unanswered");setChannel("inbox");}}>
               <span className="cs2-dot" style={{background:"#ff9f1a"}}/><span>Unanswered</span><span className="cs2-badge">{unansweredCount}</span>
             </button>
-            <button className={filter==="hot"?"active":""} onClick={()=>setFilter("hot")}>
+            <button className={filter==="hot" && channel==="inbox"?"active":""} onClick={()=>{setFilter("hot");setChannel("inbox");}}>
               <span className="cs2-dot" style={{background:"#ff5f8f"}}/><span>Hot Leads</span><span className="cs2-badge">{hotLeadsCount}</span>
             </button>
           </div>
@@ -1701,6 +1708,10 @@ export default function CsInbox2() {
           </div>
         </aside>
         <main className="cs2-main">
+          {channel === "outreach" ? (
+            <CsInboxOutreachPreview />
+          ) : (
+            <>
           <header className="cs2-topbar">
             <h2>All Conversations</h2>
             <button className="cs2-btn" onClick={() => refetchInbox()}>↻</button>
@@ -1920,6 +1931,8 @@ export default function CsInbox2() {
             <div className="cs2-stat"><small>Hot Leads</small><b>{hotLeadsCount}</b></div>
             <div className="cs2-stat"><small>Teams</small><b>{teamConvs.length}</b></div>
           </footer>
+            </>
+          )}
         </main>
       </div>
       <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>

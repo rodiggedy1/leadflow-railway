@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "table": "conversation_sessions",
+  "columns": [
+    {
+      "name": "madisonDeferredUntil",
+      "columnType": "bigint",
+      "nullable": true
+    }
+  ],
+  "indexes": []
+}
