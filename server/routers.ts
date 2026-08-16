@@ -3154,16 +3154,12 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
 
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
-        // CsInbox eligibility is based on actual inbound activity, not acquisition source.
-        // A customer remains eligible after an agent reply because this checks whether
-        // conversation history contains an inbound customer message at all.
-        const inboundMessageActivityFilter = sql`(
-          JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
-          OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
-        )`;
-        const inboundVoiceCallActivityFilter = sql`EXISTS (
-          SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
-        )`;
+        const sourceFilter = or(
+          eq(conversationSessions.leadSource, "cs-inbound"),
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+          eq(conversationSessions.leadSource, "cs_initiated"),
+          eq(conversationSessions.leadSource, "ai_call")
+        );
         const resolvedFilter = input.showResolved
           ? undefined  // show all
           : isNull(conversationSessions.csResolvedAt); // only open
@@ -3252,12 +3248,25 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .from(conversationSessions)
           .where(
             or(
-              // Preserve the existing resolved behavior for message conversations.
+              // Normal SMS sessions: must match leadSource rules AND be unresolved
               resolvedFilter
-                ? and(inboundMessageActivityFilter, resolvedFilter)
-                : inboundMessageActivityFilter,
-              // Preserve the existing inbound-call behavior.
-              inboundVoiceCallActivityFilter
+                ? and(
+                    or(
+                      eq(conversationSessions.leadSource, 'cs-inbound'),
+                      eq(conversationSessions.leadSource, 'cs-inbound-cleaner'),
+                      eq(conversationSessions.leadSource, 'cs_initiated'),
+                      eq(conversationSessions.csQueue as any, 'CS')
+                    ),
+                    resolvedFilter
+                  )
+                : or(
+                    eq(conversationSessions.leadSource, 'cs-inbound'),
+                    eq(conversationSessions.leadSource, 'cs-inbound-cleaner'),
+                    eq(conversationSessions.leadSource, 'cs_initiated'),
+                    eq(conversationSessions.csQueue as any, 'CS')
+                  ),
+              // Any session with an inbound AI call — no leadSource or csResolvedAt restriction
+              sql`EXISTS (SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id})`
             )
           )
           .orderBy(desc(conversationSessions.updatedAt));
