@@ -1599,3 +1599,4 @@
 - [ ] Polling audit — review all refetchInterval values across OpsChat.tsx and CommandChat.tsx for payload size vs. frequency tradeoffs
 - [ ] Payload reduction — investigate reducing listChannelMessages response size (field selection, pagination)
 - [ ] Memoization/profiling — profile CommandChat with React DevTools after Madison SMS ships to identify remaining re-render hotspots
+- [x] Payroll Summary: implement a preview-only accessible team-row detail drawer using existing teamPay.getTeamDetail data, with new-period and legacy layouts, reconciled totals, and independent CSV behavior

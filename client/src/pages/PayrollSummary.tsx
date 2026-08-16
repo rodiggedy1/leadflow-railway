@@ -7,6 +7,13 @@ import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ArrowLeft, Download, ChevronLeft, ChevronRight, ShieldCheck, Loader2 } from "lucide-react";
 import cx from "clsx";
 
@@ -283,10 +290,183 @@ function TeamDownloadButton({ teamName, weekStart, weekEnd }: { teamName: string
   );
 }
 
+// ─── Team detail drawer ───────────────────────────────────────────────────────
+
+type TeamDetailData = {
+  teamName: string;
+  weekStart: string;
+  weekEnd: string;
+  jobs: TeamDetailJob[];
+  totalFinalPay: number;
+};
+
+function TeamDetailDrawer({
+  open,
+  onOpenChange,
+  selectedTeamName,
+  weekLabel,
+  summaryFinalPay,
+  data,
+  isLoading,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedTeamName: string | null;
+  weekLabel: string;
+  summaryFinalPay: number | null;
+  data: TeamDetailData | undefined;
+  isLoading: boolean;
+}) {
+  const jobs = data?.jobs ?? [];
+  const isNewPayrollPeriod = jobs[0]?.payrollMode === "2026-08-16";
+  const calculatedFinalPay = jobs.reduce((sum, job) => sum + job.finalPay, 0);
+  const reconciles = data && summaryFinalPay !== null && Math.abs(calculatedFinalPay - summaryFinalPay) < 0.01;
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 sm:max-w-[920px]">
+        <SheetHeader className="border-b border-slate-200 bg-slate-50 px-6 py-5 pr-14">
+          <SheetTitle className="text-xl text-slate-950">
+            {selectedTeamName ?? "Team"} — {weekLabel} Payroll Detail
+          </SheetTitle>
+          <SheetDescription>
+            Individual dated jobs that reconcile to this team’s Payroll Summary total.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {isLoading ? (
+            <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading team payroll detail…
+            </div>
+          ) : !data ? (
+            <div className="flex min-h-48 items-center justify-center text-sm text-slate-500">
+              Select a team row to view its payroll detail.
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="flex min-h-48 items-center justify-center text-sm text-slate-500">
+              No jobs were found for this team in the selected pay week.
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-slate-600">{jobs.length} job{jobs.length === 1 ? "" : "s"} in this pay period</span>
+                <span className={cx(
+                  "rounded-full border px-3 py-1 text-xs font-semibold",
+                  reconciles
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
+                )}>
+                  {reconciles
+                    ? "Reconciles to Payroll Summary"
+                    : "Detail total needs review"}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                {isNewPayrollPeriod ? (
+                  <table className="w-full min-w-[980px] text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        {[
+                          "Date / Time", "Customer", "Job Amount", "13% Ops", "Net Amount",
+                          "Pay Rate", "Base Pay", "Manual Adj.", "Final Pay",
+                        ].map((label, index) => (
+                          <th key={label} className={cx("px-3 py-3 font-semibold", index > 1 && "text-right")}>{label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {jobs.map((job) => (
+                        <tr key={`${job.jobDate}-${job.time}-${job.customer}`} className="border-t border-slate-100 text-slate-700">
+                          <td className="px-3 py-3 whitespace-nowrap">{job.jobDate} · {job.time}</td>
+                          <td className="px-3 py-3 font-medium text-slate-900">{job.customer}</td>
+                          <td className="px-3 py-3 text-right">{fmtMoneyAbs(job.jobRevenue ?? 0)}</td>
+                          <td className="px-3 py-3 text-right text-rose-700">−{fmtMoneyAbs(job.operationalCost ?? 0)}</td>
+                          <td className="px-3 py-3 text-right">{fmtMoneyAbs(job.netJobAmount ?? 0)}</td>
+                          <td className="px-3 py-3 text-right">{job.payoutPct ?? 0}%</td>
+                          <td className="px-3 py-3 text-right">{fmtMoneyAbs(job.basePay)}</td>
+                          <td className={cx("px-3 py-3 text-right", moneyColor(job.manualAdj))}>{fmtMoney(job.manualAdj)}</td>
+                          <td className="px-3 py-3 text-right font-bold text-emerald-800">{fmtMoneyAbs(job.finalPay)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                      <tr>
+                        <td className="px-3 py-3" colSpan={2}>TOTAL</td>
+                        <td className="px-3 py-3 text-right">{fmtMoneyAbs(jobs.reduce((sum, job) => sum + (job.jobRevenue ?? 0), 0))}</td>
+                        <td className="px-3 py-3 text-right text-rose-700">−{fmtMoneyAbs(jobs.reduce((sum, job) => sum + (job.operationalCost ?? 0), 0))}</td>
+                        <td className="px-3 py-3 text-right">{fmtMoneyAbs(jobs.reduce((sum, job) => sum + (job.netJobAmount ?? 0), 0))}</td>
+                        <td />
+                        <td className="px-3 py-3 text-right">{fmtMoneyAbs(jobs.reduce((sum, job) => sum + job.basePay, 0))}</td>
+                        <td className={cx("px-3 py-3 text-right", moneyColor(jobs.reduce((sum, job) => sum + job.manualAdj, 0)))}>{fmtMoney(jobs.reduce((sum, job) => sum + job.manualAdj, 0))}</td>
+                        <td className="px-3 py-3 text-right text-base text-emerald-800">{fmtMoneyAbs(calculatedFinalPay)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                ) : (
+                  <table className="w-full min-w-[1040px] text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        {[
+                          "Date / Time", "Customer", "Base Pay", "Photo", "Rating", "Streak",
+                          "Manual Adj.", "Reclean", "Complaint", "Final Pay",
+                        ].map((label, index) => (
+                          <th key={label} className={cx("px-3 py-3 font-semibold", index > 1 && "text-right")}>{label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {jobs.map((job) => (
+                        <tr key={`${job.jobDate}-${job.time}-${job.customer}`} className="border-t border-slate-100 text-slate-700">
+                          <td className="px-3 py-3 whitespace-nowrap">{job.jobDate} · {job.time}</td>
+                          <td className="px-3 py-3 font-medium text-slate-900">{job.customer}</td>
+                          <td className="px-3 py-3 text-right">{fmtMoneyAbs(job.basePay)}</td>
+                          <td className={cx("px-3 py-3 text-right", moneyColor(job.photoAdj))}>{fmtMoney(job.photoAdj)}</td>
+                          <td className={cx("px-3 py-3 text-right", moneyColor(job.ratingAdj))}>{fmtMoney(job.ratingAdj)}</td>
+                          <td className={cx("px-3 py-3 text-right", moneyColor(job.streakBonus))}>{fmtMoney(job.streakBonus)}</td>
+                          <td className={cx("px-3 py-3 text-right", moneyColor(job.manualAdj))}>{fmtMoney(job.manualAdj)}</td>
+                          <td className={cx("px-3 py-3 text-right", moneyColor(job.reclean))}>{fmtMoney(job.reclean)}</td>
+                          <td className={cx("px-3 py-3 text-right", moneyColor(job.complaint))}>{fmtMoney(job.complaint)}</td>
+                          <td className="px-3 py-3 text-right font-bold text-slate-900">{fmtMoneyAbs(job.finalPay)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                      <tr>
+                        <td className="px-3 py-3" colSpan={2}>TOTAL</td>
+                        <td className="px-3 py-3 text-right">{fmtMoneyAbs(jobs.reduce((sum, job) => sum + job.basePay, 0))}</td>
+                        <td className={cx("px-3 py-3 text-right", moneyColor(jobs.reduce((sum, job) => sum + job.photoAdj, 0)))}>{fmtMoney(jobs.reduce((sum, job) => sum + job.photoAdj, 0))}</td>
+                        <td className={cx("px-3 py-3 text-right", moneyColor(jobs.reduce((sum, job) => sum + job.ratingAdj, 0)))}>{fmtMoney(jobs.reduce((sum, job) => sum + job.ratingAdj, 0))}</td>
+                        <td className={cx("px-3 py-3 text-right", moneyColor(jobs.reduce((sum, job) => sum + job.streakBonus, 0)))}>{fmtMoney(jobs.reduce((sum, job) => sum + job.streakBonus, 0))}</td>
+                        <td className={cx("px-3 py-3 text-right", moneyColor(jobs.reduce((sum, job) => sum + job.manualAdj, 0)))}>{fmtMoney(jobs.reduce((sum, job) => sum + job.manualAdj, 0))}</td>
+                        <td className={cx("px-3 py-3 text-right", moneyColor(jobs.reduce((sum, job) => sum + job.reclean, 0)))}>{fmtMoney(jobs.reduce((sum, job) => sum + job.reclean, 0))}</td>
+                        <td className={cx("px-3 py-3 text-right", moneyColor(jobs.reduce((sum, job) => sum + job.complaint, 0)))}>{fmtMoney(jobs.reduce((sum, job) => sum + job.complaint, 0))}</td>
+                        <td className="px-3 py-3 text-right text-base">{fmtMoneyAbs(calculatedFinalPay)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                <span className="text-slate-600">Payroll Summary row total</span>
+                <span className="font-bold text-slate-950">{fmtMoneyAbs(summaryFinalPay ?? calculatedFinalPay)}</span>
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PayrollSummary() {
   const [, navigate] = useLocation();
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedTeamName, setSelectedTeamName] = useState<string | null>(null);
 
   // Week navigation
   const [weekStart, setWeekStart] = useState<string>(() => {
@@ -297,6 +477,11 @@ export default function PayrollSummary() {
   const weekEnd = useMemo(() => fmt(addDays(new Date(weekStart + "T00:00:00"), 6)), [weekStart]);
 
   const { data, isLoading, error } = trpc.teamPay.getPayrollSummary.useQuery({ weekStart });
+  const {
+    mutate: loadTeamDetail,
+    data: teamDetail,
+    isPending: isTeamDetailLoading,
+  } = trpc.teamPay.getTeamDetail.useMutation();
 
   const rows = data?.rows ?? [];
   const isNewPayrollPeriod = rows[0]?.payrollMode === "2026-08-16";
@@ -331,6 +516,21 @@ export default function PayrollSummary() {
   }
   function nextWeek() {
     setWeekStart(fmt(addDays(new Date(weekStart + "T00:00:00"), 7)));
+  }
+
+  const selectedSummaryRow = rows.find((row) => row.teamName === selectedTeamName);
+
+  function openTeamDetail(teamName: string) {
+    setSelectedTeamName(teamName);
+    setDetailOpen(true);
+    loadTeamDetail({ teamName, weekStart });
+  }
+
+  function onTeamRowKeyDown(event: React.KeyboardEvent<HTMLTableRowElement>, teamName: string) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openTeamDetail(teamName);
+    }
   }
 
   return (
@@ -482,7 +682,15 @@ export default function PayrollSummary() {
               </tr></thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={row.teamName} className={cx("group/row border-b border-slate-100", i % 2 === 0 ? "bg-white" : "bg-slate-50/30")}>
+                  <tr
+                    key={row.teamName}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View ${row.teamName} payroll detail for ${weekLabel}`}
+                    onClick={() => openTeamDetail(row.teamName)}
+                    onKeyDown={(event) => onTeamRowKeyDown(event, row.teamName)}
+                    className={cx("group/row cursor-pointer border-b border-slate-100 outline-none transition-colors hover:bg-emerald-50/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500", i % 2 === 0 ? "bg-white" : "bg-slate-50/30")}
+                  >
                     <td className="px-3 py-3 text-left"><div className="flex items-center"><span className="font-semibold text-slate-900">{row.teamName}</span><TeamDownloadButton teamName={row.teamName} weekStart={weekStart} weekEnd={weekEnd} /></div></td>
                     <td className="px-3 py-3 text-left text-slate-700">{row.jobs}</td>
                     <td className="px-3 py-3 text-right">{fmtMoneyAbs(row.jobRevenue ?? 0)}</td>
@@ -579,8 +787,13 @@ export default function PayrollSummary() {
                   {rows.map((row, i) => (
                     <tr
                       key={row.teamName}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`View ${row.teamName} payroll detail for ${weekLabel}`}
+                      onClick={() => openTeamDetail(row.teamName)}
+                      onKeyDown={(event) => onTeamRowKeyDown(event, row.teamName)}
                       className={cx(
-                        "group/row border-b border-slate-100 transition-colors hover:bg-slate-50/60",
+                        "group/row cursor-pointer border-b border-slate-100 outline-none transition-colors hover:bg-slate-50/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500",
                         i % 2 === 0 ? "bg-white" : "bg-slate-50/30"
                       )}
                     >
@@ -695,6 +908,16 @@ export default function PayrollSummary() {
             </div>
           </div>
         )}
+
+        <TeamDetailDrawer
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+          selectedTeamName={selectedTeamName}
+          weekLabel={weekLabel}
+          summaryFinalPay={selectedSummaryRow?.finalPay ?? null}
+          data={teamDetail}
+          isLoading={isTeamDetailLoading}
+        />
       </div>
     </div>
   );
