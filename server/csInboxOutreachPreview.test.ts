@@ -26,6 +26,14 @@ describe("CsInbox Madison V1 UI contract", () => {
     expect(outreachSource).toContain("You&apos;re caught up.");
   });
 
+  it("renders query failures as an explicit retry state rather than a zero-eligible caught-up state", () => {
+    expect(outreachSource).toContain("queue.isError ? (");
+    expect(outreachSource).toContain("Madison couldn&apos;t load.");
+    expect(outreachSource).toContain(">Retry</button>");
+    expect(outreachSource).toContain("!queue.isError && <span className=\"cs2-outreach-pill\"><strong>{queue.data?.eligibleCount ?? 0}</strong> eligible</span>");
+    expect(outreachSource.indexOf("queue.isError ? (")).toBeLessThan(outreachSource.indexOf(") : !current ? ("));
+  });
+
   it("does not add direct provider, webhook, polling, or scheduling behavior", () => {
     expect(outreachSource).not.toContain("openphone");
     expect(outreachSource).not.toContain("setInterval");
