@@ -67,22 +67,6 @@ function isTeamMember(c: LiveConv): boolean {
   return c.queue === "Teams" || c.personType === "team";
 }
 
-// ── AI call action state helper ──────────────────────────────────────────────
-function deriveCallActionState(outcome: string): "needs_response" | "on_customer" | "handled" {
-  switch (outcome) {
-    case "booked":         return "handled";
-    case "faq_answered":   return "handled";
-    case "transferred":    return "needs_response";
-    case "callback_requested": return "needs_response";
-    case "no_answer":      return "needs_response";
-    case "missed":         return "needs_response";
-    case "quote_given":    return "on_customer";
-    case "answered":       return "needs_response";
-    case "no_action":
-    default:               return "needs_response";
-  }
-}
-
 function linkify(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
@@ -693,15 +677,14 @@ export default function CsInbox2() {
     // A new inbound call reactivates the customer even if the old SMS session was resolved.
     if (conv.latestInteractionType === "call" && conv.latestCallCreatedAt) {
       const callAgeMs = Date.now() - conv.latestCallCreatedAt;
-      const actionState = deriveCallActionState(conv.latestCallOutcome ?? "no_action");
       const createdAtMs = conv.createdAt
         ? (typeof conv.createdAt === "number" ? conv.createdAt : new Date(conv.createdAt as string).getTime())
         : 0;
-      const isNewCallSession = callAgeMs < TWENTY_FOUR_H && createdAtMs >= Date.now() - TWENTY_FOUR_H && (conv.messageCount ?? 999) <= 2;
-      if (actionState === "needs_response" && callAgeMs > THIRTY_MIN) return "At Risk";
-      if (actionState === "needs_response" && isNewCallSession) return "New";
-      if (actionState === "needs_response") return "Needs Response";
-      return "Waiting on Customer";
+      const isNewCallSession =
+        callAgeMs < TWENTY_FOUR_H &&
+        createdAtMs >= Date.now() - TWENTY_FOUR_H &&
+        (conv.messageCount ?? 999) <= 2;
+      return isNewCallSession ? "New" : "Needs Response";
     }
     // ── Resolved SMS sessions don't belong on the active board ───────────
     if (conv.csResolvedAt) return "Waiting on Customer";
