@@ -106,6 +106,19 @@ describe("rankMadisonSessions", () => {
     expect(beforeThreshold).toEqual([]);
     expect(atThreshold[0]?.category).toBe("follow_up_due");
   });
+
+  it("formats long customer waits as whole days without changing ranking", () => {
+    const candidates = rankMadisonSessions([
+      row({
+        lastMessageRole: "user",
+        lastMessageTs: NOW - 74 * 24 * 60 * 60 * 1000,
+        lastCustomerMessageTs: NOW - 74 * 24 * 60 * 60 * 1000,
+      }),
+    ], new Set(), NOW);
+
+    expect(candidates[0]?.category).toBe("customer_waiting");
+    expect(candidates[0]?.whyNow).toBe("Customer replied 74 days ago and is waiting for us.");
+  });
 });
 
 const FOLLOW_UP_MS = 2 * 60 * 60 * 1000;

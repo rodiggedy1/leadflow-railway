@@ -34,6 +34,18 @@ describe("CsInbox Madison V1 UI contract", () => {
     expect(outreachSource.indexOf("queue.isError ? (")).toBeLessThan(outreachSource.indexOf(") : !current ? ("));
   });
 
+  it("retains the existing AI draft through the non-stream fallback when the stream fails", () => {
+    expect(outreachSource).toContain("trpc.opsChat.csReply.useMutation()");
+    expect(outreachSource).toContain("fallbackReplyMutation.mutateAsync");
+    expect(outreachSource).toContain("AI stream ended without a draft");
+  });
+
+  it("renders Madison-style latest customer context and an expandable recent conversation", () => {
+    expect(outreachSource).toContain("LATEST MESSAGE FROM CUSTOMER");
+    expect(outreachSource).toContain('"View conversation"');
+    expect(outreachSource).toContain("recentConversation = conversation.slice(-5)");
+  });
+
   it("does not add direct provider, webhook, polling, or scheduling behavior", () => {
     expect(outreachSource).not.toContain("openphone");
     expect(outreachSource).not.toContain("setInterval");
