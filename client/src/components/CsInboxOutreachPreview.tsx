@@ -15,7 +15,7 @@ const OUTREACH_STYLES = `
   .cs2-outreach-card{max-width:760px;margin:auto;background:#fff;border:1px solid #e3e5eb;border-radius:20px;box-shadow:0 12px 40px #23233a0a;overflow:hidden}.cs2-outreach-top{padding:22px 24px 16px;border-bottom:1px solid #eff0f3;display:flex;justify-content:space-between;gap:12px}.cs2-outreach-rank{font-size:11px;color:#8c919d;font-weight:800}.cs2-outreach-urgency{font-size:11px;background:#fff0e5;color:#d96e16;padding:6px 8px;border-radius:8px;font-weight:850;white-space:nowrap}
   .cs2-outreach-body{padding:24px}.cs2-outreach-person{display:flex;gap:12px;align-items:center}.cs2-outreach-avatar{width:45px;height:45px;border-radius:50%;background:#7047eb;color:#fff;display:grid;place-items:center;font-weight:850}.cs2-outreach-person h2{margin:0 0 4px;font-size:19px}.cs2-outreach-meta{font-size:12px;color:#858b98}.cs2-outreach-phone{margin-top:2px;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;color:#858b98}.cs2-outreach-last-touch{margin-top:4px;font-size:12px;color:#858b98}.cs2-outreach-last-touch b{font-size:10px;letter-spacing:.06em;color:#6940dc;margin-right:6px}
   .cs2-outreach-why{margin:22px 0 18px;padding:14px 16px;background:#faf8ff;border-radius:12px;border:1px solid #e8e1ff}.cs2-outreach-why b{display:block;font-size:10px;letter-spacing:.06em;color:#6940dc;margin-bottom:5px}.cs2-outreach-why span{font-size:13px;line-height:1.5}
-  .cs2-outreach-context{margin:0 0 18px;border:1px solid #e7e8ee;border-radius:12px;overflow:hidden}.cs2-outreach-context-latest{padding:13px 15px;background:#fbfbfd}.cs2-outreach-context-latest b{display:block;font-size:10px;letter-spacing:.06em;color:#6940dc;margin-bottom:5px}.cs2-outreach-context-latest span{font-size:13px;line-height:1.5;white-space:pre-wrap}.cs2-outreach-context-toggle{width:100%;display:flex;justify-content:space-between;align-items:center;border:0;border-top:1px solid #e7e8ee;background:#fff;padding:11px 15px;font:750 12px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#4a4f5a;cursor:pointer}.cs2-outreach-context-toggle:hover{background:#fafafd}.cs2-outreach-history{border-top:1px solid #e7e8ee;padding:8px 15px 13px;display:grid;gap:8px}.cs2-outreach-history-row{padding:9px 11px;border-radius:9px;background:#f5f6f8}.cs2-outreach-history-row[data-role="customer"]{background:#faf8ff}.cs2-outreach-history-role{display:block;font-size:10px;font-weight:850;letter-spacing:.05em;color:#6940dc;margin-bottom:3px}.cs2-outreach-history-row[data-role="us"] .cs2-outreach-history-role{color:#626977}.cs2-outreach-history-text{font-size:12px;line-height:1.45;color:#3f4350;white-space:pre-wrap}
+  .cs2-outreach-context{margin:0 0 18px;border:1px solid #e7e8ee;border-radius:12px;overflow:hidden}.cs2-outreach-context-latest{padding:13px 15px;background:#fbfbfd}.cs2-outreach-context-latest b{display:block;font-size:10px;letter-spacing:.06em;color:#6940dc;margin-bottom:5px}.cs2-outreach-context-latest span{font-size:13px;line-height:1.5;white-space:pre-wrap}.cs2-outreach-context-toggle{width:100%;display:flex;justify-content:space-between;align-items:center;border:0;border-top:1px solid #e7e8ee;background:#fff;padding:11px 15px;font:750 12px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#4a4f5a;cursor:pointer}.cs2-outreach-context-toggle:hover{background:#fafafd}.cs2-outreach-history{border-top:1px solid #e7e8ee;padding:8px 15px 13px;display:grid;gap:8px}.cs2-outreach-history-row{padding:9px 11px;border-radius:9px;background:#f5f6f8}.cs2-outreach-history-row[data-role="customer"]{background:#faf8ff}.cs2-outreach-history-header{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:3px}.cs2-outreach-history-role{font-size:10px;font-weight:850;letter-spacing:.05em;color:#6940dc}.cs2-outreach-history-row[data-role="us"] .cs2-outreach-history-role{color:#626977}.cs2-outreach-history-time{font-size:10px;color:#858b98;white-space:nowrap}.cs2-outreach-history-text{font-size:12px;line-height:1.45;color:#3f4350;white-space:pre-wrap}
   .cs2-outreach-label{font-size:10px;color:#858b98;font-weight:850;letter-spacing:.05em}.cs2-outreach-message{width:100%;margin-top:7px;background:#f4f5f7;border:0;border-radius:13px;padding:15px;font:14px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#3f4350;min-height:82px;outline:none;resize:vertical}.cs2-outreach-message:focus{box-shadow:0 0 0 2px #d9ccff}
   .cs2-outreach-actions{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:13px}.cs2-outreach-send{border:0;border-radius:11px;background:#7047eb;color:#fff;padding:13px;font-weight:850;cursor:pointer;font:inherit}.cs2-outreach-skip{border:1px solid #e1e3e8;background:#fff;border-radius:11px;padding:13px 16px;font-weight:750;cursor:pointer;font:inherit;color:#343741}.cs2-outreach-send:hover{background:#6238dc}.cs2-outreach-skip:hover,.cs2-outreach-icon:hover{background:#fafafd}.cs2-outreach-send:disabled,.cs2-outreach-skip:disabled{opacity:.5;cursor:default}
   .cs2-outreach-after{text-align:center;color:#8b909c;font-size:11px;margin-top:13px}.cs2-outreach-next{max-width:760px;margin:17px auto 0;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 18px;color:#7e8490;font-size:12px}.cs2-outreach-next b{color:#343741}.cs2-outreach-error{max-width:760px;margin:12px auto;color:#b42318;background:#fef3f2;border:1px solid #fecdca;border-radius:10px;padding:10px 13px;font-size:12px}.cs2-outreach-caught{max-width:760px;margin:auto;background:#fff;border:1px solid #e3e5eb;border-radius:20px;padding:46px 26px;text-align:center;box-shadow:0 12px 40px #23233a0a}.cs2-outreach-caught h2{font:700 25px Georgia,serif;margin:0 0 8px}.cs2-outreach-caught p{margin:0;color:#777d89}
@@ -61,9 +61,19 @@ function formatPhone(phone: string): string {
   return phone.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
 }
 
+function formatMessageTimestamp(timestamp: number | null): string {
+  if (timestamp === null) return "TIME UNAVAILABLE";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "TIME UNAVAILABLE";
+  const day = date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${day} · ${time}`;
+}
+
 type MadisonHistoryMessage = {
   role: "user" | "assistant";
   content: string;
+  ts: number | null;
 };
 
 function parseMadisonHistory(raw: string): MadisonHistoryMessage[] {
@@ -72,11 +82,12 @@ function parseMadisonHistory(raw: string): MadisonHistoryMessage[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.flatMap((message): MadisonHistoryMessage[] => {
       if (!message || typeof message !== "object") return [];
-      const candidate = message as { role?: unknown; content?: unknown };
+      const candidate = message as { role?: unknown; content?: unknown; ts?: unknown };
       const content = typeof candidate.content === "string" ? candidate.content.trim() : "";
+      const ts = typeof candidate.ts === "number" && Number.isFinite(candidate.ts) ? candidate.ts : null;
       if (!content) return [];
-      if (candidate.role === "user" || candidate.role === "customer") return [{ role: "user", content }];
-      if (candidate.role === "assistant") return [{ role: "assistant", content }];
+      if (candidate.role === "user" || candidate.role === "customer") return [{ role: "user", content, ts }];
+      if (candidate.role === "assistant") return [{ role: "assistant", content, ts }];
       return [];
     });
   } catch {
@@ -287,7 +298,10 @@ export default function CsInboxOutreachPreview() {
                   </button>
                   {showConversation && <div className="cs2-outreach-history">
                     {recentConversation.map((message, index) => <div className="cs2-outreach-history-row" data-role={message.role === "user" ? "customer" : "us"} key={`${message.role}-${index}-${message.content}`}>
-                      <span className="cs2-outreach-history-role">{message.role === "user" ? "CUSTOMER" : "US"}</span>
+                      <div className="cs2-outreach-history-header">
+                        <span className="cs2-outreach-history-role">{message.role === "user" ? "CUSTOMER" : "US"}</span>
+                        <time className="cs2-outreach-history-time">{formatMessageTimestamp(message.ts)}</time>
+                      </div>
                       <span className="cs2-outreach-history-text">{message.content}</span>
                     </div>)}
                   </div>}
