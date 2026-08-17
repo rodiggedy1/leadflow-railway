@@ -9,6 +9,7 @@ import CsInboxOutreachPreview from "@/components/CsInboxOutreachPreview";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
+import { batchCsInboxPhonesForNameLookup, mergeCsInboxNameMaps } from "@shared/csInboxPhoneNameBatching";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2
@@ -566,15 +567,43 @@ export default function CsInbox2() {
     { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 5_000 }
   );
 
-  const allPhones = useMemo(() => {
-    if (!csData) return [];
-    return [...new Set(csData.map(r => (r.leadPhone ?? "").replace(/[^\d]/g, "").slice(-10)).filter(Boolean))];
-  }, [csData]);
-
-  const { data: nameMap } = trpc.leads.batchResolveNames.useQuery(
-    { phones: allPhones },
-    { enabled: allPhones.length > 0, staleTime: 60_000 }
+  const phoneNameBatches = useMemo(
+    () => batchCsInboxPhonesForNameLookup(csData?.map(row => row.leadPhone)),
+    [csData],
   );
+  const nameLookupCacheRef = useRef(new Map<string, { expiresAt: number; names: Record<string, string> }>());
+  const [nameMap, setNameMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const now = Date.now();
+    const pendingBatches = phoneNameBatches.filter(phones => {
+      const cached = nameLookupCacheRef.current.get(phones.join(","));
+      return !cached || cached.expiresAt <= now;
+    });
+
+    const publishCachedNames = () => {
+      if (cancelled) return;
+      setNameMap(mergeCsInboxNameMaps(phoneNameBatches.map(phones =>
+        nameLookupCacheRef.current.get(phones.join(","))?.names,
+      )));
+    };
+
+    if (pendingBatches.length === 0) {
+      publishCachedNames();
+      return () => { cancelled = true; };
+    }
+
+    void Promise.allSettled(pendingBatches.map(async phones => {
+      const names = await utils.leads.batchResolveNames.fetch({ phones });
+      nameLookupCacheRef.current.set(phones.join(","), {
+        names,
+        expiresAt: Date.now() + 60_000,
+      });
+    })).then(publishCachedNames);
+
+    return () => { cancelled = true; };
+  }, [phoneNameBatches, utils]);
 
   // ── SSE: invalidate on new inbound (exact copy from CsInbox.tsx) ───────
   const selectedIdRef = useRef<number | null>(null);
