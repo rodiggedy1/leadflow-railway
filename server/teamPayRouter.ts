@@ -131,6 +131,7 @@ export const teamPayRouter = router({
             gte(cleanerJobs.jobDate, input.weekStart),
             lte(cleanerJobs.jobDate, weekEnd),
             ne(cleanerJobs.bookingStatus, "cancelled"),
+            ne(cleanerJobs.bookingStatus, "rescheduled"),
             isNotNull(cleanerJobs.teamName)
           )
         )
@@ -366,6 +367,7 @@ export const teamPayRouter = router({
             gte(cleanerJobs.jobDate, input.weekStart),
             lte(cleanerJobs.jobDate, weekEnd),
             ne(cleanerJobs.bookingStatus, "cancelled"),
+            ne(cleanerJobs.bookingStatus, "rescheduled"),
             isNotNull(cleanerJobs.teamName)
           )
         )
@@ -520,6 +522,7 @@ export const teamPayRouter = router({
             gte(cleanerJobs.jobDate, input.weekStart),
             lte(cleanerJobs.jobDate, weekEnd),
             ne(cleanerJobs.bookingStatus, "cancelled"),
+            ne(cleanerJobs.bookingStatus, "rescheduled"),
           )
         )
         .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
@@ -605,6 +608,7 @@ export const teamPayRouter = router({
             gte(cleanerJobs.jobDate, input.weekStart),
             lte(cleanerJobs.jobDate, weekEnd),
             ne(cleanerJobs.bookingStatus, "cancelled"),
+            ne(cleanerJobs.bookingStatus, "rescheduled"),
             isNotNull(cleanerJobs.teamName),
             ne(cleanerJobs.teamName as any, "Unassigned")
           )
