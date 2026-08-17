@@ -3154,19 +3154,17 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
 
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
-        // CsInbox eligibility is based on actual inbound activity, not acquisition source.
-        // A customer remains eligible after an agent reply because this checks whether
-        // conversation history contains an inbound customer message at all.
-        const inboundMessageActivityFilter = sql`(
-          JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
-          OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
-        )`;
-        const inboundVoiceCallActivityFilter = sql`EXISTS (
-          SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
-        )`;
         const resolvedFilter = input.showResolved
           ? undefined  // show all
           : isNull(conversationSessions.csResolvedAt); // only open
+        const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+        const inboundSmsFilter = and(
+          inArray(conversationSessions.lastInboundPhoneNumberId, [
+            ENV.openPhoneCsNumberId,
+            ENV.openPhoneNumberId,
+          ]),
+          gte(conversationSessions.lastCustomerMessageTs, ninetyDaysAgo),
+        );
 
         // ── Stage 1: conversationSessions DB query (summary columns only — no messageHistory) ──
         const _t1 = performance.now();
@@ -3252,12 +3250,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .from(conversationSessions)
           .where(
             or(
-              // Preserve the existing resolved behavior for message conversations.
-              resolvedFilter
-                ? and(inboundMessageActivityFilter, resolvedFilter)
-                : inboundMessageActivityFilter,
-              // Preserve the existing inbound-call behavior.
-              inboundVoiceCallActivityFilter
+              resolvedFilter ? and(inboundSmsFilter, resolvedFilter) : inboundSmsFilter,
+              // Any session with an inbound AI call remains independently visible.
+              sql`EXISTS (SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id})`
             )
           )
           .orderBy(desc(conversationSessions.updatedAt));
