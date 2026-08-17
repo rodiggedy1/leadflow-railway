@@ -146,6 +146,42 @@ describe("rankMadisonSessions", () => {
     expect(candidates[2]?.whyNow).toBe("Customer last replied 7 days ago; consider a manual re-engagement touch.");
   });
 
+  it("keeps current hot and follow-up candidates ahead of stale tagged opportunities", () => {
+    const candidates = rankMadisonSessions([
+      row({ id: 1, leadPhone: "+12025550001", csStatusTier: "hot_lead", lastMessageTs: NOW - 4 * 60 * 60 * 1000 }),
+      row({ id: 2, leadPhone: "+12025550002", lastMessageRole: "assistant", lastMessageTs: NOW - 4 * 60 * 60 * 1000 }),
+      row({ id: 3, leadPhone: "+12025550003", csStatusTier: "objection", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1 }),
+      row({ id: 4, leadPhone: "+12025550004", lastMessageRole: "assistant", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1 }),
+    ], new Set(), NOW);
+
+    expect(candidates.map(candidate => candidate.category)).toEqual([
+      "urgent_high_intent",
+      "follow_up_due",
+      "re_engagement",
+      "re_engagement",
+    ]);
+    expect(candidates.slice(2).map(candidate => candidate.whyNow)).toEqual([
+      "Last touch was 7 days ago; consider a manual re-engagement touch.",
+      "Last touch was 7 days ago; consider a manual re-engagement touch.",
+    ]);
+  });
+
+  it("keeps hot and follow-up candidates current through the exact seven-day boundary", () => {
+    const candidates = rankMadisonSessions([
+      row({ id: 1, leadPhone: "+12025550001", csStatusTier: "hot_lead", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS }),
+      row({ id: 2, leadPhone: "+12025550002", csStatusTier: "hot_lead", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1 }),
+      row({ id: 3, leadPhone: "+12025550003", lastMessageRole: "assistant", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS }),
+      row({ id: 4, leadPhone: "+12025550004", lastMessageRole: "assistant", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1 }),
+    ], new Set(), NOW);
+
+    expect(candidates.map(candidate => candidate.category)).toEqual([
+      "urgent_high_intent",
+      "follow_up_due",
+      "re_engagement",
+      "re_engagement",
+    ]);
+  });
+
   it("keeps Follow-up Due candidates oldest-first", () => {
     const candidates = rankMadisonSessions([
       row({ id: 1, leadPhone: "+12025550001", lastMessageTs: NOW - 4 * 60 * 60 * 1000 }),

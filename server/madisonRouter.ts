@@ -111,6 +111,7 @@ function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate 
   const customerReplyElapsedMs = session.lastMessageRole === "user"
     ? Math.max(0, now - (session.lastCustomerMessageTs ?? session.lastMessageTs ?? now))
     : null;
+  const lastTouchElapsedMs = Math.max(0, now - activityTimestamp(session));
 
   if (customerReplyElapsedMs !== null && customerReplyElapsedMs <= RECENT_CUSTOMER_REPLY_MS) {
     return {
@@ -126,6 +127,14 @@ function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate 
   }
 
   if (URGENT_STATUS_TIERS.has(session.csStatusTier ?? "") || URGENT_PRIORITY_TAGS.has(session.csPriorityTag ?? "")) {
+    if (lastTouchElapsedMs > RECENT_CUSTOMER_REPLY_MS) {
+      return {
+        category: "re_engagement",
+        rank: 4,
+        whyNow: `Last touch was ${formatElapsed(lastTouchElapsedMs)} ago; consider a manual re-engagement touch.`,
+        session,
+      };
+    }
     return {
       category: "urgent_high_intent",
       rank: 2,
@@ -135,6 +144,14 @@ function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate 
   }
 
   if (session.lastMessageRole === "assistant" && session.lastMessageTs !== null && now - session.lastMessageTs >= FOLLOW_UP_DUE_MS) {
+    if (lastTouchElapsedMs > RECENT_CUSTOMER_REPLY_MS) {
+      return {
+        category: "re_engagement",
+        rank: 4,
+        whyNow: `Last touch was ${formatElapsed(lastTouchElapsedMs)} ago; consider a manual re-engagement touch.`,
+        session,
+      };
+    }
     return {
       category: "follow_up_due",
       rank: 3,
