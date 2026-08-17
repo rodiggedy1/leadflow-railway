@@ -1318,7 +1318,7 @@ export const appRouter = router({
         message: z.string().min(1).max(1600),
         fromNumberId: z.string().optional(), // Optional override for CS line replies
         isVoiceCommand: z.boolean().optional(), // Set true when triggered from voice command card
-        source: z.enum(["cs_inbox", "leads_popup"]).optional(), // Set by CsInbox2 or LeadOps to surface the conversation in CsInbox2
+        source: z.enum(["cs_inbox"]).optional(), // Set by CsInbox2 to reactivate historical sessions
       }))
       .mutation(async ({ input, ctx }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
@@ -1369,12 +1369,10 @@ export const appRouter = router({
           console.error(`[sendMessage] Failed to send SMS to ${session.leadPhone}:`, smsResult.error);
           // Don't throw — message is already stored in history
         }
-        // Mark explicitly designated inbox senders as active CS conversations.
-        // Leads-popup messages use a distinct marker so unrelated assistant-only
-        // histories are not surfaced by CsInbox2.
-        if (input.source === "cs_inbox" || input.source === "leads_popup") {
-          const csQueue = input.source === "leads_popup" ? "LeadOps" : "CS";
-          await db.update(conversationSessions).set({ csQueue: csQueue as any, csResolvedAt: null }).where(eq(conversationSessions.id, input.sessionId));
+        // When sent from Inbox2, mark session as active CS queue regardless of prior state.
+        // Covers both resolved sessions and sessions that were never in Inbox2.
+        if (input.source === "cs_inbox") {
+          await db.update(conversationSessions).set({ csQueue: 'CS' as any, csResolvedAt: null }).where(eq(conversationSessions.id, input.sessionId));
         }
         const { broadcastOpsUpdate: bcastSend } = await import("./sseBroadcast");
         bcastSend("lead_update");
@@ -3166,7 +3164,6 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const inboundVoiceCallActivityFilter = sql`EXISTS (
           SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
         )`;
-        const leadsPopupOutboundFilter = eq(conversationSessions.csQueue, "LeadOps");
         const resolvedFilter = input.showResolved
           ? undefined  // show all
           : isNull(conversationSessions.csResolvedAt); // only open
@@ -3257,8 +3254,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             or(
               // Preserve the existing resolved behavior for message conversations.
               resolvedFilter
-                ? and(or(inboundMessageActivityFilter, leadsPopupOutboundFilter), resolvedFilter)
-                : or(inboundMessageActivityFilter, leadsPopupOutboundFilter),
+                ? and(inboundMessageActivityFilter, resolvedFilter)
+                : inboundMessageActivityFilter,
               // Preserve the existing inbound-call behavior.
               inboundVoiceCallActivityFilter
             )
