@@ -107,18 +107,55 @@ describe("rankMadisonSessions", () => {
     expect(atThreshold[0]?.category).toBe("follow_up_due");
   });
 
-  it("formats long customer waits as whole days without changing ranking", () => {
+  it("ranks recent customer replies newest-first", () => {
+    const candidates = rankMadisonSessions([
+      row({ id: 1, leadPhone: "+12025550001", lastMessageRole: "user", lastMessageTs: NOW - 6 * 24 * 60 * 60 * 1000, lastCustomerMessageTs: NOW - 6 * 24 * 60 * 60 * 1000 }),
+      row({ id: 2, leadPhone: "+12025550002", lastMessageRole: "user", lastMessageTs: NOW - 4 * 60 * 60 * 1000, lastCustomerMessageTs: NOW - 4 * 60 * 60 * 1000 }),
+    ], new Set(), NOW);
+
+    expect(candidates.map(candidate => candidate.session.id)).toEqual([2, 1]);
+    expect(candidates.map(candidate => candidate.category)).toEqual(["customer_waiting", "customer_waiting"]);
+  });
+
+  it("keeps the seven-day customer-waiting boundary and demotes stale replies below current hot leads", () => {
     const candidates = rankMadisonSessions([
       row({
+        id: 1,
+        leadPhone: "+12025550001",
         lastMessageRole: "user",
-        lastMessageTs: NOW - 74 * 24 * 60 * 60 * 1000,
-        lastCustomerMessageTs: NOW - 74 * 24 * 60 * 60 * 1000,
+        lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS,
+        lastCustomerMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS,
+      }),
+      row({
+        id: 2,
+        leadPhone: "+12025550002",
+        lastMessageRole: "user",
+        lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1,
+        lastCustomerMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1,
+      }),
+      row({
+        id: 3,
+        leadPhone: "+12025550003",
+        csStatusTier: "hot_lead",
+        lastMessageTs: NOW - 60_000,
       }),
     ], new Set(), NOW);
 
-    expect(candidates[0]?.category).toBe("customer_waiting");
-    expect(candidates[0]?.whyNow).toBe("Customer replied 74 days ago and is waiting for us.");
+    expect(candidates.map(candidate => candidate.session.id)).toEqual([1, 3, 2]);
+    expect(candidates.map(candidate => candidate.category)).toEqual(["customer_waiting", "urgent_high_intent", "re_engagement"]);
+    expect(candidates[2]?.whyNow).toBe("Customer last replied 7 days ago; consider a manual re-engagement touch.");
+  });
+
+  it("keeps Follow-up Due candidates oldest-first", () => {
+    const candidates = rankMadisonSessions([
+      row({ id: 1, leadPhone: "+12025550001", lastMessageTs: NOW - 4 * 60 * 60 * 1000 }),
+      row({ id: 2, leadPhone: "+12025550002", lastMessageTs: NOW - 2 * 60 * 60 * 1000 }),
+    ], new Set(), NOW);
+
+    expect(candidates.map(candidate => candidate.session.id)).toEqual([1, 2]);
+    expect(candidates.map(candidate => candidate.category)).toEqual(["follow_up_due", "follow_up_due"]);
   });
 });
 
 const FOLLOW_UP_MS = 2 * 60 * 60 * 1000;
+const RECENT_CUSTOMER_REPLY_MS = 7 * 24 * 60 * 60 * 1000;

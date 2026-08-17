@@ -8,6 +8,7 @@ import { opsChatProcedure, router } from "./_core/trpc";
 
 const FOLLOW_UP_DUE_MS = 2 * 60 * 60 * 1000;
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
+const RECENT_CUSTOMER_REPLY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const EXCLUDED_SOURCES = new Set<string>([
   ...NON_LEAD_SOURCES,
@@ -107,12 +108,15 @@ function isBaseEligible(session: MadisonSessionRow, activeNurtureSessionIds: Rea
 }
 
 function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate | null {
-  if (session.lastMessageRole === "user") {
-    const elapsedMs = Math.max(0, now - (session.lastCustomerMessageTs ?? session.lastMessageTs ?? now));
+  const customerReplyElapsedMs = session.lastMessageRole === "user"
+    ? Math.max(0, now - (session.lastCustomerMessageTs ?? session.lastMessageTs ?? now))
+    : null;
+
+  if (customerReplyElapsedMs !== null && customerReplyElapsedMs <= RECENT_CUSTOMER_REPLY_MS) {
     return {
       category: "customer_waiting",
       rank: 1,
-      whyNow: `Customer replied ${formatElapsed(elapsedMs)} ago and is waiting for us.`,
+      whyNow: `Customer replied ${formatElapsed(customerReplyElapsedMs)} ago and is waiting for us.`,
       session,
     };
   }
@@ -139,11 +143,13 @@ function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate 
     };
   }
 
-  if (session.stage === "COLD" || session.csStatusTier === "cold_lead") {
+  if (customerReplyElapsedMs !== null || session.stage === "COLD" || session.csStatusTier === "cold_lead") {
     return {
       category: "re_engagement",
       rank: 4,
-      whyNow: "This lead is eligible for a manual re-engagement touch.",
+      whyNow: customerReplyElapsedMs !== null
+        ? `Customer last replied ${formatElapsed(customerReplyElapsedMs)} ago; consider a manual re-engagement touch.`
+        : "This lead is eligible for a manual re-engagement touch.",
       session,
     };
   }
@@ -192,7 +198,8 @@ export function rankMadisonSessions(
       const bTs = b.category === "customer_waiting"
         ? b.session.lastCustomerMessageTs ?? b.session.lastMessageTs ?? 0
         : b.session.lastMessageTs ?? b.session.createdAt.getTime();
-      if (a.rank === 1 || a.rank === 3) return aTs - bTs;
+      if (a.rank === 1) return bTs - aTs;
+      if (a.rank === 3) return aTs - bTs;
       return bTs - aTs;
     });
 }
