@@ -12,12 +12,19 @@ function isOpenCsInboxEligible(
 
 const routerSource = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");
 const leadOpsSource = readFileSync(resolve(process.cwd(), "client/src/components/LeadOps.tsx"), "utf8");
+const customerMentionChipSource = readFileSync(resolve(process.cwd(), "client/src/components/CustomerMentionChip.tsx"), "utf8");
+const opsChatRouterSource = readFileSync(resolve(process.cwd(), "server/opsChatRouter.ts"), "utf8");
 
 describe("CsInbox Leads-popup outbound eligibility", () => {
-  it("marks only a Leads-popup send with the distinct LeadOps queue marker", () => {
+  it("marks the Leads section and both Manual Text send paths with the distinct LeadOps queue marker", () => {
     expect(leadOpsSource).toContain('source: "leads_popup"');
     expect(routerSource).toContain('source: z.enum(["cs_inbox", "leads_popup"])');
     expect(routerSource).toContain('input.source === "leads_popup" ? "LeadOps" : "CS"');
+    expect(customerMentionChipSource).toContain('leadSendMutation.mutate({ sessionId, message: text.trim(), source: "leads_popup" })');
+    expect(customerMentionChipSource).toContain('source: "manual_text_popup"');
+    expect(opsChatRouterSource).toContain('source: z.enum(["manual_text_popup"]).optional()');
+    expect(opsChatRouterSource).toContain('input.source === "manual_text_popup" ? "LeadOps" : (existing[0].csQueue ?? "Needs attention")');
+    expect(opsChatRouterSource).toContain('csQueue: input.source === "manual_text_popup" ? "LeadOps" : "Needs attention"');
   });
 
   it("surfaces an open LeadOps outbound conversation even before a customer reply", () => {

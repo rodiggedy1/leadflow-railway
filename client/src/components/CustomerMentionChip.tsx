@@ -292,9 +292,9 @@ function SmsComposer({
     setSending(true);
     if (isLeadChat && sessionId != null) {
       // Lead Chats ⚡ Reply path: write to messageHistory + broadcast lead_update
-      leadSendMutation.mutate({ sessionId, message: text.trim() });
+      leadSendMutation.mutate({ sessionId, message: text.trim(), source: "leads_popup" });
     } else {
-      sendMutation.mutate({ phone: customer.phone, firstMessage: text.trim(), ...(isLeadChat ? { isLeadChat: true } : {}) });
+      sendMutation.mutate({ phone: customer.phone, firstMessage: text.trim(), ...(isLeadChat ? { isLeadChat: true } : {}), source: "manual_text_popup" });
     }
   }
 

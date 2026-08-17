@@ -2893,6 +2893,7 @@ export const opsChatRouter = router({
       phone: z.string().min(7).max(20),  // raw phone — will be normalised to E.164
       firstMessage: z.string().min(1).max(1600),
       isLeadChat: z.boolean().optional(), // When true, send from leads line (OPENPHONE_PHONE_NUMBER_ID) instead of CS line
+      source: z.enum(["manual_text_popup"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -2954,7 +2955,7 @@ export const opsChatRouter = router({
           ? "cs-inbound-cleaner"
           : (existingSource && PROTECTED_SOURCES.has(existingSource) ? existingSource : "cs_initiated");
         const updates: Record<string, unknown> = {
-          csQueue: existingIsTeams ? "Teams" : (existing[0].csQueue ?? "Needs attention"),
+          csQueue: existingIsTeams ? "Teams" : (input.source === "manual_text_popup" ? "LeadOps" : (existing[0].csQueue ?? "Needs attention")),
           leadSource: newLeadSource,
         };
         if (resolvedName && (existing[0].leadName === e164 || !existing[0].leadName)) {
@@ -2971,7 +2972,7 @@ export const opsChatRouter = router({
             stage: "QUOTE_SENT",
             messageHistory: "[]",
             aiMode: 0,               // agent-driven; no AI auto-replies
-            csQueue: "Needs attention",
+            csQueue: input.source === "manual_text_popup" ? "LeadOps" : "Needs attention",
             leadSource: "cs_initiated",
           });
         sessionId = (result as any).insertId;
