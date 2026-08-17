@@ -775,7 +775,7 @@ export default function LeadOps({ focusSessionId, rail }: { focusSessionId?: num
 
   const handleSend = () => {
     if (!activeLead || !composer.trim()) return;
-    sendMutation.mutate({ sessionId: activeLead.id, message: composer.trim() });
+    sendMutation.mutate({ sessionId: activeLead.id, message: composer.trim(), source: "leads_popup" });
   };
 
   const handleBook = () => {
