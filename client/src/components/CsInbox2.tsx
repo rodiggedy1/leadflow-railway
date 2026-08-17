@@ -9,7 +9,6 @@ import CsInboxOutreachPreview from "@/components/CsInboxOutreachPreview";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
-import { batchCsInboxPhonesForNameLookup, mergeCsInboxNameMaps } from "@shared/csInboxPhoneNameBatching";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2
@@ -567,21 +566,14 @@ export default function CsInbox2() {
     { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 5_000 }
   );
 
-  const phoneNameBatches = useMemo(
-    () => batchCsInboxPhonesForNameLookup(csData?.map(row => row.leadPhone)),
-    [csData],
-  );
+  const allPhones = useMemo(() => {
+    if (!csData) return [];
+    return [...new Set(csData.map(r => (r.leadPhone ?? "").replace(/[^\d]/g, "").slice(-10)).filter(Boolean))];
+  }, [csData]);
 
-  const nameQueries = trpc.useQueries((query) => phoneNameBatches.map(phones =>
-    query.leads.batchResolveNames(
-      { phones },
-      { staleTime: 60_000 },
-    ),
-  ));
-
-  const nameMap = useMemo(
-    () => mergeCsInboxNameMaps(nameQueries.map(query => query.data)),
-    [nameQueries],
+  const { data: nameMap } = trpc.leads.batchResolveNames.useQuery(
+    { phones: allPhones },
+    { enabled: allPhones.length > 0, staleTime: 60_000 }
   );
 
   // ── SSE: invalidate on new inbound (exact copy from CsInbox.tsx) ───────
