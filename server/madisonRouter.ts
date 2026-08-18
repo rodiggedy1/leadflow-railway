@@ -163,6 +163,10 @@ function formatElapsed(elapsedMs: number): string {
   const minutes = Math.max(1, Math.floor(elapsedMs / 60_000));
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return `${days} ${days === 1 ? "day" : "days"}`;
+  }
   const remainder = minutes % 60;
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
