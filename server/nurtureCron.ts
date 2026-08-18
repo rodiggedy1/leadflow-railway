@@ -124,6 +124,10 @@ const OPT_OUT_KEYWORDS = ["stop", "unsubscribe", "quit", "cancel", "end", "optou
  */
 const NURTURE_SMS_ENABLED = true;
 
+// Safety policy: retain enrollments and the Nurture UI, but do not automatically
+// deliver lead-outreach SMS or mutate an enrollment as if delivery occurred.
+const AUTOMATIC_LEAD_OUTREACH_ENABLED = false;
+
 // ── Enrollment runner ─────────────────────────────────────────────────────────
 
 export async function runNurtureEnrollment(): Promise<{
@@ -233,6 +237,11 @@ export async function runNurtureSend(): Promise<{
   ended: number;
   errors: number;
 }> {
+  if (!AUTOMATIC_LEAD_OUTREACH_ENABLED) {
+    console.log("[NurtureSend] Automatic lead outreach disabled — no enrollments processed.");
+    return { checked: 0, sent: 0, ended: 0, errors: 0 };
+  }
+
   const db = await getDb();
   if (!db) return { checked: 0, sent: 0, ended: 0, errors: 0 };
 
@@ -561,4 +570,3 @@ export function hasReplyAfterLastSend(
     return new Date(ts).getTime() > lastSentMs;
   });
 }
-

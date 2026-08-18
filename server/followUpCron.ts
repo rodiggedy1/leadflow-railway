@@ -47,6 +47,10 @@ const MAX_NUDGES_BEFORE_COLD = 2;
 const DEFAULT_CIRCLE_BACK_MESSAGE =
   "Hi, just circling back on this. We have some availability and would love to get you scheduled!";
 
+// Safety policy: automated lead outreach is disabled. Phase 1A and operational
+// notifications use separate paths and are intentionally unaffected.
+const AUTOMATIC_LEAD_OUTREACH_ENABLED = false;
+
 // ─── 5-Minute Silence Follow-Up ──────────────────────────────────────────────
 
 export async function runSilenceFollowUp(): Promise<{
@@ -54,6 +58,11 @@ export async function runSilenceFollowUp(): Promise<{
   sent: number;
   errors: number;
 }> {
+  if (!AUTOMATIC_LEAD_OUTREACH_ENABLED) {
+    console.log("[SilenceFollowUp] Automatic lead outreach disabled — no candidates processed.");
+    return { checked: 0, sent: 0, errors: 0 };
+  }
+
   const db = await getDb();
   if (!db) return { checked: 0, sent: 0, errors: 0 };
 
@@ -235,6 +244,11 @@ export async function runScheduledFollowUp(): Promise<{
   sent: number;
   errors: number;
 }> {
+  if (!AUTOMATIC_LEAD_OUTREACH_ENABLED) {
+    console.log("[ScheduledFollowUp] Automatic lead outreach disabled — no candidates processed.");
+    return { checked: 0, sent: 0, errors: 0 };
+  }
+
   const db = await getDb();
   if (!db) return { checked: 0, sent: 0, errors: 0 };
 
