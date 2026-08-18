@@ -8,6 +8,7 @@ import { opsChatProcedure, router } from "./_core/trpc";
 
 const FOLLOW_UP_DUE_MS = 2 * 60 * 60 * 1000;
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
+const RECENT_CUSTOMER_REPLY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const EXCLUDED_SOURCES = new Set<string>([
   ...NON_LEAD_SOURCES,
@@ -107,21 +108,33 @@ function isBaseEligible(session: MadisonSessionRow, activeNurtureSessionIds: Rea
 }
 
 function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate | null {
-  if (session.lastMessageRole === "user") {
-    const elapsedMs = Math.max(0, now - (session.lastCustomerMessageTs ?? session.lastMessageTs ?? now));
-    return {
-      category: "customer_waiting",
-      rank: 1,
-      whyNow: `Customer replied ${formatElapsed(elapsedMs)} ago and is waiting for us.`,
-      session,
-    };
-  }
+  const customerReplyElapsedMs = session.lastMessageRole === "user"
+    ? Math.max(0, now - (session.lastCustomerMessageTs ?? session.lastMessageTs ?? now))
+    : null;
+  const lastTouchElapsedMs = Math.max(0, now - activityTimestamp(session));
 
   if (session.madisonDeferredUntil !== null && session.madisonDeferredUntil > now) {
     return null;
   }
 
+  if (customerReplyElapsedMs !== null && customerReplyElapsedMs <= RECENT_CUSTOMER_REPLY_MS) {
+    return {
+      category: "customer_waiting",
+      rank: 1,
+      whyNow: `Customer replied ${formatElapsed(customerReplyElapsedMs)} ago and is waiting for us.`,
+      session,
+    };
+  }
+
   if (URGENT_STATUS_TIERS.has(session.csStatusTier ?? "") || URGENT_PRIORITY_TAGS.has(session.csPriorityTag ?? "")) {
+    if (lastTouchElapsedMs > RECENT_CUSTOMER_REPLY_MS) {
+      return {
+        category: "re_engagement",
+        rank: 4,
+        whyNow: `Last touch was ${formatElapsed(lastTouchElapsedMs)} ago; consider a manual re-engagement touch.`,
+        session,
+      };
+    }
     return {
       category: "urgent_high_intent",
       rank: 2,
@@ -131,6 +144,14 @@ function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate 
   }
 
   if (session.lastMessageRole === "assistant" && session.lastMessageTs !== null && now - session.lastMessageTs >= FOLLOW_UP_DUE_MS) {
+    if (lastTouchElapsedMs > RECENT_CUSTOMER_REPLY_MS) {
+      return {
+        category: "re_engagement",
+        rank: 4,
+        whyNow: `Last touch was ${formatElapsed(lastTouchElapsedMs)} ago; consider a manual re-engagement touch.`,
+        session,
+      };
+    }
     return {
       category: "follow_up_due",
       rank: 3,
@@ -139,11 +160,13 @@ function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate 
     };
   }
 
-  if (session.stage === "COLD" || session.csStatusTier === "cold_lead") {
+  if (customerReplyElapsedMs !== null || session.stage === "COLD" || session.csStatusTier === "cold_lead") {
     return {
       category: "re_engagement",
       rank: 4,
-      whyNow: "This lead is eligible for a manual re-engagement touch.",
+      whyNow: customerReplyElapsedMs !== null
+        ? `Customer last replied ${formatElapsed(customerReplyElapsedMs)} ago; consider a manual re-engagement touch.`
+        : "This lead is eligible for a manual re-engagement touch.",
       session,
     };
   }
@@ -173,7 +196,8 @@ function formatElapsed(elapsedMs: number): string {
 
 /**
  * Pure deterministic ranking used by both the live query and focused tests.
- * A user-last conversation intentionally ignores a still-active Madison defer.
+ * A genuine inbound reply clears its defer in the webhook, while an active defer
+ * hides every category until it expires.
  */
 export function rankMadisonSessions(
   rows: readonly MadisonSessionRow[],
@@ -192,7 +216,8 @@ export function rankMadisonSessions(
       const bTs = b.category === "customer_waiting"
         ? b.session.lastCustomerMessageTs ?? b.session.lastMessageTs ?? 0
         : b.session.lastMessageTs ?? b.session.createdAt.getTime();
-      if (a.rank === 1 || a.rank === 3) return aTs - bTs;
+      if (a.rank === 1) return bTs - aTs;
+      if (a.rank === 3) return aTs - bTs;
       return bTs - aTs;
     });
 }

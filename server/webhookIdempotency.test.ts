@@ -7,6 +7,8 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 // ─── Pure helper extracted from the webhook logic ────────────────────────────
 // We test the idempotency decision logic in isolation so we don't need to
@@ -31,6 +33,13 @@ function nextLastProcessedMessageId(
   currentValue: string | null | undefined
 ): string | null | undefined {
   return inboundMessageId ?? currentValue;
+}
+
+function nextMadisonDeferredUntil(
+  acceptedAsNewInbound: boolean,
+  currentDeferredUntil: number | null,
+): number | null {
+  return acceptedAsNewInbound ? null : currentDeferredUntil;
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -155,5 +164,32 @@ describe("Webhook idempotency guard — full duplicate scenario simulation", () 
     // Only 3 unique messages should be processed
     expect(processedMessages).toHaveLength(3);
     expect(processedMessages).toEqual(["Monday", "1501 Canyon Ledge Court", "Now"]);
+  });
+});
+
+describe("Webhook inbound Skip reset", () => {
+  it("clears a Madison defer only after a genuine new customer reply", () => {
+    const deferUntil = 1_760_000_000_000;
+
+    expect(nextMadisonDeferredUntil(true, deferUntil)).toBeNull();
+    expect(nextMadisonDeferredUntil(false, deferUntil)).toBe(deferUntil);
+  });
+
+  it("wires the reset into the existing-session update payload after both duplicate guards", () => {
+    const source = readFileSync(resolve(import.meta.dirname, "webhooks.ts"), "utf8");
+    const existingSessionStart = source.indexOf("// Append to existing session.");
+    const existingSessionEnd = source.indexOf("  } else {", existingSessionStart);
+    const existingSessionBlock = source.slice(existingSessionStart, existingSessionEnd);
+    const firstDedup = existingSessionBlock.indexOf("messageId dedup");
+    const secondDedup = existingSessionBlock.indexOf("Content dedup");
+    const updatePayload = existingSessionBlock.indexOf("const updatePayload");
+    const reset = existingSessionBlock.indexOf("madisonDeferredUntil: null");
+
+    expect(existingSessionStart).toBeGreaterThan(-1);
+    expect(existingSessionEnd).toBeGreaterThan(existingSessionStart);
+    expect(firstDedup).toBeGreaterThan(-1);
+    expect(secondDedup).toBeGreaterThan(firstDedup);
+    expect(updatePayload).toBeGreaterThan(secondDedup);
+    expect(reset).toBeGreaterThan(updatePayload);
   });
 });

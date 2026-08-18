@@ -2408,6 +2408,7 @@ async function handleCsInboundMessage(msg: any) {
       messageHistory: JSON.stringify(history),
       updatedAt: new Date(),
       ...csInboundSummary,
+      madisonDeferredUntil: null,
       ...(inboundPhoneNumberId ? { lastInboundPhoneNumberId: inboundPhoneNumberId } : {}),
     };
     if (resolvedName && !existingSession.leadName) {
