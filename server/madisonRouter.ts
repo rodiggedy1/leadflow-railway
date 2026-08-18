@@ -1,26 +1,11 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions, nurtureEnrollments } from "../drizzle/schema";
-import { NON_LEAD_SOURCES } from "../shared/leadSources";
+import { conversationSessions } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
 
-const FOLLOW_UP_DUE_MS = 2 * 60 * 60 * 1000;
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
-const RECENT_CUSTOMER_REPLY_MS = 7 * 24 * 60 * 60 * 1000;
-
-const EXCLUDED_SOURCES = new Set<string>([
-  ...NON_LEAD_SOURCES,
-  "cs_initiated",
-  "cs-inbound",
-  "cs-inbound-cleaner",
-  "hiring_interview",
-  "hiring",
-  "review_rebooking",
-  "review",
-  "schedule_confirm",
-]);
 
 const TERMINAL_STAGES = new Set<string>([
   "BOOKED",
@@ -31,14 +16,7 @@ const TERMINAL_STAGES = new Set<string>([
   "NOT_INTERESTED",
 ]);
 
-const URGENT_STATUS_TIERS = new Set(["hot_lead", "scheduling", "objection"]);
-const URGENT_PRIORITY_TAGS = new Set(["booking", "urgent"]);
-
-export type MadisonCategory =
-  | "customer_waiting"
-  | "urgent_high_intent"
-  | "follow_up_due"
-  | "re_engagement";
+export type MadisonCategory = "follow_up_due";
 
 export type MadisonSessionRow = {
   id: number;
@@ -64,6 +42,7 @@ export type MadisonSessionRow = {
   lastCustomerMessageTs: number | null;
   lastMessageRole: string | null;
   madisonDeferredUntil: number | null;
+  csResolvedAt: number | Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -97,89 +76,55 @@ function canonicalSessions(rows: readonly MadisonSessionRow[]): MadisonSessionRo
   return Array.from(latestByPhone.values());
 }
 
-function isBaseEligible(session: MadisonSessionRow, activeNurtureSessionIds: ReadonlySet<number>): boolean {
+function isBaseEligible(session: MadisonSessionRow): boolean {
   if (session.smsOptOut === 1) return false;
   if (session.isBooked === 1 || session.bookedAt !== null) return false;
   if (TERMINAL_STAGES.has(session.stage)) return false;
-  if (!session.leadSource || EXCLUDED_SOURCES.has(session.leadSource)) return false;
-  if (activeNurtureSessionIds.has(session.id)) return false;
-  if (session.followUpDate && session.followUpSent === 0) return false;
+  if (session.csResolvedAt !== null) return false;
   return true;
 }
 
-function categoryFor(session: MadisonSessionRow, now: number): MadisonCandidate | null {
-  const customerReplyElapsedMs = session.lastMessageRole === "user"
-    ? Math.max(0, now - (session.lastCustomerMessageTs ?? session.lastMessageTs ?? now))
-    : null;
-  const lastTouchElapsedMs = Math.max(0, now - activityTimestamp(session));
+function easternToday(now: number): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(now));
+  const values = new Map(parts.map(part => [part.type, part.value]));
+  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
+}
 
+function followUpIsDueOrOverdue(session: MadisonSessionRow, todayET: string): boolean {
+  return session.followUpDate !== null
+    && session.followUpSent === 0
+    && session.followUpDate <= todayET;
+}
+
+function hasFutureScheduledFollowUp(session: MadisonSessionRow, todayET: string): boolean {
+  return session.followUpDate !== null
+    && session.followUpSent === 0
+    && session.followUpDate > todayET;
+}
+
+function categoryFor(session: MadisonSessionRow, now: number, todayET: string): MadisonCandidate | null {
   if (session.madisonDeferredUntil !== null && session.madisonDeferredUntil > now) {
     return null;
   }
 
-  if (customerReplyElapsedMs !== null && customerReplyElapsedMs <= RECENT_CUSTOMER_REPLY_MS) {
-    return {
-      category: "customer_waiting",
-      rank: 1,
-      whyNow: `Customer replied ${formatElapsed(customerReplyElapsedMs)} ago and is waiting for us.`,
-      session,
-    };
-  }
+  if (session.lastMessageRole !== "assistant") return null;
+  if (hasFutureScheduledFollowUp(session, todayET)) return null;
 
-  if (URGENT_STATUS_TIERS.has(session.csStatusTier ?? "") || URGENT_PRIORITY_TAGS.has(session.csPriorityTag ?? "")) {
-    if (lastTouchElapsedMs > RECENT_CUSTOMER_REPLY_MS) {
-      return {
-        category: "re_engagement",
-        rank: 4,
-        whyNow: `Last touch was ${formatElapsed(lastTouchElapsedMs)} ago; consider a manual re-engagement touch.`,
-        session,
-      };
-    }
-    return {
-      category: "urgent_high_intent",
-      rank: 2,
-      whyNow: session.csPriorityReason?.trim() || urgentReason(session),
-      session,
-    };
-  }
-
-  if (session.lastMessageRole === "assistant" && session.lastMessageTs !== null && now - session.lastMessageTs >= FOLLOW_UP_DUE_MS) {
-    if (lastTouchElapsedMs > RECENT_CUSTOMER_REPLY_MS) {
-      return {
-        category: "re_engagement",
-        rank: 4,
-        whyNow: `Last touch was ${formatElapsed(lastTouchElapsedMs)} ago; consider a manual re-engagement touch.`,
-        session,
-      };
-    }
-    return {
-      category: "follow_up_due",
-      rank: 3,
-      whyNow: `We sent the last message ${formatElapsed(now - session.lastMessageTs)} ago and have not heard back.`,
-      session,
-    };
-  }
-
-  if (customerReplyElapsedMs !== null || session.stage === "COLD" || session.csStatusTier === "cold_lead") {
-    return {
-      category: "re_engagement",
-      rank: 4,
-      whyNow: customerReplyElapsedMs !== null
-        ? `Customer last replied ${formatElapsed(customerReplyElapsedMs)} ago; consider a manual re-engagement touch.`
-        : "This lead is eligible for a manual re-engagement touch.",
-      session,
-    };
-  }
-
-  return null;
-}
-
-function urgentReason(session: MadisonSessionRow): string {
-  if (session.csPriorityTag === "booking") return "This lead has active booking intent.";
-  if (session.csPriorityTag === "urgent") return "This lead has an urgent support signal.";
-  if (session.csStatusTier === "scheduling") return "This lead is actively discussing scheduling.";
-  if (session.csStatusTier === "objection") return "This lead has an active decision objection to address.";
-  return "This lead has a high-intent conversation signal.";
+  const elapsedMs = Math.max(0, now - activityTimestamp(session));
+  const scheduledFollowUpDue = followUpIsDueOrOverdue(session, todayET);
+  return {
+    category: "follow_up_due",
+    rank: 1,
+    whyNow: scheduledFollowUpDue
+      ? `Scheduled follow-up is due; we sent the last message ${formatElapsed(elapsedMs)} ago and have not heard back.`
+      : `We sent the last message ${formatElapsed(elapsedMs)} ago and have not heard back.`,
+    session,
+  };
 }
 
 function formatElapsed(elapsedMs: number): string {
@@ -195,40 +140,34 @@ function formatElapsed(elapsedMs: number): string {
 }
 
 /**
- * Pure deterministic ranking used by both the live query and focused tests.
- * A genuine inbound reply clears its defer in the webhook, while an active defer
- * hides every category until it expires.
+ * Pure deterministic queue for the human follow-up portion of CsInbox2's
+ * Waiting on Customer column: assistant-last active conversations, newest first.
  */
 export function rankMadisonSessions(
   rows: readonly MadisonSessionRow[],
-  activeNurtureSessionIds: ReadonlySet<number>,
   now: number,
 ): MadisonCandidate[] {
+  const todayET = easternToday(now);
   return canonicalSessions(rows)
-    .filter(session => isBaseEligible(session, activeNurtureSessionIds))
-    .map(session => categoryFor(session, now))
+    .filter(isBaseEligible)
+    .map(session => categoryFor(session, now, todayET))
     .filter((candidate): candidate is MadisonCandidate => candidate !== null)
-    .sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank;
-      const aTs = a.category === "customer_waiting"
-        ? a.session.lastCustomerMessageTs ?? a.session.lastMessageTs ?? 0
-        : a.session.lastMessageTs ?? a.session.createdAt.getTime();
-      const bTs = b.category === "customer_waiting"
-        ? b.session.lastCustomerMessageTs ?? b.session.lastMessageTs ?? 0
-        : b.session.lastMessageTs ?? b.session.createdAt.getTime();
-      if (a.rank === 1) return bTs - aTs;
-      if (a.rank === 3) return aTs - bTs;
-      return bTs - aTs;
-    });
+    .sort((a, b) => activityTimestamp(b.session) - activityTimestamp(a.session));
 }
 
 async function loadMadisonCandidates() {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-  const [sessions, activeNurtures] = await Promise.all([
-    db
-      .select({
+  // Use the same actual-inbound eligibility semantics as CsInbox2. Acquisition
+  // source and nurture enrollment are not part of Waiting on Customer membership.
+  const inboundMessageActivityFilter = sql`(
+    JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+    OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
+  )`;
+
+  const sessions = await db
+    .select({
         id: conversationSessions.id,
         leadPhone: conversationSessions.leadPhone,
         leadName: conversationSessions.leadName,
@@ -252,26 +191,22 @@ async function loadMadisonCandidates() {
         lastCustomerMessageTs: conversationSessions.lastCustomerMessageTs,
         lastMessageRole: conversationSessions.lastMessageRole,
         madisonDeferredUntil: conversationSessions.madisonDeferredUntil,
+        csResolvedAt: conversationSessions.csResolvedAt,
         createdAt: conversationSessions.createdAt,
         updatedAt: conversationSessions.updatedAt,
       })
       .from(conversationSessions)
       .where(and(
+        inboundMessageActivityFilter,
+        isNull(conversationSessions.csResolvedAt),
         eq(conversationSessions.smsOptOut, 0),
         ne(conversationSessions.isBooked, 1),
         isNull(conversationSessions.bookedAt),
         sql`${conversationSessions.stage} NOT IN ('BOOKED', 'COMPLETED', 'CLOSED', 'LOST', 'RESOLVED', 'NOT_INTERESTED')`,
-        or(isNull(conversationSessions.followUpDate), ne(conversationSessions.followUpSent, 0)),
-      )),
-    db
-      .select({ sessionId: nurtureEnrollments.sessionId })
-      .from(nurtureEnrollments)
-      .where(and(eq(nurtureEnrollments.status, "active"), isNull(nurtureEnrollments.deletedAt))),
-  ]);
+      ));
 
   return rankMadisonSessions(
     sessions as MadisonSessionRow[],
-    new Set(activeNurtures.map(row => row.sessionId)),
     Date.now(),
   );
 }

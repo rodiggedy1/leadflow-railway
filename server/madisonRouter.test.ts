@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { rankMadisonSessions, type MadisonSessionRow } from "./madisonRouter";
 
-const NOW = 1_760_000_000_000;
+const NOW = new Date("2025-10-09T16:00:00.000Z").getTime();
 
-function row(overrides: Partial<MadisonSessionRow> = {}): MadisonSessionRow {
+function row(overrides: Partial<MadisonSessionRow> & { id: number }): MadisonSessionRow {
   return {
-    id: 1,
-    leadPhone: "+12025550100",
-    leadName: "Test Lead",
+    id: overrides.id,
+    leadPhone: `+1202555${String(overrides.id).padStart(4, "0")}`,
+    leadName: `Lead ${overrides.id}`,
     leadSource: "form",
     stage: "QUOTE_SENT",
     isBooked: 0,
@@ -28,126 +28,58 @@ function row(overrides: Partial<MadisonSessionRow> = {}): MadisonSessionRow {
     lastCustomerMessageTs: null,
     lastMessageRole: "assistant",
     madisonDeferredUntil: null,
-    createdAt: new Date(NOW - 10 * 60 * 60 * 1000),
+    csResolvedAt: null,
+    createdAt: new Date(NOW - 10 * 24 * 60 * 60 * 1000),
     updatedAt: new Date(NOW - 3 * 60 * 60 * 1000),
     ...overrides,
   };
 }
 
-describe("rankMadisonSessions", () => {
-  it("orders the four approved categories deterministically", () => {
+describe("Madison canonical Waiting on Customer queue", () => {
+  it("keeps assistant-last cards only and orders them newest first", () => {
     const candidates = rankMadisonSessions([
-      row({ id: 1, leadPhone: "+12025550001", stage: "COLD", lastMessageRole: "assistant", lastMessageTs: NOW - 60_000 }),
-      row({ id: 2, leadPhone: "+12025550002", csStatusTier: "hot_lead", lastMessageTs: NOW - 60_000 }),
-      row({ id: 3, leadPhone: "+12025550003", lastMessageRole: "user", lastCustomerMessageTs: NOW - 60_000, lastMessageTs: NOW - 60_000 }),
-      row({ id: 4, leadPhone: "+12025550004", lastMessageRole: "assistant", lastMessageTs: NOW - 3 * 60 * 60 * 1000 }),
-    ], new Set(), NOW);
+      row({ id: 1, lastMessageTs: NOW - 38 * 24 * 60 * 60 * 1000 }),
+      row({ id: 2, lastMessageTs: NOW - 6 * 60 * 60 * 1000 }),
+      row({ id: 3, lastMessageTs: NOW - 20 * 60 * 1000 }),
+      row({ id: 4, lastMessageRole: "user", lastMessageTs: NOW - 10 * 60 * 1000, lastCustomerMessageTs: NOW - 10 * 60 * 1000 }),
+    ], NOW);
 
-    expect(candidates.map(candidate => candidate.category)).toEqual([
-      "customer_waiting",
-      "urgent_high_intent",
-      "follow_up_due",
-      "re_engagement",
-    ]);
+    expect(candidates.map(candidate => candidate.session.id)).toEqual([3, 2, 1]);
   });
 
-  it("uses one most-recent canonical conversation per phone", () => {
+  it("uses the newest canonical conversation for a phone, so a customer reply removes an older outreach from the queue", () => {
     const candidates = rankMadisonSessions([
       row({ id: 1, leadPhone: "+1 (202) 555-0100", lastMessageTs: NOW - 4 * 60 * 60 * 1000 }),
-      row({ id: 2, leadPhone: "+12025550100", lastMessageRole: "user", lastMessageTs: NOW - 60_000, lastCustomerMessageTs: NOW - 60_000 }),
-    ], new Set(), NOW);
-
-    expect(candidates).toHaveLength(1);
-    expect(candidates[0].session.id).toBe(2);
-  });
-
-  it("hides a deferred customer-waiting conversation until the four-hour Skip expires", () => {
-    const candidates = rankMadisonSessions([
-      row({
-        lastMessageRole: "user",
-        lastMessageTs: NOW - 60_000,
-        lastCustomerMessageTs: NOW - 60_000,
-        madisonDeferredUntil: NOW + 4 * 60 * 60 * 1000,
-      }),
-    ], new Set(), NOW);
+      row({ id: 2, leadPhone: "+12025550100", lastMessageRole: "user", lastMessageTs: NOW - 10 * 60 * 1000, lastCustomerMessageTs: NOW - 10 * 60 * 1000 }),
+    ], NOW);
 
     expect(candidates).toEqual([]);
   });
 
-  it("excludes a deferred non-user-last conversation until the four-hour Skip expires", () => {
+  it("includes due follow-ups and excludes future scheduled follow-ups", () => {
     const candidates = rankMadisonSessions([
-      row({ madisonDeferredUntil: NOW + 1 }),
-    ], new Set(), NOW);
+      row({ id: 1, followUpDate: "2025-10-09", followUpSent: 0, lastMessageTs: NOW - 24 * 60 * 60 * 1000 }),
+      row({ id: 2, followUpDate: "2025-10-10", followUpSent: 0, lastMessageTs: NOW - 10 * 60 * 1000 }),
+    ], NOW);
+
+    expect(candidates.map(candidate => candidate.session.id)).toEqual([1]);
+    expect(candidates[0]?.whyNow).toContain("Scheduled follow-up is due");
+  });
+
+  it("hides a card while its existing Skip defer is active", () => {
+    const candidates = rankMadisonSessions([
+      row({ id: 1, madisonDeferredUntil: NOW + 10_000 }),
+    ], NOW);
 
     expect(candidates).toEqual([]);
   });
 
-  it("excludes booked, lost, resolved, opted-out, scheduled, and active-nurture conversations", () => {
+  it("excludes a resolved assistant-last conversation while keeping an unresolved card", () => {
     const candidates = rankMadisonSessions([
-      row({ id: 1, isBooked: 1 }),
-      row({ id: 2, stage: "LOST" }),
-      row({ id: 3, stage: "RESOLVED" }),
-      row({ id: 4, smsOptOut: 1 }),
-      row({ id: 5, followUpDate: "2026-12-01", followUpSent: 0 }),
-      row({ id: 6 }),
-    ], new Set([6]), NOW);
+      row({ id: 1, csResolvedAt: NOW - 1_000 }),
+      row({ id: 2, csResolvedAt: null }),
+    ], NOW);
 
-    expect(candidates).toEqual([]);
-  });
-
-  it("requires the full two-hour boundary for Follow-up Due", () => {
-    const beforeThreshold = rankMadisonSessions([
-      row({ lastMessageTs: NOW - FOLLOW_UP_MS + 1 }),
-    ], new Set(), NOW);
-    const atThreshold = rankMadisonSessions([
-      row({ lastMessageTs: NOW - FOLLOW_UP_MS }),
-    ], new Set(), NOW);
-
-    expect(beforeThreshold).toEqual([]);
-    expect(atThreshold[0]?.category).toBe("follow_up_due");
-  });
-
-  it("ranks recent customer replies newest-first", () => {
-    const candidates = rankMadisonSessions([
-      row({ id: 1, leadPhone: "+12025550001", lastMessageRole: "user", lastMessageTs: NOW - 6 * 24 * 60 * 60 * 1000, lastCustomerMessageTs: NOW - 6 * 24 * 60 * 60 * 1000 }),
-      row({ id: 2, leadPhone: "+12025550002", lastMessageRole: "user", lastMessageTs: NOW - 4 * 60 * 60 * 1000, lastCustomerMessageTs: NOW - 4 * 60 * 60 * 1000 }),
-    ], new Set(), NOW);
-
-    expect(candidates.map(candidate => candidate.session.id)).toEqual([2, 1]);
-    expect(candidates.map(candidate => candidate.category)).toEqual(["customer_waiting", "customer_waiting"]);
-  });
-
-  it("keeps the seven-day customer-waiting boundary and demotes stale replies below current hot leads", () => {
-    const candidates = rankMadisonSessions([
-      row({ id: 1, leadPhone: "+12025550001", lastMessageRole: "user", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS, lastCustomerMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS }),
-      row({ id: 2, leadPhone: "+12025550002", lastMessageRole: "user", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1, lastCustomerMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1 }),
-      row({ id: 3, leadPhone: "+12025550003", csStatusTier: "hot_lead", lastMessageTs: NOW - 60_000 }),
-    ], new Set(), NOW);
-
-    expect(candidates.map(candidate => candidate.session.id)).toEqual([1, 3, 2]);
-    expect(candidates.map(candidate => candidate.category)).toEqual(["customer_waiting", "urgent_high_intent", "re_engagement"]);
-    expect(candidates[2]?.whyNow).toBe("Customer last replied 7 days ago; consider a manual re-engagement touch.");
-  });
-
-  it("demotes stale tagged hot leads and follow-ups to re-engagement", () => {
-    const candidates = rankMadisonSessions([
-      row({ id: 1, leadPhone: "+12025550001", csStatusTier: "hot_lead", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1 }),
-      row({ id: 2, leadPhone: "+12025550002", lastMessageRole: "assistant", lastMessageTs: NOW - RECENT_CUSTOMER_REPLY_MS - 1 }),
-    ], new Set(), NOW);
-
-    expect(candidates.map(candidate => candidate.category)).toEqual(["re_engagement", "re_engagement"]);
-  });
-
-  it("keeps Follow-up Due candidates oldest-first", () => {
-    const candidates = rankMadisonSessions([
-      row({ id: 1, leadPhone: "+12025550001", lastMessageTs: NOW - 4 * 60 * 60 * 1000 }),
-      row({ id: 2, leadPhone: "+12025550002", lastMessageTs: NOW - 2 * 60 * 60 * 1000 }),
-    ], new Set(), NOW);
-
-    expect(candidates.map(candidate => candidate.session.id)).toEqual([1, 2]);
-    expect(candidates.map(candidate => candidate.category)).toEqual(["follow_up_due", "follow_up_due"]);
+    expect(candidates.map(candidate => candidate.session.id)).toEqual([2]);
   });
 });
-
-const FOLLOW_UP_MS = 2 * 60 * 60 * 1000;
-const RECENT_CUSTOMER_REPLY_MS = 7 * 24 * 60 * 60 * 1000;
