@@ -287,41 +287,10 @@ export async function triggerMadisonSmsDraft(params: {
       db,
     });
 
-
-    // ── Step 7.6: Auto-Send Gate ─────────────────────────────────────────────
-    const autoSend = evaluateAutoSend({ classification, draftResponse, inboundText });
-    if (autoSend.eligible) {
-      // Atomically claim the draft (same pattern as approveSmsDraft)
-      const [claimResult] = await db
-        .update(madisonSmsDrafts)
-        .set({ status: "SENDING", approvedText: draftResponse.draft, approvedBy: "madison_auto", approvedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(madisonSmsDrafts.id, draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
-      const claimed = (claimResult as any).affectedRows ?? 0;
-      if (claimed === 0) {
-        // Already claimed by another path — return without creating any card
-        console.log(`[MadisonSMS] Auto-send claim failed for draft ${draftId} — already claimed`);
-        return;
-      }
-      // Reuse the exact same sendSms path as approveSmsDraft
-      await sendSms({ to: fromPhone, content: draftResponse.draft, fromNumberId: ENV.openPhoneCsNumberId || undefined });
-      await db.update(madisonSmsDrafts)
-        .set({ status: "SENT", sentAt: new Date(), updatedAt: new Date() })
-        .where(eq(madisonSmsDrafts.id, draftId));
-      await postAutoSentCard({
-        draftId,
-        sessionId,
-        fromPhone,
-        senderName: context.senderName ?? senderName,
-        inboundText,
-        autoReply: draftResponse.draft,
-        autoSendConfidence: draftResponse.draftConfidence,
-        db,
-      });
-      console.log(`[MadisonSMS] AUTO-SENT for ${fromPhone}: reason=social_acknowledgment, confidence=${draftResponse.draftConfidence}`);
-      return; // skip Step 8 — no approval card needed
-    } else {
-      console.log(`[MadisonSMS] Auto-send ineligible for ${fromPhone}: ${autoSend.reason}`);
-    }
+    // ── Step 7.6: Human approval boundary ─────────────────────────────────────
+    // Phase 1A returned above and remains the sole automatic courtesy-reply path.
+    // Every substantive generated draft remains DRAFT_READY until an agent approves
+    // it through opsChat.approveSmsDraft.
 
     // ── Step 8: Post Draft Card to Command Chat ───────────────────────────────
     await postDraftCardToCommandChat({
@@ -1133,84 +1102,6 @@ function pickPhase1AResponse(inboundText: string): string | null {
     if (pattern.test(normalised)) return response;
   }
   return null;
-}
-
-// ─── Auto-Send Gate ──────────────────────────────────────────────────────────
-
-/**
- * Phase 1 positive allowlist — only these exact social acknowledgments are eligible.
- * Deliberately narrow. Expand after observing production behavior.
- */
-const AUTO_SEND_ALLOWLIST = [
-  /^thanks[!.]*$/i,
-  /^thank you[!.]*$/i,
-  /^thank u[!.]*$/i,
-  /^thx[!.]*$/i,
-  /^okay thanks[!.]*$/i,
-  /^ok thanks[!.]*$/i,
-  /^ok thank you[!.]*$/i,
-  /^got it[!.]*$/i,
-  /^got it[,\s]+thanks[!.]*$/i,
-  /^have a good day[!.]*$/i,
-  /^have a great day[!.]*$/i,
-  /^you too[!.]*$/i,
-  /^you're welcome[!.]*$/i,
-  /^youre welcome[!.]*$/i,
-];
-
-/** Keywords that disqualify the inbound message from auto-send. */
-const AUTO_SEND_INBOUND_EXCLUSIONS = [
-  "?", "$", "cost", "price", "charge", "refund", "discount", "payment", "pay", "fee",
-  "quote", "book", "availab", "reschedule", "cancel", "move", "appointment", "recurring",
-  "damage", "broken", "missing", "stole", "complaint", "unhappy", "disappoint", "terrible", "awful",
-  "key", "code", "lock", "alarm", "gate", "entry",
-  "late", "no show", "didn't show", "not here", "where is", "eta", "when will", "what time",
-  "yes", "confirmed", "sure", "absolutely", "do it", "go ahead", "sounds fine", "that's fine",
-  "that works", "sounds good", "sounds great", "perfect", "see you",
-];
-
-/** Keywords that disqualify the outbound draft from auto-send. */
-const AUTO_SEND_REPLY_EXCLUSIONS = [
-  "booked", "scheduled", "confirmed for", "we'll arrive", "your total",
-  "charged", "added", "removed", "cancelled", "refunded",
-  "appointment is", "we can", "we will", "you're set",
-];
-
-function evaluateAutoSend(params: {
-  classification: ClassificationResult;
-  draftResponse: DraftResponse;
-  inboundText: string;
-}): { eligible: boolean; reason: string } {
-  try {
-    const { classification, draftResponse, inboundText } = params;
-    const normalised = inboundText.trim().replace(/[\u{1F300}-\u{1FFFF}]/gu, "").trim();
-
-    // Gate 1: positive allowlist
-    const matchesAllowlist = AUTO_SEND_ALLOWLIST.some(re => re.test(normalised));
-    if (!matchesAllowlist) return { eligible: false, reason: "not_in_allowlist" };
-
-    // Gate 2: classification type + confidence
-    if (classification.type !== "CONVERSATION") return { eligible: false, reason: "not_conversation" };
-    if (classification.intentConfidence < 0.98) return { eligible: false, reason: "low_intent_confidence" };
-    if (draftResponse.draftConfidence < 0.98) return { eligible: false, reason: "low_draft_confidence" };
-
-    // Gate 3: inbound exclusion keywords
-    const lowerInbound = inboundText.toLowerCase();
-    for (const kw of AUTO_SEND_INBOUND_EXCLUSIONS) {
-      if (lowerInbound.includes(kw)) return { eligible: false, reason: `inbound_exclusion:${kw}` };
-    }
-
-    // Gate 5: reply-side safety check
-    const lowerReply = draftResponse.draft.toLowerCase();
-    for (const kw of AUTO_SEND_REPLY_EXCLUSIONS) {
-      if (lowerReply.includes(kw)) return { eligible: false, reason: `reply_exclusion:${kw}` };
-    }
-
-    return { eligible: true, reason: "social_acknowledgment" };
-  } catch (err) {
-    // Fail closed on any unexpected error
-    return { eligible: false, reason: `gate_error:${err instanceof Error ? err.message : String(err)}` };
-  }
 }
 
 async function postAutoSentCard(params: {
