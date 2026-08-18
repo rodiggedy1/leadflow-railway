@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { rankMadisonSessions, type MadisonSessionRow } from "./madisonRouter";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { TrpcContext } from "./_core/context";
+
+vi.mock("./db", () => ({ getDb: vi.fn() }));
+
+import { getDb } from "./db";
+import { madisonRouter, rankMadisonSessions, type MadisonSessionRow } from "./madisonRouter";
+
+const mockGetDb = vi.mocked(getDb);
 
 const NOW = new Date("2025-10-09T16:00:00.000Z").getTime();
 
@@ -34,6 +41,18 @@ function row(overrides: Partial<MadisonSessionRow> & { id: number }): MadisonSes
     ...overrides,
   };
 }
+
+function ownerContext(): TrpcContext {
+  return {
+    user: { openId: "test-owner", name: "Test Owner" } as TrpcContext["user"],
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("Madison canonical Waiting on Customer queue", () => {
   it("keeps assistant-last cards only and orders them newest first", () => {
@@ -74,12 +93,31 @@ describe("Madison canonical Waiting on Customer queue", () => {
     expect(candidates).toEqual([]);
   });
 
-  it("excludes a resolved assistant-last conversation while keeping an unresolved card", () => {
+  it("excludes a resolved current card so the next unresolved card advances into the queue", () => {
     const candidates = rankMadisonSessions([
-      row({ id: 1, csResolvedAt: NOW - 1_000 }),
-      row({ id: 2, csResolvedAt: null }),
+      row({ id: 1, csResolvedAt: NOW - 1_000, lastMessageTs: NOW - 10 * 60 * 1000 }),
+      row({ id: 2, csResolvedAt: null, lastMessageTs: NOW - 20 * 60 * 1000 }),
+      row({ id: 3, csResolvedAt: null, lastMessageTs: NOW - 30 * 60 * 1000 }),
     ], NOW);
 
-    expect(candidates.map(candidate => candidate.session.id)).toEqual([2]);
+    expect(candidates.map(candidate => candidate.session.id)).toEqual([2, 3]);
+  });
+
+  it("defers the presented session with a direct write and no candidate-pool pre-read", async () => {
+    const where = vi.fn().mockResolvedValue({ affectedRows: 1 });
+    const set = vi.fn().mockReturnValue({ where });
+    const update = vi.fn().mockReturnValue({ set });
+    const select = vi.fn();
+    mockGetDb.mockResolvedValue({ select, update } as never);
+
+    const caller = madisonRouter.createCaller(ownerContext());
+    const result = await caller.deferNextBestAction({ sessionId: 42 });
+
+    expect(result.success).toBe(true);
+    expect(result.madisonDeferredUntil).toBeGreaterThan(Date.now());
+    expect(select).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalled();
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({ madisonDeferredUntil: expect.any(Number) }));
+    expect(where).toHaveBeenCalled();
   });
 });

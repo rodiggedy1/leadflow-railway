@@ -112,6 +112,20 @@ export default function CsInboxOutreachPreview() {
   const current = queue.data?.current ?? null;
   const upNext = queue.data?.upNext ?? null;
 
+  function advanceCurrentCard(sessionId: number) {
+    setDraft("");
+    utils.madison.getNextBestActions.setData(undefined, old => {
+      if (!old || old.current?.sessionId !== sessionId) return old;
+      return {
+        ...old,
+        current: old.upNext ?? null,
+        upNext: null,
+        eligibleCount: Math.max(0, old.eligibleCount - 1),
+      };
+    });
+    void utils.madison.getNextBestActions.invalidate();
+  }
+
   useOpsStream(
     { onLeadUpdate: () => { void utils.madison.getNextBestActions.invalidate(); } },
     { enabled: Boolean(queue.data), label: "Madison" },
@@ -225,8 +239,7 @@ export default function CsInboxOutreachPreview() {
     setError("");
     try {
       await deferMutation.mutateAsync({ sessionId: current.sessionId });
-      setDraft("");
-      await utils.madison.getNextBestActions.invalidate();
+      advanceCurrentCard(current.sessionId);
     } catch (skipError) {
       setError(skipError instanceof Error ? skipError.message : "Unable to skip this action. Please try again.");
     }
@@ -237,12 +250,9 @@ export default function CsInboxOutreachPreview() {
     setError("");
     try {
       await resolveMutation.mutateAsync({ sessionId: current.sessionId });
-      setDraft("");
-      await Promise.all([
-        utils.madison.getNextBestActions.invalidate(),
-        utils.leads.listCsInbox.invalidate(),
-        utils.opsChat.getCsResolvedCount.invalidate(),
-      ]);
+      advanceCurrentCard(current.sessionId);
+      void utils.leads.listCsInbox.invalidate();
+      void utils.opsChat.getCsResolvedCount.invalidate();
     } catch (resolveError) {
       setError(resolveError instanceof Error ? resolveError.message : "Unable to resolve this conversation. Please try again.");
     }

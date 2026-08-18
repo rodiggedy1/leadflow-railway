@@ -243,11 +243,6 @@ export const madisonRouter = router({
   deferNextBestAction: opsChatProcedure
     .input(z.object({ sessionId: z.number().int().positive() }))
     .mutation(async ({ input }) => {
-      const candidates = await loadMadisonCandidates();
-      if (!candidates.some(candidate => candidate.session.id === input.sessionId)) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Madison action is no longer eligible" });
-      }
-
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
