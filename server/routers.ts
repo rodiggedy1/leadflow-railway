@@ -3164,6 +3164,10 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const inboundVoiceCallActivityFilter = sql`EXISTS (
           SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
         )`;
+        // Manual/outbound workspace sends explicitly mark their canonical session as
+        // CS-touched. Preserve that established CsInbox2 exception so an outbound-only
+        // New Message popup session appears while awaiting the customer's reply.
+        const csTouchedOutboundFilter = eq(conversationSessions.csQueue as any, 'CS');
         const resolvedFilter = input.showResolved
           ? undefined  // show all
           : isNull(conversationSessions.csResolvedAt); // only open
@@ -3254,8 +3258,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             or(
               // Preserve the existing resolved behavior for message conversations.
               resolvedFilter
-                ? and(inboundMessageActivityFilter, resolvedFilter)
-                : inboundMessageActivityFilter,
+                ? and(or(inboundMessageActivityFilter, csTouchedOutboundFilter), resolvedFilter)
+                : or(inboundMessageActivityFilter, csTouchedOutboundFilter),
               // Preserve the existing inbound-call behavior.
               inboundVoiceCallActivityFilter
             )
