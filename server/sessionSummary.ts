@@ -29,6 +29,48 @@ export type SessionSummaryFields = {
   messageCount: number;
 };
 
+type IndexedMessage = {
+  message: RawMessage;
+  ordinal: number;
+  timestamp: number | null;
+};
+
+function validTimestamp(message: RawMessage): number | null {
+  return typeof message.ts === "number" && Number.isFinite(message.ts)
+    ? message.ts
+    : null;
+}
+
+/**
+ * Select the latest deterministically without manufacturing chronology for legacy
+ * entries that have no valid timestamp. A valid numeric timestamp always wins;
+ * ties use the later original array ordinal. When every candidate lacks a valid
+ * timestamp, the later original array ordinal is the explicit fallback.
+ */
+function latestChronologicalMessage(
+  messages: RawMessage[],
+  include: (message: RawMessage) => boolean = () => true,
+): IndexedMessage | null {
+  const candidates = messages
+    .map((message, ordinal) => ({ message, ordinal, timestamp: validTimestamp(message) }))
+    .filter(({ message }) => include(message));
+
+  if (candidates.length === 0) return null;
+
+  const timestamped = candidates.filter(
+    (candidate): candidate is IndexedMessage & { timestamp: number } => candidate.timestamp !== null,
+  );
+
+  if (timestamped.length === 0) return candidates[candidates.length - 1] ?? null;
+
+  return timestamped.reduce((latest, candidate) =>
+    candidate.timestamp > latest.timestamp ||
+    (candidate.timestamp === latest.timestamp && candidate.ordinal > latest.ordinal)
+      ? candidate
+      : latest,
+  );
+}
+
 /**
  * Compute all 5 summary fields from a parsed message array.
  * Pass the already-parsed array (not the JSON string) to avoid double-parsing.
@@ -46,21 +88,28 @@ export function computeSessionSummary(messages: RawMessage[]): SessionSummaryFie
     };
   }
 
-  const last = messages[count - 1];
-  const rawText = typeof last.content === "string" ? last.content : "";
+  const latest = latestChronologicalMessage(messages);
+  if (!latest) {
+    return {
+      lastMessageText: null,
+      lastMessageTs: null,
+      lastCustomerMessageTs: null,
+      lastMessageRole: null,
+      messageCount: count,
+    };
+  }
+
+  const rawText = typeof latest.message.content === "string" ? latest.message.content : "";
   // Truncate to 255 chars for the varchar column
   const lastMessageText = rawText.slice(0, 255) || null;
-  const lastMessageTs = last.ts ?? null;
-  const lastMessageRole = last.role ?? null;
+  const lastMessageTs = latest.timestamp;
+  const lastMessageRole = latest.message.role || null;
 
-  // Walk backwards to find the last customer message
-  let lastCustomerMessageTs: number | null = null;
-  for (let i = count - 1; i >= 0; i--) {
-    if (messages[i].role === "user" && messages[i].ts != null) {
-      lastCustomerMessageTs = messages[i].ts!;
-      break;
-    }
-  }
+  const latestCustomer = latestChronologicalMessage(
+    messages,
+    (message) => message.role === "user" || message.role === "customer",
+  );
+  const lastCustomerMessageTs = latestCustomer?.timestamp ?? null;
 
   return {
     lastMessageText,
