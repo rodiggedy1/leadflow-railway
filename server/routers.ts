@@ -3313,16 +3313,27 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const _t4 = performance.now();
         type AugmentedSession = typeof augmented[number];
         const phoneGroups = new Map<string, AugmentedSession[]>();
+        const normalizedPhoneDedupKey = (phone: string | null | undefined) => {
+          const rawPhone = phone?.trim() ?? "";
+          const digits = rawPhone.replace(/[^\d]/g, "");
+          return digits ? digits.slice(-10) : "__no_phone__";
+        };
         for (const s of augmented) {
-          const phone = s.leadPhone?.trim() || "__no_phone__";
+          const phone = normalizedPhoneDedupKey(s.leadPhone);
           if (!phoneGroups.has(phone)) phoneGroups.set(phone, []);
           phoneGroups.get(phone)!.push(s);
         }
         const deduped = Array.from(phoneGroups.values()).map((group) => {
           if (group.length === 1) return group[0];
-          // Pick the single canonical session: the one with the most recent lastMessageTs.
-          // All fields come from this one row — no mixing, no hybrid objects.
-          return group.reduce((a, b) =>
+          // One normalized customer phone gets one real stored session card. An
+          // unresolved customer-last session wins so a newer assistant message in a
+          // parallel raw-phone-format session cannot hide actionable inbound work.
+          const unresolvedUserLast = group.filter((session) =>
+            session.csResolvedAt == null && session.lastMessageRole === "user"
+          );
+          const candidates = unresolvedUserLast.length > 0 ? unresolvedUserLast : group;
+          // All fields come from one real row — no history merge or hybrid object.
+          return candidates.reduce((a, b) =>
             Math.max(b.lastMessageTs ?? 0, preCallMap.get(b.id) ?? 0) > Math.max(a.lastMessageTs ?? 0, preCallMap.get(a.id) ?? 0) ? b : a
           );
         });
