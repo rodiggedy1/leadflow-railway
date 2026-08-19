@@ -561,15 +561,13 @@ export const stripeRouter = router({
   // 10. listAllCustomers (admin) — lists all stripe_customers rows
   // ────────────────────────────────────────────────────────────────────────────
   listAllCustomers: agentProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(200).default(100) }))
-    .query(async ({ input }) => {
+    .query(async () => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const rows = await db
         .select()
         .from(stripeCustomers)
-        .orderBy(desc(stripeCustomers.updatedAt))
-        .limit(input.limit);
+        .orderBy(desc(stripeCustomers.updatedAt));
       return rows;
     }),
 

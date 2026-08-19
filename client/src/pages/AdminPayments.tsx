@@ -341,7 +341,7 @@ function CardsOnFilePanel() {
   const [search, setSearch] = useState("");
   const [preauthFor, setPreauthFor] = useState<string | null>(null); // phone
   const { data, isLoading, refetch, isFetching } = trpc.stripe.listAllCustomers.useQuery(
-    { limit: 100 },
+    undefined,
     { staleTime: 30_000, retry: false, throwOnError: false }
   );
 
