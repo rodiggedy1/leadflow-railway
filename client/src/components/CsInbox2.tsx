@@ -447,7 +447,7 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
   ].filter(Boolean);
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(19,20,25,.42)",display:"grid",placeItems:"center",padding:"20px",zIndex:9999}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(19,20,25,.42)",display:"grid",placeItems:"center",padding:"20px",zIndex:9999}}>
       <div style={{width:"min(650px,100%)",background:"white",borderRadius:"20px",boxShadow:"0 28px 90px rgba(0,0,0,.22)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:"20px 22px 16px",borderBottom:"1px solid #ececf0",display:"flex",justifyContent:"space-between",alignItems:"start"}}>
           <div>
