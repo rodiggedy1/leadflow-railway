@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import DOMPurify from "dompurify";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Play, Pause, ChevronUp, ChevronDown } from "lucide-react";
+import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
@@ -763,6 +763,12 @@ export default function CsInbox2() {
   const [channel, setChannel] = useState<"inbox" | "email" | "outreach">("inbox");
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [selectedConv, setSelectedConv] = useState<LiveConv | null>(null);
+  const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null);
+  const lightboxUrl = lightbox ? lightbox.urls[lightbox.idx] : null;
+  const openLightbox = (urls: string[], idx: number) => setLightbox({ urls, idx });
+  const closeLightbox = () => setLightbox(null);
+  const lightboxPrev = () => setLightbox(lb => lb && lb.idx > 0 ? { ...lb, idx: lb.idx - 1 } : lb);
+  const lightboxNext = () => setLightbox(lb => lb && lb.idx < lb.urls.length - 1 ? { ...lb, idx: lb.idx + 1 } : lb);
   // A customer may text a different CS-treated number while this conversation
   // is open. Keep the exact persisted reply source current for the next send.
   useEffect(() => {
@@ -832,6 +838,18 @@ export default function CsInbox2() {
 
   // Keep selectedIdRef in sync for SSE
   useEffect(() => { selectedIdRef.current = selectedConv?.id ?? null; }, [selectedConv]);
+
+  // Existing CsInbox behavior: Escape closes the photo viewer; arrows navigate an MMS photo set.
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeLightbox();
+      if (event.key === "ArrowLeft") lightboxPrev();
+      if (event.key === "ArrowRight") lightboxNext();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightbox]);
 
   // Mirror Inbox1: Quo does not emit outbound-message webhooks, so merge any
   // direct Quo reply when an agent opens the corresponding CS conversation.
@@ -1325,7 +1343,28 @@ export default function CsInbox2() {
                 return (
                   <div key={i} className={`msg${m.sender === "agent" ? " out" : ""}${i === timeline.length - 1 ? " latest" : ""}`}>
                     <div className="mmeta">{m.sender === "agent" ? (m.senderName || "Agent") : selectedConv.name} · {m.time}</div>
-                    <div className="bubble2">{linkify(m.text)}</div>
+                    <div className="bubble2">
+                      {m.text && linkify(m.text)}
+                      {m.media && m.media.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {m.media.map((url, mediaIndex) => (
+                            <button
+                              key={url}
+                              type="button"
+                              onClick={() => openLightbox(m.media!, mediaIndex)}
+                              className="focus:outline-none"
+                              title="Click to enlarge"
+                            >
+                              <img
+                                src={url}
+                                alt="MMS photo"
+                                className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1395,6 +1434,62 @@ export default function CsInbox2() {
           </aside>
         </div>
         <div className={`cs2-toast${toast ? " show" : ""}`}>{toast}</div>
+        {lightbox && lightboxUrl && (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            onClick={closeLightbox}
+          >
+            <button
+              type="button"
+              className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 p-2 text-white transition-colors"
+              onClick={closeLightbox}
+              title="Close (Esc)"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <a
+              href={lightboxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute top-4 left-4 rounded-full bg-white/10 hover:bg-white/20 p-2 text-white transition-colors"
+              onClick={(event) => event.stopPropagation()}
+              title="Open original"
+            >
+              <ExternalLink className="h-5 w-5" />
+            </a>
+            {lightbox.idx > 0 && (
+              <button
+                type="button"
+                className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/25 p-3 text-white transition-colors"
+                onClick={(event) => { event.stopPropagation(); lightboxPrev(); }}
+                title="Previous (←)"
+              >
+                <ChevronLeft className="h-7 w-7" />
+              </button>
+            )}
+            {lightbox.idx < lightbox.urls.length - 1 && (
+              <button
+                type="button"
+                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/25 p-3 text-white transition-colors"
+                onClick={(event) => { event.stopPropagation(); lightboxNext(); }}
+                title="Next (→)"
+              >
+                <ChevronRight className="h-7 w-7" />
+              </button>
+            )}
+            {lightbox.urls.length > 1 && (
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-xs text-white">
+                {lightbox.idx + 1} / {lightbox.urls.length}
+              </div>
+            )}
+            <img
+              src={lightboxUrl}
+              alt="MMS photo enlarged"
+              className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            />
+          </div>
+        )}
       </>
     );
   }
