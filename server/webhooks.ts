@@ -1124,10 +1124,11 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
         }
         history.push({ role: "user", content: inboundText, ts: Date.now() });
         history.push({ role: "assistant", content: replyMsg, ts: Date.now() });
+        const summary = computeSessionSummary(history);
 
         await db
           .update(conversationSessions)
-          .set({ stage: newStage, messageHistory: JSON.stringify(history) })
+          .set({ stage: newStage, messageHistory: JSON.stringify(history), ...summary } as any)
           .where(eq(conversationSessions.id, session.id));
         const replyResult = await sendSms({ to: fromPhone, content: replyMsg });
         if (!replyResult.success) {
