@@ -10,6 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import { batchCsInboxPhonesForNameLookup, mergeCsInboxNameMaps } from "@shared/csInboxPhoneNameBatching";
+import { qualifiesForAtRisk } from "@shared/csAtRisk";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2
@@ -690,7 +691,6 @@ export default function CsInbox2() {
 
   // ── Kanban column assignment ────────────────────────────────────────────
   const now = Date.now();
-  const THIRTY_MIN = 30 * 60 * 1000;
   const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
 
   // Single canonical timestamp for both display and sorting
@@ -721,10 +721,11 @@ export default function CsInbox2() {
 
     const needsReply = conv.lastSenderRole === "user";
 
-    const isAtRisk =
-      needsReply &&
-      conv.lastCustomerMessageTs != null &&
-      conv.lastCustomerMessageTs <= now - THIRTY_MIN;
+    const isAtRisk = qualifiesForAtRisk({
+      lastSenderRole: conv.lastSenderRole,
+      lastCustomerMessageTs: conv.lastCustomerMessageTs,
+      now,
+    });
 
     const createdAtMs = conv.createdAt
       ? (typeof conv.createdAt === "number" ? conv.createdAt : new Date(conv.createdAt).getTime())
@@ -1120,10 +1121,11 @@ export default function CsInbox2() {
 
   // Sidebar counts — aligned with column logic
   const needsResponseCount = activeClientConvs.filter(c => c.lastSenderRole === "user" && !c.csResolvedAt).length;
-  const unansweredCount    = activeClientConvs.filter(c => {
-    const needsReply = c.lastSenderRole === "user";
-    return needsReply && c.lastCustomerMessageTs != null && c.lastCustomerMessageTs <= now - THIRTY_MIN;
-  }).length;
+  const unansweredCount    = activeClientConvs.filter(c => qualifiesForAtRisk({
+    lastSenderRole: c.lastSenderRole,
+    lastCustomerMessageTs: c.lastCustomerMessageTs,
+    now,
+  })).length;
   const hotLeadsCount = clientConvs.filter(c => c.csStatusTier === "hot_lead").length;
 
   const columns = useMemo(() => {
