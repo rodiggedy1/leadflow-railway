@@ -1141,7 +1141,11 @@ export default function CsInbox2() {
         if (!( (c.name + " " + c.lastMessage).toLowerCase().includes(q) )) return false;
         if (filter === "needs-response") return c.lastSenderRole === "user";
         if (filter === "unanswered") {
-          return c.lastSenderRole === "user" && c.lastCustomerMessageTs != null && c.lastCustomerMessageTs <= now - THIRTY_MIN;
+          return qualifiesForAtRisk({
+            lastSenderRole: c.lastSenderRole,
+            lastCustomerMessageTs: c.lastCustomerMessageTs,
+            now,
+          });
         }
         if (filter === "hot") return c.csStatusTier === "hot_lead";
         return true;

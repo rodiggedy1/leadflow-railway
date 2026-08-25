@@ -14,4 +14,11 @@ describe("CsInbox2 active Kanban urgency windows", () => {
     expect(source).toContain('}) === "needs_response").length;');
     expect(source).toContain('qualifiesForAtRisk({');
   });
+
+  it("uses the shared At Risk window for the Unanswered board filter", () => {
+    const columnsBlock = source.slice(source.indexOf("const columns = useMemo"), source.indexOf("// ── DETAIL VIEW"));
+    expect(columnsBlock).toContain('if (filter === "unanswered") {');
+    expect(columnsBlock).toContain("return qualifiesForAtRisk({");
+    expect(columnsBlock).not.toContain("THIRTY_MIN");
+  });
 });
