@@ -790,7 +790,6 @@ export default function CsInbox2() {
   const emailInbox = trpc.opsChat.listEmailInboxThreads.useQuery(undefined, {
     staleTime: 30_000,
     refetchOnWindowFocus: true,
-    enabled: channel === "email",
   });
   const emailUtils = trpc.useUtils();
   // Email thread detail query
