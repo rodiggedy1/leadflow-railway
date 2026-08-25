@@ -10,7 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import { batchCsInboxPhonesForNameLookup, mergeCsInboxNameMaps } from "@shared/csInboxPhoneNameBatching";
-import { qualifiesForAtRisk } from "@shared/csAtRisk";
+import { getUnansweredUrgencyWindow, qualifiesForAtRisk } from "@shared/csAtRisk";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CsInbox2
@@ -701,7 +701,7 @@ export default function CsInbox2() {
     return (c as any).lastMsgTs ?? 0;
   }
 
-  function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "Waiting on Customer" {
+  function getKanbanColumn(conv: LiveConv): "At Risk" | "New" | "Needs Response" | "Waiting on Customer" | "Expired" {
     // ── Call-aware column assignment (MUST come before csResolvedAt guard) ─
     // A new inbound call reactivates the customer even if the old SMS session was resolved.
     if (conv.latestInteractionType === "call" && conv.latestCallCreatedAt) {
@@ -720,25 +720,25 @@ export default function CsInbox2() {
     // ── SMS column assignment (unchanged) ────────────────────────────────
 
     const needsReply = conv.lastSenderRole === "user";
-
-    const isAtRisk = qualifiesForAtRisk({
+    const urgencyWindow = getUnansweredUrgencyWindow({
       lastSenderRole: conv.lastSenderRole,
       lastCustomerMessageTs: conv.lastCustomerMessageTs,
       now,
     });
+
+    if (urgencyWindow === "expired") return "Expired";
+    if (urgencyWindow === "at_risk") return "At Risk";
+    if (urgencyWindow === "needs_response") return "Needs Response";
 
     const createdAtMs = conv.createdAt
       ? (typeof conv.createdAt === "number" ? conv.createdAt : new Date(conv.createdAt).getTime())
       : 0;
     const isNew =
       needsReply &&
-      !isAtRisk &&
       createdAtMs >= now - TWENTY_FOUR_H &&
       (conv.messageCount ?? 999) <= 2;
 
-    if (isAtRisk)    return "At Risk";
     if (isNew)       return "New";
-    if (needsReply)  return "Needs Response";
     return "Waiting on Customer";
   }
 
@@ -1120,7 +1120,11 @@ export default function CsInbox2() {
   }), [clientConvs]);
 
   // Sidebar counts — aligned with column logic
-  const needsResponseCount = activeClientConvs.filter(c => c.lastSenderRole === "user" && !c.csResolvedAt).length;
+  const needsResponseCount = activeClientConvs.filter(c => getUnansweredUrgencyWindow({
+    lastSenderRole: c.lastSenderRole,
+    lastCustomerMessageTs: c.lastCustomerMessageTs,
+    now,
+  }) === "needs_response").length;
   const unansweredCount    = activeClientConvs.filter(c => qualifiesForAtRisk({
     lastSenderRole: c.lastSenderRole,
     lastCustomerMessageTs: c.lastCustomerMessageTs,
