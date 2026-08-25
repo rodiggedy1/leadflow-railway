@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { SERVICE_AGREEMENT_SMS } from "@shared/csServiceAgreement";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,7 +8,7 @@ import {
   Brain, Tag, RefreshCw, Copy, CircleDot, Briefcase, MapPin,
   TrendingUp, Users, X, ClipboardList,
 } from "lucide-react";
-import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle, Link2, Copy, Loader2, Send } from "lucide-react";
+import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle, Link2, Copy, Loader2, Send, FileText } from "lucide-react";
 import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
 import { toast } from "sonner";
 import {
@@ -393,11 +394,20 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
     success: boolean; error?: string;
   }
   const [showQuoteWidget, setShowQuoteWidget] = useState(false);
+  const [showServiceAgreementWidget, setShowServiceAgreementWidget] = useState(false);
   const [paymentCard, setPaymentCard] = useState<PaymentLinkConfirmCard | null>(null);
   const [paymentSentCard, setPaymentSentCard] = useState<PaymentLinkSentCard | null>(null);
   const [paymentSmsText, setPaymentSmsText] = useState("");
+  const [serviceAgreementSmsText, setServiceAgreementSmsText] = useState(SERVICE_AGREEMENT_SMS);
   const chatMutation = trpc.aiConcierge.chat.useMutation();
   const sendPaymentLinkSms = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
+  const sendServiceAgreementSms = trpc.csMissions.sendQuoteSms.useMutation({
+    onSuccess: () => {
+      toast.success("Service agreement sent to customer!");
+      setShowServiceAgreementWidget(false);
+    },
+    onError: (err) => toast.error(err.message || "Failed to send service agreement"),
+  });
   function firePaymentLink() {
     const name = selected.name ?? "Customer";
     const phone = selected.phone;
@@ -419,6 +429,14 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
       { recipientPhone: paymentCard.recipientPhone, recipientName: paymentCard.recipientName, smsText: paymentSmsText, paymentLinkUrl: paymentCard.paymentLinkUrl },
       { onSuccess: (result: any) => { setPaymentSentCard(result); setPaymentCard(null); } }
     );
+  }
+  function handleSendServiceAgreement() {
+    if (!serviceAgreementSmsText.trim()) return;
+    sendServiceAgreementSms.mutate({
+      missionId: 0,
+      sessionId: selected.id,
+      text: serviceAgreementSmsText.trim(),
+    });
   }
 
   useEffect(() => {
@@ -512,9 +530,15 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
               <div style={{width:'32px',height:'32px',borderRadius:'9px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>📋</div>
               <div><b style={{fontSize:'13px',fontWeight:700}}>Send Quote</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'11px'}}>Build &amp; send a personalized quote.</p></div>
             </div>
-            <div style={{padding:'10px 12px',opacity:0.42,display:'flex',alignItems:'flex-start',gap:'9px'}}>
-              <div style={{width:'32px',height:'32px',borderRadius:'9px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>🚗</div>
-              <div><b style={{fontSize:'13px',fontWeight:700}}>Get ETA</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'11px'}}>Coming soon.</p></div>
+            <div
+              style={{padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'flex-start',gap:'9px'}}
+              onClick={() => {
+                setServiceAgreementSmsText(SERVICE_AGREEMENT_SMS);
+                setShowServiceAgreementWidget(v => !v);
+              }}
+            >
+              <div style={{width:'32px',height:'32px',borderRadius:'9px',background:'#f0edff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0}}>📄</div>
+              <div><b style={{fontSize:'13px',fontWeight:700}}>Send Service Agreement</b><p style={{margin:'3px 0 0',color:'#9298a4',fontSize:'11px'}}>Send the Satisfaction Guarantee via SMS.</p></div>
             </div>
           </div>
         </section>
@@ -587,6 +611,31 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
               sessionContext={{ teamName: null, leadPhone: selected.phone, leadName: selected.name, bedrooms: null, bathrooms: null, serviceType: null }}
               customerName={selected.name}
             />
+          </div>
+        )}
+        {showServiceAgreementWidget && (
+          <div className="mx-4 mb-3">
+            <div className="rounded-2xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+                <FileText className="w-4 h-4 flex-shrink-0" style={{color:"#7447f5"}} />
+                <p className="text-sm font-semibold" style={{color:"#202431"}}>Send Service Agreement</p>
+              </div>
+              <div className="px-4 pt-3 pb-2">
+                <p className="text-xs" style={{color:"#8a8a9a"}}>Send to {selected.name}</p>
+              </div>
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Edit3 className="w-3 h-3" style={{color:"#7447f5"}} />
+                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>Message to send</span>
+                </div>
+                <textarea value={serviceAgreementSmsText} onChange={(e) => setServiceAgreementSmsText(e.target.value)} disabled={sendServiceAgreementSms.isPending} rows={8} className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039"}} />
+              </div>
+              <div className="px-4 pb-4">
+                <button onClick={handleSendServiceAgreement} disabled={!serviceAgreementSmsText.trim() || sendServiceAgreementSms.isPending} className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}>
+                  {sendServiceAgreementSms.isPending ? (<><div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Sending…</>) : (<>Send to {(selected.name ?? "Customer").split(" ")[0]}</>)}
+                </button>
+              </div>
+            </div>
           </div>
         )}
         {/* Today's job for client */}
