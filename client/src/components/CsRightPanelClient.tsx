@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { SERVICE_AGREEMENT_SMS } from "@shared/csServiceAgreement";
+import { buildDefaultQuoteSms } from "@shared/quoteSmsTemplate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -149,10 +150,7 @@ function SendQuoteWidget({
   });
 
   function handleGenerate() {
-    const discountLine = discount > 0 ? `\nWe've included a special discount for you as well. 🎁` : "";
-    setSmsText(
-      `Hi ${firstName}! We put together a custom quote just for you 🖤${discountLine}\n\nTap the link to view your personalized pricing and book your first clean:\n\n${welcomeUrl}\n\nAny questions? Just reply here, we're happy to help!`
-    );
+    setSmsText(buildDefaultQuoteSms({ firstName, welcomeUrl, hasDiscount: discount > 0 }));
     setStep("compose");
   }
 
