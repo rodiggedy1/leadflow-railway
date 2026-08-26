@@ -203,7 +203,7 @@ const STYLES = `
 .msg.out{margin-left:auto;align-items:flex-end}
 .mmeta{font-size:9px;color:#9ba0aa;margin:0 4px 4px}
 .msg.out .mmeta{text-align:right}
-.bubble2{padding:11px 13px;border-radius:16px;background:#f0ecff;line-height:1.48;font-size:12px}
+.bubble2{padding:11px 13px;border-radius:16px;background:#f0ecff;line-height:1.48;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.out .bubble2{background:#f1f2f4}
 .msg.latest .bubble2{box-shadow:0 0 0 2px rgba(107,78,255,.08)}
 .cs2-composer{padding:10px 24px 20px;border-top:1px solid #f0f1f3;flex-shrink:0}
