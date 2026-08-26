@@ -1,11 +1,15 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import DOMPurify from "dompurify";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
+import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X, BookOpen, ShieldAlert, Smile } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
 import CsInboxOutreachPreview from "@/components/CsInboxOutreachPreview";
+import FAQPanel from "@/components/FAQPanel";
+import ObjectionsPanel from "@/components/ObjectionsPanel";
+import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
+import InsertResponseModal from "@/components/InsertResponseModal";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
@@ -210,7 +214,7 @@ const STYLES = `
 .composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}
 .composeBox:focus-within{border-color:#bdb2ff;box-shadow:0 8px 30px rgba(70,53,159,.08),0 0 0 3px #f2efff}
 .composeBox textarea{width:100%;height:55px;border:0;outline:0;resize:none;font-size:13px;font-family:inherit}
-.composeRow{display:flex;align-items:center;gap:6px;margin-top:8px}
+.composeRow{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}.replyAssist{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.assistBtn{height:28px;border:1px solid #e1e4ea;background:#fff;border-radius:999px;padding:0 9px;display:inline-flex;align-items:center;gap:4px;color:#525866;font-size:10px;font-weight:700;cursor:pointer}.assistBtn:hover{border-color:#b8a8ff;background:#f7f5ff;color:#6647ef}.assistBtn.faq{border-color:#a7ead1;color:#0e8a61}.assistBtn.objection{border-color:#fecdd3;color:#be123c}.assistBtn.emoji{width:28px;justify-content:center;padding:0}.emojiPopup{position:absolute;bottom:100%;left:0;margin-bottom:8px;z-index:60;box-shadow:0 16px 40px rgba(15,23,42,.18);border-radius:14px;overflow:hidden}
 .quick{border:0;background:#f4f4f6;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}
 .send2{margin-left:auto;border:0;background:#684bfa;color:#fff;border-radius:9px;padding:8px 17px;font-weight:750;cursor:pointer;box-shadow:0 5px 13px rgba(104,75,250,.2)}
 .cs2-side{border-left:1px solid var(--line);background:#f8f9fb;overflow:auto;padding:17px 15px;scrollbar-width:none}
@@ -843,10 +847,25 @@ export default function CsInbox2() {
     setSelectedConv(conv);
   };
   const [compose, setCompose] = useState("");
+  const [faqOpen, setFaqOpen] = useState(false);
+  const [objectionsOpen, setObjectionsOpen] = useState(false);
+  const [worldClassOpen, setWorldClassOpen] = useState(false);
+  const [insertResponseOpen, setInsertResponseOpen] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [toast, setToast] = useState("");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const [missionDone, setMissionDone] = useState<Set<number>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) setShowEmojiPicker(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [showEmojiPicker]);
 
   // Keep selectedIdRef in sync for SSE
   useEffect(() => { selectedIdRef.current = selectedConv?.id ?? null; }, [selectedConv]);
@@ -1401,6 +1420,22 @@ export default function CsInbox2() {
               {timeline.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px",fontSize:"12px"}}>No messages yet</div>}
             </section>
             <footer className="cs2-composer">
+              <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
+              <InsertResponseModal
+                open={insertResponseOpen}
+                onClose={() => setInsertResponseOpen(false)}
+                onInsert={(text) => { setCompose(text); setInsertResponseOpen(false); }}
+                customerFirstName={selectedConv.name ? selectedConv.name.split(" ")[0] : undefined}
+              />
+              <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
+              <WorldClassReplyPanel
+                open={worldClassOpen}
+                onClose={() => setWorldClassOpen(false)}
+                onInsert={(text) => { setCompose(text); setWorldClassOpen(false); }}
+                conversationContext={detailMessages.slice(-5).map(m => `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`).join("\n")}
+                customerName={selectedConv.name ?? ""}
+                jobContext={jobContext}
+              />
               <div className="composeBox">
                 <textarea
                   placeholder={`Reply to ${selectedConv.name.split(" ")[0]}…`}
@@ -1409,9 +1444,16 @@ export default function CsInbox2() {
                   onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doSend(); }}
                 />
                 <div className="composeRow">
-                  <button className="quick" onClick={() => setCompose("Yes! We have a morning opening 😊")}>Morning opening</button>
-                  <button className="quick" onClick={() => setCompose("Let me check with the team and get right back to you.")}>Check team</button>
-                  <button className="quick">+ More</button>
+                  <div className="replyAssist">
+                    <button className="assistBtn" type="button" onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles size={12} aria-hidden="true" /> World-Class</button>
+                    <button className="assistBtn faq" type="button" onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}><BookOpen size={12} aria-hidden="true" /> FAQ</button>
+                    <button className="assistBtn" type="button" onClick={() => setInsertResponseOpen(true)}><Sparkles size={12} aria-hidden="true" /> Responses</button>
+                    <button className="assistBtn objection" type="button" onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}><ShieldAlert size={12} aria-hidden="true" /> Objections</button>
+                    <div style={{position:"relative"}} ref={emojiPickerRef}>
+                      <button className="assistBtn emoji" type="button" onClick={() => setShowEmojiPicker(open => !open)} title="Add emoji"><Smile size={14} aria-hidden="true" /></button>
+                      {showEmojiPicker && <div className="emojiPopup"><Picker data={emojiData} onEmojiSelect={(emoji: { native: string }) => { setCompose(previous => previous + emoji.native); setShowEmojiPicker(false); }} theme="light" previewPosition="none" skinTonePosition="none" /></div>}
+                    </div>
+                  </div>
                   <div style={{display:'flex',marginLeft:'auto',borderRadius:'9px',overflow:'hidden',boxShadow:'0 5px 13px rgba(104,75,250,.2)'}}>
                     <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
                       {sendMessage.isPending ? "Sending…" : "Send ↗"}
