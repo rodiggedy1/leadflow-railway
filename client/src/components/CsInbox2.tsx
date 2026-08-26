@@ -1523,7 +1523,7 @@ export default function CsInbox2() {
                   </button>
                   {composeMode === "reply" && <>
                     <div className="replyAssist">
-                      <button className="assistBtn" type="button" onClick={() => { autoDraftedForId.current = null; triggerAutoDraft(selectedConv); }} disabled={autoDraftLoading}><Bot size={12} aria-hidden="true" /> World-Class</button>
+                      <button className="assistBtn" type="button" onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles size={12} aria-hidden="true" /> World-Class</button>
                       <button className="assistBtn faq" type="button" onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}><BookOpen size={12} aria-hidden="true" /> FAQ</button>
                       <button className="assistBtn" type="button" onClick={() => setInsertResponseOpen(true)}><Sparkles size={12} aria-hidden="true" /> Responses</button>
                       <button className="assistBtn objection" type="button" onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}><ShieldAlert size={12} aria-hidden="true" /> Objections</button>
