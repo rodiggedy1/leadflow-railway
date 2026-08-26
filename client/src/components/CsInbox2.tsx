@@ -3,7 +3,7 @@ import DOMPurify from "dompurify";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X, Lock, Bot, BookOpen, ShieldAlert, Smile, RefreshCw } from "lucide-react";
+import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X, Lock, Bot, BookOpen, ShieldAlert, Smile, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
@@ -222,9 +222,9 @@ const STYLES = `
 .cs2-note{max-width:80%;margin:14px auto;padding:11px 13px;border:1px solid #f3cf7b;border-radius:14px;background:#fffbeb;box-shadow:0 2px 8px rgba(146,90,10,.06)}
 .cs2-noteHead{display:flex;align-items:center;gap:5px;margin-bottom:5px;font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:#a86508}.cs2-noteAvatar{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;background:#b7791f;color:#fff;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0}.cs2-noteAvatarImg{display:block;object-fit:cover}.cs2-noteAuthor{color:#c38731;text-transform:none;letter-spacing:0;font-weight:600}.cs2-noteTime{margin-left:auto;text-transform:none;letter-spacing:0;color:#c99b55;font-weight:500}.cs2-noteBody{font-size:12px;line-height:1.48;color:#713f12;white-space:pre-wrap;overflow-wrap:anywhere}
 .cs2-composer{padding:10px 24px 20px;border-top:1px solid #f0f1f3;flex-shrink:0}
-.composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}.composeBox.noteMode{border-color:#f3cf7b;background:#fffcf2}.composeBox.noteMode:focus-within{border-color:#e9b955;box-shadow:0 8px 30px rgba(146,90,10,.08),0 0 0 3px #fff3d6}
+.composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}.composeBox.composerExpanded{box-shadow:0 16px 38px rgba(70,53,159,.12),0 0 0 3px #f2efff}.composeBox.noteMode{border-color:#f3cf7b;background:#fffcf2}.composeBox.noteMode:focus-within{border-color:#e9b955;box-shadow:0 8px 30px rgba(146,90,10,.08),0 0 0 3px #fff3d6}
 .composeBox:focus-within{border-color:#bdb2ff;box-shadow:0 8px 30px rgba(70,53,159,.08),0 0 0 3px #f2efff}
-.composeBox textarea{width:100%;height:55px;border:0;outline:0;resize:none;font-size:13px;font-family:inherit}
+.composerMeta{display:flex;align-items:center;justify-content:space-between;min-height:19px;margin:0 0 4px 1px}.composerMeta span{font-size:10px;font-weight:800;color:#8b91a0;letter-spacing:.01em}.composerExpand{width:26px;height:26px;border:0;border-radius:7px;background:transparent;color:#858b98;display:grid;place-items:center;cursor:pointer}.composerExpand:hover{background:#f1efff;color:#684bfa}.composeBox textarea{width:100%;height:72px;min-height:72px;max-height:220px;border:0;outline:0;resize:none;font-size:13px;font-family:inherit;line-height:1.5;overflow-y:hidden;transition:height .16s ease}.composeBox.composerExpanded textarea{max-height:min(42vh,420px)}
 .composeRow{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}.replyAssist{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.noteToggle{border:1px solid #f3cf7b;background:#fff9e9;color:#a86508;border-radius:8px;padding:7px 9px;font-size:9px;font-weight:700;cursor:pointer}.noteToggle.active{background:#f7d997}.noteSave{background:#c98019;box-shadow:0 5px 13px rgba(146,90,10,.2)}.assistBtn{height:28px;border:1px solid #e1e4ea;background:#fff;border-radius:999px;padding:0 9px;display:inline-flex;align-items:center;gap:4px;color:#525866;font-size:10px;font-weight:700;cursor:pointer}.assistBtn:hover{border-color:#b8a8ff;background:#f7f5ff;color:#6647ef}.assistBtn.faq{border-color:#a7ead1;color:#0e8a61}.assistBtn.objection{border-color:#fecdd3;color:#be123c}.assistBtn.emoji{width:28px;justify-content:center;padding:0}.draftBadge{display:flex;align-items:center;gap:6px;font-size:10px;color:#7054e6;margin-bottom:7px;font-weight:700}.draftBadge button{margin-left:auto;border:0;background:transparent;color:#8b91a0;font:inherit;cursor:pointer;display:flex;align-items:center;gap:3px}.emojiPopup{position:absolute;bottom:100%;left:0;margin-bottom:8px;z-index:60;box-shadow:0 16px 40px rgba(15,23,42,.18);border-radius:14px;overflow:hidden}
 .quick{border:0;background:#f4f4f6;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}
 .send2{margin-left:auto;border:0;background:#684bfa;color:#fff;border-radius:9px;padding:8px 17px;font-weight:750;cursor:pointer;box-shadow:0 5px 13px rgba(104,75,250,.2)}
@@ -862,6 +862,7 @@ export default function CsInbox2() {
       setShowEmojiPicker(false);
       setCompose("");
       setAutoDraftRetryForId(null);
+      setComposerExpanded(false);
     }
     setSelectedConv(conv);
   };
@@ -872,12 +873,14 @@ export default function CsInbox2() {
   const [worldClassOpen, setWorldClassOpen] = useState(false);
   const [insertResponseOpen, setInsertResponseOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [composerExpanded, setComposerExpanded] = useState(false);
   const [toast, setToast] = useState("");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const [autoDraftRetryForId, setAutoDraftRetryForId] = useState<number | null>(null);
   const [missionDone, setMissionDone] = useState<Set<number>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const composeTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -887,6 +890,21 @@ export default function CsInbox2() {
     document.addEventListener("mousedown", closeOnOutsideClick);
     return () => document.removeEventListener("mousedown", closeOnOutsideClick);
   }, [showEmojiPicker]);
+
+  function adjustComposerHeight() {
+    const textarea = composeTextareaRef.current;
+    if (!textarea) return;
+    const minimumHeight = composerExpanded ? 220 : 72;
+    const maximumHeight = composerExpanded ? Math.min(Math.floor(window.innerHeight * 0.42), 420) : 220;
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, minimumHeight), maximumHeight);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maximumHeight ? "auto" : "hidden";
+  }
+
+  useEffect(() => {
+    adjustComposerHeight();
+  }, [compose, composerExpanded, composeMode, selectedConv?.id]);
 
   // Keep selectedIdRef in sync for SSE
   useEffect(() => { selectedIdRef.current = selectedConv?.id ?? null; }, [selectedConv]);
@@ -1511,7 +1529,7 @@ export default function CsInbox2() {
                 customerName={selectedConv.name ?? ""}
                 jobContext={jobContext}
               />
-              <div className={`composeBox${composeMode === "note" ? " noteMode" : ""}`}>
+              <div className={`composeBox${composeMode === "note" ? " noteMode" : ""}${composerExpanded ? " composerExpanded" : ""}`}>
                 {composeMode === "reply" && (autoDraftLoading || compose) && (
                   <div className="draftBadge">
                     <Sparkles size={12} aria-hidden="true" />
@@ -1523,11 +1541,36 @@ export default function CsInbox2() {
                     )}
                   </div>
                 )}
+                {composeMode === "reply" && (
+                  <div className="composerMeta">
+                    <span>{composerExpanded ? "Expanded reply" : "Reply"}</span>
+                    <button
+                      className="composerExpand"
+                      type="button"
+                      onClick={() => {
+                        setComposerExpanded(expanded => !expanded);
+                        window.requestAnimationFrame(() => composeTextareaRef.current?.focus());
+                      }}
+                      aria-label={composerExpanded ? "Collapse reply composer" : "Expand reply composer"}
+                      aria-pressed={composerExpanded}
+                      title={composerExpanded ? "Collapse composer" : "Expand composer"}
+                    >
+                      {composerExpanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
+                    </button>
+                  </div>
+                )}
                 <textarea
+                  ref={composeTextareaRef}
                   placeholder={composeMode === "note" ? "Add an internal note…" : `Reply to ${selectedConv.name.split(" ")[0]}…`}
                   value={compose}
                   onChange={e => setCompose(e.target.value)}
+                  onInput={adjustComposerHeight}
                   onKeyDown={e => {
+                    if (e.key === "Escape" && composerExpanded) {
+                      e.preventDefault();
+                      setComposerExpanded(false);
+                      return;
+                    }
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault();
                       if (composeMode === "note") doSaveNote();
