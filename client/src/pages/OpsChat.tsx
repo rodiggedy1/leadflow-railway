@@ -64,7 +64,6 @@ import {
   Users,
   Wifi,
   WifiOff,
-  LayoutDashboard,
   Radio,
   UserCircle,
   ClipboardList,
@@ -2212,7 +2211,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           {/* ── Workspace switcher icons ── */}
           <div className="flex flex-col items-center gap-0 w-full">
-            {([
+              {([
               { id: "channels"    as const, icon: "◉", color: "#a78bfa", line1: "Command",   line2: "Chat" },
               { id: "cs"          as const, icon: "♧", color: "#10b981", line1: "Customer",  line2: "Service SMS" },
               { id: "leadops"     as const, icon: "⌘", color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
@@ -2223,7 +2222,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               return (
                 <button
                   key={ws.id}
-                  onClick={() => handleSetActiveTab(ws.id)}
+                  onClick={() => {
+                    if (ws.id === "cs") { window.location.assign("/admin/cs-inbox-2"); return; }
+                    handleSetActiveTab(ws.id);
+                  }}
                   className="relative flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all"
                   style={{ opacity: isActive ? 1 : 0.65 }}
                 >
@@ -2267,7 +2269,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               { href: "/admin/sms-campaigns",     icon: "📣", color: "#f43f5e", line1: "Campaigns",line2: "" },
               { href: "/admin/confirmation-calls",icon: "📞", color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
               { href: "/admin/payments",          icon: "💳", color: "#f59e0b", line1: "Payments", line2: "" },
-              { href: "/admin/cs-inbox-2",         icon: "⊞",  color: "#6b4eff", line1: "Inbox",    line2: "v2" },
             ]).map((nav) => (
               <a
                 key={nav.href}
@@ -3107,7 +3108,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       return (
                         <button
                           key={ws.id}
-                          onClick={() => handleSetActiveTab(ws.id)}
+                          onClick={() => {
+                            if (ws.id === "cs") { window.location.assign("/admin/cs-inbox-2"); return; }
+                            handleSetActiveTab(ws.id);
+                          }}
                           className="relative flex flex-col items-center gap-1 w-full py-2.5 px-1 transition-all"
                           style={{ opacity: isActive ? 1 : 0.65 }}
                         >
@@ -3144,7 +3148,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
                       { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
                       { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
-                      { href: "/admin/cs-inbox-2",         Icon: LayoutDashboard, color: "#6b4eff", line1: "Inbox",    line2: "v2" },
                     ]).map((nav) => (
                       <a
                         key={nav.href}
@@ -3194,7 +3197,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       return (
                         <button
                           key={ws.id}
-                          onClick={() => handleSetActiveTab(ws.id)}
+                          onClick={() => {
+                            if (ws.id === "cs") { window.location.assign("/admin/cs-inbox-2"); return; }
+                            handleSetActiveTab(ws.id);
+                          }}
                           className="relative flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all"
                           style={{ opacity: isActive ? 1 : 0.65 }}
                         >
@@ -3231,7 +3237,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
                       { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
                       { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
-                      { href: "/admin/cs-inbox-2",         Icon: LayoutDashboard, color: "#6b4eff", line1: "Inbox",    line2: "v2" },
                     ]).map((nav) => (
                       <a
                         key={nav.href}
