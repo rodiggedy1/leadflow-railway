@@ -36,11 +36,6 @@ export interface AppendCsOutboundParams {
   message: string;
   /** Display name of the agent who sent the message (e.g. ctx.user.name). */
   senderName: string;
-  /**
-   * Optional verified manual human-agent attribution. Omitted callers preserve
-   * existing attribution fields unchanged.
-   */
-  lastHumanAssistantSenderName?: string;
   /** Unix ms timestamp of the send. Defaults to Date.now(). */
   sentAt?: number;
   /** Optional OpenPhone message ID for exact deduplication. */
@@ -60,7 +55,6 @@ export async function appendCsOutboundMessage(
     recipientName,
     message,
     senderName,
-    lastHumanAssistantSenderName,
     openPhoneMessageId,
   } = params;
   const sentAt = params.sentAt ?? Date.now();
@@ -111,10 +105,6 @@ export async function appendCsOutboundMessage(
         messageHistory: JSON.stringify(history),
         lastReadAt: sentAt,
         ...summary,
-        ...(lastHumanAssistantSenderName ? {
-          lastHumanAssistantSenderName,
-          lastHumanAssistantSummaryVersion: 1,
-        } : {}),
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -178,10 +168,6 @@ export async function appendCsOutboundMessage(
           lastReadAt: sentAt,
           updatedAt: new Date(),
           ...summary,
-          ...(lastHumanAssistantSenderName ? {
-            lastHumanAssistantSenderName,
-            lastHumanAssistantSummaryVersion: 1,
-          } : {}),
         })
         .where(eq(conversationSessions.id, sessionId));
 
