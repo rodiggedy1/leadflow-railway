@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findLastHistoricalHumanAssistant, HUMAN_ASSISTANT_SUMMARY_VERSION } from "./lastHumanAssistantAttribution";
+import { buildExactActiveHumanAliasMap, findLastHistoricalHumanAssistant, HUMAN_ASSISTANT_SUMMARY_VERSION } from "./lastHumanAssistantAttribution";
 
 describe("last human assistant historical resolver", () => {
   const agents = new Map([
@@ -28,6 +28,22 @@ describe("last human assistant historical resolver", () => {
       { role: "assistant", senderName: "OpenPhone", ts: 100 },
       { role: "assistant", senderName: "Unknown", ts: 200 },
     ]), agents)).toBeNull();
+  });
+
+  it("adds a full-name alias only through the exact agent-email-to-user-email join", () => {
+    const aliases = buildExactActiveHumanAliasMap(
+      [{ name: "Diane", email: "diane@maidsinblack.com" }],
+      [
+        { name: "Diane Ruiz", email: "diane@maidsinblack.com" },
+        { name: "Diane Different", email: "different@maidsinblack.com" },
+      ],
+    );
+    expect(aliases.get("diane")).toBe("Diane");
+    expect(aliases.get("diane ruiz")).toBe("Diane");
+    expect(aliases.get("diane different")).toBeUndefined();
+    expect(findLastHistoricalHumanAssistant(JSON.stringify([
+      { role: "assistant", senderName: "Diane Different", ts: 100 },
+    ]), aliases)).toBeNull();
   });
 
   it("documents the live-wins conditional-backfill race contract", () => {

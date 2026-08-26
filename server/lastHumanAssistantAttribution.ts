@@ -1,5 +1,8 @@
 export const HUMAN_ASSISTANT_SUMMARY_VERSION = 1;
 
+type ActiveAgentIdentity = { name: string; email: string };
+type UserIdentityAlias = { name: string | null; email: string | null };
+
 type HistoricalMessage = {
   role?: unknown;
   senderName?: unknown;
@@ -24,6 +27,32 @@ function newestFirst(messages: HistoricalMessage[]): HistoricalMessage[] {
       return b.ordinal - a.ordinal;
     })
     .map(({ message }) => message);
+}
+
+/**
+ * Produces only exact, database-backed human aliases: an active agent's own
+ * stored name and a users-table full name whose email exactly matches that
+ * agent's email. No prefix, fuzzy, or guessed name matching is allowed.
+ */
+export function buildExactActiveHumanAliasMap(
+  activeAgents: ActiveAgentIdentity[],
+  users: UserIdentityAlias[],
+): Map<string, string> {
+  const aliases = new Map<string, string>();
+  const canonicalByEmail = new Map<string, string>();
+  for (const agent of activeAgents) {
+    const canonicalName = agent.name.trim();
+    const normalizedEmail = agent.email.trim().toLowerCase();
+    if (!canonicalName || !normalizedEmail) continue;
+    aliases.set(canonicalName.toLowerCase(), canonicalName);
+    canonicalByEmail.set(normalizedEmail, canonicalName);
+  }
+  for (const user of users) {
+    const alias = user.name?.trim();
+    const canonicalName = user.email ? canonicalByEmail.get(user.email.trim().toLowerCase()) : undefined;
+    if (alias && canonicalName) aliases.set(alias.toLowerCase(), canonicalName);
+  }
+  return aliases;
 }
 
 /**

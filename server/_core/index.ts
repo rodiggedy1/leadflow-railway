@@ -42,7 +42,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { sql, isNotNull, count, eq } from "drizzle-orm";
 import { gmailThreadMeta, agents, users } from "../../drizzle/schema";
 import { runNormalStartup } from "../normalStartup";
-import { findLastHistoricalHumanAssistant, HUMAN_ASSISTANT_SUMMARY_VERSION } from "../lastHumanAssistantAttribution";
+import { buildExactActiveHumanAliasMap, findLastHistoricalHumanAssistant, HUMAN_ASSISTANT_SUMMARY_VERSION } from "../lastHumanAssistantAttribution";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -212,26 +212,13 @@ async function runStartupMigrations() {
   try {
     const loadActiveHumanAliases = async () => {
       const agentRows = await db
-        .select({ name: agents.name })
+        .select({ name: agents.name, email: agents.email })
         .from(agents)
         .where(eq(agents.isActive, 1));
       const userRows = await db
-        .select({ name: users.name })
+        .select({ name: users.name, email: users.email })
         .from(users);
-      const activeHumanAliases = new Map<string, string>();
-      for (const agent of agentRows) {
-        if (agent.name) activeHumanAliases.set(agent.name.trim().toLowerCase(), agent.name);
-      }
-      for (const user of userRows) {
-        if (!user.name) continue;
-        const firstName = user.name.split(/\s+/)[0].toLowerCase();
-        const match = agentRows.find(agent => {
-          const agentName = agent.name.toLowerCase();
-          return agentName.startsWith(firstName) || firstName.startsWith(agentName);
-        });
-        if (match) activeHumanAliases.set(user.name.trim().toLowerCase(), match.name);
-      }
-      return activeHumanAliases;
+      return buildExactActiveHumanAliasMap(agentRows, userRows);
     };
 
     let processed = 0;
