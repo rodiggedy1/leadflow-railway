@@ -29,6 +29,7 @@ describe("CsInbox2 shared timeline notes", () => {
     expect(clientSource).toContain("Internal note");
     expect(clientSource).toContain("trpc.opsChat.addCsInbox2Note.useMutation");
     expect(clientSource).toContain("const [composeMode, setComposeMode] = useState<\"reply\" | \"note\">(\"reply\")");
+    expect(clientSource).toContain("disabled={addCsInbox2Note.isPending || !selectedConv || !compose.trim()}");
     expect(mutation).toContain("utils.leads.getCsConversation.setData");
     expect(mutation).not.toContain("utils.leads.listCsInbox.setData");
     expect(mutation).not.toContain("sendMessage.mutate");
