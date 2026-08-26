@@ -1287,7 +1287,7 @@ export default function CsInbox2() {
         <div className="cs2-shell">
           <nav className="cs2-rail">
             <div className="logo">M</div>
-            <button className="cs2-rbtn">⌂</button>
+            <button className="cs2-rbtn" onClick={() => setSelectedConvWithReset(null)} title="Back to inbox">⌂</button>
             <button className="cs2-rbtn on">✉</button>
             <button className="cs2-rbtn">✓</button>
             <button className="cs2-rbtn">⌁</button>
