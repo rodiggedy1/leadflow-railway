@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import DOMPurify from "dompurify";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X, BookOpen, ShieldAlert, Smile, Maximize2, Minimize2 } from "lucide-react";
+import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X, BookOpen, ShieldAlert, Smile, Maximize2, Minimize2, Lock } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
@@ -78,6 +78,13 @@ function LastAgentAvatar({ name, photoUrl }: { name?: string | null; photoUrl?: 
   const [imageFailed, setImageFailed] = useState(false);
   if (!name || !photoUrl || imageFailed) return <span className="cs2-mini">M</span>;
   return <img className="cs2-mini cs2-mini-img" src={photoUrl} alt={`Last agent: ${name}`} onError={() => setImageFailed(true)} />;
+}
+
+function NoteAuthorAvatar({ name, photoUrl }: { name?: string | null; photoUrl?: string | null }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const initials = (name ?? "Agent").split(/\s+/).filter(Boolean).map(part => part[0]).join("").slice(0, 2) || "A";
+  if (!photoUrl || imageFailed) return <span className="cs2-noteAvatar" aria-label={`Note author: ${name ?? "Agent"}`}>{initials}</span>;
+  return <img className="cs2-noteAvatar cs2-noteAvatarImg" src={photoUrl} alt={`Note author: ${name ?? "Agent"}`} onError={() => setImageFailed(true)} />;
 }
 
 function linkify(text: string) {
@@ -210,11 +217,14 @@ const STYLES = `
 .bubble2{padding:11px 13px;border-radius:16px;background:#f0ecff;line-height:1.48;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.out .bubble2{background:#f1f2f4}
 .msg.latest .bubble2{box-shadow:0 0 0 2px rgba(107,78,255,.08)}
+.cs2-note{max-width:80%;margin:14px auto;padding:11px 13px;border:1px solid #f3cf7b;border-radius:14px;background:#fffbeb;box-shadow:0 2px 8px rgba(146,90,10,.06)}
+.cs2-noteHead{display:flex;align-items:center;gap:5px;margin-bottom:5px;font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:#a86508}.cs2-noteAvatar{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;background:#b7791f;color:#fff;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0}.cs2-noteAvatarImg{display:block;object-fit:cover}.cs2-noteAuthor{color:#c38731;text-transform:none;letter-spacing:0;font-weight:600}.cs2-noteTime{margin-left:auto;text-transform:none;letter-spacing:0;color:#c99b55;font-weight:500}.cs2-noteBody{font-size:12px;line-height:1.48;color:#713f12;white-space:pre-wrap;overflow-wrap:anywhere}
 .cs2-composer{padding:10px 24px 20px;border-top:1px solid #f0f1f3;flex-shrink:0}
-.composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}.composeBox.composerExpanded{box-shadow:0 16px 38px rgba(70,53,159,.12),0 0 0 3px #f2efff}
+.composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}.composeBox.composerExpanded{box-shadow:0 16px 38px rgba(70,53,159,.12),0 0 0 3px #f2efff}.composeBox.noteMode{border-color:#f3cf7b;background:#fffcf2}.composeBox.noteMode:focus-within{border-color:#e9b955;box-shadow:0 8px 30px rgba(146,90,10,.08),0 0 0 3px #fff3d6}
 .composeBox:focus-within{border-color:#bdb2ff;box-shadow:0 8px 30px rgba(70,53,159,.08),0 0 0 3px #f2efff}
 .composerMeta{display:flex;align-items:center;justify-content:space-between;min-height:19px;margin:0 0 4px 1px}.composerMeta span{font-size:10px;font-weight:800;color:#8b91a0;letter-spacing:.01em}.composerExpand{width:26px;height:26px;border:0;border-radius:7px;background:transparent;color:#858b98;display:grid;place-items:center;cursor:pointer}.composerExpand:hover{background:#f1efff;color:#684bfa}.composeBox textarea{width:100%;height:72px;min-height:72px;max-height:220px;border:0;outline:0;resize:none;font-size:13px;font-family:inherit;line-height:1.5;overflow-y:hidden;transition:height .16s ease}.composeBox.composerExpanded textarea{max-height:min(42vh,420px)}
 .composeRow{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}.replyAssist{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.assistBtn{height:28px;border:1px solid #e1e4ea;background:#fff;border-radius:999px;padding:0 9px;display:inline-flex;align-items:center;gap:4px;color:#525866;font-size:10px;font-weight:700;cursor:pointer}.assistBtn:hover{border-color:#b8a8ff;background:#f7f5ff;color:#6647ef}.assistBtn.faq{border-color:#a7ead1;color:#0e8a61}.assistBtn.objection{border-color:#fecdd3;color:#be123c}.assistBtn.emoji{width:28px;justify-content:center;padding:0}.emojiPopup{position:absolute;bottom:100%;left:0;margin-bottom:8px;z-index:60;box-shadow:0 16px 40px rgba(15,23,42,.18);border-radius:14px;overflow:hidden}
+.noteToggle{border:1px solid #f3cf7b;background:#fff9e9;color:#a86508;border-radius:999px;padding:6px 9px;font-size:10px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px}.noteToggle.active{background:#f7d997}.noteSave{background:#c98019;box-shadow:0 5px 13px rgba(146,90,10,.2)}
 .quick{border:0;background:#f4f4f6;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}
 .send2{margin-left:auto;border:0;background:#684bfa;color:#fff;border-radius:9px;padding:8px 17px;font-weight:750;cursor:pointer;box-shadow:0 5px 13px rgba(104,75,250,.2)}
 .cs2-side{border-left:1px solid var(--line);background:#f8f9fb;overflow:auto;padding:17px 15px;scrollbar-width:none}
@@ -459,7 +469,7 @@ function NewMessageModal({ onClose, onConvOpened }: { onClose: () => void; onCon
   ].filter(Boolean);
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(19,20,25,.42)",display:"grid",placeItems:"center",padding:"20px",zIndex:9999}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(19,20,25,.42)",display:"grid",placeItems:"center",padding:"20px",zIndex:9999}}>
       <div style={{width:"min(650px,100%)",background:"white",borderRadius:"20px",boxShadow:"0 28px 90px rgba(0,0,0,.22)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:"20px 22px 16px",borderBottom:"1px solid #ececf0",display:"flex",justifyContent:"space-between",alignItems:"start"}}>
           <div>
@@ -844,10 +854,12 @@ export default function CsInbox2() {
       autoDraftedForId.current = null;
       selectedConvRef.current = conv?.id ?? null;
       setComposerExpanded(false);
+      setComposeMode("reply");
     }
     setSelectedConv(conv);
   };
   const [compose, setCompose] = useState("");
+  const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
   const [faqOpen, setFaqOpen] = useState(false);
   const [objectionsOpen, setObjectionsOpen] = useState(false);
   const [worldClassOpen, setWorldClassOpen] = useState(false);
@@ -945,6 +957,21 @@ export default function CsInbox2() {
     },
   });
 
+  const addCsInbox2Note = trpc.opsChat.addCsInbox2Note.useMutation({
+    onSuccess: (data, variables) => {
+      setCompose("");
+      setComposeMode("reply");
+      utils.leads.getCsConversation.setData({ sessionId: variables.sessionId }, (old) => {
+        if (!old) return old;
+        let history: RawMsg[] = [];
+        try { history = JSON.parse(old.messageHistory ?? "[]"); } catch { history = []; }
+        return { ...old, messageHistory: JSON.stringify([...history, data.note]) };
+      });
+      showToast("Note saved");
+    },
+    onError: () => showToast("Note not saved"),
+  });
+
   // ── resolveSession (exact copy from CsInbox.tsx) ────────────────────────
   const resolveSession = trpc.leads.resolveSession.useMutation({
     onSuccess: (_data, variables) => {
@@ -976,6 +1003,11 @@ export default function CsInbox2() {
     }, {
       onSuccess: () => { if (afterSend) afterSend(); }
     });
+  }
+
+  function doSaveNote() {
+    if (!selectedConv || !compose.trim()) return;
+    addCsInbox2Note.mutate({ sessionId: selectedConv.id, note: compose.trim() });
   }
 
   // ── Detail query: real thread messages (exact copy from CsInbox.tsx) ────
@@ -1407,6 +1439,21 @@ export default function CsInbox2() {
                   );
                 }
                 const m = entry.msg;
+                if (m.sender === "note") {
+                  const notePhotoUrl = m.senderName ? agentPhotoMap[m.senderName] ?? null : null;
+                  return (
+                    <div key={i} className="cs2-note">
+                      <div className="cs2-noteHead">
+                        <Lock size={11} aria-hidden="true" />
+                        <span>Internal note</span>
+                        <NoteAuthorAvatar name={m.senderName} photoUrl={notePhotoUrl} />
+                        {m.senderName && <span className="cs2-noteAuthor">· {m.senderName}</span>}
+                        <span className="cs2-noteTime">{m.time}</span>
+                      </div>
+                      <div className="cs2-noteBody">{m.text && linkify(m.text)}</div>
+                    </div>
+                  );
+                }
                 return (
                   <div key={i} className={`msg${m.sender === "agent" ? " out" : ""}${i === timeline.length - 1 ? " latest" : ""}`}>
                     <div className="mmeta">{m.sender === "agent" ? (m.senderName || "Agent") : selectedConv.name} · {m.time}</div>
@@ -1454,10 +1501,10 @@ export default function CsInbox2() {
                 customerName={selectedConv.name ?? ""}
                 jobContext={jobContext}
               />
-              <div className={`composeBox${composerExpanded ? " composerExpanded" : ""}`}>
+              <div className={`composeBox${composeMode === "note" ? " noteMode" : ""}${composerExpanded ? " composerExpanded" : ""}`}>
                 <div className="composerMeta">
-                  <span>{composerExpanded ? "Expanded reply" : "Reply"}</span>
-                  <button
+                  <span>{composeMode === "note" ? "Internal note" : composerExpanded ? "Expanded reply" : "Reply"}</span>
+                  {composeMode === "reply" && <button
                     className="composerExpand"
                     type="button"
                     onClick={() => {
@@ -1469,11 +1516,11 @@ export default function CsInbox2() {
                     title={composerExpanded ? "Collapse composer" : "Expand composer"}
                   >
                     {composerExpanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
-                  </button>
+                  </button>}
                 </div>
                 <textarea
                   ref={composeTextareaRef}
-                  placeholder={`Reply to ${selectedConv.name.split(" ")[0]}…`}
+                  placeholder={composeMode === "note" ? "Add an internal note…" : `Reply to ${selectedConv.name.split(" ")[0]}…`}
                   value={compose}
                   onChange={e => setCompose(e.target.value)}
                   onInput={adjustComposerHeight}
@@ -1485,12 +1532,19 @@ export default function CsInbox2() {
                     }
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault();
-                      doSend();
+                      if (composeMode === "note") doSaveNote();
+                      else doSend();
                     }
                   }}
                 />
                 <div className="composeRow">
-                  <div className="replyAssist">
+                  <button className={`noteToggle${composeMode === "note" ? " active" : ""}`} type="button" onClick={() => {
+                    setComposeMode(mode => mode === "note" ? "reply" : "note");
+                    setComposerExpanded(false);
+                  }}>
+                    <Lock size={11} aria-hidden="true" /> {composeMode === "note" ? "Note mode" : "Internal note"}
+                  </button>
+                  {composeMode === "reply" && <div className="replyAssist">
                     <button className="assistBtn" type="button" onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles size={12} aria-hidden="true" /> World-Class</button>
                     <button className="assistBtn faq" type="button" onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}><BookOpen size={12} aria-hidden="true" /> FAQ</button>
                     <button className="assistBtn" type="button" onClick={() => setInsertResponseOpen(true)}><Sparkles size={12} aria-hidden="true" /> Responses</button>
@@ -1499,18 +1553,24 @@ export default function CsInbox2() {
                       <button className="assistBtn emoji" type="button" onClick={() => setShowEmojiPicker(open => !open)} title="Add emoji"><Smile size={14} aria-hidden="true" /></button>
                       {showEmojiPicker && <div className="emojiPopup"><Picker data={emojiData} onEmojiSelect={(emoji: { native: string }) => { setCompose(previous => previous + emoji.native); setShowEmojiPicker(false); }} theme="light" previewPosition="none" skinTonePosition="none" /></div>}
                     </div>
-                  </div>
+                  </div>}
                   <div style={{display:'flex',marginLeft:'auto',borderRadius:'9px',overflow:'hidden',boxShadow:'0 5px 13px rgba(104,75,250,.2)'}}>
-                    <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
-                      {sendMessage.isPending ? "Sending…" : "Send ↗"}
-                    </button>
-                    <button
-                      className="send2"
-                      style={{borderRadius:0,boxShadow:'none',borderLeft:'1px solid rgba(255,255,255,.25)',padding:'8px 10px',fontSize:'12px',margin:0}}
-                      onClick={() => doSend(() => resolveSession.mutate({ sessionId: selectedConv.id }))}
-                      disabled={sendMessage.isPending || resolveSession.isPending}
-                      title="Send and resolve"
-                    >✓</button>
+                    {composeMode === "note" ? (
+                      <button className="send2 noteSave" onClick={doSaveNote} disabled={addCsInbox2Note.isPending || !selectedConv || !compose.trim()} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
+                        {addCsInbox2Note.isPending ? "Saving…" : "Save note"}
+                      </button>
+                    ) : <>
+                      <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
+                        {sendMessage.isPending ? "Sending…" : "Send ↗"}
+                      </button>
+                      <button
+                        className="send2"
+                        style={{borderRadius:0,boxShadow:'none',borderLeft:'1px solid rgba(255,255,255,.25)',padding:'8px 10px',fontSize:'12px',margin:0}}
+                        onClick={() => doSend(() => resolveSession.mutate({ sessionId: selectedConv.id }))}
+                        disabled={sendMessage.isPending || resolveSession.isPending}
+                        title="Send and resolve"
+                      >✓</button>
+                    </>}
                   </div>
                 </div>
               </div>
