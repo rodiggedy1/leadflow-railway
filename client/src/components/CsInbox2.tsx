@@ -860,6 +860,8 @@ export default function CsInbox2() {
       setWorldClassOpen(false);
       setInsertResponseOpen(false);
       setShowEmojiPicker(false);
+      setCompose("");
+      setAutoDraftRetryForId(null);
     }
     setSelectedConv(conv);
   };
@@ -872,6 +874,7 @@ export default function CsInbox2() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [toast, setToast] = useState("");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
+  const [autoDraftRetryForId, setAutoDraftRetryForId] = useState<number | null>(null);
   const [missionDone, setMissionDone] = useState<Set<number>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -1065,6 +1068,13 @@ export default function CsInbox2() {
     }
     return "";
   }, [clientProfile]);
+  function markAutoDraftRetryable(sessionId = autoDraftInflightSessionIdRef.current) {
+    if (sessionId == null || sessionId !== selectedConvRef.current) return;
+    autoDraftedForId.current = null;
+    setAutoDraftRetryForId(sessionId);
+    setAutoDraftLoading(false);
+  }
+
   // ── csAutoDraft fallback mutation (exact copy from CsInbox.tsx) ─────────
   const csAutoDraft = trpc.opsChat.csReply.useMutation({
     onSuccess: (data) => {
@@ -1073,10 +1083,15 @@ export default function CsInbox2() {
         return;
       }
       const replyText = typeof data.reply === "string" ? data.reply : "";
-      if (replyText) setCompose(replyText);
-      setAutoDraftLoading(false);
+      if (replyText.trim()) {
+        setCompose(replyText);
+        setAutoDraftRetryForId(null);
+        setAutoDraftLoading(false);
+        return;
+      }
+      markAutoDraftRetryable();
     },
-    onError: () => { setAutoDraftLoading(false); },
+    onError: () => { markAutoDraftRetryable(); },
   });
   // ── streamAutoDraft (exact copy from CsInbox.tsx, last 20 messages) ─────
   async function streamAutoDraft(params: {
@@ -1105,6 +1120,7 @@ export default function CsInbox2() {
       const decoder = new TextDecoder();
       let buf = "";
       let accumulated = "";
+      let receivedToken = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -1125,9 +1141,14 @@ export default function CsInbox2() {
           let parsed: { token?: string; error?: string };
           try { parsed = JSON.parse(dataStr); } catch { continue; }
           if (parsed.error) throw new Error(parsed.error);
-          if (parsed.token) { accumulated += parsed.token; setCompose(accumulated); }
+          if (parsed.token) {
+            receivedToken = true;
+            accumulated += parsed.token;
+            setCompose(accumulated);
+          }
         }
       }
+      if (!receivedToken) throw new Error("AI draft stream completed without text");
       setAutoDraftLoading(false);
       autoDraftAbortRef.current = null;
     } catch (err) {
@@ -1144,6 +1165,7 @@ export default function CsInbox2() {
     if (!conv) return;
     if (autoDraftedForId.current === conv.id) return;
     autoDraftedForId.current = conv.id;
+    setAutoDraftRetryForId(null);
     autoDraftInflightSessionIdRef.current = conv.id;
     if (autoDraftAbortRef.current) { autoDraftAbortRef.current.abort(); autoDraftAbortRef.current = null; }
     const recentMsgs = detailMessages.slice(-20);
@@ -1164,11 +1186,11 @@ export default function CsInbox2() {
 
   // Auto-draft when full conversation detail for the correct session is loaded
   useEffect(() => {
-    if (!selectedConv || !detailReady) return;
+    if (!selectedConv || !detailReady || detailMessages.length === 0) return;
     selectedConvRef.current = selectedConv.id;
     triggerAutoDraft(selectedConv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConv?.id, detailReady]);
+  }, [selectedConv?.id, detailReady, detailMessages.length]);
 
 
   useEffect(() => {
@@ -1531,6 +1553,9 @@ export default function CsInbox2() {
                         <button className="assistBtn emoji" type="button" onClick={() => setShowEmojiPicker(open => !open)} title="Add emoji"><Smile size={14} aria-hidden="true" /></button>
                         {showEmojiPicker && <div className="emojiPopup"><Picker data={emojiData} onEmojiSelect={(emoji: { native: string }) => { setCompose(previous => previous + emoji.native); setShowEmojiPicker(false); }} theme="light" previewPosition="none" skinTonePosition="none" /></div>}
                       </div>
+                      {autoDraftRetryForId === selectedConv.id && !autoDraftLoading && !compose.trim() && (
+                        <button className="assistBtn" type="button" onClick={() => { autoDraftedForId.current = null; triggerAutoDraft(selectedConv); }}><RefreshCw size={12} aria-hidden="true" /> Retry AI Draft</button>
+                      )}
                     </div>
                   </>}
                   <div style={{display:'flex',marginLeft:'auto',borderRadius:'9px',overflow:'hidden',boxShadow:'0 5px 13px rgba(104,75,250,.2)'}}>
