@@ -5,12 +5,12 @@
  * Single-recipient flows continue to use their own per-context cards.
  */
 import React, { useState } from "react";
-import { Users, Edit3, Send, Loader2, User, X } from "lucide-react";
+import { Users, Edit3, Send, Loader2, User, X, AlertTriangle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import type { MissionMetadata } from "@/hooks/useMissionHistory";
 
 export interface BulkSmsRecipient {
-  cleanerProfileId: number;
+  cleanerProfileId?: number;
   name: string;
   phone: string;
 }
@@ -20,6 +20,9 @@ export interface BulkSmsConfirmCardData {
   recipients: BulkSmsRecipient[];
   draftMessage: string;
   command?: string;
+  audience?: "customer" | "cleaner";
+  excludedCount?: number;
+  excludedReasons?: string[];
 }
 
 export interface BulkSmsSentResult {
@@ -58,6 +61,7 @@ export function BulkSmsConfirmCard({
       {
         recipients: activeRecipients,
         message: draft,
+        ...(card.audience ? { audience: card.audience } : {}),
         ...(card.command ? { command: card.command } : {}),
       },
       {
@@ -107,6 +111,16 @@ export function BulkSmsConfirmCard({
           );
         })}
       </div>
+      {(card.excludedCount ?? 0) > 0 && (
+        <div className="mx-4 mb-3 rounded-lg px-3 py-2" style={{ background: "#fff8e8", border: "1px solid #f3cf7b" }}>
+          <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#9a6700" }}>
+            <AlertTriangle className="w-3.5 h-3.5" /> {card.excludedCount} excluded from this send
+          </div>
+          <ul className="mt-1 space-y-0.5 text-[11px]" style={{ color: "#9a6700" }}>
+            {(card.excludedReasons ?? []).map(reason => <li key={reason}>• {reason}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="px-4 pb-3">
         <div className="flex items-center gap-1.5 mb-1.5">
           <Edit3 className="w-3 h-3" style={{ color: "#7447f5" }} />

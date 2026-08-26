@@ -17,11 +17,11 @@ import { router, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages, stripeCustomers, paymentAuthorizations, conversationSessions, invoiceTemplates, invoices } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages, stripeCustomers, paymentAuthorizations, conversationSessions, invoiceTemplates, invoices, smsOptOuts } from "../drizzle/schema";
 import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
-import { normalizePhoneLegacy } from "./utils/phone";
+import { normalizePhone, normalizePhoneLegacy } from "./utils/phone";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
@@ -40,6 +40,7 @@ import { computeReadinessSummary } from "./madison/readinessService";
 import { executeConfirmedChain } from "./madison/chain";
 import type { ChainConfirmCard, ChainExecutionResult, ExecutionPlan } from "./madison/chain/types";
 import { chainExecutions } from "../drizzle/schema";
+import { selectScheduledCustomerRecipients } from "./madison/scheduledCustomerBroadcast";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // getTodayET and resolveServiceDateRange are imported from ./conciergeTime
@@ -202,6 +203,10 @@ interface BulkSmsConfirmResult {
   draftMessage: string;
   /** Original user command — carried through to sendBulkSms for mission persistence */
   command?: string;
+  /** Selects customer-safe wording and the pre-send STOP recheck in the shared sender. */
+  audience?: "customer" | "cleaner";
+  excludedCount?: number;
+  excludedReasons?: string[];
 }
 
 /** Returned after agent confirms and messages are sent */
@@ -816,6 +821,62 @@ async function draftCleanerMessage(
     ],
   });
   return (result.choices[0].message.content as string).trim();
+}
+
+async function draftScheduledCustomerMessage(
+  messageHint: string | null,
+  targetDescription: string,
+): Promise<string> {
+  const result = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: buildSystemPrompt() + `\n\n=== CUSTOMER BROADCAST MESSAGE RULES ===\nYou are drafting one SMS from Maids in Black to multiple customers who are scheduled for the same day.\nKeep it warm, concise, and customer-safe (1-3 sentences).\nDo NOT use a personal greeting, a customer name, a job time, a team name, a price, a link, or a sign-off unless the dispatcher explicitly supplied it.\nWrite one generic message body that is safe to send unchanged to every recipient.`,
+      },
+      {
+        role: "user",
+        content: `Draft one SMS to send to ${targetDescription}.\nThe dispatcher wants to: ${messageHint ?? "send a general update about their scheduled cleaning"}`,
+      },
+    ],
+  });
+  return (result.choices[0].message.content as string).trim();
+}
+
+async function handleTextScheduledCustomers(
+  plan: QueryPlan,
+  messageHint: string | null,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<ConciergeResult> {
+  const { startDate } = resolveServiceDateRange(plan.timeScope);
+  const dateLabel = startDate === getTodayET() ? "today" : startDate;
+  const jobs = await db
+    .select({
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+      bookingStatus: cleanerJobs.bookingStatus,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.jobDate, startDate))
+    .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.customerName);
+  const optOutRows = await db.select({ phone: smsOptOuts.phone }).from(smsOptOuts);
+  const selection = selectScheduledCustomerRecipients(jobs, new Set(optOutRows.map(row => row.phone)));
+  const targetDescription = `customers scheduled ${dateLabel}`;
+
+  if (selection.recipients.length === 0) {
+    const detail = selection.excludedReasons.length > 0 ? ` ${selection.excludedReasons.join("; ")}.` : "";
+    return { type: "error", message: `No eligible customers are scheduled ${dateLabel}.${detail}` };
+  }
+
+  const draftMessage = await draftScheduledCustomerMessage(messageHint, targetDescription);
+  return {
+    type: "bulk_sms_confirm",
+    targetDescription,
+    recipients: selection.recipients,
+    draftMessage,
+    audience: "customer",
+    excludedCount: selection.excludedCount,
+    excludedReasons: selection.excludedReasons,
+  };
 }
 
 // ── Text client handler ──────────────────────────────────────────────────────
@@ -2691,6 +2752,13 @@ export async function handleConciergeRequest({
     }
     return textCleanersResult;
   }
+  if (plan.action === "text_scheduled_customers") {
+    const scheduledCustomerResult = await handleTextScheduledCustomers(plan, intent.messageHint, db);
+    if (scheduledCustomerResult.type === "bulk_sms_confirm") {
+      return { ...scheduledCustomerResult, command: message };
+    }
+    return scheduledCustomerResult;
+  }
   if (intent.action === "text_client") {
     if (re?.type === "cleaner") {
       const r = await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db);
@@ -3009,6 +3077,7 @@ export const aiConciergeRouter = router({
           phone: z.string(),
         })),
         message: z.string().min(1).max(1600),
+        audience: z.enum(["customer", "cleaner"]).optional(),
         missionTitle: z.string().optional(),
         /** Original user command from the confirm card — used for mission persistence */
         command: z.string().optional(),
@@ -3018,8 +3087,25 @@ export const aiConciergeRouter = router({
       const startedAt = new Date();
       const results: BulkSmsSentResult["results"] = [];
       const db = await getDb();
+      const optedOutPhones = new Set<string>();
+      if (input.audience === "customer" && db) {
+        const normalizedPhones = input.recipients
+          .map(recipient => normalizePhone(recipient.phone))
+          .filter((phone): phone is string => Boolean(phone));
+        if (normalizedPhones.length > 0) {
+          const rows = await db
+            .select({ phone: smsOptOuts.phone })
+            .from(smsOptOuts)
+            .where(inArray(smsOptOuts.phone, normalizedPhones));
+          rows.forEach(row => optedOutPhones.add(row.phone));
+        }
+      }
       for (const recipient of input.recipients) {
         try {
+          if (input.audience === "customer" && optedOutPhones.has(normalizePhone(recipient.phone) ?? "")) {
+            results.push({ name: recipient.name, phone: recipient.phone, success: false, error: "Customer opted out via STOP" });
+            continue;
+          }
           const result = await sendSms({
             to: recipient.phone,
             content: input.message,
@@ -3060,7 +3146,7 @@ export const aiConciergeRouter = router({
         : `${sent} sent, ${failed} failed.`;
 
       const missionMeta = createMissionMetadata({
-        title: input.missionTitle ?? `Text ${input.recipients.length === 1 ? input.recipients[0].name : `${input.recipients.length} Cleaners`}`,
+        title: input.missionTitle ?? `Text ${input.recipients.length === 1 ? input.recipients[0].name : `${input.recipients.length} ${input.audience === "customer" ? "Customers" : "Cleaners"}`}`,
         startedAt,
         status: overallStatus,
         summary,
@@ -3086,7 +3172,7 @@ export const aiConciergeRouter = router({
       return {
         type: "bulk_sms_sent" as const,
         message: failed === 0
-          ? `Sent to ${sent} cleaner${sent !== 1 ? "s" : ""}.`
+          ? `Sent to ${sent} ${input.audience === "customer" ? "customer" : "cleaner"}${sent !== 1 ? "s" : ""}.`
           : `Sent to ${sent}, failed for ${failed}.`,
         results,
         mission,
