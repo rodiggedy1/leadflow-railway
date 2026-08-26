@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import DOMPurify from "dompurify";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
+import { Sparkles, Play, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, X, Lock } from "lucide-react";
 import { proxyRecordingUrl } from "@/lib/utils";
 import CsRightPanelClient from "@/components/CsRightPanelClient";
 import CsRightPanelTeam from "@/components/CsRightPanelTeam";
@@ -206,11 +206,13 @@ const STYLES = `
 .bubble2{padding:11px 13px;border-radius:16px;background:#f0ecff;line-height:1.48;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.out .bubble2{background:#f1f2f4}
 .msg.latest .bubble2{box-shadow:0 0 0 2px rgba(107,78,255,.08)}
+.cs2-note{max-width:80%;margin:14px auto;padding:11px 13px;border:1px solid #f3cf7b;border-radius:14px;background:#fffbeb;box-shadow:0 2px 8px rgba(146,90,10,.06)}
+.cs2-noteHead{display:flex;align-items:center;gap:5px;margin-bottom:5px;font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:#a86508}.cs2-noteAuthor{color:#c38731;text-transform:none;letter-spacing:0;font-weight:600}.cs2-noteTime{margin-left:auto;text-transform:none;letter-spacing:0;color:#c99b55;font-weight:500}.cs2-noteBody{font-size:12px;line-height:1.48;color:#713f12;white-space:pre-wrap;overflow-wrap:anywhere}
 .cs2-composer{padding:10px 24px 20px;border-top:1px solid #f0f1f3;flex-shrink:0}
-.composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}
+.composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}.composeBox.noteMode{border-color:#f3cf7b;background:#fffcf2}.composeBox.noteMode:focus-within{border-color:#e9b955;box-shadow:0 8px 30px rgba(146,90,10,.08),0 0 0 3px #fff3d6}
 .composeBox:focus-within{border-color:#bdb2ff;box-shadow:0 8px 30px rgba(70,53,159,.08),0 0 0 3px #f2efff}
 .composeBox textarea{width:100%;height:55px;border:0;outline:0;resize:none;font-size:13px;font-family:inherit}
-.composeRow{display:flex;align-items:center;gap:6px;margin-top:8px}
+.composeRow{display:flex;align-items:center;gap:6px;margin-top:8px}.noteToggle{border:1px solid #f3cf7b;background:#fff9e9;color:#a86508;border-radius:8px;padding:7px 9px;font-size:9px;font-weight:700;cursor:pointer}.noteToggle.active{background:#f7d997}.noteSave{background:#c98019;box-shadow:0 5px 13px rgba(146,90,10,.2)}
 .quick{border:0;background:#f4f4f6;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}
 .send2{margin-left:auto;border:0;background:#684bfa;color:#fff;border-radius:9px;padding:8px 17px;font-weight:750;cursor:pointer;box-shadow:0 5px 13px rgba(104,75,250,.2)}
 .cs2-side{border-left:1px solid var(--line);background:#f8f9fb;overflow:auto;padding:17px 15px;scrollbar-width:none}
@@ -839,10 +841,12 @@ export default function CsInbox2() {
     if (conv?.id !== selectedConv?.id) {
       autoDraftedForId.current = null;
       selectedConvRef.current = conv?.id ?? null;
+      setComposeMode("reply");
     }
     setSelectedConv(conv);
   };
   const [compose, setCompose] = useState("");
+  const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
   const [toast, setToast] = useState("");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const [missionDone, setMissionDone] = useState<Set<number>>(new Set());
@@ -908,6 +912,21 @@ export default function CsInbox2() {
     },
   });
 
+  const addCsInbox2Note = trpc.opsChat.addCsInbox2Note.useMutation({
+    onSuccess: (data, variables) => {
+      setCompose("");
+      setComposeMode("reply");
+      utils.leads.getCsConversation.setData({ sessionId: variables.sessionId }, (old) => {
+        if (!old) return old;
+        let history: RawMsg[] = [];
+        try { history = JSON.parse(old.messageHistory ?? "[]"); } catch { history = []; }
+        return { ...old, messageHistory: JSON.stringify([...history, data.note]) };
+      });
+      showToast("Note saved");
+    },
+    onError: () => showToast("Note not saved"),
+  });
+
   // ── resolveSession (exact copy from CsInbox.tsx) ────────────────────────
   const resolveSession = trpc.leads.resolveSession.useMutation({
     onSuccess: (_data, variables) => {
@@ -939,6 +958,11 @@ export default function CsInbox2() {
     }, {
       onSuccess: () => { if (afterSend) afterSend(); }
     });
+  }
+
+  function doSaveNote() {
+    if (!selectedConv || !compose.trim()) return;
+    addCsInbox2Note.mutate({ sessionId: selectedConv.id, note: compose.trim() });
   }
 
   // ── Detail query: real thread messages (exact copy from CsInbox.tsx) ────
@@ -1370,6 +1394,19 @@ export default function CsInbox2() {
                   );
                 }
                 const m = entry.msg;
+                if (m.sender === "note") {
+                  return (
+                    <div key={i} className="cs2-note">
+                      <div className="cs2-noteHead">
+                        <Lock size={11} aria-hidden="true" />
+                        <span>Internal note</span>
+                        {m.senderName && <span className="cs2-noteAuthor">· {m.senderName}</span>}
+                        <span className="cs2-noteTime">{m.time}</span>
+                      </div>
+                      <div className="cs2-noteBody">{m.text && linkify(m.text)}</div>
+                    </div>
+                  );
+                }
                 return (
                   <div key={i} className={`msg${m.sender === "agent" ? " out" : ""}${i === timeline.length - 1 ? " latest" : ""}`}>
                     <div className="mmeta">{m.sender === "agent" ? (m.senderName || "Agent") : selectedConv.name} · {m.time}</div>
@@ -1401,28 +1438,45 @@ export default function CsInbox2() {
               {timeline.length === 0 && <div style={{textAlign:"center",color:"#9aa0aa",padding:"28px",fontSize:"12px"}}>No messages yet</div>}
             </section>
             <footer className="cs2-composer">
-              <div className="composeBox">
+              <div className={`composeBox${composeMode === "note" ? " noteMode" : ""}`}>
                 <textarea
-                  placeholder={`Reply to ${selectedConv.name.split(" ")[0]}…`}
+                  placeholder={composeMode === "note" ? "Add an internal note…" : `Reply to ${selectedConv.name.split(" ")[0]}…`}
                   value={compose}
                   onChange={e => setCompose(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doSend(); }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      if (composeMode === "note") doSaveNote();
+                      else doSend();
+                    }
+                  }}
                 />
                 <div className="composeRow">
-                  <button className="quick" onClick={() => setCompose("Yes! We have a morning opening 😊")}>Morning opening</button>
-                  <button className="quick" onClick={() => setCompose("Let me check with the team and get right back to you.")}>Check team</button>
-                  <button className="quick">+ More</button>
+                  <button className={`noteToggle${composeMode === "note" ? " active" : ""}`} onClick={() => setComposeMode(mode => mode === "note" ? "reply" : "note")}>
+                    <Lock size={11} aria-hidden="true" /> {composeMode === "note" ? "Note mode" : "Internal note"}
+                  </button>
+                  {composeMode === "reply" && <>
+                    <button className="quick" onClick={() => setCompose("Yes! We have a morning opening 😊")}>Morning opening</button>
+                    <button className="quick" onClick={() => setCompose("Let me check with the team and get right back to you.")}>Check team</button>
+                    <button className="quick">+ More</button>
+                  </>}
                   <div style={{display:'flex',marginLeft:'auto',borderRadius:'9px',overflow:'hidden',boxShadow:'0 5px 13px rgba(104,75,250,.2)'}}>
-                    <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
-                      {sendMessage.isPending ? "Sending…" : "Send ↗"}
-                    </button>
-                    <button
-                      className="send2"
-                      style={{borderRadius:0,boxShadow:'none',borderLeft:'1px solid rgba(255,255,255,.25)',padding:'8px 10px',fontSize:'12px',margin:0}}
-                      onClick={() => doSend(() => resolveSession.mutate({ sessionId: selectedConv.id }))}
-                      disabled={sendMessage.isPending || resolveSession.isPending}
-                      title="Send and resolve"
-                    >✓</button>
+                    {composeMode === "note" ? (
+                      <button className="send2 noteSave" onClick={doSaveNote} disabled={addCsInbox2Note.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
+                        {addCsInbox2Note.isPending ? "Saving…" : "Save note"}
+                      </button>
+                    ) : <>
+                      <button className="send2" onClick={() => doSend()} disabled={sendMessage.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
+                        {sendMessage.isPending ? "Sending…" : "Send ↗"}
+                      </button>
+                      <button
+                        className="send2"
+                        style={{borderRadius:0,boxShadow:'none',borderLeft:'1px solid rgba(255,255,255,.25)',padding:'8px 10px',fontSize:'12px',margin:0}}
+                        onClick={() => doSend(() => resolveSession.mutate({ sessionId: selectedConv.id }))}
+                        disabled={sendMessage.isPending || resolveSession.isPending}
+                        title="Send and resolve"
+                      >✓</button>
+                    </>}
                   </div>
                 </div>
               </div>
