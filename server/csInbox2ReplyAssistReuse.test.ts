@@ -26,4 +26,10 @@ describe("CsInbox2 reply-assist reuse", () => {
     expect(controls).toContain('Objections');
     expect(controls).toContain('setShowEmojiPicker');
   });
+
+  it("opens the existing World-Class panel instead of substituting the separate auto-draft flow", () => {
+    expect(source).toContain('onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles size={12} aria-hidden="true" /> World-Class');
+    expect(source).toContain('open={worldClassOpen}');
+    expect(source).toContain('triggerAutoDraft(selectedConv)');
+  });
 });
