@@ -5073,6 +5073,39 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       }),
 
     /**
+     * addCsInbox2Note — persists an internal note for the CsInbox2 timeline.
+     * This deliberately does not recompute inbox summary fields: notes must not
+     * reorder a card or count as an agent response to a customer.
+     */
+    addCsInbox2Note: opsChatProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        note: z.string().min(1).max(2000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const [session] = await db
+          .select({ messageHistory: conversationSessions.messageHistory, updatedAt: conversationSessions.updatedAt })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!session) throw new Error("Session not found");
+
+        let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+        try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+        const note = { role: "note" as const, content: input.note, ts: Date.now(), senderName: agentSession.agentName };
+
+        await db
+          .update(conversationSessions)
+          .set({ messageHistory: JSON.stringify([...history, note]), updatedAt: session.updatedAt })
+          .where(eq(conversationSessions.id, input.sessionId));
+
+        return { success: true, note };
+      }),
+
+    /**
      * leads.attentionItems — real-data attention panel for the executive summary widget.
      * Returns 4 metrics with severity levels (urgent | warning | ok) computed from live DB data.
      * No LLM involved — pure DB queries. Designed to refresh every 60s.
