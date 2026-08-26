@@ -76,6 +76,13 @@ function LastAgentAvatar({ name, photoUrl }: { name?: string | null; photoUrl?: 
   return <img className="cs2-mini cs2-mini-img" src={photoUrl} alt={`Last agent: ${name}`} onError={() => setImageFailed(true)} />;
 }
 
+function NoteAuthorAvatar({ name, photoUrl }: { name?: string | null; photoUrl?: string | null }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const initials = name?.trim().split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase() || "A";
+  if (!photoUrl || imageFailed) return <span className="cs2-noteAvatar" aria-label={`Note author: ${name ?? "Agent"}`}>{initials}</span>;
+  return <img className="cs2-noteAvatar cs2-noteAvatarImg" src={photoUrl} alt={`Note author: ${name ?? "Agent"}`} onError={() => setImageFailed(true)} />;
+}
+
 function linkify(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
@@ -207,7 +214,7 @@ const STYLES = `
 .msg.out .bubble2{background:#f1f2f4}
 .msg.latest .bubble2{box-shadow:0 0 0 2px rgba(107,78,255,.08)}
 .cs2-note{max-width:80%;margin:14px auto;padding:11px 13px;border:1px solid #f3cf7b;border-radius:14px;background:#fffbeb;box-shadow:0 2px 8px rgba(146,90,10,.06)}
-.cs2-noteHead{display:flex;align-items:center;gap:5px;margin-bottom:5px;font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:#a86508}.cs2-noteAuthor{color:#c38731;text-transform:none;letter-spacing:0;font-weight:600}.cs2-noteTime{margin-left:auto;text-transform:none;letter-spacing:0;color:#c99b55;font-weight:500}.cs2-noteBody{font-size:12px;line-height:1.48;color:#713f12;white-space:pre-wrap;overflow-wrap:anywhere}
+.cs2-noteHead{display:flex;align-items:center;gap:5px;margin-bottom:5px;font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:#a86508}.cs2-noteAvatar{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;background:#b7791f;color:#fff;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0}.cs2-noteAvatarImg{display:block;object-fit:cover}.cs2-noteAuthor{color:#c38731;text-transform:none;letter-spacing:0;font-weight:600}.cs2-noteTime{margin-left:auto;text-transform:none;letter-spacing:0;color:#c99b55;font-weight:500}.cs2-noteBody{font-size:12px;line-height:1.48;color:#713f12;white-space:pre-wrap;overflow-wrap:anywhere}
 .cs2-composer{padding:10px 24px 20px;border-top:1px solid #f0f1f3;flex-shrink:0}
 .composeBox{border:1px solid #dfe1e6;border-radius:14px;padding:10px 11px;box-shadow:0 8px 30px rgba(30,31,45,.05)}.composeBox.noteMode{border-color:#f3cf7b;background:#fffcf2}.composeBox.noteMode:focus-within{border-color:#e9b955;box-shadow:0 8px 30px rgba(146,90,10,.08),0 0 0 3px #fff3d6}
 .composeBox:focus-within{border-color:#bdb2ff;box-shadow:0 8px 30px rgba(70,53,159,.08),0 0 0 3px #f2efff}
@@ -1395,11 +1402,13 @@ export default function CsInbox2() {
                 }
                 const m = entry.msg;
                 if (m.sender === "note") {
+                  const notePhotoUrl = m.senderName ? agentPhotoMap[m.senderName] ?? null : null;
                   return (
                     <div key={i} className="cs2-note">
                       <div className="cs2-noteHead">
                         <Lock size={11} aria-hidden="true" />
                         <span>Internal note</span>
+                        <NoteAuthorAvatar name={m.senderName} photoUrl={notePhotoUrl} />
                         {m.senderName && <span className="cs2-noteAuthor">· {m.senderName}</span>}
                         <span className="cs2-noteTime">{m.time}</span>
                       </div>

@@ -12,7 +12,7 @@ describe("CsInbox2 shared timeline notes", () => {
   it("persists an authenticated, attributed note without changing inbox summary fields", () => {
     expect(procedureStart).toBeGreaterThan(-1);
     expect(procedure).toContain('role: "note"');
-    expect(procedure).toContain('senderName: ctx.user?.name ?? "Agent"');
+    expect(procedure).toContain("senderName: ctx.opsCaller.name");
     expect(procedure).toContain("updatedAt: session.updatedAt");
     expect(procedure).not.toContain("computeSessionSummary");
     expect(procedure).not.toContain("lastMessageRole");
@@ -29,6 +29,8 @@ describe("CsInbox2 shared timeline notes", () => {
     expect(clientSource).toContain("trpc.opsChat.addCsInbox2Note.useMutation");
     expect(clientSource).toContain("const [composeMode, setComposeMode] = useState<\"reply\" | \"note\">(\"reply\")");
     expect(clientSource).toContain("disabled={addCsInbox2Note.isPending || !selectedConv || !compose.trim()}");
+    expect(clientSource).toContain("agentPhotoMap[m.senderName] ?? null");
+    expect(clientSource).toContain("<NoteAuthorAvatar name={m.senderName} photoUrl={notePhotoUrl} />");
     expect(mutation).toContain("utils.leads.getCsConversation.setData");
     expect(mutation).not.toContain("utils.leads.listCsInbox.setData");
     expect(mutation).not.toContain("sendMessage.mutate");

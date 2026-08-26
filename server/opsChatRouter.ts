@@ -3630,7 +3630,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
       let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
       try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
-      const note = { role: "note" as const, content: input.note, ts: Date.now(), senderName: ctx.user?.name ?? "Agent" };
+      const note = { role: "note" as const, content: input.note, ts: Date.now(), senderName: ctx.opsCaller.name };
 
       await db
         .update(conversationSessions)
