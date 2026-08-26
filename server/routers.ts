@@ -40,6 +40,7 @@ import { followUpsRouter } from "./followUpsRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
+import { findLastExactActiveAgentName } from "./csInboxLastAgent";
 import { sendPushToAgent, sendPushToAll } from "./webPush";
 import { pushSubscriptions } from "../drizzle/schema";
 import { hiringRouter } from "./hiringRouter";
@@ -3515,6 +3516,38 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           };
         });
         return resultWithCalls;
+      }),
+    /**
+     * getCsInboxLastAgents — bounded read-only last-human-agent lookup for
+     * cards that the client has already kept in an active Kanban column.
+     * Performs one session-history query and one active-agent registry query;
+     * it never sends history to the browser or writes any database data.
+     */
+    getCsInboxLastAgents: opsChatProcedure
+      .input(z.object({ sessionIds: z.array(z.number().int().positive()).max(800) }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db || input.sessionIds.length === 0) return {} as Record<number, string | null>;
+        const sessionIds = [...new Set(input.sessionIds)].slice(0, 800);
+        const [sessions, activeAgents] = await Promise.all([
+          db
+            .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })
+            .from(conversationSessions)
+            .where(inArray(conversationSessions.id, sessionIds)),
+          db
+            .select({ name: agents.name })
+            .from(agents)
+            .where(eq(agents.isActive, 1)),
+        ]);
+        const activeAgentNames = new Map<string, string>();
+        for (const agent of activeAgents) {
+          const canonicalName = agent.name.trim();
+          if (canonicalName) activeAgentNames.set(canonicalName.toLowerCase(), canonicalName);
+        }
+        return Object.fromEntries(sessions.map(session => [
+          session.id,
+          findLastExactActiveAgentName(session.messageHistory, activeAgentNames),
+        ])) as Record<number, string | null>;
       }),
     /**
      * getCsConversation — returns the merged messageHistory for a single CS session.

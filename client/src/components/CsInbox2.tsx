@@ -59,6 +59,7 @@ type LiveConv = {
   latestCallStructuredData?: string | null;
   latestCallCallerPhone?: string | null;
   lastInboundPhoneNumberId?: string | null;
+  lastAgentName?: string | null;
   personType?: "team" | "customer";
 };
 
@@ -67,6 +68,12 @@ type LiveConv = {
 // personType==="team" is the new phone-based identity signal (can promote).
 function isTeamMember(c: LiveConv): boolean {
   return c.queue === "Teams" || c.personType === "team";
+}
+
+function LastAgentAvatar({ name, photoUrl }: { name?: string | null; photoUrl?: string | null }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  if (!name || !photoUrl || imageFailed) return <span className="cs2-mini">M</span>;
+  return <img className="cs2-mini cs2-mini-img" src={photoUrl} alt={`Last agent: ${name}`} onError={() => setImageFailed(true)} />;
 }
 
 function linkify(text: string) {
@@ -139,7 +146,7 @@ const STYLES = `
 .chip.hot{background:#ffefed;color:#dd4435}.chip.ok{background:#e9f8f2;color:#11815c}.chip.warn{background:#fff2dd;color:#bd7200}
 .cs2-meta{margin-top:12px;color:#8c929f;font-size:11px;display:flex;align-items:center}
 .cs2-p1{color:#ef4444;font-weight:800}.cs2-p2{color:#d78b00;font-weight:800}
-.cs2-mini{margin-left:auto;width:21px;height:21px;border-radius:50%;background:#252a36;color:#fff;display:grid;place-items:center;font-size:9px;flex-shrink:0}
+.cs2-mini{margin-left:auto;width:21px;height:21px;border-radius:50%;background:#252a36;color:#fff;display:grid;place-items:center;font-size:9px;flex-shrink:0}.cs2-mini-img{display:block;object-fit:cover;background:#252a36}
 .cs2-stats{height:70px;background:#fff;border-top:1px solid #e5e7ee;display:grid;grid-template-columns:repeat(5,1fr);flex-shrink:0}
 .cs2-stat{padding:11px 20px;border-right:1px solid #eceef2}.cs2-stat small{color:#818795;font-size:11px}.cs2-stat b{display:block;font-size:19px;margin-top:3px;font-weight:800}
 .cs2-addConv{text-align:center;color:#9aa0aa;padding:14px;font-size:13px}
@@ -567,6 +574,11 @@ export default function CsInbox2() {
     { showResolved: true },
     { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 5_000 }
   );
+  const { data: agentPhotoMapData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const agentPhotoMap = agentPhotoMapData?.photos ?? {};
 
   const phoneNameBatches = useMemo(
     () => batchCsInboxPhonesForNameLookup(csData?.map(row => row.leadPhone)),
@@ -1159,6 +1171,15 @@ export default function CsInbox2() {
       return { label, convs };
     });
   }, [activeClientConvs, query, filter, now]);
+  const activeCardSessionIds = useMemo(
+    () => [...new Set(columns.flatMap(column => column.convs.map(conv => conv.id)))].sort((a, b) => a - b),
+    [columns],
+  );
+  const lastAgentNames = trpc.leads.getCsInboxLastAgents.useQuery(
+    { sessionIds: activeCardSessionIds },
+    { enabled: channel === "inbox" && activeCardSessionIds.length > 0, staleTime: 30_000, refetchOnWindowFocus: false },
+  );
+  const lastAgentNameBySessionId = lastAgentNames.data ?? {};
 
   // ── DETAIL VIEW ─────────────────────────────────────────────────────────
   if (selectedConv) {
@@ -2008,7 +2029,7 @@ export default function CsInbox2() {
                             <div className="cs2-meta">
                               <span style={{fontSize:"9px",fontWeight:700,color:"#6b4eff"}}>☎ AI CALL</span>
                               &nbsp;·&nbsp;{conv.wait}
-                              <span className="cs2-mini">M</span>
+                              <LastAgentAvatar name={lastAgentNameBySessionId[conv.id] ?? null} photoUrl={lastAgentNameBySessionId[conv.id] ? agentPhotoMap[lastAgentNameBySessionId[conv.id]!] ?? null : null} />
                             </div>
                           </>
                         ) : (
@@ -2025,7 +2046,7 @@ export default function CsInbox2() {
                             <div className="cs2-meta">
                               <span className={conv.priority==="P1"?"cs2-p1":"cs2-p2"}>{conv.priority}</span>
                               &nbsp;·&nbsp;{conv.wait}
-                              <span className="cs2-mini">M</span>
+                              <LastAgentAvatar name={lastAgentNameBySessionId[conv.id] ?? null} photoUrl={lastAgentNameBySessionId[conv.id] ? agentPhotoMap[lastAgentNameBySessionId[conv.id]!] ?? null : null} />
                             </div>
                           </>
                         )}
