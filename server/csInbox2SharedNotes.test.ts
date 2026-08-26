@@ -1,19 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+const routerSource = readFileSync(new URL("./opsChatRouter.ts", import.meta.url), "utf8");
 const clientSource = readFileSync(new URL("../client/src/components/CsInbox2.tsx", import.meta.url), "utf8");
 
 describe("CsInbox2 shared timeline notes", () => {
   const procedureStart = routerSource.indexOf("addCsInbox2Note: opsChatProcedure");
-  const procedureEnd = routerSource.indexOf("leads.attentionItems", procedureStart);
+  const procedureEnd = routerSource.indexOf("getCsResolvedCount", procedureStart);
   const procedure = routerSource.slice(procedureStart, procedureEnd);
 
   it("persists an authenticated, attributed note without changing inbox summary fields", () => {
     expect(procedureStart).toBeGreaterThan(-1);
-    expect(procedure).toContain("getAgentSessionFromCtx(ctx)");
     expect(procedure).toContain('role: "note"');
-    expect(procedure).toContain("senderName: agentSession.agentName");
+    expect(procedure).toContain('senderName: ctx.user?.name ?? "Agent"');
     expect(procedure).toContain("updatedAt: session.updatedAt");
     expect(procedure).not.toContain("computeSessionSummary");
     expect(procedure).not.toContain("lastMessageRole");

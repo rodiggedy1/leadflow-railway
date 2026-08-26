@@ -3608,6 +3608,37 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
         .where(eq(conversationSessions.id, input.sessionId));
       return { success: true };
     }),
+
+  /**
+   * addCsInbox2Note — persists an internal CsInbox2 timeline note without
+   * changing inbox summary fields, card ordering, or response status.
+   */
+  addCsInbox2Note: opsChatProcedure
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      note: z.string().min(1).max(2000),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const [session] = await db
+        .select({ messageHistory: conversationSessions.messageHistory, updatedAt: conversationSessions.updatedAt })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session) throw new Error("Session not found");
+
+      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+      try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+      const note = { role: "note" as const, content: input.note, ts: Date.now(), senderName: ctx.user?.name ?? "Agent" };
+
+      await db
+        .update(conversationSessions)
+        .set({ messageHistory: JSON.stringify([...history, note]), updatedAt: session.updatedAt })
+        .where(eq(conversationSessions.id, input.sessionId));
+
+      return { success: true, note };
+    }),
   /**
    * getCsResolvedCount — count of resolved CS sessions for the Resolved tab badge.
    */
