@@ -1186,11 +1186,11 @@ export default function CsInbox2() {
 
   // Auto-draft when full conversation detail for the correct session is loaded
   useEffect(() => {
-    if (!selectedConv || !detailReady || detailMessages.length === 0) return;
+    if (!selectedConv || !detailReady) return;
     selectedConvRef.current = selectedConv.id;
     triggerAutoDraft(selectedConv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConv?.id, detailReady, detailMessages.length]);
+  }, [selectedConv?.id, detailReady]);
 
 
   useEffect(() => {
@@ -2132,7 +2132,7 @@ export default function CsInbox2() {
                       ago: timeAgo,
                       personType: (r as any).personType,
                     };
-                    setSelectedConv(conv);
+                    setSelectedConvWithReset(conv);
                     setChannel("inbox");
                   }}>
                     <div className="cs2-havatar">{initials}</div>
