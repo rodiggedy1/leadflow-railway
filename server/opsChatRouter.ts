@@ -5119,7 +5119,7 @@ Rules that ALWAYS apply regardless of instruction:
       body: z.string().min(1).max(1600),
       agentName: z.string().min(1),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const digits = input.phone.replace(/\D/g, "");
       const e164 = digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
       const smsResult = await sendSms({ to: e164, content: input.body, fromNumberId: ENV.openPhoneCsNumberId || undefined });
@@ -5151,6 +5151,7 @@ Rules that ALWAYS apply regardless of instruction:
           recipientName: input.customerName,
           message: input.body,
           senderName: input.agentName,
+          lastHumanAssistantSenderName: ctx.opsCaller.name,
           openPhoneMessageId: smsResult.messageId,
         }).catch(console.error);
       }

@@ -996,7 +996,7 @@ If TOP OBJECTIONS are provided in the metrics:
       actionType: z.enum(["send_sms", "trigger_call", "send_reactivation_sms"]),
       customMessage: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
 
@@ -1033,6 +1033,7 @@ If TOP OBJECTIONS are provided in the metrics:
             recipientName: s.leadName ?? undefined,
             message,
             senderName: "Agent",
+            lastHumanAssistantSenderName: ctx.agent.agentName,
             openPhoneMessageId: result.messageId,
           }).catch(console.error);
         }
@@ -1091,7 +1092,7 @@ If TOP OBJECTIONS are provided in the metrics:
       actionType: z.enum(["followup_cold", "followup_quote_sent", "reactivate_pool"]),
       customMessage: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
 
@@ -1144,6 +1145,7 @@ If TOP OBJECTIONS are provided in the metrics:
               recipientName: s.leadName ?? undefined,
               message: msg,
               senderName: "Agent",
+              lastHumanAssistantSenderName: ctx.agent.agentName,
               openPhoneMessageId: result.messageId,
             }).catch(console.error);
           }

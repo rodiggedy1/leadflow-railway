@@ -428,6 +428,10 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   lastMessageRole: varchar("lastMessageRole", { length: 16 }),
   /** Total number of messages in messageHistory. */
   messageCount: int("messageCount").default(0).notNull(),
+  /** Latest verified manual human agent to successfully send this session an SMS. */
+  lastHumanAssistantSenderName: varchar("lastHumanAssistantSenderName", { length: 255 }),
+  /** Versioned completion marker for the last-human-agent historical backfill. */
+  lastHumanAssistantSummaryVersion: int("lastHumanAssistantSummaryVersion").default(0).notNull(),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

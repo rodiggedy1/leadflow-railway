@@ -3252,6 +3252,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             lastCustomerMessageTs: conversationSessions.lastCustomerMessageTs,
             lastMessageRole: conversationSessions.lastMessageRole,
             messageCount: conversationSessions.messageCount,
+            lastHumanAssistantSenderName: conversationSessions.lastHumanAssistantSenderName,
           })
           .from(conversationSessions)
           .where(

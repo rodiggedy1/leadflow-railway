@@ -2922,6 +2922,7 @@ export const aiConciergeRouter = router({
               recipientName: input.recipientName,
               message: input.smsText,
               senderName: ctx.user?.name ?? "Agent",
+              lastHumanAssistantSenderName: ctx.agent.agentName,
               openPhoneMessageId: result.messageId,
             }).catch(console.error);
           }
@@ -3033,6 +3034,7 @@ export const aiConciergeRouter = router({
               recipientName: recipient.name,
               message: input.message,
               senderName: ctx.user?.name ?? "Agent",
+              lastHumanAssistantSenderName: ctx.agent.agentName,
               openPhoneMessageId: result.messageId,
             }).catch(console.error);
           }

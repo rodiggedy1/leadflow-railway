@@ -39,9 +39,10 @@ import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getAgentByEmail, getDb, getPool } from "../db";
 import { startDbWatchdog } from "../dbWatchdog";
 import { registerStorageProxy } from "./storageProxy";
-import { sql, isNotNull, count } from "drizzle-orm";
-import { gmailThreadMeta } from "../../drizzle/schema";
+import { sql, isNotNull, count, eq } from "drizzle-orm";
+import { gmailThreadMeta, agents, users } from "../../drizzle/schema";
 import { runNormalStartup } from "../normalStartup";
+import { findLastHistoricalHumanAssistant, HUMAN_ASSISTANT_SUMMARY_VERSION } from "../lastHumanAssistantAttribution";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -191,6 +192,84 @@ async function runStartupMigrations() {
     console.log('[Migration] conversation_sessions summary columns: OK');
   } catch (err) {
     console.error('[Migration] Failed to add conversation_sessions summary columns:', err);
+  }
+
+  // ── conversation_sessions last-human-agent attribution ────────────────────────
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE conversation_sessions
+        ADD COLUMN IF NOT EXISTS lastHumanAssistantSenderName VARCHAR(255) NULL,
+        ADD COLUMN IF NOT EXISTS lastHumanAssistantSummaryVersion INT NOT NULL DEFAULT 0
+    `));
+    console.log('[Migration] conversation_sessions last-human-agent columns: OK');
+  } catch (err) {
+    console.error('[Migration] Failed to add last-human-agent columns:', err);
+  }
+
+  // ── Backfill last-human-agent attribution from existing history ───────────────
+  // The version condition makes NULL a completed no-match result. The conditional
+  // row update prevents this historical worker from overwriting newer live stamps.
+  try {
+    const loadActiveHumanAliases = async () => {
+      const agentRows = await db
+        .select({ name: agents.name })
+        .from(agents)
+        .where(eq(agents.isActive, 1));
+      const userRows = await db
+        .select({ name: users.name })
+        .from(users);
+      const activeHumanAliases = new Map<string, string>();
+      for (const agent of agentRows) {
+        if (agent.name) activeHumanAliases.set(agent.name.trim().toLowerCase(), agent.name);
+      }
+      for (const user of userRows) {
+        if (!user.name) continue;
+        const firstName = user.name.split(/\s+/)[0].toLowerCase();
+        const match = agentRows.find(agent => {
+          const agentName = agent.name.toLowerCase();
+          return agentName.startsWith(firstName) || firstName.startsWith(agentName);
+        });
+        if (match) activeHumanAliases.set(user.name.trim().toLowerCase(), match.name);
+      }
+      return activeHumanAliases;
+    };
+
+    let processed = 0;
+    let updated = 0;
+    let supersededByLive = 0;
+    const BATCH = 200;
+    while (true) {
+      const [rows] = await db.execute(sql.raw(
+        `SELECT id, messageHistory FROM conversation_sessions
+         WHERE lastHumanAssistantSummaryVersion < ${HUMAN_ASSISTANT_SUMMARY_VERSION}
+         ORDER BY id LIMIT ${BATCH}`,
+      )) as any;
+      if (!Array.isArray(rows) || rows.length === 0) break;
+
+      // One canonical alias registry lookup per bounded batch, never per row.
+      const activeHumanAliases = await loadActiveHumanAliases();
+
+      for (const row of rows) {
+        const canonicalName = findLastHistoricalHumanAssistant(row.messageHistory, activeHumanAliases);
+        const updateResult = await db.execute(sql`
+          UPDATE conversation_sessions
+          SET lastHumanAssistantSenderName = ${canonicalName},
+              lastHumanAssistantSummaryVersion = ${HUMAN_ASSISTANT_SUMMARY_VERSION}
+          WHERE id = ${Number(row.id)}
+            AND lastHumanAssistantSummaryVersion < ${HUMAN_ASSISTANT_SUMMARY_VERSION}
+        `) as any;
+        const affectedRows = Number(updateResult?.[0]?.affectedRows ?? updateResult?.affectedRows ?? 0);
+        if (affectedRows === 1) updated++;
+        else supersededByLive++;
+        processed++;
+      }
+      if (processed % 1000 === 0) {
+        console.log(`[Migration] last-human-agent backfill progress: processed=${processed} updated=${updated} superseded=${supersededByLive}`);
+      }
+    }
+    console.log(`[Migration] last-human-agent backfill complete: processed=${processed} updated=${updated} superseded_by_live=${supersededByLive}`);
+  } catch (err) {
+    console.error('[Migration] last-human-agent backfill failed (non-fatal):', err);
   }
 
   // ── Backfill summary columns from messageHistory ──────────────────────────────────
