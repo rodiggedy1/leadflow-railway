@@ -98,6 +98,7 @@ export interface QueryPlan {
   action:
     | "query"
     | "text_cleaners"
+    | "text_scheduled_customers"
     | "text_client"
     | "send_payment_link"
     | "call_client"

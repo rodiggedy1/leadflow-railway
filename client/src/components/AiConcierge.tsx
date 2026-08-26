@@ -96,6 +96,9 @@ interface BulkSmsConfirmCard {
   draftMessage: string;
   /** Original user command — forwarded to sendBulkSms for mission persistence */
   command?: string;
+  audience?: "customer" | "cleaner";
+  excludedCount?: number;
+  excludedReasons?: string[];
 }
 interface BulkSmsSentCard {
   message: string;
@@ -470,7 +473,7 @@ function ClientDisambiguationCardView({
 function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; onSent: (result: BulkSmsSentCard) => void }) {
   return (
     <BulkSmsConfirmCard
-      card={{ targetDescription: card.targetDescription, recipients: card.recipients as any, draftMessage: card.draftMessage, command: card.command }}
+      card={{ targetDescription: card.targetDescription, recipients: card.recipients as any, draftMessage: card.draftMessage, command: card.command, audience: card.audience, excludedCount: card.excludedCount, excludedReasons: card.excludedReasons }}
       onSent={(result) => onSent({ message: result.message, results: result.results, mission: result.mission })}
     />
   );
@@ -4017,7 +4020,7 @@ type ServerResult =
   | { type: "error"; message: string }
   | { type: "clarify"; message: string; teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }> }
   | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
-  | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string; command?: string }
+  | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string; command?: string; audience?: "customer" | "cleaner"; excludedCount?: number; excludedReasons?: string[] }
   | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
   | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null }> }
   | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string; command?: string }
@@ -4094,6 +4097,9 @@ function buildAiMessage(result: ServerResult): Message[] {
           recipients: result.recipients,
           draftMessage: result.draftMessage,
           command: result.command,
+          audience: result.audience,
+          excludedCount: result.excludedCount,
+          excludedReasons: result.excludedReasons,
         },
       },
       ts,
