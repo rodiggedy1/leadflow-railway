@@ -1462,7 +1462,7 @@ export default function CsInbox2() {
                   </>}
                   <div style={{display:'flex',marginLeft:'auto',borderRadius:'9px',overflow:'hidden',boxShadow:'0 5px 13px rgba(104,75,250,.2)'}}>
                     {composeMode === "note" ? (
-                      <button className="send2 noteSave" onClick={doSaveNote} disabled={addCsInbox2Note.isPending} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
+                      <button className="send2 noteSave" onClick={doSaveNote} disabled={addCsInbox2Note.isPending || !selectedConv || !compose.trim()} style={{borderRadius:0,boxShadow:'none',paddingRight:'12px',margin:0}}>
                         {addCsInbox2Note.isPending ? "Saving…" : "Save note"}
                       </button>
                     ) : <>
