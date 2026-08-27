@@ -55,9 +55,25 @@ describe("Madison’s Moves Fill Capacity", () => {
         if (options?.area) expect(options.area).toBe("zip:20001");
         return { recipients: [lead], exclusions: [] };
       },
+      tomorrowCapacityCandidate: async () => null,
     });
     expect(moves.map((move) => move.kind)).toEqual(expect.arrayContaining(["save_cancellation", "fill_capacity"]));
     expect(moves.find((move) => move.kind === "fill_capacity")).toMatchObject({ moveKey: "fill:cancel:714:2026-08-28", recipients: [lead] });
+  });
+
+  it("adds the isolated tomorrow capacity candidate without changing the Protect Tomorrow computation", async () => {
+    const tomorrowCapacity = {
+      moveKey: "capacity:2026-08-28", headline: "Fill tomorrow’s capacity", businessReason: "Tomorrow is below target.", impact: "Review one safe former customer.",
+      eligibleCount: 1, excludedCount: 0, excludedReasons: [], recipients: [lead], draftMessage: "Hi! We have availability tomorrow.", targetDescription: "safe previous one-time customers", details: [], source: { jobDate: "2026-08-28" },
+    };
+    const moves = await listMadisonMoves({} as any, {
+      storedMoveRows: async () => [],
+      computeReadinessSummary: async () => ({ totalIssues: 0 }) as any,
+      eligibleQualifiedLeads: async () => ({ recipients: [], exclusions: [] }),
+      tomorrowCapacityCandidate: async () => tomorrowCapacity,
+    });
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({ kind: "fill_capacity", moveKey: "capacity:2026-08-28", recipients: [lead] });
   });
 
   it("reconstructs original dismissal details from the stored History snapshot", async () => {
