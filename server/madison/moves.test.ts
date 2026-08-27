@@ -91,6 +91,7 @@ describe("Madison’s Moves Protect Tomorrow", () => {
     });
     expect(move?.businessReason).toContain("1 schedule, 1 team, 1 payment, 1 confirmation, 1 client request");
     expect(move?.details).toHaveLength(5);
+    expect(move?.detailSections?.map((section) => section.heading)).toEqual(["Schedule", "Team confirmations", "Payment authorizations", "Customer confirmations", "Client requests"]);
     expect(move?.details).toEqual(expect.arrayContaining([expect.stringContaining("Team One"), expect.stringContaining("Taylor"), expect.stringContaining("Riley")]));
   });
 });

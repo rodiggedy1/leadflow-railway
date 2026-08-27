@@ -20,6 +20,7 @@ type Move = {
   draftMessage?: string;
   targetDescription?: string;
   details?: string[];
+  detailSections?: Array<{ heading: string; items: string[] }>;
   status: "ready" | "dismissed" | "sent";
 };
 
@@ -69,7 +70,7 @@ function MoveCard({ move, onReview, onDismiss, onRestore }: { move: Move; onRevi
         </button>
         {move.status === "ready" ? <button onClick={onDismiss} className="rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-50">Not now</button> : move.status === "dismissed" ? <button onClick={onRestore} className="rounded-xl border border-[#d9caff] bg-[#faf8ff] px-3 py-2 text-[11px] font-bold text-[#6541cf] transition hover:bg-[#f1edff]">Bring back</button> : null}
       </div>
-      {detailsOpen && <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-600"><p className="mb-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Verified details</p>{move.details?.length ? <ul className="space-y-1">{move.details.map((detail) => <li key={detail}>• {detail}</li>)}</ul> : <p>Madison has no additional verified detail for this move.</p>}</div>}
+      {detailsOpen && <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-600"><p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Verified details</p>{move.detailSections?.length ? <div className="space-y-3">{move.detailSections.map((section) => <section key={section.heading}><p className="mb-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#846db4]">{section.heading}</p><ul className="space-y-1">{section.items.map((detail) => <li key={detail}>• {detail}</li>)}</ul></section>)}</div> : move.details?.length ? <ul className="space-y-1">{move.details.map((detail) => <li key={detail}>• {detail}</li>)}</ul> : <p>Madison has no additional verified detail for this move.</p>}</div>}
     </article>
   );
 }
