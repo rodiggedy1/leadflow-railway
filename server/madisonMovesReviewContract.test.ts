@@ -48,6 +48,14 @@ describe("Madison’s Moves review-first contract", () => {
     expect(moves).toContain("checklistResolvedItemKeys");
   });
 
+  it("uses the approved tomorrow-only 30-job Fill Capacity rule with review-first delivery", () => {
+    expect(moves).toContain("buildTomorrowCapacityMove");
+    expect(moves).toContain("DAILY_JOB_TARGET = 30");
+    expect(moves).toContain("eligiblePastOneTimeCustomers");
+    expect(moves).toContain("reactivationEligible");
+    expect(moves).toContain("contacted in a campaign within 7 days");
+  });
+
   it("shows a clear retryable error for a failed custom review send", () => {
     const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
     expect(card).toContain(".catch((error: unknown) =>");
