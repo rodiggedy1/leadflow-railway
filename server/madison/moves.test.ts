@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCancellationOpeningMoves, buildFillCapacityMove, listMadisonMoveHistory, listMadisonMoves, shouldObserveCancellationTransition } from "./moves";
+import { buildCancellationOpeningMoves, buildFillCapacityMove, buildProtectTomorrowMove, listMadisonMoveHistory, listMadisonMoves, shouldObserveCancellationTransition } from "./moves";
 
 describe("Madison’s Moves cancellation observation", () => {
   it("records only an active booking becoming cancelled", () => {
@@ -71,5 +71,26 @@ describe("Madison’s Moves Fill Capacity", () => {
       }],
     });
     expect(history).toMatchObject({ id: 11, status: "dismissed", headline: "2 verified items could affect tomorrow", details: ["Taylor is unassigned."] });
+  });
+});
+
+describe("Madison’s Moves Protect Tomorrow", () => {
+  it("lists every category in the headline breakdown and expanded details that contributes to the verified total", () => {
+    const move = buildProtectTomorrowMove({
+      tomorrow: "2026-08-28", status: "ready",
+      readiness: {
+        totalIssues: 5,
+        dimensions: {
+          jobs: { issueCount: 1, unassigned: [{ customerName: "Jordan", jobTime: "9:00 AM" }], doubleBooked: [] },
+          teams: { issueCount: 1, rows: [{ name: "Team One", confirmed: false, jobCount: 2 }] },
+          payments: { issueCount: 1, rows: [{ customerName: "Taylor", jobTime: "10:00 AM", status: "no_card" }] },
+          confirmations: { issueCount: 1, rows: [{ customerName: "Casey", jobTime: "11:00 AM", status: "pending" }] },
+          clientRequests: { issueCount: 1, rows: [{ customerName: "Riley", requestedTeam: "Team Two", assignedTeam: null, status: "unassigned" }] },
+        },
+      } as any,
+    });
+    expect(move?.businessReason).toContain("1 schedule, 1 team, 1 payment, 1 confirmation, 1 client request");
+    expect(move?.details).toHaveLength(5);
+    expect(move?.details).toEqual(expect.arrayContaining([expect.stringContaining("Team One"), expect.stringContaining("Taylor"), expect.stringContaining("Riley")]));
   });
 });
