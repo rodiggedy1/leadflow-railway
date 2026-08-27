@@ -49,26 +49,57 @@ export async function sendMadisonMove(
   const stops = new Set(stopRows.map((row: { phone: string }) => row.phone));
   const sendable = excludeStopOptedRecipients(requested, stops);
   if (sendable.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No selected recipients remain eligible after STOP protection." });
+
+  // Claim the reviewed move before the first external SMS call. If process execution
+  // stops after a carrier accepts a text, this retained state prevents the card from
+  // returning to Ready and inviting a duplicate batch.
+  const existingRows = await db.select().from(opsChatMessages).where(eq(opsChatMessages.channel, "madison_moves"));
+  const stored = existingRows.find((row: any) => { try { return JSON.parse(row.metadata ?? "{}").moveKey === input.moveKey; } catch { return false; } });
+  const startedAt = Date.now();
+  const sendingMeta = {
+    ...(stored ? JSON.parse(stored.metadata ?? "{}") : {}),
+    moveKey: input.moveKey,
+    kind: move.kind,
+    outcome: "sending",
+    sendStartedAt: startedAt,
+    intendedRecipientCount: sendable.length,
+    snapshot: move,
+    source: move.source ?? null,
+  };
+  let moveRecordId: number;
+  if (stored) {
+    await db.update(opsChatMessages).set({ body: move.headline, cardStatus: "dismissed", activeDedupKey: null, metadata: JSON.stringify(sendingMeta), lastActivityAt: startedAt }).where(eq(opsChatMessages.id, stored.id));
+    moveRecordId = stored.id;
+  } else {
+    const inserted = await db.insert(opsChatMessages).values({
+      cleanerJobId: null, channel: "madison_moves", authorName: "Madison", authorRole: "system", body: move.headline, quickAction: "madisons_move",
+      metadata: JSON.stringify(sendingMeta), cardStatus: "dismissed", lastActivityAt: startedAt,
+    });
+    moveRecordId = (inserted as any).insertId as number;
+  }
+
   const results: Array<{ name: string; phone: string; success: boolean; error?: string }> = [];
-  for (const recipient of requested) {
-    if (stops.has(recipient.normalized!)) { results.push({ name: recipient.name, phone: recipient.phone, success: false, error: "Customer opted out via STOP" }); continue; }
-    const sent = await dependencies.sendSms({ to: recipient.phone, content: input.message, fromNumberId: dependencies.csNumberId });
-    results.push({ name: recipient.name, phone: recipient.phone, success: sent.success });
-    if (sent.success) dependencies.appendCsOutboundMessage({ db: db as any, recipientPhone: recipient.phone, recipientName: recipient.name, message: input.message, senderName: ctx.user?.name ?? "Agent", openPhoneMessageId: sent.messageId }).catch(console.error);
+  for (const recipient of sendable) {
+    try {
+      const sent = await dependencies.sendSms({ to: recipient.phone, content: input.message, fromNumberId: dependencies.csNumberId });
+      results.push({ name: recipient.name, phone: recipient.phone, success: sent.success });
+      if (sent.success) Promise.resolve(dependencies.appendCsOutboundMessage({ db: db as any, recipientPhone: recipient.phone, recipientName: recipient.name, message: input.message, senderName: ctx.user?.name ?? "Agent", openPhoneMessageId: sent.messageId })).catch(console.error);
+    } catch (error) {
+      results.push({ name: recipient.name, phone: recipient.phone, success: false, error: error instanceof Error ? error.message : String(error) });
+    }
   }
   const sentCount = results.filter((result) => result.success).length;
-  const rows = await db.select().from(opsChatMessages).where(eq(opsChatMessages.channel, "madison_moves"));
-  const stored = rows.find((row: any) => { try { return JSON.parse(row.metadata ?? "{}").moveKey === input.moveKey; } catch { return false; } });
-  if (stored) {
-    const meta = { ...JSON.parse(stored.metadata ?? "{}"), outcome: sentCount ? "sent" : "failed", sentAt: Date.now(), sentCount };
-    await db.update(opsChatMessages).set({ cardStatus: "dismissed", activeDedupKey: null, metadata: JSON.stringify(meta), lastActivityAt: Date.now() }).where(eq(opsChatMessages.id, stored.id));
-  } else {
-    await db.insert(opsChatMessages).values({
-      cleanerJobId: null, channel: "madison_moves", authorName: "Madison", authorRole: "system", body: `Madison move ${sentCount ? "sent" : "failed"}.`, quickAction: "madisons_move",
-      metadata: JSON.stringify({ moveKey: input.moveKey, kind: move.kind, outcome: sentCount ? "sent" : "failed", sentAt: Date.now(), sentCount, source: move.source ?? null }), cardStatus: "dismissed", lastActivityAt: Date.now(),
-    });
+  let statePersistenceError = false;
+  try {
+    const meta = { ...sendingMeta, outcome: sentCount ? "sent" : "failed", sentAt: Date.now(), sentCount };
+    await db.update(opsChatMessages).set({ body: `Madison move ${sentCount ? "sent" : "failed"}.`, cardStatus: "dismissed", activeDedupKey: null, metadata: JSON.stringify(meta), lastActivityAt: Date.now() }).where(eq(opsChatMessages.id, moveRecordId));
+  } catch (error) {
+    // The move remains in its pre-send "sending" state, which suppresses automatic retry.
+    // A persistence failure after carrier success must never turn into a false send failure.
+    console.error("[MadisonMoves] Failed to finalize send state after SMS delivery:", error);
+    statePersistenceError = true;
   }
-  return { message: sentCount ? `Sent to ${sentCount} customer${sentCount === 1 ? "" : "s"}.` : "No messages were sent.", results };
+  return { message: sentCount ? `Sent to ${sentCount} customer${sentCount === 1 ? "" : "s"}.` : "No messages were sent.", results, ...(statePersistenceError ? { statePersistenceError: true } : {}) };
 }
 
 export const madisonMovesRouter = router({

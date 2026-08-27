@@ -9,14 +9,22 @@ const moves = fs.readFileSync(path.join(root, "server", "madison", "moves.ts"), 
 const sharedBulkSender = fs.readFileSync(path.join(root, "server", "aiConciergeRouter.ts"), "utf8");
 
 describe("Madison’s Moves review-first contract", () => {
-  it("routes the right-column contact action through the existing shared SMS sender", () => {
+  it("routes the right-column contact action through Madison’s server-owned shared SMS handoff", () => {
     expect(panel).toContain("<BulkSmsConfirmCard");
-    expect(panel).not.toContain("onReviewSend={async");
-    expect(panel).not.toContain("madisonMoves.send.useMutation");
+    expect(panel).toContain("onReviewSend={async");
+    expect(panel).toContain("madisonMoves.send.useMutation");
     expect(sharedBulkSender).toContain("sendBulkSms: agentProcedure");
     expect(sharedBulkSender).toContain("Customer opted out via STOP");
     expect(sharedBulkSender).toContain("Persistence failure must NOT cause the action to appear failed.");
     expect(panel).toContain("Review & send");
+  });
+
+  it("records a send-started Madison state before the first carrier call and contains final persistence failure", () => {
+    expect(router).toContain('outcome: "sending"');
+    expect(router).toContain("sendStartedAt");
+    expect(router).toContain("Failed to finalize send state after SMS delivery");
+    expect(router).toContain("statePersistenceError");
+    expect(moves).toContain('row.meta.outcome === "sending"');
   });
 
   it("moves a Not now dismissal directly into persisted History", () => {
