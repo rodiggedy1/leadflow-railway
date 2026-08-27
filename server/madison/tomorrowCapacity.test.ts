@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTomorrowCapacityCandidate } from "./tomorrowCapacity";
 
 describe("Tomorrow Capacity", () => {
-  const formerOneTimeCustomer = { name: "Robin", phone: "+12025550188", reason: "Previous one-time customer with no newer booking" };
+  const formerOneTimeCustomer = { name: "Robin Fullname", phone: "+12025550188", reason: "Previous one-time customer with no newer booking", lastBookingDate: "2026-07-01" };
 
   it("creates a review-first opportunity only when tomorrow is under the 30-job target", () => {
     const candidate = buildTomorrowCapacityCandidate({
@@ -20,6 +20,7 @@ describe("Tomorrow Capacity", () => {
     });
     expect(candidate?.businessReason).toContain("26 verified scheduled jobs");
     expect(candidate?.draftMessage).toContain("availability tomorrow");
+    expect(candidate?.recipients[0]).toMatchObject({ name: "Robin Fullname", lastBookingDate: "2026-07-01" });
   });
 
   it("does not create a capacity claim once the target is met or no safe former one-time customer remains", () => {

@@ -5,7 +5,7 @@ import { normalizePhoneLegacy } from "../utils/phone";
 
 type Db = any;
 
-export type TomorrowCapacityRecipient = { name: string; phone: string; reason: string };
+export type TomorrowCapacityRecipient = { name: string; phone: string; reason: string; lastBookingDate?: string | null };
 export type TomorrowCapacityCandidate = {
   moveKey: string;
   headline: string;
@@ -78,7 +78,7 @@ async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: Tom
     else if (isRecurringFrequency(row.frequency)) reason = "not a previous one-time customer";
     if (reason) { exclusions.push(reason); continue; }
     seen.add(phone);
-    recipients.push({ name: row.firstName?.trim() || row.name?.trim() || "Customer", phone, reason: "Previous one-time customer with no newer booking" });
+    recipients.push({ name: row.name?.trim() || row.firstName?.trim() || "Customer", phone, reason: "Previous one-time customer with no newer booking", lastBookingDate: row.jobDate });
   }
   return { recipients: recipients.slice(0, RECIPIENT_LIMIT), exclusions };
 }
