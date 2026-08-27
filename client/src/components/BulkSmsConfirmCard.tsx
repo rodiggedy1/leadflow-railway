@@ -13,6 +13,8 @@ export interface BulkSmsRecipient {
   cleanerProfileId?: number;
   name: string;
   phone: string;
+  /** Present only for review flows with verified customer-history context. */
+  lastBookingDate?: string | null;
 }
 
 export interface BulkSmsConfirmCardData {
@@ -59,6 +61,10 @@ export function BulkSmsConfirmCard({
       else next.add(phone);
       return next;
     });
+  }
+
+  function formatLastBookingDate(value: string) {
+    return new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
   function handleSend() {
@@ -112,7 +118,7 @@ export function BulkSmsConfirmCard({
               type="button"
               onClick={() => !sent && toggleRecipient(r.phone)}
               title={isExcluded ? "Click to re-add" : "Click to remove"}
-              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-all"
+              className={`inline-flex ${r.lastBookingDate ? "flex-col items-start" : "items-center"} gap-1.5 rounded-xl px-2.5 py-1 text-xs transition-all`}
               style={{
                 background: isExcluded ? "rgba(0,0,0,0.04)" : "rgba(116,71,245,0.08)",
                 border: isExcluded ? "1px solid #d0d0d8" : "1px solid #e5d9ea",
@@ -122,11 +128,14 @@ export function BulkSmsConfirmCard({
                 textDecoration: isExcluded ? "line-through" : "none",
               }}
             >
-              <User className="w-3 h-3" style={{ color: isExcluded ? "#bbb" : "#9b8aaa" }} />
-              <span className="font-medium" style={{ color: isExcluded ? "#aaa" : "#202431" }}>{r.name}</span>
-              <span style={{ color: isExcluded ? "#ccc" : "#9b8aaa" }}>·</span>
-              <span style={{ color: isExcluded ? "#aaa" : "#7447f5" }}>{r.phone}</span>
-              {isExcluded && <X className="w-3 h-3 ml-0.5" style={{ color: "#bbb" }} />}
+              <span className="inline-flex items-center gap-1.5">
+                <User className="w-3 h-3" style={{ color: isExcluded ? "#bbb" : "#9b8aaa" }} />
+                <span className="font-medium" style={{ color: isExcluded ? "#aaa" : "#202431" }}>{r.name}</span>
+                <span style={{ color: isExcluded ? "#ccc" : "#9b8aaa" }}>·</span>
+                <span style={{ color: isExcluded ? "#aaa" : "#7447f5" }}>{r.phone}</span>
+                {isExcluded && <X className="w-3 h-3 ml-0.5" style={{ color: "#bbb" }} />}
+              </span>
+              {r.lastBookingDate && <span className="pl-[18px] text-[10px]" style={{ color: isExcluded ? "#aaa" : "#667085" }}>Last booking: {formatLastBookingDate(r.lastBookingDate)}</span>}
             </button>
           );
         })}

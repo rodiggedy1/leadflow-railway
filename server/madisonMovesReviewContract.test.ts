@@ -69,5 +69,9 @@ describe("Madison’s Moves review-first contract", () => {
     expect(capacity).toContain("RECIPIENT_LIMIT = 30");
     expect(capacity).toContain("reactivationEligible");
     expect(capacity).toContain("contacted in a campaign within 7 days");
+    expect(capacity).toContain("lastBookingDate: row.jobDate");
+    const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
+    expect(card).toContain("Last booking:");
+    expect(card).toContain("formatLastBookingDate");
   });
 });
