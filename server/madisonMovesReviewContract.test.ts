@@ -9,7 +9,8 @@ const panel = fs.readFileSync(path.join(root, "client", "src", "components", "Ma
 describe("Madison’s Moves review-first contract", () => {
   it("uses an explicit send mutation and rechecks the live move before sending", () => {
     expect(router).toContain("send: agentProcedure");
-    expect(router).toContain("const liveMoves = await listMadisonMoves(db)");
+    expect(router).toContain("export async function sendMadisonMove");
+    expect(router).toContain("const liveMoves = await dependencies.listMoves(db)");
     expect(router).toContain("Customer opted out via STOP");
   });
 

@@ -31,6 +31,12 @@ export type MadisonMove = {
 };
 
 type Db = any;
+type StoredMoveRow = { id: number; metadata: string | null; cardStatus: string | null };
+type MadisonMovesDependencies = {
+  storedMoveRows?: (db: Db) => Promise<StoredMoveRow[]>;
+  computeReadinessSummary?: typeof computeReadinessSummary;
+  eligibleQualifiedLeads?: (db: Db, options?: { area?: string }) => Promise<{ recipients: MadisonMoveRecipient[]; exclusions: string[] }>;
+};
 const inactiveLeadStages = new Set(["COLD", "LOST", "QUALITY_RATING_DONE", "REVIEW_REBOOKING_DONE"]);
 const DAY_MS = 86_400_000;
 
@@ -220,8 +226,11 @@ export function buildCancellationOpeningMoves(input: {
   return { cancellation, fill };
 }
 
-export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
-  const rows = await storedMoveRows(db);
+export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDependencies = {}): Promise<MadisonMove[]> {
+  const loadStoredMoveRows = dependencies.storedMoveRows ?? storedMoveRows;
+  const getReadinessSummary = dependencies.computeReadinessSummary ?? computeReadinessSummary;
+  const getEligibleQualifiedLeads = dependencies.eligibleQualifiedLeads ?? eligibleQualifiedLeads;
+  const rows = await loadStoredMoveRows(db);
   const stored = new Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>();
   for (const row of rows) {
     const meta = parseMeta(row.metadata);
@@ -229,7 +238,7 @@ export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
   }
   const moves: MadisonMove[] = [];
   const tomorrow = easternDate(1);
-  const readiness = await computeReadinessSummary(db, tomorrow);
+  const readiness = await getReadinessSummary(db, tomorrow);
   const readinessKey = `protect:${tomorrow}`;
   const readinessStatus = statusFor(stored, readinessKey);
   if (readiness.totalIssues > 0 && readinessStatus === "ready") {
@@ -247,7 +256,7 @@ export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
 
   const recoveryKey = `recover:${tomorrow}`;
   const recoveryStatus = statusFor(stored, recoveryKey);
-  const recovery = await eligibleQualifiedLeads(db);
+  const recovery = await getEligibleQualifiedLeads(db);
   if (recovery.recipients.length > 0 && recoveryStatus === "ready") {
     moves.push({
       id: stored.get(recoveryKey)?.id, moveKey: recoveryKey, kind: "recover_qualified_leads", priority: "normal",
@@ -263,7 +272,7 @@ export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
   for (const [moveKey, row] of stored) {
     if (row.cardStatus !== "active" || row.meta.kind !== "save_cancellation") continue;
     const source = row.meta.source ?? {};
-    const candidates = await eligibleQualifiedLeads(db, { area: locality(source.address) });
+    const candidates = await getEligibleQualifiedLeads(db, { area: locality(source.address) });
     const fillKey = `fill:${moveKey}`;
     const fillStatus = statusFor(stored, fillKey);
     const pair = buildCancellationOpeningMoves({ parentMoveKey: moveKey, source, recipients: candidates.recipients, exclusions: candidates.exclusions, fillStatus, cancellationId: row.id, fillId: stored.get(fillKey)?.id });

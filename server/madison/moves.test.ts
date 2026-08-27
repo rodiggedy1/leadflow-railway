@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCancellationOpeningMoves, buildFillCapacityMove, shouldObserveCancellationTransition } from "./moves";
+import { buildCancellationOpeningMoves, buildFillCapacityMove, listMadisonMoves, shouldObserveCancellationTransition } from "./moves";
 
 describe("Madison’s Moves cancellation observation", () => {
   it("records only an active booking becoming cancelled", () => {
@@ -45,5 +45,18 @@ describe("Madison’s Moves Fill Capacity", () => {
     });
     expect(pair.cancellation).toMatchObject({ kind: "save_cancellation", moveKey: "cancel:714:2026-08-28", eligibleCount: 1 });
     expect(pair.fill).toMatchObject({ kind: "fill_capacity", moveKey: "fill:cancel:714:2026-08-28", eligibleCount: 1 });
+  });
+
+  it("turns a stored active cancellation observation into a live Fill Capacity move", async () => {
+    const moves = await listMadisonMoves({} as any, {
+      storedMoveRows: async () => [{ id: 9, cardStatus: "active", metadata: JSON.stringify({ moveKey: "cancel:714:2026-08-28", kind: "save_cancellation", source }) }],
+      computeReadinessSummary: async () => ({ totalIssues: 0 }) as any,
+      eligibleQualifiedLeads: async (_db, options) => {
+        if (options?.area) expect(options.area).toBe("zip:20001");
+        return { recipients: [lead], exclusions: [] };
+      },
+    });
+    expect(moves.map((move) => move.kind)).toEqual(expect.arrayContaining(["save_cancellation", "fill_capacity"]));
+    expect(moves.find((move) => move.kind === "fill_capacity")).toMatchObject({ moveKey: "fill:cancel:714:2026-08-28", recipients: [lead] });
   });
 });
