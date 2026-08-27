@@ -89,9 +89,27 @@ describe("Madison’s Moves Protect Tomorrow", () => {
         },
       } as any,
     });
-    expect(move?.businessReason).toContain("1 schedule, 1 team, 1 payment, 1 confirmation, 1 client request");
+    expect(move?.businessReason).toContain("1 schedule, 1 team confirmations, 1 payment authorizations, 1 customer confirmations, 1 client requests");
     expect(move?.details).toHaveLength(5);
     expect(move?.detailSections?.map((section) => section.heading)).toEqual(["Schedule", "Team confirmations", "Payment authorizations", "Customer confirmations", "Client requests"]);
     expect(move?.details).toEqual(expect.arrayContaining([expect.stringContaining("Team One"), expect.stringContaining("Taylor"), expect.stringContaining("Riley")]));
+  });
+
+  it("removes reviewed items from the live count and produces a completed History snapshot only after every item is reviewed", () => {
+    const readiness = {
+      totalIssues: 2,
+      dimensions: {
+        jobs: { issueCount: 1, unassigned: [{ jobId: 1, customerName: "Jordan", jobTime: "9:00 AM" }], doubleBooked: [] },
+        teams: { issueCount: 0, rows: [] }, payments: { issueCount: 0, rows: [] },
+        confirmations: { issueCount: 1, rows: [{ jobId: 2, customerName: "Casey", jobTime: "11:00 AM", status: "pending" }] },
+        clientRequests: { issueCount: 0, rows: [] },
+      },
+    } as any;
+    const initial = buildProtectTomorrowMove({ readiness, tomorrow: "2026-08-28", status: "ready" })!;
+    const keys = initial.detailSections!.flatMap((section) => section.items.map((item) => item.key));
+    const oneReviewed = buildProtectTomorrowMove({ readiness, tomorrow: "2026-08-28", status: "ready", resolvedItemKeys: [keys[0]] })!;
+    const allReviewed = buildProtectTomorrowMove({ readiness, tomorrow: "2026-08-28", status: "ready", resolvedItemKeys: keys })!;
+    expect(oneReviewed).toMatchObject({ remainingIssueCount: 1, completedIssueCount: 1, status: "ready" });
+    expect(allReviewed).toMatchObject({ remainingIssueCount: 0, completedIssueCount: 2, status: "completed" });
   });
 });

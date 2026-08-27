@@ -40,6 +40,14 @@ describe("Madison’s Moves review-first contract", () => {
     expect(panel).toContain("section.heading");
   });
 
+  it("keeps each Protect Tomorrow review action explicit, reversible, and separate from operational source writes", () => {
+    expect(router).toContain("reviewProtectTomorrowItem: agentProcedure");
+    expect(moves).toContain("setProtectTomorrowChecklistItem");
+    expect(panel).toContain(">Resolve</button>");
+    expect(panel).toContain(">Undo</button>");
+    expect(moves).toContain("checklistResolvedItemKeys");
+  });
+
   it("shows a clear retryable error for a failed custom review send", () => {
     const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
     expect(card).toContain(".catch((error: unknown) =>");

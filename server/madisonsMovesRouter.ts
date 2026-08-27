@@ -8,7 +8,7 @@ import { ENV } from "./_core/env";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { cleanerJobs, opsChatMessages, smsOptOuts } from "../drizzle/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { dismissMadisonMove, listMadisonMoveHistory, listMadisonMoves, restoreMadisonMove, type MadisonMoveKind } from "./madison/moves";
+import { dismissMadisonMove, listMadisonMoveHistory, listMadisonMoves, restoreMadisonMove, setProtectTomorrowChecklistItem, type MadisonMoveKind } from "./madison/moves";
 
 const kindSchema = z.enum(["protect_tomorrow", "save_cancellation", "fill_capacity", "recover_qualified_leads"]);
 
@@ -101,6 +101,15 @@ export const madisonMovesRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "This move cannot be restored." });
     }
     return { ok: true };
+  }),
+  reviewProtectTomorrowItem: agentProcedure.input(z.object({ moveKey: z.string().regex(/^protect:\d{4}-\d{2}-\d{2}$/), itemKey: z.string().min(1).max(160), resolved: z.boolean() })).mutation(async ({ ctx, input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    try {
+      return await setProtectTomorrowChecklistItem(db, { ...input, agentId: ctx.agent.agentId });
+    } catch (error) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to update this review item." });
+    }
   }),
   send: agentProcedure.input(z.object({
     moveKey: z.string().min(1).max(120),
