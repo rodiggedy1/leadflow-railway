@@ -87,19 +87,19 @@ async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: Tom
 export function buildTomorrowCapacityCandidate(input: { tomorrow: string; bookedJobs: number; recipients: TomorrowCapacityRecipient[]; exclusions: string[] }): TomorrowCapacityCandidate | null {
   const jobsNeeded = Math.max(DAILY_JOB_TARGET - input.bookedJobs, 0);
   if (jobsNeeded === 0 || input.recipients.length === 0) return null;
-  const recipients = input.recipients.slice(0, jobsNeeded);
+  const recipients = input.recipients.slice(0, RECIPIENT_LIMIT);
   return {
     moveKey: `capacity:${input.tomorrow}`,
     headline: "Fill tomorrow’s capacity",
     businessReason: `Tomorrow has ${input.bookedJobs} verified scheduled job${input.bookedJobs === 1 ? "" : "s"}, which is ${jobsNeeded} below your ${DAILY_JOB_TARGET}-job target.`,
-    impact: `Review ${recipients.length} safe previous one-time customer${recipients.length === 1 ? "" : "s"} who have not rebooked recently.`,
+    impact: `Review ${recipients.length} safe previous one-time customer${recipients.length === 1 ? "" : "s"} who have not rebooked recently to help recover ${jobsNeeded} job${jobsNeeded === 1 ? "" : "s"}.`,
     eligibleCount: recipients.length,
     excludedCount: input.exclusions.length,
     excludedReasons: Array.from(new Set(input.exclusions)).slice(0, 4),
     recipients,
     draftMessage: "Hi! We have availability tomorrow and wanted to see whether you would like to get another cleaning scheduled. Reply here and we’ll help find a time that works for you.",
     targetDescription: "safe previous one-time customers who have not rebooked recently",
-    details: [`Verified scheduled jobs: ${input.bookedJobs} of ${DAILY_JOB_TARGET} target.`, `This opportunity needs ${jobsNeeded} additional job${jobsNeeded === 1 ? "" : "s"} to reach the target.`, "Recipients are rechecked immediately before sending."],
+    details: [`Verified scheduled jobs: ${input.bookedJobs} of ${DAILY_JOB_TARGET} target.`, `Goal: recover ${jobsNeeded} additional job${jobsNeeded === 1 ? "" : "s"} to reach the target.`, `Review pool: up to ${RECIPIENT_LIMIT} safe former one-time customers.`, "Recipients are rechecked immediately before sending."],
     source: { jobDate: input.tomorrow },
   };
 }
