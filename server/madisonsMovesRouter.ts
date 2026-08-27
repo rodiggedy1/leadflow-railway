@@ -10,7 +10,7 @@ import { cleanerJobs, opsChatMessages, smsOptOuts } from "../drizzle/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { dismissMadisonMove, listMadisonMoveHistory, listMadisonMoves, restoreMadisonMove, setProtectTomorrowChecklistItem, type MadisonMoveKind } from "./madison/moves";
 
-const kindSchema = z.enum(["protect_tomorrow", "save_cancellation", "fill_capacity", "recover_qualified_leads"]);
+const kindSchema = z.enum(["protect_tomorrow", "save_cancellation", "fill_capacity", "recover_qualified_leads", "smart_upsell"]);
 
 export function selectLiveMoveRecipients<T extends { name: string; phone: string }>(requested: T[], moveRecipients: T[]) {
   const allowed = new Map(moveRecipients.map((recipient) => [normalizePhoneLegacy(recipient.phone), recipient]));

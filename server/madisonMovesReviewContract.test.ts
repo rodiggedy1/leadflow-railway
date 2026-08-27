@@ -78,4 +78,14 @@ describe("Madison’s Moves review-first contract", () => {
     expect(card).toContain("Last booking:");
     expect(card).toContain("formatLastBookingDate");
   });
+
+  it("adds a review-first Smart Upsell only from the verified current booking service and extras", () => {
+    expect(router).toContain('"smart_upsell"');
+    expect(panel).toContain("smart_upsell: \"Smart upsell\"");
+    const upsells = fs.readFileSync(path.join(root, "server", "madison", "smartUpsells.ts"), "utf8");
+    expect(upsells).toContain("clean_inside_oven");
+    expect(upsells).toContain("isStandardOrRegularCleaning");
+    expect(upsells).toContain("selected extras could not be verified");
+    expect(upsells).toContain("Recipients are rechecked immediately before sending.");
+  });
 });
