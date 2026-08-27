@@ -1,15 +1,12 @@
-import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import {
   cleanerJobs,
-  completedJobs,
   conversationSessions,
   opsChatMessages,
-  reactivationContacts,
   smsOptOuts,
 } from "../../drizzle/schema";
 import { computeReadinessSummary, type ReadinessSummary } from "./readinessService";
 import { normalizePhoneLegacy } from "../utils/phone";
-import { isRecurringFrequency } from "../alwaysOnEngine";
 
 export type MadisonMoveKind = "protect_tomorrow" | "save_cancellation" | "fill_capacity" | "recover_qualified_leads";
 export type MadisonMoveDetailItem = { key: string; label: string; resolved: boolean };
@@ -43,12 +40,7 @@ type MadisonMovesDependencies = {
   storedMoveRows?: (db: Db) => Promise<StoredMoveRow[]>;
   computeReadinessSummary?: typeof computeReadinessSummary;
   eligibleQualifiedLeads?: (db: Db, options?: { area?: string }) => Promise<{ recipients: MadisonMoveRecipient[]; exclusions: string[] }>;
-  underTargetCapacityDays?: (db: Db, dates: string[]) => Promise<CapacityDay[]>;
-  eligiblePastOneTimeCustomers?: (db: Db) => Promise<{ recipients: MadisonMoveRecipient[]; exclusions: string[] }>;
 };
-type CapacityDay = { date: string; bookedJobs: number; jobsNeeded: number };
-const DAILY_JOB_TARGET = 30;
-const MAX_CAPACITY_RECIPIENTS = 30;
 const inactiveLeadStages = new Set(["COLD", "LOST", "QUALITY_RATING_DONE", "REVIEW_REBOOKING_DONE"]);
 const DAY_MS = 86_400_000;
 
@@ -138,78 +130,6 @@ async function eligibleQualifiedLeads(db: Db, options?: { area?: string }) {
     valid.push({ name: row.leadName?.trim() || "Customer", phone, reason: options?.area ? "Qualified quote lead in the opening’s area" : "Qualified quote lead with no booking" });
   }
   return { recipients: valid.slice(0, 12), exclusions };
-}
-
-/** Counts distinct active bookings for each requested date; it does not infer capacity from teams or routes. */
-async function underTargetCapacityDays(db: Db, dates: string[]): Promise<CapacityDay[]> {
-  if (dates.length === 0) return [];
-  const rows = await db.select({ id: cleanerJobs.id, bookingId: cleanerJobs.bookingId, jobDate: cleanerJobs.jobDate })
-    .from(cleanerJobs)
-    .where(and(inArray(cleanerJobs.jobDate, dates), sql`${cleanerJobs.bookingStatus} NOT IN ('cancelled', 'rescheduled')`));
-  const bookingsByDate = new Map(dates.map((date) => [date, new Set<string>()]));
-  for (const row of rows) bookingsByDate.get(row.jobDate)?.add(String(row.bookingId ?? row.id));
-  return dates.map((date) => {
-    const bookedJobs = bookingsByDate.get(date)?.size ?? 0;
-    return { date, bookedJobs, jobsNeeded: Math.max(DAILY_JOB_TARGET - bookedJobs, 0) };
-  });
-}
-
-/** Uses only the existing curated reactivation pool: valid, lapsed one-time customers with no detected newer booking. */
-async function eligiblePastOneTimeCustomers(db: Db): Promise<{ recipients: MadisonMoveRecipient[]; exclusions: string[] }> {
-  const sevenDaysAgo = new Date(Date.now() - 7 * DAY_MS);
-  const [{ stops, complaints, activeCs }, rows, recentCampaignRows] = await Promise.all([
-    safetySets(db),
-    db.select({ phone: completedJobs.phone, name: completedJobs.name, firstName: completedJobs.firstName, frequency: completedJobs.frequency, jobDate: completedJobs.jobDate, status: completedJobs.status })
-      .from(completedJobs)
-      .where(and(eq(completedJobs.reactivationEligible, 1), eq(completedJobs.phoneInvalid, 0), isNotNull(completedJobs.phone), isNotNull(completedJobs.jobDate)))
-      .orderBy(desc(completedJobs.jobDate)).limit(1000),
-    db.select({ phone: reactivationContacts.phone }).from(reactivationContacts)
-      .where(and(isNotNull(reactivationContacts.sentAt), gte(reactivationContacts.sentAt, sevenDaysAgo))),
-  ]);
-  const recentlyMessaged = new Set(recentCampaignRows.map((row) => normalizePhoneLegacy(row.phone ?? "")).filter(Boolean));
-  const recipients: MadisonMoveRecipient[] = [];
-  const exclusions: string[] = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    const phone = normalizePhoneLegacy(row.phone ?? "");
-    let reason = "";
-    if (!phone) reason = "invalid phone";
-    else if (seen.has(phone)) reason = "duplicate customer";
-    else if (row.status === "OPTED_OUT" || stops.has(phone)) reason = "STOP opt-out";
-    else if (complaints.has(phone)) reason = "open complaint";
-    else if (activeCs.has(phone)) reason = "active customer-service conversation";
-    else if (recentlyMessaged.has(phone)) reason = "contacted in a campaign within 7 days";
-    else if (isRecurringFrequency(row.frequency)) reason = "not a previous one-time customer";
-    if (reason) { exclusions.push(reason); continue; }
-    seen.add(phone);
-    recipients.push({ name: row.firstName?.trim() || row.name?.trim() || "Customer", phone, reason: "Previous one-time customer with no newer booking" });
-  }
-  return { recipients, exclusions };
-}
-
-function formatCapacityDate(date: string) {
-  return new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" });
-}
-
-/** Produces one card for tomorrow only, after confirming the stored schedule is below the approved 30-job target. */
-export function buildTomorrowCapacityMove(input: { day: CapacityDay; recipients: MadisonMoveRecipient[]; exclusions: string[]; stored: Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }> }): MadisonMove | null {
-  if (input.day.jobsNeeded <= 0) return null;
-  const moveKey = `capacity:${input.day.date}`;
-  const status = statusFor(input.stored, moveKey);
-  const recipients = input.recipients.slice(0, Math.min(input.day.jobsNeeded, MAX_CAPACITY_RECIPIENTS));
-  if (status !== "ready" || recipients.length === 0) return null;
-  const dayLabel = formatCapacityDate(input.day.date);
-  return {
-    id: input.stored.get(moveKey)?.id, moveKey, kind: "fill_capacity", priority: "high",
-    headline: `Fill capacity on ${dayLabel}`,
-    businessReason: `${dayLabel} has ${input.day.bookedJobs} verified scheduled job${input.day.bookedJobs === 1 ? "" : "s"}, which is ${input.day.jobsNeeded} below your ${DAILY_JOB_TARGET}-job target.`,
-    impact: `Review ${recipients.length} safe previous one-time customer${recipients.length === 1 ? "" : "s"} who have not rebooked recently.`,
-    eligibleCount: recipients.length, excludedCount: input.exclusions.length, excludedReasons: Array.from(new Set(input.exclusions)).slice(0, 4), recipients,
-    draftMessage: "Hi! We have availability tomorrow and wanted to see whether you would like to get another cleaning scheduled. Reply here and we’ll help find a time that works for you.",
-    targetDescription: "safe previous one-time customers who have not rebooked recently", status,
-    source: { jobDate: input.day.date },
-    details: [`Verified scheduled jobs: ${input.day.bookedJobs} of ${DAILY_JOB_TARGET} target.`, `This card needs ${input.day.jobsNeeded} additional job${input.day.jobsNeeded === 1 ? "" : "s"} to reach the target.`, "Recipients are from the existing reactivation-eligible one-time customer pool and are rechecked before sending."],
-  };
 }
 
 /** Only an observed active booking becoming cancelled/rescheduled may create an opening move. */
@@ -374,8 +294,6 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
   const loadStoredMoveRows = dependencies.storedMoveRows ?? storedMoveRows;
   const getReadinessSummary = dependencies.computeReadinessSummary ?? computeReadinessSummary;
   const getEligibleQualifiedLeads = dependencies.eligibleQualifiedLeads ?? eligibleQualifiedLeads;
-  const getUnderTargetCapacityDays = dependencies.underTargetCapacityDays ?? underTargetCapacityDays;
-  const getEligiblePastOneTimeCustomers = dependencies.eligiblePastOneTimeCustomers ?? eligiblePastOneTimeCustomers;
   const rows = await loadStoredMoveRows(db);
   const stored = new Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>();
   for (const row of rows) {
@@ -404,18 +322,6 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
       targetDescription: "qualified leads", status: recoveryStatus,
     });
   }
-
-  const [capacityDays, pastOneTimeCustomers] = await Promise.all([
-    getUnderTargetCapacityDays(db, [tomorrow]),
-    getEligiblePastOneTimeCustomers(db),
-  ]);
-  const tomorrowCapacity = buildTomorrowCapacityMove({
-    day: capacityDays[0] ?? { date: tomorrow, bookedJobs: DAILY_JOB_TARGET, jobsNeeded: 0 },
-    recipients: pastOneTimeCustomers.recipients,
-    exclusions: pastOneTimeCustomers.exclusions,
-    stored,
-  });
-  if (tomorrowCapacity) moves.push(tomorrowCapacity);
 
   for (const [moveKey, row] of stored) {
     if (row.cardStatus !== "active" || row.meta.kind !== "save_cancellation") continue;

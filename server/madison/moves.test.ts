@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCancellationOpeningMoves, buildFillCapacityMove, buildProtectTomorrowMove, buildTomorrowCapacityMove, listMadisonMoveHistory, listMadisonMoves, shouldObserveCancellationTransition } from "./moves";
+import { buildCancellationOpeningMoves, buildFillCapacityMove, buildProtectTomorrowMove, listMadisonMoveHistory, listMadisonMoves, shouldObserveCancellationTransition } from "./moves";
 
 describe("Madison’s Moves cancellation observation", () => {
   it("records only an active booking becoming cancelled", () => {
@@ -55,8 +55,6 @@ describe("Madison’s Moves Fill Capacity", () => {
         if (options?.area) expect(options.area).toBe("zip:20001");
         return { recipients: [lead], exclusions: [] };
       },
-      underTargetCapacityDays: async () => [],
-      eligiblePastOneTimeCustomers: async () => ({ recipients: [], exclusions: [] }),
     });
     expect(moves.map((move) => move.kind)).toEqual(expect.arrayContaining(["save_cancellation", "fill_capacity"]));
     expect(moves.find((move) => move.kind === "fill_capacity")).toMatchObject({ moveKey: "fill:cancel:714:2026-08-28", recipients: [lead] });
@@ -73,42 +71,6 @@ describe("Madison’s Moves Fill Capacity", () => {
       }],
     });
     expect(history).toMatchObject({ id: 11, status: "dismissed", headline: "2 verified items could affect tomorrow", details: ["Taylor is unassigned."] });
-  });
-  it("builds one review-first tomorrow capacity move only when the verified job count is below the 30-job target", () => {
-    const pastCustomers = [
-      { name: "Alex", phone: "+12025550101", reason: "Previous one-time customer with no newer booking" },
-      { name: "Blair", phone: "+12025550102", reason: "Previous one-time customer with no newer booking" },
-      { name: "Casey", phone: "+12025550103", reason: "Previous one-time customer with no newer booking" },
-    ];
-    const move = buildTomorrowCapacityMove({
-      day: { date: "2026-08-28", bookedJobs: 28, jobsNeeded: 2 },
-      recipients: pastCustomers,
-      exclusions: ["STOP opt-out"],
-      stored: new Map(),
-    });
-    expect(move).toMatchObject({ kind: "fill_capacity", moveKey: "capacity:2026-08-28", eligibleCount: 2, excludedCount: 1 });
-    expect(move?.recipients.map((recipient) => recipient.name)).toEqual(["Alex", "Blair"]);
-    expect(move?.businessReason).toContain("28 verified scheduled jobs");
-    expect(buildTomorrowCapacityMove({ day: { date: "2026-08-28", bookedJobs: 30, jobsNeeded: 0 }, recipients: pastCustomers, exclusions: [], stored: new Map() })).toBeNull();
-  });
-
-  it("keeps a dismissed tomorrow capacity move out of Ready even if its day remains below target", () => {
-    const stored = new Map([["capacity:2026-08-28", { id: 14, cardStatus: "dismissed", meta: { outcome: "dismissed" } }]]);
-    expect(buildTomorrowCapacityMove({ day: { date: "2026-08-28", bookedJobs: 12, jobsNeeded: 18 }, recipients: [lead], exclusions: [], stored })).toBeNull();
-  });
-
-  it("surfaces the tomorrow capacity move through the live list only with both an under-target day and a safe former one-time customer", async () => {
-    const pastCustomer = { name: "Robin", phone: "+12025550188", reason: "Previous one-time customer with no newer booking" };
-    const moves = await listMadisonMoves({} as any, {
-      storedMoveRows: async () => [],
-      computeReadinessSummary: async () => ({ totalIssues: 0 }) as any,
-      eligibleQualifiedLeads: async () => ({ recipients: [], exclusions: [] }),
-      underTargetCapacityDays: async (_db, [tomorrow]) => [{ date: tomorrow, bookedJobs: 26, jobsNeeded: 4 }],
-      eligiblePastOneTimeCustomers: async () => ({ recipients: [pastCustomer], exclusions: ["STOP opt-out"] }),
-    });
-    expect(moves.find((move) => move.moveKey.startsWith("capacity:"))).toMatchObject({
-      kind: "fill_capacity", eligibleCount: 1, excludedCount: 1, recipients: [pastCustomer],
-    });
   });
 });
 
