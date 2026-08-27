@@ -12,6 +12,16 @@ import { dismissMadisonMove, listMadisonMoveHistory, listMadisonMoves, type Madi
 
 const kindSchema = z.enum(["protect_tomorrow", "save_cancellation", "fill_capacity", "recover_qualified_leads"]);
 
+export function selectLiveMoveRecipients<T extends { name: string; phone: string }>(requested: T[], moveRecipients: T[]) {
+  const allowed = new Map(moveRecipients.map((recipient) => [normalizePhoneLegacy(recipient.phone), recipient]));
+  return requested.map((recipient) => ({ ...recipient, normalized: normalizePhoneLegacy(recipient.phone) }))
+    .filter((recipient) => recipient.normalized && allowed.has(recipient.normalized));
+}
+
+export function excludeStopOptedRecipients<T extends { normalized?: string | null }>(recipients: T[], stoppedPhones: Set<string>) {
+  return recipients.filter((recipient) => !stoppedPhones.has(recipient.normalized ?? ""));
+}
+
 export const madisonMovesRouter = router({
   list: agentProcedure.query(async () => {
     const db = await getDb();
@@ -41,11 +51,12 @@ export const madisonMovesRouter = router({
     const liveMoves = await listMadisonMoves(db);
     const move = liveMoves.find((candidate) => candidate.moveKey === input.moveKey);
     if (!move || !move.draftMessage) throw new TRPCError({ code: "BAD_REQUEST", message: "This opportunity is no longer available for outreach." });
-    const allowed = new Map(move.recipients.map((recipient) => [normalizePhoneLegacy(recipient.phone), recipient]));
-    const requested = input.recipients.map((recipient) => ({ ...recipient, normalized: normalizePhoneLegacy(recipient.phone) })).filter((recipient) => recipient.normalized && allowed.has(recipient.normalized));
+    const requested = selectLiveMoveRecipients(input.recipients, move.recipients);
     if (requested.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No selected recipients remain eligible." });
     const stopRows = await db.select({ phone: smsOptOuts.phone }).from(smsOptOuts).where(inArray(smsOptOuts.phone, requested.map((recipient) => recipient.normalized!)));
     const stops = new Set(stopRows.map((row) => row.phone));
+    const sendable = excludeStopOptedRecipients(requested, stops);
+    if (sendable.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No selected recipients remain eligible after STOP protection." });
     const results: Array<{ name: string; phone: string; success: boolean; error?: string }> = [];
     for (const recipient of requested) {
       if (stops.has(recipient.normalized!)) { results.push({ name: recipient.name, phone: recipient.phone, success: false, error: "Customer opted out via STOP" }); continue; }

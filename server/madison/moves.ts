@@ -195,6 +195,31 @@ export function buildFillCapacityMove(input: {
   };
 }
 
+/** Builds the two related move cards from one persisted, verified cancellation opening. */
+export function buildCancellationOpeningMoves(input: {
+  parentMoveKey: string;
+  source: Record<string, any>;
+  recipients: MadisonMoveRecipient[];
+  exclusions: string[];
+  fillStatus: "ready" | "dismissed" | "sent";
+  cancellationId?: number;
+  fillId?: number;
+}) {
+  const cancellation: MadisonMove = {
+    id: input.cancellationId, moveKey: input.parentMoveKey, kind: "save_cancellation", priority: "high",
+    headline: `A verified cancellation opened ${input.source.jobDate ?? "a service window"}`,
+    businessReason: `Launch27 changed booking ${input.source.bookingId ?? ""} from ${input.source.previousStatus ?? "active"} to ${input.source.nextStatus ?? "cancelled"}.`,
+    impact: input.recipients.length > 0 ? `Review ${input.recipients.length} same-area qualified lead${input.recipients.length === 1 ? "" : "s"} to help refill the opening.` : "The opening is verified; no safe same-area lead is currently eligible.",
+    eligibleCount: input.recipients.length, excludedCount: input.exclusions.length, excludedReasons: Array.from(new Set(input.exclusions)).slice(0, 4),
+    recipients: input.recipients,
+    draftMessage: input.recipients.length ? "Hi! We have an opening available and wanted to see whether you would still like to get your cleaning scheduled. Reply here and we’ll help find the best time." : undefined,
+    targetDescription: "qualified leads near this opening", status: "ready", source: input.source,
+    details: [`Opening source: booking ${input.source.bookingId ?? "unknown"} changed from ${input.source.previousStatus ?? "active"} to ${input.source.nextStatus ?? "cancelled"}.`, ...(input.recipients.length === 0 ? ["No same-area lead clears all current contact safeguards."] : [])],
+  };
+  const fill = buildFillCapacityMove({ parentMoveKey: input.parentMoveKey, source: input.source, recipients: input.recipients, exclusions: input.exclusions, status: input.fillStatus, id: input.fillId });
+  return { cancellation, fill };
+}
+
 export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
   const rows = await storedMoveRows(db);
   const stored = new Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>();
@@ -239,21 +264,11 @@ export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
     if (row.cardStatus !== "active" || row.meta.kind !== "save_cancellation") continue;
     const source = row.meta.source ?? {};
     const candidates = await eligibleQualifiedLeads(db, { area: locality(source.address) });
-    moves.push({
-      id: row.id, moveKey, kind: "save_cancellation", priority: "high",
-      headline: `A verified cancellation opened ${source.jobDate ?? "a service window"}`,
-      businessReason: `Launch27 changed booking ${source.bookingId ?? ""} from ${source.previousStatus ?? "active"} to ${source.nextStatus ?? "cancelled"}.`,
-      impact: candidates.recipients.length > 0 ? `Review ${candidates.recipients.length} same-area qualified lead${candidates.recipients.length === 1 ? "" : "s"} to help refill the opening.` : "The opening is verified; no safe same-area lead is currently eligible.",
-      eligibleCount: candidates.recipients.length, excludedCount: candidates.exclusions.length, excludedReasons: Array.from(new Set(candidates.exclusions)).slice(0, 4),
-      recipients: candidates.recipients,
-      draftMessage: candidates.recipients.length ? "Hi! We have an opening available and wanted to see whether you would still like to get your cleaning scheduled. Reply here and we’ll help find the best time." : undefined,
-      targetDescription: "qualified leads near this opening", status: "ready", source,
-      details: [`Opening source: booking ${source.bookingId ?? "unknown"} changed from ${source.previousStatus ?? "active"} to ${source.nextStatus ?? "cancelled"}.`, ...(candidates.recipients.length === 0 ? ["No same-area lead clears all current contact safeguards."] : [])],
-    });
     const fillKey = `fill:${moveKey}`;
     const fillStatus = statusFor(stored, fillKey);
-    const fillMove = buildFillCapacityMove({ parentMoveKey: moveKey, source, recipients: candidates.recipients, exclusions: candidates.exclusions, status: fillStatus, id: stored.get(fillKey)?.id });
-    if (fillMove) moves.push(fillMove);
+    const pair = buildCancellationOpeningMoves({ parentMoveKey: moveKey, source, recipients: candidates.recipients, exclusions: candidates.exclusions, fillStatus, cancellationId: row.id, fillId: stored.get(fillKey)?.id });
+    moves.push(pair.cancellation);
+    if (pair.fill) moves.push(pair.fill);
   }
   return moves.sort((a, b) => (b.priority === "urgent" ? 3 : b.priority === "high" ? 2 : 1) - (a.priority === "urgent" ? 3 : a.priority === "high" ? 2 : 1));
 }
