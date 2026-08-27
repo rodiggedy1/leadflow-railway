@@ -6,19 +6,25 @@ const root = path.resolve(import.meta.dirname, "..");
 const router = fs.readFileSync(path.join(root, "server", "madisonsMovesRouter.ts"), "utf8");
 const panel = fs.readFileSync(path.join(root, "client", "src", "components", "MadisonsMovesPanel.tsx"), "utf8");
 const moves = fs.readFileSync(path.join(root, "server", "madison", "moves.ts"), "utf8");
+const sharedBulkSender = fs.readFileSync(path.join(root, "server", "aiConciergeRouter.ts"), "utf8");
 
 describe("Madison’s Moves review-first contract", () => {
-  it("uses an explicit send mutation and rechecks the live move before sending", () => {
-    expect(router).toContain("send: agentProcedure");
-    expect(router).toContain("export async function sendMadisonMove");
-    expect(router).toContain("const liveMoves = await dependencies.listMoves(db)");
-    expect(router).toContain("Customer opted out via STOP");
-  });
-
-  it("keeps the right-column contact action behind the shared review card", () => {
+  it("routes the right-column contact action through Madison’s server-owned shared SMS handoff", () => {
     expect(panel).toContain("<BulkSmsConfirmCard");
     expect(panel).toContain("onReviewSend={async");
+    expect(panel).toContain("madisonMoves.send.useMutation");
+    expect(sharedBulkSender).toContain("sendBulkSms: agentProcedure");
+    expect(sharedBulkSender).toContain("Customer opted out via STOP");
+    expect(sharedBulkSender).toContain("Persistence failure must NOT cause the action to appear failed.");
     expect(panel).toContain("Review & send");
+  });
+
+  it("records a send-started Madison state before the first carrier call and contains final persistence failure", () => {
+    expect(router).toContain('outcome: "sending"');
+    expect(router).toContain("sendStartedAt");
+    expect(router).toContain("Failed to finalize send state after SMS delivery");
+    expect(router).toContain("statePersistenceError");
+    expect(moves).toContain('row.meta.outcome === "sending"');
   });
 
   it("moves a Not now dismissal directly into persisted History", () => {

@@ -32,7 +32,7 @@ export type MadisonMove = {
   detailSections?: Array<{ heading: string; items: MadisonMoveDetailItem[] }>;
   remainingIssueCount?: number;
   completedIssueCount?: number;
-  status: "ready" | "dismissed" | "sent" | "completed";
+  status: "ready" | "dismissed" | "sent" | "completed" | "sending";
   source?: { bookingId?: number; jobDate?: string; address?: string; serviceDateTime?: string | null; parentMoveKey?: string };
 };
 
@@ -176,7 +176,7 @@ export async function recordCancellationObservation(db: Db, input: {
 function statusFor(stored: Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>, moveKey: string) {
   const row = stored.get(moveKey);
   if (!row) return "ready" as const;
-  return row.meta.outcome === "sent" ? "sent" as const : row.meta.outcome === "completed" ? "completed" as const : row.cardStatus === "dismissed" ? "dismissed" as const : "ready" as const;
+  return row.meta.outcome === "sent" || row.meta.outcome === "sending" ? "sent" as const : row.meta.outcome === "completed" ? "completed" as const : row.cardStatus === "dismissed" ? "dismissed" as const : "ready" as const;
 }
 
 export function buildFillCapacityMove(input: {
@@ -354,7 +354,7 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
 
 export async function listMadisonMoveHistory(db: Db, dependencies: Pick<MadisonMovesDependencies, "storedMoveRows"> = {}): Promise<MadisonMove[]> {
   const rows = await (dependencies.storedMoveRows ?? storedMoveRows)(db);
-  return rows.filter((row: any) => ["dismissed", "sent", "completed"].includes(parseMeta(row.metadata).outcome)).map((row: any) => {
+  return rows.filter((row: any) => ["dismissed", "sending", "sent", "completed"].includes(parseMeta(row.metadata).outcome)).map((row: any) => {
     const meta = parseMeta(row.metadata);
     const snapshot = meta.snapshot as Partial<MadisonMove> | undefined;
     if (snapshot?.moveKey && snapshot.kind && snapshot.headline && snapshot.businessReason && snapshot.impact) {
@@ -366,7 +366,7 @@ export async function listMadisonMoveHistory(db: Db, dependencies: Pick<MadisonM
         eligibleCount: snapshot.eligibleCount ?? 0,
         excludedCount: snapshot.excludedCount ?? 0,
         details: snapshot.details ?? [],
-        status: meta.outcome === "sent" ? "sent" : meta.outcome === "completed" ? "completed" : "dismissed",
+        status: meta.outcome === "sending" ? "sending" : meta.outcome === "sent" ? "sent" : meta.outcome === "completed" ? "completed" : "dismissed",
       } as MadisonMove;
     }
     return {
@@ -375,13 +375,13 @@ export async function listMadisonMoveHistory(db: Db, dependencies: Pick<MadisonM
       kind: meta.kind ?? "recover_qualified_leads",
       priority: "normal",
       headline: row.body,
-      businessReason: meta.outcome === "sent" ? `Sent to ${meta.sentCount ?? 0} customer${meta.sentCount === 1 ? "" : "s"}.` : "Set aside for now.",
+      businessReason: meta.outcome === "sending" ? "A send was started and is retained in history to prevent an automatic duplicate retry." : meta.outcome === "sent" ? `Sent to ${meta.sentCount ?? 0} customer${meta.sentCount === 1 ? "" : "s"}.` : "Set aside for now.",
       impact: "Stored for review; no further customer action occurs automatically.",
       eligibleCount: 0,
       excludedCount: 0,
       excludedReasons: [],
       recipients: [],
-      status: meta.outcome === "sent" ? "sent" : meta.outcome === "completed" ? "completed" : "dismissed",
+      status: meta.outcome === "sending" ? "sending" : meta.outcome === "sent" ? "sent" : meta.outcome === "completed" ? "completed" : "dismissed",
       details: [],
     };
   });
