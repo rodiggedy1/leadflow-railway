@@ -17,8 +17,9 @@ import { and, eq, gte, lte, ne, isNotNull, inArray, sql } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerJobCustomRules } from "../drizzle/schema";
+import { cleanerJobs, cleanerJobCustomRules, cleanerProfiles } from "../drizzle/schema";
 import { calculateCleanerJobPayroll, isNewPayrollPeriod } from "./payrollCalculator";
+import { buildHistoricalPayrollRecoveryPlan, PAYROLL_RECOVERY_DATES, PAYROLL_RECOVERY_WEEK_START } from "./payrollHistoricalRecovery";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -447,6 +448,50 @@ export const teamPayRouter = router({
       rows.sort((a, b) => b.finalPay - a.finalPay);
 
       return { rows, weekStart: input.weekStart, weekEnd };
+    }),
+
+  /**
+   * Read-only review for the one approved missing historical payroll week.
+   * It does not insert/update/delete any database record or contact anyone.
+   */
+  previewHistoricalPayrollRecovery: agentProcedure
+    .input(z.object({ weekStart: z.literal(PAYROLL_RECOVERY_WEEK_START) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const weekEnd = PAYROLL_RECOVERY_DATES[PAYROLL_RECOVERY_DATES.length - 1];
+      const [profiles, existingJobs] = await Promise.all([
+        db
+          .select({
+            id: cleanerProfiles.id,
+            name: cleanerProfiles.name,
+            payPercent: cleanerProfiles.payPercent,
+            launch27TeamId: cleanerProfiles.launch27TeamId,
+          })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.isActive, 1)),
+        db
+          .select({ bookingId: cleanerJobs.bookingId, cleanerProfileId: cleanerJobs.cleanerProfileId })
+          .from(cleanerJobs)
+          .where(and(gte(cleanerJobs.jobDate, input.weekStart), lte(cleanerJobs.jobDate, weekEnd))),
+      ]);
+
+      const { getCompletedBookingsForDate } = await import("./launch27");
+      const bookingsByDate = new Map<string, Awaited<ReturnType<typeof getCompletedBookingsForDate>>["bookings"]>();
+      const fetchErrors: Array<{ date: string; message: string }> = [];
+      for (const date of PAYROLL_RECOVERY_DATES) {
+        const result = await getCompletedBookingsForDate(date, { includeAll: true });
+        if (result.error) {
+          fetchErrors.push({ date, message: result.error });
+          bookingsByDate.set(date, []);
+          continue;
+        }
+        bookingsByDate.set(date, result.bookings);
+      }
+
+      const plan = buildHistoricalPayrollRecoveryPlan({ bookingsByDate, profiles, existingJobs });
+      return { ...plan, fetchErrors, writeEnabled: false as const };
     }),
 
   /**

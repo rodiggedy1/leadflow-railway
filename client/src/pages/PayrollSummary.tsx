@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { ArrowLeft, Download, ChevronLeft, ChevronRight, ShieldCheck, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, ChevronLeft, ChevronRight, ShieldCheck, Loader2, SearchCheck } from "lucide-react";
 import cx from "clsx";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -478,6 +478,12 @@ export default function PayrollSummary() {
 
   const { data, isLoading, error } = trpc.teamPay.getPayrollSummary.useQuery({ weekStart });
   const {
+    mutate: previewHistoricalPayrollRecovery,
+    data: recoveryReview,
+    isPending: isRecoveryReviewLoading,
+    error: recoveryReviewError,
+  } = trpc.teamPay.previewHistoricalPayrollRecovery.useMutation();
+  const {
     mutate: loadTeamDetail,
     data: teamDetail,
     isPending: isTeamDetailLoading,
@@ -726,8 +732,43 @@ export default function PayrollSummary() {
               Failed to load payroll data.
             </div>
           ) : rows.length === 0 ? (
-            <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
-              No team data for this period.
+            <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center text-sm text-slate-500">
+              <span>No team data for this period.</span>
+              {weekStart === "2026-08-16" && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl gap-2 bg-white"
+                    onClick={() => previewHistoricalPayrollRecovery({ weekStart: "2026-08-16" })}
+                    disabled={isRecoveryReviewLoading}
+                  >
+                    {isRecoveryReviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SearchCheck className="h-4 w-4" />}
+                    {isRecoveryReviewLoading ? "Reviewing source data…" : "Review missing-data recovery"}
+                  </Button>
+                  <span className="max-w-xl text-xs leading-5 text-slate-400">
+                    This is read-only. It checks Launch27 and the stored payroll rows but does not restore, change, or contact anyone.
+                  </span>
+                  {recoveryReviewError && (
+                    <p role="alert" className="max-w-xl text-xs text-rose-600">Could not review the recovery source data: {recoveryReviewError.message}</p>
+                  )}
+                  {recoveryReview && (
+                    <div className="max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-left text-sm text-amber-950">
+                      <p className="font-semibold">Read-only recovery review</p>
+                      <p className="mt-1 text-amber-900">
+                        Launch27 bookings: {recoveryReview.sourceBookingCount} · Active: {recoveryReview.activeBookingCount} · Already stored: {recoveryReview.existingJobCount} · Missing payroll rows that could be restored: {recoveryReview.insertableJobCount}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-800">
+                        Blocked without changing any profile: {recoveryReview.blockedMissingProfileCount + recoveryReview.blockedAmbiguousProfileCount + recoveryReview.blockedProfileConflictCount}. Excluded as cancelled, rescheduled, or unassigned: {recoveryReview.skippedInactiveBookingCount + recoveryReview.skippedUnassignedBookingCount}.
+                      </p>
+                      {recoveryReview.fetchErrors.length > 0 && (
+                        <p role="alert" className="mt-2 text-xs font-medium text-rose-700">Source fetch could not complete for {recoveryReview.fetchErrors.length} day(s); no recovery should run until those dates are available.</p>
+                      )}
+                      <p className="mt-3 text-xs font-medium text-amber-900">No payroll data was restored by this review.</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
