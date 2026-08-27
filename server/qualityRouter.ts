@@ -853,6 +853,21 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           }
           await db.update(cleanerJobs).set(syncData).where(eq(cleanerJobs.id, existing.id));
           updated++;
+          // Madison's Moves observes only an existing active → cancelled/rescheduled transition.
+          // It records the verified opening and never changes a booking, session, or customer state.
+          if (previousStatus !== booking.bookingStatus && ["cancelled", "rescheduled"].includes(booking.bookingStatus)) {
+            const { recordCancellationObservation } = await import("./madison/moves");
+            await recordCancellationObservation(db, {
+              bookingId: booking.id,
+              jobDate: dateStr,
+              jobId: existing.id,
+              customerName: booking.fullName,
+              address: booking.address || null,
+              serviceDateTime: booking.serviceDate || null,
+              previousStatus,
+              nextStatus: booking.bookingStatus,
+            });
+          }
           // If L27 is marking this job as rescheduled (or cancelled), remove its schedule_assignments
           // row immediately. The job will be hidden by ne(bookingStatus, 'rescheduled') filters, but
           // the orphan assignment row would otherwise persist until the next optimize run.
@@ -932,11 +947,11 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
     const freshBookingIds = bookings.map((b) => b.id);
     const staleRows = freshBookingIds.length > 0
       ? await db
-          .select({ id: cleanerJobs.id, customerName: cleanerJobs.customerName })
+          .select({ id: cleanerJobs.id, bookingId: cleanerJobs.bookingId, customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress, serviceDateTime: cleanerJobs.serviceDateTime, bookingStatus: cleanerJobs.bookingStatus })
           .from(cleanerJobs)
           .where(and(eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.bookingId, freshBookingIds)))
       : await db
-          .select({ id: cleanerJobs.id, customerName: cleanerJobs.customerName })
+          .select({ id: cleanerJobs.id, bookingId: cleanerJobs.bookingId, customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress, serviceDateTime: cleanerJobs.serviceDateTime, bookingStatus: cleanerJobs.bookingStatus })
           .from(cleanerJobs)
           .where(eq(cleanerJobs.jobDate, dateStr));
     for (const row of staleRows) {
@@ -971,6 +986,17 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           await db.update(cleanerJobs)
             .set({ bookingStatus: "rescheduled" })
             .where(eq(cleanerJobs.id, row.id));
+          const { recordCancellationObservation } = await import("./madison/moves");
+          await recordCancellationObservation(db, {
+            bookingId: row.bookingId ?? row.id,
+            jobDate: dateStr,
+            jobId: row.id,
+            customerName: row.customerName ?? "Customer",
+            address: row.jobAddress,
+            serviceDateTime: row.serviceDateTime,
+            previousStatus: row.bookingStatus,
+            nextStatus: "rescheduled",
+          });
           await db.delete(scheduleAssignments)
             .where(eq(scheduleAssignments.cleanerJobId, row.id));
           console.log(`[StaleCleanup] Marked stale job ${row.id} (${row.customerName}) as rescheduled and removed schedule_assignments (has conf-call history, no matching new job on ${dateStr})`);

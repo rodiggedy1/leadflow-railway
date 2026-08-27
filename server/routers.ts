@@ -35,6 +35,7 @@ import { metricsRouter } from "./metricsRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { schedulingRouter } from "./schedulingRouter";
 import { opsChatRouter } from "./opsChatRouter";
+import { madisonMovesRouter } from "./madisonsMovesRouter";
 import { madisonRouter } from "./madisonRouter";
 import { followUpsRouter } from "./followUpsRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
@@ -102,6 +103,7 @@ const quoteFormSchema = z.object({
 
 export const appRouter = router({
   system: systemRouter,
+  madisonMoves: madisonMovesRouter,
   smsCampaign: smsCampaignRouter,
   gmail: gmailRouter,
   callMatrix: callMatrixRouter,
