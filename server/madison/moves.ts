@@ -6,6 +6,7 @@ import {
   smsOptOuts,
 } from "../../drizzle/schema";
 import { computeReadinessSummary, type ReadinessSummary } from "./readinessService";
+import { getTomorrowCapacityCandidate, type TomorrowCapacityCandidate } from "./tomorrowCapacity";
 import { normalizePhoneLegacy } from "../utils/phone";
 
 export type MadisonMoveKind = "protect_tomorrow" | "save_cancellation" | "fill_capacity" | "recover_qualified_leads";
@@ -40,6 +41,7 @@ type MadisonMovesDependencies = {
   storedMoveRows?: (db: Db) => Promise<StoredMoveRow[]>;
   computeReadinessSummary?: typeof computeReadinessSummary;
   eligibleQualifiedLeads?: (db: Db, options?: { area?: string }) => Promise<{ recipients: MadisonMoveRecipient[]; exclusions: string[] }>;
+  tomorrowCapacityCandidate?: (db: Db, tomorrow: string) => Promise<TomorrowCapacityCandidate | null>;
 };
 const inactiveLeadStages = new Set(["COLD", "LOST", "QUALITY_RATING_DONE", "REVIEW_REBOOKING_DONE"]);
 const DAY_MS = 86_400_000;
@@ -294,6 +296,7 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
   const loadStoredMoveRows = dependencies.storedMoveRows ?? storedMoveRows;
   const getReadinessSummary = dependencies.computeReadinessSummary ?? computeReadinessSummary;
   const getEligibleQualifiedLeads = dependencies.eligibleQualifiedLeads ?? eligibleQualifiedLeads;
+  const getTomorrowCapacity = dependencies.tomorrowCapacityCandidate ?? getTomorrowCapacityCandidate;
   const rows = await loadStoredMoveRows(db);
   const stored = new Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>();
   for (const row of rows) {
@@ -321,6 +324,11 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
       draftMessage: "Hi! We wanted to check back in—would you still like help getting your cleaning scheduled? We have availability and would be happy to find a time that works for you.",
       targetDescription: "qualified leads", status: recoveryStatus,
     });
+  }
+
+  const tomorrowCapacity = await getTomorrowCapacity(db, tomorrow);
+  if (tomorrowCapacity && statusFor(stored, tomorrowCapacity.moveKey) === "ready") {
+    moves.push({ ...tomorrowCapacity, kind: "fill_capacity", priority: "high", status: "ready" });
   }
 
   for (const [moveKey, row] of stored) {

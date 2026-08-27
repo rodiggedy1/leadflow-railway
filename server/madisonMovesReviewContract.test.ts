@@ -60,4 +60,13 @@ describe("Madison’s Moves review-first contract", () => {
     expect(moves).toContain('kind: "fill_capacity"');
     expect(moves).toContain('row.meta.kind !== "save_cancellation"');
   });
+
+  it("adds tomorrow capacity through a separate module without changing Protect Tomorrow builder code", () => {
+    expect(moves).toContain('import { getTomorrowCapacityCandidate');
+    expect(moves).toContain('const tomorrowCapacity = await getTomorrowCapacity');
+    const capacity = fs.readFileSync(path.join(root, "server", "madison", "tomorrowCapacity.ts"), "utf8");
+    expect(capacity).toContain("DAILY_JOB_TARGET = 30");
+    expect(capacity).toContain("reactivationEligible");
+    expect(capacity).toContain("contacted in a campaign within 7 days");
+  });
 });
