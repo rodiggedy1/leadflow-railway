@@ -59,6 +59,18 @@ export const madisonMovesRouter = router({
     if (stored) {
       const meta = { ...JSON.parse(stored.metadata ?? "{}"), outcome: sentCount ? "sent" : "failed", sentAt: Date.now(), sentCount };
       await db.update(opsChatMessages).set({ cardStatus: "dismissed", activeDedupKey: null, metadata: JSON.stringify(meta), lastActivityAt: Date.now() }).where(eq(opsChatMessages.id, stored.id));
+    } else {
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "madison_moves",
+        authorName: "Madison",
+        authorRole: "system",
+        body: `Madison move ${sentCount ? "sent" : "failed"}.`,
+        quickAction: "madisons_move",
+        metadata: JSON.stringify({ moveKey: input.moveKey, kind: move.kind, outcome: sentCount ? "sent" : "failed", sentAt: Date.now(), sentCount, source: move.source ?? null }),
+        cardStatus: "dismissed",
+        lastActivityAt: Date.now(),
+      });
     }
     return { message: sentCount ? `Sent to ${sentCount} customer${sentCount === 1 ? "" : "s"}.` : "No messages were sent.", results };
   }),

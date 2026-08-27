@@ -27,7 +27,7 @@ export type MadisonMove = {
   targetDescription?: string;
   details?: string[];
   status: "ready" | "dismissed" | "sent";
-  source?: { bookingId?: number; jobDate?: string; address?: string; serviceDateTime?: string | null };
+  source?: { bookingId?: number; jobDate?: string; address?: string; serviceDateTime?: string | null; parentMoveKey?: string };
 };
 
 type Db = any;
@@ -220,6 +220,22 @@ export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
       targetDescription: "qualified leads near this opening", status: "ready", source,
       details: [`Opening source: booking ${source.bookingId ?? "unknown"} changed from ${source.previousStatus ?? "active"} to ${source.nextStatus ?? "cancelled"}.`, ...(candidates.recipients.length === 0 ? ["No same-area lead clears all current contact safeguards."] : [])],
     });
+    const fillKey = `fill:${moveKey}`;
+    const fillStatus = statusFor(stored, fillKey);
+    if (candidates.recipients.length > 0 && fillStatus === "ready") {
+      moves.push({
+        id: stored.get(fillKey)?.id, moveKey: fillKey, kind: "fill_capacity", priority: "high",
+        headline: `Fill a verified opening on ${source.jobDate ?? "the schedule"}`,
+        businessReason: `A ${source.nextStatus ?? "cancelled"} booking opened capacity near ${locality(source.address).replace(/^(zip|city):/, "") || "the affected route"}.`,
+        impact: `Review ${candidates.recipients.length} qualified nearby lead${candidates.recipients.length === 1 ? "" : "s"} before offering the opening.`,
+        eligibleCount: candidates.recipients.length, excludedCount: candidates.exclusions.length,
+        excludedReasons: Array.from(new Set(candidates.exclusions)).slice(0, 4), recipients: candidates.recipients,
+        draftMessage: "Hi! We have a cleaning opening available near you and wanted to see if you would like to get on the schedule. Reply here and we’ll help find the best time.",
+        targetDescription: "qualified leads near this verified opening", status: fillStatus,
+        source: { ...source, parentMoveKey: moveKey },
+        details: [`This is tied to the verified opening from booking ${source.bookingId ?? "unknown"}.`, "Recipients are limited to qualified leads in the same verified area and rechecked before sending."],
+      });
+    }
   }
   return moves.sort((a, b) => (b.priority === "urgent" ? 3 : b.priority === "high" ? 2 : 1) - (a.priority === "urgent" ? 3 : a.priority === "high" ? 2 : 1));
 }
