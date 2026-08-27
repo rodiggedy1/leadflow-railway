@@ -1,21 +1,35 @@
-import { describe, expect, it } from "vitest";
-import { excludeStopOptedRecipients, selectLiveMoveRecipients } from "./madisonsMovesRouter";
+import { describe, expect, it, vi } from "vitest";
+import { sendMadisonMove } from "./madisonsMovesRouter";
 
 describe("Madison’s Moves send safeguards", () => {
   const reviewedMoveRecipients = [{ name: "Eligible Customer", phone: "+12025550123" }];
 
-  it("does not allow a stale or client-injected recipient past the live move recheck", () => {
-    const selected = selectLiveMoveRecipients(
-      [...reviewedMoveRecipients, { name: "Injected Recipient", phone: "+12025550999" }],
-      reviewedMoveRecipients,
-    );
-    expect(selected).toHaveLength(1);
-    expect(selected[0].phone).toBe("+12025550123");
+  function dependencies(options: { liveRecipients: typeof reviewedMoveRecipients; stopPhones?: string[] }) {
+    const sendSms = vi.fn();
+    const db = { select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(async () => (options.stopPhones ?? []).map((phone) => ({ phone }))) })) })) };
+    return {
+      sendSms,
+      deps: {
+        getDb: async () => db,
+        listMoves: async () => [{ moveKey: "fill:cancel:714:2026-08-28", kind: "fill_capacity" as const, draftMessage: "Opening available", recipients: options.liveRecipients }],
+        sendSms,
+        appendCsOutboundMessage: vi.fn(),
+        csNumberId: "cs-number",
+      },
+    };
+  }
+
+  it("rejects a stale recipient through the real send path before SMS delivery", async () => {
+    const { deps, sendSms } = dependencies({ liveRecipients: [] });
+    await expect(sendMadisonMove({}, { moveKey: "fill:cancel:714:2026-08-28", recipients: reviewedMoveRecipients, message: "Opening available" }, deps as any))
+      .rejects.toMatchObject({ code: "BAD_REQUEST", message: "No selected recipients remain eligible." });
+    expect(sendSms).not.toHaveBeenCalled();
   });
 
-  it("removes STOP-opted recipients before the send loop can contact them", () => {
-    const selected = selectLiveMoveRecipients(reviewedMoveRecipients, reviewedMoveRecipients);
-    expect(excludeStopOptedRecipients(selected, new Set(["+12025550123"]))).toEqual([]);
-    expect(excludeStopOptedRecipients(selected, new Set())).toHaveLength(1);
+  it("blocks a newly STOP-opted Fill Capacity recipient through the real send path before SMS delivery", async () => {
+    const { deps, sendSms } = dependencies({ liveRecipients: reviewedMoveRecipients, stopPhones: ["+12025550123"] });
+    await expect(sendMadisonMove({}, { moveKey: "fill:cancel:714:2026-08-28", recipients: reviewedMoveRecipients, message: "Opening available" }, deps as any))
+      .rejects.toMatchObject({ code: "BAD_REQUEST", message: "No selected recipients remain eligible after STOP protection." });
+    expect(sendSms).not.toHaveBeenCalled();
   });
 });
