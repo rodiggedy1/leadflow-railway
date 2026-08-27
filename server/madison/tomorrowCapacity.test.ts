@@ -42,8 +42,13 @@ describe("Tomorrow Capacity", () => {
   });
 
   it("excludes a former one-time row when the customer has a current weekly booking or any newer booking", () => {
-    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-06-01", hasActiveOrFutureBooking: true })).toBe("has an active or future booking");
-    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-07-01", hasActiveOrFutureBooking: false })).toBe("has a newer booking history");
-    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-06-01", hasActiveOrFutureBooking: false })).toBeNull();
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-06-01", hasActiveOrFutureBooking: true, hasCompletedBookingWithin7Days: false, hasRecurringBookingWithin30Days: false })).toBe("has an active or future booking");
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-07-01", hasActiveOrFutureBooking: false, hasCompletedBookingWithin7Days: false, hasRecurringBookingWithin30Days: false })).toBe("has a newer booking history");
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-06-01", hasActiveOrFutureBooking: false, hasCompletedBookingWithin7Days: false, hasRecurringBookingWithin30Days: false })).toBeNull();
+  });
+
+  it("excludes customers who completed recently or show recurring status within 30 days", () => {
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-07-01", latestCompletedBookingDate: "2026-08-25", hasActiveOrFutureBooking: false, hasCompletedBookingWithin7Days: true, hasRecurringBookingWithin30Days: false })).toBe("completed a booking within the last 7 days");
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-07-01", latestCompletedBookingDate: "2026-08-10", hasActiveOrFutureBooking: false, hasCompletedBookingWithin7Days: false, hasRecurringBookingWithin30Days: true })).toBe("has recurring status within the last 30 days");
   });
 });

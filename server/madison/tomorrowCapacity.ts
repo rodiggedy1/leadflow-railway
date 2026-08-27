@@ -30,9 +30,17 @@ function easternDate() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+function easternDateDaysAgo(days: number) {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  now.setDate(now.getDate() - days);
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 /** A customer with any stored active/future service or a later completed booking is not a former one-time target. */
-export function bookingActivityExclusionReason(input: { candidateLastBookingDate: string | null; latestCompletedBookingDate: string | null; hasActiveOrFutureBooking: boolean }) {
+export function bookingActivityExclusionReason(input: { candidateLastBookingDate: string | null; latestCompletedBookingDate: string | null; hasActiveOrFutureBooking: boolean; hasCompletedBookingWithin7Days: boolean; hasRecurringBookingWithin30Days: boolean }) {
   if (input.hasActiveOrFutureBooking) return "has an active or future booking";
+  if (input.hasCompletedBookingWithin7Days) return "completed a booking within the last 7 days";
+  if (input.hasRecurringBookingWithin30Days) return "has recurring status within the last 30 days";
   if (input.latestCompletedBookingDate && input.latestCompletedBookingDate !== input.candidateLastBookingDate) return "has a newer booking history";
   return null;
 }
@@ -65,6 +73,8 @@ async function countVerifiedTomorrowBookings(db: Db, tomorrow: string) {
 /** Reuses the curated reactivation pool and excludes any contact with current safety or recent-campaign concerns. */
 async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: TomorrowCapacityRecipient[]; exclusions: string[] }> {
   const sevenDaysAgo = new Date(Date.now() - 7 * DAY_MS);
+  const sevenDaysAgoDate = easternDateDaysAgo(7);
+  const thirtyDaysAgoDate = easternDateDaysAgo(30);
   const [{ stops, complaints, activeCs }, rows, recentCampaignRows] = await Promise.all([
     loadSafetySets(db),
     db.select({ phone: completedJobs.phone, name: completedJobs.name, firstName: completedJobs.firstName, frequency: completedJobs.frequency, status: completedJobs.status, jobDate: completedJobs.jobDate })
@@ -77,7 +87,7 @@ async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: Tom
   const storedCandidatePhones = Array.from(new Set(rows.map((row) => row.phone).filter((phone): phone is string => Boolean(phone))));
   const [bookingHistoryRows, activeOrFutureBookingRows] = storedCandidatePhones.length > 0
     ? await Promise.all([
-      db.select({ phone: completedJobs.phone, jobDate: completedJobs.jobDate }).from(completedJobs)
+      db.select({ phone: completedJobs.phone, jobDate: completedJobs.jobDate, frequency: completedJobs.frequency }).from(completedJobs)
         .where(inArray(completedJobs.phone, storedCandidatePhones)),
       db.select({ phone: cleanerJobs.customerPhone }).from(cleanerJobs)
         .where(and(gte(cleanerJobs.jobDate, easternDate()), sql`(${cleanerJobs.bookingStatus} IS NULL OR ${cleanerJobs.bookingStatus} NOT IN ('cancelled', 'rescheduled', 'completed'))`)),
@@ -85,9 +95,14 @@ async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: Tom
     : [[], []];
   const recentlyMessaged = new Set(recentCampaignRows.map((row) => normalizePhoneLegacy(row.phone ?? "")).filter(Boolean));
   const latestCompletedBookingDate = new Map<string, string>();
+  const completedWithinSevenDays = new Set<string>();
+  const recurringWithinThirtyDays = new Set<string>();
   for (const row of bookingHistoryRows) {
     const phone = normalizePhoneLegacy(row.phone ?? "");
-    if (phone && row.jobDate && (row.jobDate > (latestCompletedBookingDate.get(phone) ?? ""))) latestCompletedBookingDate.set(phone, row.jobDate);
+    if (!phone || !row.jobDate) continue;
+    if (row.jobDate > (latestCompletedBookingDate.get(phone) ?? "")) latestCompletedBookingDate.set(phone, row.jobDate);
+    if (row.jobDate >= sevenDaysAgoDate) completedWithinSevenDays.add(phone);
+    if (row.jobDate >= thirtyDaysAgoDate && isRecurringFrequency(row.frequency)) recurringWithinThirtyDays.add(phone);
   }
   const activeOrFutureBookingPhones = new Set(activeOrFutureBookingRows.map((row) => normalizePhoneLegacy(row.phone ?? "")).filter(Boolean));
   const recipients: TomorrowCapacityRecipient[] = [];
@@ -103,7 +118,13 @@ async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: Tom
     else if (activeCs.has(phone)) reason = "active customer-service conversation";
     else if (recentlyMessaged.has(phone)) reason = "contacted in a campaign within 7 days";
     else {
-      const bookingExclusion = bookingActivityExclusionReason({ candidateLastBookingDate: row.jobDate, latestCompletedBookingDate: latestCompletedBookingDate.get(phone) ?? null, hasActiveOrFutureBooking: activeOrFutureBookingPhones.has(phone) });
+      const bookingExclusion = bookingActivityExclusionReason({
+        candidateLastBookingDate: row.jobDate,
+        latestCompletedBookingDate: latestCompletedBookingDate.get(phone) ?? null,
+        hasActiveOrFutureBooking: activeOrFutureBookingPhones.has(phone),
+        hasCompletedBookingWithin7Days: completedWithinSevenDays.has(phone),
+        hasRecurringBookingWithin30Days: recurringWithinThirtyDays.has(phone),
+      });
       if (bookingExclusion) reason = bookingExclusion;
       else if (isRecurringFrequency(row.frequency)) reason = "not a previous one-time customer";
     }
