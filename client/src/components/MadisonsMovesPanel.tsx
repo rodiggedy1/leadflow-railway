@@ -79,7 +79,7 @@ export function MadisonsMovesPanel() {
   const [reviewing, setReviewing] = useState<Move | null>(null);
   const movesQuery = trpc.madisonMoves.list.useQuery(undefined, { staleTime: 30_000, refetchInterval: 60_000, refetchOnWindowFocus: false });
   const historyQuery = trpc.madisonMoves.history.useQuery(undefined, { enabled: tab === "history", staleTime: 30_000 });
-  const dismiss = trpc.madisonMoves.dismiss.useMutation({ onSuccess: () => { setReviewing(null); movesQuery.refetch(); } });
+  const dismiss = trpc.madisonMoves.dismiss.useMutation({ onSuccess: () => { setReviewing(null); setTab("history"); movesQuery.refetch(); historyQuery.refetch(); } });
   const send = trpc.madisonMoves.send.useMutation();
   const moves = (movesQuery.data?.moves ?? []) as Move[];
   const stats = movesQuery.data?.stats ?? { moves: 0, recipients: 0, urgent: 0 };

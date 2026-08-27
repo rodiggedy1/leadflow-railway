@@ -20,6 +20,12 @@ describe("Madison’s Moves review-first contract", () => {
     expect(panel).toContain("Review & send");
   });
 
+  it("moves a Not now dismissal directly into persisted History", () => {
+    expect(panel).toContain('setTab("history")');
+    expect(panel).toContain("historyQuery.refetch()");
+    expect(panel).toContain("dismiss.mutate({ moveKey: move.moveKey, kind: move.kind })");
+  });
+
   it("shows a clear retryable error for a failed custom review send", () => {
     const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
     expect(card).toContain(".catch((error: unknown) =>");
