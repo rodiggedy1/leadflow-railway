@@ -5,6 +5,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const router = fs.readFileSync(path.join(root, "server", "madisonsMovesRouter.ts"), "utf8");
 const panel = fs.readFileSync(path.join(root, "client", "src", "components", "MadisonsMovesPanel.tsx"), "utf8");
+const moves = fs.readFileSync(path.join(root, "server", "madison", "moves.ts"), "utf8");
 
 describe("Madison’s Moves review-first contract", () => {
   it("uses an explicit send mutation and rechecks the live move before sending", () => {
@@ -26,6 +27,13 @@ describe("Madison’s Moves review-first contract", () => {
     expect(panel).toContain("dismiss.mutate({ moveKey: move.moveKey, kind: move.kind })");
   });
 
+  it("preserves dismissed card details and permits only user-triggered restoration", () => {
+    expect(moves).toContain("snapshot: snapshot");
+    expect(router).toContain("restore: agentProcedure");
+    expect(panel).toContain("Bring back");
+    expect(panel).toContain("restore.mutate({ moveKey: move.moveKey })");
+  });
+
   it("shows a clear retryable error for a failed custom review send", () => {
     const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
     expect(card).toContain(".catch((error: unknown) =>");
@@ -34,7 +42,6 @@ describe("Madison’s Moves review-first contract", () => {
   });
 
   it("generates Fill Capacity only from a verified stored cancellation opening", () => {
-    const moves = fs.readFileSync(path.join(root, "server", "madison", "moves.ts"), "utf8");
     expect(moves).toContain('const fillKey = `fill:${moveKey}`');
     expect(moves).toContain('kind: "fill_capacity"');
     expect(moves).toContain('row.meta.kind !== "save_cancellation"');

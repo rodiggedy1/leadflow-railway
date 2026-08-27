@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCancellationOpeningMoves, buildFillCapacityMove, listMadisonMoves, shouldObserveCancellationTransition } from "./moves";
+import { buildCancellationOpeningMoves, buildFillCapacityMove, listMadisonMoveHistory, listMadisonMoves, shouldObserveCancellationTransition } from "./moves";
 
 describe("Madison’s Moves cancellation observation", () => {
   it("records only an active booking becoming cancelled", () => {
@@ -58,5 +58,18 @@ describe("Madison’s Moves Fill Capacity", () => {
     });
     expect(moves.map((move) => move.kind)).toEqual(expect.arrayContaining(["save_cancellation", "fill_capacity"]));
     expect(moves.find((move) => move.kind === "fill_capacity")).toMatchObject({ moveKey: "fill:cancel:714:2026-08-28", recipients: [lead] });
+  });
+
+  it("reconstructs original dismissal details from the stored History snapshot", async () => {
+    const [history] = await listMadisonMoveHistory({} as any, {
+      storedMoveRows: async () => [{
+        id: 11,
+        cardStatus: "dismissed",
+        metadata: JSON.stringify({ moveKey: "protect:2026-08-28", kind: "protect_tomorrow", outcome: "dismissed", snapshot: {
+          moveKey: "protect:2026-08-28", kind: "protect_tomorrow", priority: "urgent", headline: "2 verified items could affect tomorrow", businessReason: "One schedule and one confirmation issue are open.", impact: "Protect tomorrow’s scheduled revenue.", eligibleCount: 0, excludedCount: 0, excludedReasons: [], recipients: [], details: ["Taylor is unassigned."], status: "ready",
+        } }),
+      }],
+    });
+    expect(history).toMatchObject({ id: 11, status: "dismissed", headline: "2 verified items could affect tomorrow", details: ["Taylor is unassigned."] });
   });
 });

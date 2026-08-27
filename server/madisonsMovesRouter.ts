@@ -8,7 +8,7 @@ import { ENV } from "./_core/env";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { cleanerJobs, opsChatMessages, smsOptOuts } from "../drizzle/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { dismissMadisonMove, listMadisonMoveHistory, listMadisonMoves, type MadisonMoveKind } from "./madison/moves";
+import { dismissMadisonMove, listMadisonMoveHistory, listMadisonMoves, restoreMadisonMove, type MadisonMoveKind } from "./madison/moves";
 
 const kindSchema = z.enum(["protect_tomorrow", "save_cancellation", "fill_capacity", "recover_qualified_leads"]);
 
@@ -87,7 +87,19 @@ export const madisonMovesRouter = router({
   dismiss: agentProcedure.input(z.object({ moveKey: z.string().min(1).max(120), kind: kindSchema })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-    await dismissMadisonMove(db, input.moveKey, input.kind as MadisonMoveKind);
+    const move = (await listMadisonMoves(db)).find((candidate) => candidate.moveKey === input.moveKey);
+    if (!move) throw new TRPCError({ code: "BAD_REQUEST", message: "This opportunity is no longer available." });
+    await dismissMadisonMove(db, input.moveKey, input.kind as MadisonMoveKind, move);
+    return { ok: true };
+  }),
+  restore: agentProcedure.input(z.object({ moveKey: z.string().min(1).max(120) })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    try {
+      await restoreMadisonMove(db, input.moveKey);
+    } catch (error) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "This move cannot be restored." });
+    }
     return { ok: true };
   }),
   send: agentProcedure.input(z.object({
