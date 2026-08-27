@@ -26,4 +26,17 @@ describe("Tomorrow Capacity", () => {
     expect(buildTomorrowCapacityCandidate({ tomorrow: "2026-08-28", bookedJobs: 30, recipients: [formerOneTimeCustomer], exclusions: [] })).toBeNull();
     expect(buildTomorrowCapacityCandidate({ tomorrow: "2026-08-28", bookedJobs: 12, recipients: [], exclusions: ["STOP opt-out"] })).toBeNull();
   });
+
+  it("keeps a 30-person review pool even when fewer jobs are needed", () => {
+    const recipients = Array.from({ length: 35 }, (_, index) => ({
+      name: `Customer ${index + 1}`,
+      phone: `+1202555${String(1000 + index).slice(-4)}`,
+      reason: "Previous one-time customer with no newer booking",
+    }));
+    const candidate = buildTomorrowCapacityCandidate({ tomorrow: "2026-08-28", bookedJobs: 26, recipients, exclusions: [] });
+    expect(candidate).toMatchObject({ eligibleCount: 30 });
+    expect(candidate?.recipients).toHaveLength(30);
+    expect(candidate?.impact).toContain("help recover 4 jobs");
+    expect(candidate?.details).toContain("Review pool: up to 30 safe former one-time customers.");
+  });
 });
