@@ -26,6 +26,7 @@ export type MadisonMove = {
   draftMessage?: string;
   targetDescription?: string;
   details?: string[];
+  detailSections?: Array<{ heading: string; items: string[] }>;
   status: "ready" | "dismissed" | "sent";
   source?: { bookingId?: number; jobDate?: string; address?: string; serviceDateTime?: string | null; parentMoveKey?: string };
 };
@@ -213,20 +214,23 @@ export function buildProtectTomorrowMove(input: { readiness: ReadinessSummary; t
     [readiness.dimensions.clientRequests.issueCount, "client request"],
   ].filter(([count]) => Number(count) > 0) as Array<[number, string]>;
   const breakdown = categories.map(([count, label]) => `${count} ${label}`).join(", ");
-  const details = [
-    ...readiness.dimensions.jobs.unassigned.map((row) => `${row.customerName} is unassigned${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
-    ...readiness.dimensions.jobs.doubleBooked.map((row) => `${row.customerName} is double-booked with ${row.cleanerName}${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
-    ...readiness.dimensions.teams.rows.filter((row) => !row.confirmed).map((row) => `${row.name} has not confirmed their team schedule.`),
-    ...readiness.dimensions.payments.rows.filter((row) => row.status !== "on_hold" && row.status !== "lf_on_hold").map((row) => `${row.customerName} has no payment authorization${row.jobTime ? ` (${row.jobTime})` : ""}.`),
-    ...readiness.dimensions.confirmations.rows.filter((row) => row.status === "pending").map((row) => `${row.customerName} has not confirmed${row.jobTime ? ` (${row.jobTime})` : ""}.`),
-    ...readiness.dimensions.clientRequests.rows.filter((row) => row.status !== "honored").map((row) => row.status === "unassigned" ? `${row.customerName}'s ${row.requestedTeam} request is unassigned.` : `${row.customerName}'s ${row.requestedTeam} request is assigned to ${row.assignedTeam ?? "another team"}.`),
-  ];
+  const detailSections = [
+    { heading: "Schedule", items: [
+      ...readiness.dimensions.jobs.unassigned.map((row) => `${row.customerName} is unassigned${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
+      ...readiness.dimensions.jobs.doubleBooked.map((row) => `${row.customerName} is double-booked with ${row.cleanerName}${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
+    ] },
+    { heading: "Team confirmations", items: readiness.dimensions.teams.rows.filter((row) => !row.confirmed).map((row) => `${row.name} has not confirmed their team schedule.`) },
+    { heading: "Payment authorizations", items: readiness.dimensions.payments.rows.filter((row) => row.status !== "on_hold" && row.status !== "lf_on_hold").map((row) => `${row.customerName} has no payment authorization${row.jobTime ? ` (${row.jobTime})` : ""}.`) },
+    { heading: "Customer confirmations", items: readiness.dimensions.confirmations.rows.filter((row) => row.status === "pending").map((row) => `${row.customerName} has not confirmed${row.jobTime ? ` (${row.jobTime})` : ""}.`) },
+    { heading: "Client requests", items: readiness.dimensions.clientRequests.rows.filter((row) => row.status !== "honored").map((row) => row.status === "unassigned" ? `${row.customerName}'s ${row.requestedTeam} request is unassigned.` : `${row.customerName}'s ${row.requestedTeam} request is assigned to ${row.assignedTeam ?? "another team"}.`) },
+  ].filter((section) => section.items.length > 0);
   return {
     id: input.id, moveKey: `protect:${input.tomorrow}`, kind: "protect_tomorrow", priority: "urgent",
     headline: `${readiness.totalIssues} verified item${readiness.totalIssues === 1 ? "" : "s"} could affect tomorrow`,
     businessReason: `${breakdown} issue${readiness.totalIssues === 1 ? "" : "s"} ${readiness.totalIssues === 1 ? "is" : "are"} still open.`,
     impact: "Protect tomorrow’s scheduled revenue and customer experience.", eligibleCount: 0, excludedCount: 0, excludedReasons: [], recipients: [], status: input.status,
-    details,
+    details: detailSections.flatMap((section) => section.items),
+    detailSections,
   };
 }
 

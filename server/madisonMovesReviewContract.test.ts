@@ -34,6 +34,12 @@ describe("Madison’s Moves review-first contract", () => {
     expect(panel).toContain("restore.mutate({ moveKey: move.moveKey })");
   });
 
+  it("renders Protect Tomorrow details in verified category sections", () => {
+    expect(moves).toContain('heading: "Payment authorizations"');
+    expect(panel).toContain("move.detailSections?.length");
+    expect(panel).toContain("section.heading");
+  });
+
   it("shows a clear retryable error for a failed custom review send", () => {
     const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
     expect(card).toContain(".catch((error: unknown) =>");
