@@ -18,4 +18,11 @@ describe("Madison’s Moves review-first contract", () => {
     expect(panel).toContain("onReviewSend={async");
     expect(panel).toContain("Review & send");
   });
+
+  it("generates Fill Capacity only from a verified stored cancellation opening", () => {
+    const moves = fs.readFileSync(path.join(root, "server", "madison", "moves.ts"), "utf8");
+    expect(moves).toContain('const fillKey = `fill:${moveKey}`');
+    expect(moves).toContain('kind: "fill_capacity"');
+    expect(moves).toContain('row.meta.kind !== "save_cancellation"');
+  });
 });
