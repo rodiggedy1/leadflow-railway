@@ -67,8 +67,9 @@ export interface ReadinessSummary {
     jobs: {
       total: number;
       issueCount: number;
-      unassigned: Array<{ customerName: string; jobTime: string | null }>;
+      unassigned: Array<{ jobId: number; customerName: string; jobTime: string | null }>;
       doubleBooked: Array<{
+        jobId: number;
         customerName: string;
         jobTime: string | null;
         cleanerName: string;
@@ -78,13 +79,14 @@ export interface ReadinessSummary {
       total: number;
       confirmed: number;
       issueCount: number;
-      rows: Array<{ name: string; confirmed: boolean; jobCount: number }>;
+      rows: Array<{ cleanerProfileId: number; name: string; confirmed: boolean; jobCount: number }>;
     };
     payments: {
       total: number;
       onHold: number;
       issueCount: number;
       rows: Array<{
+        jobId: number;
         customerName: string;
         jobTime: string | null;
         serviceType: string | null;
@@ -100,6 +102,7 @@ export interface ReadinessSummary {
       confirmed: number;
       issueCount: number;
       rows: Array<{
+        jobId: number;
         customerName: string;
         jobTime: string | null;
         serviceType: string | null;
@@ -112,6 +115,7 @@ export interface ReadinessSummary {
       honored: number;
       issueCount: number;
       rows: Array<{
+        jobId: number;
         customerName: string;
         jobTime: string | null;
         requestedTeam: string;
@@ -257,6 +261,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
     timeKeyMap.get(key)!.push(j);
   }
   const doubleBookedJobs: Array<{
+    jobId: number;
     customerName: string;
     jobTime: string | null;
     cleanerName: string;
@@ -265,6 +270,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
     if (group.length >= 2) {
       for (const j of group) {
         doubleBookedJobs.push({
+          jobId: j.id,
           customerName: j.customerName ?? "Unknown",
           jobTime: j.jobTime,
           cleanerName: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
@@ -277,7 +283,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
   // ── DIMENSION 2: Team Confirmations ──────────────────────────────────
   const teamMap = new Map<
     number,
-    { name: string; confirmed: boolean; jobCount: number }
+    { cleanerProfileId: number; name: string; confirmed: boolean; jobCount: number }
   >();
   for (const j of jobs) {
     if (!j.cleanerProfileId) continue;
@@ -287,6 +293,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
       if (!j.scheduleConfirmed) existing.confirmed = false;
     } else {
       teamMap.set(j.cleanerProfileId, {
+        cleanerProfileId: j.cleanerProfileId,
         name: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
         confirmed: j.scheduleConfirmed === 1,
         jobCount: 1,
@@ -301,6 +308,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
   // ── DIMENSION 3: Payment Methods ─────────────────────────────────────
   const seenCustomers = new Set<string>();
   const paymentRows: Array<{
+    jobId: number;
     customerName: string;
     jobTime: string | null;
     serviceType: string | null;
@@ -326,6 +334,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
     }
 
     paymentRows.push({
+      jobId: j.id,
       customerName: j.customerName ?? "Unknown",
       jobTime: j.jobTime,
       serviceType: j.serviceType ?? null,
@@ -416,6 +425,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
   // ── DIMENSION 4: Customer Confirmations ──────────────────────────────
   const seenBookings = new Set<string>();
   const confirmationRows: Array<{
+    jobId: number;
     customerName: string;
     jobTime: string | null;
     serviceType: string | null;
@@ -438,6 +448,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
       call?.manualOutcomeLabel ?? call?.aiOutcomeLabel ?? null;
 
     confirmationRows.push({
+      jobId: j.id,
       customerName: j.customerName ?? "Unknown",
       jobTime: j.jobTime,
       serviceType: j.serviceType ?? null,
@@ -456,6 +467,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
 
   // ── DIMENSION 5: Client Requests ─────────────────────────────────────
   const clientRequestRows: Array<{
+    jobId: number;
     customerName: string;
     jobTime: string | null;
     requestedTeam: string;
@@ -469,6 +481,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
 
     if (assignment?.isManual === 2) {
       clientRequestRows.push({
+        jobId: j.id,
         customerName: j.customerName ?? "Unknown",
         jobTime: j.jobTime,
         requestedTeam: j.requestedTeam,
@@ -480,6 +493,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
 
     if (!j.cleanerProfileId || !assignment) {
       clientRequestRows.push({
+        jobId: j.id,
         customerName: j.customerName ?? "Unknown",
         jobTime: j.jobTime,
         requestedTeam: j.requestedTeam,
@@ -495,6 +509,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
       reqNorm.includes(assignedNorm) || assignedNorm.includes(reqNorm);
 
     clientRequestRows.push({
+      jobId: j.id,
       customerName: j.customerName ?? "Unknown",
       jobTime: j.jobTime,
       requestedTeam: j.requestedTeam,
@@ -557,6 +572,7 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
         total: totalJobs,
         issueCount: jobsIssueCount,
         unassigned: unassignedJobs.map((j) => ({
+          jobId: j.id,
           customerName: j.customerName ?? "Unknown",
           jobTime: j.jobTime,
         })),

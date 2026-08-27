@@ -20,8 +20,10 @@ type Move = {
   draftMessage?: string;
   targetDescription?: string;
   details?: string[];
-  detailSections?: Array<{ heading: string; items: string[] }>;
-  status: "ready" | "dismissed" | "sent";
+  detailSections?: Array<{ heading: string; items: Array<{ key: string; label: string; resolved: boolean }> }>;
+  remainingIssueCount?: number;
+  completedIssueCount?: number;
+  status: "ready" | "dismissed" | "sent" | "completed";
 };
 
 const kindLabel: Record<MoveKind, string> = {
@@ -37,7 +39,7 @@ const kindTone: Record<MoveKind, { tint: string; ink: string; icon: React.ReactN
   recover_qualified_leads: { tint: "#f1edff", ink: "#6d47cf", icon: <Users className="h-3.5 w-3.5" /> },
 };
 
-function MoveCard({ move, onReview, onDismiss, onRestore }: { move: Move; onReview: () => void; onDismiss: () => void; onRestore: () => void }) {
+function MoveCard({ move, onReview, onDismiss, onRestore, onReviewItem, reviewItemPending }: { move: Move; onReview: () => void; onDismiss: () => void; onRestore: () => void; onReviewItem: (itemKey: string, resolved: boolean) => void; reviewItemPending: boolean }) {
   const tone = kindTone[move.kind];
   const canContact = move.status === "ready" && move.recipients.length > 0 && Boolean(move.draftMessage);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -70,7 +72,7 @@ function MoveCard({ move, onReview, onDismiss, onRestore }: { move: Move; onRevi
         </button>
         {move.status === "ready" ? <button onClick={onDismiss} className="rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-50">Not now</button> : move.status === "dismissed" ? <button onClick={onRestore} className="rounded-xl border border-[#d9caff] bg-[#faf8ff] px-3 py-2 text-[11px] font-bold text-[#6541cf] transition hover:bg-[#f1edff]">Bring back</button> : null}
       </div>
-      {detailsOpen && <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-600"><p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Verified details</p>{move.detailSections?.length ? <div className="space-y-3">{move.detailSections.map((section) => <section key={section.heading}><p className="mb-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#846db4]">{section.heading}</p><ul className="space-y-1">{section.items.map((detail) => <li key={detail}>• {detail}</li>)}</ul></section>)}</div> : move.details?.length ? <ul className="space-y-1">{move.details.map((detail) => <li key={detail}>• {detail}</li>)}</ul> : <p>Madison has no additional verified detail for this move.</p>}</div>}
+      {detailsOpen && <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-600"><p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Verified details</p>{move.detailSections?.length ? <div className="space-y-3">{move.detailSections.map((section) => { const pending = section.items.filter((item) => !item.resolved); const completed = section.items.filter((item) => item.resolved); return <section key={section.heading}><div className="mb-1 flex items-center justify-between gap-2"><p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#846db4]">{section.heading}</p>{move.kind === "protect_tomorrow" && <span className="text-[9px] font-bold text-slate-400">{pending.length} remaining</span>}</div>{pending.length > 0 && <ul className="space-y-1.5">{pending.map((item) => <li key={item.key} className="flex items-start gap-2"><span className="min-w-0 flex-1">• {item.label}</span>{move.kind === "protect_tomorrow" && move.status === "ready" && <button onClick={() => onReviewItem(item.key, true)} disabled={reviewItemPending} className="shrink-0 rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">Resolve</button>}</li>)}</ul>}{completed.length > 0 && <details className="mt-1.5"><summary className="cursor-pointer text-[10px] font-semibold text-emerald-700">Completed ({completed.length})</summary><ul className="mt-1.5 space-y-1.5">{completed.map((item) => <li key={item.key} className="flex items-start gap-2 text-slate-400"><span className="min-w-0 flex-1 line-through">• {item.label}</span>{move.kind === "protect_tomorrow" && (move.status === "ready" || move.status === "completed") && <button onClick={() => onReviewItem(item.key, false)} disabled={reviewItemPending} className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50">Undo</button>}</li>)}</ul></details>}</section>; })}</div> : move.details?.length ? <ul className="space-y-1">{move.details.map((detail) => <li key={detail}>• {detail}</li>)}</ul> : <p>Madison has no additional verified detail for this move.</p>}</div>}
     </article>
   );
 }
@@ -82,6 +84,7 @@ export function MadisonsMovesPanel() {
   const historyQuery = trpc.madisonMoves.history.useQuery(undefined, { enabled: tab === "history", staleTime: 30_000 });
   const dismiss = trpc.madisonMoves.dismiss.useMutation({ onSuccess: () => { setReviewing(null); setTab("history"); movesQuery.refetch(); historyQuery.refetch(); } });
   const restore = trpc.madisonMoves.restore.useMutation({ onSuccess: () => { setTab("ready"); movesQuery.refetch(); historyQuery.refetch(); } });
+  const reviewItem = trpc.madisonMoves.reviewProtectTomorrowItem.useMutation({ onSuccess: (result) => { if (result.completed) setTab("history"); toast.success(result.completed ? "All Protect Tomorrow items are reviewed." : "Item marked resolved."); movesQuery.refetch(); historyQuery.refetch(); }, onError: (error) => toast.error(error.message) });
   const send = trpc.madisonMoves.send.useMutation();
   const moves = (movesQuery.data?.moves ?? []) as Move[];
   const stats = movesQuery.data?.stats ?? { moves: 0, recipients: 0, urgent: 0 };
@@ -125,7 +128,7 @@ export function MadisonsMovesPanel() {
         )}
         {movesQuery.isLoading && <div className="grid place-items-center py-10 text-xs text-slate-400"><RefreshCw className="mb-2 h-4 w-4 animate-spin" /> Finding verified moves…</div>}
         {!movesQuery.isLoading && visible.length === 0 && <div className="rounded-2xl border border-dashed border-[#ddd4ed] bg-white px-5 py-10 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-emerald-500" /><p className="mt-3 text-xs font-bold text-slate-700">Nothing needs a move right now.</p><p className="mt-1 text-[11px] leading-relaxed text-slate-500">Madison will surface the next verified opportunity here.</p></div>}
-        <div className="space-y-3">{visible.map((move) => <MoveCard key={move.moveKey} move={move} onReview={() => setReviewing(move)} onDismiss={() => dismiss.mutate({ moveKey: move.moveKey, kind: move.kind })} onRestore={() => restore.mutate({ moveKey: move.moveKey })} />)}</div>
+        <div className="space-y-3">{visible.map((move) => <MoveCard key={move.moveKey} move={move} onReview={() => setReviewing(move)} onDismiss={() => dismiss.mutate({ moveKey: move.moveKey, kind: move.kind })} onRestore={() => restore.mutate({ moveKey: move.moveKey })} onReviewItem={(itemKey, resolved) => reviewItem.mutate({ moveKey: move.moveKey, itemKey, resolved })} reviewItemPending={reviewItem.isPending} />)}</div>
       </div>
       <footer className="shrink-0 border-t border-[#e8e2ef] bg-white px-4 py-2.5"><p className="flex items-center gap-1.5 text-[9px] leading-relaxed text-slate-500"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Every outreach move is rechecked and requires your Send approval.</p></footer>
     </aside>

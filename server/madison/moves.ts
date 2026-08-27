@@ -9,6 +9,7 @@ import { computeReadinessSummary, type ReadinessSummary } from "./readinessServi
 import { normalizePhoneLegacy } from "../utils/phone";
 
 export type MadisonMoveKind = "protect_tomorrow" | "save_cancellation" | "fill_capacity" | "recover_qualified_leads";
+export type MadisonMoveDetailItem = { key: string; label: string; resolved: boolean };
 
 export type MadisonMoveRecipient = { name: string; phone: string; reason: string };
 export type MadisonMove = {
@@ -26,8 +27,10 @@ export type MadisonMove = {
   draftMessage?: string;
   targetDescription?: string;
   details?: string[];
-  detailSections?: Array<{ heading: string; items: string[] }>;
-  status: "ready" | "dismissed" | "sent";
+  detailSections?: Array<{ heading: string; items: MadisonMoveDetailItem[] }>;
+  remainingIssueCount?: number;
+  completedIssueCount?: number;
+  status: "ready" | "dismissed" | "sent" | "completed";
   source?: { bookingId?: number; jobDate?: string; address?: string; serviceDateTime?: string | null; parentMoveKey?: string };
 };
 
@@ -169,7 +172,7 @@ export async function recordCancellationObservation(db: Db, input: {
 function statusFor(stored: Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>, moveKey: string) {
   const row = stored.get(moveKey);
   if (!row) return "ready" as const;
-  return row.meta.outcome === "sent" ? "sent" as const : row.cardStatus === "dismissed" ? "dismissed" as const : "ready" as const;
+  return row.meta.outcome === "sent" ? "sent" as const : row.meta.outcome === "completed" ? "completed" as const : row.cardStatus === "dismissed" ? "dismissed" as const : "ready" as const;
 }
 
 export function buildFillCapacityMove(input: {
@@ -177,7 +180,7 @@ export function buildFillCapacityMove(input: {
   source: Record<string, any>;
   recipients: MadisonMoveRecipient[];
   exclusions: string[];
-  status: "ready" | "dismissed" | "sent";
+  status: "ready" | "dismissed" | "sent" | "completed";
   id?: number;
 }): MadisonMove | null {
   if (input.recipients.length === 0 || input.status !== "ready") return null;
@@ -203,35 +206,63 @@ export function buildFillCapacityMove(input: {
 }
 
 /** Keeps the Protect Tomorrow headline, category breakdown, and expanded detail rows on the same readiness totals. */
-export function buildProtectTomorrowMove(input: { readiness: ReadinessSummary; tomorrow: string; status: "ready" | "dismissed" | "sent"; id?: number }): MadisonMove | null {
+export function buildProtectTomorrowMove(input: { readiness: ReadinessSummary; tomorrow: string; status: "ready" | "dismissed" | "sent" | "completed"; id?: number; resolvedItemKeys?: Iterable<string> }): MadisonMove | null {
   const { readiness } = input;
   if (readiness.totalIssues <= 0 || input.status !== "ready") return null;
-  const categories = [
-    [readiness.dimensions.jobs.issueCount, "schedule"],
-    [readiness.dimensions.teams.issueCount, "team"],
-    [readiness.dimensions.payments.issueCount, "payment"],
-    [readiness.dimensions.confirmations.issueCount, "confirmation"],
-    [readiness.dimensions.clientRequests.issueCount, "client request"],
-  ].filter(([count]) => Number(count) > 0) as Array<[number, string]>;
-  const breakdown = categories.map(([count, label]) => `${count} ${label}`).join(", ");
+  const resolvedKeys = new Set(input.resolvedItemKeys ?? []);
+  const item = (key: string, label: string): MadisonMoveDetailItem => ({ key, label, resolved: resolvedKeys.has(key) });
   const detailSections = [
     { heading: "Schedule", items: [
-      ...readiness.dimensions.jobs.unassigned.map((row) => `${row.customerName} is unassigned${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
-      ...readiness.dimensions.jobs.doubleBooked.map((row) => `${row.customerName} is double-booked with ${row.cleanerName}${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
+      ...readiness.dimensions.jobs.unassigned.map((row) => item(`schedule:unassigned:${row.jobId}`, `${row.customerName} is unassigned${row.jobTime ? ` at ${row.jobTime}` : ""}.`)),
+      ...readiness.dimensions.jobs.doubleBooked.map((row) => item(`schedule:conflict:${row.jobId}`, `${row.customerName} is double-booked with ${row.cleanerName}${row.jobTime ? ` at ${row.jobTime}` : ""}.`)),
     ] },
-    { heading: "Team confirmations", items: readiness.dimensions.teams.rows.filter((row) => !row.confirmed).map((row) => `${row.name} has not confirmed their team schedule.`) },
-    { heading: "Payment authorizations", items: readiness.dimensions.payments.rows.filter((row) => row.status !== "on_hold" && row.status !== "lf_on_hold").map((row) => `${row.customerName} has no payment authorization${row.jobTime ? ` (${row.jobTime})` : ""}.`) },
-    { heading: "Customer confirmations", items: readiness.dimensions.confirmations.rows.filter((row) => row.status === "pending").map((row) => `${row.customerName} has not confirmed${row.jobTime ? ` (${row.jobTime})` : ""}.`) },
-    { heading: "Client requests", items: readiness.dimensions.clientRequests.rows.filter((row) => row.status !== "honored").map((row) => row.status === "unassigned" ? `${row.customerName}'s ${row.requestedTeam} request is unassigned.` : `${row.customerName}'s ${row.requestedTeam} request is assigned to ${row.assignedTeam ?? "another team"}.`) },
+    { heading: "Team confirmations", items: readiness.dimensions.teams.rows.filter((row) => !row.confirmed).map((row) => item(`team:confirmation:${row.cleanerProfileId}`, `${row.name} has not confirmed their team schedule.`)) },
+    { heading: "Payment authorizations", items: readiness.dimensions.payments.rows.filter((row) => row.status !== "on_hold" && row.status !== "lf_on_hold").map((row) => item(`payment:${row.jobId}`, `${row.customerName} has no payment authorization${row.jobTime ? ` (${row.jobTime})` : ""}.`)) },
+    { heading: "Customer confirmations", items: readiness.dimensions.confirmations.rows.filter((row) => row.status === "pending").map((row) => item(`customer:confirmation:${row.jobId}`, `${row.customerName} has not confirmed${row.jobTime ? ` (${row.jobTime})` : ""}.`)) },
+    { heading: "Client requests", items: readiness.dimensions.clientRequests.rows.filter((row) => row.status !== "honored").map((row) => item(`request:${row.jobId}`, row.status === "unassigned" ? `${row.customerName}'s ${row.requestedTeam} request is unassigned.` : `${row.customerName}'s ${row.requestedTeam} request is assigned to ${row.assignedTeam ?? "another team"}.`)) },
   ].filter((section) => section.items.length > 0);
+  const remainingCategories = detailSections.map((section) => ({ ...section, remaining: section.items.filter((entry) => !entry.resolved).length })).filter((section) => section.remaining > 0);
+  const remainingIssueCount = remainingCategories.reduce((sum, section) => sum + section.remaining, 0);
+  const completedIssueCount = readiness.totalIssues - remainingIssueCount;
+  const breakdown = remainingCategories.map((section) => `${section.remaining} ${section.heading.toLowerCase()}`).join(", ");
+  const completed = remainingIssueCount === 0;
   return {
     id: input.id, moveKey: `protect:${input.tomorrow}`, kind: "protect_tomorrow", priority: "urgent",
-    headline: `${readiness.totalIssues} verified item${readiness.totalIssues === 1 ? "" : "s"} could affect tomorrow`,
-    businessReason: `${breakdown} issue${readiness.totalIssues === 1 ? "" : "s"} ${readiness.totalIssues === 1 ? "is" : "are"} still open.`,
-    impact: "Protect tomorrow’s scheduled revenue and customer experience.", eligibleCount: 0, excludedCount: 0, excludedReasons: [], recipients: [], status: input.status,
-    details: detailSections.flatMap((section) => section.items),
+    headline: completed ? `All ${readiness.totalIssues} verified items were reviewed` : `${remainingIssueCount} verified item${remainingIssueCount === 1 ? "" : "s"} could affect tomorrow`,
+    businessReason: completed ? "The internal review checklist is complete. Underlying schedule, team, payment, confirmation, and customer records are unchanged." : `${breakdown} issue${remainingIssueCount === 1 ? "" : "s"} ${remainingIssueCount === 1 ? "is" : "are"} still open.`,
+    impact: completed ? "Review is complete; the original details remain available here for reference and Undo." : "Protect tomorrow’s scheduled revenue and customer experience.", eligibleCount: 0, excludedCount: 0, excludedReasons: [], recipients: [], status: completed ? "completed" : input.status,
+    details: detailSections.flatMap((section) => section.items.map((entry) => entry.label)),
     detailSections,
+    remainingIssueCount,
+    completedIssueCount,
   };
+}
+
+/** Explicitly records only an agent's review state for one current Protect Tomorrow alert. */
+export async function setProtectTomorrowChecklistItem(db: Db, input: { moveKey: string; itemKey: string; resolved: boolean; agentId: number }) {
+  const date = input.moveKey.match(/^protect:(\d{4}-\d{2}-\d{2})$/)?.[1];
+  if (!date) throw new Error("Invalid Protect Tomorrow move.");
+  const rows = await storedMoveRows(db);
+  const existing = rows.find((row: any) => parseMeta(row.metadata).moveKey === input.moveKey);
+  const existingMeta = existing ? parseMeta(existing.metadata) : {};
+  const previouslyResolved = new Set(Array.isArray(existingMeta.checklistResolvedItemKeys) ? existingMeta.checklistResolvedItemKeys.filter((key: unknown): key is string => typeof key === "string") : []);
+  const baseline = buildProtectTomorrowMove({ readiness: await computeReadinessSummary(db, date), tomorrow: date, status: "ready" });
+  const availableItems = baseline?.detailSections?.flatMap((section) => section.items) ?? [];
+  if (!availableItems.some((entry) => entry.key === input.itemKey)) throw new Error("This readiness item is no longer active.");
+  if (input.resolved) previouslyResolved.add(input.itemKey); else previouslyResolved.delete(input.itemKey);
+  const updated = buildProtectTomorrowMove({ readiness: await computeReadinessSummary(db, date), tomorrow: date, status: "ready", id: existing?.id, resolvedItemKeys: previouslyResolved });
+  if (!updated) throw new Error("This Protect Tomorrow move is no longer active.");
+  const completed = updated.status === "completed";
+  const metadata = JSON.stringify({
+    ...existingMeta, moveKey: input.moveKey, kind: "protect_tomorrow", outcome: completed ? "completed" : "ready",
+    checklistResolvedItemKeys: [...previouslyResolved], checklistUpdatedAt: Date.now(), checklistUpdatedBy: input.agentId, snapshot: updated,
+  });
+  if (existing) {
+    await db.update(opsChatMessages).set({ body: updated.headline, cardStatus: completed ? "dismissed" : "active", activeDedupKey: completed ? null : `move:${input.moveKey}`, metadata, lastActivityAt: Date.now() }).where(eq(opsChatMessages.id, existing.id));
+  } else {
+    await db.insert(opsChatMessages).values({ cleanerJobId: null, channel: "madison_moves", authorName: "Madison", authorRole: "system", body: updated.headline, quickAction: "madisons_move", metadata, cardStatus: completed ? "dismissed" : "active", activeDedupKey: completed ? null : `move:${input.moveKey}`, lastActivityAt: Date.now() });
+  }
+  return { completed, remainingIssueCount: updated.remainingIssueCount ?? 0, completedIssueCount: updated.completedIssueCount ?? 0 };
 }
 
 /** Builds the two related move cards from one persisted, verified cancellation opening. */
@@ -240,7 +271,7 @@ export function buildCancellationOpeningMoves(input: {
   source: Record<string, any>;
   recipients: MadisonMoveRecipient[];
   exclusions: string[];
-  fillStatus: "ready" | "dismissed" | "sent";
+  fillStatus: "ready" | "dismissed" | "sent" | "completed";
   cancellationId?: number;
   fillId?: number;
 }) {
@@ -274,8 +305,8 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
   const readiness = await getReadinessSummary(db, tomorrow);
   const readinessKey = `protect:${tomorrow}`;
   const readinessStatus = statusFor(stored, readinessKey);
-  const protectTomorrow = buildProtectTomorrowMove({ readiness, tomorrow, status: readinessStatus, id: stored.get(readinessKey)?.id });
-  if (protectTomorrow) moves.push(protectTomorrow);
+  const protectTomorrow = buildProtectTomorrowMove({ readiness, tomorrow, status: readinessStatus, id: stored.get(readinessKey)?.id, resolvedItemKeys: stored.get(readinessKey)?.meta.checklistResolvedItemKeys });
+  if (protectTomorrow?.status === "ready") moves.push(protectTomorrow);
 
   const recoveryKey = `recover:${tomorrow}`;
   const recoveryStatus = statusFor(stored, recoveryKey);
@@ -307,7 +338,7 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
 
 export async function listMadisonMoveHistory(db: Db, dependencies: Pick<MadisonMovesDependencies, "storedMoveRows"> = {}): Promise<MadisonMove[]> {
   const rows = await (dependencies.storedMoveRows ?? storedMoveRows)(db);
-  return rows.map((row: any) => {
+  return rows.filter((row: any) => ["dismissed", "sent", "completed"].includes(parseMeta(row.metadata).outcome)).map((row: any) => {
     const meta = parseMeta(row.metadata);
     const snapshot = meta.snapshot as Partial<MadisonMove> | undefined;
     if (snapshot?.moveKey && snapshot.kind && snapshot.headline && snapshot.businessReason && snapshot.impact) {
@@ -319,7 +350,7 @@ export async function listMadisonMoveHistory(db: Db, dependencies: Pick<MadisonM
         eligibleCount: snapshot.eligibleCount ?? 0,
         excludedCount: snapshot.excludedCount ?? 0,
         details: snapshot.details ?? [],
-        status: meta.outcome === "sent" ? "sent" : "dismissed",
+        status: meta.outcome === "sent" ? "sent" : meta.outcome === "completed" ? "completed" : "dismissed",
       } as MadisonMove;
     }
     return {
@@ -334,7 +365,7 @@ export async function listMadisonMoveHistory(db: Db, dependencies: Pick<MadisonM
       excludedCount: 0,
       excludedReasons: [],
       recipients: [],
-      status: meta.outcome === "sent" ? "sent" : "dismissed",
+      status: meta.outcome === "sent" ? "sent" : meta.outcome === "completed" ? "completed" : "dismissed",
       details: [],
     };
   });
