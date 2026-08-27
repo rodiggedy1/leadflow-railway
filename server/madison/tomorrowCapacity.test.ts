@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTomorrowCapacityCandidate } from "./tomorrowCapacity";
+import { bookingActivityExclusionReason, buildTomorrowCapacityCandidate } from "./tomorrowCapacity";
 
 describe("Tomorrow Capacity", () => {
   const formerOneTimeCustomer = { name: "Robin Fullname", phone: "+12025550188", reason: "Previous one-time customer with no newer booking", lastBookingDate: "2026-07-01" };
@@ -39,5 +39,11 @@ describe("Tomorrow Capacity", () => {
     expect(candidate?.recipients).toHaveLength(30);
     expect(candidate?.impact).toContain("help recover 4 jobs");
     expect(candidate?.details).toContain("Review pool: up to 30 safe former one-time customers.");
+  });
+
+  it("excludes a former one-time row when the customer has a current weekly booking or any newer booking", () => {
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-06-01", hasActiveOrFutureBooking: true })).toBe("has an active or future booking");
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-07-01", hasActiveOrFutureBooking: false })).toBe("has a newer booking history");
+    expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-06-01", latestCompletedBookingDate: "2026-06-01", hasActiveOrFutureBooking: false })).toBeNull();
   });
 });
