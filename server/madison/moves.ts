@@ -282,10 +282,23 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
   return moves.sort((a, b) => (b.priority === "urgent" ? 3 : b.priority === "high" ? 2 : 1) - (a.priority === "urgent" ? 3 : a.priority === "high" ? 2 : 1));
 }
 
-export async function listMadisonMoveHistory(db: Db): Promise<MadisonMove[]> {
-  const rows = await storedMoveRows(db);
+export async function listMadisonMoveHistory(db: Db, dependencies: Pick<MadisonMovesDependencies, "storedMoveRows"> = {}): Promise<MadisonMove[]> {
+  const rows = await (dependencies.storedMoveRows ?? storedMoveRows)(db);
   return rows.map((row: any) => {
     const meta = parseMeta(row.metadata);
+    const snapshot = meta.snapshot as Partial<MadisonMove> | undefined;
+    if (snapshot?.moveKey && snapshot.kind && snapshot.headline && snapshot.businessReason && snapshot.impact) {
+      return {
+        ...snapshot,
+        id: row.id,
+        recipients: snapshot.recipients ?? [],
+        excludedReasons: snapshot.excludedReasons ?? [],
+        eligibleCount: snapshot.eligibleCount ?? 0,
+        excludedCount: snapshot.excludedCount ?? 0,
+        details: snapshot.details ?? [],
+        status: meta.outcome === "sent" ? "sent" : "dismissed",
+      } as MadisonMove;
+    }
     return {
       id: row.id,
       moveKey: meta.moveKey ?? `stored:${row.id}`,
@@ -304,13 +317,24 @@ export async function listMadisonMoveHistory(db: Db): Promise<MadisonMove[]> {
   });
 }
 
-export async function dismissMadisonMove(db: Db, moveKey: string, kind: MadisonMoveKind) {
+export async function dismissMadisonMove(db: Db, moveKey: string, kind: MadisonMoveKind, snapshot?: MadisonMove) {
   const rows = await storedMoveRows(db);
   const existing = rows.find((row: any) => parseMeta(row.metadata).moveKey === moveKey);
   if (existing) {
-    const meta = { ...parseMeta(existing.metadata), outcome: "dismissed", dismissedAt: Date.now() };
+    const meta = { ...parseMeta(existing.metadata), outcome: "dismissed", dismissedAt: Date.now(), snapshot: snapshot ?? parseMeta(existing.metadata).snapshot };
     await db.update(opsChatMessages).set({ cardStatus: "dismissed", activeDedupKey: null, metadata: JSON.stringify(meta), lastActivityAt: Date.now() }).where(eq(opsChatMessages.id, existing.id));
     return;
   }
-  await db.insert(opsChatMessages).values({ cleanerJobId: null, channel: "madison_moves", authorName: "Madison", authorRole: "system", body: "Madison move dismissed.", quickAction: "madisons_move", metadata: JSON.stringify({ moveKey, kind, outcome: "dismissed", dismissedAt: Date.now() }), cardStatus: "dismissed", lastActivityAt: Date.now() });
+  await db.insert(opsChatMessages).values({ cleanerJobId: null, channel: "madison_moves", authorName: "Madison", authorRole: "system", body: snapshot?.headline ?? "Madison move dismissed.", quickAction: "madisons_move", metadata: JSON.stringify({ moveKey, kind, outcome: "dismissed", dismissedAt: Date.now(), snapshot }), cardStatus: "dismissed", lastActivityAt: Date.now() });
+}
+
+/** Restoring is explicit and only re-enables a dismissed recommendation; it never sends a message. */
+export async function restoreMadisonMove(db: Db, moveKey: string) {
+  const rows = await storedMoveRows(db);
+  const existing = rows.find((row: any) => parseMeta(row.metadata).moveKey === moveKey);
+  if (!existing) throw new Error("Stored move not found");
+  const existingMeta = parseMeta(existing.metadata);
+  if (existingMeta.outcome === "sent") throw new Error("Sent moves cannot be restored");
+  const metadata = JSON.stringify({ ...existingMeta, outcome: "ready", restoredAt: Date.now() });
+  await db.update(opsChatMessages).set({ cardStatus: "active", activeDedupKey: `move:${moveKey}`, metadata, lastActivityAt: Date.now() }).where(eq(opsChatMessages.id, existing.id));
 }
