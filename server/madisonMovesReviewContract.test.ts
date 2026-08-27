@@ -71,6 +71,8 @@ describe("Madison’s Moves review-first contract", () => {
     expect(capacity).toContain("contacted in a campaign within 7 days");
     expect(capacity).toContain("has an active or future booking");
     expect(capacity).toContain("has a newer booking history");
+    expect(capacity).toContain("completed a booking within the last 7 days");
+    expect(capacity).toContain("has recurring status within the last 30 days");
     expect(capacity).toContain("lastBookingDate: row.jobDate");
     const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
     expect(card).toContain("Last booking:");
