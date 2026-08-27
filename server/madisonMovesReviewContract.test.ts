@@ -6,18 +6,16 @@ const root = path.resolve(import.meta.dirname, "..");
 const router = fs.readFileSync(path.join(root, "server", "madisonsMovesRouter.ts"), "utf8");
 const panel = fs.readFileSync(path.join(root, "client", "src", "components", "MadisonsMovesPanel.tsx"), "utf8");
 const moves = fs.readFileSync(path.join(root, "server", "madison", "moves.ts"), "utf8");
+const sharedBulkSender = fs.readFileSync(path.join(root, "server", "aiConciergeRouter.ts"), "utf8");
 
 describe("Madison’s Moves review-first contract", () => {
-  it("uses an explicit send mutation and rechecks the live move before sending", () => {
-    expect(router).toContain("send: agentProcedure");
-    expect(router).toContain("export async function sendMadisonMove");
-    expect(router).toContain("const liveMoves = await dependencies.listMoves(db)");
-    expect(router).toContain("Customer opted out via STOP");
-  });
-
-  it("keeps the right-column contact action behind the shared review card", () => {
+  it("routes the right-column contact action through the existing shared SMS sender", () => {
     expect(panel).toContain("<BulkSmsConfirmCard");
-    expect(panel).toContain("onReviewSend={async");
+    expect(panel).not.toContain("onReviewSend={async");
+    expect(panel).not.toContain("madisonMoves.send.useMutation");
+    expect(sharedBulkSender).toContain("sendBulkSms: agentProcedure");
+    expect(sharedBulkSender).toContain("Customer opted out via STOP");
+    expect(sharedBulkSender).toContain("Persistence failure must NOT cause the action to appear failed.");
     expect(panel).toContain("Review & send");
   });
 

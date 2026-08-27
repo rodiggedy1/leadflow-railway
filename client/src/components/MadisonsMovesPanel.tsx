@@ -87,7 +87,6 @@ export function MadisonsMovesPanel() {
   const dismiss = trpc.madisonMoves.dismiss.useMutation({ onSuccess: () => { setReviewing(null); setTab("history"); movesQuery.refetch(); historyQuery.refetch(); } });
   const restore = trpc.madisonMoves.restore.useMutation({ onSuccess: () => { setTab("ready"); movesQuery.refetch(); historyQuery.refetch(); } });
   const reviewItem = trpc.madisonMoves.reviewProtectTomorrowItem.useMutation({ onSuccess: (result) => { if (result.completed) setTab("history"); toast.success(result.completed ? "All Protect Tomorrow items are reviewed." : "Item marked resolved."); movesQuery.refetch(); historyQuery.refetch(); }, onError: (error) => toast.error(error.message) });
-  const send = trpc.madisonMoves.send.useMutation();
   const moves = (movesQuery.data?.moves ?? []) as Move[];
   const stats = movesQuery.data?.stats ?? { moves: 0, recipients: 0, urgent: 0 };
   const history = (historyQuery.data ?? []) as Move[];
@@ -122,10 +121,7 @@ export function MadisonsMovesPanel() {
         {reviewing && reviewCard && (
           <div className="mb-3">
             <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#7657bd]">Review recipients & message</span><button onClick={() => setReviewing(null)} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button></div>
-            <BulkSmsConfirmCard card={reviewCard} onDismiss={() => setReviewing(null)} onReviewSend={async ({ recipients, message }) => {
-              const result = await send.mutateAsync({ moveKey: reviewing.moveKey, recipients, message });
-              return { message: result.message, results: result.results };
-            }} onSent={(result) => { toast.success(result.message); setReviewing(null); movesQuery.refetch(); }} />
+            <BulkSmsConfirmCard card={reviewCard} onDismiss={() => setReviewing(null)} onSent={(result) => { toast.success(result.message); setReviewing(null); movesQuery.refetch(); }} />
           </div>
         )}
         {movesQuery.isLoading && <div className="grid place-items-center py-10 text-xs text-slate-400"><RefreshCw className="mb-2 h-4 w-4 animate-spin" /> Finding verified moves…</div>}
