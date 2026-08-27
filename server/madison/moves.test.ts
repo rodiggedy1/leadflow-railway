@@ -56,6 +56,7 @@ describe("Madison’s Moves Fill Capacity", () => {
         return { recipients: [lead], exclusions: [] };
       },
       tomorrowCapacityCandidate: async () => null,
+      tomorrowOvenUpsellCandidate: async () => null,
     });
     expect(moves.map((move) => move.kind)).toEqual(expect.arrayContaining(["save_cancellation", "fill_capacity"]));
     expect(moves.find((move) => move.kind === "fill_capacity")).toMatchObject({ moveKey: "fill:cancel:714:2026-08-28", recipients: [lead] });
@@ -71,9 +72,25 @@ describe("Madison’s Moves Fill Capacity", () => {
       computeReadinessSummary: async () => ({ totalIssues: 0 }) as any,
       eligibleQualifiedLeads: async () => ({ recipients: [], exclusions: [] }),
       tomorrowCapacityCandidate: async () => tomorrowCapacity,
+      tomorrowOvenUpsellCandidate: async () => null,
     });
     expect(moves).toHaveLength(1);
     expect(moves[0]).toMatchObject({ kind: "fill_capacity", moveKey: "capacity:2026-08-28", recipients: [lead] });
+  });
+
+  it("adds the tomorrow inside-oven Smart Upsell through its separate candidate path", async () => {
+    const upsell = {
+      moveKey: "upsell:inside-oven:2026-08-28", headline: "Offer inside-oven cleaning for tomorrow", businessReason: "One customer has Standard Cleaning without the oven add-on.", impact: "Review before sending.",
+      eligibleCount: 1, excludedCount: 0, excludedReasons: [], recipients: [lead], draftMessage: "Would you like to add an inside-oven clean?", targetDescription: "tomorrow's Standard Cleaning customers", details: [], source: { jobDate: "2026-08-28" },
+    };
+    const moves = await listMadisonMoves({} as any, {
+      storedMoveRows: async () => [],
+      computeReadinessSummary: async () => ({ totalIssues: 0 }) as any,
+      eligibleQualifiedLeads: async () => ({ recipients: [], exclusions: [] }),
+      tomorrowCapacityCandidate: async () => null,
+      tomorrowOvenUpsellCandidate: async () => upsell,
+    });
+    expect(moves).toMatchObject([{ kind: "smart_upsell", moveKey: "upsell:inside-oven:2026-08-28", recipients: [lead] }]);
   });
 
   it("reconstructs original dismissal details from the stored History snapshot", async () => {

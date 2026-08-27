@@ -7,9 +7,10 @@ import {
 } from "../../drizzle/schema";
 import { computeReadinessSummary, type ReadinessSummary } from "./readinessService";
 import { getTomorrowCapacityCandidate, type TomorrowCapacityCandidate } from "./tomorrowCapacity";
+import { getTomorrowOvenUpsellCandidate, type SmartUpsellCandidate } from "./smartUpsells";
 import { normalizePhoneLegacy } from "../utils/phone";
 
-export type MadisonMoveKind = "protect_tomorrow" | "save_cancellation" | "fill_capacity" | "recover_qualified_leads";
+export type MadisonMoveKind = "protect_tomorrow" | "save_cancellation" | "fill_capacity" | "recover_qualified_leads" | "smart_upsell";
 export type MadisonMoveDetailItem = { key: string; label: string; resolved: boolean };
 
 export type MadisonMoveRecipient = { name: string; phone: string; reason: string };
@@ -42,6 +43,7 @@ type MadisonMovesDependencies = {
   computeReadinessSummary?: typeof computeReadinessSummary;
   eligibleQualifiedLeads?: (db: Db, options?: { area?: string }) => Promise<{ recipients: MadisonMoveRecipient[]; exclusions: string[] }>;
   tomorrowCapacityCandidate?: (db: Db, tomorrow: string) => Promise<TomorrowCapacityCandidate | null>;
+  tomorrowOvenUpsellCandidate?: (db: Db, tomorrow: string) => Promise<SmartUpsellCandidate | null>;
 };
 const inactiveLeadStages = new Set(["COLD", "LOST", "QUALITY_RATING_DONE", "REVIEW_REBOOKING_DONE"]);
 const DAY_MS = 86_400_000;
@@ -297,6 +299,7 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
   const getReadinessSummary = dependencies.computeReadinessSummary ?? computeReadinessSummary;
   const getEligibleQualifiedLeads = dependencies.eligibleQualifiedLeads ?? eligibleQualifiedLeads;
   const getTomorrowCapacity = dependencies.tomorrowCapacityCandidate ?? getTomorrowCapacityCandidate;
+  const getTomorrowOvenUpsell = dependencies.tomorrowOvenUpsellCandidate ?? getTomorrowOvenUpsellCandidate;
   const rows = await loadStoredMoveRows(db);
   const stored = new Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>();
   for (const row of rows) {
@@ -329,6 +332,11 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
   const tomorrowCapacity = await getTomorrowCapacity(db, tomorrow);
   if (tomorrowCapacity && statusFor(stored, tomorrowCapacity.moveKey) === "ready") {
     moves.push({ ...tomorrowCapacity, kind: "fill_capacity", priority: "high", status: "ready" });
+  }
+
+  const tomorrowOvenUpsell = await getTomorrowOvenUpsell(db, tomorrow);
+  if (tomorrowOvenUpsell && statusFor(stored, tomorrowOvenUpsell.moveKey) === "ready") {
+    moves.push({ ...tomorrowOvenUpsell, kind: "smart_upsell", priority: "normal", status: "ready" });
   }
 
   for (const [moveKey, row] of stored) {
