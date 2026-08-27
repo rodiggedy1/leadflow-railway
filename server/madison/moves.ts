@@ -165,6 +165,36 @@ function statusFor(stored: Map<string, { id: number; meta: Record<string, any>; 
   return row.meta.outcome === "sent" ? "sent" as const : row.cardStatus === "dismissed" ? "dismissed" as const : "ready" as const;
 }
 
+export function buildFillCapacityMove(input: {
+  parentMoveKey: string;
+  source: Record<string, any>;
+  recipients: MadisonMoveRecipient[];
+  exclusions: string[];
+  status: "ready" | "dismissed" | "sent";
+  id?: number;
+}): MadisonMove | null {
+  if (input.recipients.length === 0 || input.status !== "ready") return null;
+  const { source } = input;
+  return {
+    id: input.id,
+    moveKey: `fill:${input.parentMoveKey}`,
+    kind: "fill_capacity",
+    priority: "high",
+    headline: `Fill a verified opening on ${source.jobDate ?? "the schedule"}`,
+    businessReason: `A ${source.nextStatus ?? "cancelled"} booking opened capacity near ${locality(source.address).replace(/^(zip|city):/, "") || "the affected route"}.`,
+    impact: `Review ${input.recipients.length} qualified nearby lead${input.recipients.length === 1 ? "" : "s"} before offering the opening.`,
+    eligibleCount: input.recipients.length,
+    excludedCount: input.exclusions.length,
+    excludedReasons: Array.from(new Set(input.exclusions)).slice(0, 4),
+    recipients: input.recipients,
+    draftMessage: "Hi! We have a cleaning opening available near you and wanted to see if you would like to get on the schedule. Reply here and we’ll help find the best time.",
+    targetDescription: "qualified leads near this verified opening",
+    status: input.status,
+    source: { ...source, parentMoveKey: input.parentMoveKey },
+    details: [`This is tied to the verified opening from booking ${source.bookingId ?? "unknown"}.`, "Recipients are limited to qualified leads in the same verified area and rechecked before sending."],
+  };
+}
+
 export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
   const rows = await storedMoveRows(db);
   const stored = new Map<string, { id: number; meta: Record<string, any>; cardStatus: string | null }>();
@@ -222,20 +252,8 @@ export async function listMadisonMoves(db: Db): Promise<MadisonMove[]> {
     });
     const fillKey = `fill:${moveKey}`;
     const fillStatus = statusFor(stored, fillKey);
-    if (candidates.recipients.length > 0 && fillStatus === "ready") {
-      moves.push({
-        id: stored.get(fillKey)?.id, moveKey: fillKey, kind: "fill_capacity", priority: "high",
-        headline: `Fill a verified opening on ${source.jobDate ?? "the schedule"}`,
-        businessReason: `A ${source.nextStatus ?? "cancelled"} booking opened capacity near ${locality(source.address).replace(/^(zip|city):/, "") || "the affected route"}.`,
-        impact: `Review ${candidates.recipients.length} qualified nearby lead${candidates.recipients.length === 1 ? "" : "s"} before offering the opening.`,
-        eligibleCount: candidates.recipients.length, excludedCount: candidates.exclusions.length,
-        excludedReasons: Array.from(new Set(candidates.exclusions)).slice(0, 4), recipients: candidates.recipients,
-        draftMessage: "Hi! We have a cleaning opening available near you and wanted to see if you would like to get on the schedule. Reply here and we’ll help find the best time.",
-        targetDescription: "qualified leads near this verified opening", status: fillStatus,
-        source: { ...source, parentMoveKey: moveKey },
-        details: [`This is tied to the verified opening from booking ${source.bookingId ?? "unknown"}.`, "Recipients are limited to qualified leads in the same verified area and rechecked before sending."],
-      });
-    }
+    const fillMove = buildFillCapacityMove({ parentMoveKey: moveKey, source, recipients: candidates.recipients, exclusions: candidates.exclusions, status: fillStatus, id: stored.get(fillKey)?.id });
+    if (fillMove) moves.push(fillMove);
   }
   return moves.sort((a, b) => (b.priority === "urgent" ? 3 : b.priority === "high" ? 2 : 1) - (a.priority === "urgent" ? 3 : a.priority === "high" ? 2 : 1));
 }
