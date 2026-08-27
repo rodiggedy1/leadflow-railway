@@ -5,7 +5,7 @@ import {
   opsChatMessages,
   smsOptOuts,
 } from "../../drizzle/schema";
-import { computeReadinessSummary } from "./readinessService";
+import { computeReadinessSummary, type ReadinessSummary } from "./readinessService";
 import { normalizePhoneLegacy } from "../utils/phone";
 
 export type MadisonMoveKind = "protect_tomorrow" | "save_cancellation" | "fill_capacity" | "recover_qualified_leads";
@@ -201,6 +201,35 @@ export function buildFillCapacityMove(input: {
   };
 }
 
+/** Keeps the Protect Tomorrow headline, category breakdown, and expanded detail rows on the same readiness totals. */
+export function buildProtectTomorrowMove(input: { readiness: ReadinessSummary; tomorrow: string; status: "ready" | "dismissed" | "sent"; id?: number }): MadisonMove | null {
+  const { readiness } = input;
+  if (readiness.totalIssues <= 0 || input.status !== "ready") return null;
+  const categories = [
+    [readiness.dimensions.jobs.issueCount, "schedule"],
+    [readiness.dimensions.teams.issueCount, "team"],
+    [readiness.dimensions.payments.issueCount, "payment"],
+    [readiness.dimensions.confirmations.issueCount, "confirmation"],
+    [readiness.dimensions.clientRequests.issueCount, "client request"],
+  ].filter(([count]) => Number(count) > 0) as Array<[number, string]>;
+  const breakdown = categories.map(([count, label]) => `${count} ${label}`).join(", ");
+  const details = [
+    ...readiness.dimensions.jobs.unassigned.map((row) => `${row.customerName} is unassigned${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
+    ...readiness.dimensions.jobs.doubleBooked.map((row) => `${row.customerName} is double-booked with ${row.cleanerName}${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
+    ...readiness.dimensions.teams.rows.filter((row) => !row.confirmed).map((row) => `${row.name} has not confirmed their team schedule.`),
+    ...readiness.dimensions.payments.rows.filter((row) => row.status !== "on_hold" && row.status !== "lf_on_hold").map((row) => `${row.customerName} has no payment authorization${row.jobTime ? ` (${row.jobTime})` : ""}.`),
+    ...readiness.dimensions.confirmations.rows.filter((row) => row.status === "pending").map((row) => `${row.customerName} has not confirmed${row.jobTime ? ` (${row.jobTime})` : ""}.`),
+    ...readiness.dimensions.clientRequests.rows.filter((row) => row.status !== "honored").map((row) => row.status === "unassigned" ? `${row.customerName}'s ${row.requestedTeam} request is unassigned.` : `${row.customerName}'s ${row.requestedTeam} request is assigned to ${row.assignedTeam ?? "another team"}.`),
+  ];
+  return {
+    id: input.id, moveKey: `protect:${input.tomorrow}`, kind: "protect_tomorrow", priority: "urgent",
+    headline: `${readiness.totalIssues} verified item${readiness.totalIssues === 1 ? "" : "s"} could affect tomorrow`,
+    businessReason: `${breakdown} issue${readiness.totalIssues === 1 ? "" : "s"} ${readiness.totalIssues === 1 ? "is" : "are"} still open.`,
+    impact: "Protect tomorrow’s scheduled revenue and customer experience.", eligibleCount: 0, excludedCount: 0, excludedReasons: [], recipients: [], status: input.status,
+    details,
+  };
+}
+
 /** Builds the two related move cards from one persisted, verified cancellation opening. */
 export function buildCancellationOpeningMoves(input: {
   parentMoveKey: string;
@@ -241,18 +270,8 @@ export async function listMadisonMoves(db: Db, dependencies: MadisonMovesDepende
   const readiness = await getReadinessSummary(db, tomorrow);
   const readinessKey = `protect:${tomorrow}`;
   const readinessStatus = statusFor(stored, readinessKey);
-  if (readiness.totalIssues > 0 && readinessStatus === "ready") {
-    moves.push({
-      id: stored.get(readinessKey)?.id, moveKey: readinessKey, kind: "protect_tomorrow", priority: "urgent",
-      headline: `${readiness.totalIssues} verified item${readiness.totalIssues === 1 ? "" : "s"} could affect tomorrow`,
-      businessReason: `${readiness.dimensions.jobs.issueCount} schedule, ${readiness.dimensions.teams.issueCount} team, and ${readiness.dimensions.confirmations.issueCount} confirmation issue${readiness.totalIssues === 1 ? "" : "s"} are still open.`,
-      impact: "Protect tomorrow’s scheduled revenue and customer experience.", eligibleCount: 0, excludedCount: 0, excludedReasons: [], recipients: [], status: readinessStatus,
-      details: [
-        ...readiness.dimensions.jobs.unassigned.map((row) => `${row.customerName} is unassigned${row.jobTime ? ` at ${row.jobTime}` : ""}.`),
-        ...readiness.dimensions.confirmations.rows.filter((row) => row.status === "pending").map((row) => `${row.customerName} has not confirmed${row.jobTime ? ` (${row.jobTime})` : ""}.`),
-      ].slice(0, 8),
-    });
-  }
+  const protectTomorrow = buildProtectTomorrowMove({ readiness, tomorrow, status: readinessStatus, id: stored.get(readinessKey)?.id });
+  if (protectTomorrow) moves.push(protectTomorrow);
 
   const recoveryKey = `recover:${tomorrow}`;
   const recoveryStatus = statusFor(stored, recoveryKey);
