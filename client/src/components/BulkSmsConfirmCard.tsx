@@ -35,16 +35,21 @@ export function BulkSmsConfirmCard({
   card,
   onSent,
   onDismiss,
+  onReviewSend,
 }: {
   card: BulkSmsConfirmCardData;
   onSent: (result: BulkSmsSentResult) => void;
   onDismiss?: () => void;
+  /** Optional caller-owned sender. When omitted, preserve the existing concierge bulk sender. */
+  onReviewSend?: (input: { recipients: BulkSmsRecipient[]; message: string }) => Promise<BulkSmsSentResult>;
 }) {
   const [draft, setDraft] = useState(card.draftMessage);
   const [sent, setSent] = useState(false);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState(false);
   const sendMutation = trpc.aiConcierge.sendBulkSms.useMutation();
   const activeRecipients = card.recipients.filter(r => !excluded.has(r.phone));
+  const isSending = sending || sendMutation.isPending;
 
   function toggleRecipient(phone: string) {
     setExcluded(prev => {
@@ -56,7 +61,17 @@ export function BulkSmsConfirmCard({
   }
 
   function handleSend() {
-    if (sent || sendMutation.isPending) return;
+    if (sent || isSending) return;
+    if (onReviewSend) {
+      setSending(true);
+      onReviewSend({ recipients: activeRecipients, message: draft })
+        .then((result) => {
+          setSent(true);
+          onSent(result);
+        })
+        .finally(() => setSending(false));
+      return;
+    }
     sendMutation.mutate(
       {
         recipients: activeRecipients,
@@ -129,7 +144,7 @@ export function BulkSmsConfirmCard({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          disabled={sent || sendMutation.isPending}
+          disabled={sent || isSending}
           rows={10}
           className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60"
           style={{ background: "rgba(255,255,255,0.8)", border: "1px solid #e5d9ea", color: "#2d3039", minHeight: "200px" }}
@@ -139,11 +154,11 @@ export function BulkSmsConfirmCard({
         <div className="px-4 pb-4">
           <button
             onClick={handleSend}
-            disabled={!draft.trim() || sendMutation.isPending || activeRecipients.length === 0}
+            disabled={!draft.trim() || isSending || activeRecipients.length === 0}
             className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all"
             style={{ background: "linear-gradient(135deg,#7447f5,#9b6ff5)" }}
           >
-            {sendMutation.isPending ? (
+            {isSending ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
             ) : (
               <><Send className="w-4 h-4" /> Send text{activeRecipients.length > 1 ? ` to ${activeRecipients.length} people` : ""}</>
