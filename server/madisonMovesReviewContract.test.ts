@@ -19,6 +19,13 @@ describe("Madison’s Moves review-first contract", () => {
     expect(panel).toContain("Review & send");
   });
 
+  it("shows a clear retryable error for a failed custom review send", () => {
+    const card = fs.readFileSync(path.join(root, "client", "src", "components", "BulkSmsConfirmCard.tsx"), "utf8");
+    expect(card).toContain(".catch((error: unknown) =>");
+    expect(card).toContain('role="alert"');
+    expect(card).toContain("No customer was contacted by this attempt.");
+  });
+
   it("generates Fill Capacity only from a verified stored cancellation opening", () => {
     const moves = fs.readFileSync(path.join(root, "server", "madison", "moves.ts"), "utf8");
     expect(moves).toContain('const fillKey = `fill:${moveKey}`');

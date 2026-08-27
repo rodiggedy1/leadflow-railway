@@ -47,6 +47,7 @@ export function BulkSmsConfirmCard({
   const [sent, setSent] = useState(false);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const sendMutation = trpc.aiConcierge.sendBulkSms.useMutation();
   const activeRecipients = card.recipients.filter(r => !excluded.has(r.phone));
   const isSending = sending || sendMutation.isPending;
@@ -62,12 +63,16 @@ export function BulkSmsConfirmCard({
 
   function handleSend() {
     if (sent || isSending) return;
+    setSendError(null);
     if (onReviewSend) {
       setSending(true);
       onReviewSend({ recipients: activeRecipients, message: draft })
         .then((result) => {
           setSent(true);
           onSent(result);
+        })
+        .catch((error: unknown) => {
+          setSendError(error instanceof Error ? error.message : "Message could not be sent. No customer was contacted by this attempt.");
         })
         .finally(() => setSending(false));
       return;
@@ -137,6 +142,7 @@ export function BulkSmsConfirmCard({
         </div>
       )}
       <div className="px-4 pb-3">
+        {sendError && <p role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{sendError}</p>}
         <div className="flex items-center gap-1.5 mb-1.5">
           <Edit3 className="w-3 h-3" style={{ color: "#7447f5" }} />
           <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#7447f5" }}>Message</span>
