@@ -6,7 +6,7 @@ import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 import { normalizePhoneLegacy } from "./utils/phone";
-import { cleanerJobs, opsChatMessages, smsOptOuts } from "../drizzle/schema";
+import { cleanerJobs, opsChatMessages, reactivationContacts, smsOptOuts } from "../drizzle/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { dismissMadisonMove, listMadisonMoveHistory, listMadisonMoves, restoreMadisonMove, setProtectTomorrowChecklistItem, type MadisonMoveKind } from "./madison/moves";
 
@@ -28,10 +28,28 @@ type MadisonMoveSendDependencies = {
   listMoves: typeof listMadisonMoves;
   sendSms: typeof sendSms;
   appendCsOutboundMessage: typeof appendCsOutboundMessage;
+  recordRecentContact: typeof recordMadisonFillCapacityContact;
   csNumberId: typeof ENV.openPhoneCsNumberId;
 };
 
-const defaultSendDependencies: MadisonMoveSendDependencies = { getDb, listMoves: listMadisonMoves, sendSms, appendCsOutboundMessage, csNumberId: ENV.openPhoneCsNumberId };
+export async function recordMadisonFillCapacityContact(input: { db: any; phone: string }) {
+  await input.db.insert(reactivationContacts).values({
+    campaignId: -1,
+    phone: input.phone,
+    bookingCount: 0,
+    status: "SENT",
+    sentAt: new Date(),
+  });
+}
+
+const defaultSendDependencies: MadisonMoveSendDependencies = {
+  getDb,
+  listMoves: listMadisonMoves,
+  sendSms,
+  appendCsOutboundMessage,
+  recordRecentContact: recordMadisonFillCapacityContact,
+  csNumberId: ENV.openPhoneCsNumberId,
+};
 
 export async function sendMadisonMove(
   ctx: { user?: { name?: string | null } | null },
@@ -79,11 +97,24 @@ export async function sendMadisonMove(
   }
 
   const results: Array<{ name: string; phone: string; success: boolean; error?: string }> = [];
+  let recentContactLoggedCount = 0;
+  let recentContactLogFailedCount = 0;
   for (const recipient of sendable) {
     try {
       const sent = await dependencies.sendSms({ to: recipient.phone, content: input.message, fromNumberId: dependencies.csNumberId });
       results.push({ name: recipient.name, phone: recipient.phone, success: sent.success });
-      if (sent.success) Promise.resolve(dependencies.appendCsOutboundMessage({ db: db as any, recipientPhone: recipient.phone, recipientName: recipient.name, message: input.message, senderName: ctx.user?.name ?? "Agent", openPhoneMessageId: sent.messageId })).catch(console.error);
+      if (sent.success) {
+        if (move.kind === "fill_capacity") {
+          try {
+            await dependencies.recordRecentContact({ db, phone: recipient.normalized! });
+            recentContactLoggedCount += 1;
+          } catch (error) {
+            recentContactLogFailedCount += 1;
+            console.error(`[MadisonMoves] Failed to record Fill Capacity contact for ${recipient.normalized}:`, error);
+          }
+        }
+        Promise.resolve(dependencies.appendCsOutboundMessage({ db: db as any, recipientPhone: recipient.phone, recipientName: recipient.name, message: input.message, senderName: ctx.user?.name ?? "Agent", openPhoneMessageId: sent.messageId })).catch(console.error);
+      }
     } catch (error) {
       results.push({ name: recipient.name, phone: recipient.phone, success: false, error: error instanceof Error ? error.message : String(error) });
     }
@@ -91,7 +122,13 @@ export async function sendMadisonMove(
   const sentCount = results.filter((result) => result.success).length;
   let statePersistenceError = false;
   try {
-    const meta = { ...sendingMeta, outcome: sentCount ? "sent" : "failed", sentAt: Date.now(), sentCount };
+    const meta = {
+      ...sendingMeta,
+      outcome: sentCount ? "sent" : "failed",
+      sentAt: Date.now(),
+      sentCount,
+      ...(move.kind === "fill_capacity" ? { recentContactLoggedCount, recentContactLogFailedCount } : {}),
+    };
     await db.update(opsChatMessages).set({ body: `Madison move ${sentCount ? "sent" : "failed"}.`, cardStatus: "dismissed", activeDedupKey: null, metadata: JSON.stringify(meta), lastActivityAt: Date.now() }).where(eq(opsChatMessages.id, moveRecordId));
   } catch (error) {
     // The move remains in its pre-send "sending" state, which suppresses automatic retry.
@@ -99,7 +136,15 @@ export async function sendMadisonMove(
     console.error("[MadisonMoves] Failed to finalize send state after SMS delivery:", error);
     statePersistenceError = true;
   }
-  return { message: sentCount ? `Sent to ${sentCount} customer${sentCount === 1 ? "" : "s"}.` : "No messages were sent.", results, ...(statePersistenceError ? { statePersistenceError: true } : {}) };
+  const message = sentCount
+    ? `Sent to ${sentCount} customer${sentCount === 1 ? "" : "s"}.${recentContactLogFailedCount ? ` Warning: ${recentContactLogFailedCount} successful send${recentContactLogFailedCount === 1 ? " was" : "s were"} not added to the recent-contact safeguard.` : ""}`
+    : "No messages were sent.";
+  return {
+    message,
+    results,
+    ...(statePersistenceError ? { statePersistenceError: true } : {}),
+    ...(recentContactLogFailedCount ? { recentContactPersistenceError: true } : {}),
+  };
 }
 
 export const madisonMovesRouter = router({

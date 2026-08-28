@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingActivityExclusionReason, buildTomorrowCapacityCandidate } from "./tomorrowCapacity";
+import { bookingActivityExclusionReason, buildTomorrowCapacityCandidate, recentOutboundPhones } from "./tomorrowCapacity";
 
 describe("Tomorrow Capacity", () => {
   const formerOneTimeCustomer = { name: "Robin Fullname", phone: "+12025550188", reason: "Previous one-time customer with no newer booking", lastBookingDate: "2026-07-01" };
@@ -50,5 +50,22 @@ describe("Tomorrow Capacity", () => {
   it("excludes customers who completed recently or show recurring status within 30 days", () => {
     expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-07-01", latestCompletedBookingDate: "2026-08-25", hasActiveOrFutureBooking: false, hasCompletedBookingWithin7Days: true, hasRecurringBookingWithin30Days: false })).toBe("completed a booking within the last 7 days");
     expect(bookingActivityExclusionReason({ candidateLastBookingDate: "2026-07-01", latestCompletedBookingDate: "2026-08-10", hasActiveOrFutureBooking: false, hasCompletedBookingWithin7Days: false, hasRecurringBookingWithin30Days: true })).toBe("has recurring status within the last 30 days");
+  });
+
+  it("recognizes recent carrier-accepted outbound messages from both canonical session formats", () => {
+    const cutoff = Date.parse("2026-08-21T00:00:00.000Z");
+    const phones = recentOutboundPhones([
+      { phone: "+1 (202) 555-0101", messageHistory: JSON.stringify([{ role: "assistant", content: "Opening available", ts: cutoff + 1, opMsgId: "op-madison-1" }]) },
+      { phone: "+12025550102", messageHistory: JSON.stringify([{ role: "assistant", content: "Campaign message", ts: cutoff + 2, openPhoneId: "op-campaign-1" }]) },
+      { phone: "+12025550103", messageHistory: JSON.stringify([{ role: "user", content: "Customer reply", ts: cutoff + 3, opMsgId: "op-inbound-1" }]) },
+      { phone: "+12025550104", messageHistory: JSON.stringify([{ role: "assistant", content: "Draft only", ts: cutoff + 4 }]) },
+      { phone: "+12025550105", messageHistory: JSON.stringify([{ role: "assistant", content: "Old send", ts: cutoff - 1, opMsgId: "op-old-1" }]) },
+    ], cutoff);
+
+    expect([...phones]).toEqual(["+12025550101", "+12025550102"]);
+  });
+
+  it("ignores malformed session history without excluding the customer", () => {
+    expect(recentOutboundPhones([{ phone: "+12025550101", messageHistory: "not-json" }], Date.now())).toEqual(new Set());
   });
 });
