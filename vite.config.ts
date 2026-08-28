@@ -216,6 +216,10 @@ export default defineConfig({
           if (id.includes("node_modules/emoji-picker-react")) {
             return "vendor-emoji";
           }
+          // ExcelJS — large and used only after Payroll Summary's workbook button is clicked
+          if (id.includes("node_modules/exceljs") || id.includes("node_modules/jszip")) {
+            return "vendor-payroll-xlsx";
+          }
           // CommandChat — very large component, split into its own chunk
           if (id.includes("components/CommandChat")) {
             return "CommandChat";

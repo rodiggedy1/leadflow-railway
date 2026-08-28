@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { ArrowLeft, Download, ChevronLeft, ChevronRight, ShieldCheck, Loader2 } from "lucide-react";
 import cx from "clsx";
+import { toast } from "sonner";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -482,6 +483,8 @@ export default function PayrollSummary() {
     data: teamDetail,
     isPending: isTeamDetailLoading,
   } = trpc.teamPay.getTeamDetail.useMutation();
+  const { mutateAsync: loadWorkbookTeamDetail } = trpc.teamPay.getTeamDetail.useMutation();
+  const [isWorkbookDownloading, setIsWorkbookDownloading] = useState(false);
 
   const rows = data?.rows ?? [];
   const isNewPayrollPeriod = rows[0]?.payrollMode === "2026-08-16";
@@ -510,6 +513,24 @@ export default function PayrollSummary() {
     const csv = buildSummaryCsv(rows, weekStart, weekEnd);
     triggerCsvDownload(csv, `payroll-summary-${weekStart}-to-${weekEnd}.csv`);
   }, [rows, weekStart, weekEnd]);
+
+  const handleWorkbookDownload = useCallback(async () => {
+    if (rows.length === 0 || isWorkbookDownloading) return;
+    setIsWorkbookDownloading(true);
+    try {
+      const teamDetails = await Promise.all(
+        rows.map((row) => loadWorkbookTeamDetail({ teamName: row.teamName, weekStart }))
+      );
+      const { downloadPayrollWorkbook } = await import("@/lib/payrollWorkbook");
+      const filename = await downloadPayrollWorkbook({ rows, teamDetails, weekStart, weekEnd });
+      toast.success(`${filename} downloaded with ${teamDetails.length} team tab${teamDetails.length === 1 ? "" : "s"}.`);
+    } catch (downloadError) {
+      console.error("[Payroll Workbook] Download failed", downloadError);
+      toast.error(downloadError instanceof Error ? downloadError.message : "Payroll workbook download failed.");
+    } finally {
+      setIsWorkbookDownloading(false);
+    }
+  }, [rows, isWorkbookDownloading, loadWorkbookTeamDetail, weekStart, weekEnd]);
 
   function prevWeek() {
     setWeekStart(fmt(addDays(new Date(weekStart + "T00:00:00"), -7)));
@@ -573,12 +594,23 @@ export default function PayrollSummary() {
             </div>
 
             <Button
+              variant="outline"
               onClick={handleSummaryCsvDownload}
               disabled={rows.length === 0}
-              className="rounded-2xl gap-2"
+              className="rounded-2xl gap-2 bg-white"
             >
               <Download className="h-4 w-4" />
-              Download CSV
+              Summary CSV
+            </Button>
+            <Button
+              onClick={handleWorkbookDownload}
+              disabled={rows.length === 0 || isWorkbookDownloading}
+              className="rounded-2xl gap-2"
+            >
+              {isWorkbookDownloading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Download className="h-4 w-4" />}
+              {isWorkbookDownloading ? "Building workbook…" : "Download Workbook"}
             </Button>
           </div>
         </div>
