@@ -533,18 +533,17 @@ export const stripeRouter = router({
       z.object({
         customerPhone: z.string().min(7).max(30).optional(),
         cleanerJobId: z.number().int().optional(),
-        limit: z.number().int().min(1).max(100).default(50),
-      })
+      }).optional()
     )
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
       const conditions = [];
-      if (input.customerPhone) {
+      if (input?.customerPhone) {
         conditions.push(eq(paymentAuthorizations.customerPhone, input.customerPhone));
       }
-      if (input.cleanerJobId) {
+      if (input?.cleanerJobId) {
         conditions.push(eq(paymentAuthorizations.cleanerJobId, input.cleanerJobId));
       }
 
@@ -552,8 +551,7 @@ export const stripeRouter = router({
         .select()
         .from(paymentAuthorizations)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(paymentAuthorizations.createdAt))
-        .limit(input.limit);
+        .orderBy(desc(paymentAuthorizations.createdAt));
 
       return rows;
     }),

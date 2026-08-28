@@ -562,7 +562,7 @@ function AuthorizationsPanel() {
   const [filterStatus, setFilterStatus] = useState<"all" | "authorized" | "captured" | "cancelled" | "failed">("all");
 
   const { data, isLoading, refetch, isFetching } = trpc.stripe.listPaymentAuthorizations.useQuery(
-    { limit: 100 },
+    undefined,
     { staleTime: 30_000, retry: false, throwOnError: false }
   );
 
