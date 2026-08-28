@@ -1,5 +1,6 @@
 export type BookingWidgetServiceId = "standard" | "deep" | "moveout";
 export type BookingWidgetQuestionRole = "bedrooms" | "bathrooms" | "extras" | "custom";
+export type BookingWidgetQuestionSelectionMode = "single" | "multiple";
 
 export type BookingWidgetServiceDraft = {
   id: BookingWidgetServiceId;
@@ -17,10 +18,11 @@ export type BookingWidgetQuestionDraft = {
   role: BookingWidgetQuestionRole;
   prompt: string;
   choices: string[];
+  selectionMode: BookingWidgetQuestionSelectionMode;
 };
 
 export type BookingWidgetDraftConfig = {
-  demoVersion: 3;
+  demoVersion: 4;
   brandName: string;
   brandLogoUrl: string;
   headerIcon: string;
@@ -50,7 +52,7 @@ export type BookingWidgetDraftConfig = {
 };
 
 export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
-  demoVersion: 3,
+  demoVersion: 4,
   brandName: "Book with AI",
   brandLogoUrl: "",
   headerIcon: "✨",
@@ -72,18 +74,21 @@ export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
       role: "bedrooms",
       prompt: "And how many bedrooms?",
       choices: ["1 bedroom", "2 bedrooms", "3 bedrooms", "4 bedrooms", "5+ bedrooms"],
+      selectionMode: "single",
     },
     {
       id: "bathrooms",
       role: "bathrooms",
       prompt: "And how many bathrooms?",
       choices: ["1 bathroom", "2 bathrooms", "3 bathrooms", "4 bathrooms"],
+      selectionMode: "single",
     },
     {
       id: "extras",
       role: "extras",
       prompt: "Anything you want to add?",
       choices: ["No extras", "Fridge", "Oven", "Baseboards", "Fridge + oven"],
+      selectionMode: "multiple",
     },
   ],
   openingEyebrow: "I found an opening",
@@ -160,11 +165,20 @@ function normalizeQuestions(value: unknown, fallback: readonly BookingWidgetQues
     let id = asText(source.id, `question-${index + 1}`).trim() || `question-${index + 1}`;
     while (seenIds.has(id)) id = `${id}-${index + 1}`;
     seenIds.add(id);
+    const role = isQuestionRole(source.role) ? source.role : "custom";
+    const selectionMode = source.selectionMode === "multiple"
+      ? "multiple"
+      : source.selectionMode === "single"
+        ? "single"
+        : role === "extras"
+          ? "multiple"
+          : "single";
     return [{
       id,
-      role: isQuestionRole(source.role) ? source.role : "custom",
+      role,
       prompt: asText(source.prompt, `Question ${index + 1}`),
       choices: asStringList(source.choices, ["Option 1", "Option 2"]),
+      selectionMode,
     }];
   });
 }
@@ -177,12 +191,14 @@ function migrateVersionTwoQuestions(parsed: Record<string, unknown>): BookingWid
       role: "bathrooms",
       prompt: asText(parsed.bathroomQuestion, "And how many bathrooms?"),
       choices: asStringList(parsed.bathroomOptions, ["1 bathroom", "2 bathrooms", "3 bathrooms", "4 bathrooms"]),
+      selectionMode: "single",
     },
     {
       id: "extras",
       role: "extras",
       prompt: asText(parsed.extrasQuestion, "Anything you want to add?"),
       choices: asStringList(parsed.extrasOptions, ["No extras", "Fridge", "Oven", "Baseboards", "Fridge + oven"]),
+      selectionMode: "multiple",
     },
   ];
 }
@@ -193,10 +209,12 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const defaults = DEFAULT_BOOKING_WIDGET_DRAFT;
+    const isVersionFour = parsed.demoVersion === 4;
     const isVersionThree = parsed.demoVersion === 3;
     const isVersionTwo = parsed.demoVersion === 2;
-    const rawServices = (isVersionThree || isVersionTwo) && Array.isArray(parsed.services) ? parsed.services : [];
-    const questions = isVersionThree
+    const isSupportedVersion = isVersionFour || isVersionThree || isVersionTwo;
+    const rawServices = isSupportedVersion && Array.isArray(parsed.services) ? parsed.services : [];
+    const questions = isVersionFour || isVersionThree
       ? normalizeQuestions(parsed.questions, defaults.questions)
       : isVersionTwo
         ? migrateVersionTwoQuestions(parsed)
@@ -204,20 +222,20 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
 
     return {
       ...structuredClone(defaults),
-      demoVersion: 3,
+      demoVersion: 4,
       brandName: asText(parsed.brandName, defaults.brandName),
       brandLogoUrl: asText(parsed.brandLogoUrl, defaults.brandLogoUrl),
       headerIcon: asText(parsed.headerIcon, defaults.headerIcon),
       statusText: asText(parsed.statusText, defaults.statusText),
       greeting: asText(parsed.greeting, defaults.greeting),
-      inputPlaceholder: isVersionThree || isVersionTwo ? asText(parsed.inputPlaceholder, defaults.inputPlaceholder) : defaults.inputPlaceholder,
-      addressPlaceholder: isVersionThree || isVersionTwo ? asText(parsed.addressPlaceholder, defaults.addressPlaceholder) : defaults.addressPlaceholder,
-      helperText: isVersionThree || isVersionTwo ? asText(parsed.helperText, defaults.helperText) : defaults.helperText,
+      inputPlaceholder: isSupportedVersion ? asText(parsed.inputPlaceholder, defaults.inputPlaceholder) : defaults.inputPlaceholder,
+      addressPlaceholder: isSupportedVersion ? asText(parsed.addressPlaceholder, defaults.addressPlaceholder) : defaults.addressPlaceholder,
+      helperText: isSupportedVersion ? asText(parsed.helperText, defaults.helperText) : defaults.helperText,
       primaryColor: asColor(parsed.primaryColor, defaults.primaryColor),
       customerBubbleColor: asColor(parsed.customerBubbleColor, defaults.customerBubbleColor),
       quickPrompts: asStringList(parsed.quickPrompts, defaults.quickPrompts),
       questions,
-      openingEyebrow: isVersionThree || isVersionTwo ? asText(parsed.openingEyebrow, defaults.openingEyebrow) : defaults.openingEyebrow,
+      openingEyebrow: isSupportedVersion ? asText(parsed.openingEyebrow, defaults.openingEyebrow) : defaults.openingEyebrow,
       services: defaults.services.map((fallback, index) => {
         const service = rawServices[index] as Partial<BookingWidgetServiceDraft> | undefined;
         return {
@@ -231,18 +249,18 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
           completedJobs: asText(service?.completedJobs, fallback.completedJobs),
         };
       }) as BookingWidgetDraftConfig["services"],
-      bookingButtonLabel: isVersionThree || isVersionTwo ? asText(parsed.bookingButtonLabel, defaults.bookingButtonLabel) : defaults.bookingButtonLabel,
-      addressQuestion: isVersionThree || isVersionTwo ? asText(parsed.addressQuestion, defaults.addressQuestion) : defaults.addressQuestion,
-      addressExample: isVersionThree || isVersionTwo ? asText(parsed.addressExample, defaults.addressExample) : defaults.addressExample,
-      paymentConfirmationTemplate: isVersionThree || isVersionTwo ? asText(parsed.paymentConfirmationTemplate, defaults.paymentConfirmationTemplate) : defaults.paymentConfirmationTemplate,
-      demoCardBrand: isVersionThree || isVersionTwo ? asText(parsed.demoCardBrand, defaults.demoCardBrand) : defaults.demoCardBrand,
-      demoCardLast4: isVersionThree || isVersionTwo ? asText(parsed.demoCardLast4, defaults.demoCardLast4) : defaults.demoCardLast4,
-      confirmButtonLabel: isVersionThree || isVersionTwo ? asText(parsed.confirmButtonLabel, defaults.confirmButtonLabel) : defaults.confirmButtonLabel,
-      confirmedEyebrow: isVersionThree || isVersionTwo ? asText(parsed.confirmedEyebrow, defaults.confirmedEyebrow) : defaults.confirmedEyebrow,
-      confirmedTitle: isVersionThree || isVersionTwo ? asText(parsed.confirmedTitle, defaults.confirmedTitle) : defaults.confirmedTitle,
-      confirmedScheduleTemplate: isVersionThree || isVersionTwo ? asText(parsed.confirmedScheduleTemplate, defaults.confirmedScheduleTemplate) : defaults.confirmedScheduleTemplate,
-      demoPaymentNotice: isVersionThree || isVersionTwo ? asText(parsed.demoPaymentNotice, defaults.demoPaymentNotice) : defaults.demoPaymentNotice,
-      finalReminder: isVersionThree || isVersionTwo ? asText(parsed.finalReminder, defaults.finalReminder) : defaults.finalReminder,
+      bookingButtonLabel: isSupportedVersion ? asText(parsed.bookingButtonLabel, defaults.bookingButtonLabel) : defaults.bookingButtonLabel,
+      addressQuestion: isSupportedVersion ? asText(parsed.addressQuestion, defaults.addressQuestion) : defaults.addressQuestion,
+      addressExample: isSupportedVersion ? asText(parsed.addressExample, defaults.addressExample) : defaults.addressExample,
+      paymentConfirmationTemplate: isSupportedVersion ? asText(parsed.paymentConfirmationTemplate, defaults.paymentConfirmationTemplate) : defaults.paymentConfirmationTemplate,
+      demoCardBrand: isSupportedVersion ? asText(parsed.demoCardBrand, defaults.demoCardBrand) : defaults.demoCardBrand,
+      demoCardLast4: isSupportedVersion ? asText(parsed.demoCardLast4, defaults.demoCardLast4) : defaults.demoCardLast4,
+      confirmButtonLabel: isSupportedVersion ? asText(parsed.confirmButtonLabel, defaults.confirmButtonLabel) : defaults.confirmButtonLabel,
+      confirmedEyebrow: isSupportedVersion ? asText(parsed.confirmedEyebrow, defaults.confirmedEyebrow) : defaults.confirmedEyebrow,
+      confirmedTitle: isSupportedVersion ? asText(parsed.confirmedTitle, defaults.confirmedTitle) : defaults.confirmedTitle,
+      confirmedScheduleTemplate: isSupportedVersion ? asText(parsed.confirmedScheduleTemplate, defaults.confirmedScheduleTemplate) : defaults.confirmedScheduleTemplate,
+      demoPaymentNotice: isSupportedVersion ? asText(parsed.demoPaymentNotice, defaults.demoPaymentNotice) : defaults.demoPaymentNotice,
+      finalReminder: isSupportedVersion ? asText(parsed.finalReminder, defaults.finalReminder) : defaults.finalReminder,
     };
   } catch {
     return structuredClone(DEFAULT_BOOKING_WIDGET_DRAFT);
@@ -281,20 +299,37 @@ function numericAnswer(value?: string): string {
 export function buildDemoDetailLine(
   fallbackBedrooms: number,
   questions: readonly BookingWidgetQuestionDraft[],
-  answers: Readonly<Record<string, string>>,
+  answers: Readonly<Record<string, string | readonly string[]>>,
 ): string {
   const parts: string[] = [];
   const bedroomQuestion = questions.find((question) => question.role === "bedrooms");
   const bathroomQuestion = questions.find((question) => question.role === "bathrooms");
   const extrasQuestion = questions.find((question) => question.role === "extras");
-  const bedroomAnswer = bedroomQuestion ? answers[bedroomQuestion.id] : "";
-  const bathroomAnswer = bathroomQuestion ? answers[bathroomQuestion.id] : "";
-  const extrasAnswer = extrasQuestion ? answers[extrasQuestion.id] : "";
+  const asAnswers = (value: string | readonly string[] | undefined) => Array.isArray(value) ? value : value ? [value as string] : [];
+  const bedroomAnswer = bedroomQuestion ? asAnswers(answers[bedroomQuestion.id])[0] ?? "" : "";
+  const bathroomAnswer = bathroomQuestion ? asAnswers(answers[bathroomQuestion.id])[0] ?? "" : "";
+  const extrasAnswers = extrasQuestion ? asAnswers(answers[extrasQuestion.id]) : [];
 
   parts.push(`${numericAnswer(bedroomAnswer) || fallbackBedrooms} bed`);
   if (bathroomAnswer) parts.push(`${numericAnswer(bathroomAnswer)} bath`);
-  if (extrasAnswer && extrasAnswer.trim().toLowerCase() !== "no extras") parts.push(extrasAnswer.trim());
+  for (const extra of extrasAnswers) {
+    if (!isNoSelectionChoice(extra)) parts.push(extra.trim());
+  }
   return [...new Set(parts)].join(" · ");
+}
+
+export function isNoSelectionChoice(choice: string): boolean {
+  return /^(?:none|no\s+(?:extras?|add[ -]?ons?))$/i.test(choice.trim());
+}
+
+export function toggleMultiSelectChoice(selected: readonly string[], choice: string): string[] {
+  const trimmed = choice.trim();
+  if (!trimmed) return [...selected];
+  const alreadySelected = selected.some((item) => item.toLowerCase() === trimmed.toLowerCase());
+  if (isNoSelectionChoice(trimmed)) return alreadySelected ? [] : [trimmed];
+  const withoutNoSelection = selected.filter((item) => !isNoSelectionChoice(item));
+  if (alreadySelected) return withoutNoSelection.filter((item) => item.toLowerCase() !== trimmed.toLowerCase());
+  return [...withoutNoSelection, trimmed];
 }
 
 export const BOOKING_WIDGET_DRAFT_SETTING = {

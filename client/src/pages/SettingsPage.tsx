@@ -1026,6 +1026,8 @@ export default function SettingsPage() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
   const updateSetting = trpc.settings.update.useMutation();
+  const { data: bookingWidgetSetting, refetch: refetchBookingWidgetDraft } = trpc.settings.getBookingWidgetDraft.useQuery();
+  const updateBookingWidgetDraft = trpc.settings.updateBookingWidgetDraft.useMutation();
   const [activeTab, setActiveTab] = useState<SettingsTab>(getInitialSettingsTab);
 
   // ── Pay Rules state ─────────────────────────────────────────────────────────
@@ -1139,6 +1141,12 @@ export default function SettingsPage() {
       return next;
     });
     toast.success("Setting saved");
+  };
+
+  const handleSaveBookingWidgetDraft = async (value: string) => {
+    await updateBookingWidgetDraft.mutateAsync({ value });
+    await refetchBookingWidgetDraft();
+    toast.success("Widget draft saved");
   };
 
   // serverSettings: keyed by setting key
@@ -1387,8 +1395,8 @@ export default function SettingsPage() {
                 {/* ── Email Leads Tab ───────────────────────────────────── */}
             {activeTab === "booking-widget" && (
               <BookingWidgetConfigPanel
-                savedValue={serverSettings["bookingWidgetDraft"]?.value}
-                onSave={(value) => handleSave("bookingWidgetDraft", value)}
+                savedValue={bookingWidgetSetting?.value}
+                onSave={handleSaveBookingWidgetDraft}
               />
             )}
 
