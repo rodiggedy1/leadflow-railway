@@ -119,6 +119,7 @@ function Router() {
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
+        <Route path={"/admin/widget-config"} component={SettingsPage} />
         <Route path={"/admin/settings"} component={SettingsPage} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
