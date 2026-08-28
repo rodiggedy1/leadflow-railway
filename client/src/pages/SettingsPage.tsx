@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
+import BookingWidgetConfigPanel from "@/components/BookingWidgetConfigPanel";
 import { PhoneCall as PhoneCallIcon } from "lucide-react";
 
 // ── Known service types that can be silenced ──────────────────────────────────
@@ -1011,13 +1012,21 @@ function ResponseTemplatesTab() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general" | "pay" | "responses";
+type SettingsTab = "form" | "widget" | "booking-widget" | "email" | "reactivation" | "general" | "pay" | "responses";
+
+const SETTINGS_TABS: SettingsTab[] = ["form", "widget", "booking-widget", "email", "reactivation", "general", "pay", "responses"];
+
+function getInitialSettingsTab(): SettingsTab {
+  if (window.location.pathname === "/admin/widget-config") return "booking-widget";
+  const requested = new URLSearchParams(window.location.search).get("tab") as SettingsTab | null;
+  return requested && SETTINGS_TABS.includes(requested) ? requested : "form";
+}
 
 export default function SettingsPage() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
   const updateSetting = trpc.settings.update.useMutation();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("form");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(getInitialSettingsTab);
 
   // ── Pay Rules state ─────────────────────────────────────────────────────────
   const { data: payRulesData, isLoading: payRulesLoading, refetch: refetchPayRules } = trpc.settings.getPayRules.useQuery();
@@ -1149,6 +1158,7 @@ export default function SettingsPage() {
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "form", label: "Form SMS", icon: <FileText className="w-4 h-4" /> },
     { id: "widget", label: "Widget SMS", icon: <MessageCircle className="w-4 h-4" /> },
+    { id: "booking-widget", label: "Booking Widget", icon: <Sparkles className="w-4 h-4" /> },
     { id: "email", label: "Email Leads", icon: <Mail className="w-4 h-4" /> },
     { id: "reactivation", label: "Reactivation", icon: <RefreshCw className="w-4 h-4" /> },
     { id: "general", label: "General", icon: <Settings className="w-4 h-4" /> },
@@ -1161,7 +1171,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-[#faf9f7]">
       <AdminHeader activeTab="settings" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <div className={`${activeTab === "booking-widget" ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8 space-y-6`}>
         {/* Page header */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#E8735A]/10 flex items-center justify-center">
@@ -1179,7 +1189,11 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                const nextUrl = tab.id === "booking-widget" ? "/admin/widget-config" : `/admin/settings?tab=${tab.id}`;
+                window.history.replaceState({}, "", nextUrl);
+              }}
               className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap
                 ${activeTab === tab.id
                   ? "bg-white text-gray-900 shadow-sm"
@@ -1371,6 +1385,13 @@ export default function SettingsPage() {
             )}
 
                 {/* ── Email Leads Tab ───────────────────────────────────── */}
+            {activeTab === "booking-widget" && (
+              <BookingWidgetConfigPanel
+                savedValue={serverSettings["bookingWidgetDraft"]?.value}
+                onSave={(value) => handleSave("bookingWidgetDraft", value)}
+              />
+            )}
+
             {activeTab === "email" && (
               <div className="space-y-6">
                 <div className="rounded-xl bg-violet-50 border border-violet-100 px-4 py-3">

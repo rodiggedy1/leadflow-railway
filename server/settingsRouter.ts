@@ -10,6 +10,7 @@ import { protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { appSettings, customPayRules } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { BOOKING_WIDGET_DRAFT_SETTING } from "../shared/bookingWidgetConfig";
 
 // ── Default settings seeded on first access ──────────────────────────────────
 
@@ -296,6 +297,7 @@ const DEFAULT_SETTINGS = [
     description: "Comma-separated list of service types to completely suppress — no leads saved, no SMS sent, no alerts fired. Leave blank to allow all services.",
     fieldType: "textarea",
   },
+  BOOKING_WIDGET_DRAFT_SETTING,
 ] as const;
 
 async function seedDefaultSettings() {
