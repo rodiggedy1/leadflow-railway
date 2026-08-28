@@ -13,6 +13,7 @@ import {
   parseBookingWidgetDraft,
   renderBookingWidgetTemplate,
   resolveDemoRequest,
+  toggleMultiSelectChoice,
   type BookingWidgetDraftConfig,
   type BookingWidgetQuestionDraft,
   type BookingWidgetServiceId,
@@ -29,7 +30,7 @@ type DemoSession = {
   prompt: string;
   serviceId: BookingWidgetServiceId;
   fallbackBedrooms: number;
-  answers: Record<string, string>;
+  answers: Record<string, string[]>;
   address: string;
 };
 
@@ -53,9 +54,15 @@ function DemoBubble({ children, customer, color }: { children: React.ReactNode; 
   );
 }
 
-function DemoChip({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function DemoChip({ children, onClick, selected = false, color }: { children: React.ReactNode; onClick: () => void; selected?: boolean; color?: string }) {
   return (
-    <button type="button" onClick={onClick} className="rounded-full border border-gray-200 bg-white px-4 py-2.5 text-left text-sm font-medium text-gray-800 transition hover:border-gray-300 hover:shadow-sm active:scale-[0.98]">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`rounded-full border px-4 py-2.5 text-left text-sm font-medium text-gray-800 transition hover:border-gray-300 hover:shadow-sm active:scale-[0.98] ${selected ? "border-gray-400 shadow-sm" : "border-gray-200 bg-white"}`}
+      style={selected ? { backgroundColor: color } : undefined}
+    >
       {children}
     </button>
   );
@@ -80,7 +87,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     const element = conversationRef.current;
     if (!element) return;
     requestAnimationFrame(() => element.scrollTo({ top: element.scrollHeight, behavior: "smooth" }));
-  }, [step]);
+  }, [step, currentQuestionIndex]);
 
   const serialized = JSON.stringify(config);
   const isDirty = serialized !== JSON.stringify(savedConfig);
@@ -112,7 +119,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
   const addQuestion = () => {
     const id = `custom-${Date.now().toString(36)}`;
-    updateQuestions([...config.questions, { id, role: "custom", prompt: "New question", choices: ["Option 1", "Option 2"] }], true);
+    updateQuestions([...config.questions, { id, role: "custom", prompt: "New question", choices: ["Option 1", "Option 2"], selectionMode: "single" }], true);
   };
 
   const removeQuestion = (index: number) => updateQuestions(config.questions.filter((_, questionIndex) => questionIndex !== index), true);
@@ -154,13 +161,34 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setStep(config.questions.length > 0 ? "questions" : "quote");
   };
 
-  const selectQuestionAnswer = (answer: string) => {
-    const trimmed = answer.trim();
-    if (!trimmed || !currentQuestion) return;
-    setDemo((current) => ({ ...current, answers: { ...current.answers, [currentQuestion.id]: trimmed } }));
+  const advanceFromQuestion = () => {
     setComposerValue("");
     if (currentQuestionIndex < config.questions.length - 1) setCurrentQuestionIndex((index) => index + 1);
     else setStep("quote");
+  };
+
+  const selectQuestionAnswer = (answer: string) => {
+    const trimmed = answer.trim();
+    if (!trimmed || !currentQuestion) return;
+    if (currentQuestion.selectionMode === "multiple") {
+      setDemo((current) => ({
+        ...current,
+        answers: {
+          ...current.answers,
+          [currentQuestion.id]: toggleMultiSelectChoice(current.answers[currentQuestion.id] ?? [], trimmed),
+        },
+      }));
+      setComposerValue("");
+      return;
+    }
+    setDemo((current) => ({ ...current, answers: { ...current.answers, [currentQuestion.id]: [trimmed] } }));
+    advanceFromQuestion();
+  };
+
+  const continueMultipleQuestion = () => {
+    if (!currentQuestion || currentQuestion.selectionMode !== "multiple") return;
+    if ((demo.answers[currentQuestion.id] ?? []).length === 0) return;
+    advanceFromQuestion();
   };
 
   const submitAddress = (address: string) => {
@@ -256,10 +284,16 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                     <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={questionIndex === config.questions.length - 1} onClick={() => moveQuestion(questionIndex, 1)} aria-label={`Move question ${questionIndex + 1} down`}><ChevronDown className="h-4 w-4" /></Button>
                     <Button type="button" variant="outline" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeQuestion(questionIndex)} aria-label={`Remove question ${questionIndex + 1}`}><Trash2 className="h-4 w-4" /></Button>
                   </div>
-                  <div className="grid grid-cols-[1fr_118px] gap-2">
+                  <div className="grid grid-cols-[1fr_105px_105px] gap-2">
                     <Input aria-label={`Question ${questionIndex + 1} text`} className={fieldClass} value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} />
-                    <select aria-label={`Question ${questionIndex + 1} type`} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs" value={question.role} onChange={(event) => updateQuestion(questionIndex, { role: event.target.value as BookingWidgetQuestionDraft["role"] })}>
+                    <select aria-label={`Question ${questionIndex + 1} type`} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs" value={question.role} onChange={(event) => {
+                      const role = event.target.value as BookingWidgetQuestionDraft["role"];
+                      updateQuestion(questionIndex, { role, selectionMode: role === "extras" ? "multiple" : question.selectionMode });
+                    }}>
                       <option value="bedrooms">Bedrooms</option><option value="bathrooms">Bathrooms</option><option value="extras">Extras</option><option value="custom">Custom</option>
+                    </select>
+                    <select aria-label={`Question ${questionIndex + 1} selection mode`} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs" value={question.selectionMode} onChange={(event) => updateQuestion(questionIndex, { selectionMode: event.target.value as BookingWidgetQuestionDraft["selectionMode"] })}>
+                      <option value="single">Single choice</option><option value="multiple">Multiple choice</option>
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -342,12 +376,39 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   {reached("questions") && config.questions.map((question, questionIndex) => {
                     const visible = step !== "questions" || questionIndex <= currentQuestionIndex;
                     if (!visible) return null;
-                    const answer = demo.answers[question.id];
+                    const answer = demo.answers[question.id] ?? [];
+                    const answerText = answer.join(", ");
                     return (
                       <div key={question.id} className="contents">
                         <DemoBubble>{question.prompt}</DemoBubble>
-                        {answer && <DemoBubble customer color={config.customerBubbleColor}>{answer}</DemoBubble>}
-                        {step === "questions" && questionIndex === currentQuestionIndex && <div className="flex flex-wrap gap-2.5">{question.choices.map((choice) => <DemoChip key={choice} onClick={() => selectQuestionAnswer(choice)}>{choice}</DemoChip>)}</div>}
+                        {answerText && <DemoBubble customer color={config.customerBubbleColor}>{answerText}</DemoBubble>}
+                        {step === "questions" && questionIndex === currentQuestionIndex && (
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap gap-2.5">
+                              {question.choices.map((choice) => (
+                                <DemoChip
+                                  key={choice}
+                                  onClick={() => selectQuestionAnswer(choice)}
+                                  selected={question.selectionMode === "multiple" && answer.some((item) => item.toLowerCase() === choice.trim().toLowerCase())}
+                                  color={config.customerBubbleColor}
+                                >
+                                  {choice}
+                                </DemoChip>
+                              ))}
+                            </div>
+                            {question.selectionMode === "multiple" && (
+                              <button
+                                type="button"
+                                onClick={continueMultipleQuestion}
+                                disabled={answer.length === 0}
+                                className="rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45"
+                                style={{ backgroundColor: config.customerBubbleColor }}
+                              >
+                                Continue
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
