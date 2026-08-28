@@ -4,6 +4,7 @@ import {
   DEFAULT_BOOKING_WIDGET_DRAFT,
   buildDemoDetailLine,
   formatBookingButtonLabel,
+  moveListItem,
   parseBookingWidgetDraft,
   renderBookingWidgetTemplate,
   resolveDemoRequest,
@@ -14,15 +15,43 @@ describe("booking widget interactive demo configuration", () => {
     expect(parseBookingWidgetDraft("not-json")).toEqual(DEFAULT_BOOKING_WIDGET_DRAFT);
   });
 
-  it("upgrades the earlier simple preview while preserving its safe brand choices", () => {
-    const parsed = parseBookingWidgetDraft(JSON.stringify({ brandName: "MIB Booking", primaryColor: "#123456", quickPrompts: ["Book a clean"] }));
-    expect(parsed.demoVersion).toBe(2);
+  it("migrates the deployed version-two draft and inserts bedrooms before bathrooms", () => {
+    const parsed = parseBookingWidgetDraft(JSON.stringify({
+      demoVersion: 2,
+      brandName: "MIB Booking",
+      primaryColor: "#123456",
+      quickPrompts: ["Book a clean"],
+      bathroomQuestion: "How many baths?",
+      bathroomOptions: ["One bath", "Two baths"],
+      extrasQuestion: "Add anything?",
+      extrasOptions: ["Nothing", "Oven"],
+    }));
+    expect(parsed.demoVersion).toBe(3);
     expect(parsed.brandName).toBe("MIB Booking");
     expect(parsed.primaryColor).toBe("#123456");
     expect(parsed.quickPrompts[0]).toBe("Book a clean");
-    expect(parsed.bathroomOptions).toHaveLength(4);
-    expect(parsed.extrasOptions).toHaveLength(5);
+    expect(parsed.questions.map((question) => question.role)).toEqual(["bedrooms", "bathrooms", "extras"]);
+    expect(parsed.questions[0].prompt).toBe("And how many bedrooms?");
+    expect(parsed.questions[1]).toMatchObject({ prompt: "How many baths?", choices: ["One bath", "Two baths"] });
+    expect(parsed.questions[2]).toMatchObject({ prompt: "Add anything?", choices: ["Nothing", "Oven"] });
     expect(parsed.services.find((service) => service.id === "deep")?.price).toBe("405");
+  });
+
+  it("preserves dynamic custom questions and choices in their configured order", () => {
+    const parsed = parseBookingWidgetDraft(JSON.stringify({
+      ...DEFAULT_BOOKING_WIDGET_DRAFT,
+      questions: [
+        ...DEFAULT_BOOKING_WIDGET_DRAFT.questions,
+        { id: "pets", role: "custom", prompt: "Any pets?", choices: ["No pets", "Dog", "Cat", "Other"] },
+      ],
+    }));
+    expect(parsed.questions.at(-1)).toEqual({ id: "pets", role: "custom", prompt: "Any pets?", choices: ["No pets", "Dog", "Cat", "Other"] });
+  });
+
+  it("reorders list items without mutating the source list", () => {
+    const source = ["Bedrooms", "Bathrooms", "Extras"];
+    expect(moveListItem(source, 2, 1)).toEqual(["Bedrooms", "Extras", "Bathrooms"]);
+    expect(source).toEqual(["Bedrooms", "Bathrooms", "Extras"]);
   });
 
   it("resolves the supplied prompt into the deep-clean demo with three bedrooms", () => {
@@ -30,8 +59,9 @@ describe("booking widget interactive demo configuration", () => {
   });
 
   it("keeps a selected extra exactly once in the priced summary", () => {
-    expect(buildDemoDetailLine(3, "2 bathrooms", "Fridge")).toBe("3 bed · 2 bath · Fridge");
-    expect(buildDemoDetailLine(3, "2 bathrooms", "No extras")).toBe("3 bed · 2 bath");
+    const answers = { bedrooms: "3 bedrooms", bathrooms: "2 bathrooms", extras: "Fridge" };
+    expect(buildDemoDetailLine(3, DEFAULT_BOOKING_WIDGET_DRAFT.questions, answers)).toBe("3 bed · 2 bath · Fridge");
+    expect(buildDemoDetailLine(3, DEFAULT_BOOKING_WIDGET_DRAFT.questions, { ...answers, extras: "No extras" })).toBe("3 bed · 2 bath");
   });
 
   it("formats price and confirmation templates deterministically", () => {

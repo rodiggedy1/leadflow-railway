@@ -1,4 +1,5 @@
 export type BookingWidgetServiceId = "standard" | "deep" | "moveout";
+export type BookingWidgetQuestionRole = "bedrooms" | "bathrooms" | "extras" | "custom";
 
 export type BookingWidgetServiceDraft = {
   id: BookingWidgetServiceId;
@@ -11,8 +12,15 @@ export type BookingWidgetServiceDraft = {
   completedJobs: string;
 };
 
+export type BookingWidgetQuestionDraft = {
+  id: string;
+  role: BookingWidgetQuestionRole;
+  prompt: string;
+  choices: string[];
+};
+
 export type BookingWidgetDraftConfig = {
-  demoVersion: 2;
+  demoVersion: 3;
   brandName: string;
   brandLogoUrl: string;
   headerIcon: string;
@@ -23,11 +31,8 @@ export type BookingWidgetDraftConfig = {
   helperText: string;
   primaryColor: string;
   customerBubbleColor: string;
-  quickPrompts: [string, string, string];
-  bathroomQuestion: string;
-  bathroomOptions: [string, string, string, string];
-  extrasQuestion: string;
-  extrasOptions: [string, string, string, string, string];
+  quickPrompts: string[];
+  questions: BookingWidgetQuestionDraft[];
   openingEyebrow: string;
   services: [BookingWidgetServiceDraft, BookingWidgetServiceDraft, BookingWidgetServiceDraft];
   bookingButtonLabel: string;
@@ -45,7 +50,7 @@ export type BookingWidgetDraftConfig = {
 };
 
 export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
-  demoVersion: 2,
+  demoVersion: 3,
   brandName: "Book with AI",
   brandLogoUrl: "",
   headerIcon: "✨",
@@ -61,10 +66,26 @@ export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
     "2BR standard cleaning Saturday",
     "Move-out clean Friday",
   ],
-  bathroomQuestion: "And how many bathrooms?",
-  bathroomOptions: ["1 bathroom", "2 bathrooms", "3 bathrooms", "4 bathrooms"],
-  extrasQuestion: "Anything you want to add?",
-  extrasOptions: ["No extras", "Fridge", "Oven", "Baseboards", "Fridge + oven"],
+  questions: [
+    {
+      id: "bedrooms",
+      role: "bedrooms",
+      prompt: "And how many bedrooms?",
+      choices: ["1 bedroom", "2 bedrooms", "3 bedrooms", "4 bedrooms", "5+ bedrooms"],
+    },
+    {
+      id: "bathrooms",
+      role: "bathrooms",
+      prompt: "And how many bathrooms?",
+      choices: ["1 bathroom", "2 bathrooms", "3 bathrooms", "4 bathrooms"],
+    },
+    {
+      id: "extras",
+      role: "extras",
+      prompt: "Anything you want to add?",
+      choices: ["No extras", "Fridge", "Oven", "Baseboards", "Fridge + oven"],
+    },
+  ],
   openingEyebrow: "I found an opening",
   services: [
     {
@@ -120,41 +141,85 @@ function asColor(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 }
 
-function asTuple<T extends string>(value: unknown, fallback: readonly T[]): T[] {
-  const source = Array.isArray(value) ? value : [];
-  return fallback.map((item, index) => asText(source[index], item) as T);
+function asStringList(value: unknown, fallback: readonly string[]): string[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const normalized = value.filter((item): item is string => typeof item === "string");
+  return normalized.length > 0 ? normalized : [...fallback];
+}
+
+function isQuestionRole(value: unknown): value is BookingWidgetQuestionRole {
+  return value === "bedrooms" || value === "bathrooms" || value === "extras" || value === "custom";
+}
+
+function normalizeQuestions(value: unknown, fallback: readonly BookingWidgetQuestionDraft[]): BookingWidgetQuestionDraft[] {
+  if (!Array.isArray(value)) return structuredClone(fallback);
+  const seenIds = new Set<string>();
+  return value.flatMap((raw, index) => {
+    if (!raw || typeof raw !== "object") return [];
+    const source = raw as Partial<BookingWidgetQuestionDraft>;
+    let id = asText(source.id, `question-${index + 1}`).trim() || `question-${index + 1}`;
+    while (seenIds.has(id)) id = `${id}-${index + 1}`;
+    seenIds.add(id);
+    return [{
+      id,
+      role: isQuestionRole(source.role) ? source.role : "custom",
+      prompt: asText(source.prompt, `Question ${index + 1}`),
+      choices: asStringList(source.choices, ["Option 1", "Option 2"]),
+    }];
+  });
+}
+
+function migrateVersionTwoQuestions(parsed: Record<string, unknown>): BookingWidgetQuestionDraft[] {
+  return [
+    structuredClone(DEFAULT_BOOKING_WIDGET_DRAFT.questions[0]),
+    {
+      id: "bathrooms",
+      role: "bathrooms",
+      prompt: asText(parsed.bathroomQuestion, "And how many bathrooms?"),
+      choices: asStringList(parsed.bathroomOptions, ["1 bathroom", "2 bathrooms", "3 bathrooms", "4 bathrooms"]),
+    },
+    {
+      id: "extras",
+      role: "extras",
+      prompt: asText(parsed.extrasQuestion, "Anything you want to add?"),
+      choices: asStringList(parsed.extrasOptions, ["No extras", "Fridge", "Oven", "Baseboards", "Fridge + oven"]),
+    },
+  ];
 }
 
 export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraftConfig {
   if (!raw) return structuredClone(DEFAULT_BOOKING_WIDGET_DRAFT);
 
   try {
-    const parsed = JSON.parse(raw) as Partial<BookingWidgetDraftConfig>;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
     const defaults = DEFAULT_BOOKING_WIDGET_DRAFT;
-    const isCurrentDemo = parsed.demoVersion === 2;
-    const services = isCurrentDemo && Array.isArray(parsed.services) ? parsed.services : [];
+    const isVersionThree = parsed.demoVersion === 3;
+    const isVersionTwo = parsed.demoVersion === 2;
+    const rawServices = (isVersionThree || isVersionTwo) && Array.isArray(parsed.services) ? parsed.services : [];
+    const questions = isVersionThree
+      ? normalizeQuestions(parsed.questions, defaults.questions)
+      : isVersionTwo
+        ? migrateVersionTwoQuestions(parsed)
+        : structuredClone(defaults.questions);
 
     return {
       ...structuredClone(defaults),
-      demoVersion: 2,
+      demoVersion: 3,
       brandName: asText(parsed.brandName, defaults.brandName),
       brandLogoUrl: asText(parsed.brandLogoUrl, defaults.brandLogoUrl),
       headerIcon: asText(parsed.headerIcon, defaults.headerIcon),
       statusText: asText(parsed.statusText, defaults.statusText),
       greeting: asText(parsed.greeting, defaults.greeting),
-      inputPlaceholder: isCurrentDemo ? asText(parsed.inputPlaceholder, defaults.inputPlaceholder) : defaults.inputPlaceholder,
-      addressPlaceholder: isCurrentDemo ? asText(parsed.addressPlaceholder, defaults.addressPlaceholder) : defaults.addressPlaceholder,
-      helperText: isCurrentDemo ? asText(parsed.helperText, defaults.helperText) : defaults.helperText,
+      inputPlaceholder: isVersionThree || isVersionTwo ? asText(parsed.inputPlaceholder, defaults.inputPlaceholder) : defaults.inputPlaceholder,
+      addressPlaceholder: isVersionThree || isVersionTwo ? asText(parsed.addressPlaceholder, defaults.addressPlaceholder) : defaults.addressPlaceholder,
+      helperText: isVersionThree || isVersionTwo ? asText(parsed.helperText, defaults.helperText) : defaults.helperText,
       primaryColor: asColor(parsed.primaryColor, defaults.primaryColor),
       customerBubbleColor: asColor(parsed.customerBubbleColor, defaults.customerBubbleColor),
-      quickPrompts: asTuple(parsed.quickPrompts, defaults.quickPrompts) as BookingWidgetDraftConfig["quickPrompts"],
-      bathroomQuestion: isCurrentDemo ? asText(parsed.bathroomQuestion, defaults.bathroomQuestion) : defaults.bathroomQuestion,
-      bathroomOptions: asTuple(isCurrentDemo ? parsed.bathroomOptions : undefined, defaults.bathroomOptions) as BookingWidgetDraftConfig["bathroomOptions"],
-      extrasQuestion: isCurrentDemo ? asText(parsed.extrasQuestion, defaults.extrasQuestion) : defaults.extrasQuestion,
-      extrasOptions: asTuple(isCurrentDemo ? parsed.extrasOptions : undefined, defaults.extrasOptions) as BookingWidgetDraftConfig["extrasOptions"],
-      openingEyebrow: isCurrentDemo ? asText(parsed.openingEyebrow, defaults.openingEyebrow) : defaults.openingEyebrow,
+      quickPrompts: asStringList(parsed.quickPrompts, defaults.quickPrompts),
+      questions,
+      openingEyebrow: isVersionThree || isVersionTwo ? asText(parsed.openingEyebrow, defaults.openingEyebrow) : defaults.openingEyebrow,
       services: defaults.services.map((fallback, index) => {
-        const service = services[index] as Partial<BookingWidgetServiceDraft> | undefined;
+        const service = rawServices[index] as Partial<BookingWidgetServiceDraft> | undefined;
         return {
           id: fallback.id,
           name: asText(service?.name, fallback.name),
@@ -166,18 +231,18 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
           completedJobs: asText(service?.completedJobs, fallback.completedJobs),
         };
       }) as BookingWidgetDraftConfig["services"],
-      bookingButtonLabel: isCurrentDemo ? asText(parsed.bookingButtonLabel, defaults.bookingButtonLabel) : defaults.bookingButtonLabel,
-      addressQuestion: isCurrentDemo ? asText(parsed.addressQuestion, defaults.addressQuestion) : defaults.addressQuestion,
-      addressExample: isCurrentDemo ? asText(parsed.addressExample, defaults.addressExample) : defaults.addressExample,
-      paymentConfirmationTemplate: isCurrentDemo ? asText(parsed.paymentConfirmationTemplate, defaults.paymentConfirmationTemplate) : defaults.paymentConfirmationTemplate,
-      demoCardBrand: isCurrentDemo ? asText(parsed.demoCardBrand, defaults.demoCardBrand) : defaults.demoCardBrand,
-      demoCardLast4: isCurrentDemo ? asText(parsed.demoCardLast4, defaults.demoCardLast4) : defaults.demoCardLast4,
-      confirmButtonLabel: isCurrentDemo ? asText(parsed.confirmButtonLabel, defaults.confirmButtonLabel) : defaults.confirmButtonLabel,
-      confirmedEyebrow: isCurrentDemo ? asText(parsed.confirmedEyebrow, defaults.confirmedEyebrow) : defaults.confirmedEyebrow,
-      confirmedTitle: isCurrentDemo ? asText(parsed.confirmedTitle, defaults.confirmedTitle) : defaults.confirmedTitle,
-      confirmedScheduleTemplate: isCurrentDemo ? asText(parsed.confirmedScheduleTemplate, defaults.confirmedScheduleTemplate) : defaults.confirmedScheduleTemplate,
-      demoPaymentNotice: isCurrentDemo ? asText(parsed.demoPaymentNotice, defaults.demoPaymentNotice) : defaults.demoPaymentNotice,
-      finalReminder: isCurrentDemo ? asText(parsed.finalReminder, defaults.finalReminder) : defaults.finalReminder,
+      bookingButtonLabel: isVersionThree || isVersionTwo ? asText(parsed.bookingButtonLabel, defaults.bookingButtonLabel) : defaults.bookingButtonLabel,
+      addressQuestion: isVersionThree || isVersionTwo ? asText(parsed.addressQuestion, defaults.addressQuestion) : defaults.addressQuestion,
+      addressExample: isVersionThree || isVersionTwo ? asText(parsed.addressExample, defaults.addressExample) : defaults.addressExample,
+      paymentConfirmationTemplate: isVersionThree || isVersionTwo ? asText(parsed.paymentConfirmationTemplate, defaults.paymentConfirmationTemplate) : defaults.paymentConfirmationTemplate,
+      demoCardBrand: isVersionThree || isVersionTwo ? asText(parsed.demoCardBrand, defaults.demoCardBrand) : defaults.demoCardBrand,
+      demoCardLast4: isVersionThree || isVersionTwo ? asText(parsed.demoCardLast4, defaults.demoCardLast4) : defaults.demoCardLast4,
+      confirmButtonLabel: isVersionThree || isVersionTwo ? asText(parsed.confirmButtonLabel, defaults.confirmButtonLabel) : defaults.confirmButtonLabel,
+      confirmedEyebrow: isVersionThree || isVersionTwo ? asText(parsed.confirmedEyebrow, defaults.confirmedEyebrow) : defaults.confirmedEyebrow,
+      confirmedTitle: isVersionThree || isVersionTwo ? asText(parsed.confirmedTitle, defaults.confirmedTitle) : defaults.confirmedTitle,
+      confirmedScheduleTemplate: isVersionThree || isVersionTwo ? asText(parsed.confirmedScheduleTemplate, defaults.confirmedScheduleTemplate) : defaults.confirmedScheduleTemplate,
+      demoPaymentNotice: isVersionThree || isVersionTwo ? asText(parsed.demoPaymentNotice, defaults.demoPaymentNotice) : defaults.demoPaymentNotice,
+      finalReminder: isVersionThree || isVersionTwo ? asText(parsed.finalReminder, defaults.finalReminder) : defaults.finalReminder,
     };
   } catch {
     return structuredClone(DEFAULT_BOOKING_WIDGET_DRAFT);
@@ -200,11 +265,36 @@ export function resolveDemoRequest(prompt: string): { serviceId: BookingWidgetSe
   return { serviceId: "standard", bedrooms };
 }
 
-export function buildDemoDetailLine(bedrooms: number, bathrooms: string, extra: string): string {
-  const bathroomCount = bathrooms.match(/\d+/)?.[0] ?? bathrooms.trim();
-  const parts = [`${bedrooms} bed`, `${bathroomCount || "1"} bath`];
-  if (extra.trim() && extra.trim().toLowerCase() !== "no extras") parts.push(extra.trim());
-  return parts.join(" · ");
+export function moveListItem<T>(items: readonly T[], fromIndex: number, toIndex: number): T[] {
+  if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length || fromIndex === toIndex) return [...items];
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function numericAnswer(value?: string): string {
+  if (!value) return "";
+  return value.match(/\d+\+?/)?.[0] ?? value.trim();
+}
+
+export function buildDemoDetailLine(
+  fallbackBedrooms: number,
+  questions: readonly BookingWidgetQuestionDraft[],
+  answers: Readonly<Record<string, string>>,
+): string {
+  const parts: string[] = [];
+  const bedroomQuestion = questions.find((question) => question.role === "bedrooms");
+  const bathroomQuestion = questions.find((question) => question.role === "bathrooms");
+  const extrasQuestion = questions.find((question) => question.role === "extras");
+  const bedroomAnswer = bedroomQuestion ? answers[bedroomQuestion.id] : "";
+  const bathroomAnswer = bathroomQuestion ? answers[bathroomQuestion.id] : "";
+  const extrasAnswer = extrasQuestion ? answers[extrasQuestion.id] : "";
+
+  parts.push(`${numericAnswer(bedroomAnswer) || fallbackBedrooms} bed`);
+  if (bathroomAnswer) parts.push(`${numericAnswer(bathroomAnswer)} bath`);
+  if (extrasAnswer && extrasAnswer.trim().toLowerCase() !== "no extras") parts.push(extrasAnswer.trim());
+  return [...new Set(parts)].join(" · ");
 }
 
 export const BOOKING_WIDGET_DRAFT_SETTING = {

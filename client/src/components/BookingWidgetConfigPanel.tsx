@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CheckCircle2, Eye, Loader2, RotateCcw, Save, Send, Sparkles } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, ChevronUp, Eye, Loader2, Plus, RotateCcw, Save, Send, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,12 @@ import {
   DEFAULT_BOOKING_WIDGET_DRAFT,
   buildDemoDetailLine,
   formatBookingButtonLabel,
+  moveListItem,
   parseBookingWidgetDraft,
   renderBookingWidgetTemplate,
   resolveDemoRequest,
   type BookingWidgetDraftConfig,
+  type BookingWidgetQuestionDraft,
   type BookingWidgetServiceId,
 } from "@shared/bookingWidgetConfig";
 
@@ -21,14 +23,13 @@ type BookingWidgetConfigPanelProps = {
   onSave: (value: string) => Promise<void>;
 };
 
-type DemoStep = "request" | "bathrooms" | "extras" | "quote" | "address" | "confirm" | "complete";
+type DemoStep = "request" | "questions" | "quote" | "address" | "confirm" | "complete";
 
 type DemoSession = {
   prompt: string;
   serviceId: BookingWidgetServiceId;
-  bedrooms: number;
-  bathrooms: string;
-  extra: string;
+  fallbackBedrooms: number;
+  answers: Record<string, string>;
   address: string;
 };
 
@@ -36,9 +37,8 @@ const fieldClass = "h-9 bg-white border-gray-200 text-sm";
 const emptySession: DemoSession = {
   prompt: "",
   serviceId: "deep",
-  bedrooms: 3,
-  bathrooms: "",
-  extra: "",
+  fallbackBedrooms: 3,
+  answers: {},
   address: "",
 };
 
@@ -68,6 +68,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [saved, setSaved] = useState(false);
   const [step, setStep] = useState<DemoStep>("request");
   const [demo, setDemo] = useState<DemoSession>(emptySession);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [composerValue, setComposerValue] = useState("");
   const conversationRef = useRef<HTMLDivElement>(null);
 
@@ -84,20 +85,51 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const serialized = JSON.stringify(config);
   const isDirty = serialized !== JSON.stringify(savedConfig);
   const service = config.services.find((item) => item.id === demo.serviceId) ?? config.services[1];
-  const detailLine = buildDemoDetailLine(demo.bedrooms, demo.bathrooms, demo.extra);
-  const stepOrder: DemoStep[] = ["request", "bathrooms", "extras", "quote", "address", "confirm", "complete"];
+  const detailLine = buildDemoDetailLine(demo.fallbackBedrooms, config.questions, demo.answers);
+  const stepOrder: DemoStep[] = ["request", "questions", "quote", "address", "confirm", "complete"];
   const reached = (target: DemoStep) => stepOrder.indexOf(step) >= stepOrder.indexOf(target);
+  const currentQuestion = config.questions[currentQuestionIndex];
 
   const update = <K extends keyof BookingWidgetDraftConfig>(key: K, value: BookingWidgetDraftConfig[K]) => {
     setConfig((current) => ({ ...current, [key]: value }));
     setSaved(false);
   };
 
-  const updateTuple = (key: "quickPrompts" | "bathroomOptions" | "extrasOptions", index: number, value: string) => {
-    const next = [...config[key]];
-    next[index] = value;
-    update(key, next as BookingWidgetDraftConfig[typeof key]);
+  const updatePrompts = (next: string[]) => update("quickPrompts", next);
+  const updatePrompt = (index: number, value: string) => updatePrompts(config.quickPrompts.map((prompt, promptIndex) => promptIndex === index ? value : prompt));
+  const addPrompt = () => updatePrompts([...config.quickPrompts, "New opening prompt"]);
+  const removePrompt = (index: number) => updatePrompts(config.quickPrompts.filter((_, promptIndex) => promptIndex !== index));
+  const movePrompt = (index: number, direction: -1 | 1) => updatePrompts(moveListItem(config.quickPrompts, index, index + direction));
+
+  const updateQuestions = (questions: BookingWidgetQuestionDraft[], resetPreview = false) => {
+    update("questions", questions);
+    if (resetPreview) startOver();
   };
+
+  const updateQuestion = (index: number, patch: Partial<BookingWidgetQuestionDraft>) => {
+    updateQuestions(config.questions.map((question, questionIndex) => questionIndex === index ? { ...question, ...patch } : question));
+  };
+
+  const addQuestion = () => {
+    const id = `custom-${Date.now().toString(36)}`;
+    updateQuestions([...config.questions, { id, role: "custom", prompt: "New question", choices: ["Option 1", "Option 2"] }], true);
+  };
+
+  const removeQuestion = (index: number) => updateQuestions(config.questions.filter((_, questionIndex) => questionIndex !== index), true);
+  const moveQuestion = (index: number, direction: -1 | 1) => updateQuestions(moveListItem(config.questions, index, index + direction), true);
+
+  const updateChoices = (questionIndex: number, choices: string[], resetPreview = false) => {
+    updateQuestions(config.questions.map((question, index) => index === questionIndex ? { ...question, choices } : question), resetPreview);
+  };
+
+  const updateChoice = (questionIndex: number, choiceIndex: number, value: string) => {
+    const choices = config.questions[questionIndex].choices.map((choice, index) => index === choiceIndex ? value : choice);
+    updateChoices(questionIndex, choices);
+  };
+
+  const addChoice = (questionIndex: number) => updateChoices(questionIndex, [...config.questions[questionIndex].choices, "New choice"]);
+  const removeChoice = (questionIndex: number, choiceIndex: number) => updateChoices(questionIndex, config.questions[questionIndex].choices.filter((_, index) => index !== choiceIndex), true);
+  const moveChoice = (questionIndex: number, choiceIndex: number, direction: -1 | 1) => updateChoices(questionIndex, moveListItem(config.questions[questionIndex].choices, choiceIndex, choiceIndex + direction), true);
 
   const updateService = (index: number, key: Exclude<keyof BookingWidgetDraftConfig["services"][number], "id">, value: string) => {
     const next = config.services.map((item, serviceIndex) => serviceIndex === index ? { ...item, [key]: value } : item) as BookingWidgetDraftConfig["services"];
@@ -107,6 +139,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const startOver = () => {
     setStep("request");
     setDemo(emptySession);
+    setCurrentQuestionIndex(0);
     setComposerValue("");
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
@@ -115,21 +148,19 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     const trimmed = prompt.trim();
     if (!trimmed) return;
     const resolved = resolveDemoRequest(trimmed);
-    setDemo({ ...emptySession, prompt: trimmed, ...resolved });
+    setDemo({ ...emptySession, prompt: trimmed, serviceId: resolved.serviceId, fallbackBedrooms: resolved.bedrooms });
+    setCurrentQuestionIndex(0);
     setComposerValue("");
-    setStep("bathrooms");
+    setStep(config.questions.length > 0 ? "questions" : "quote");
   };
 
-  const selectBathroom = (bathrooms: string) => {
-    setDemo((current) => ({ ...current, bathrooms }));
+  const selectQuestionAnswer = (answer: string) => {
+    const trimmed = answer.trim();
+    if (!trimmed || !currentQuestion) return;
+    setDemo((current) => ({ ...current, answers: { ...current.answers, [currentQuestion.id]: trimmed } }));
     setComposerValue("");
-    setStep("extras");
-  };
-
-  const selectExtra = (extra: string) => {
-    setDemo((current) => ({ ...current, extra }));
-    setComposerValue("");
-    setStep("quote");
+    if (currentQuestionIndex < config.questions.length - 1) setCurrentQuestionIndex((index) => index + 1);
+    else setStep("quote");
   };
 
   const submitAddress = (address: string) => {
@@ -142,8 +173,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
   const submitComposer = () => {
     if (step === "request") return selectRequest(composerValue);
-    if (step === "bathrooms") return selectBathroom(composerValue);
-    if (step === "extras") return selectExtra(composerValue);
+    if (step === "questions") return selectQuestionAnswer(composerValue);
     if (step === "address") return submitAddress(composerValue);
   };
 
@@ -165,7 +195,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   };
 
   const composerPlaceholder = step === "address" || reached("confirm") ? config.addressPlaceholder : config.inputPlaceholder;
-  const composerEnabled = ["request", "bathrooms", "extras", "address"].includes(step);
+  const composerEnabled = ["request", "questions", "address"].includes(step);
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 
   return (
@@ -201,11 +231,51 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </Card>
 
           <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Questions and choices</CardTitle><CardDescription>Configure the request, bathroom, and extras steps.</CardDescription></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Opening prompts</CardTitle><CardDescription>Edit, add, remove, or reorder the first choices customers see.</CardDescription></CardHeader>
+            <CardContent className="space-y-2">
+              {config.quickPrompts.map((value, index) => (
+                <div key={index} className="flex items-center gap-1.5">
+                  <Input aria-label={`Opening prompt ${index + 1}`} className={fieldClass} value={value} onChange={(event) => updatePrompt(index, event.target.value)} />
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" disabled={index === 0} onClick={() => movePrompt(index, -1)} aria-label={`Move opening prompt ${index + 1} up`}><ChevronUp className="h-4 w-4" /></Button>
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" disabled={index === config.quickPrompts.length - 1} onClick={() => movePrompt(index, 1)} aria-label={`Move opening prompt ${index + 1} down`}><ChevronDown className="h-4 w-4" /></Button>
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0 text-red-500" onClick={() => removePrompt(index)} aria-label={`Remove opening prompt ${index + 1}`}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="mt-1 w-full gap-2" onClick={addPrompt}><Plus className="h-4 w-4" /> Add opening prompt</Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-gray-200 shadow-sm">
+            <CardHeader className="pb-3"><CardTitle className="text-base">Questions and choices</CardTitle><CardDescription>Questions run top to bottom. Core types control the quote summary; custom questions remain part of the demo conversation.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2"><Label>Opening prompts</Label>{config.quickPrompts.map((value, index) => <Input key={index} aria-label={`Opening prompt ${index + 1}`} className={fieldClass} value={value} onChange={(event) => updateTuple("quickPrompts", index, event.target.value)} />)}</div>
-              <div className="space-y-2"><Label htmlFor="bathroom-question">Bathroom question</Label><Input id="bathroom-question" className={fieldClass} value={config.bathroomQuestion} onChange={(event) => update("bathroomQuestion", event.target.value)} />{config.bathroomOptions.map((value, index) => <Input key={index} aria-label={`Bathroom option ${index + 1}`} className={fieldClass} value={value} onChange={(event) => updateTuple("bathroomOptions", index, event.target.value)} />)}</div>
-              <div className="space-y-2"><Label htmlFor="extras-question">Extras question</Label><Input id="extras-question" className={fieldClass} value={config.extrasQuestion} onChange={(event) => update("extrasQuestion", event.target.value)} />{config.extrasOptions.map((value, index) => <Input key={index} aria-label={`Extras option ${index + 1}`} className={fieldClass} value={value} onChange={(event) => updateTuple("extrasOptions", index, event.target.value)} />)}</div>
+              {config.questions.map((question, questionIndex) => (
+                <div key={question.id} className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Question {questionIndex + 1}</span>
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={questionIndex === 0} onClick={() => moveQuestion(questionIndex, -1)} aria-label={`Move question ${questionIndex + 1} up`}><ChevronUp className="h-4 w-4" /></Button>
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={questionIndex === config.questions.length - 1} onClick={() => moveQuestion(questionIndex, 1)} aria-label={`Move question ${questionIndex + 1} down`}><ChevronDown className="h-4 w-4" /></Button>
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeQuestion(questionIndex)} aria-label={`Remove question ${questionIndex + 1}`}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                  <div className="grid grid-cols-[1fr_118px] gap-2">
+                    <Input aria-label={`Question ${questionIndex + 1} text`} className={fieldClass} value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} />
+                    <select aria-label={`Question ${questionIndex + 1} type`} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs" value={question.role} onChange={(event) => updateQuestion(questionIndex, { role: event.target.value as BookingWidgetQuestionDraft["role"] })}>
+                      <option value="bedrooms">Bedrooms</option><option value="bathrooms">Bathrooms</option><option value="extras">Extras</option><option value="custom">Custom</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    {question.choices.map((choice, choiceIndex) => (
+                      <div key={choiceIndex} className="flex items-center gap-1.5 pl-3">
+                        <Input aria-label={`Question ${questionIndex + 1} choice ${choiceIndex + 1}`} className={fieldClass} value={choice} onChange={(event) => updateChoice(questionIndex, choiceIndex, event.target.value)} />
+                        <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" disabled={choiceIndex === 0} onClick={() => moveChoice(questionIndex, choiceIndex, -1)} aria-label={`Move question ${questionIndex + 1} choice ${choiceIndex + 1} up`}><ChevronUp className="h-4 w-4" /></Button>
+                        <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" disabled={choiceIndex === question.choices.length - 1} onClick={() => moveChoice(questionIndex, choiceIndex, 1)} aria-label={`Move question ${questionIndex + 1} choice ${choiceIndex + 1} down`}><ChevronDown className="h-4 w-4" /></Button>
+                        <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0 text-red-500" onClick={() => removeChoice(questionIndex, choiceIndex)} aria-label={`Remove question ${questionIndex + 1} choice ${choiceIndex + 1}`}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                    ))}
+                    <Button type="button" variant="outline" className="ml-3 h-9 gap-2" onClick={() => addChoice(questionIndex)}><Plus className="h-4 w-4" /> Add choice</Button>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="w-full gap-2" onClick={addQuestion}><Plus className="h-4 w-4" /> Add question</Button>
             </CardContent>
           </Card>
 
@@ -268,15 +338,20 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
                   {step === "request" && <div className="flex flex-wrap gap-2.5">{config.quickPrompts.map((prompt) => <DemoChip key={prompt} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>}
 
-                  {reached("bathrooms") && <DemoBubble customer color={config.customerBubbleColor}>{demo.prompt}</DemoBubble>}
-                  {reached("bathrooms") && <DemoBubble>{config.bathroomQuestion}</DemoBubble>}
-                  {step === "bathrooms" && <div className="flex flex-wrap gap-2.5">{config.bathroomOptions.map((option) => <DemoChip key={option} onClick={() => selectBathroom(option)}>{option}</DemoChip>)}</div>}
+                  {reached("questions") && <DemoBubble customer color={config.customerBubbleColor}>{demo.prompt}</DemoBubble>}
+                  {reached("questions") && config.questions.map((question, questionIndex) => {
+                    const visible = step !== "questions" || questionIndex <= currentQuestionIndex;
+                    if (!visible) return null;
+                    const answer = demo.answers[question.id];
+                    return (
+                      <div key={question.id} className="contents">
+                        <DemoBubble>{question.prompt}</DemoBubble>
+                        {answer && <DemoBubble customer color={config.customerBubbleColor}>{answer}</DemoBubble>}
+                        {step === "questions" && questionIndex === currentQuestionIndex && <div className="flex flex-wrap gap-2.5">{question.choices.map((choice) => <DemoChip key={choice} onClick={() => selectQuestionAnswer(choice)}>{choice}</DemoChip>)}</div>}
+                      </div>
+                    );
+                  })}
 
-                  {reached("extras") && <DemoBubble customer color={config.customerBubbleColor}>{demo.bathrooms}</DemoBubble>}
-                  {reached("extras") && <DemoBubble>{config.extrasQuestion}</DemoBubble>}
-                  {step === "extras" && <div className="flex flex-wrap gap-2.5">{config.extrasOptions.map((option) => <DemoChip key={option} onClick={() => selectExtra(option)}>{option}</DemoChip>)}</div>}
-
-                  {reached("quote") && <DemoBubble customer color={config.customerBubbleColor}>{demo.extra}</DemoBubble>}
                   {reached("quote") && (
                     <div className="max-w-[94%] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                       <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">{config.openingEyebrow}</div>
