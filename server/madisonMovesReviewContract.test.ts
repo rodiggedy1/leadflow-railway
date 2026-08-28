@@ -74,7 +74,8 @@ describe("Madison’s Moves review-first contract", () => {
     expect(capacity).toContain("DAILY_JOB_TARGET = 30");
     expect(capacity).toContain("RECIPIENT_LIMIT = 30");
     expect(capacity).toContain("reactivationEligible");
-    expect(capacity).toContain("contacted in a campaign within 7 days");
+    expect(capacity).toContain("contacted within the last 7 days");
+    expect(capacity).toContain("recentOutboundPhones");
     expect(capacity).toContain("has an active or future booking");
     expect(capacity).toContain("has a newer booking history");
     expect(capacity).toContain("completed a booking within the last 7 days");

@@ -45,6 +45,35 @@ export function bookingActivityExclusionReason(input: { candidateLastBookingDate
   return null;
 }
 
+type RecentOutboundSession = { phone: string | null; messageHistory: string | null };
+
+/**
+ * Returns phones with a carrier-identified outbound message inside the cutoff.
+ * Both fields are existing OpenPhone identifiers used by the two canonical
+ * outbound append helpers. Messages without a carrier ID do not qualify.
+ */
+export function recentOutboundPhones(rows: RecentOutboundSession[], cutoffMs: number) {
+  const phones = new Set<string>();
+  for (const row of rows) {
+    const phone = normalizePhoneLegacy(row.phone ?? "");
+    if (!phone) continue;
+    let history: Array<Record<string, unknown>> = [];
+    try {
+      const parsed = JSON.parse(row.messageHistory ?? "[]");
+      if (Array.isArray(parsed)) history = parsed;
+    } catch {
+      continue;
+    }
+    const hasRecentOutbound = history.some((message) => {
+      const carrierId = typeof message.opMsgId === "string" ? message.opMsgId : typeof message.openPhoneId === "string" ? message.openPhoneId : "";
+      const timestamp = typeof message.ts === "number" ? message.ts : Number(message.ts);
+      return message.role === "assistant" && carrierId.trim().length > 0 && Number.isFinite(timestamp) && timestamp >= cutoffMs;
+    });
+    if (hasRecentOutbound) phones.add(phone);
+  }
+  return phones;
+}
+
 async function loadSafetySets(db: Db) {
   const [globalStops, sessionStops, complaintRows, activeCsRows] = await Promise.all([
     db.select({ phone: smsOptOuts.phone }).from(smsOptOuts),
@@ -85,15 +114,21 @@ async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: Tom
       .where(and(isNotNull(reactivationContacts.sentAt), gte(reactivationContacts.sentAt, sevenDaysAgo))),
   ]);
   const storedCandidatePhones = Array.from(new Set(rows.map((row) => row.phone).filter((phone): phone is string => Boolean(phone))));
-  const [bookingHistoryRows, activeOrFutureBookingRows] = storedCandidatePhones.length > 0
+  const candidatePhone10s = Array.from(new Set(storedCandidatePhones.map((phone) => normalizePhoneLegacy(phone)).filter((phone): phone is string => Boolean(phone)).map((phone) => phone.replace(/\D/g, "").slice(-10))));
+  const [bookingHistoryRows, activeOrFutureBookingRows, recentOutboundSessionRows] = storedCandidatePhones.length > 0
     ? await Promise.all([
       db.select({ phone: completedJobs.phone, jobDate: completedJobs.jobDate, frequency: completedJobs.frequency }).from(completedJobs)
         .where(inArray(completedJobs.phone, storedCandidatePhones)),
       db.select({ phone: cleanerJobs.customerPhone }).from(cleanerJobs)
         .where(and(gte(cleanerJobs.jobDate, easternDate()), sql`(${cleanerJobs.bookingStatus} IS NULL OR ${cleanerJobs.bookingStatus} NOT IN ('cancelled', 'rescheduled', 'completed'))`)),
+      db.select({ phone: conversationSessions.leadPhone, messageHistory: conversationSessions.messageHistory }).from(conversationSessions)
+        .where(and(gte(conversationSessions.updatedAt, sevenDaysAgo), inArray(sql<string>`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10)`, candidatePhone10s))),
     ])
-    : [[], []];
-  const recentlyMessaged = new Set(recentCampaignRows.map((row) => normalizePhoneLegacy(row.phone ?? "")).filter(Boolean));
+    : [[], [], []];
+  const recentlyMessaged = new Set([
+    ...recentCampaignRows.map((row) => normalizePhoneLegacy(row.phone ?? "")).filter((phone): phone is string => Boolean(phone)),
+    ...recentOutboundPhones(recentOutboundSessionRows, sevenDaysAgo.getTime()),
+  ]);
   const latestCompletedBookingDate = new Map<string, string>();
   const completedWithinSevenDays = new Set<string>();
   const recurringWithinThirtyDays = new Set<string>();
@@ -116,7 +151,7 @@ async function selectSafePastOneTimeCustomers(db: Db): Promise<{ recipients: Tom
     else if (row.status === "OPTED_OUT" || stops.has(phone)) reason = "STOP opt-out";
     else if (complaints.has(phone)) reason = "open complaint";
     else if (activeCs.has(phone)) reason = "active customer-service conversation";
-    else if (recentlyMessaged.has(phone)) reason = "contacted in a campaign within 7 days";
+    else if (recentlyMessaged.has(phone)) reason = "contacted within the last 7 days";
     else {
       const bookingExclusion = bookingActivityExclusionReason({
         candidateLastBookingDate: row.jobDate,
