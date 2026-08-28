@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, RefreshCw, Send, ShieldCheck, Sparkles, Users, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { BulkSmsConfirmCard, type BulkSmsConfirmCardData } from "./BulkSmsConfirmCard";
@@ -82,6 +82,8 @@ function MoveCard({ move, onReview, onDismiss, onRestore, onReviewItem, reviewIt
 export function MadisonsMovesPanel() {
   const [tab, setTab] = useState<"ready" | "history">("ready");
   const [reviewing, setReviewing] = useState<Move | null>(null);
+  const movesScrollRef = useRef<HTMLDivElement>(null);
+  const reviewPanelRef = useRef<HTMLDivElement>(null);
   const movesQuery = trpc.madisonMoves.list.useQuery(undefined, { staleTime: 30_000, refetchInterval: 60_000, refetchOnWindowFocus: false });
   const historyQuery = trpc.madisonMoves.history.useQuery(undefined, { enabled: tab === "history", staleTime: 30_000 });
   const dismiss = trpc.madisonMoves.dismiss.useMutation({ onSuccess: () => { setReviewing(null); setTab("history"); movesQuery.refetch(); historyQuery.refetch(); } });
@@ -101,6 +103,14 @@ export function MadisonsMovesPanel() {
     excludedReasons: reviewing.excludedReasons,
   } : null;
 
+  useEffect(() => {
+    if (!reviewing) return;
+    requestAnimationFrame(() => {
+      movesScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      reviewPanelRef.current?.focus({ preventScroll: true });
+    });
+  }, [reviewing]);
+
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-[#e8e2ef] bg-[#fbf9ff]">
       <header className="shrink-0 border-b border-[#e8e2ef] bg-white px-4 pb-3 pt-4">
@@ -118,9 +128,9 @@ export function MadisonsMovesPanel() {
           {(["ready", "history"] as const).map((value) => <button key={value} onClick={() => setTab(value)} className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold capitalize transition ${tab === value ? "bg-white text-[#6541cf] shadow-sm" : "text-slate-500"}`}>{value}</button>)}
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div ref={movesScrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
         {reviewing && reviewCard && (
-          <div className="mb-3">
+          <div ref={reviewPanelRef} tabIndex={-1} className="mb-3 outline-none">
             <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#7657bd]">Review recipients & message</span><button onClick={() => setReviewing(null)} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button></div>
             <BulkSmsConfirmCard card={reviewCard} onDismiss={() => setReviewing(null)} onReviewSend={async ({ recipients, message }) => {
               const result = await sendMadisonMove.mutateAsync({ moveKey: reviewing.moveKey, recipients, message });

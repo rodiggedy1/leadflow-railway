@@ -19,6 +19,12 @@ describe("Madison’s Moves review-first contract", () => {
     expect(panel).toContain("Review & send");
   });
 
+  it("brings the selected review card into view when a lower move is opened", () => {
+    expect(panel).toContain("movesScrollRef.current?.scrollTo({ top: 0, behavior: \"smooth\" })");
+    expect(panel).toContain("ref={movesScrollRef}");
+    expect(panel).toContain("ref={reviewPanelRef} tabIndex={-1}");
+  });
+
   it("records a send-started Madison state before the first carrier call and contains final persistence failure", () => {
     expect(router).toContain('outcome: "sending"');
     expect(router).toContain("sendStartedAt");
