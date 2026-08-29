@@ -114,6 +114,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("WHY PEOPLE BOOK US");
     expect(componentSource).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BzlthoPImdsJEqoM.webp");
     expect(componentSource).toContain('style={{ objectPosition: "50% 38%" }}');
+    expect(componentSource).toContain("sm:aspect-[2.75/1]");
     expect(componentSource).toContain("Demo checkout");
     expect(componentSource).toContain("Stripe-style payment preview");
     expect(componentSource).toContain('aria-label="Demo card number"');

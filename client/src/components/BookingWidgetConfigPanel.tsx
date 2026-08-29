@@ -151,7 +151,7 @@ function DemoHistoryRow({ entry, customerColor, trustPoints }: { entry: DemoHist
     );
   }
   return (
-    <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:grid-cols-[42%_1fr]">
+    <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:aspect-[2.75/1] sm:grid-cols-[42%_1fr]">
       <img
         src={CLEANER_TEAM_IMAGE_URL}
         alt="Maids in Black professional holding cleaning supplies"
