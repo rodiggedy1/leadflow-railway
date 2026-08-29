@@ -86,7 +86,10 @@ describe("booking widget interactive demo configuration", () => {
       openingEyebrow: "I found an opening",
       bookingButtonLabel: "Continue — ${price}",
       addressQuestion: "Great choice. What address should we send the team to?",
+      paymentConfirmationTemplate: "Perfect. I found your address. For this demo I’ll use a saved {cardBrand} ending in {last4}.",
+      confirmButtonLabel: "Confirm booking",
       confirmedScheduleTemplate: "{providerName} is scheduled for {day}, {time}.",
+      demoPaymentNotice: "Your card is only a demo. No payment was processed.",
     };
     const migrated = parseBookingWidgetDraft(JSON.stringify(versionFive));
     expect(migrated.demoVersion).toBe(6);
@@ -97,6 +100,9 @@ describe("booking widget interactive demo configuration", () => {
     expect(migrated.bookingButtonLabel).toBe("Book for ${price} →");
     expect(migrated.resultTitle).toBe("I can get you in 🎉");
     expect(migrated.resultTrustPoints).toHaveLength(3);
+    expect(migrated.paymentConfirmationTemplate).toBe("Almost done ✨");
+    expect(migrated.confirmButtonLabel).toBe("Confirm & book — ${price}");
+    expect(migrated.demoPaymentNotice).toContain("No card details are collected or stored");
 
     const customized = parseBookingWidgetDraft(JSON.stringify({ ...versionFive, scheduleQuestion: "Which date works for you?" }));
     expect(customized.scheduleQuestion).toBe("Which date works for you?");
@@ -113,6 +119,9 @@ describe("booking widget interactive demo configuration", () => {
       availabilityCheckMessage: "Checking the schedule now…",
       resultTitle: "We found a time",
       resultTrustPoints: ["Insured", "Supplies included", "Guaranteed"],
+      paymentConfirmationTemplate: "Complete your demo checkout",
+      confirmButtonLabel: "Preview confirmation — ${price}",
+      demoPaymentNotice: "This remains a visual mock.",
     };
     const parsed = parseBookingWidgetDraft(JSON.stringify(savedDraft));
     expect(parsed).toEqual(savedDraft);
@@ -189,6 +198,7 @@ describe("booking widget interactive demo configuration", () => {
 
   it("formats price and confirmation templates deterministically", () => {
     expect(formatBookingButtonLabel("Book for ${price} →", "405")).toBe("Book for $405 →");
+    expect(formatBookingButtonLabel("Confirm & book — ${price}", "405")).toBe("Confirm & book — $405");
     expect(renderBookingWidgetTemplate("Saved {cardBrand} ending in {last4}", { cardBrand: "Visa", last4: "4242" })).toBe("Saved Visa ending in 4242");
   });
 
