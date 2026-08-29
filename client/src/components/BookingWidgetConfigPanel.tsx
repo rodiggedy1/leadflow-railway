@@ -59,7 +59,7 @@ type DemoSession = {
 
 const fieldClass = "h-9 bg-white border-gray-200 text-sm";
 const DEMO_TIME_SLOTS = ["8:30 AM", "10:30 AM", "1:00 PM", "3:30 PM"] as const;
-const CLEANER_TEAM_IMAGE_URL = "/manus-storage/book-with-ai-cleaner-team_ea9c2c7d.png";
+const CLEANER_TEAM_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BzlthoPImdsJEqoM.webp";
 
 function normalizeCalendarDate(date: Date): Date {
   const normalized = new Date(date);
@@ -152,7 +152,12 @@ function DemoHistoryRow({ entry, customerColor, trustPoints }: { entry: DemoHist
   }
   return (
     <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:grid-cols-[42%_1fr]">
-      <img src={CLEANER_TEAM_IMAGE_URL} alt="Professional cleaner holding supplies in a bright living room" className="h-44 w-full object-cover sm:h-full" />
+      <img
+        src={CLEANER_TEAM_IMAGE_URL}
+        alt="Maids in Black professional holding cleaning supplies"
+        className="h-44 w-full object-cover sm:h-full"
+        style={{ objectPosition: "50% 38%" }}
+      />
       <div className="flex flex-col justify-center p-5"><span className="text-[10px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-3 text-[17px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#66736e]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#239268]" /><span>{trustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-3 text-[11px] font-extrabold text-[#ff684c]">See our happiness promise</span></div>
     </div>
   );
