@@ -70,4 +70,35 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("PaymentIntent");
     expect(componentSource).not.toContain("confirmPayment");
   });
+
+  it("keeps the sticky preview within the viewport with an independently scrolling transcript and pinned composer", () => {
+    expect(componentSource).toContain("xl:h-[clamp(420px,calc(100dvh-400px),700px)]");
+    expect(componentSource).toContain("xl:h-auto xl:min-h-0 xl:flex-1");
+    expect(componentSource).toContain("overscroll-contain");
+    expect(componentSource).toContain('className="shrink-0 border-t border-[#e4e5e7]');
+  });
+
+  it("places the full privacy and photo-led proof cards before the address answer", () => {
+    const phoneAnswerIndex = componentSource.indexOf('>{demo.phone}</DemoBubble>');
+    const privacyIndex = componentSource.indexOf("Your information stays private");
+    const addressQuestionIndex = componentSource.indexOf('{reached("address") && <DemoBubble>{config.addressQuestion}</DemoBubble>}');
+    const proofIndex = componentSource.indexOf("<img src={CLEANER_TEAM_IMAGE_URL}");
+    const addressAnswerIndex = componentSource.indexOf('>{demo.address}</DemoBubble>');
+
+    expect(phoneAnswerIndex).toBeGreaterThan(-1);
+    expect(privacyIndex).toBeGreaterThan(phoneAnswerIndex);
+    expect(addressQuestionIndex).toBeGreaterThan(privacyIndex);
+    expect(proofIndex).toBeGreaterThan(addressQuestionIndex);
+    expect(addressAnswerIndex).toBeGreaterThan(proofIndex);
+    expect(componentSource).toContain("/manus-storage/book-with-ai-cleaner-team_ea9c2c7d.png");
+    expect(componentSource).not.toContain("2,100+ completed cleanings");
+  });
+
+  it("positions each active result, checkout, and completion card immediately after its transition", () => {
+    expect(componentSource).toContain("const activeStepRef = useRef<HTMLDivElement>(null)");
+    expect(componentSource).toContain('step === "quote" || step === "confirm" || step === "complete"');
+    expect(componentSource.match(/ref=\{activeStepRef\}/g)?.length).toBe(3);
+    expect(componentSource).toContain('onClick={() => setStep("confirm")}');
+    expect(componentSource).toContain('setStep("complete")');
+  });
 });
