@@ -61,7 +61,7 @@ type DemoSession = {
 const fieldClass = "h-9 bg-white border-gray-200 text-sm";
 const DEMO_TIME_SLOTS = ["8:30 AM", "10:30 AM", "1:00 PM", "3:30 PM"] as const;
 const CLEANER_TEAM_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/KoTsWjcUFAcYYhVB.png";
-const WELCOME_VIDEO_WISTIA_MEDIA_ID = "jtv8f50ale";
+const WELCOME_VIDEO_WISTIA_MEDIA_ID = "bzlt49ipk1";
 const WELCOME_VIDEO_SWATCH_URL = `https://fast.wistia.com/embed/medias/${WELCOME_VIDEO_WISTIA_MEDIA_ID}/swatch`;
 const WELCOME_VIDEO_IFRAME_URL = `https://fast.wistia.net/embed/iframe/${WELCOME_VIDEO_WISTIA_MEDIA_ID}?seo=false&videoFoam=true&autoplay=1`;
 
