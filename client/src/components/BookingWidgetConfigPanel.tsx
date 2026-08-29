@@ -29,10 +29,11 @@ type BookingWidgetConfigPanelProps = {
   onSave: (value: string) => Promise<void>;
 };
 
-type DemoStep = "request" | "questions" | "fullName" | "phone" | "email" | "schedule" | "checking" | "quote" | "address" | "confirm" | "complete";
+type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "complete";
 
 type DemoSession = {
   prompt: string;
+  serviceDetailsAnswer: string;
   serviceId: BookingWidgetServiceId;
   fallbackBedrooms: number;
   answers: Record<string, string[]>;
@@ -43,11 +44,13 @@ type DemoSession = {
   email: string;
   schedule: string;
   address: string;
+  leadCaptured: boolean;
 };
 
 const fieldClass = "h-9 bg-white border-gray-200 text-sm";
 const emptySession: DemoSession = {
   prompt: "",
+  serviceDetailsAnswer: "",
   serviceId: "deep",
   fallbackBedrooms: 3,
   answers: {},
@@ -58,6 +61,7 @@ const emptySession: DemoSession = {
   email: "",
   schedule: "",
   address: "",
+  leadCaptured: false,
 };
 
 function DemoBubble({ children, customer, color }: { children: React.ReactNode; customer?: boolean; color?: string }) {
@@ -117,9 +121,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const isDirty = serialized !== JSON.stringify(savedConfig);
   const service = config.services.find((item) => item.id === demo.serviceId) ?? config.services[1];
   const detailLine = buildDemoDetailLine(demo.fallbackBedrooms, config.questions, demo.answers);
-  const stepOrder: DemoStep[] = ["request", "questions", "fullName", "phone", "email", "schedule", "checking", "quote", "address", "confirm", "complete"];
+  const stepOrder: DemoStep[] = ["request", "serviceDetails", "questions", "schedule", "extras", "fullName", "phone", "email", "address", "checking", "quote", "confirm", "complete"];
   const reached = (target: DemoStep) => stepOrder.indexOf(step) >= stepOrder.indexOf(target);
   const currentQuestion = config.questions[currentQuestionIndex];
+  const extrasQuestion = config.questions.find((question) => question.role === "extras");
 
   const update = <K extends keyof BookingWidgetDraftConfig>(key: K, value: BookingWidgetDraftConfig[K]) => {
     setConfig((current) => ({ ...current, [key]: value }));
@@ -176,11 +181,21 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
 
-  const nextUnansweredQuestionIndex = (fromIndex: number, answers: Record<string, string[]>) => {
+  const nextUnansweredCustomQuestionIndex = (fromIndex: number, answers: Record<string, string[]>) => {
     for (let index = Math.max(fromIndex, 0); index < config.questions.length; index += 1) {
-      if ((answers[config.questions[index].id] ?? []).length === 0) return index;
+      if (config.questions[index].role === "custom" && (answers[config.questions[index].id] ?? []).length === 0) return index;
     }
     return -1;
+  };
+
+  const nextAfterServiceDetails = (answers: Record<string, string[]>) => {
+    const customQuestionIndex = nextUnansweredCustomQuestionIndex(0, answers);
+    if (customQuestionIndex >= 0) {
+      setCurrentQuestionIndex(customQuestionIndex);
+      setStep("questions");
+      return;
+    }
+    setStep("schedule");
   };
 
   const selectRequest = (prompt: string) => {
@@ -188,7 +203,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     if (!trimmed) return;
     const resolved = resolveDemoRequest(trimmed);
     const inferred = buildInferredQuestionAnswers(resolved, config.questions);
-    const nextQuestionIndex = nextUnansweredQuestionIndex(0, inferred.answers);
+    const hasBedrooms = config.questions.every((question) => question.role !== "bedrooms" || (inferred.answers[question.id] ?? []).length > 0);
+    const hasBathrooms = config.questions.every((question) => question.role !== "bathrooms" || (inferred.answers[question.id] ?? []).length > 0);
     setDemo({
       ...emptySession,
       prompt: trimmed,
@@ -198,18 +214,39 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       inferredQuestionIds: inferred.inferredQuestionIds,
       requestedDay: resolved.requestedDay ?? "",
     });
-    setCurrentQuestionIndex(nextQuestionIndex >= 0 ? nextQuestionIndex : 0);
     setComposerValue("");
     setComposerError("");
-    setStep(nextQuestionIndex >= 0 ? "questions" : "fullName");
+    if (hasBedrooms && hasBathrooms) nextAfterServiceDetails(inferred.answers);
+    else setStep("serviceDetails");
   };
 
   const advanceFromQuestion = (answers = demo.answers) => {
     setComposerValue("");
     setComposerError("");
-    const nextQuestionIndex = nextUnansweredQuestionIndex(currentQuestionIndex + 1, answers);
+    const nextQuestionIndex = nextUnansweredCustomQuestionIndex(currentQuestionIndex + 1, answers);
     if (nextQuestionIndex >= 0) setCurrentQuestionIndex(nextQuestionIndex);
-    else setStep("fullName");
+    else setStep("schedule");
+  };
+
+  const submitCombinedServiceDetails = () => {
+    const resolved = resolveDemoRequest(composerValue);
+    const inferred = buildInferredQuestionAnswers(resolved, config.questions);
+    const nextAnswers = { ...demo.answers, ...inferred.answers };
+    const hasBedrooms = config.questions.every((question) => question.role !== "bedrooms" || (nextAnswers[question.id] ?? []).length > 0);
+    const hasBathrooms = config.questions.every((question) => question.role !== "bathrooms" || (nextAnswers[question.id] ?? []).length > 0);
+    if (!hasBedrooms || !hasBathrooms) {
+      setComposerError("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
+      return;
+    }
+    setDemo((current) => ({
+      ...current,
+      serviceDetailsAnswer: composerValue.trim(),
+      answers: nextAnswers,
+      inferredQuestionIds: [...new Set([...current.inferredQuestionIds, ...inferred.inferredQuestionIds])],
+    }));
+    setComposerValue("");
+    setComposerError("");
+    nextAfterServiceDetails(nextAnswers);
   };
 
   const selectQuestionAnswer = (answer: string) => {
@@ -231,8 +268,33 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     advanceFromQuestion(nextAnswers);
   };
 
+  const selectExtrasAnswer = (answer: string) => {
+    const trimmed = answer.trim();
+    if (!trimmed || !extrasQuestion) return;
+    if (extrasQuestion.selectionMode === "multiple") {
+      setDemo((current) => ({
+        ...current,
+        answers: {
+          ...current.answers,
+          [extrasQuestion.id]: toggleMultiSelectChoice(current.answers[extrasQuestion.id] ?? [], trimmed),
+        },
+      }));
+      setComposerValue("");
+      return;
+    }
+    setDemo((current) => ({ ...current, answers: { ...current.answers, [extrasQuestion.id]: [trimmed] } }));
+    setComposerValue("");
+    setComposerError("");
+    setStep("fullName");
+  };
+
   const continueMultipleQuestion = () => {
-    if (!currentQuestion || currentQuestion.selectionMode !== "multiple") return;
+    if (!extrasQuestion || (demo.answers[extrasQuestion.id] ?? []).length === 0) return;
+    setStep("fullName");
+  };
+
+  const continueCustomQuestion = () => {
+    if (!currentQuestion || currentQuestion.role !== "custom" || currentQuestion.selectionMode !== "multiple") return;
     if ((demo.answers[currentQuestion.id] ?? []).length === 0) return;
     advanceFromQuestion();
   };
@@ -256,16 +318,31 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setDemo((current) => ({ ...current, address: trimmed }));
     setComposerValue("");
     setComposerError("");
-    setStep("confirm");
+    setStep("checking");
+  };
+
+  const submitPhone = () => {
+    const trimmed = composerValue.trim();
+    const error = validateBookingWidgetIntakeField("phone", trimmed);
+    if (error) {
+      setComposerError(error);
+      return;
+    }
+    setDemo((current) => ({ ...current, phone: trimmed, leadCaptured: true }));
+    setComposerValue("");
+    setComposerError("");
+    setStep("email");
   };
 
   const submitComposer = () => {
     if (step === "request") return selectRequest(composerValue);
+    if (step === "serviceDetails") return submitCombinedServiceDetails();
     if (step === "questions") return selectQuestionAnswer(composerValue);
+    if (step === "schedule") return submitIntakeField("schedule", "extras");
+    if (step === "extras") return selectExtrasAnswer(composerValue);
     if (step === "fullName") return submitIntakeField("fullName", "phone");
-    if (step === "phone") return submitIntakeField("phone", "email");
-    if (step === "email") return submitIntakeField("email", "schedule");
-    if (step === "schedule") return submitIntakeField("schedule", "checking");
+    if (step === "phone") return submitPhone();
+    if (step === "email") return submitIntakeField("email", "address");
     if (step === "address") return submitAddress(composerValue);
   };
 
@@ -286,7 +363,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     startOver();
   };
 
-  const composerPlaceholder = step === "fullName"
+  const composerPlaceholder = step === "serviceDetails"
+    ? config.combinedDetailsPlaceholder
+    : step === "fullName"
     ? config.fullNamePlaceholder
     : step === "phone"
       ? config.phonePlaceholder
@@ -294,10 +373,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
         ? config.emailPlaceholder
         : step === "schedule"
           ? config.schedulePlaceholder
-          : step === "address" || reached("confirm")
+          : step === "address" || reached("checking")
             ? config.addressPlaceholder
             : config.inputPlaceholder;
-  const composerEnabled = ["request", "questions", "fullName", "phone", "email", "schedule", "address"].includes(step);
+  const composerEnabled = ["request", "serviceDetails", "questions", "schedule", "extras", "fullName", "phone", "email", "address"].includes(step);
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 
   return (
@@ -305,7 +384,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
         <p className="text-sm font-semibold text-violet-900">Fully interactive demo · internal preview only</p>
         <p className="mt-0.5 text-xs leading-relaxed text-violet-700">
-          This simulation never creates a booking, processes a card, checks live availability, changes the quote form, or contacts a customer.
+          This simulation never saves customer details, creates a lead or booking, processes a card, checks live availability, changes the quote form, or contacts a customer.
         </p>
       </div>
 
@@ -348,7 +427,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </Card>
 
           <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Questions and choices</CardTitle><CardDescription>Questions run top to bottom. Core types control the quote summary; custom questions remain part of the demo conversation.</CardDescription></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Questions and choices</CardTitle><CardDescription>Bedrooms and bathrooms are collected together. Their choices still control summary wording; extras and custom questions remain editable.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               {config.questions.map((question, questionIndex) => (
                 <div key={question.id} className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
@@ -388,15 +467,18 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </Card>
 
           <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Customer intake and availability</CardTitle><CardDescription>Configure the contact questions shown after service details and before the sample opening.</CardDescription></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Customer intake and availability</CardTitle><CardDescription>Configure the combined service details, schedule, contact, address, and sample availability transition.</CardDescription></CardHeader>
             <CardContent className="space-y-3">
+              <div className="grid grid-cols-[1fr_170px] gap-2"><Input aria-label="Combined bedroom and bathroom question" className={fieldClass} value={config.combinedDetailsQuestion} onChange={(event) => update("combinedDetailsQuestion", event.target.value)} /><Input aria-label="Combined details placeholder" className={fieldClass} value={config.combinedDetailsPlaceholder} onChange={(event) => update("combinedDetailsPlaceholder", event.target.value)} /></div>
+              <div className="space-y-1.5"><Label htmlFor="schedule-question">Schedule question</Label><Input id="schedule-question" className={fieldClass} value={config.scheduleQuestion} onChange={(event) => update("scheduleQuestion", event.target.value)} /></div>
+              <div className="space-y-1.5"><Label htmlFor="schedule-question-day">Schedule question when the request includes a day</Label><Input id="schedule-question-day" className={fieldClass} value={config.scheduleQuestionWithDayTemplate} onChange={(event) => update("scheduleQuestionWithDayTemplate", event.target.value)} /><p className="text-xs text-gray-400">Use <code>{"{day}"}</code> for the requested day.</p></div>
+              <Input aria-label="Schedule placeholder" className={fieldClass} value={config.schedulePlaceholder} onChange={(event) => update("schedulePlaceholder", event.target.value)} />
               <div className="grid grid-cols-[1fr_170px] gap-2"><Input aria-label="Full name question" className={fieldClass} value={config.fullNameQuestion} onChange={(event) => update("fullNameQuestion", event.target.value)} /><Input aria-label="Full name placeholder" className={fieldClass} value={config.fullNamePlaceholder} onChange={(event) => update("fullNamePlaceholder", event.target.value)} /></div>
               <div className="grid grid-cols-[1fr_170px] gap-2"><Input aria-label="Phone question" className={fieldClass} value={config.phoneQuestionTemplate} onChange={(event) => update("phoneQuestionTemplate", event.target.value)} /><Input aria-label="Phone placeholder" className={fieldClass} value={config.phonePlaceholder} onChange={(event) => update("phonePlaceholder", event.target.value)} /></div>
               <p className="-mt-1 text-xs text-gray-400">Use <code>{"{firstName}"}</code> in the phone question.</p>
               <div className="grid grid-cols-[1fr_170px] gap-2"><Input aria-label="Email question" className={fieldClass} value={config.emailQuestion} onChange={(event) => update("emailQuestion", event.target.value)} /><Input aria-label="Email placeholder" className={fieldClass} value={config.emailPlaceholder} onChange={(event) => update("emailPlaceholder", event.target.value)} /></div>
-              <div className="space-y-1.5"><Label htmlFor="schedule-question">Schedule question</Label><Input id="schedule-question" className={fieldClass} value={config.scheduleQuestion} onChange={(event) => update("scheduleQuestion", event.target.value)} /></div>
-              <div className="space-y-1.5"><Label htmlFor="schedule-question-day">Schedule question when the request includes a day</Label><Input id="schedule-question-day" className={fieldClass} value={config.scheduleQuestionWithDayTemplate} onChange={(event) => update("scheduleQuestionWithDayTemplate", event.target.value)} /><p className="text-xs text-gray-400">Use <code>{"{day}"}</code> for the requested day.</p></div>
-              <Input aria-label="Schedule placeholder" className={fieldClass} value={config.schedulePlaceholder} onChange={(event) => update("schedulePlaceholder", event.target.value)} />
+              <div className="space-y-1.5"><Label htmlFor="address-question">Address question</Label><Input id="address-question" className={fieldClass} value={config.addressQuestion} onChange={(event) => update("addressQuestion", event.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-2"><Input aria-label="Address input placeholder" className={fieldClass} value={config.addressPlaceholder} onChange={(event) => update("addressPlaceholder", event.target.value)} /><Input aria-label="Sample address" className={fieldClass} value={config.addressExample} onChange={(event) => update("addressExample", event.target.value)} /></div>
               <div className="space-y-1.5"><Label htmlFor="availability-check-message">Availability transition</Label><Textarea id="availability-check-message" className="min-h-20 bg-white border-gray-200 text-sm" value={config.availabilityCheckMessage} onChange={(event) => update("availabilityCheckMessage", event.target.value)} /></div>
             </CardContent>
           </Card>
@@ -405,24 +487,22 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
             <CardHeader className="pb-3"><CardTitle className="text-base">Opening and sample pricing</CardTitle><CardDescription>Demo values only; no live pricing or availability is queried.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5"><Label htmlFor="opening-eyebrow">Result label</Label><Input id="opening-eyebrow" className={fieldClass} value={config.openingEyebrow} onChange={(event) => update("openingEyebrow", event.target.value)} /></div>
+              <div className="space-y-1.5"><Label htmlFor="result-title">Result title</Label><Input id="result-title" className={fieldClass} value={config.resultTitle} onChange={(event) => update("resultTitle", event.target.value)} /></div>
+              <div className="space-y-2"><Label>Trust points</Label>{config.resultTrustPoints.map((point, index) => <Input key={index} aria-label={`Trust point ${index + 1}`} className={fieldClass} value={point} onChange={(event) => update("resultTrustPoints", config.resultTrustPoints.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} />)}</div>
               {config.services.map((item, index) => (
                 <div key={item.id} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.id}</div>
                   <div className="grid grid-cols-[1fr_90px] gap-2"><Input aria-label={`${item.id} service name`} className={fieldClass} value={item.name} onChange={(event) => updateService(index, "name", event.target.value)} /><Input aria-label={`${item.id} preview price`} className={fieldClass} value={item.price} onChange={(event) => updateService(index, "price", event.target.value)} /></div>
                   <div className="grid grid-cols-2 gap-2"><Input aria-label={`${item.id} day`} className={fieldClass} value={item.availabilityDay} onChange={(event) => updateService(index, "availabilityDay", event.target.value)} /><Input aria-label={`${item.id} time`} className={fieldClass} value={item.availabilityTime} onChange={(event) => updateService(index, "availabilityTime", event.target.value)} /></div>
-                  <Input aria-label={`${item.id} provider`} className={fieldClass} value={item.providerName} onChange={(event) => updateService(index, "providerName", event.target.value)} />
-                  <div className="grid grid-cols-2 gap-2"><Input aria-label={`${item.id} rating`} className={fieldClass} value={item.rating} onChange={(event) => updateService(index, "rating", event.target.value)} /><Input aria-label={`${item.id} completed jobs`} className={fieldClass} value={item.completedJobs} onChange={(event) => updateService(index, "completedJobs", event.target.value)} /></div>
                 </div>
               ))}
-              <div className="space-y-1.5"><Label htmlFor="widget-book-label">Continue button</Label><Input id="widget-book-label" className={fieldClass} value={config.bookingButtonLabel} onChange={(event) => update("bookingButtonLabel", event.target.value)} /><p className="text-xs text-gray-400">Use <code>{"${price}"}</code> for the demo price.</p></div>
+              <div className="space-y-1.5"><Label htmlFor="widget-book-label">Book button</Label><Input id="widget-book-label" className={fieldClass} value={config.bookingButtonLabel} onChange={(event) => update("bookingButtonLabel", event.target.value)} /><p className="text-xs text-gray-400">Use <code>{"${price}"}</code> for the demo price.</p></div>
             </CardContent>
           </Card>
 
           <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Address, confirmation, and completion</CardTitle><CardDescription>Configure the final demo-only steps.</CardDescription></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Demo payment and completion</CardTitle><CardDescription>Configure the simulated steps after the branded result.</CardDescription></CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-1.5"><Label htmlFor="address-question">Address question</Label><Input id="address-question" className={fieldClass} value={config.addressQuestion} onChange={(event) => update("addressQuestion", event.target.value)} /></div>
-              <div className="grid grid-cols-2 gap-2"><Input aria-label="Address input placeholder" className={fieldClass} value={config.addressPlaceholder} onChange={(event) => update("addressPlaceholder", event.target.value)} /><Input aria-label="Sample address" className={fieldClass} value={config.addressExample} onChange={(event) => update("addressExample", event.target.value)} /></div>
               <div className="space-y-1.5"><Label htmlFor="payment-confirmation">Payment confirmation</Label><Textarea id="payment-confirmation" className="min-h-20 bg-white border-gray-200 text-sm" value={config.paymentConfirmationTemplate} onChange={(event) => update("paymentConfirmationTemplate", event.target.value)} /><p className="text-xs text-gray-400">Tokens: <code>{"{cardBrand}"}</code> and <code>{"{last4}"}</code>.</p></div>
               <div className="grid grid-cols-2 gap-2"><Input aria-label="Demo card brand" className={fieldClass} value={config.demoCardBrand} onChange={(event) => update("demoCardBrand", event.target.value)} /><Input aria-label="Demo card last four" className={fieldClass} value={config.demoCardLast4} onChange={(event) => update("demoCardLast4", event.target.value)} /></div>
               <Input aria-label="Confirm booking button" className={fieldClass} value={config.confirmButtonLabel} onChange={(event) => update("confirmButtonLabel", event.target.value)} />
@@ -460,9 +540,12 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
                   {step === "request" && <div className="flex flex-wrap gap-2.5">{config.quickPrompts.map((prompt) => <DemoChip key={prompt} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>}
 
-                  {reached("questions") && <DemoBubble customer color={config.customerBubbleColor}>{demo.prompt}</DemoBubble>}
+                  {reached("serviceDetails") && <DemoBubble customer color={config.customerBubbleColor}>{demo.prompt}</DemoBubble>}
+                  {(step === "serviceDetails" || demo.serviceDetailsAnswer) && <DemoBubble>{config.combinedDetailsQuestion}</DemoBubble>}
+                  {demo.serviceDetailsAnswer && <DemoBubble customer color={config.customerBubbleColor}>{demo.serviceDetailsAnswer}</DemoBubble>}
+
                   {reached("questions") && config.questions.map((question, questionIndex) => {
-                    if (demo.inferredQuestionIds.includes(question.id)) return null;
+                    if (question.role !== "custom" || demo.inferredQuestionIds.includes(question.id)) return null;
                     const visible = step !== "questions" || questionIndex <= currentQuestionIndex;
                     if (!visible) return null;
                     const answer = demo.answers[question.id] ?? [];
@@ -486,15 +569,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                               ))}
                             </div>
                             {question.selectionMode === "multiple" && (
-                              <button
-                                type="button"
-                                onClick={continueMultipleQuestion}
-                                disabled={answer.length === 0}
-                                className="rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45"
-                                style={{ backgroundColor: config.customerBubbleColor }}
-                              >
-                                Continue
-                              </button>
+                              <button type="button" onClick={continueCustomQuestion} disabled={answer.length === 0} className="rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45" style={{ backgroundColor: config.customerBubbleColor }}>Continue</button>
                             )}
                           </div>
                         )}
@@ -502,31 +577,50 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                     );
                   })}
 
+                  {reached("schedule") && <DemoBubble>{formatScheduleQuestion(config, demo.requestedDay)}</DemoBubble>}
+                  {reached("extras") && <DemoBubble customer color={config.customerBubbleColor}>{demo.schedule}</DemoBubble>}
+                  {reached("extras") && extrasQuestion && <DemoBubble>{extrasQuestion.prompt}</DemoBubble>}
+                  {reached("extras") && extrasQuestion && (
+                    <div className="space-y-3">
+                      {reached("fullName") && <DemoBubble customer color={config.customerBubbleColor}>{(demo.answers[extrasQuestion.id] ?? []).join(", ")}</DemoBubble>}
+                      {step === "extras" && (
+                        <>
+                          <div className="flex flex-wrap gap-2.5">
+                            {extrasQuestion.choices.map((choice) => (
+                              <DemoChip key={choice} onClick={() => selectExtrasAnswer(choice)} selected={(demo.answers[extrasQuestion.id] ?? []).some((item) => item.toLowerCase() === choice.trim().toLowerCase())} color={config.customerBubbleColor}>{choice}</DemoChip>
+                            ))}
+                          </div>
+                          <button type="button" onClick={continueMultipleQuestion} disabled={(demo.answers[extrasQuestion.id] ?? []).length === 0} className="rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45" style={{ backgroundColor: config.customerBubbleColor }}>Continue</button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {reached("fullName") && <DemoBubble>{config.fullNameQuestion}</DemoBubble>}
                   {reached("phone") && <DemoBubble customer color={config.customerBubbleColor}>{demo.fullName}</DemoBubble>}
                   {reached("phone") && <DemoBubble>{renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) })}</DemoBubble>}
                   {reached("email") && <DemoBubble customer color={config.customerBubbleColor}>{demo.phone}</DemoBubble>}
                   {reached("email") && <DemoBubble>{config.emailQuestion}</DemoBubble>}
-                  {reached("schedule") && <DemoBubble customer color={config.customerBubbleColor}>{demo.email}</DemoBubble>}
-                  {reached("schedule") && <DemoBubble>{formatScheduleQuestion(config, demo.requestedDay)}</DemoBubble>}
-                  {reached("checking") && <DemoBubble customer color={config.customerBubbleColor}>{demo.schedule}</DemoBubble>}
+                  {reached("address") && <DemoBubble customer color={config.customerBubbleColor}>{demo.email}</DemoBubble>}
+                  {reached("address") && <DemoBubble>{config.addressQuestion}</DemoBubble>}
+                  {reached("checking") && <DemoBubble customer color={config.customerBubbleColor}>{demo.address}</DemoBubble>}
                   {reached("checking") && <DemoBubble><span className="inline-flex items-center gap-2">{step === "checking" && <Loader2 className="h-4 w-4 animate-spin" />}{config.availabilityCheckMessage}</span></DemoBubble>}
 
                   {reached("quote") && (
                     <div className="max-w-[94%] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                       <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">{config.openingEyebrow}</div>
-                      <div className="mt-3 flex items-start justify-between gap-5"><div><div className="text-xl font-bold">{service.name}</div><div className="mt-1 text-sm text-gray-500">{detailLine}</div></div><div className="text-right"><div className="text-xs text-gray-500">Total</div><div className="text-2xl font-bold">${service.price || "0"}</div></div></div>
-                      <div className="mt-4 rounded-xl border border-gray-200 px-4 py-3">
-                        <div className="flex justify-between gap-4 text-sm"><span>📅 {service.availabilityDay}</span><strong>{service.availabilityTime}</strong></div>
-                        <div className="mt-2 flex justify-between gap-4 text-sm"><span>⭐ {service.providerName}</span><strong>{service.rating}</strong></div>
-                        <div className="mt-1 text-xs text-gray-500">{service.completedJobs} completed jobs · supplies included · insured</div>
+                      <div className="mt-2 text-2xl font-bold">{config.resultTitle}</div>
+                      <div className="mt-4 text-base font-semibold">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div>
+                      <div className="mt-5 text-lg font-bold">{service.name}</div>
+                      <div className="mt-1 text-sm leading-6 text-gray-600">{detailLine}</div>
+                      <div className="mt-5 text-3xl font-bold">${service.price || "0"} <span className="text-sm font-medium text-gray-500">total</span></div>
+                      <div className="mt-5 space-y-2.5 border-t border-gray-100 pt-4 text-sm text-gray-700">
+                        {config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2"><span className="font-bold text-emerald-600">✓</span><span>{point}</span></div>)}
                       </div>
-                      <button type="button" onClick={() => step === "quote" && setStep("address")} disabled={step !== "quote"} className="mt-4 w-full rounded-xl py-3 text-sm font-bold disabled:cursor-default" style={{ backgroundColor: config.customerBubbleColor }}>{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}</button>
+                      <button type="button" onClick={() => step === "quote" && setStep("confirm")} disabled={step !== "quote"} className="mt-5 w-full rounded-xl py-3 text-sm font-bold disabled:cursor-default" style={{ backgroundColor: config.customerBubbleColor }}>{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}</button>
                     </div>
                   )}
 
-                  {reached("address") && <DemoBubble>{config.addressQuestion}</DemoBubble>}
-                  {reached("confirm") && <DemoBubble customer color={config.customerBubbleColor}>{demo.address}</DemoBubble>}
                   {reached("confirm") && <DemoBubble>{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</DemoBubble>}
                   {step === "confirm" && <div><DemoChip onClick={() => setStep("complete")}>{config.confirmButtonLabel}</DemoChip></div>}
 
@@ -535,7 +629,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                     <div className="max-w-[94%] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                       <div className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-600">{config.confirmedEyebrow}</div>
                       <div className="mt-3 text-xl font-bold">{config.confirmedTitle}</div>
-                      <div className="mt-3 text-sm leading-6 text-gray-600">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: service.availabilityDay, time: service.availabilityTime })}</div>
+                      <div className="mt-3 text-sm leading-6 text-gray-600">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div>
                       <div className="mt-4 space-y-2 rounded-xl border border-gray-200 p-4 text-sm">
                         <div className="flex justify-between gap-4"><span>{service.name}</span><strong>${service.price}</strong></div>
                         <div className="flex justify-between gap-4 text-gray-500"><span>Address</span><span className="text-right">{demo.address}</span></div>
