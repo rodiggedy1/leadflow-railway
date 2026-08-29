@@ -112,8 +112,9 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("xl:h-auto xl:min-h-0 xl:flex-1");
     expect(componentSource).toContain("Your information stays private");
     expect(componentSource).toContain("WHY PEOPLE BOOK US");
-    expect(componentSource).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BzlthoPImdsJEqoM.webp");
-    expect(componentSource).toContain('style={{ objectPosition: "50% 38%" }}');
+    expect(componentSource).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/KoTsWjcUFAcYYhVB.png");
+    expect(componentSource).toContain("object-contain");
+    expect(componentSource).not.toContain("objectPosition");
     expect(componentSource).toContain("sm:aspect-[2.75/1]");
     expect(componentSource).toContain("Demo checkout");
     expect(componentSource).toContain("Stripe-style payment preview");
