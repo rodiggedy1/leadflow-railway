@@ -16,7 +16,6 @@ import {
   parseBookingWidgetDraft,
   renderBookingWidgetTemplate,
   resolveDemoRequest,
-  roundBookingWidgetPriceUpToNine,
   toggleMultiSelectChoice,
   validateBookingWidgetIntakeField,
 } from "../shared/bookingWidgetConfig";
@@ -166,19 +165,18 @@ describe("booking widget interactive demo configuration", () => {
     for (const [bedrooms, basePrice] of Object.entries(BOOKING_WIDGET_BEDROOM_BASE_PRICES)) expect(calculateBookingWidgetPrice({ serviceId: "standard", bedrooms: Number(bedrooms), bathrooms: 0 }).total).toBe(basePrice);
   });
 
-  it("calculates bathrooms, flat extras, quantity extras, and service uplifts before rounding", () => {
+  it("calculates bathrooms, flat extras, quantity extras, and service uplifts before nearest-dollar rounding", () => {
     expect(calculateBookingWidgetPrice({ serviceId: "standard", bedrooms: 2, bathrooms: 2 }).total).toBe(239);
-    expect(calculateBookingWidgetPrice({ serviceId: "standard", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] })).toMatchObject({ bedroomBasePrice: 179, bathroomTotal: 60, baseCleaningTotal: 239, extrasTotal: 45, standardSubtotal: 284, serviceAdjustment: 0, adjustedSubtotal: 284, roundingAdjustment: 5, total: 289 });
-    expect(calculateBookingWidgetPrice({ serviceId: "deep", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] })).toMatchObject({ baseCleaningTotal: 239, standardSubtotal: 284, serviceMultiplier: 1.2, serviceAdjustment: 56.8, adjustedSubtotal: 340.8, roundingAdjustment: 8.2, total: 349 });
-    expect(calculateBookingWidgetPrice({ serviceId: "moveout", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] }).total).toBe(349);
+    expect(calculateBookingWidgetPrice({ serviceId: "standard", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] })).toMatchObject({ bedroomBasePrice: 179, bathroomTotal: 60, baseCleaningTotal: 239, extrasTotal: 45, standardSubtotal: 284, serviceAdjustment: 0, adjustedSubtotal: 284, total: 284 });
+    expect(calculateBookingWidgetPrice({ serviceId: "deep", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] })).toMatchObject({ baseCleaningTotal: 239, standardSubtotal: 284, serviceMultiplier: 1.2, serviceAdjustment: 56.8, adjustedSubtotal: 340.8, total: 341 });
+    expect(calculateBookingWidgetPrice({ serviceId: "moveout", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] }).total).toBe(341);
     expect(calculateBookingWidgetPrice({ serviceId: "standard", bedrooms: 3, bathrooms: 2, selectedExtras: ["Interior windows", "Laundry", "Wipe walls"], extraQuantities: { "interior-windows": 3, "laundry-load": 2, "wipe-walls-room": 4 } })).toMatchObject({ extrasTotal: 160, standardSubtotal: 419, total: 419 });
   });
 
-  it("rounds every final quote upward to the next amount ending in nine", () => {
-    expect(roundBookingWidgetPriceUpToNine(9)).toBe(9);
-    expect(roundBookingWidgetPriceUpToNine(10)).toBe(19);
-    expect(roundBookingWidgetPriceUpToNine(340.8)).toBe(349);
-    expect(roundBookingWidgetPriceUpToNine(481)).toBe(489);
+  it("keeps standard totals exact and rounds uplifted totals to the nearest whole dollar", () => {
+    expect(calculateBookingWidgetPrice({ serviceId: "standard", bedrooms: 0, bathrooms: 0 }).total).toBe(99);
+    expect(calculateBookingWidgetPrice({ serviceId: "deep", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] }).total).toBe(341);
+    expect(calculateBookingWidgetPrice({ serviceId: "deep", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside cabinets"] }).total).toBe(347);
   });
 
   it("rejects unsupported inputs rather than inventing a price", () => {
