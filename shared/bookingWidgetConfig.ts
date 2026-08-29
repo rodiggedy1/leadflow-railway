@@ -3,6 +3,111 @@ export type BookingWidgetQuestionRole = "bedrooms" | "bathrooms" | "extras" | "c
 export type BookingWidgetQuestionSelectionMode = "single" | "multiple";
 export type BookingWidgetIntakeField = "fullName" | "phone" | "email" | "schedule";
 
+export type BookingWidgetPricedExtra = {
+  id: string;
+  label: string;
+  unitPrice: number;
+  quantityUnit?: "window" | "load" | "room";
+};
+
+export type BookingWidgetPriceBreakdown = {
+  bedroomBasePrice: number;
+  bathroomTotal: number;
+  extrasTotal: number;
+  standardSubtotal: number;
+  serviceMultiplier: number;
+  adjustedSubtotal: number;
+  total: number;
+};
+
+export const BOOKING_WIDGET_BEDROOM_BASE_PRICES: Readonly<Record<number, number>> = {
+  0: 99,
+  1: 119,
+  2: 179,
+  3: 199,
+  4: 249,
+  5: 289,
+  6: 349,
+  7: 389,
+};
+
+export const BOOKING_WIDGET_BATHROOM_UNIT_PRICE = 30;
+
+export const BOOKING_WIDGET_PRICED_EXTRAS: readonly BookingWidgetPricedExtra[] = [
+  { id: "inside-cabinets", label: "Inside cabinets", unitPrice: 50 },
+  { id: "inside-fridge", label: "Inside fridge", unitPrice: 45 },
+  { id: "inside-oven", label: "Inside oven", unitPrice: 45 },
+  { id: "interior-windows", label: "Interior windows", unitPrice: 10, quantityUnit: "window" },
+  { id: "basement", label: "Basement", unitPrice: 60 },
+  { id: "organizing-hour", label: "One hour of organizing", unitPrice: 60 },
+  { id: "laundry-load", label: "Laundry", unitPrice: 25, quantityUnit: "load" },
+  { id: "wipe-walls-room", label: "Wipe walls", unitPrice: 20, quantityUnit: "room" },
+  { id: "sweep-garage", label: "Sweep garage", unitPrice: 30 },
+] as const;
+
+export const BOOKING_WIDGET_EXTRA_CHOICES = ["Nothing extra", ...BOOKING_WIDGET_PRICED_EXTRAS.map((extra) => extra.label)] as const;
+
+export function findBookingWidgetPricedExtra(choice: string): BookingWidgetPricedExtra | undefined {
+  const normalized = choice.trim().toLowerCase();
+  return BOOKING_WIDGET_PRICED_EXTRAS.find((extra) => extra.label.toLowerCase() === normalized);
+}
+
+export function formatBookingWidgetExtraSelection(choice: string, quantities: Readonly<Record<string, number>> = {}): string {
+  if (isNoSelectionChoice(choice)) return choice.trim();
+  const pricedExtra = findBookingWidgetPricedExtra(choice);
+  if (!pricedExtra?.quantityUnit) return pricedExtra?.label ?? choice.trim();
+  const quantity = quantities[pricedExtra.id];
+  return quantity ? `${pricedExtra.label} × ${quantity}` : pricedExtra.label;
+}
+
+export function roundBookingWidgetPriceUpToNine(amount: number): number {
+  if (!Number.isFinite(amount) || amount < 0) throw new Error("Price must be a non-negative finite number.");
+  return Math.ceil((amount + 1) / 10) * 10 - 1;
+}
+
+export function calculateBookingWidgetPrice(input: {
+  serviceId: BookingWidgetServiceId;
+  bedrooms: number;
+  bathrooms: number;
+  selectedExtras?: readonly string[];
+  extraQuantities?: Readonly<Record<string, number>>;
+}): BookingWidgetPriceBreakdown {
+  if (!Number.isInteger(input.bedrooms) || BOOKING_WIDGET_BEDROOM_BASE_PRICES[input.bedrooms] === undefined) {
+    throw new Error("Bedrooms must be a whole number from 0 through 7.");
+  }
+  if (!Number.isInteger(input.bathrooms) || input.bathrooms < 0) {
+    throw new Error("Bathrooms must be a non-negative whole number.");
+  }
+
+  const bedroomBasePrice = BOOKING_WIDGET_BEDROOM_BASE_PRICES[input.bedrooms];
+  const bathroomTotal = input.bathrooms * BOOKING_WIDGET_BATHROOM_UNIT_PRICE;
+  const selectedExtras = [...new Set((input.selectedExtras ?? []).map((choice) => choice.trim()).filter(Boolean))]
+    .filter((choice) => !isNoSelectionChoice(choice));
+  const extrasTotal = selectedExtras.reduce((total, choice) => {
+    const pricedExtra = findBookingWidgetPricedExtra(choice);
+    if (!pricedExtra) throw new Error(`Unsupported priced extra: ${choice}`);
+    if (!pricedExtra.quantityUnit) return total + pricedExtra.unitPrice;
+    const quantity = input.extraQuantities?.[pricedExtra.id];
+    if (!Number.isInteger(quantity) || (quantity ?? 0) < 1) {
+      throw new Error(`${pricedExtra.label} requires a positive whole-number quantity.`);
+    }
+    return total + pricedExtra.unitPrice * quantity;
+  }, 0);
+  const standardSubtotal = bedroomBasePrice + bathroomTotal + extrasTotal;
+  const serviceMultiplier = input.serviceId === "standard" ? 1 : 1.2;
+  const adjustedSubtotal = Math.round(standardSubtotal * serviceMultiplier * 100) / 100;
+
+  return {
+    bedroomBasePrice,
+    bathroomTotal,
+    extrasTotal,
+    standardSubtotal,
+    serviceMultiplier,
+    adjustedSubtotal,
+    total: roundBookingWidgetPriceUpToNine(adjustedSubtotal),
+  };
+}
+
 export type BookingWidgetResolvedRequest = {
   serviceId: BookingWidgetServiceId;
   bedrooms?: number;
@@ -30,7 +135,7 @@ export type BookingWidgetQuestionDraft = {
 };
 
 export type BookingWidgetDraftConfig = {
-  demoVersion: 6;
+  demoVersion: 7;
   brandName: string;
   brandLogoUrl: string;
   headerIcon: string;
@@ -74,7 +179,7 @@ export type BookingWidgetDraftConfig = {
 };
 
 export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
-  demoVersion: 6,
+  demoVersion: 7,
   brandName: "Book with AI",
   brandLogoUrl: "",
   headerIcon: "✨",
@@ -82,7 +187,7 @@ export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
   greeting: "Hey! 👋 I can get your cleaning booked in about a minute. Just tell me what you need.",
   inputPlaceholder: "Tell me what you need...",
   addressPlaceholder: "Enter service address...",
-  helperText: "Demo only · sample pricing and availability",
+  helperText: "Demo only · calculated pricing and sample availability",
   primaryColor: "#171717",
   customerBubbleColor: "#edf2ff",
   quickPrompts: [
@@ -109,7 +214,7 @@ export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
       id: "extras",
       role: "extras",
       prompt: "Got it. Anything you’d like us to add?",
-      choices: ["Nothing extra", "Fridge", "Oven", "Baseboards", "Inside cabinets"],
+      choices: [...BOOKING_WIDGET_EXTRA_CHOICES],
       selectionMode: "multiple",
     },
   ],
@@ -241,6 +346,14 @@ function migrateVersionFiveQuestions(questions: BookingWidgetQuestionDraft[]): B
   });
 }
 
+function normalizeAuthoritativeExtrasQuestion(questions: BookingWidgetQuestionDraft[]): BookingWidgetQuestionDraft[] {
+  return questions.map((question) => question.role === "extras" ? {
+    ...question,
+    choices: [...BOOKING_WIDGET_EXTRA_CHOICES],
+    selectionMode: "multiple",
+  } : question);
+}
+
 function migrateVersionTwoQuestions(parsed: Record<string, unknown>): BookingWidgetQuestionDraft[] {
   return [
     structuredClone(DEFAULT_BOOKING_WIDGET_DRAFT.questions[0]),
@@ -267,25 +380,27 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const defaults = DEFAULT_BOOKING_WIDGET_DRAFT;
+    const isVersionSeven = parsed.demoVersion === 7;
     const isVersionSix = parsed.demoVersion === 6;
     const isVersionFive = parsed.demoVersion === 5;
     const isVersionFour = parsed.demoVersion === 4;
     const isVersionThree = parsed.demoVersion === 3;
     const isVersionTwo = parsed.demoVersion === 2;
-    const isSupportedVersion = isVersionSix || isVersionFive || isVersionFour || isVersionThree || isVersionTwo;
+    const isSupportedVersion = isVersionSeven || isVersionSix || isVersionFive || isVersionFour || isVersionThree || isVersionTwo;
     const rawServices = isSupportedVersion && Array.isArray(parsed.services) ? parsed.services : [];
-    const normalizedQuestions = isVersionSix || isVersionFive || isVersionFour || isVersionThree
+    const normalizedQuestions = isVersionSeven || isVersionSix || isVersionFive || isVersionFour || isVersionThree
       ? normalizeQuestions(parsed.questions, defaults.questions)
       : isVersionTwo
         ? migrateVersionTwoQuestions(parsed)
         : structuredClone(defaults.questions);
-    const questions = isVersionFive ? migrateVersionFiveQuestions(normalizedQuestions) : normalizedQuestions;
+    const migratedQuestions = isVersionFive ? migrateVersionFiveQuestions(normalizedQuestions) : normalizedQuestions;
+    const questions = normalizeAuthoritativeExtrasQuestion(migratedQuestions);
     const quickPrompts = asStringList(parsed.quickPrompts, defaults.quickPrompts);
     if (isVersionFive && quickPrompts[0] === "Deep clean my 3BR tomorrow morning") quickPrompts[0] = defaults.quickPrompts[0];
 
     return {
       ...structuredClone(defaults),
-      demoVersion: 6,
+      demoVersion: 7,
       brandName: asText(parsed.brandName, defaults.brandName),
       brandLogoUrl: asText(parsed.brandLogoUrl, defaults.brandLogoUrl),
       headerIcon: asText(parsed.headerIcon, defaults.headerIcon),
@@ -293,13 +408,17 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
       greeting: asText(parsed.greeting, defaults.greeting),
       inputPlaceholder: isSupportedVersion ? asText(parsed.inputPlaceholder, defaults.inputPlaceholder) : defaults.inputPlaceholder,
       addressPlaceholder: isSupportedVersion ? asText(parsed.addressPlaceholder, defaults.addressPlaceholder) : defaults.addressPlaceholder,
-      helperText: isSupportedVersion ? asText(parsed.helperText, defaults.helperText) : defaults.helperText,
+      helperText: isVersionSeven
+        ? asText(parsed.helperText, defaults.helperText)
+        : isSupportedVersion
+          ? migrateVersionFiveText(parsed.helperText, "Demo only · sample pricing and availability", defaults.helperText)
+          : defaults.helperText,
       primaryColor: asColor(parsed.primaryColor, defaults.primaryColor),
       customerBubbleColor: asColor(parsed.customerBubbleColor, defaults.customerBubbleColor),
       quickPrompts,
       questions,
-      combinedDetailsQuestion: isVersionSix ? asText(parsed.combinedDetailsQuestion, defaults.combinedDetailsQuestion) : defaults.combinedDetailsQuestion,
-      combinedDetailsPlaceholder: isVersionSix ? asText(parsed.combinedDetailsPlaceholder, defaults.combinedDetailsPlaceholder) : defaults.combinedDetailsPlaceholder,
+      combinedDetailsQuestion: isVersionSeven || isVersionSix ? asText(parsed.combinedDetailsQuestion, defaults.combinedDetailsQuestion) : defaults.combinedDetailsQuestion,
+      combinedDetailsPlaceholder: isVersionSeven || isVersionSix ? asText(parsed.combinedDetailsPlaceholder, defaults.combinedDetailsPlaceholder) : defaults.combinedDetailsPlaceholder,
       fullNameQuestion: isVersionFive ? migrateVersionFiveText(parsed.fullNameQuestion, "Perfect — who should I put the request under?", defaults.fullNameQuestion) : isSupportedVersion ? asText(parsed.fullNameQuestion, defaults.fullNameQuestion) : defaults.fullNameQuestion,
       fullNamePlaceholder: isSupportedVersion ? asText(parsed.fullNamePlaceholder, defaults.fullNamePlaceholder) : defaults.fullNamePlaceholder,
       phoneQuestionTemplate: isVersionFive ? migrateVersionFiveText(parsed.phoneQuestionTemplate, "Thanks, {firstName}. What’s the best number for arrival updates?", defaults.phoneQuestionTemplate) : isSupportedVersion ? asText(parsed.phoneQuestionTemplate, defaults.phoneQuestionTemplate) : defaults.phoneQuestionTemplate,
@@ -310,8 +429,8 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
       scheduleQuestionWithDayTemplate: isVersionFive ? migrateVersionFiveText(parsed.scheduleQuestionWithDayTemplate, "What time on {day} were you hoping for?", defaults.scheduleQuestionWithDayTemplate) : isSupportedVersion ? asText(parsed.scheduleQuestionWithDayTemplate, defaults.scheduleQuestionWithDayTemplate) : defaults.scheduleQuestionWithDayTemplate,
       schedulePlaceholder: isSupportedVersion ? asText(parsed.schedulePlaceholder, defaults.schedulePlaceholder) : defaults.schedulePlaceholder,
       availabilityCheckMessage: isVersionFive ? migrateVersionFiveText(parsed.availabilityCheckMessage, "Perfect. Give me a second while I check availability…", defaults.availabilityCheckMessage) : isSupportedVersion ? asText(parsed.availabilityCheckMessage, defaults.availabilityCheckMessage) : defaults.availabilityCheckMessage,
-      resultTitle: isVersionSix ? asText(parsed.resultTitle, defaults.resultTitle) : defaults.resultTitle,
-      resultTrustPoints: isVersionSix ? asStringList(parsed.resultTrustPoints, defaults.resultTrustPoints) : [...defaults.resultTrustPoints],
+      resultTitle: isVersionSeven || isVersionSix ? asText(parsed.resultTitle, defaults.resultTitle) : defaults.resultTitle,
+      resultTrustPoints: isVersionSeven || isVersionSix ? asStringList(parsed.resultTrustPoints, defaults.resultTrustPoints) : [...defaults.resultTrustPoints],
       openingEyebrow: isVersionFive ? migrateVersionFiveText(parsed.openingEyebrow, "I found an opening", defaults.openingEyebrow) : isSupportedVersion ? asText(parsed.openingEyebrow, defaults.openingEyebrow) : defaults.openingEyebrow,
       services: defaults.services.map((fallback, index) => {
         const service = rawServices[index] as Partial<BookingWidgetServiceDraft> | undefined;
@@ -354,7 +473,7 @@ export function renderBookingWidgetTemplate(template: string, values: Record<str
 
 export function resolveDemoRequest(prompt: string): BookingWidgetResolvedRequest {
   const normalized = prompt.toLowerCase();
-  const bedrooms = normalized.match(/(\d+)\s*(?:br|bed|bedrooms?)/)?.[1];
+  const bedrooms = normalized.includes("studio") ? "0" : normalized.match(/(\d+)\s*(?:br|bed|bedrooms?)/)?.[1];
   const bathrooms = normalized.match(/(\d+)\s*(?:ba|bath|bathrooms?)/)?.[1];
   const requestedDay = normalized.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/)?.[1];
   const serviceId: BookingWidgetServiceId = normalized.includes("move")
@@ -383,11 +502,24 @@ export function buildInferredQuestionAnswers(
   const inferredQuestionIds: string[] = [];
   for (const question of questions) {
     const count = question.role === "bedrooms" ? resolved.bedrooms : question.role === "bathrooms" ? resolved.bathrooms : undefined;
-    if (!count) continue;
+    if (count === undefined) continue;
     answers[question.id] = [answerForCount(question, count, question.role === "bedrooms" ? "bedroom" : "bathroom", question.role === "bedrooms" ? "bedrooms" : "bathrooms")];
     inferredQuestionIds.push(question.id);
   }
   return { answers, inferredQuestionIds };
+}
+
+export function getBookingWidgetRoomCount(
+  role: "bedrooms" | "bathrooms",
+  questions: readonly BookingWidgetQuestionDraft[],
+  answers: Readonly<Record<string, string | readonly string[]>>,
+): number | undefined {
+  const question = questions.find((item) => item.role === role);
+  if (!question) return undefined;
+  const value = answers[question.id];
+  const firstAnswer = Array.isArray(value) ? value[0] : value;
+  const match = firstAnswer?.match(/\d+/)?.[0];
+  return match === undefined ? undefined : Number(match);
 }
 
 export function firstNameFromFullName(fullName: string): string {
@@ -443,6 +575,7 @@ export function buildDemoDetailLine(
   fallbackBedrooms: number,
   questions: readonly BookingWidgetQuestionDraft[],
   answers: Readonly<Record<string, string | readonly string[]>>,
+  extraQuantities: Readonly<Record<string, number>> = {},
 ): string {
   const parts: string[] = [];
   const bedroomQuestion = questions.find((question) => question.role === "bedrooms");
@@ -456,7 +589,10 @@ export function buildDemoDetailLine(
   parts.push(roomCountLabel(bedroomAnswer, fallbackBedrooms, "bedroom"));
   if (bathroomAnswer) parts.push(roomCountLabel(bathroomAnswer, undefined, "bathroom"));
   for (const extra of extrasAnswers) {
-    if (!isNoSelectionChoice(extra)) parts.push(`${extra.trim()} cleaning included`);
+    if (isNoSelectionChoice(extra)) continue;
+    const pricedExtra = findBookingWidgetPricedExtra(extra);
+    const quantity = pricedExtra?.quantityUnit ? extraQuantities[pricedExtra.id] : undefined;
+    parts.push(quantity ? `${pricedExtra?.label ?? extra.trim()} × ${quantity}` : `${pricedExtra?.label ?? extra.trim()} included`);
   }
   return [...new Set(parts.filter(Boolean))].join(" · ");
 }
