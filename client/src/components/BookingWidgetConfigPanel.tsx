@@ -41,6 +41,7 @@ type BookingWidgetConfigPanelProps = {
 };
 
 type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "complete";
+type ItemizationPanel = "none" | "base" | "extras" | "note";
 
 type DemoHistoryItem =
   | { kind: "message"; sender: "assistant" | "customer"; text: string }
@@ -58,6 +59,7 @@ type DemoSession = {
   fallbackBedrooms: number;
   answers: Record<string, string[]>;
   extraQuantities: Record<string, number>;
+  specialRequestNotes: string[];
   inferredQuestionIds: string[];
   requestedDay: string;
   fullName: string;
@@ -105,6 +107,7 @@ const emptySession: DemoSession = {
   fallbackBedrooms: 0,
   answers: {},
   extraQuantities: {},
+  specialRequestNotes: [],
   inferredQuestionIds: [],
   requestedDay: "",
   fullName: "",
@@ -154,6 +157,15 @@ function DemoChip({ children, onClick, selected = false, color, buttonRef }: { c
   );
 }
 
+function formatItemizedCurrency(amount: number): string {
+  return amount.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function DemoHistoryRow({ entry, customerColor, trustPoints }: { entry: DemoHistoryEntry; customerColor: string; trustPoints: string[] }) {
   if (entry.kind === "message") {
     return <DemoBubble customer={entry.sender === "customer"} color={customerColor}>{entry.text}</DemoBubble>;
@@ -192,6 +204,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [selectedTime, setSelectedTime] = useState("");
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [savePaymentDetails, setSavePaymentDetails] = useState(false);
+  const [itemizationPanel, setItemizationPanel] = useState<ItemizationPanel>("none");
+  const [specialRequestDraft, setSpecialRequestDraft] = useState("");
   const [welcomeVideoOpen, setWelcomeVideoOpen] = useState(false);
   const [history, setHistory] = useState<DemoHistoryEntry[]>([]);
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -294,6 +308,16 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   })();
   const quotePrice = String(priceBreakdown?.total ?? 0);
   const detailLine = buildDemoDetailLine(demo.fallbackBedrooms, config.questions, demo.answers, demo.extraQuantities);
+  const itemizedExtras = selectedExtras.flatMap((choice) => {
+    const pricedExtra = findBookingWidgetPricedExtra(choice);
+    if (!pricedExtra) return [];
+    const quantity = pricedExtra.quantityUnit ? demo.extraQuantities[pricedExtra.id] ?? 1 : 1;
+    return [{ pricedExtra, quantity, amount: pricedExtra.unitPrice * quantity }];
+  });
+  const unselectedPricedExtras = BOOKING_WIDGET_PRICED_EXTRAS.filter((extra) => !selectedExtras.some((choice) => choice.toLowerCase() === extra.label.toLowerCase()));
+  const roomItemizationLabel = bedroomCount === 0
+    ? `Studio / ${bathroomCount ?? 0} bath${bathroomCount === 1 ? "" : "s"}`
+    : `${bedroomCount ?? 0} bed / ${bathroomCount ?? 0} bath`;
 
   const appendHistory = (...items: DemoHistoryItem[]) => {
     const entries = items.map((item) => ({ ...item, id: ++historyIdRef.current }));
@@ -360,6 +384,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setSelectedTime("");
     setSummaryOpen(false);
     setSavePaymentDetails(false);
+    setItemizationPanel("none");
+    setSpecialRequestDraft("");
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
 
@@ -532,6 +558,72 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     }));
   };
 
+  const addItemizedExtra = (extraLabel: string) => {
+    if (!extrasQuestion) return;
+    const pricedExtra = findBookingWidgetPricedExtra(extraLabel);
+    if (!pricedExtra) return;
+    setDemo((current) => {
+      const selected = (current.answers[extrasQuestion.id] ?? []).filter((choice) => !isNoSelectionChoice(choice));
+      if (selected.some((choice) => choice.toLowerCase() === pricedExtra.label.toLowerCase())) return current;
+      return {
+        ...current,
+        answers: { ...current.answers, [extrasQuestion.id]: [...selected, pricedExtra.label] },
+        extraQuantities: pricedExtra.quantityUnit
+          ? { ...current.extraQuantities, [pricedExtra.id]: 1 }
+          : current.extraQuantities,
+      };
+    });
+  };
+
+  const removeItemizedExtra = (extraLabel: string) => {
+    if (!extrasQuestion) return;
+    const pricedExtra = findBookingWidgetPricedExtra(extraLabel);
+    if (!pricedExtra) return;
+    setDemo((current) => {
+      const remaining = (current.answers[extrasQuestion.id] ?? []).filter((choice) => choice.toLowerCase() !== pricedExtra.label.toLowerCase() && !isNoSelectionChoice(choice));
+      const nextQuantities = { ...current.extraQuantities };
+      delete nextQuantities[pricedExtra.id];
+      return {
+        ...current,
+        answers: { ...current.answers, [extrasQuestion.id]: remaining.length ? remaining : ["Nothing extra"] },
+        extraQuantities: nextQuantities,
+      };
+    });
+  };
+
+  const addSpecialRequestNote = () => {
+    const note = specialRequestDraft.trim();
+    if (!note) return;
+    setDemo((current) => ({ ...current, specialRequestNotes: [...current.specialRequestNotes, note] }));
+    setSpecialRequestDraft("");
+    setItemizationPanel("none");
+  };
+
+  const removeSpecialRequestNote = (index: number) => {
+    setDemo((current) => ({ ...current, specialRequestNotes: current.specialRequestNotes.filter((_, noteIndex) => noteIndex !== index) }));
+  };
+
+  const updateItemizedBedrooms = (bedrooms: number) => {
+    setDemo((current) => {
+      const answers = { ...current.answers };
+      for (const question of config.questions) {
+        if (question.role === "bedrooms") answers[question.id] = [bedrooms === 0 ? "Studio" : `${bedrooms} bedroom${bedrooms === 1 ? "" : "s"}`];
+      }
+      return { ...current, bedrooms, fallbackBedrooms: bedrooms, answers };
+    });
+  };
+
+  const updateItemizedBathrooms = (bathrooms: number) => {
+    const nextBathrooms = Math.max(0, Math.floor(bathrooms));
+    setDemo((current) => {
+      const answers = { ...current.answers };
+      for (const question of config.questions) {
+        if (question.role === "bathrooms") answers[question.id] = [`${nextBathrooms} bathroom${nextBathrooms === 1 ? "" : "s"}`];
+      }
+      return { ...current, bathrooms: nextBathrooms, answers };
+    });
+  };
+
   const continueCustomQuestion = () => {
     if (!currentQuestion || currentQuestion.role !== "custom" || currentQuestion.selectionMode !== "multiple") return;
     if ((demo.answers[currentQuestion.id] ?? []).length === 0) return;
@@ -653,7 +745,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
   const roomSummary = detailLine.split(" · ").slice(0, 2).join(" · ");
   const showSummary = !["request", "serviceDetails", "questions"].includes(step);
-  const openCheckout = () => setStep("confirm");
+  const openCheckout = () => {
+    setItemizationPanel("none");
+    setSpecialRequestDraft("");
+    setStep("confirm");
+  };
   const completeCheckout = () => setStep("complete");
   const openWelcomeVideo = () => {
     welcomeVideoReturnFocusRef.current = "trigger";
@@ -773,9 +869,36 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{config.resultTitle}</h2></div></div>
           <div className="flex items-center border-b border-[#e4e5e7] py-3"><CalendarDays className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">DATE & TIME</small><strong className="text-[11px] text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</strong></span></div>
           <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
-          <div className="py-3"><div className="text-[12px] font-extrabold text-[#3a3c41]">{service.name}</div><div className="mt-1 text-[10px] leading-4 text-[#6f7279]">{detailLine}</div></div>
+          <section aria-label="Editable itemized cleaning order" className="border-b border-[#e4e5e7] py-4">
+            <div className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#77798b]">Your cleaning</div>
+            <div className="mt-3 divide-y divide-[#ececef] rounded-xl border border-[#e4e5e7] bg-white px-3">
+              <div className="flex items-start justify-between gap-3 py-3">
+                <div className="min-w-0"><div className="text-[12px] font-extrabold text-[#3a3c41]">{service.name} · {roomItemizationLabel}</div><div className="mt-1 text-[9px] text-[#77798b]">Bedroom tier {formatItemizedCurrency(priceBreakdown?.bedroomBasePrice ?? 0)} · Bathrooms {formatItemizedCurrency(priceBreakdown?.bathroomTotal ?? 0)}</div></div>
+                <div className="shrink-0 text-right"><div className="text-[12px] font-extrabold text-[#3a3c41]">{formatItemizedCurrency(priceBreakdown?.baseCleaningTotal ?? 0)}</div><button type="button" onClick={() => setItemizationPanel((panel) => panel === "base" ? "none" : "base")} className="mt-1 text-[10px] font-bold text-[#e9573e]">{itemizationPanel === "base" ? "Close" : "Change"}</button></div>
+              </div>
+              {itemizationPanel === "base" && (
+                <div className="grid gap-3 py-3 sm:grid-cols-3">
+                  <label className="grid gap-1 text-[9px] font-bold text-[#6f7279]">Service<select value={demo.serviceId} onChange={(event) => setDemo((current) => ({ ...current, serviceId: event.target.value as BookingWidgetServiceId }))} className="h-9 rounded-lg border border-[#d7d8dc] bg-white px-2 text-[11px] text-[#3a3c41]">{config.services.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+                  <label className="grid gap-1 text-[9px] font-bold text-[#6f7279]">Bedrooms<select value={bedroomCount ?? 0} onChange={(event) => updateItemizedBedrooms(Number(event.target.value))} className="h-9 rounded-lg border border-[#d7d8dc] bg-white px-2 text-[11px] text-[#3a3c41]">{Object.keys(BOOKING_WIDGET_BEDROOM_BASE_PRICES).map((value) => <option key={value} value={value}>{Number(value) === 0 ? "Studio" : value}</option>)}</select></label>
+                  <label className="grid gap-1 text-[9px] font-bold text-[#6f7279]">Bathrooms<input type="number" min={0} step={1} value={bathroomCount ?? 0} onChange={(event) => updateItemizedBathrooms(Number(event.target.value))} className="h-9 rounded-lg border border-[#d7d8dc] bg-white px-2 text-[11px] text-[#3a3c41]" /></label>
+                </div>
+              )}
+              {itemizedExtras.map(({ pricedExtra, quantity, amount }) => (
+                <div key={pricedExtra.id} className="flex items-start justify-between gap-3 py-3">
+                  <div className="min-w-0"><div className="text-[11px] font-bold text-[#3a3c41]">{pricedExtra.label}</div>{pricedExtra.quantityUnit && <div className="mt-1 text-[9px] text-[#77798b]">{quantity} × {formatItemizedCurrency(pricedExtra.unitPrice)} per {pricedExtra.quantityUnit}</div>}</div>
+                  <div className="shrink-0 text-right"><div className="text-[11px] font-extrabold text-[#3a3c41]">+{formatItemizedCurrency(amount)}</div><div className="mt-1 flex items-center justify-end gap-1.5">{pricedExtra.quantityUnit && <><button type="button" aria-label={`Decrease ${pricedExtra.label} itemized quantity`} onClick={() => updateExtraQuantity(pricedExtra.id, quantity - 1)} disabled={quantity === 1} className="grid h-6 w-6 place-items-center rounded-full border border-[#ffd2c8] text-[11px] font-bold text-[#d95740] disabled:opacity-35">−</button><span className="min-w-5 text-center text-[10px] font-bold text-[#5f6168]">{quantity}</span><button type="button" aria-label={`Increase ${pricedExtra.label} itemized quantity`} onClick={() => updateExtraQuantity(pricedExtra.id, quantity + 1)} className="grid h-6 w-6 place-items-center rounded-full border border-[#ffd2c8] text-[11px] font-bold text-[#d95740]">+</button></>}<button type="button" onClick={() => removeItemizedExtra(pricedExtra.label)} className="ml-1 text-[9px] font-bold text-[#e9573e]">Remove</button></div></div>
+                </div>
+              ))}
+              {demo.specialRequestNotes.map((note, index) => (
+                <div key={`${note}-${index}`} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><div className="text-[11px] font-bold text-[#3a3c41]">{note}</div><span className="mt-1 inline-flex rounded-full bg-[#fff4da] px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-[0.08em] text-[#9b6815]">Needs review</span></div><button type="button" onClick={() => removeSpecialRequestNote(index)} className="shrink-0 text-[9px] font-bold text-[#e9573e]">Remove</button></div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-bold text-[#3a3c41]"><button type="button" onClick={() => setItemizationPanel((panel) => panel === "extras" ? "none" : "extras")}>+ Add another extra</button><button type="button" onClick={() => setItemizationPanel((panel) => panel === "note" ? "none" : "note")}>+ Add a special request</button></div>
+            {itemizationPanel === "extras" && <div className="mt-3 flex flex-wrap gap-2 rounded-xl bg-[#f5f5f3] p-3">{unselectedPricedExtras.length ? unselectedPricedExtras.map((extra) => <button key={extra.id} type="button" onClick={() => addItemizedExtra(extra.label)} className="rounded-full border border-[#ffd2c8] bg-white px-3 py-2 text-[10px] font-bold text-[#d95740]">{extra.label} · {formatItemizedCurrency(extra.unitPrice)}{extra.quantityUnit ? `/${extra.quantityUnit}` : ""}</button>) : <span className="text-[10px] text-[#77798b]">All priced extras are already selected.</span>}</div>}
+            {itemizationPanel === "note" && <div className="mt-3 rounded-xl bg-[#f5f5f3] p-3"><label className="grid gap-1 text-[9px] font-bold text-[#6f7279]">Special request note<textarea value={specialRequestDraft} onChange={(event) => setSpecialRequestDraft(event.target.value)} placeholder="Tell us what you need..." className="min-h-20 rounded-lg border border-[#d7d8dc] bg-white p-2.5 text-[11px] text-[#3a3c41]" /></label><div className="mt-2 flex gap-2"><button type="button" onClick={addSpecialRequestNote} disabled={!specialRequestDraft.trim()} className="rounded-lg bg-[#ff684c] px-3 py-2 text-[10px] font-bold text-white disabled:opacity-40">Add note</button><button type="button" onClick={() => { setSpecialRequestDraft(""); setItemizationPanel("none"); }} className="rounded-lg border border-[#d7d8dc] bg-white px-3 py-2 text-[10px] font-bold text-[#5f6168]">Cancel</button></div></div>}
+          </section>
           <div className="space-y-1.5 border-t border-[#e4e5e7] py-3">{config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2 text-[10px] text-[#5f6168]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#23b982]" /><span>{point}</span></div>)}</div>
-          <div className="flex items-center justify-between border-t border-[#e4e5e7] py-3 text-[12px] text-[#5f6168]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${quotePrice}</strong></div>
+          <div className="space-y-1.5 border-t border-[#e4e5e7] py-3 text-[10px] text-[#5f6168]"><div className="flex justify-between gap-4"><span>Standard subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.standardSubtotal ?? 0)}</strong></div>{(priceBreakdown?.serviceAdjustment ?? 0) > 0 && <><div className="flex justify-between gap-4"><span>{service.name} adjustment · 20%</span><strong>+{formatItemizedCurrency(priceBreakdown?.serviceAdjustment ?? 0)}</strong></div><div className="flex justify-between gap-4"><span>Adjusted subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.adjustedSubtotal ?? 0)}</strong></div></>}{(priceBreakdown?.roundingAdjustment ?? 0) > 0 && <div className="flex justify-between gap-4"><span>Ending-in-9 adjustment</span><strong>+{formatItemizedCurrency(priceBreakdown?.roundingAdjustment ?? 0)}</strong></div>}<div className="mt-2 flex items-center justify-between border-t border-[#e4e5e7] pt-3 text-[12px]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${quotePrice}</strong></div></div>
           <button type="button" onClick={openCheckout} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e]"><CreditCard className="h-4 w-4" />{formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
           <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />Visual demo only · no charge will be made</p>
         </div>
