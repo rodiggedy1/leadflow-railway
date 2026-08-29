@@ -3,12 +3,16 @@ import {
   BOOKING_WIDGET_DRAFT_SETTING,
   DEFAULT_BOOKING_WIDGET_DRAFT,
   buildDemoDetailLine,
+  buildInferredQuestionAnswers,
+  firstNameFromFullName,
   formatBookingButtonLabel,
+  formatScheduleQuestion,
   moveListItem,
   parseBookingWidgetDraft,
   renderBookingWidgetTemplate,
   resolveDemoRequest,
   toggleMultiSelectChoice,
+  validateBookingWidgetIntakeField,
 } from "../shared/bookingWidgetConfig";
 
 describe("booking widget interactive demo configuration", () => {
@@ -27,7 +31,7 @@ describe("booking widget interactive demo configuration", () => {
       extrasQuestion: "Add anything?",
       extrasOptions: ["Nothing", "Oven"],
     }));
-    expect(parsed.demoVersion).toBe(4);
+    expect(parsed.demoVersion).toBe(5);
     expect(parsed.brandName).toBe("MIB Booking");
     expect(parsed.primaryColor).toBe("#123456");
     expect(parsed.quickPrompts[0]).toBe("Book a clean");
@@ -45,8 +49,34 @@ describe("booking widget interactive demo configuration", () => {
       questions: DEFAULT_BOOKING_WIDGET_DRAFT.questions.map(({ selectionMode: _selectionMode, ...question }) => question),
     };
     const parsed = parseBookingWidgetDraft(JSON.stringify(versionThree));
-    expect(parsed.demoVersion).toBe(4);
+    expect(parsed.demoVersion).toBe(5);
     expect(parsed.questions.map((question) => question.selectionMode)).toEqual(["single", "single", "multiple"]);
+  });
+
+  it("migrates a saved version-four draft with complete customer-intake defaults", () => {
+    const versionFour = { ...DEFAULT_BOOKING_WIDGET_DRAFT, demoVersion: 4 } as Record<string, unknown>;
+    for (const key of ["fullNameQuestion", "fullNamePlaceholder", "phoneQuestionTemplate", "phonePlaceholder", "emailQuestion", "emailPlaceholder", "scheduleQuestion", "scheduleQuestionWithDayTemplate", "schedulePlaceholder", "availabilityCheckMessage"]) {
+      delete versionFour[key];
+    }
+    const parsed = parseBookingWidgetDraft(JSON.stringify(versionFour));
+    expect(parsed.demoVersion).toBe(5);
+    expect(parsed.fullNameQuestion).toBe("Perfect — who should I put the request under?");
+    expect(parsed.phoneQuestionTemplate).toContain("{firstName}");
+    expect(parsed.availabilityCheckMessage).toContain("check availability");
+  });
+
+  it("round-trips editable intake copy and multi-select mode through the persisted JSON draft", () => {
+    const savedDraft = {
+      ...DEFAULT_BOOKING_WIDGET_DRAFT,
+      fullNameQuestion: "Who is this booking for?",
+      phoneQuestionTemplate: "Thanks, {firstName}. Which phone should receive updates?",
+      emailQuestion: "Where should confirmation go?",
+      scheduleQuestionWithDayTemplate: "Which time on {day} works best?",
+      availabilityCheckMessage: "Checking the schedule now…",
+    };
+    const parsed = parseBookingWidgetDraft(JSON.stringify(savedDraft));
+    expect(parsed).toEqual(savedDraft);
+    expect(parsed.questions.find((question) => question.role === "extras")?.selectionMode).toBe("multiple");
   });
 
   it("preserves dynamic custom questions and choices in their configured order", () => {
@@ -66,8 +96,44 @@ describe("booking widget interactive demo configuration", () => {
     expect(source).toEqual(["Bedrooms", "Bathrooms", "Extras"]);
   });
 
-  it("resolves the supplied prompt into the deep-clean demo with three bedrooms", () => {
-    expect(resolveDemoRequest("Deep clean my 3BR tomorrow morning")).toEqual({ serviceId: "deep", bedrooms: 3 });
+  it("extracts only explicitly supplied service details and requested day", () => {
+    expect(resolveDemoRequest("Deep clean my 3BR and 2 bath house tomorrow")).toEqual({ serviceId: "deep", bedrooms: 3, bathrooms: 2, requestedDay: "Tomorrow" });
+    expect(resolveDemoRequest("I need a deep clean")).toEqual({ serviceId: "deep" });
+  });
+
+  it("pre-fills and skips only core service questions found in the opening request", () => {
+    const resolved = resolveDemoRequest("Deep clean my 3 bedroom house tomorrow");
+    const inferred = buildInferredQuestionAnswers(resolved, DEFAULT_BOOKING_WIDGET_DRAFT.questions);
+    expect(inferred.answers).toEqual({ bedrooms: ["3 bedrooms"] });
+    expect(inferred.inferredQuestionIds).toEqual(["bedrooms"]);
+    expect(inferred.answers.bathrooms).toBeUndefined();
+    expect(inferred.answers.extras).toBeUndefined();
+  });
+
+  it("can pre-fill both bedrooms and bathrooms while leaving extras unanswered", () => {
+    const inferred = buildInferredQuestionAnswers(
+      resolveDemoRequest("Deep clean my 3 bedrooms and 2 bathrooms tomorrow"),
+      DEFAULT_BOOKING_WIDGET_DRAFT.questions,
+    );
+    expect(inferred.answers).toEqual({ bedrooms: ["3 bedrooms"], bathrooms: ["2 bathrooms"] });
+    expect(inferred.inferredQuestionIds).toEqual(["bedrooms", "bathrooms"]);
+    expect(inferred.answers.extras).toBeUndefined();
+  });
+
+  it("personalizes the phone prompt and scheduling question deterministically", () => {
+    expect(firstNameFromFullName("  Jordan Smith ")).toBe("Jordan");
+    expect(formatScheduleQuestion(DEFAULT_BOOKING_WIDGET_DRAFT, "Tomorrow")).toBe("What time on Tomorrow were you hoping for?");
+    expect(formatScheduleQuestion(DEFAULT_BOOKING_WIDGET_DRAFT)).toBe("What day and time were you hoping for?");
+  });
+
+  it("validates every required customer-intake field before advancing", () => {
+    expect(validateBookingWidgetIntakeField("fullName", "Jordan")).toBe("Enter a first and last name.");
+    expect(validateBookingWidgetIntakeField("fullName", "Jordan Smith")).toBeNull();
+    expect(validateBookingWidgetIntakeField("phone", "202-555-0123")).toBeNull();
+    expect(validateBookingWidgetIntakeField("phone", "555-12")).toBe("Enter a valid phone number.");
+    expect(validateBookingWidgetIntakeField("email", "jordan@example.com")).toBeNull();
+    expect(validateBookingWidgetIntakeField("email", "jordan@invalid")).toBe("Enter a valid email address.");
+    expect(validateBookingWidgetIntakeField("schedule", "Tomorrow at 10 AM")).toBeNull();
   });
 
   it("keeps every selected extra exactly once in the priced summary", () => {

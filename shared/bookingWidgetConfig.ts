@@ -1,6 +1,14 @@
 export type BookingWidgetServiceId = "standard" | "deep" | "moveout";
 export type BookingWidgetQuestionRole = "bedrooms" | "bathrooms" | "extras" | "custom";
 export type BookingWidgetQuestionSelectionMode = "single" | "multiple";
+export type BookingWidgetIntakeField = "fullName" | "phone" | "email" | "schedule";
+
+export type BookingWidgetResolvedRequest = {
+  serviceId: BookingWidgetServiceId;
+  bedrooms?: number;
+  bathrooms?: number;
+  requestedDay?: string;
+};
 
 export type BookingWidgetServiceDraft = {
   id: BookingWidgetServiceId;
@@ -22,7 +30,7 @@ export type BookingWidgetQuestionDraft = {
 };
 
 export type BookingWidgetDraftConfig = {
-  demoVersion: 4;
+  demoVersion: 5;
   brandName: string;
   brandLogoUrl: string;
   headerIcon: string;
@@ -35,6 +43,16 @@ export type BookingWidgetDraftConfig = {
   customerBubbleColor: string;
   quickPrompts: string[];
   questions: BookingWidgetQuestionDraft[];
+  fullNameQuestion: string;
+  fullNamePlaceholder: string;
+  phoneQuestionTemplate: string;
+  phonePlaceholder: string;
+  emailQuestion: string;
+  emailPlaceholder: string;
+  scheduleQuestion: string;
+  scheduleQuestionWithDayTemplate: string;
+  schedulePlaceholder: string;
+  availabilityCheckMessage: string;
   openingEyebrow: string;
   services: [BookingWidgetServiceDraft, BookingWidgetServiceDraft, BookingWidgetServiceDraft];
   bookingButtonLabel: string;
@@ -52,7 +70,7 @@ export type BookingWidgetDraftConfig = {
 };
 
 export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
-  demoVersion: 4,
+  demoVersion: 5,
   brandName: "Book with AI",
   brandLogoUrl: "",
   headerIcon: "✨",
@@ -91,6 +109,16 @@ export const DEFAULT_BOOKING_WIDGET_DRAFT: BookingWidgetDraftConfig = {
       selectionMode: "multiple",
     },
   ],
+  fullNameQuestion: "Perfect — who should I put the request under?",
+  fullNamePlaceholder: "Enter your full name...",
+  phoneQuestionTemplate: "Thanks, {firstName}. What’s the best number for arrival updates?",
+  phonePlaceholder: "Enter your phone number...",
+  emailQuestion: "And where should I send your booking confirmation?",
+  emailPlaceholder: "Enter your email address...",
+  scheduleQuestion: "What day and time were you hoping for?",
+  scheduleQuestionWithDayTemplate: "What time on {day} were you hoping for?",
+  schedulePlaceholder: "Enter your preferred day and time...",
+  availabilityCheckMessage: "Perfect. Give me a second while I check availability…",
   openingEyebrow: "I found an opening",
   services: [
     {
@@ -209,12 +237,13 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const defaults = DEFAULT_BOOKING_WIDGET_DRAFT;
+    const isVersionFive = parsed.demoVersion === 5;
     const isVersionFour = parsed.demoVersion === 4;
     const isVersionThree = parsed.demoVersion === 3;
     const isVersionTwo = parsed.demoVersion === 2;
-    const isSupportedVersion = isVersionFour || isVersionThree || isVersionTwo;
+    const isSupportedVersion = isVersionFive || isVersionFour || isVersionThree || isVersionTwo;
     const rawServices = isSupportedVersion && Array.isArray(parsed.services) ? parsed.services : [];
-    const questions = isVersionFour || isVersionThree
+    const questions = isVersionFive || isVersionFour || isVersionThree
       ? normalizeQuestions(parsed.questions, defaults.questions)
       : isVersionTwo
         ? migrateVersionTwoQuestions(parsed)
@@ -222,7 +251,7 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
 
     return {
       ...structuredClone(defaults),
-      demoVersion: 4,
+      demoVersion: 5,
       brandName: asText(parsed.brandName, defaults.brandName),
       brandLogoUrl: asText(parsed.brandLogoUrl, defaults.brandLogoUrl),
       headerIcon: asText(parsed.headerIcon, defaults.headerIcon),
@@ -235,6 +264,16 @@ export function parseBookingWidgetDraft(raw?: string | null): BookingWidgetDraft
       customerBubbleColor: asColor(parsed.customerBubbleColor, defaults.customerBubbleColor),
       quickPrompts: asStringList(parsed.quickPrompts, defaults.quickPrompts),
       questions,
+      fullNameQuestion: isSupportedVersion ? asText(parsed.fullNameQuestion, defaults.fullNameQuestion) : defaults.fullNameQuestion,
+      fullNamePlaceholder: isSupportedVersion ? asText(parsed.fullNamePlaceholder, defaults.fullNamePlaceholder) : defaults.fullNamePlaceholder,
+      phoneQuestionTemplate: isSupportedVersion ? asText(parsed.phoneQuestionTemplate, defaults.phoneQuestionTemplate) : defaults.phoneQuestionTemplate,
+      phonePlaceholder: isSupportedVersion ? asText(parsed.phonePlaceholder, defaults.phonePlaceholder) : defaults.phonePlaceholder,
+      emailQuestion: isSupportedVersion ? asText(parsed.emailQuestion, defaults.emailQuestion) : defaults.emailQuestion,
+      emailPlaceholder: isSupportedVersion ? asText(parsed.emailPlaceholder, defaults.emailPlaceholder) : defaults.emailPlaceholder,
+      scheduleQuestion: isSupportedVersion ? asText(parsed.scheduleQuestion, defaults.scheduleQuestion) : defaults.scheduleQuestion,
+      scheduleQuestionWithDayTemplate: isSupportedVersion ? asText(parsed.scheduleQuestionWithDayTemplate, defaults.scheduleQuestionWithDayTemplate) : defaults.scheduleQuestionWithDayTemplate,
+      schedulePlaceholder: isSupportedVersion ? asText(parsed.schedulePlaceholder, defaults.schedulePlaceholder) : defaults.schedulePlaceholder,
+      availabilityCheckMessage: isSupportedVersion ? asText(parsed.availabilityCheckMessage, defaults.availabilityCheckMessage) : defaults.availabilityCheckMessage,
       openingEyebrow: isSupportedVersion ? asText(parsed.openingEyebrow, defaults.openingEyebrow) : defaults.openingEyebrow,
       services: defaults.services.map((fallback, index) => {
         const service = rawServices[index] as Partial<BookingWidgetServiceDraft> | undefined;
@@ -275,12 +314,67 @@ export function renderBookingWidgetTemplate(template: string, values: Record<str
   return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, value), template);
 }
 
-export function resolveDemoRequest(prompt: string): { serviceId: BookingWidgetServiceId; bedrooms: number } {
+export function resolveDemoRequest(prompt: string): BookingWidgetResolvedRequest {
   const normalized = prompt.toLowerCase();
-  const bedrooms = Number(normalized.match(/(\d+)\s*(?:br|bed|bedroom)/)?.[1] ?? 3);
-  if (normalized.includes("move")) return { serviceId: "moveout", bedrooms };
-  if (normalized.includes("deep")) return { serviceId: "deep", bedrooms };
-  return { serviceId: "standard", bedrooms };
+  const bedrooms = normalized.match(/(\d+)\s*(?:br|bed|bedrooms?)/)?.[1];
+  const bathrooms = normalized.match(/(\d+)\s*(?:ba|bath|bathrooms?)/)?.[1];
+  const requestedDay = normalized.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/)?.[1];
+  const serviceId: BookingWidgetServiceId = normalized.includes("move")
+    ? "moveout"
+    : normalized.includes("deep")
+      ? "deep"
+      : "standard";
+  return {
+    serviceId,
+    ...(bedrooms ? { bedrooms: Number(bedrooms) } : {}),
+    ...(bathrooms ? { bathrooms: Number(bathrooms) } : {}),
+    ...(requestedDay ? { requestedDay: requestedDay[0].toUpperCase() + requestedDay.slice(1) } : {}),
+  };
+}
+
+function answerForCount(question: BookingWidgetQuestionDraft, count: number, singular: string, plural: string): string {
+  return question.choices.find((choice) => Number(choice.match(/\d+/)?.[0]) === count)
+    ?? `${count} ${count === 1 ? singular : plural}`;
+}
+
+export function buildInferredQuestionAnswers(
+  resolved: BookingWidgetResolvedRequest,
+  questions: readonly BookingWidgetQuestionDraft[],
+): { answers: Record<string, string[]>; inferredQuestionIds: string[] } {
+  const answers: Record<string, string[]> = {};
+  const inferredQuestionIds: string[] = [];
+  for (const question of questions) {
+    const count = question.role === "bedrooms" ? resolved.bedrooms : question.role === "bathrooms" ? resolved.bathrooms : undefined;
+    if (!count) continue;
+    answers[question.id] = [answerForCount(question, count, question.role === "bedrooms" ? "bedroom" : "bathroom", question.role === "bedrooms" ? "bedrooms" : "bathrooms")];
+    inferredQuestionIds.push(question.id);
+  }
+  return { answers, inferredQuestionIds };
+}
+
+export function firstNameFromFullName(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] || "there";
+}
+
+export function formatScheduleQuestion(config: BookingWidgetDraftConfig, requestedDay?: string): string {
+  return requestedDay
+    ? renderBookingWidgetTemplate(config.scheduleQuestionWithDayTemplate, { day: requestedDay })
+    : config.scheduleQuestion;
+}
+
+export function validateBookingWidgetIntakeField(field: BookingWidgetIntakeField, value: string): string | null {
+  const trimmed = value.trim();
+  if (field === "fullName") {
+    return trimmed.split(/\s+/).filter(Boolean).length >= 2 ? null : "Enter a first and last name.";
+  }
+  if (field === "phone") {
+    const digitCount = trimmed.replace(/\D/g, "").length;
+    return digitCount >= 10 && digitCount <= 15 ? null : "Enter a valid phone number.";
+  }
+  if (field === "email") {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) ? null : "Enter a valid email address.";
+  }
+  return trimmed.length >= 3 ? null : "Enter your preferred day and time.";
 }
 
 export function moveListItem<T>(items: readonly T[], fromIndex: number, toIndex: number): T[] {
