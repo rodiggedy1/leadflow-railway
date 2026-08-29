@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Bot, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronUp, Clock, CreditCard, Eye, Home, Lock, MapPin, MessageCircle, Plus, RotateCcw, Save, Send, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowRight, Bot, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronUp, Clock, CreditCard, Eye, Home, Lock, MapPin, MessageCircle, Play, Plus, RotateCcw, Save, Send, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +61,9 @@ type DemoSession = {
 const fieldClass = "h-9 bg-white border-gray-200 text-sm";
 const DEMO_TIME_SLOTS = ["8:30 AM", "10:30 AM", "1:00 PM", "3:30 PM"] as const;
 const CLEANER_TEAM_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/KoTsWjcUFAcYYhVB.png";
+const WELCOME_VIDEO_WISTIA_MEDIA_ID = "jtv8f50ale";
+const WELCOME_VIDEO_SWATCH_URL = `https://fast.wistia.com/embed/medias/${WELCOME_VIDEO_WISTIA_MEDIA_ID}/swatch`;
+const WELCOME_VIDEO_IFRAME_URL = `https://fast.wistia.net/embed/iframe/${WELCOME_VIDEO_WISTIA_MEDIA_ID}?seo=false&videoFoam=true&autoplay=1`;
 
 function normalizeCalendarDate(date: Date): Date {
   const normalized = new Date(date);
@@ -124,9 +128,10 @@ function DemoBubble({ children, customer, color, containerRef }: { children: Rea
   );
 }
 
-function DemoChip({ children, onClick, selected = false, color }: { children: React.ReactNode; onClick: () => void; selected?: boolean; color?: string }) {
+function DemoChip({ children, onClick, selected = false, color, buttonRef }: { children: React.ReactNode; onClick: () => void; selected?: boolean; color?: string; buttonRef?: React.Ref<HTMLButtonElement> }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
       aria-pressed={selected}
@@ -176,10 +181,16 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [selectedTime, setSelectedTime] = useState("");
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [savePaymentDetails, setSavePaymentDetails] = useState(false);
+  const [welcomeVideoOpen, setWelcomeVideoOpen] = useState(false);
   const [history, setHistory] = useState<DemoHistoryEntry[]>([]);
   const conversationRef = useRef<HTMLDivElement>(null);
   const activeStageRef = useRef<HTMLDivElement>(null);
   const checkoutRef = useRef<HTMLDivElement>(null);
+  const welcomeVideoTriggerRef = useRef<HTMLButtonElement>(null);
+  const welcomeVideoCloseRef = useRef<HTMLButtonElement>(null);
+  const welcomeVideoDialogRef = useRef<HTMLDivElement>(null);
+  const openingPromptRef = useRef<HTMLButtonElement>(null);
+  const welcomeVideoReturnFocusRef = useRef<"trigger" | "prompt">("trigger");
   const historyIdRef = useRef(0);
   const demoToday = useMemo(() => normalizeCalendarDate(new Date()), []);
   const demoCalendarEnd = useMemo(() => {
@@ -208,6 +219,46 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       if (step === "confirm") checkoutRef.current?.focus({ preventScroll: true });
     });
   }, [step, currentQuestionIndex, history.length]);
+
+  useEffect(() => {
+    if (!welcomeVideoOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => welcomeVideoCloseRef.current?.focus());
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        welcomeVideoReturnFocusRef.current = "trigger";
+        setWelcomeVideoOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = welcomeVideoDialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button, iframe, [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hasAttribute("disabled"));
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      requestAnimationFrame(() => {
+        const focusTarget = welcomeVideoReturnFocusRef.current === "prompt" ? openingPromptRef.current : welcomeVideoTriggerRef.current;
+        focusTarget?.focus();
+        welcomeVideoReturnFocusRef.current = "trigger";
+      });
+    };
+  }, [welcomeVideoOpen]);
 
   const serialized = JSON.stringify(config);
   const isDirty = serialized !== JSON.stringify(savedConfig);
@@ -268,6 +319,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   };
 
   const startOver = () => {
+    setWelcomeVideoOpen(false);
+    welcomeVideoReturnFocusRef.current = "trigger";
     setStep("request");
     setDemo(emptySession);
     setHistory([]);
@@ -540,13 +593,43 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const showSummary = !["request", "serviceDetails", "questions"].includes(step);
   const openCheckout = () => setStep("confirm");
   const completeCheckout = () => setStep("complete");
+  const openWelcomeVideo = () => {
+    welcomeVideoReturnFocusRef.current = "trigger";
+    setWelcomeVideoOpen(true);
+  };
+  const closeWelcomeVideo = () => {
+    welcomeVideoReturnFocusRef.current = "trigger";
+    setWelcomeVideoOpen(false);
+  };
+  const startBookingFromWelcomeVideo = () => {
+    welcomeVideoReturnFocusRef.current = "prompt";
+    setWelcomeVideoOpen(false);
+  };
 
   const activeStage = (() => {
     if (step === "request") {
       return (
         <div className="flex flex-col gap-4">
+          <DemoBubble>
+            <p>Before we get started, here&apos;s a quick hello from our team 👋</p>
+            <button
+              ref={welcomeVideoTriggerRef}
+              type="button"
+              aria-haspopup="dialog"
+              aria-label="Play Madison's 20-second welcome video"
+              onClick={openWelcomeVideo}
+              className="group relative mt-3 h-[146px] w-full overflow-hidden rounded-[14px] bg-[#151515] text-left text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2"
+            >
+              <img src={WELCOME_VIDEO_SWATCH_URL} alt="Maids in Black welcome video" className="h-full w-full object-cover object-[center_38%] transition duration-300 group-hover:scale-[1.025]" />
+              <span className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.74),rgba(0,0,0,0.12)),linear-gradient(0deg,rgba(0,0,0,0.35),transparent_60%)]" />
+              <span className="absolute left-4 top-4 grid h-[42px] w-[42px] place-items-center rounded-full bg-[#ff684c] shadow-[0_7px_22px_rgba(0,0,0,0.22)]"><Play className="ml-0.5 h-[19px] w-[19px] fill-current" /></span>
+              <span className="absolute bottom-[15px] left-4 grid gap-[3px]"><strong className="text-[14px]">Meet Maids in Black</strong><small className="text-[10px] text-white/80">Watch our 20-second welcome</small></span>
+              <span className="absolute bottom-2.5 right-2.5 rounded-full bg-black/70 px-[7px] py-1 text-[9px] font-bold">0:20</span>
+            </button>
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[8px] font-bold text-[#7b7d82]"><span>About 60 seconds to book</span><i className="h-[3px] w-[3px] rounded-full bg-[#ff684c]" /><span>Instant pricing</span><i className="h-[3px] w-[3px] rounded-full bg-[#ff684c]" /><span>No phone call</span></div>
+          </DemoBubble>
           <DemoBubble>{config.greeting}</DemoBubble>
-          <div className="ml-10 flex flex-wrap gap-2">{config.quickPrompts.map((prompt) => <DemoChip key={prompt} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>
+          <div className="ml-10 flex flex-wrap gap-2">{config.quickPrompts.map((prompt, index) => <DemoChip key={prompt} buttonRef={index === 0 ? openingPromptRef : undefined} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>
         </div>
       );
     }
@@ -634,8 +717,27 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     );
   })();
 
+  const welcomeVideoDialog = welcomeVideoOpen && typeof document !== "undefined" ? createPortal(
+    <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-md sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWelcomeVideo(); }}>
+      <div ref={welcomeVideoDialogRef} role="dialog" aria-modal="true" aria-labelledby="welcome-video-title" aria-describedby="welcome-video-description" className="relative my-auto w-full max-w-[700px] overflow-hidden rounded-[24px] bg-white shadow-[0_35px_110px_rgba(0,0,0,0.42)]">
+        <button ref={welcomeVideoCloseRef} type="button" onClick={closeWelcomeVideo} aria-label="Close welcome video" className="absolute right-3.5 top-3.5 z-10 grid h-9 w-9 place-items-center rounded-full border border-white/30 bg-black/45 text-white transition hover:bg-black/65 focus:outline-none focus:ring-2 focus:ring-white"><X className="h-5 w-5" /></button>
+        <div className="relative aspect-video overflow-hidden bg-[#111]">
+          <iframe src={WELCOME_VIDEO_IFRAME_URL} title="Welcome to Maids in Black" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="absolute inset-0 h-full w-full border-0" />
+        </div>
+        <div className="px-5 py-5 sm:px-[26px] sm:pb-[25px] sm:pt-[22px]">
+          <span className="text-[9px] font-extrabold tracking-[0.12em] text-[#ff684c]">WELCOME FROM MADISON</span>
+          <h2 id="welcome-video-title" className="mt-1 text-[22px] font-extrabold text-[#3a3c41]">We&apos;ll take it from here.</h2>
+          <p id="welcome-video-description" className="mb-4 mt-1.5 text-[12px] leading-[1.55] text-[#6f7279]">Answer a few simple questions and I&apos;ll show you your price and available appointments.</p>
+          <button type="button" onClick={startBookingFromWelcomeVideo} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-extrabold text-white transition hover:bg-[#e9573e] focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2">Start my booking <ArrowRight className="h-[17px] w-[17px]" /></button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return (
     <div className="space-y-5">
+      {welcomeVideoDialog}
       <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
         <p className="text-sm font-semibold text-violet-900">Fully interactive demo · internal preview only</p>
         <p className="mt-0.5 text-xs leading-relaxed text-violet-700">

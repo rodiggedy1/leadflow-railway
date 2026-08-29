@@ -17,6 +17,30 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('setStep("complete")');
   });
 
+  it("adds the supplied Wistia welcome experience only at the beginning of the request stage", () => {
+    expect(componentSource).toContain('const WELCOME_VIDEO_WISTIA_MEDIA_ID = "jtv8f50ale"');
+    expect(componentSource).toContain("WELCOME_VIDEO_SWATCH_URL");
+    expect(componentSource).toContain("WELCOME_VIDEO_IFRAME_URL");
+    expect(componentSource).toContain("Before we get started, here&apos;s a quick hello from our team 👋");
+    expect(componentSource).toContain("Meet Maids in Black");
+    expect(componentSource).toContain("Watch our 20-second welcome");
+    expect(componentSource.indexOf("Before we get started")).toBeLessThan(componentSource.indexOf("<DemoBubble>{config.greeting}</DemoBubble>"));
+    expect(componentSource).toContain('aria-label="Play Madison\'s 20-second welcome video"');
+    expect(componentSource).toContain('role="dialog" aria-modal="true"');
+    expect(componentSource).toContain('allow="autoplay; fullscreen; picture-in-picture"');
+  });
+
+  it("keeps welcome-video state isolated from booking history and restores intentional focus", () => {
+    expect(componentSource).toContain("const [welcomeVideoOpen, setWelcomeVideoOpen] = useState(false)");
+    expect(componentSource).toContain("welcomeVideoCloseRef.current?.focus()");
+    expect(componentSource).toContain('welcomeVideoReturnFocusRef = useRef<"trigger" | "prompt">("trigger")');
+    expect(componentSource).toContain('welcomeVideoReturnFocusRef.current = "prompt"');
+    expect(componentSource).toContain("openingPromptRef.current");
+    expect(componentSource).toContain('if (event.key === "Escape")');
+    expect(componentSource).toContain("setWelcomeVideoOpen(false)");
+    expect(componentSource).not.toContain('{ kind: "video" }');
+  });
+
   it("requires both combined room counts and preserves custom questions and editable multi-select extras", () => {
     expect(componentSource).toContain("buildInferredQuestionAnswers(resolved, config.questions)");
     expect(componentSource).toContain("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
