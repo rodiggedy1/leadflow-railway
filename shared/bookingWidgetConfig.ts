@@ -19,7 +19,6 @@ export type BookingWidgetPriceBreakdown = {
   serviceMultiplier: number;
   serviceAdjustment: number;
   adjustedSubtotal: number;
-  roundingAdjustment: number;
   total: number;
 };
 
@@ -63,11 +62,6 @@ export function formatBookingWidgetExtraSelection(choice: string, quantities: Re
   return quantity ? `${pricedExtra.label} × ${quantity}` : pricedExtra.label;
 }
 
-export function roundBookingWidgetPriceUpToNine(amount: number): number {
-  if (!Number.isFinite(amount) || amount < 0) throw new Error("Price must be a non-negative finite number.");
-  return Math.ceil((amount + 1) / 10) * 10 - 1;
-}
-
 export function calculateBookingWidgetPrice(input: {
   serviceId: BookingWidgetServiceId;
   bedrooms: number;
@@ -101,7 +95,7 @@ export function calculateBookingWidgetPrice(input: {
   const serviceMultiplier = input.serviceId === "standard" ? 1 : 1.2;
   const adjustedSubtotal = Math.round(standardSubtotal * serviceMultiplier * 100) / 100;
   const serviceAdjustment = Math.round((adjustedSubtotal - standardSubtotal) * 100) / 100;
-  const total = roundBookingWidgetPriceUpToNine(adjustedSubtotal);
+  const total = Math.round(adjustedSubtotal);
 
   return {
     bedroomBasePrice,
@@ -112,7 +106,6 @@ export function calculateBookingWidgetPrice(input: {
     serviceMultiplier,
     serviceAdjustment,
     adjustedSubtotal,
-    roundingAdjustment: Math.round((total - adjustedSubtotal) * 100) / 100,
     total,
   };
 }

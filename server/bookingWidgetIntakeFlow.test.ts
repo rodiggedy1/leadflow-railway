@@ -165,7 +165,8 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("priceBreakdown?.baseCleaningTotal");
     expect(componentSource).toContain("priceBreakdown?.standardSubtotal");
     expect(componentSource).toContain("priceBreakdown?.serviceAdjustment");
-    expect(componentSource).toContain("priceBreakdown?.roundingAdjustment");
+    expect(componentSource).not.toContain("roundingAdjustment");
+    expect(componentSource).toContain("adjusted totals round to the nearest whole dollar");
     expect(componentSource).toContain("+ Add another extra");
     expect(componentSource).toContain("removeItemizedExtra");
     expect(componentSource).toContain("addItemizedExtra");
