@@ -93,10 +93,10 @@ const emptySession: DemoSession = {
   leadCaptured: false,
 };
 
-function DemoBubble({ children, customer, color }: { children: React.ReactNode; customer?: boolean; color?: string }) {
+function DemoBubble({ children, customer, color, containerRef }: { children: React.ReactNode; customer?: boolean; color?: string; containerRef?: React.Ref<HTMLDivElement> }) {
   if (!customer) {
     return (
-      <div className="flex items-end gap-2.5">
+      <div ref={containerRef} className="flex items-end gap-2.5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[#ffe3dc] text-[#ff684c]"><Sparkles className="h-3.5 w-3.5" /></div>
         <div className="max-w-[78%] rounded-[18px_18px_18px_6px] border border-[#e4e5e7] bg-white px-4 py-3 shadow-[0_3px_9px_rgba(22,20,33,0.03)]">
           <span className="mb-1 block text-[10px] font-extrabold tracking-wide text-[#ff684c]">Madison</span>
@@ -107,6 +107,7 @@ function DemoBubble({ children, customer, color }: { children: React.ReactNode; 
   }
   return (
     <div
+      ref={containerRef}
       className="ml-auto max-w-[78%] rounded-[18px_18px_6px_18px] border border-[#f1e5c6] px-4 py-3 text-[13px] leading-6 text-[#3a3c41] shadow-[0_3px_9px_rgba(22,20,33,0.03)] whitespace-pre-wrap"
       style={{ backgroundColor: color }}
     >
@@ -161,8 +162,12 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     const container = conversationRef.current;
     if (!container) return;
     requestAnimationFrame(() => {
+      if (step === "request") {
+        container.scrollTo({ top: 0, behavior: "auto" });
+        return;
+      }
       const activeCard = activeStepRef.current;
-      if (activeCard && (step === "quote" || step === "confirm" || step === "complete")) {
+      if (activeCard) {
         container.scrollTo({ top: Math.max(activeCard.offsetTop - 12, 0), behavior: "auto" });
         return;
       }
@@ -591,9 +596,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </div>
         </div>
 
-        <div className="xl:sticky xl:top-[132px] xl:h-[clamp(420px,calc(100dvh-400px),700px)]">
-          <Card className="overflow-hidden border-gray-200 shadow-lg xl:flex xl:h-full xl:flex-col">
-            <CardHeader className="border-b border-gray-100 bg-white pb-3 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>
+        <div className="xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]">
+          <Card className="gap-0 overflow-hidden border-gray-200 py-0 shadow-lg xl:flex xl:h-full xl:flex-col">
+            <CardHeader className="border-b border-gray-100 bg-white py-4 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>
             <CardContent className="bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden">
               <div className="mx-auto flex w-full max-w-[720px] flex-col overflow-hidden rounded-[28px] border border-[#dfe0e2] bg-white shadow-[0_28px_80px_rgba(17,17,17,0.16)] xl:min-h-0 xl:flex-1" style={{ color: config.primaryColor }}>
                 <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#282828] bg-[#111111] px-5 py-4 text-white sm:px-6">
@@ -615,10 +620,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   <div className="flex items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
                   <DemoBubble>{config.greeting}</DemoBubble>
 
-                  {step === "request" && <div className="ml-10 flex flex-wrap gap-2">{config.quickPrompts.map((prompt) => <DemoChip key={prompt} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>}
+                  {step === "request" && <div ref={activeStepRef} className="ml-10 flex flex-wrap gap-2">{config.quickPrompts.map((prompt) => <DemoChip key={prompt} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>}
 
                   {reached("serviceDetails") && <DemoBubble customer color={config.customerBubbleColor}>{demo.prompt}</DemoBubble>}
-                  {(step === "serviceDetails" || demo.serviceDetailsAnswer) && <DemoBubble>{config.combinedDetailsQuestion}</DemoBubble>}
+                  {(step === "serviceDetails" || demo.serviceDetailsAnswer) && <DemoBubble containerRef={step === "serviceDetails" ? activeStepRef : undefined}>{config.combinedDetailsQuestion}</DemoBubble>}
                   {demo.serviceDetailsAnswer && <DemoBubble customer color={config.customerBubbleColor}>{demo.serviceDetailsAnswer}</DemoBubble>}
 
                   {reached("questions") && config.questions.map((question, questionIndex) => {
@@ -632,7 +637,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                         <DemoBubble>{question.prompt}</DemoBubble>
                         {answerText && <DemoBubble customer color={config.customerBubbleColor}>{answerText}</DemoBubble>}
                         {step === "questions" && questionIndex === currentQuestionIndex && (
-                          <div className="ml-10 space-y-3">
+                          <div ref={activeStepRef} className="ml-10 space-y-3">
                             <div className="flex flex-wrap gap-2">
                               {question.choices.map((choice) => (
                                 <DemoChip
@@ -656,39 +661,43 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
                   {reached("schedule") && <DemoBubble>{formatScheduleQuestion(config, demo.requestedDay)}</DemoBubble>}
                   {step === "schedule" && (
-                    <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#e4e5e7] bg-white p-4 shadow-[0_12px_32px_rgba(22,20,33,0.07)] sm:p-5">
-                      <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><CalendarDays className="h-4 w-4 text-[#ff684c]" /> Choose a date</div>
-                      <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={(date) => { setSelectedDate(date); setSelectedTime(""); }}
-                        defaultMonth={selectedDate ?? demoToday}
-                        startMonth={demoToday}
-                        endMonth={demoCalendarEnd}
-                        disabled={{ before: demoToday }}
-                        className="mx-auto mt-2 bg-transparent p-0 [--cell-size:2.15rem]"
-                        classNames={{ caption_label: "text-[12px] font-extrabold text-[#3a3c41]", button_previous: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", button_next: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", weekday: "flex-1 text-[10px] font-bold text-[#9a9ba5]", today: "rounded-lg bg-[#fff1ed] text-[#e9573e]" }}
-                      />
+                    <div ref={activeStepRef} className="ml-10 max-w-[82%] rounded-[20px] border border-[#e4e5e7] bg-white p-4 shadow-[0_12px_32px_rgba(22,20,33,0.07)] sm:p-5">
+                      <div className="grid gap-5 md:grid-cols-[minmax(0,1.15fr)_minmax(180px,0.85fr)] md:items-start">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><CalendarDays className="h-4 w-4 text-[#ff684c]" /> Choose a date</div>
+                          <Calendar
+                            mode="single"
+                            selected={selectedDate}
+                            onSelect={(date) => { setSelectedDate(date); setSelectedTime(""); }}
+                            defaultMonth={selectedDate ?? demoToday}
+                            startMonth={demoToday}
+                            endMonth={demoCalendarEnd}
+                            disabled={{ before: demoToday }}
+                            className="mx-auto mt-2 bg-transparent p-0 [--cell-size:2.15rem]"
+                            classNames={{ caption_label: "text-[12px] font-extrabold text-[#3a3c41]", button_previous: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", button_next: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", weekday: "flex-1 text-[10px] font-bold text-[#9a9ba5]", today: "rounded-lg bg-[#fff1ed] text-[#e9573e]" }}
+                          />
+                        </div>
 
-                      <div className="mt-3 border-t border-[#e4e5e7] pt-4">
-                        <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><Clock className="h-4 w-4 text-[#ff684c]" /> Available times <span className="font-normal text-[#9a9ba5]">(demo)</span></div>
-                        <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="border-t border-[#e4e5e7] pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+                          <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><Clock className="h-4 w-4 text-[#ff684c]" /> Available times <span className="font-normal text-[#9a9ba5]">(demo)</span></div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-1">
                           {DEMO_TIME_SLOTS.map((time) => (
                             <button key={time} type="button" aria-pressed={selectedTime === time} onClick={() => setSelectedTime(time)} className={`rounded-xl border px-3 py-2.5 text-[12px] font-bold transition ${selectedTime === time ? "border-[#ff684c] bg-[#ff684c] text-white shadow-sm" : "border-[#ffd2c8] bg-[#fff8f6] text-[#d95740] hover:border-[#ff9c89]"}`}>{time}</button>
                           ))}
+                          </div>
+
+                          <div className="mt-4 rounded-xl bg-[#f5f5f3] px-3 py-2.5 text-[12px] text-[#6f7279]">
+                            {selectedDate ? selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }) : "Select a date"}{selectedTime ? ` · ${selectedTime}` : " · Select a time"}
+                          </div>
+                          <button type="button" onClick={confirmScheduleSelection} disabled={!selectedDate || !selectedTime} className="mt-3 w-full rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white shadow-sm transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:bg-[#ececef] disabled:text-[#a6a7af]">Continue →</button>
                         </div>
                       </div>
-
-                      <div className="mt-4 rounded-xl bg-[#f5f5f3] px-3 py-2.5 text-[12px] text-[#6f7279]">
-                        {selectedDate ? selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }) : "Select a date"}{selectedTime ? ` · ${selectedTime}` : " · Select a time"}
-                      </div>
-                      <button type="button" onClick={confirmScheduleSelection} disabled={!selectedDate || !selectedTime} className="mt-3 w-full rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white shadow-sm transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:bg-[#ececef] disabled:text-[#a6a7af]">Continue →</button>
                     </div>
                   )}
                   {reached("extras") && <DemoBubble customer color={config.customerBubbleColor}>{demo.schedule}</DemoBubble>}
                   {reached("extras") && extrasQuestion && <DemoBubble>{extrasQuestion.prompt}</DemoBubble>}
                   {reached("extras") && extrasQuestion && (
-                    <div className="ml-10 space-y-3">
+                    <div ref={step === "extras" ? activeStepRef : undefined} className="ml-10 space-y-3">
                       {reached("fullName") && <DemoBubble customer color={config.customerBubbleColor}>{(demo.answers[extrasQuestion.id] ?? []).join(", ")}</DemoBubble>}
                       {step === "extras" && (
                         <>
@@ -703,14 +712,14 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                     </div>
                   )}
 
-                  {reached("fullName") && <DemoBubble>{config.fullNameQuestion}</DemoBubble>}
+                  {reached("fullName") && <DemoBubble containerRef={step === "fullName" ? activeStepRef : undefined}>{config.fullNameQuestion}</DemoBubble>}
                   {reached("phone") && <DemoBubble customer color={config.customerBubbleColor}>{demo.fullName}</DemoBubble>}
-                  {reached("phone") && <DemoBubble>{renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) })}</DemoBubble>}
+                  {reached("phone") && <DemoBubble containerRef={step === "phone" ? activeStepRef : undefined}>{renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) })}</DemoBubble>}
                   {reached("email") && <DemoBubble customer color={config.customerBubbleColor}>{demo.phone}</DemoBubble>}
-                  {reached("email") && demo.phone && <div className="ml-10 mr-2 flex items-center gap-4 rounded-[18px] border border-[#dfe4e2] bg-[#f5f7f6] p-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-white text-[#239268]"><ShieldCheck className="h-6 w-6" /></div><div><strong className="text-[12px] text-[#3a3c41]">Your information stays private</strong><p className="mt-1 text-[11px] leading-5 text-[#6d837a]">We only use it for your booking and arrival updates.</p></div></div>}
+                  {reached("email") && demo.phone && <div ref={step === "email" ? activeStepRef : undefined} className="ml-10 mr-2 flex items-center gap-4 rounded-[18px] border border-[#dfe4e2] bg-[#f5f7f6] p-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-white text-[#239268]"><ShieldCheck className="h-6 w-6" /></div><div><strong className="text-[12px] text-[#3a3c41]">Your information stays private</strong><p className="mt-1 text-[11px] leading-5 text-[#6d837a]">We only use it for your booking and arrival updates.</p></div></div>}
                   {reached("email") && <DemoBubble>{config.emailQuestion}</DemoBubble>}
                   {reached("address") && <DemoBubble customer color={config.customerBubbleColor}>{demo.email}</DemoBubble>}
-                  {reached("address") && <DemoBubble>{config.addressQuestion}</DemoBubble>}
+                  {reached("address") && <DemoBubble containerRef={step === "address" ? activeStepRef : undefined}>{config.addressQuestion}</DemoBubble>}
                   {reached("address") && <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:grid-cols-[42%_1fr]"><img src={CLEANER_TEAM_IMAGE_URL} alt="Professional cleaner holding supplies in a bright living room" className="h-44 w-full object-cover sm:h-full" /><div className="flex flex-col justify-center p-5"><span className="text-[10px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-3 text-[17px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#66736e]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#239268]" /><span>{config.resultTrustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-3 text-[11px] font-extrabold text-[#ff684c]">See our happiness promise</span></div></div>}
                   {reached("checking") && <DemoBubble customer color={config.customerBubbleColor}>{demo.address}</DemoBubble>}
                   {reached("checking") && <DemoBubble>{config.availabilityCheckMessage}</DemoBubble>}
