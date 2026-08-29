@@ -4,10 +4,12 @@ import {
   BOOKING_WIDGET_DRAFT_SETTING,
   BOOKING_WIDGET_EXTRA_CHOICES,
   BOOKING_WIDGET_PRICED_EXTRAS,
+  BOOKING_WIDGET_RECURRING_OPTIONS,
   DEFAULT_BOOKING_WIDGET_DRAFT,
   buildDemoDetailLine,
   buildInferredQuestionAnswers,
   calculateBookingWidgetPrice,
+  calculateBookingWidgetRecurringPrice,
   firstNameFromFullName,
   formatBookingButtonLabel,
   formatDemoScheduleSelection,
@@ -177,6 +179,22 @@ describe("booking widget interactive demo configuration", () => {
     expect(calculateBookingWidgetPrice({ serviceId: "standard", bedrooms: 0, bathrooms: 0 }).total).toBe(99);
     expect(calculateBookingWidgetPrice({ serviceId: "deep", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside fridge"] }).total).toBe(341);
     expect(calculateBookingWidgetPrice({ serviceId: "deep", bedrooms: 2, bathrooms: 2, selectedExtras: ["Inside cabinets"] }).total).toBe(347);
+  });
+
+  it("derives approved recurring future-visit prices from the authoritative current total", () => {
+    expect(BOOKING_WIDGET_RECURRING_OPTIONS).toEqual([
+      { id: "weekly", label: "Weekly", discountPercent: 20 },
+      { id: "biweekly", label: "Every 2 weeks", discountPercent: 15, badge: "MOST POPULAR" },
+      { id: "monthly", label: "Monthly", discountPercent: 10 },
+    ]);
+    expect(calculateBookingWidgetRecurringPrice(405, "weekly")).toBe(324);
+    expect(calculateBookingWidgetRecurringPrice(405, "biweekly")).toBe(344);
+    expect(calculateBookingWidgetRecurringPrice(405, "monthly")).toBe(365);
+    expect(calculateBookingWidgetRecurringPrice(341, "weekly")).toBe(273);
+    expect(calculateBookingWidgetRecurringPrice(341, "biweekly")).toBe(290);
+    expect(calculateBookingWidgetRecurringPrice(341, "monthly")).toBe(307);
+    expect(calculateBookingWidgetRecurringPrice(341, "one-time")).toBeNull();
+    expect(() => calculateBookingWidgetRecurringPrice(-1, "weekly")).toThrow("non-negative");
   });
 
   it("rejects unsupported inputs rather than inventing a price", () => {

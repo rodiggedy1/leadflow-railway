@@ -2,6 +2,14 @@ export type BookingWidgetServiceId = "standard" | "deep" | "moveout";
 export type BookingWidgetQuestionRole = "bedrooms" | "bathrooms" | "extras" | "custom";
 export type BookingWidgetQuestionSelectionMode = "single" | "multiple";
 export type BookingWidgetIntakeField = "fullName" | "phone" | "email" | "schedule";
+export type BookingWidgetRecurringFrequency = "one-time" | "weekly" | "biweekly" | "monthly";
+
+export type BookingWidgetRecurringOption = {
+  id: Exclude<BookingWidgetRecurringFrequency, "one-time">;
+  label: string;
+  discountPercent: number;
+  badge?: string;
+};
 
 export type BookingWidgetPricedExtra = {
   id: string;
@@ -48,6 +56,25 @@ export const BOOKING_WIDGET_PRICED_EXTRAS: readonly BookingWidgetPricedExtra[] =
 ] as const;
 
 export const BOOKING_WIDGET_EXTRA_CHOICES = ["Nothing extra", ...BOOKING_WIDGET_PRICED_EXTRAS.map((extra) => extra.label)] as const;
+
+export const BOOKING_WIDGET_RECURRING_OPTIONS: readonly BookingWidgetRecurringOption[] = [
+  { id: "weekly", label: "Weekly", discountPercent: 20 },
+  { id: "biweekly", label: "Every 2 weeks", discountPercent: 15, badge: "MOST POPULAR" },
+  { id: "monthly", label: "Monthly", discountPercent: 10 },
+] as const;
+
+export function calculateBookingWidgetRecurringPrice(
+  firstCleaningTotal: number,
+  frequency: BookingWidgetRecurringFrequency,
+): number | null {
+  if (!Number.isFinite(firstCleaningTotal) || firstCleaningTotal < 0) {
+    throw new Error("First-clean total must be a non-negative number.");
+  }
+  if (frequency === "one-time") return null;
+  const option = BOOKING_WIDGET_RECURRING_OPTIONS.find((item) => item.id === frequency);
+  if (!option) throw new Error(`Unsupported recurring frequency: ${frequency}`);
+  return Math.round(firstCleaningTotal * (1 - option.discountPercent / 100));
+}
 
 export function findBookingWidgetPricedExtra(choice: string): BookingWidgetPricedExtra | undefined {
   const normalized = choice.trim().toLowerCase();
