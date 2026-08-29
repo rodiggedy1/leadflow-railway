@@ -139,7 +139,9 @@ describe("booking widget customer-intake flow contract", () => {
 
   it("replaces quote with a dedicated focused checkout and replaces checkout with confirmation", () => {
     expect(componentSource).toContain("const checkoutRef = useRef<HTMLDivElement>(null)");
-    expect(componentSource).toContain('const openCheckout = () => setStep("confirm")');
+    expect(componentSource).toContain("const openCheckout = () => {");
+    expect(componentSource).toContain('setItemizationPanel("none")');
+    expect(componentSource).toContain('setStep("confirm")');
     expect(componentSource).toContain('const completeCheckout = () => setStep("complete")');
     expect(componentSource).toContain("onClick={openCheckout}");
     expect(componentSource).toContain("onClick={completeCheckout}");
@@ -155,6 +157,37 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('<button type="button" onClick={completeCheckout}');
     expect(componentSource).not.toContain("onKeyDown={openCheckout}");
     expect(componentSource).not.toContain("onKeyDown={completeCheckout}");
+  });
+
+  it("renders one editable itemized order with authoritative base, extras, adjustments, and final total", () => {
+    expect(componentSource).toContain('type ItemizationPanel = "none" | "base" | "extras" | "note"');
+    expect(componentSource).toContain('aria-label="Editable itemized cleaning order"');
+    expect(componentSource).toContain("priceBreakdown?.baseCleaningTotal");
+    expect(componentSource).toContain("priceBreakdown?.standardSubtotal");
+    expect(componentSource).toContain("priceBreakdown?.serviceAdjustment");
+    expect(componentSource).toContain("priceBreakdown?.roundingAdjustment");
+    expect(componentSource).toContain("+ Add another extra");
+    expect(componentSource).toContain("removeItemizedExtra");
+    expect(componentSource).toContain("addItemizedExtra");
+    expect(componentSource).not.toContain("Frequency");
+  });
+
+  it("keeps special requests as unpriced browser-only review notes and clears them on Start over", () => {
+    expect(componentSource).toContain("specialRequestNotes: string[]");
+    expect(componentSource).toContain("specialRequestNotes: []");
+    expect(componentSource).toContain('specialRequestNotes: [...current.specialRequestNotes, note]');
+    expect(componentSource).toContain("Needs review");
+    expect(componentSource).toContain("removeSpecialRequestNote");
+    expect(componentSource).not.toContain("recognizeSpecialRequest");
+    expect(componentSource).not.toContain("priceSpecialRequest");
+  });
+
+  it("reuses fixed extras and existing browser quantities for quote-stage edits", () => {
+    expect(componentSource).toContain("BOOKING_WIDGET_PRICED_EXTRAS.filter");
+    expect(componentSource).toContain("updateExtraQuantity(pricedExtra.id, quantity - 1)");
+    expect(componentSource).toContain("updateExtraQuantity(pricedExtra.id, quantity + 1)");
+    expect(componentSource).toContain('answers: { ...current.answers, [extrasQuestion.id]: remaining.length ? remaining : ["Nothing extra"] }');
+    expect(componentSource).toContain("extraQuantities: pricedExtra.quantityUnit");
   });
 
   it("keeps the responsive transcript, privacy/proof content, and preview-only Stripe boundary", () => {

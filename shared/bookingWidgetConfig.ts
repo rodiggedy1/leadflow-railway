@@ -13,10 +13,13 @@ export type BookingWidgetPricedExtra = {
 export type BookingWidgetPriceBreakdown = {
   bedroomBasePrice: number;
   bathroomTotal: number;
+  baseCleaningTotal: number;
   extrasTotal: number;
   standardSubtotal: number;
   serviceMultiplier: number;
+  serviceAdjustment: number;
   adjustedSubtotal: number;
+  roundingAdjustment: number;
   total: number;
 };
 
@@ -81,6 +84,7 @@ export function calculateBookingWidgetPrice(input: {
 
   const bedroomBasePrice = BOOKING_WIDGET_BEDROOM_BASE_PRICES[input.bedrooms];
   const bathroomTotal = input.bathrooms * BOOKING_WIDGET_BATHROOM_UNIT_PRICE;
+  const baseCleaningTotal = bedroomBasePrice + bathroomTotal;
   const selectedExtras = [...new Set((input.selectedExtras ?? []).map((choice) => choice.trim()).filter(Boolean))]
     .filter((choice) => !isNoSelectionChoice(choice));
   const extrasTotal = selectedExtras.reduce((total, choice) => {
@@ -93,18 +97,23 @@ export function calculateBookingWidgetPrice(input: {
     }
     return total + pricedExtra.unitPrice * quantity;
   }, 0);
-  const standardSubtotal = bedroomBasePrice + bathroomTotal + extrasTotal;
+  const standardSubtotal = baseCleaningTotal + extrasTotal;
   const serviceMultiplier = input.serviceId === "standard" ? 1 : 1.2;
   const adjustedSubtotal = Math.round(standardSubtotal * serviceMultiplier * 100) / 100;
+  const serviceAdjustment = Math.round((adjustedSubtotal - standardSubtotal) * 100) / 100;
+  const total = roundBookingWidgetPriceUpToNine(adjustedSubtotal);
 
   return {
     bedroomBasePrice,
     bathroomTotal,
+    baseCleaningTotal,
     extrasTotal,
     standardSubtotal,
     serviceMultiplier,
+    serviceAdjustment,
     adjustedSubtotal,
-    total: roundBookingWidgetPriceUpToNine(adjustedSubtotal),
+    roundingAdjustment: Math.round((total - adjustedSubtotal) * 100) / 100,
+    total,
   };
 }
 
