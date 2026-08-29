@@ -18,7 +18,7 @@ describe("booking widget customer-intake flow contract", () => {
   });
 
   it("adds the supplied Wistia welcome experience only at the beginning of the request stage", () => {
-    expect(componentSource).toContain('const WELCOME_VIDEO_WISTIA_MEDIA_ID = "jtv8f50ale"');
+    expect(componentSource).toContain('const WELCOME_VIDEO_WISTIA_MEDIA_ID = "bzlt49ipk1"');
     expect(componentSource).toContain("WELCOME_VIDEO_SWATCH_URL");
     expect(componentSource).toContain("WELCOME_VIDEO_IFRAME_URL");
     expect(componentSource).toContain("Before we get started, here&apos;s a quick hello from our team 👋");
