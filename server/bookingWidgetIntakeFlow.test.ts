@@ -170,7 +170,28 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("+ Add another extra");
     expect(componentSource).toContain("removeItemizedExtra");
     expect(componentSource).toContain("addItemizedExtra");
-    expect(componentSource).not.toContain("Frequency");
+  });
+
+  it("uses the authoritative current total for approved recurring future-visit discounts", () => {
+    expect(componentSource).toContain("recurringFrequency: BookingWidgetRecurringFrequency");
+    expect(componentSource).toContain('recurringFrequency: "one-time"');
+    expect(componentSource).toContain("BOOKING_WIDGET_RECURRING_OPTIONS.map");
+    expect(componentSource).toContain("calculateBookingWidgetRecurringPrice(priceBreakdown.total, option.id)");
+    expect(componentSource).toContain("calculateBookingWidgetRecurringPrice(priceBreakdown.total, demo.recurringFrequency)");
+    expect(componentSource).toContain("First clean stays ${quotePrice}");
+    expect(componentSource).toContain("Your first cleaning remains full price. Savings begin with visit two.");
+    expect(componentSource).toContain("No thanks, keep this as a one-time cleaning");
+    expect(componentSource).not.toContain("const FIRST_CLEAN_PRICE = 405");
+  });
+
+  it("keeps the first-clean Book total and propagates only future-visit information to checkout and confirmation", () => {
+    expect(componentSource).toContain("formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)");
+    expect(componentSource).toContain("First cleaning total");
+    expect(componentSource).toContain("beginning with visit two");
+    expect(componentSource).toContain("/visit from visit two");
+    expect(componentSource).not.toContain("createRecurringBooking");
+    expect(componentSource).not.toContain("saveRecurringFrequency");
+    expect(componentSource).not.toContain("recurringMutation");
   });
 
   it("keeps special requests as unpriced browser-only review notes and clears them on Start over", () => {

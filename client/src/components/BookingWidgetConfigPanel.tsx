@@ -11,10 +11,12 @@ import {
   BOOKING_WIDGET_BATHROOM_UNIT_PRICE,
   BOOKING_WIDGET_BEDROOM_BASE_PRICES,
   BOOKING_WIDGET_PRICED_EXTRAS,
+  BOOKING_WIDGET_RECURRING_OPTIONS,
   DEFAULT_BOOKING_WIDGET_DRAFT,
   buildInferredQuestionAnswers,
   buildDemoDetailLine,
   calculateBookingWidgetPrice,
+  calculateBookingWidgetRecurringPrice,
   findBookingWidgetPricedExtra,
   firstNameFromFullName,
   formatBookingWidgetExtraSelection,
@@ -32,6 +34,7 @@ import {
   type BookingWidgetDraftConfig,
   type BookingWidgetIntakeField,
   type BookingWidgetQuestionDraft,
+  type BookingWidgetRecurringFrequency,
   type BookingWidgetServiceId,
 } from "@shared/bookingWidgetConfig";
 
@@ -60,6 +63,7 @@ type DemoSession = {
   answers: Record<string, string[]>;
   extraQuantities: Record<string, number>;
   specialRequestNotes: string[];
+  recurringFrequency: BookingWidgetRecurringFrequency;
   inferredQuestionIds: string[];
   requestedDay: string;
   fullName: string;
@@ -108,6 +112,7 @@ const emptySession: DemoSession = {
   answers: {},
   extraQuantities: {},
   specialRequestNotes: [],
+  recurringFrequency: "one-time",
   inferredQuestionIds: [],
   requestedDay: "",
   fullName: "",
@@ -307,6 +312,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     }
   })();
   const quotePrice = String(priceBreakdown?.total ?? 0);
+  const selectedRecurringOption = BOOKING_WIDGET_RECURRING_OPTIONS.find((option) => option.id === demo.recurringFrequency);
+  const recurringFutureVisitPrice = priceBreakdown
+    ? calculateBookingWidgetRecurringPrice(priceBreakdown.total, demo.recurringFrequency)
+    : null;
   const detailLine = buildDemoDetailLine(demo.fallbackBedrooms, config.questions, demo.answers, demo.extraQuantities);
   const itemizedExtras = selectedExtras.flatMap((choice) => {
     const pricedExtra = findBookingWidgetPricedExtra(choice);
@@ -869,6 +878,21 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{config.resultTitle}</h2></div></div>
           <div className="flex items-center border-b border-[#e4e5e7] py-3"><CalendarDays className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">DATE & TIME</small><strong className="text-[11px] text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</strong></span></div>
           <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
+          <section aria-label="Recurring cleaning frequency" className="border-b border-[#e4e5e7] py-4">
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#77798b]">Save on future cleanings</div><h3 className="mt-1 text-[15px] font-extrabold text-[#3a3c41]">Would you like to make it recurring?</h3></div><span className="rounded-full bg-[#fff1ed] px-2.5 py-1 text-[9px] font-extrabold text-[#e9573e]">First clean stays ${quotePrice}</span></div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">{BOOKING_WIDGET_RECURRING_OPTIONS.map((option) => {
+              const futurePrice = priceBreakdown ? calculateBookingWidgetRecurringPrice(priceBreakdown.total, option.id) : null;
+              const selected = demo.recurringFrequency === option.id;
+              return (
+                <button key={option.id} type="button" aria-pressed={selected} onClick={() => setDemo((current) => ({ ...current, recurringFrequency: option.id }))} className={`relative rounded-xl border px-3 py-3 text-center transition focus:outline-none focus:ring-2 focus:ring-[#ff684c]/35 ${selected ? "border-[#ff684c] bg-[#fff8f6] shadow-sm" : "border-[#dfe0e4] bg-white hover:border-[#ff9c89]"}`}>
+                  {option.badge && <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#3a3c41] px-2 py-0.5 text-[7px] font-extrabold tracking-wide text-white">{option.badge}</span>}
+                  <span className="block text-[11px] font-extrabold text-[#3a3c41]">{option.label}</span><strong className="mt-2 block text-[18px] text-[#3a3c41]">{formatItemizedCurrency(futurePrice ?? 0)}<small className="text-[9px] font-medium text-[#77798b]">/visit</small></strong><span className="mt-1.5 block text-[9px] font-extrabold text-[#168d61]">Save {option.discountPercent}%</span>
+                </button>
+              );
+            })}</div>
+            <p className="mt-3 text-[10px] leading-5 text-[#6f7279]">Your first cleaning remains full price. Savings begin with visit two.</p>
+            <button type="button" aria-pressed={demo.recurringFrequency === "one-time"} onClick={() => setDemo((current) => ({ ...current, recurringFrequency: "one-time" }))} className={`mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[10px] font-bold transition ${demo.recurringFrequency === "one-time" ? "bg-[#eef9f4] text-[#276b53]" : "bg-[#f5f5f3] text-[#5f6168] hover:bg-[#efefec]"}`}><CheckCircle2 className="h-4 w-4 shrink-0" />No thanks, keep this as a one-time cleaning</button>
+          </section>
           <section aria-label="Editable itemized cleaning order" className="border-b border-[#e4e5e7] py-4">
             <div className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#77798b]">Your cleaning</div>
             <div className="mt-3 divide-y divide-[#ececef] rounded-xl border border-[#e4e5e7] bg-white px-3">
@@ -907,7 +931,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     if (step === "confirm") {
       return (
         <div ref={checkoutRef} tabIndex={-1} aria-label="Demo checkout" className="ml-10 max-w-[82%] overflow-hidden rounded-[20px] border border-[#e4e5e7] bg-white shadow-[0_14px_36px_rgba(22,20,33,0.08)] outline-none focus:ring-2 focus:ring-[#ff684c]/30">
-          <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-[20px] font-extrabold text-[#3a3c41]">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div><div className="mt-1 text-[11px] text-[#6f7279]">Review your cleaning, then preview payment.</div></div><span className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Demo checkout</span></div><div className="mt-4 space-y-3 rounded-xl border border-[#e4e5e7] bg-white p-4 text-[11px]"><div><div className="font-extrabold text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-[#6f7279]">{service.name} · {detailLine}</div></div><div className="border-t border-[#e4e5e7] pt-3 text-[#6f7279]">{demo.address}</div><div className="flex items-center justify-between border-t border-[#e4e5e7] pt-3"><span className="font-medium text-[#6f7279]">Total</span><strong className="text-[19px] text-[#3a3c41]">${quotePrice}</strong></div></div></div>
+          <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-[20px] font-extrabold text-[#3a3c41]">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div><div className="mt-1 text-[11px] text-[#6f7279]">Review your cleaning, then preview payment.</div></div><span className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Demo checkout</span></div><div className="mt-4 space-y-3 rounded-xl border border-[#e4e5e7] bg-white p-4 text-[11px]"><div><div className="font-extrabold text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-[#6f7279]">{service.name} · {detailLine}</div></div><div className="border-t border-[#e4e5e7] pt-3 text-[#6f7279]">{demo.address}</div>{selectedRecurringOption && recurringFutureVisitPrice !== null && <div className="flex items-start justify-between gap-4 border-t border-[#e4e5e7] pt-3"><span className="text-[#6f7279]">Then {selectedRecurringOption.label.toLowerCase()} beginning with visit two</span><strong className="shrink-0 text-[#3a3c41]">{formatItemizedCurrency(recurringFutureVisitPrice)}/visit</strong></div>}<div className="flex items-center justify-between border-t border-[#e4e5e7] pt-3"><span className="font-medium text-[#6f7279]">First cleaning total</span><strong className="text-[19px] text-[#3a3c41]">${quotePrice}</strong></div></div></div>
           <div className="p-5"><div className="flex items-center justify-between gap-3"><div className="text-[13px] font-extrabold text-[#3a3c41]">Payment</div><div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6f7279]"><Lock className="h-3.5 w-3.5" /> Stripe-style payment preview</div></div><p className="mt-1 text-[10px] text-[#b46a29]">Mock fields only. Do not enter real card information.</p><div className="mt-4 overflow-hidden rounded-xl border border-[#d7d8dc] bg-white shadow-sm"><div role="textbox" aria-readonly="true" aria-label="Demo card number" tabIndex={0} className="border-b border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Card number</div><div className="mt-1 flex items-center justify-between gap-3 font-mono text-[12px] tracking-wide"><span>4242 4242 4242 4242</span><span className="flex items-center gap-1.5 font-sans text-[10px] font-extrabold uppercase text-[#e9573e]"><CreditCard className="h-4 w-4" /> {config.demoCardBrand}</span></div></div><div className="grid grid-cols-2"><div role="textbox" aria-readonly="true" aria-label="Demo card expiry" tabIndex={0} className="px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">MM / YY</div><div className="mt-1 font-mono text-[12px]">12 / 34</div></div><div role="textbox" aria-readonly="true" aria-label="Demo card security code" tabIndex={0} className="border-l border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">CVC</div><div className="mt-1 flex items-center justify-between font-mono text-[12px]"><span>123</span><Lock className="h-3.5 w-3.5 text-[#9a9ba5]" /></div></div></div></div><div role="textbox" aria-readonly="true" aria-label="Demo name on card" tabIndex={0} className="mt-3 rounded-xl border border-[#d7d8dc] bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Name on card</div><div className="mt-1 text-[12px]">{demo.fullName}</div></div><label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-[#f5f5f3] p-3 text-[11px] text-[#5f6168]"><input type="checkbox" checked={savePaymentDetails} onChange={(event) => setSavePaymentDetails(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-[#d7d8dc] accent-[#ff684c]" /><span>Save my payment details for faster bookings next time <span className="text-[9px] text-[#9a9ba5]">(demo only)</span></span></label><p className="mt-4 text-[10px] leading-5 text-[#6f7279]">{config.demoPaymentNotice}</p><button type="button" onClick={completeCheckout} className="mt-4 w-full rounded-xl bg-[#ff684c] px-4 py-3.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e]">{formatBookingButtonLabel(config.confirmButtonLabel, quotePrice)}</button></div>
         </div>
       );
@@ -915,7 +939,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     return (
       <div className="flex flex-col gap-4">
         <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, quotePrice)}</DemoBubble>
-        <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#168d61]"><CheckCircle2 className="h-4 w-4" />{config.confirmedEyebrow}</div><div className="mt-3 text-[18px] font-extrabold text-[#3a3c41]">{config.confirmedTitle}</div><div className="mt-3 text-[11px] leading-5 text-[#6f7279]">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div><div className="mt-4 space-y-2 rounded-xl border border-[#e4e5e7] p-4 text-[11px]"><div className="flex justify-between gap-4"><span>{service.name}</span><strong>${quotePrice}</strong></div><div className="flex justify-between gap-4 text-gray-500"><span>Address</span><span className="text-right">{demo.address}</span></div><div className="flex justify-between gap-4 text-gray-500"><span>Payment</span><span>•••• {config.demoCardLast4}</span></div></div><p className="mt-4 text-[10px] text-[#6f7279]">{config.demoPaymentNotice}</p></div>
+        <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#168d61]"><CheckCircle2 className="h-4 w-4" />{config.confirmedEyebrow}</div><div className="mt-3 text-[18px] font-extrabold text-[#3a3c41]">{config.confirmedTitle}</div><div className="mt-3 text-[11px] leading-5 text-[#6f7279]">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div><div className="mt-4 space-y-2 rounded-xl border border-[#e4e5e7] p-4 text-[11px]"><div className="flex justify-between gap-4"><span>{service.name}</span><strong>${quotePrice}</strong></div><div className="flex justify-between gap-4 text-gray-500"><span>Address</span><span className="text-right">{demo.address}</span></div>{selectedRecurringOption && recurringFutureVisitPrice !== null && <div className="flex justify-between gap-4 text-gray-500"><span>{selectedRecurringOption.label}</span><span className="text-right">{formatItemizedCurrency(recurringFutureVisitPrice)}/visit from visit two</span></div>}<div className="flex justify-between gap-4 text-gray-500"><span>Payment</span><span>•••• {config.demoCardLast4}</span></div></div><p className="mt-4 text-[10px] text-[#6f7279]">{config.demoPaymentNotice}</p></div>
         <DemoBubble>{config.finalReminder}</DemoBubble>
       </div>
     );
