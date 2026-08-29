@@ -400,6 +400,11 @@ export function formatScheduleQuestion(config: BookingWidgetDraftConfig, request
     : config.scheduleQuestion;
 }
 
+export function formatDemoScheduleSelection(date: Date, time: string): string {
+  const day = date.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  return `${day} · ${time.trim()}`;
+}
+
 export function validateBookingWidgetIntakeField(field: BookingWidgetIntakeField, value: string): string | null {
   const trimmed = value.trim();
   if (field === "fullName") {

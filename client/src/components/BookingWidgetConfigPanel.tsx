@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Eye, Loader2, Lock, Plus, RotateCcw, Save, Send, Sparkles, Trash2 } from "lucide-react";
+import { Bot, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock, CreditCard, Eye, Loader2, Lock, Plus, RotateCcw, Save, Send, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import {
   buildDemoDetailLine,
   firstNameFromFullName,
   formatBookingButtonLabel,
+  formatDemoScheduleSelection,
   formatScheduleQuestion,
   moveListItem,
   parseBookingWidgetDraft,
@@ -48,6 +50,31 @@ type DemoSession = {
 };
 
 const fieldClass = "h-9 bg-white border-gray-200 text-sm";
+const DEMO_TIME_SLOTS = ["8:30 AM", "10:30 AM", "1:00 PM", "3:30 PM"] as const;
+
+function normalizeCalendarDate(date: Date): Date {
+  const normalized = new Date(date);
+  normalized.setHours(12, 0, 0, 0);
+  return normalized;
+}
+
+function suggestedDateForRequest(requestedDay: string | undefined, today: Date): Date | undefined {
+  if (!requestedDay) return undefined;
+  const normalizedDay = requestedDay.trim().toLowerCase();
+  const date = normalizeCalendarDate(today);
+  if (normalizedDay === "today") return date;
+  if (normalizedDay === "tomorrow") {
+    date.setDate(date.getDate() + 1);
+    return date;
+  }
+  const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const targetDay = weekdays.indexOf(normalizedDay);
+  if (targetDay < 0) return undefined;
+  const daysAhead = (targetDay - date.getDay() + 7) % 7 || 7;
+  date.setDate(date.getDate() + daysAhead);
+  return date;
+}
+
 const emptySession: DemoSession = {
   prompt: "",
   serviceDetailsAnswer: "",
@@ -99,8 +126,16 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [composerValue, setComposerValue] = useState("");
   const [composerError, setComposerError] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = useState("");
   const [savePaymentDetails, setSavePaymentDetails] = useState(false);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const demoToday = useMemo(() => normalizeCalendarDate(new Date()), []);
+  const demoCalendarEnd = useMemo(() => {
+    const end = new Date(demoToday);
+    end.setMonth(end.getMonth() + 6);
+    return end;
+  }, [demoToday]);
 
   useEffect(() => {
     setConfig(savedConfig);
@@ -179,6 +214,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setCurrentQuestionIndex(0);
     setComposerValue("");
     setComposerError("");
+    setSelectedDate(undefined);
+    setSelectedTime("");
     setSavePaymentDetails(false);
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
@@ -218,6 +255,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     });
     setComposerValue("");
     setComposerError("");
+    setSelectedDate(suggestedDateForRequest(resolved.requestedDay, demoToday));
+    setSelectedTime("");
     if (hasBedrooms && hasBathrooms) nextAfterServiceDetails(inferred.answers);
     else setStep("serviceDetails");
   };
@@ -336,11 +375,19 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setStep("email");
   };
 
+  const confirmScheduleSelection = () => {
+    if (!selectedDate || !selectedTime) return;
+    const schedule = formatDemoScheduleSelection(selectedDate, selectedTime);
+    setDemo((current) => ({ ...current, schedule, requestedDay: schedule.split(" · ")[0] }));
+    setComposerValue("");
+    setComposerError("");
+    setStep("extras");
+  };
+
   const submitComposer = () => {
     if (step === "request") return selectRequest(composerValue);
     if (step === "serviceDetails") return submitCombinedServiceDetails();
     if (step === "questions") return selectQuestionAnswer(composerValue);
-    if (step === "schedule") return submitIntakeField("schedule", "extras");
     if (step === "extras") return selectExtrasAnswer(composerValue);
     if (step === "fullName") return submitIntakeField("fullName", "phone");
     if (step === "phone") return submitPhone();
@@ -374,11 +421,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       : step === "email"
         ? config.emailPlaceholder
         : step === "schedule"
-          ? config.schedulePlaceholder
+          ? "Choose a date and time above"
           : step === "address" || reached("checking")
             ? config.addressPlaceholder
             : config.inputPlaceholder;
-  const composerEnabled = ["request", "serviceDetails", "questions", "schedule", "extras", "fullName", "phone", "email", "address"].includes(step);
+  const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step);
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 
   return (
@@ -580,6 +627,35 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   })}
 
                   {reached("schedule") && <DemoBubble>{formatScheduleQuestion(config, demo.requestedDay)}</DemoBubble>}
+                  {step === "schedule" && (
+                    <div className="max-w-[94%] rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+                      <div className="flex items-center gap-2 text-sm font-bold"><CalendarDays className="h-4 w-4 text-indigo-600" /> Choose a date</div>
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => { setSelectedDate(date); setSelectedTime(""); }}
+                        defaultMonth={selectedDate ?? demoToday}
+                        startMonth={demoToday}
+                        endMonth={demoCalendarEnd}
+                        disabled={{ before: demoToday }}
+                        className="mx-auto mt-2 [--cell-size:2.25rem]"
+                      />
+
+                      <div className="mt-3 border-t border-gray-100 pt-4">
+                        <div className="flex items-center gap-2 text-sm font-bold"><Clock className="h-4 w-4 text-indigo-600" /> Available times <span className="font-normal text-gray-400">(demo)</span></div>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          {DEMO_TIME_SLOTS.map((time) => (
+                            <button key={time} type="button" aria-pressed={selectedTime === time} onClick={() => setSelectedTime(time)} className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${selectedTime === time ? "border-indigo-600 bg-indigo-600 text-white shadow-sm" : "border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"}`}>{time}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-600">
+                        {selectedDate ? selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }) : "Select a date"}{selectedTime ? ` · ${selectedTime}` : " · Select a time"}
+                      </div>
+                      <button type="button" onClick={confirmScheduleSelection} disabled={!selectedDate || !selectedTime} className="mt-3 w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">Continue →</button>
+                    </div>
+                  )}
                   {reached("extras") && <DemoBubble customer color={config.customerBubbleColor}>{demo.schedule}</DemoBubble>}
                   {reached("extras") && extrasQuestion && <DemoBubble>{extrasQuestion.prompt}</DemoBubble>}
                   {reached("extras") && extrasQuestion && (
@@ -608,7 +684,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   {reached("checking") && <DemoBubble customer color={config.customerBubbleColor}>{demo.address}</DemoBubble>}
                   {reached("checking") && <DemoBubble><span className="inline-flex items-center gap-2">{step === "checking" && <Loader2 className="h-4 w-4 animate-spin" />}{config.availabilityCheckMessage}</span></DemoBubble>}
 
-                  {reached("quote") && (
+                  {step === "quote" && (
                     <div className="max-w-[94%] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                       <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">{config.openingEyebrow}</div>
                       <div className="mt-2 text-2xl font-bold">{config.resultTitle}</div>
@@ -619,11 +695,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                       <div className="mt-5 space-y-2.5 border-t border-gray-100 pt-4 text-sm text-gray-700">
                         {config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2"><span className="font-bold text-emerald-600">✓</span><span>{point}</span></div>)}
                       </div>
-                      <button type="button" onClick={() => step === "quote" && setStep("confirm")} disabled={step !== "quote"} className="mt-5 w-full rounded-xl py-3 text-sm font-bold disabled:cursor-default" style={{ backgroundColor: config.customerBubbleColor }}>{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}</button>
+                      <button type="button" onClick={() => setStep("confirm")} className="mt-5 w-full rounded-xl py-3 text-sm font-bold" style={{ backgroundColor: config.customerBubbleColor }}>{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}</button>
                     </div>
                   )}
 
-                  {reached("confirm") && (
+                  {step === "confirm" && (
                     <div className="max-w-[94%] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                       <div className="border-b border-gray-100 bg-gradient-to-br from-white to-indigo-50/70 p-5">
                         <div className="flex items-start justify-between gap-4">
