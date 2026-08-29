@@ -52,6 +52,7 @@ type DemoSession = {
 
 const fieldClass = "h-9 bg-white border-gray-200 text-sm";
 const DEMO_TIME_SLOTS = ["8:30 AM", "10:30 AM", "1:00 PM", "3:30 PM"] as const;
+const CLEANER_TEAM_IMAGE_URL = "/manus-storage/book-with-ai-cleaner-team_ea9c2c7d.png";
 
 function normalizeCalendarDate(date: Date): Date {
   const normalized = new Date(date);
@@ -144,6 +145,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [summaryOpen, setSummaryOpen] = useState(true);
   const [savePaymentDetails, setSavePaymentDetails] = useState(false);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const activeStepRef = useRef<HTMLDivElement>(null);
   const demoToday = useMemo(() => normalizeCalendarDate(new Date()), []);
   const demoCalendarEnd = useMemo(() => {
     const end = new Date(demoToday);
@@ -156,9 +158,16 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   }, [savedConfig]);
 
   useEffect(() => {
-    const element = conversationRef.current;
-    if (!element) return;
-    requestAnimationFrame(() => element.scrollTo({ top: element.scrollHeight, behavior: "smooth" }));
+    const container = conversationRef.current;
+    if (!container) return;
+    requestAnimationFrame(() => {
+      const activeCard = activeStepRef.current;
+      if (activeCard && (step === "quote" || step === "confirm" || step === "complete")) {
+        container.scrollTo({ top: Math.max(activeCard.offsetTop - 12, 0), behavior: "auto" });
+        return;
+      }
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    });
   }, [step, currentQuestionIndex]);
 
   useEffect(() => {
@@ -588,12 +597,12 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </div>
         </div>
 
-        <div className="xl:sticky xl:top-[132px]">
-          <Card className="overflow-hidden border-gray-200 shadow-lg">
-            <CardHeader className="border-b border-gray-100 bg-white pb-3"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>
-            <CardContent className="bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-5">
-              <div className="mx-auto flex w-full max-w-[720px] flex-col overflow-hidden rounded-[28px] border border-[#dfe0e2] bg-white shadow-[0_28px_80px_rgba(17,17,17,0.16)]" style={{ color: config.primaryColor }}>
-                <div className="flex items-center justify-between gap-4 border-b border-[#282828] bg-[#111111] px-5 py-4 text-white sm:px-6">
+        <div className="xl:sticky xl:top-[132px] xl:h-[clamp(420px,calc(100dvh-400px),700px)]">
+          <Card className="overflow-hidden border-gray-200 shadow-lg xl:flex xl:h-full xl:flex-col">
+            <CardHeader className="border-b border-gray-100 bg-white pb-3 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>
+            <CardContent className="bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden">
+              <div className="mx-auto flex w-full max-w-[720px] flex-col overflow-hidden rounded-[28px] border border-[#dfe0e2] bg-white shadow-[0_28px_80px_rgba(17,17,17,0.16)] xl:min-h-0 xl:flex-1" style={{ color: config.primaryColor }}>
+                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#282828] bg-[#111111] px-5 py-4 text-white sm:px-6">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white text-xl text-[#ff684c]">{config.brandLogoUrl ? <img src={config.brandLogoUrl} alt="Widget logo preview" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : config.headerIcon || <Bot className="h-5 w-5" />}</div>
                     <div className="min-w-0"><div className="truncate text-[18px] font-extrabold">{config.brandName || "Book with AI"}</div><div className="mt-1 flex items-center text-[12px] text-white/65"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#23b982] shadow-[0_0_0_4px_rgba(35,185,130,0.13)]" />{config.statusText}</div></div>
@@ -602,13 +611,13 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                 </div>
 
                 {reached("schedule") && (
-                  <div className="border-b border-[#e4e5e7] bg-[#fff8f6]">
+                  <div className="shrink-0 border-b border-[#e4e5e7] bg-[#fff8f6]">
                     <button type="button" onClick={() => setSummaryOpen((open) => !open)} aria-expanded={summaryOpen} className="flex w-full items-center gap-2 px-5 py-3 text-left text-[12px] font-extrabold text-[#ff684c] sm:px-6"><Sparkles className="h-3.5 w-3.5" /><span>Your cleaning so far</span><strong className="ml-auto text-[14px] text-[#3a3c41]">${service.price || "0"}</strong><ChevronDown className={`h-4 w-4 text-[#3a3c41] transition ${summaryOpen ? "rotate-180" : ""}`} /></button>
                     {summaryOpen && <div className="grid grid-cols-2 gap-2 px-5 pb-3 sm:grid-cols-3 sm:px-6"><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Sparkles className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">SERVICE</small><strong className="truncate text-[10px] text-[#3a3c41]">{service.name}</strong></p></div><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Home className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">HOME</small><strong className="truncate text-[10px] text-[#3a3c41]">{roomSummary}</strong></p></div><div className="col-span-2 flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5 sm:col-span-1"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Check className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">EXTRAS</small><strong className="truncate text-[10px] text-[#3a3c41]">{selectedExtras.length ? selectedExtras.join(", ") : "None selected"}</strong></p></div></div>}
                   </div>
                 )}
 
-                <div ref={conversationRef} className="flex h-[680px] flex-col gap-4 overflow-y-auto bg-gradient-to-b from-white to-[#fcfcfd] px-4 py-5 sm:px-6">
+                <div ref={conversationRef} className="relative flex h-[680px] flex-col gap-4 overflow-y-auto overscroll-contain bg-gradient-to-b from-white to-[#fcfcfd] px-4 py-5 sm:px-6 xl:h-auto xl:min-h-0 xl:flex-1">
                   <div className="flex items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
                   <DemoBubble>{config.greeting}</DemoBubble>
 
@@ -704,17 +713,18 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   {reached("phone") && <DemoBubble customer color={config.customerBubbleColor}>{demo.fullName}</DemoBubble>}
                   {reached("phone") && <DemoBubble>{renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) })}</DemoBubble>}
                   {reached("email") && <DemoBubble customer color={config.customerBubbleColor}>{demo.phone}</DemoBubble>}
-                  {reached("email") && demo.phone && <div className="ml-10 flex max-w-[68%] items-center gap-3 rounded-[14px] border border-[#e2e8e5] bg-[#f5f7f6] p-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-white text-[#239268]"><ShieldCheck className="h-5 w-5" /></div><div><strong className="text-[11px] text-[#3a3c41]">Your information stays private</strong><p className="mt-0.5 text-[10px] leading-4 text-[#6d837a]">We only use it for this booking demo and arrival-update preview.</p></div></div>}
+                  {reached("email") && demo.phone && <div className="ml-10 mr-2 flex items-center gap-4 rounded-[18px] border border-[#dfe4e2] bg-[#f5f7f6] p-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-white text-[#239268]"><ShieldCheck className="h-6 w-6" /></div><div><strong className="text-[12px] text-[#3a3c41]">Your information stays private</strong><p className="mt-1 text-[11px] leading-5 text-[#6d837a]">We only use it for your booking and arrival updates.</p></div></div>}
                   {reached("email") && <DemoBubble>{config.emailQuestion}</DemoBubble>}
                   {reached("address") && <DemoBubble customer color={config.customerBubbleColor}>{demo.email}</DemoBubble>}
                   {reached("address") && <DemoBubble>{config.addressQuestion}</DemoBubble>}
+                  {reached("address") && <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:grid-cols-[42%_1fr]"><img src={CLEANER_TEAM_IMAGE_URL} alt="Professional cleaner holding supplies in a bright living room" className="h-44 w-full object-cover sm:h-full" /><div className="flex flex-col justify-center p-5"><span className="text-[10px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-3 text-[17px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#66736e]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#239268]" /><span>{config.resultTrustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-3 text-[11px] font-extrabold text-[#ff684c]">See our happiness promise</span></div></div>}
                   {reached("checking") && <DemoBubble customer color={config.customerBubbleColor}>{demo.address}</DemoBubble>}
                   {reached("checking") && <DemoBubble>{config.availabilityCheckMessage}</DemoBubble>}
                   {step === "checking" && <div className="ml-10 flex items-center gap-1.5 text-[10px] text-[#77798b]"><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#ff9c89]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#ff9c89] [animation-delay:150ms]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#ff9c89] [animation-delay:300ms]" /><span className="ml-1">Checking teams nearby</span></div>}
 
                   {step === "quote" && (
                     <>
-                      <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#dcd5ef] bg-gradient-to-br from-white to-[#fffaf8] p-4 shadow-[0_14px_36px_rgba(77,54,139,0.09)]">
+                      <div ref={activeStepRef} className="ml-10 max-w-[82%] rounded-[20px] border border-[#dcd5ef] bg-gradient-to-br from-white to-[#fffaf8] p-4 shadow-[0_14px_36px_rgba(77,54,139,0.09)]">
                         <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{config.resultTitle}</h2></div></div>
                         <div className="flex items-center border-b border-[#e4e5e7] py-3"><CalendarDays className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">DATE & TIME</small><strong className="text-[11px] text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</strong></span></div>
                         <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
@@ -724,12 +734,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                         <button type="button" onClick={() => setStep("confirm")} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e]"><CreditCard className="h-4 w-4" />{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}<ArrowRight className="h-4 w-4" /></button>
                         <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />Visual demo only · no charge will be made</p>
                       </div>
-                      <div className="ml-10 flex max-w-[82%] items-center gap-3 rounded-[17px] border border-[#e4e5e7] bg-white p-3"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-[#fff0ec] text-[#ff684c]"><ShieldCheck className="h-6 w-6" /></div><div><span className="text-[8px] font-extrabold tracking-[0.1em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-1 text-[12px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><p className="mt-1 text-[9px] text-[#6f7279]">Supplies included · satisfaction-focused service</p></div></div>
                     </>
                   )}
 
                   {step === "confirm" && (
-                    <div className="ml-10 max-w-[82%] overflow-hidden rounded-[20px] border border-[#e4e5e7] bg-white shadow-[0_14px_36px_rgba(22,20,33,0.08)]">
+                    <div ref={activeStepRef} className="ml-10 max-w-[82%] overflow-hidden rounded-[20px] border border-[#e4e5e7] bg-white shadow-[0_14px_36px_rgba(22,20,33,0.08)]">
                       <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5">
                         <div className="flex items-start justify-between gap-4">
                           <div>
@@ -778,7 +787,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
                   {step === "complete" && <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</DemoBubble>}
                   {step === "complete" && (
-                    <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm">
+                    <div ref={activeStepRef} className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm">
                       <div className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#168d61]"><CheckCircle2 className="h-4 w-4" />{config.confirmedEyebrow}</div>
                       <div className="mt-3 text-[18px] font-extrabold text-[#3a3c41]">{config.confirmedTitle}</div>
                       <div className="mt-3 text-[11px] leading-5 text-[#6f7279]">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div>
@@ -793,7 +802,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   {step === "complete" && <DemoBubble>{config.finalReminder}</DemoBubble>}
                 </div>
 
-                <form onSubmit={(event) => { event.preventDefault(); submitComposer(); }} className="border-t border-[#e4e5e7] bg-white px-4 py-3 sm:px-5">
+                <form onSubmit={(event) => { event.preventDefault(); submitComposer(); }} className="shrink-0 border-t border-[#e4e5e7] bg-white px-4 py-3 sm:px-5">
                   {step === "address" && <div className="mb-2 flex gap-2"><button type="button" onClick={() => setComposerValue(config.addressExample)} className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-3 py-1.5 text-[9px] font-bold text-[#d95740]">Use sample address</button></div>}
                   <div className="flex items-center gap-2 rounded-2xl border border-[#e4e5e7] bg-white p-1.5 pl-3 shadow-[0_5px_18px_rgba(29,25,42,0.04)] focus-within:border-[#ff684c] focus-within:ring-4 focus-within:ring-[#ff684c]/10">
                     <MessageCircle className="h-4 w-4 shrink-0 text-[#a1a2ad]" />
