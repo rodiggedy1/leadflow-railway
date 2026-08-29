@@ -45,4 +45,17 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("service.rating");
     expect(componentSource).not.toContain("service.completedJobs");
   });
+
+  it("renders a clearly labeled Stripe-style mock checkout without any Stripe or payment-processing integration", () => {
+    expect(componentSource).toContain("Demo checkout");
+    expect(componentSource).toContain("Stripe-style payment preview");
+    expect(componentSource).toContain('aria-label="Demo card number"');
+    expect(componentSource).toContain("Mock fields only. Do not enter real card information.");
+    expect(componentSource).toContain("formatBookingButtonLabel(config.confirmButtonLabel, service.price)");
+    expect(componentSource).not.toContain("@stripe/");
+    expect(componentSource).not.toContain("loadStripe");
+    expect(componentSource).not.toContain("PaymentElement");
+    expect(componentSource).not.toContain("PaymentIntent");
+    expect(componentSource).not.toContain("confirmPayment");
+  });
 });

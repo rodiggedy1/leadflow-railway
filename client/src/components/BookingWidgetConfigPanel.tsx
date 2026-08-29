@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CheckCircle2, ChevronDown, ChevronUp, Eye, Loader2, Plus, RotateCcw, Save, Send, Sparkles, Trash2 } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Eye, Loader2, Lock, Plus, RotateCcw, Save, Send, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -99,6 +99,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [composerValue, setComposerValue] = useState("");
   const [composerError, setComposerError] = useState("");
+  const [savePaymentDetails, setSavePaymentDetails] = useState(false);
   const conversationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -178,6 +179,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setCurrentQuestionIndex(0);
     setComposerValue("");
     setComposerError("");
+    setSavePaymentDetails(false);
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
 
@@ -501,11 +503,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </Card>
 
           <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Demo payment and completion</CardTitle><CardDescription>Configure the simulated steps after the branded result.</CardDescription></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Demo payment area and completion</CardTitle><CardDescription>Configure the visual payment mock shown after the branded result. It never connects to Stripe or processes a payment.</CardDescription></CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-1.5"><Label htmlFor="payment-confirmation">Payment confirmation</Label><Textarea id="payment-confirmation" className="min-h-20 bg-white border-gray-200 text-sm" value={config.paymentConfirmationTemplate} onChange={(event) => update("paymentConfirmationTemplate", event.target.value)} /><p className="text-xs text-gray-400">Tokens: <code>{"{cardBrand}"}</code> and <code>{"{last4}"}</code>.</p></div>
+              <div className="space-y-1.5"><Label htmlFor="payment-confirmation">Payment heading</Label><Textarea id="payment-confirmation" className="min-h-20 bg-white border-gray-200 text-sm" value={config.paymentConfirmationTemplate} onChange={(event) => update("paymentConfirmationTemplate", event.target.value)} /><p className="text-xs text-gray-400">Displayed above the mock card fields.</p></div>
               <div className="grid grid-cols-2 gap-2"><Input aria-label="Demo card brand" className={fieldClass} value={config.demoCardBrand} onChange={(event) => update("demoCardBrand", event.target.value)} /><Input aria-label="Demo card last four" className={fieldClass} value={config.demoCardLast4} onChange={(event) => update("demoCardLast4", event.target.value)} /></div>
-              <Input aria-label="Confirm booking button" className={fieldClass} value={config.confirmButtonLabel} onChange={(event) => update("confirmButtonLabel", event.target.value)} />
+              <div className="space-y-1.5"><Input aria-label="Confirm booking button" className={fieldClass} value={config.confirmButtonLabel} onChange={(event) => update("confirmButtonLabel", event.target.value)} /><p className="text-xs text-gray-400">Use <code>{"${price}"}</code> for the demo price.</p></div>
               <div className="grid grid-cols-2 gap-2"><Input aria-label="Confirmed label" className={fieldClass} value={config.confirmedEyebrow} onChange={(event) => update("confirmedEyebrow", event.target.value)} /><Input aria-label="Confirmed title" className={fieldClass} value={config.confirmedTitle} onChange={(event) => update("confirmedTitle", event.target.value)} /></div>
               <Textarea aria-label="Confirmed schedule template" className="min-h-20 bg-white border-gray-200 text-sm" value={config.confirmedScheduleTemplate} onChange={(event) => update("confirmedScheduleTemplate", event.target.value)} />
               <Input aria-label="Demo payment notice" className={fieldClass} value={config.demoPaymentNotice} onChange={(event) => update("demoPaymentNotice", event.target.value)} />
@@ -621,10 +623,55 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                     </div>
                   )}
 
-                  {reached("confirm") && <DemoBubble>{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</DemoBubble>}
-                  {step === "confirm" && <div><DemoChip onClick={() => setStep("complete")}>{config.confirmButtonLabel}</DemoChip></div>}
+                  {reached("confirm") && (
+                    <div className="max-w-[94%] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                      <div className="border-b border-gray-100 bg-gradient-to-br from-white to-indigo-50/70 p-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-2xl font-bold">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div>
+                            <div className="mt-1 text-sm text-gray-500">Review your cleaning, then preview the payment step.</div>
+                          </div>
+                          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-indigo-700">Demo checkout</span>
+                        </div>
+                        <div className="mt-5 space-y-3 rounded-xl border border-gray-200 bg-white/90 p-4 text-sm">
+                          <div><div className="font-semibold">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-gray-500">{service.name} · {detailLine}</div></div>
+                          <div className="border-t border-gray-100 pt-3 text-gray-500">{demo.address}</div>
+                          <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-base"><span className="font-medium text-gray-600">Total</span><strong className="text-xl">${service.price}</strong></div>
+                        </div>
+                      </div>
 
-                  {step === "complete" && <DemoBubble customer color={config.customerBubbleColor}>{config.confirmButtonLabel}</DemoBubble>}
+                      <div className="p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-bold">Payment</div>
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500"><Lock className="h-3.5 w-3.5" /> Stripe-style payment preview</div>
+                        </div>
+                        <p className="mt-1 text-xs text-amber-700">Mock fields only. Do not enter real card information.</p>
+
+                        <div className="mt-4 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                          <div role="textbox" aria-readonly="true" aria-label="Demo card number" tabIndex={0} className="border-b border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                            <div className="text-[11px] font-medium text-gray-500">Card number</div>
+                            <div className="mt-1 flex items-center justify-between gap-3 font-mono text-sm tracking-wide"><span>4242 4242 4242 4242</span><span className="flex items-center gap-1.5 font-sans text-xs font-bold uppercase text-indigo-700"><CreditCard className="h-4 w-4" /> {config.demoCardBrand}</span></div>
+                          </div>
+                          <div className="grid grid-cols-2">
+                            <div role="textbox" aria-readonly="true" aria-label="Demo card expiry" tabIndex={0} className="px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-200"><div className="text-[11px] font-medium text-gray-500">MM / YY</div><div className="mt-1 font-mono text-sm">12 / 34</div></div>
+                            <div role="textbox" aria-readonly="true" aria-label="Demo card security code" tabIndex={0} className="border-l border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-200"><div className="text-[11px] font-medium text-gray-500">CVC</div><div className="mt-1 flex items-center justify-between font-mono text-sm"><span>123</span><Lock className="h-3.5 w-3.5 text-gray-400" /></div></div>
+                          </div>
+                        </div>
+
+                        <div role="textbox" aria-readonly="true" aria-label="Demo name on card" tabIndex={0} className="mt-3 rounded-xl border border-gray-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-200"><div className="text-[11px] font-medium text-gray-500">Name on card</div><div className="mt-1 text-sm">{demo.fullName}</div></div>
+
+                        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-gray-50 p-3 text-sm text-gray-700">
+                          <input type="checkbox" checked={savePaymentDetails} onChange={(event) => setSavePaymentDetails(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-indigo-600" />
+                          <span>Save my payment details for faster bookings next time <span className="text-xs text-gray-400">(demo only)</span></span>
+                        </label>
+
+                        <p className="mt-4 text-xs leading-5 text-gray-500">{config.demoPaymentNotice}</p>
+                        <button type="button" onClick={() => step === "confirm" && setStep("complete")} disabled={step !== "confirm"} className="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-default disabled:bg-indigo-300">{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {step === "complete" && <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</DemoBubble>}
                   {step === "complete" && (
                     <div className="max-w-[94%] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                       <div className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-600">{config.confirmedEyebrow}</div>
