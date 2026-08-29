@@ -142,7 +142,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [composerError, setComposerError] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedTime, setSelectedTime] = useState("");
-  const [summaryOpen, setSummaryOpen] = useState(true);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [savePaymentDetails, setSavePaymentDetails] = useState(false);
   const conversationRef = useRef<HTMLDivElement>(null);
   const activeStepRef = useRef<HTMLDivElement>(null);
@@ -166,15 +166,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
         container.scrollTo({ top: Math.max(activeCard.offsetTop - 12, 0), behavior: "auto" });
         return;
       }
-      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
     });
   }, [step, currentQuestionIndex]);
-
-  useEffect(() => {
-    if (step !== "checking") return;
-    const timer = window.setTimeout(() => setStep("quote"), 900);
-    return () => window.clearTimeout(timer);
-  }, [step]);
 
   const serialized = JSON.stringify(config);
   const isDirty = serialized !== JSON.stringify(savedConfig);
@@ -239,7 +233,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setComposerError("");
     setSelectedDate(undefined);
     setSelectedTime("");
-    setSummaryOpen(true);
+    setSummaryOpen(false);
     setSavePaymentDetails(false);
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
@@ -383,7 +377,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setDemo((current) => ({ ...current, address: trimmed }));
     setComposerValue("");
     setComposerError("");
-    setStep("checking");
+    setStep("quote");
   };
 
   const submitPhone = () => {

@@ -12,7 +12,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('submitIntakeField("fullName", "phone")');
     expect(componentSource).toContain('if (step === "phone") return submitPhone()');
     expect(componentSource).toContain('submitIntakeField("email", "address")');
-    expect(componentSource).toContain('setStep("checking")');
+    expect(componentSource).toContain('setStep("quote")');
   });
 
   it("requires both combined room counts, then preserves custom questions and editable multi-select extras", () => {
@@ -24,10 +24,10 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("continueMultipleQuestion");
   });
 
-  it("shows the editable availability transition before revealing the quote", () => {
-    expect(componentSource).toContain('if (step !== "checking") return');
-    expect(componentSource).toContain('window.setTimeout(() => setStep("quote"), 900)');
+  it("shows the editable availability transition while revealing the result without a timer-dependent state", () => {
     expect(componentSource).toContain("config.availabilityCheckMessage");
+    expect(componentSource).toContain('setStep("quote")');
+    expect(componentSource).not.toContain('window.setTimeout(() => setStep("quote")');
   });
 
   it("uses the shared inline calendar and explicit demo time slots instead of typed schedule submission", () => {
@@ -75,6 +75,9 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("xl:h-[clamp(420px,calc(100dvh-400px),700px)]");
     expect(componentSource).toContain("xl:h-auto xl:min-h-0 xl:flex-1");
     expect(componentSource).toContain("overscroll-contain");
+    expect(componentSource).toContain("const [summaryOpen, setSummaryOpen] = useState(false)");
+    expect(componentSource).toContain('behavior: "auto"');
+    expect(componentSource).not.toContain('behavior: "smooth"');
     expect(componentSource).toContain('className="shrink-0 border-t border-[#e4e5e7]');
   });
 
