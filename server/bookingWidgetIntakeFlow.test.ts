@@ -8,7 +8,7 @@ describe("booking widget customer-intake flow contract", () => {
   it("runs combined details, schedule, extras, contact, address, and availability checking before the priced result", () => {
     expect(componentSource).toContain('["request", "serviceDetails", "questions", "schedule", "extras", "fullName", "phone", "email", "address", "checking", "quote", "confirm", "complete"]');
     expect(componentSource).toContain('if (step === "serviceDetails") return submitCombinedServiceDetails()');
-    expect(componentSource).toContain('submitIntakeField("schedule", "extras")');
+    expect(componentSource).toContain("confirmScheduleSelection");
     expect(componentSource).toContain('submitIntakeField("fullName", "phone")');
     expect(componentSource).toContain('if (step === "phone") return submitPhone()');
     expect(componentSource).toContain('submitIntakeField("email", "address")');
@@ -30,6 +30,15 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("config.availabilityCheckMessage");
   });
 
+  it("uses the shared inline calendar and explicit demo time slots instead of typed schedule submission", () => {
+    expect(componentSource).toContain('import { Calendar } from "@/components/ui/calendar"');
+    expect(componentSource).toContain('mode="single"');
+    expect(componentSource).toContain("DEMO_TIME_SLOTS.map");
+    expect(componentSource).toContain("disabled={!selectedDate || !selectedTime}");
+    expect(componentSource).toContain("Choose a date and time above");
+    expect(componentSource).not.toContain('submitIntakeField("schedule", "extras")');
+  });
+
   it("keeps customer-entered contact data local to the interactive preview", () => {
     expect(componentSource).toContain("leadCaptured: true");
     expect(componentSource).not.toContain("createBooking");
@@ -41,7 +50,10 @@ describe("booking widget customer-intake flow contract", () => {
   it("shows the branded result and sends its Book button only to the existing demo payment step", () => {
     expect(componentSource).toContain("config.resultTitle");
     expect(componentSource).toContain("config.resultTrustPoints.map");
-    expect(componentSource).toContain('setStep("confirm")');
+    expect(componentSource).toContain('{step === "quote" && (');
+    expect(componentSource).toContain('onClick={() => setStep("confirm")}');
+    expect(componentSource).toContain('{step === "confirm" && (');
+    expect(componentSource).toContain("formatBookingButtonLabel(config.bookingButtonLabel, service.price)");
     expect(componentSource).not.toContain("service.rating");
     expect(componentSource).not.toContain("service.completedJobs");
   });

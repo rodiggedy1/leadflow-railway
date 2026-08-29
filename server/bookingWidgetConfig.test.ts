@@ -6,6 +6,7 @@ import {
   buildInferredQuestionAnswers,
   firstNameFromFullName,
   formatBookingButtonLabel,
+  formatDemoScheduleSelection,
   formatScheduleQuestion,
   moveListItem,
   parseBookingWidgetDraft,
@@ -199,6 +200,7 @@ describe("booking widget interactive demo configuration", () => {
   it("formats price and confirmation templates deterministically", () => {
     expect(formatBookingButtonLabel("Book for ${price} →", "405")).toBe("Book for $405 →");
     expect(formatBookingButtonLabel("Confirm & book — ${price}", "405")).toBe("Confirm & book — $405");
+    expect(formatDemoScheduleSelection(new Date(2026, 5, 5, 12), "9:00 AM")).toBe("June 5 · 9:00 AM");
     expect(renderBookingWidgetTemplate("Saved {cardBrand} ending in {last4}", { cardBrand: "Visa", last4: "4242" })).toBe("Saved Visa ending in 4242");
   });
 
