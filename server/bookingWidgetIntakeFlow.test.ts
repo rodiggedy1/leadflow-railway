@@ -5,18 +5,23 @@ import path from "node:path";
 const componentSource = fs.readFileSync(path.resolve("client/src/components/BookingWidgetConfigPanel.tsx"), "utf8");
 
 describe("booking widget customer-intake flow contract", () => {
-  it("runs contact collection and availability checking before the priced opening", () => {
-    expect(componentSource).toContain('["request", "questions", "fullName", "phone", "email", "schedule", "checking", "quote", "address", "confirm", "complete"]');
+  it("runs combined details, schedule, extras, contact, address, and availability checking before the priced result", () => {
+    expect(componentSource).toContain('["request", "serviceDetails", "questions", "schedule", "extras", "fullName", "phone", "email", "address", "checking", "quote", "confirm", "complete"]');
+    expect(componentSource).toContain('if (step === "serviceDetails") return submitCombinedServiceDetails()');
+    expect(componentSource).toContain('submitIntakeField("schedule", "extras")');
     expect(componentSource).toContain('submitIntakeField("fullName", "phone")');
-    expect(componentSource).toContain('submitIntakeField("phone", "email")');
-    expect(componentSource).toContain('submitIntakeField("email", "schedule")');
-    expect(componentSource).toContain('submitIntakeField("schedule", "checking")');
+    expect(componentSource).toContain('if (step === "phone") return submitPhone()');
+    expect(componentSource).toContain('submitIntakeField("email", "address")');
+    expect(componentSource).toContain('setStep("checking")');
   });
 
-  it("skips only inferred service questions and preserves configured extras and custom questions", () => {
+  it("requires both combined room counts, then preserves custom questions and editable multi-select extras", () => {
     expect(componentSource).toContain("buildInferredQuestionAnswers(resolved, config.questions)");
-    expect(componentSource).toContain("nextUnansweredQuestionIndex");
-    expect(componentSource).toContain("demo.inferredQuestionIds.includes(question.id)");
+    expect(componentSource).toContain("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
+    expect(componentSource).toContain("nextUnansweredCustomQuestionIndex");
+    expect(componentSource).toContain('question.role !== "custom"');
+    expect(componentSource).toContain('config.questions.find((question) => question.role === "extras")');
+    expect(componentSource).toContain("continueMultipleQuestion");
   });
 
   it("shows the editable availability transition before revealing the quote", () => {
@@ -26,8 +31,18 @@ describe("booking widget customer-intake flow contract", () => {
   });
 
   it("keeps customer-entered contact data local to the interactive preview", () => {
+    expect(componentSource).toContain("leadCaptured: true");
     expect(componentSource).not.toContain("createBooking");
+    expect(componentSource).not.toContain("createLead");
     expect(componentSource).not.toContain("sendSms");
     expect(componentSource).not.toContain("processPayment");
+  });
+
+  it("shows the branded result and sends its Book button only to the existing demo payment step", () => {
+    expect(componentSource).toContain("config.resultTitle");
+    expect(componentSource).toContain("config.resultTrustPoints.map");
+    expect(componentSource).toContain('setStep("confirm")');
+    expect(componentSource).not.toContain("service.rating");
+    expect(componentSource).not.toContain("service.completedJobs");
   });
 });
