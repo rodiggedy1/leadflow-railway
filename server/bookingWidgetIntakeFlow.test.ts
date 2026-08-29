@@ -41,14 +41,38 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain('{ kind: "video" }');
   });
 
-  it("requires both combined room counts and preserves custom questions and editable multi-select extras", () => {
+  it("requires supported combined room counts and preserves custom questions with fixed multi-select extras", () => {
     expect(componentSource).toContain("buildInferredQuestionAnswers(resolved, config.questions)");
     expect(componentSource).toContain("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
+    expect(componentSource).toContain("Enter a bedroom count from 0 through 7.");
     expect(componentSource).toContain("nextUnansweredCustomQuestionIndex");
     expect(componentSource).toContain('config.questions[index].role === "custom"');
     expect(componentSource).toContain('config.questions.find((question) => question.role === "extras")');
     expect(componentSource).toContain("continueMultipleQuestion");
     expect(componentSource).toContain("continueCustomQuestion");
+  });
+
+  it("uses the fixed authoritative extras catalog with inline quantity steppers", () => {
+    expect(componentSource).toContain("BOOKING_WIDGET_PRICED_EXTRAS");
+    expect(componentSource).toContain("findBookingWidgetPricedExtra");
+    expect(componentSource).toContain("extraQuantities: Record<string, number>");
+    expect(componentSource).toContain("updateExtraQuantity");
+    expect(componentSource).toContain("Decrease ${pricedExtra.label} quantity");
+    expect(componentSource).toContain("Increase ${pricedExtra.label} quantity");
+    expect(componentSource).toContain("Math.max(1, Math.floor(nextQuantity))");
+    expect(componentSource).toContain("Fixed authoritative catalog");
+    expect(componentSource).toContain('question.role === "extras" ?');
+  });
+
+  it("derives one calculated quote and reuses it in result, checkout, confirmation, and summary", () => {
+    expect(componentSource).toContain("calculateBookingWidgetPrice");
+    expect(componentSource).toContain("const quotePrice = String(priceBreakdown?.total ?? 0)");
+    expect(componentSource).toContain("formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)");
+    expect(componentSource).toContain("formatBookingButtonLabel(config.confirmButtonLabel, quotePrice)");
+    expect(componentSource).toContain("Authoritative pricing");
+    expect(componentSource).not.toContain('aria-label={`${item.id} preview price`}');
+    expect(componentSource).not.toContain("formatBookingButtonLabel(config.bookingButtonLabel, service.price)");
+    expect(componentSource).not.toContain("formatBookingButtonLabel(config.confirmButtonLabel, service.price)");
   });
 
   it("keeps the editable availability message while revealing the quote without a timer-dependent terminal state", () => {
@@ -74,6 +98,8 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("createLead");
     expect(componentSource).not.toContain("sendSms");
     expect(componentSource).not.toContain("processPayment");
+    expect(componentSource).not.toContain("savePricing");
+    expect(componentSource).not.toContain("updatePricing");
   });
 
   it("uses one append-only ordered history data structure for completed messages and cards", () => {

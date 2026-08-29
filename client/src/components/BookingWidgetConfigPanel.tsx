@@ -8,13 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  BOOKING_WIDGET_BATHROOM_UNIT_PRICE,
+  BOOKING_WIDGET_BEDROOM_BASE_PRICES,
+  BOOKING_WIDGET_PRICED_EXTRAS,
   DEFAULT_BOOKING_WIDGET_DRAFT,
   buildInferredQuestionAnswers,
   buildDemoDetailLine,
+  calculateBookingWidgetPrice,
+  findBookingWidgetPricedExtra,
   firstNameFromFullName,
+  formatBookingWidgetExtraSelection,
   formatBookingButtonLabel,
   formatDemoScheduleSelection,
   formatScheduleQuestion,
+  getBookingWidgetRoomCount,
   isNoSelectionChoice,
   moveListItem,
   parseBookingWidgetDraft,
@@ -46,8 +53,11 @@ type DemoSession = {
   prompt: string;
   serviceDetailsAnswer: string;
   serviceId: BookingWidgetServiceId;
+  bedrooms?: number;
+  bathrooms?: number;
   fallbackBedrooms: number;
   answers: Record<string, string[]>;
+  extraQuantities: Record<string, number>;
   inferredQuestionIds: string[];
   requestedDay: string;
   fullName: string;
@@ -92,8 +102,9 @@ const emptySession: DemoSession = {
   prompt: "",
   serviceDetailsAnswer: "",
   serviceId: "deep",
-  fallbackBedrooms: 3,
+  fallbackBedrooms: 0,
   answers: {},
+  extraQuantities: {},
   inferredQuestionIds: [],
   requestedDay: "",
   fullName: "",
@@ -263,9 +274,26 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const serialized = JSON.stringify(config);
   const isDirty = serialized !== JSON.stringify(savedConfig);
   const service = config.services.find((item) => item.id === demo.serviceId) ?? config.services[1];
-  const detailLine = buildDemoDetailLine(demo.fallbackBedrooms, config.questions, demo.answers);
   const currentQuestion = config.questions[currentQuestionIndex];
   const extrasQuestion = config.questions.find((question) => question.role === "extras");
+  const selectedExtras = extrasQuestion ? (demo.answers[extrasQuestion.id] ?? []).filter((answer) => !isNoSelectionChoice(answer)) : [];
+  const bedroomCount = demo.bedrooms ?? getBookingWidgetRoomCount("bedrooms", config.questions, demo.answers);
+  const bathroomCount = demo.bathrooms ?? getBookingWidgetRoomCount("bathrooms", config.questions, demo.answers);
+  const priceBreakdown = (() => {
+    try {
+      return calculateBookingWidgetPrice({
+        serviceId: demo.serviceId,
+        bedrooms: bedroomCount as number,
+        bathrooms: bathroomCount as number,
+        selectedExtras,
+        extraQuantities: demo.extraQuantities,
+      });
+    } catch {
+      return null;
+    }
+  })();
+  const quotePrice = String(priceBreakdown?.total ?? 0);
+  const detailLine = buildDemoDetailLine(demo.fallbackBedrooms, config.questions, demo.answers, demo.extraQuantities);
 
   const appendHistory = (...items: DemoHistoryItem[]) => {
     const entries = items.map((item) => ({ ...item, id: ++historyIdRef.current }));
@@ -359,6 +387,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     const inferred = buildInferredQuestionAnswers(resolved, config.questions);
     const hasBedrooms = config.questions.every((question) => question.role !== "bedrooms" || (inferred.answers[question.id] ?? []).length > 0);
     const hasBathrooms = config.questions.every((question) => question.role !== "bathrooms" || (inferred.answers[question.id] ?? []).length > 0);
+    const hasUnsupportedBedrooms = resolved.bedrooms !== undefined && BOOKING_WIDGET_BEDROOM_BASE_PRICES[resolved.bedrooms] === undefined;
     appendHistory(
       { kind: "message", sender: "assistant", text: config.greeting },
       { kind: "message", sender: "customer", text: trimmed },
@@ -367,16 +396,19 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       ...emptySession,
       prompt: trimmed,
       serviceId: resolved.serviceId,
-      fallbackBedrooms: resolved.bedrooms ?? 3,
+      bedrooms: resolved.bedrooms,
+      bathrooms: resolved.bathrooms,
+      fallbackBedrooms: resolved.bedrooms ?? 0,
       answers: inferred.answers,
       inferredQuestionIds: inferred.inferredQuestionIds,
       requestedDay: resolved.requestedDay ?? "",
     });
     setComposerValue("");
-    setComposerError("");
+    setComposerError(hasUnsupportedBedrooms ? "Enter a bedroom count from 0 through 7." : "");
     setSelectedDate(suggestedDateForRequest(resolved.requestedDay, demoToday));
     setSelectedTime("");
-    if (hasBedrooms && hasBathrooms) nextAfterServiceDetails(inferred.answers);
+    if (hasUnsupportedBedrooms) setStep("serviceDetails");
+    else if (hasBedrooms && hasBathrooms) nextAfterServiceDetails(inferred.answers);
     else setStep("serviceDetails");
   };
 
@@ -390,11 +422,15 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
   const submitCombinedServiceDetails = () => {
     const resolved = resolveDemoRequest(composerValue);
+    if (resolved.bedrooms !== undefined && BOOKING_WIDGET_BEDROOM_BASE_PRICES[resolved.bedrooms] === undefined) {
+      setComposerError("Enter a bedroom count from 0 through 7.");
+      return;
+    }
     const inferred = buildInferredQuestionAnswers(resolved, config.questions);
     const nextAnswers = { ...demo.answers, ...inferred.answers };
     const hasBedrooms = config.questions.every((question) => question.role !== "bedrooms" || (nextAnswers[question.id] ?? []).length > 0);
     const hasBathrooms = config.questions.every((question) => question.role !== "bathrooms" || (nextAnswers[question.id] ?? []).length > 0);
-    if (!hasBedrooms || !hasBathrooms) {
+    if (!hasBedrooms || !hasBathrooms || resolved.bedrooms === undefined || resolved.bathrooms === undefined) {
       setComposerError("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
       return;
     }
@@ -405,6 +441,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setDemo((current) => ({
       ...current,
       serviceDetailsAnswer: composerValue.trim(),
+      bedrooms: resolved.bedrooms,
+      bathrooms: resolved.bathrooms,
+      fallbackBedrooms: resolved.bedrooms,
       answers: nextAnswers,
       inferredQuestionIds: [...new Set([...current.inferredQuestionIds, ...inferred.inferredQuestionIds])],
     }));
@@ -439,22 +478,39 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const selectExtrasAnswer = (answer: string) => {
     const trimmed = answer.trim();
     if (!trimmed || !extrasQuestion) return;
+    const canonicalChoice = isNoSelectionChoice(trimmed)
+      ? "Nothing extra"
+      : findBookingWidgetPricedExtra(trimmed)?.label;
+    if (!canonicalChoice) {
+      setComposerError("Choose one of the priced extras shown above.");
+      return;
+    }
     if (extrasQuestion.selectionMode === "multiple") {
-      setDemo((current) => ({
-        ...current,
-        answers: {
-          ...current.answers,
-          [extrasQuestion.id]: toggleMultiSelectChoice(current.answers[extrasQuestion.id] ?? [], trimmed),
-        },
-      }));
+      setDemo((current) => {
+        const nextSelected = toggleMultiSelectChoice(current.answers[extrasQuestion.id] ?? [], canonicalChoice);
+        const selectedExtra = findBookingWidgetPricedExtra(canonicalChoice);
+        const nextQuantities = { ...current.extraQuantities };
+        if (isNoSelectionChoice(canonicalChoice)) {
+          for (const key of Object.keys(nextQuantities)) delete nextQuantities[key];
+        } else if (selectedExtra?.quantityUnit) {
+          if (nextSelected.some((choice) => choice.toLowerCase() === canonicalChoice.toLowerCase())) nextQuantities[selectedExtra.id] ??= 1;
+          else delete nextQuantities[selectedExtra.id];
+        }
+        return {
+          ...current,
+          answers: { ...current.answers, [extrasQuestion.id]: nextSelected },
+          extraQuantities: nextQuantities,
+        };
+      });
       setComposerValue("");
+      setComposerError("");
       return;
     }
     appendHistory(
       { kind: "message", sender: "assistant", text: extrasQuestion.prompt },
-      { kind: "message", sender: "customer", text: trimmed },
+      { kind: "message", sender: "customer", text: canonicalChoice },
     );
-    setDemo((current) => ({ ...current, answers: { ...current.answers, [extrasQuestion.id]: [trimmed] } }));
+    setDemo((current) => ({ ...current, answers: { ...current.answers, [extrasQuestion.id]: [canonicalChoice] } }));
     setComposerValue("");
     setComposerError("");
     setStep("fullName");
@@ -464,9 +520,16 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     if (!extrasQuestion || (demo.answers[extrasQuestion.id] ?? []).length === 0) return;
     appendHistory(
       { kind: "message", sender: "assistant", text: extrasQuestion.prompt },
-      { kind: "message", sender: "customer", text: (demo.answers[extrasQuestion.id] ?? []).join(", ") },
+      { kind: "message", sender: "customer", text: (demo.answers[extrasQuestion.id] ?? []).map((choice) => formatBookingWidgetExtraSelection(choice, demo.extraQuantities)).join(", ") },
     );
     setStep("fullName");
+  };
+
+  const updateExtraQuantity = (extraId: string, nextQuantity: number) => {
+    setDemo((current) => ({
+      ...current,
+      extraQuantities: { ...current.extraQuantities, [extraId]: Math.max(1, Math.floor(nextQuantity)) },
+    }));
   };
 
   const continueCustomQuestion = () => {
@@ -588,7 +651,6 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
             : config.inputPlaceholder;
   const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step);
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
-  const selectedExtras = extrasQuestion ? (demo.answers[extrasQuestion.id] ?? []).filter((answer) => !isNoSelectionChoice(answer)) : [];
   const roomSummary = detailLine.split(" · ").slice(0, 2).join(" · ");
   const showSummary = !["request", "serviceDetails", "questions"].includes(step);
   const openCheckout = () => setStep("confirm");
@@ -673,7 +735,26 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
         <div className="flex flex-col gap-4">
           <DemoBubble>{extrasQuestion.prompt}</DemoBubble>
           <div className="ml-10 flex flex-col gap-3">
-            <div className="flex flex-wrap gap-2">{extrasQuestion.choices.map((choice) => <DemoChip key={choice} onClick={() => selectExtrasAnswer(choice)} selected={answer.some((item) => item.toLowerCase() === choice.trim().toLowerCase())} color={config.customerBubbleColor}>{choice}</DemoChip>)}</div>
+            <div className="flex flex-wrap items-start gap-2">{extrasQuestion.choices.map((choice) => {
+              const pricedExtra = findBookingWidgetPricedExtra(choice);
+              const selected = answer.some((item) => item.toLowerCase() === choice.trim().toLowerCase());
+              const quantity = pricedExtra?.quantityUnit ? demo.extraQuantities[pricedExtra.id] ?? 1 : undefined;
+              const unitSuffix = pricedExtra?.quantityUnit ? `/${pricedExtra.quantityUnit}` : "";
+              return (
+                <div key={choice} className="flex flex-col items-start gap-1.5">
+                  <DemoChip onClick={() => selectExtrasAnswer(choice)} selected={selected} color={config.customerBubbleColor}>
+                    {pricedExtra ? `${pricedExtra.label} · $${pricedExtra.unitPrice}${unitSuffix}` : choice}
+                  </DemoChip>
+                  {selected && pricedExtra?.quantityUnit && (
+                    <div className="flex items-center gap-2 rounded-full border border-[#ffd2c8] bg-white px-2 py-1 shadow-sm">
+                      <button type="button" aria-label={`Decrease ${pricedExtra.label} quantity`} onClick={() => updateExtraQuantity(pricedExtra.id, (quantity ?? 1) - 1)} disabled={quantity === 1} className="grid h-6 w-6 place-items-center rounded-full text-sm font-bold text-[#d95740] transition hover:bg-[#fff1ed] disabled:cursor-not-allowed disabled:opacity-35">−</button>
+                      <span className="min-w-[76px] text-center text-[10px] font-bold text-[#5f6168]">{quantity} {quantity === 1 ? pricedExtra.quantityUnit : `${pricedExtra.quantityUnit}s`}</span>
+                      <button type="button" aria-label={`Increase ${pricedExtra.label} quantity`} onClick={() => updateExtraQuantity(pricedExtra.id, (quantity ?? 1) + 1)} className="grid h-6 w-6 place-items-center rounded-full text-sm font-bold text-[#d95740] transition hover:bg-[#fff1ed]">+</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}</div>
             {extrasQuestion.selectionMode === "multiple" && <button type="button" onClick={continueMultipleQuestion} disabled={answer.length === 0} className="w-fit rounded-xl bg-[#ff684c] px-5 py-2.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-45">Continue</button>}
           </div>
         </div>
@@ -694,8 +775,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
           <div className="py-3"><div className="text-[12px] font-extrabold text-[#3a3c41]">{service.name}</div><div className="mt-1 text-[10px] leading-4 text-[#6f7279]">{detailLine}</div></div>
           <div className="space-y-1.5 border-t border-[#e4e5e7] py-3">{config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2 text-[10px] text-[#5f6168]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#23b982]" /><span>{point}</span></div>)}</div>
-          <div className="flex items-center justify-between border-t border-[#e4e5e7] py-3 text-[12px] text-[#5f6168]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${service.price || "0"}</strong></div>
-          <button type="button" onClick={openCheckout} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e]"><CreditCard className="h-4 w-4" />{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}<ArrowRight className="h-4 w-4" /></button>
+          <div className="flex items-center justify-between border-t border-[#e4e5e7] py-3 text-[12px] text-[#5f6168]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${quotePrice}</strong></div>
+          <button type="button" onClick={openCheckout} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e]"><CreditCard className="h-4 w-4" />{formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
           <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />Visual demo only · no charge will be made</p>
         </div>
       );
@@ -703,15 +784,15 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     if (step === "confirm") {
       return (
         <div ref={checkoutRef} tabIndex={-1} aria-label="Demo checkout" className="ml-10 max-w-[82%] overflow-hidden rounded-[20px] border border-[#e4e5e7] bg-white shadow-[0_14px_36px_rgba(22,20,33,0.08)] outline-none focus:ring-2 focus:ring-[#ff684c]/30">
-          <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-[20px] font-extrabold text-[#3a3c41]">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div><div className="mt-1 text-[11px] text-[#6f7279]">Review your cleaning, then preview payment.</div></div><span className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Demo checkout</span></div><div className="mt-4 space-y-3 rounded-xl border border-[#e4e5e7] bg-white p-4 text-[11px]"><div><div className="font-extrabold text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-[#6f7279]">{service.name} · {detailLine}</div></div><div className="border-t border-[#e4e5e7] pt-3 text-[#6f7279]">{demo.address}</div><div className="flex items-center justify-between border-t border-[#e4e5e7] pt-3"><span className="font-medium text-[#6f7279]">Total</span><strong className="text-[19px] text-[#3a3c41]">${service.price}</strong></div></div></div>
-          <div className="p-5"><div className="flex items-center justify-between gap-3"><div className="text-[13px] font-extrabold text-[#3a3c41]">Payment</div><div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6f7279]"><Lock className="h-3.5 w-3.5" /> Stripe-style payment preview</div></div><p className="mt-1 text-[10px] text-[#b46a29]">Mock fields only. Do not enter real card information.</p><div className="mt-4 overflow-hidden rounded-xl border border-[#d7d8dc] bg-white shadow-sm"><div role="textbox" aria-readonly="true" aria-label="Demo card number" tabIndex={0} className="border-b border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Card number</div><div className="mt-1 flex items-center justify-between gap-3 font-mono text-[12px] tracking-wide"><span>4242 4242 4242 4242</span><span className="flex items-center gap-1.5 font-sans text-[10px] font-extrabold uppercase text-[#e9573e]"><CreditCard className="h-4 w-4" /> {config.demoCardBrand}</span></div></div><div className="grid grid-cols-2"><div role="textbox" aria-readonly="true" aria-label="Demo card expiry" tabIndex={0} className="px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">MM / YY</div><div className="mt-1 font-mono text-[12px]">12 / 34</div></div><div role="textbox" aria-readonly="true" aria-label="Demo card security code" tabIndex={0} className="border-l border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">CVC</div><div className="mt-1 flex items-center justify-between font-mono text-[12px]"><span>123</span><Lock className="h-3.5 w-3.5 text-[#9a9ba5]" /></div></div></div></div><div role="textbox" aria-readonly="true" aria-label="Demo name on card" tabIndex={0} className="mt-3 rounded-xl border border-[#d7d8dc] bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Name on card</div><div className="mt-1 text-[12px]">{demo.fullName}</div></div><label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-[#f5f5f3] p-3 text-[11px] text-[#5f6168]"><input type="checkbox" checked={savePaymentDetails} onChange={(event) => setSavePaymentDetails(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-[#d7d8dc] accent-[#ff684c]" /><span>Save my payment details for faster bookings next time <span className="text-[9px] text-[#9a9ba5]">(demo only)</span></span></label><p className="mt-4 text-[10px] leading-5 text-[#6f7279]">{config.demoPaymentNotice}</p><button type="button" onClick={completeCheckout} className="mt-4 w-full rounded-xl bg-[#ff684c] px-4 py-3.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e]">{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</button></div>
+          <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-[20px] font-extrabold text-[#3a3c41]">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div><div className="mt-1 text-[11px] text-[#6f7279]">Review your cleaning, then preview payment.</div></div><span className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Demo checkout</span></div><div className="mt-4 space-y-3 rounded-xl border border-[#e4e5e7] bg-white p-4 text-[11px]"><div><div className="font-extrabold text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-[#6f7279]">{service.name} · {detailLine}</div></div><div className="border-t border-[#e4e5e7] pt-3 text-[#6f7279]">{demo.address}</div><div className="flex items-center justify-between border-t border-[#e4e5e7] pt-3"><span className="font-medium text-[#6f7279]">Total</span><strong className="text-[19px] text-[#3a3c41]">${quotePrice}</strong></div></div></div>
+          <div className="p-5"><div className="flex items-center justify-between gap-3"><div className="text-[13px] font-extrabold text-[#3a3c41]">Payment</div><div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6f7279]"><Lock className="h-3.5 w-3.5" /> Stripe-style payment preview</div></div><p className="mt-1 text-[10px] text-[#b46a29]">Mock fields only. Do not enter real card information.</p><div className="mt-4 overflow-hidden rounded-xl border border-[#d7d8dc] bg-white shadow-sm"><div role="textbox" aria-readonly="true" aria-label="Demo card number" tabIndex={0} className="border-b border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Card number</div><div className="mt-1 flex items-center justify-between gap-3 font-mono text-[12px] tracking-wide"><span>4242 4242 4242 4242</span><span className="flex items-center gap-1.5 font-sans text-[10px] font-extrabold uppercase text-[#e9573e]"><CreditCard className="h-4 w-4" /> {config.demoCardBrand}</span></div></div><div className="grid grid-cols-2"><div role="textbox" aria-readonly="true" aria-label="Demo card expiry" tabIndex={0} className="px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">MM / YY</div><div className="mt-1 font-mono text-[12px]">12 / 34</div></div><div role="textbox" aria-readonly="true" aria-label="Demo card security code" tabIndex={0} className="border-l border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">CVC</div><div className="mt-1 flex items-center justify-between font-mono text-[12px]"><span>123</span><Lock className="h-3.5 w-3.5 text-[#9a9ba5]" /></div></div></div></div><div role="textbox" aria-readonly="true" aria-label="Demo name on card" tabIndex={0} className="mt-3 rounded-xl border border-[#d7d8dc] bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Name on card</div><div className="mt-1 text-[12px]">{demo.fullName}</div></div><label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-[#f5f5f3] p-3 text-[11px] text-[#5f6168]"><input type="checkbox" checked={savePaymentDetails} onChange={(event) => setSavePaymentDetails(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-[#d7d8dc] accent-[#ff684c]" /><span>Save my payment details for faster bookings next time <span className="text-[9px] text-[#9a9ba5]">(demo only)</span></span></label><p className="mt-4 text-[10px] leading-5 text-[#6f7279]">{config.demoPaymentNotice}</p><button type="button" onClick={completeCheckout} className="mt-4 w-full rounded-xl bg-[#ff684c] px-4 py-3.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e]">{formatBookingButtonLabel(config.confirmButtonLabel, quotePrice)}</button></div>
         </div>
       );
     }
     return (
       <div className="flex flex-col gap-4">
-        <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</DemoBubble>
-        <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#168d61]"><CheckCircle2 className="h-4 w-4" />{config.confirmedEyebrow}</div><div className="mt-3 text-[18px] font-extrabold text-[#3a3c41]">{config.confirmedTitle}</div><div className="mt-3 text-[11px] leading-5 text-[#6f7279]">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div><div className="mt-4 space-y-2 rounded-xl border border-[#e4e5e7] p-4 text-[11px]"><div className="flex justify-between gap-4"><span>{service.name}</span><strong>${service.price}</strong></div><div className="flex justify-between gap-4 text-gray-500"><span>Address</span><span className="text-right">{demo.address}</span></div><div className="flex justify-between gap-4 text-gray-500"><span>Payment</span><span>•••• {config.demoCardLast4}</span></div></div><p className="mt-4 text-[10px] text-[#6f7279]">{config.demoPaymentNotice}</p></div>
+        <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, quotePrice)}</DemoBubble>
+        <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#168d61]"><CheckCircle2 className="h-4 w-4" />{config.confirmedEyebrow}</div><div className="mt-3 text-[18px] font-extrabold text-[#3a3c41]">{config.confirmedTitle}</div><div className="mt-3 text-[11px] leading-5 text-[#6f7279]">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div><div className="mt-4 space-y-2 rounded-xl border border-[#e4e5e7] p-4 text-[11px]"><div className="flex justify-between gap-4"><span>{service.name}</span><strong>${quotePrice}</strong></div><div className="flex justify-between gap-4 text-gray-500"><span>Address</span><span className="text-right">{demo.address}</span></div><div className="flex justify-between gap-4 text-gray-500"><span>Payment</span><span>•••• {config.demoCardLast4}</span></div></div><p className="mt-4 text-[10px] text-[#6f7279]">{config.demoPaymentNotice}</p></div>
         <DemoBubble>{config.finalReminder}</DemoBubble>
       </div>
     );
@@ -784,7 +865,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </Card>
 
           <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Questions and choices</CardTitle><CardDescription>Bedrooms and bathrooms are collected together. Their choices still control summary wording; extras and custom questions remain editable.</CardDescription></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Questions and choices</CardTitle><CardDescription>Question wording and custom questions remain editable. Priced extras use the fixed approved catalog below.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               {config.questions.map((question, questionIndex) => (
                 <div key={question.id} className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
@@ -792,21 +873,29 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                     <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Question {questionIndex + 1}</span>
                     <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={questionIndex === 0} onClick={() => moveQuestion(questionIndex, -1)} aria-label={`Move question ${questionIndex + 1} up`}><ChevronUp className="h-4 w-4" /></Button>
                     <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={questionIndex === config.questions.length - 1} onClick={() => moveQuestion(questionIndex, 1)} aria-label={`Move question ${questionIndex + 1} down`}><ChevronDown className="h-4 w-4" /></Button>
-                    <Button type="button" variant="outline" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeQuestion(questionIndex)} aria-label={`Remove question ${questionIndex + 1}`}><Trash2 className="h-4 w-4" /></Button>
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8 text-red-500" disabled={question.role === "extras"} onClick={() => removeQuestion(questionIndex)} aria-label={`Remove question ${questionIndex + 1}`}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                   <div className="grid grid-cols-[1fr_105px_105px] gap-2">
                     <Input aria-label={`Question ${questionIndex + 1} text`} className={fieldClass} value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} />
-                    <select aria-label={`Question ${questionIndex + 1} type`} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs" value={question.role} onChange={(event) => {
+                    <select aria-label={`Question ${questionIndex + 1} type`} disabled={question.role === "extras"} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs disabled:bg-gray-100 disabled:text-gray-500" value={question.role} onChange={(event) => {
                       const role = event.target.value as BookingWidgetQuestionDraft["role"];
                       updateQuestion(questionIndex, { role, selectionMode: role === "extras" ? "multiple" : question.selectionMode });
                     }}>
-                      <option value="bedrooms">Bedrooms</option><option value="bathrooms">Bathrooms</option><option value="extras">Extras</option><option value="custom">Custom</option>
+                      <option value="bedrooms">Bedrooms</option><option value="bathrooms">Bathrooms</option>{question.role === "extras" && <option value="extras">Extras</option>}<option value="custom">Custom</option>
                     </select>
-                    <select aria-label={`Question ${questionIndex + 1} selection mode`} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs" value={question.selectionMode} onChange={(event) => updateQuestion(questionIndex, { selectionMode: event.target.value as BookingWidgetQuestionDraft["selectionMode"] })}>
+                    <select aria-label={`Question ${questionIndex + 1} selection mode`} disabled={question.role === "extras"} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-xs disabled:bg-gray-100 disabled:text-gray-500" value={question.selectionMode} onChange={(event) => updateQuestion(questionIndex, { selectionMode: event.target.value as BookingWidgetQuestionDraft["selectionMode"] })}>
                       <option value="single">Single choice</option><option value="multiple">Multiple choice</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
+                  {question.role === "extras" ? (
+                    <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <div className="text-[11px] font-semibold text-amber-900">Fixed authoritative catalog</div>
+                      <div className="grid gap-1.5 text-xs text-amber-950 sm:grid-cols-2">
+                        <div className="rounded-md bg-white/80 px-2.5 py-2">Nothing extra</div>
+                        {BOOKING_WIDGET_PRICED_EXTRAS.map((extra) => <div key={extra.id} className="rounded-md bg-white/80 px-2.5 py-2">{extra.label} · ${extra.unitPrice}{extra.quantityUnit ? `/${extra.quantityUnit}` : ""}</div>)}
+                      </div>
+                    </div>
+                  ) : <div className="space-y-2">
                     {question.choices.map((choice, choiceIndex) => (
                       <div key={choiceIndex} className="flex items-center gap-1.5 pl-3">
                         <Input aria-label={`Question ${questionIndex + 1} choice ${choiceIndex + 1}`} className={fieldClass} value={choice} onChange={(event) => updateChoice(questionIndex, choiceIndex, event.target.value)} />
@@ -816,7 +905,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                       </div>
                     ))}
                     <Button type="button" variant="outline" className="ml-3 h-9 gap-2" onClick={() => addChoice(questionIndex)}><Plus className="h-4 w-4" /> Add choice</Button>
-                  </div>
+                  </div>}
                 </div>
               ))}
               <Button type="button" variant="outline" className="w-full gap-2" onClick={addQuestion}><Plus className="h-4 w-4" /> Add question</Button>
@@ -841,15 +930,20 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </Card>
 
           <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Opening and sample pricing</CardTitle><CardDescription>Demo values only; no live pricing or availability is queried.</CardDescription></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Opening and calculated pricing</CardTitle><CardDescription>Availability remains a demo. Prices use the approved authoritative rules and cannot be overridden here.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+                <div className="font-semibold">Authoritative pricing</div>
+                <div className="mt-2 leading-5">Studio $99 · 1BR $119 · 2BR $179 · 3BR $199 · 4BR $249 · 5BR $289 · 6BR $349 · 7BR $389</div>
+                <div className="mt-1 leading-5">Bathrooms ${BOOKING_WIDGET_BATHROOM_UNIT_PRICE} each · Deep and move-out +20% · every final quote rounds upward to the next price ending in 9.</div>
+              </div>
               <div className="space-y-1.5"><Label htmlFor="opening-eyebrow">Result label</Label><Input id="opening-eyebrow" className={fieldClass} value={config.openingEyebrow} onChange={(event) => update("openingEyebrow", event.target.value)} /></div>
               <div className="space-y-1.5"><Label htmlFor="result-title">Result title</Label><Input id="result-title" className={fieldClass} value={config.resultTitle} onChange={(event) => update("resultTitle", event.target.value)} /></div>
               <div className="space-y-2"><Label>Trust points</Label>{config.resultTrustPoints.map((point, index) => <Input key={index} aria-label={`Trust point ${index + 1}`} className={fieldClass} value={point} onChange={(event) => update("resultTrustPoints", config.resultTrustPoints.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} />)}</div>
               {config.services.map((item, index) => (
                 <div key={item.id} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.id}</div>
-                  <div className="grid grid-cols-[1fr_90px] gap-2"><Input aria-label={`${item.id} service name`} className={fieldClass} value={item.name} onChange={(event) => updateService(index, "name", event.target.value)} /><Input aria-label={`${item.id} preview price`} className={fieldClass} value={item.price} onChange={(event) => updateService(index, "price", event.target.value)} /></div>
+                  <Input aria-label={`${item.id} service name`} className={fieldClass} value={item.name} onChange={(event) => updateService(index, "name", event.target.value)} />
                   <div className="grid grid-cols-2 gap-2"><Input aria-label={`${item.id} day`} className={fieldClass} value={item.availabilityDay} onChange={(event) => updateService(index, "availabilityDay", event.target.value)} /><Input aria-label={`${item.id} time`} className={fieldClass} value={item.availabilityTime} onChange={(event) => updateService(index, "availabilityTime", event.target.value)} /></div>
                 </div>
               ))}
@@ -894,8 +988,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
                 {showSummary && (
                   <div className="shrink-0 border-b border-[#e4e5e7] bg-[#fff8f6]">
-                    <button type="button" onClick={() => setSummaryOpen((open) => !open)} aria-expanded={summaryOpen} className="flex w-full items-center gap-2 px-5 py-3 text-left text-[12px] font-extrabold text-[#ff684c] sm:px-6"><Sparkles className="h-3.5 w-3.5" /><span>Your cleaning so far</span><strong className="ml-auto text-[14px] text-[#3a3c41]">${service.price || "0"}</strong><ChevronDown className={`h-4 w-4 text-[#3a3c41] transition ${summaryOpen ? "rotate-180" : ""}`} /></button>
-                    {summaryOpen && <div className="grid grid-cols-2 gap-2 px-5 pb-3 sm:grid-cols-3 sm:px-6"><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Sparkles className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">SERVICE</small><strong className="truncate text-[10px] text-[#3a3c41]">{service.name}</strong></p></div><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Home className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">HOME</small><strong className="truncate text-[10px] text-[#3a3c41]">{roomSummary}</strong></p></div><div className="col-span-2 flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5 sm:col-span-1"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Check className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">EXTRAS</small><strong className="truncate text-[10px] text-[#3a3c41]">{selectedExtras.length ? selectedExtras.join(", ") : "None selected"}</strong></p></div></div>}
+                    <button type="button" onClick={() => setSummaryOpen((open) => !open)} aria-expanded={summaryOpen} className="flex w-full items-center gap-2 px-5 py-3 text-left text-[12px] font-extrabold text-[#ff684c] sm:px-6"><Sparkles className="h-3.5 w-3.5" /><span>Your cleaning so far</span><strong className="ml-auto text-[14px] text-[#3a3c41]">${quotePrice}</strong><ChevronDown className={`h-4 w-4 text-[#3a3c41] transition ${summaryOpen ? "rotate-180" : ""}`} /></button>
+                    {summaryOpen && <div className="grid grid-cols-2 gap-2 px-5 pb-3 sm:grid-cols-3 sm:px-6"><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Sparkles className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">SERVICE</small><strong className="truncate text-[10px] text-[#3a3c41]">{service.name}</strong></p></div><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Home className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">HOME</small><strong className="truncate text-[10px] text-[#3a3c41]">{roomSummary}</strong></p></div><div className="col-span-2 flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5 sm:col-span-1"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Check className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">EXTRAS</small><strong className="truncate text-[10px] text-[#3a3c41]">{selectedExtras.length ? selectedExtras.map((choice) => formatBookingWidgetExtraSelection(choice, demo.extraQuantities)).join(", ") : "None selected"}</strong></p></div></div>}
                   </div>
                 )}
 
