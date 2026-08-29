@@ -34,6 +34,13 @@ type BookingWidgetConfigPanelProps = {
 
 type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "complete";
 
+type DemoHistoryItem =
+  | { kind: "message"; sender: "assistant" | "customer"; text: string }
+  | { kind: "privacy" }
+  | { kind: "proof" };
+
+type DemoHistoryEntry = DemoHistoryItem & { id: number };
+
 type DemoSession = {
   prompt: string;
   serviceDetailsAnswer: string;
@@ -131,6 +138,26 @@ function DemoChip({ children, onClick, selected = false, color }: { children: Re
   );
 }
 
+function DemoHistoryRow({ entry, customerColor, trustPoints }: { entry: DemoHistoryEntry; customerColor: string; trustPoints: string[] }) {
+  if (entry.kind === "message") {
+    return <DemoBubble customer={entry.sender === "customer"} color={customerColor}>{entry.text}</DemoBubble>;
+  }
+  if (entry.kind === "privacy") {
+    return (
+      <div className="ml-10 mr-2 flex items-center gap-4 rounded-[18px] border border-[#dfe4e2] bg-[#f5f7f6] p-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-white text-[#239268]"><ShieldCheck className="h-6 w-6" /></div>
+        <div><strong className="text-[12px] text-[#3a3c41]">Your information stays private</strong><p className="mt-1 text-[11px] leading-5 text-[#6d837a]">We only use it for your booking and arrival updates.</p></div>
+      </div>
+    );
+  }
+  return (
+    <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:grid-cols-[42%_1fr]">
+      <img src={CLEANER_TEAM_IMAGE_URL} alt="Professional cleaner holding supplies in a bright living room" className="h-44 w-full object-cover sm:h-full" />
+      <div className="flex flex-col justify-center p-5"><span className="text-[10px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-3 text-[17px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#66736e]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#239268]" /><span>{trustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-3 text-[11px] font-extrabold text-[#ff684c]">See our happiness promise</span></div>
+    </div>
+  );
+}
+
 export default function BookingWidgetConfigPanel({ savedValue, onSave }: BookingWidgetConfigPanelProps) {
   const savedConfig = useMemo(() => parseBookingWidgetDraft(savedValue), [savedValue]);
   const [config, setConfig] = useState<BookingWidgetDraftConfig>(savedConfig);
@@ -145,8 +172,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [selectedTime, setSelectedTime] = useState("");
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [savePaymentDetails, setSavePaymentDetails] = useState(false);
+  const [history, setHistory] = useState<DemoHistoryEntry[]>([]);
   const conversationRef = useRef<HTMLDivElement>(null);
-  const activeStepRef = useRef<HTMLDivElement>(null);
+  const activeStageRef = useRef<HTMLDivElement>(null);
+  const checkoutRef = useRef<HTMLDivElement>(null);
+  const historyIdRef = useRef(0);
   const demoToday = useMemo(() => normalizeCalendarDate(new Date()), []);
   const demoCalendarEnd = useMemo(() => {
     const end = new Date(demoToday);
@@ -166,23 +196,26 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
         container.scrollTo({ top: 0, behavior: "auto" });
         return;
       }
-      const activeCard = activeStepRef.current;
-      if (activeCard) {
-        container.scrollTo({ top: Math.max(activeCard.offsetTop - 12, 0), behavior: "auto" });
-        return;
-      }
-      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+      const activeStage = activeStageRef.current;
+      if (!activeStage) return;
+      const containerRect = container.getBoundingClientRect();
+      const activeRect = activeStage.getBoundingClientRect();
+      container.scrollTo({ top: Math.max(container.scrollTop + activeRect.top - containerRect.top - 12, 0), behavior: "auto" });
+      if (step === "confirm") checkoutRef.current?.focus({ preventScroll: true });
     });
-  }, [step, currentQuestionIndex]);
+  }, [step, currentQuestionIndex, history.length]);
 
   const serialized = JSON.stringify(config);
   const isDirty = serialized !== JSON.stringify(savedConfig);
   const service = config.services.find((item) => item.id === demo.serviceId) ?? config.services[1];
   const detailLine = buildDemoDetailLine(demo.fallbackBedrooms, config.questions, demo.answers);
-  const stepOrder: DemoStep[] = ["request", "serviceDetails", "questions", "schedule", "extras", "fullName", "phone", "email", "address", "checking", "quote", "confirm", "complete"];
-  const reached = (target: DemoStep) => stepOrder.indexOf(step) >= stepOrder.indexOf(target);
   const currentQuestion = config.questions[currentQuestionIndex];
   const extrasQuestion = config.questions.find((question) => question.role === "extras");
+
+  const appendHistory = (...items: DemoHistoryItem[]) => {
+    const entries = items.map((item) => ({ ...item, id: ++historyIdRef.current }));
+    setHistory((current) => [...current, ...entries]);
+  };
 
   const update = <K extends keyof BookingWidgetDraftConfig>(key: K, value: BookingWidgetDraftConfig[K]) => {
     setConfig((current) => ({ ...current, [key]: value }));
@@ -233,6 +266,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const startOver = () => {
     setStep("request");
     setDemo(emptySession);
+    setHistory([]);
+    historyIdRef.current = 0;
     setCurrentQuestionIndex(0);
     setComposerValue("");
     setComposerError("");
@@ -267,6 +302,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     const inferred = buildInferredQuestionAnswers(resolved, config.questions);
     const hasBedrooms = config.questions.every((question) => question.role !== "bedrooms" || (inferred.answers[question.id] ?? []).length > 0);
     const hasBathrooms = config.questions.every((question) => question.role !== "bathrooms" || (inferred.answers[question.id] ?? []).length > 0);
+    appendHistory(
+      { kind: "message", sender: "assistant", text: config.greeting },
+      { kind: "message", sender: "customer", text: trimmed },
+    );
     setDemo({
       ...emptySession,
       prompt: trimmed,
@@ -302,6 +341,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       setComposerError("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
       return;
     }
+    appendHistory(
+      { kind: "message", sender: "assistant", text: config.combinedDetailsQuestion },
+      { kind: "message", sender: "customer", text: composerValue.trim() },
+    );
     setDemo((current) => ({
       ...current,
       serviceDetailsAnswer: composerValue.trim(),
@@ -328,6 +371,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       return;
     }
     const nextAnswers = { ...demo.answers, [currentQuestion.id]: [trimmed] };
+    appendHistory(
+      { kind: "message", sender: "assistant", text: currentQuestion.prompt },
+      { kind: "message", sender: "customer", text: trimmed },
+    );
     setDemo((current) => ({ ...current, answers: nextAnswers }));
     advanceFromQuestion(nextAnswers);
   };
@@ -346,6 +393,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       setComposerValue("");
       return;
     }
+    appendHistory(
+      { kind: "message", sender: "assistant", text: extrasQuestion.prompt },
+      { kind: "message", sender: "customer", text: trimmed },
+    );
     setDemo((current) => ({ ...current, answers: { ...current.answers, [extrasQuestion.id]: [trimmed] } }));
     setComposerValue("");
     setComposerError("");
@@ -354,12 +405,20 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
 
   const continueMultipleQuestion = () => {
     if (!extrasQuestion || (demo.answers[extrasQuestion.id] ?? []).length === 0) return;
+    appendHistory(
+      { kind: "message", sender: "assistant", text: extrasQuestion.prompt },
+      { kind: "message", sender: "customer", text: (demo.answers[extrasQuestion.id] ?? []).join(", ") },
+    );
     setStep("fullName");
   };
 
   const continueCustomQuestion = () => {
     if (!currentQuestion || currentQuestion.role !== "custom" || currentQuestion.selectionMode !== "multiple") return;
     if ((demo.answers[currentQuestion.id] ?? []).length === 0) return;
+    appendHistory(
+      { kind: "message", sender: "assistant", text: currentQuestion.prompt },
+      { kind: "message", sender: "customer", text: (demo.answers[currentQuestion.id] ?? []).join(", ") },
+    );
     advanceFromQuestion();
   };
 
@@ -370,6 +429,13 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       setComposerError(error);
       return;
     }
+    const questionText = field === "fullName" ? config.fullNameQuestion : field === "email" ? config.emailQuestion : "";
+    if (questionText) {
+      appendHistory(
+        { kind: "message", sender: "assistant", text: questionText },
+        { kind: "message", sender: "customer", text: trimmed },
+      );
+    }
     setDemo((current) => ({ ...current, [field]: trimmed }));
     setComposerValue("");
     setComposerError("");
@@ -379,6 +445,12 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const submitAddress = (address: string) => {
     const trimmed = address.trim();
     if (!trimmed) return;
+    appendHistory(
+      { kind: "message", sender: "assistant", text: config.addressQuestion },
+      { kind: "proof" },
+      { kind: "message", sender: "customer", text: trimmed },
+      { kind: "message", sender: "assistant", text: config.availabilityCheckMessage },
+    );
     setDemo((current) => ({ ...current, address: trimmed }));
     setComposerValue("");
     setComposerError("");
@@ -392,6 +464,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
       setComposerError(error);
       return;
     }
+    appendHistory(
+      { kind: "message", sender: "assistant", text: renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) }) },
+      { kind: "message", sender: "customer", text: trimmed },
+      { kind: "privacy" },
+    );
     setDemo((current) => ({ ...current, phone: trimmed, leadCaptured: true }));
     setComposerValue("");
     setComposerError("");
@@ -401,6 +478,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const confirmScheduleSelection = () => {
     if (!selectedDate || !selectedTime) return;
     const schedule = formatDemoScheduleSelection(selectedDate, selectedTime);
+    appendHistory(
+      { kind: "message", sender: "assistant", text: formatScheduleQuestion(config, demo.requestedDay) },
+      { kind: "message", sender: "customer", text: schedule },
+    );
     setDemo((current) => ({ ...current, schedule, requestedDay: schedule.split(" · ")[0] }));
     setComposerValue("");
     setComposerError("");
@@ -445,13 +526,109 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
         ? config.emailPlaceholder
         : step === "schedule"
           ? "Choose a date and time above"
-          : step === "address" || reached("checking")
+          : step === "address"
             ? config.addressPlaceholder
             : config.inputPlaceholder;
   const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step);
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
   const selectedExtras = extrasQuestion ? (demo.answers[extrasQuestion.id] ?? []).filter((answer) => !isNoSelectionChoice(answer)) : [];
   const roomSummary = detailLine.split(" · ").slice(0, 2).join(" · ");
+  const showSummary = !["request", "serviceDetails", "questions"].includes(step);
+  const openCheckout = () => setStep("confirm");
+  const completeCheckout = () => setStep("complete");
+
+  const activeStage = (() => {
+    if (step === "request") {
+      return (
+        <div className="flex flex-col gap-4">
+          <DemoBubble>{config.greeting}</DemoBubble>
+          <div className="ml-10 flex flex-wrap gap-2">{config.quickPrompts.map((prompt) => <DemoChip key={prompt} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>
+        </div>
+      );
+    }
+    if (step === "serviceDetails") return <DemoBubble>{config.combinedDetailsQuestion}</DemoBubble>;
+    if (step === "questions" && currentQuestion) {
+      const answer = demo.answers[currentQuestion.id] ?? [];
+      return (
+        <div className="flex flex-col gap-4">
+          <DemoBubble>{currentQuestion.prompt}</DemoBubble>
+          <div className="ml-10 flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">{currentQuestion.choices.map((choice) => <DemoChip key={choice} onClick={() => selectQuestionAnswer(choice)} selected={currentQuestion.selectionMode === "multiple" && answer.some((item) => item.toLowerCase() === choice.trim().toLowerCase())} color={config.customerBubbleColor}>{choice}</DemoChip>)}</div>
+            {currentQuestion.selectionMode === "multiple" && <button type="button" onClick={continueCustomQuestion} disabled={answer.length === 0} className="w-fit rounded-xl bg-[#ff684c] px-5 py-2.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-45">Continue</button>}
+          </div>
+        </div>
+      );
+    }
+    if (step === "schedule") {
+      return (
+        <div className="flex flex-col gap-4">
+          <DemoBubble>{formatScheduleQuestion(config, demo.requestedDay)}</DemoBubble>
+          <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#e4e5e7] bg-white p-4 shadow-[0_12px_32px_rgba(22,20,33,0.07)] sm:p-5">
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1.15fr)_minmax(180px,0.85fr)] md:items-start">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><CalendarDays className="h-4 w-4 text-[#ff684c]" /> Choose a date</div>
+                <Calendar mode="single" selected={selectedDate} onSelect={(date) => { setSelectedDate(date); setSelectedTime(""); }} defaultMonth={selectedDate ?? demoToday} startMonth={demoToday} endMonth={demoCalendarEnd} disabled={{ before: demoToday }} className="mx-auto mt-2 bg-transparent p-0 [--cell-size:2.15rem]" classNames={{ caption_label: "text-[12px] font-extrabold text-[#3a3c41]", button_previous: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", button_next: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", weekday: "flex-1 text-[10px] font-bold text-[#9a9ba5]", today: "rounded-lg bg-[#fff1ed] text-[#e9573e]" }} />
+              </div>
+              <div className="border-t border-[#e4e5e7] pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+                <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><Clock className="h-4 w-4 text-[#ff684c]" /> Available times <span className="font-normal text-[#9a9ba5]">(demo)</span></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-1">{DEMO_TIME_SLOTS.map((time) => <button key={time} type="button" aria-pressed={selectedTime === time} onClick={() => setSelectedTime(time)} className={`rounded-xl border px-3 py-2.5 text-[12px] font-bold transition ${selectedTime === time ? "border-[#ff684c] bg-[#ff684c] text-white shadow-sm" : "border-[#ffd2c8] bg-[#fff8f6] text-[#d95740] hover:border-[#ff9c89]"}`}>{time}</button>)}</div>
+                <div className="mt-4 rounded-xl bg-[#f5f5f3] px-3 py-2.5 text-[12px] text-[#6f7279]">{selectedDate ? selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }) : "Select a date"}{selectedTime ? ` · ${selectedTime}` : " · Select a time"}</div>
+                <button type="button" onClick={confirmScheduleSelection} disabled={!selectedDate || !selectedTime} className="mt-3 w-full rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white shadow-sm transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:bg-[#ececef] disabled:text-[#a6a7af]">Continue →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (step === "extras" && extrasQuestion) {
+      const answer = demo.answers[extrasQuestion.id] ?? [];
+      return (
+        <div className="flex flex-col gap-4">
+          <DemoBubble>{extrasQuestion.prompt}</DemoBubble>
+          <div className="ml-10 flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">{extrasQuestion.choices.map((choice) => <DemoChip key={choice} onClick={() => selectExtrasAnswer(choice)} selected={answer.some((item) => item.toLowerCase() === choice.trim().toLowerCase())} color={config.customerBubbleColor}>{choice}</DemoChip>)}</div>
+            {extrasQuestion.selectionMode === "multiple" && <button type="button" onClick={continueMultipleQuestion} disabled={answer.length === 0} className="w-fit rounded-xl bg-[#ff684c] px-5 py-2.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-45">Continue</button>}
+          </div>
+        </div>
+      );
+    }
+    if (step === "fullName") return <DemoBubble>{config.fullNameQuestion}</DemoBubble>;
+    if (step === "phone") return <DemoBubble>{renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) })}</DemoBubble>;
+    if (step === "email") return <DemoBubble>{config.emailQuestion}</DemoBubble>;
+    if (step === "address") {
+      return <div className="flex flex-col gap-4"><DemoBubble>{config.addressQuestion}</DemoBubble><DemoHistoryRow entry={{ id: -1, kind: "proof" }} customerColor={config.customerBubbleColor} trustPoints={config.resultTrustPoints} /></div>;
+    }
+    if (step === "checking") return <DemoBubble>{config.availabilityCheckMessage}</DemoBubble>;
+    if (step === "quote") {
+      return (
+        <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#dcd5ef] bg-gradient-to-br from-white to-[#fffaf8] p-4 shadow-[0_14px_36px_rgba(77,54,139,0.09)]">
+          <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{config.resultTitle}</h2></div></div>
+          <div className="flex items-center border-b border-[#e4e5e7] py-3"><CalendarDays className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">DATE & TIME</small><strong className="text-[11px] text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</strong></span></div>
+          <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
+          <div className="py-3"><div className="text-[12px] font-extrabold text-[#3a3c41]">{service.name}</div><div className="mt-1 text-[10px] leading-4 text-[#6f7279]">{detailLine}</div></div>
+          <div className="space-y-1.5 border-t border-[#e4e5e7] py-3">{config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2 text-[10px] text-[#5f6168]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#23b982]" /><span>{point}</span></div>)}</div>
+          <div className="flex items-center justify-between border-t border-[#e4e5e7] py-3 text-[12px] text-[#5f6168]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${service.price || "0"}</strong></div>
+          <button type="button" onClick={openCheckout} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e]"><CreditCard className="h-4 w-4" />{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}<ArrowRight className="h-4 w-4" /></button>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />Visual demo only · no charge will be made</p>
+        </div>
+      );
+    }
+    if (step === "confirm") {
+      return (
+        <div ref={checkoutRef} tabIndex={-1} aria-label="Demo checkout" className="ml-10 max-w-[82%] overflow-hidden rounded-[20px] border border-[#e4e5e7] bg-white shadow-[0_14px_36px_rgba(22,20,33,0.08)] outline-none focus:ring-2 focus:ring-[#ff684c]/30">
+          <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-[20px] font-extrabold text-[#3a3c41]">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div><div className="mt-1 text-[11px] text-[#6f7279]">Review your cleaning, then preview payment.</div></div><span className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Demo checkout</span></div><div className="mt-4 space-y-3 rounded-xl border border-[#e4e5e7] bg-white p-4 text-[11px]"><div><div className="font-extrabold text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-[#6f7279]">{service.name} · {detailLine}</div></div><div className="border-t border-[#e4e5e7] pt-3 text-[#6f7279]">{demo.address}</div><div className="flex items-center justify-between border-t border-[#e4e5e7] pt-3"><span className="font-medium text-[#6f7279]">Total</span><strong className="text-[19px] text-[#3a3c41]">${service.price}</strong></div></div></div>
+          <div className="p-5"><div className="flex items-center justify-between gap-3"><div className="text-[13px] font-extrabold text-[#3a3c41]">Payment</div><div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6f7279]"><Lock className="h-3.5 w-3.5" /> Stripe-style payment preview</div></div><p className="mt-1 text-[10px] text-[#b46a29]">Mock fields only. Do not enter real card information.</p><div className="mt-4 overflow-hidden rounded-xl border border-[#d7d8dc] bg-white shadow-sm"><div role="textbox" aria-readonly="true" aria-label="Demo card number" tabIndex={0} className="border-b border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Card number</div><div className="mt-1 flex items-center justify-between gap-3 font-mono text-[12px] tracking-wide"><span>4242 4242 4242 4242</span><span className="flex items-center gap-1.5 font-sans text-[10px] font-extrabold uppercase text-[#e9573e]"><CreditCard className="h-4 w-4" /> {config.demoCardBrand}</span></div></div><div className="grid grid-cols-2"><div role="textbox" aria-readonly="true" aria-label="Demo card expiry" tabIndex={0} className="px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">MM / YY</div><div className="mt-1 font-mono text-[12px]">12 / 34</div></div><div role="textbox" aria-readonly="true" aria-label="Demo card security code" tabIndex={0} className="border-l border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">CVC</div><div className="mt-1 flex items-center justify-between font-mono text-[12px]"><span>123</span><Lock className="h-3.5 w-3.5 text-[#9a9ba5]" /></div></div></div></div><div role="textbox" aria-readonly="true" aria-label="Demo name on card" tabIndex={0} className="mt-3 rounded-xl border border-[#d7d8dc] bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Name on card</div><div className="mt-1 text-[12px]">{demo.fullName}</div></div><label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-[#f5f5f3] p-3 text-[11px] text-[#5f6168]"><input type="checkbox" checked={savePaymentDetails} onChange={(event) => setSavePaymentDetails(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-[#d7d8dc] accent-[#ff684c]" /><span>Save my payment details for faster bookings next time <span className="text-[9px] text-[#9a9ba5]">(demo only)</span></span></label><p className="mt-4 text-[10px] leading-5 text-[#6f7279]">{config.demoPaymentNotice}</p><button type="button" onClick={completeCheckout} className="mt-4 w-full rounded-xl bg-[#ff684c] px-4 py-3.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e]">{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</button></div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-col gap-4">
+        <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</DemoBubble>
+        <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#168d61]"><CheckCircle2 className="h-4 w-4" />{config.confirmedEyebrow}</div><div className="mt-3 text-[18px] font-extrabold text-[#3a3c41]">{config.confirmedTitle}</div><div className="mt-3 text-[11px] leading-5 text-[#6f7279]">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div><div className="mt-4 space-y-2 rounded-xl border border-[#e4e5e7] p-4 text-[11px]"><div className="flex justify-between gap-4"><span>{service.name}</span><strong>${service.price}</strong></div><div className="flex justify-between gap-4 text-gray-500"><span>Address</span><span className="text-right">{demo.address}</span></div><div className="flex justify-between gap-4 text-gray-500"><span>Payment</span><span>•••• {config.demoCardLast4}</span></div></div><p className="mt-4 text-[10px] text-[#6f7279]">{config.demoPaymentNotice}</p></div>
+        <DemoBubble>{config.finalReminder}</DemoBubble>
+      </div>
+    );
+  })();
 
   return (
     <div className="space-y-5">
@@ -609,7 +786,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   <button type="button" onClick={startOver} className="shrink-0 rounded-full border border-[#4a4a4a] bg-[#242424] px-3.5 py-2 text-[12px] font-bold text-white transition hover:border-[#ff684c] hover:bg-[#ff684c]">Start over</button>
                 </div>
 
-                {reached("schedule") && (
+                {showSummary && (
                   <div className="shrink-0 border-b border-[#e4e5e7] bg-[#fff8f6]">
                     <button type="button" onClick={() => setSummaryOpen((open) => !open)} aria-expanded={summaryOpen} className="flex w-full items-center gap-2 px-5 py-3 text-left text-[12px] font-extrabold text-[#ff684c] sm:px-6"><Sparkles className="h-3.5 w-3.5" /><span>Your cleaning so far</span><strong className="ml-auto text-[14px] text-[#3a3c41]">${service.price || "0"}</strong><ChevronDown className={`h-4 w-4 text-[#3a3c41] transition ${summaryOpen ? "rotate-180" : ""}`} /></button>
                     {summaryOpen && <div className="grid grid-cols-2 gap-2 px-5 pb-3 sm:grid-cols-3 sm:px-6"><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Sparkles className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">SERVICE</small><strong className="truncate text-[10px] text-[#3a3c41]">{service.name}</strong></p></div><div className="flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Home className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">HOME</small><strong className="truncate text-[10px] text-[#3a3c41]">{roomSummary}</strong></p></div><div className="col-span-2 flex items-center gap-2 rounded-xl border border-[#e4e5e7] bg-white p-2.5 sm:col-span-1"><span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Check className="h-4 w-4" /></span><p className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">EXTRAS</small><strong className="truncate text-[10px] text-[#3a3c41]">{selectedExtras.length ? selectedExtras.join(", ") : "None selected"}</strong></p></div></div>}
@@ -617,192 +794,13 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                 )}
 
                 <div ref={conversationRef} className="relative flex h-[680px] flex-col gap-4 overflow-y-auto overscroll-contain bg-gradient-to-b from-white to-[#fcfcfd] px-4 py-5 sm:px-6 xl:h-auto xl:min-h-0 xl:flex-1">
-                  <div className="flex items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
-                  <DemoBubble>{config.greeting}</DemoBubble>
-
-                  {step === "request" && <div ref={activeStepRef} className="ml-10 flex flex-wrap gap-2">{config.quickPrompts.map((prompt) => <DemoChip key={prompt} onClick={() => selectRequest(prompt)}>{prompt}</DemoChip>)}</div>}
-
-                  {reached("serviceDetails") && <DemoBubble customer color={config.customerBubbleColor}>{demo.prompt}</DemoBubble>}
-                  {(step === "serviceDetails" || demo.serviceDetailsAnswer) && <DemoBubble containerRef={step === "serviceDetails" ? activeStepRef : undefined}>{config.combinedDetailsQuestion}</DemoBubble>}
-                  {demo.serviceDetailsAnswer && <DemoBubble customer color={config.customerBubbleColor}>{demo.serviceDetailsAnswer}</DemoBubble>}
-
-                  {reached("questions") && config.questions.map((question, questionIndex) => {
-                    if (question.role !== "custom" || demo.inferredQuestionIds.includes(question.id)) return null;
-                    const visible = step !== "questions" || questionIndex <= currentQuestionIndex;
-                    if (!visible) return null;
-                    const answer = demo.answers[question.id] ?? [];
-                    const answerText = answer.join(", ");
-                    return (
-                      <div key={question.id} className="contents">
-                        <DemoBubble>{question.prompt}</DemoBubble>
-                        {answerText && <DemoBubble customer color={config.customerBubbleColor}>{answerText}</DemoBubble>}
-                        {step === "questions" && questionIndex === currentQuestionIndex && (
-                          <div ref={activeStepRef} className="ml-10 space-y-3">
-                            <div className="flex flex-wrap gap-2">
-                              {question.choices.map((choice) => (
-                                <DemoChip
-                                  key={choice}
-                                  onClick={() => selectQuestionAnswer(choice)}
-                                  selected={question.selectionMode === "multiple" && answer.some((item) => item.toLowerCase() === choice.trim().toLowerCase())}
-                                  color={config.customerBubbleColor}
-                                >
-                                  {choice}
-                                </DemoChip>
-                              ))}
-                            </div>
-                            {question.selectionMode === "multiple" && (
-                              <button type="button" onClick={continueCustomQuestion} disabled={answer.length === 0} className="rounded-xl bg-[#ff684c] px-5 py-2.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-45">Continue</button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {reached("schedule") && <DemoBubble>{formatScheduleQuestion(config, demo.requestedDay)}</DemoBubble>}
-                  {step === "schedule" && (
-                    <div ref={activeStepRef} className="ml-10 max-w-[82%] rounded-[20px] border border-[#e4e5e7] bg-white p-4 shadow-[0_12px_32px_rgba(22,20,33,0.07)] sm:p-5">
-                      <div className="grid gap-5 md:grid-cols-[minmax(0,1.15fr)_minmax(180px,0.85fr)] md:items-start">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><CalendarDays className="h-4 w-4 text-[#ff684c]" /> Choose a date</div>
-                          <Calendar
-                            mode="single"
-                            selected={selectedDate}
-                            onSelect={(date) => { setSelectedDate(date); setSelectedTime(""); }}
-                            defaultMonth={selectedDate ?? demoToday}
-                            startMonth={demoToday}
-                            endMonth={demoCalendarEnd}
-                            disabled={{ before: demoToday }}
-                            className="mx-auto mt-2 bg-transparent p-0 [--cell-size:2.15rem]"
-                            classNames={{ caption_label: "text-[12px] font-extrabold text-[#3a3c41]", button_previous: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", button_next: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", weekday: "flex-1 text-[10px] font-bold text-[#9a9ba5]", today: "rounded-lg bg-[#fff1ed] text-[#e9573e]" }}
-                          />
-                        </div>
-
-                        <div className="border-t border-[#e4e5e7] pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
-                          <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><Clock className="h-4 w-4 text-[#ff684c]" /> Available times <span className="font-normal text-[#9a9ba5]">(demo)</span></div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-1">
-                          {DEMO_TIME_SLOTS.map((time) => (
-                            <button key={time} type="button" aria-pressed={selectedTime === time} onClick={() => setSelectedTime(time)} className={`rounded-xl border px-3 py-2.5 text-[12px] font-bold transition ${selectedTime === time ? "border-[#ff684c] bg-[#ff684c] text-white shadow-sm" : "border-[#ffd2c8] bg-[#fff8f6] text-[#d95740] hover:border-[#ff9c89]"}`}>{time}</button>
-                          ))}
-                          </div>
-
-                          <div className="mt-4 rounded-xl bg-[#f5f5f3] px-3 py-2.5 text-[12px] text-[#6f7279]">
-                            {selectedDate ? selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }) : "Select a date"}{selectedTime ? ` · ${selectedTime}` : " · Select a time"}
-                          </div>
-                          <button type="button" onClick={confirmScheduleSelection} disabled={!selectedDate || !selectedTime} className="mt-3 w-full rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white shadow-sm transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:bg-[#ececef] disabled:text-[#a6a7af]">Continue →</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {reached("extras") && <DemoBubble customer color={config.customerBubbleColor}>{demo.schedule}</DemoBubble>}
-                  {reached("extras") && extrasQuestion && <DemoBubble>{extrasQuestion.prompt}</DemoBubble>}
-                  {reached("extras") && extrasQuestion && (
-                    <div ref={step === "extras" ? activeStepRef : undefined} className="ml-10 space-y-3">
-                      {reached("fullName") && <DemoBubble customer color={config.customerBubbleColor}>{(demo.answers[extrasQuestion.id] ?? []).join(", ")}</DemoBubble>}
-                      {step === "extras" && (
-                        <>
-                          <div className="flex flex-wrap gap-2">
-                            {extrasQuestion.choices.map((choice) => (
-                              <DemoChip key={choice} onClick={() => selectExtrasAnswer(choice)} selected={(demo.answers[extrasQuestion.id] ?? []).some((item) => item.toLowerCase() === choice.trim().toLowerCase())} color={config.customerBubbleColor}>{choice}</DemoChip>
-                            ))}
-                          </div>
-                          <button type="button" onClick={continueMultipleQuestion} disabled={(demo.answers[extrasQuestion.id] ?? []).length === 0} className="rounded-xl bg-[#ff684c] px-5 py-2.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-45">Continue</button>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {reached("fullName") && <DemoBubble containerRef={step === "fullName" ? activeStepRef : undefined}>{config.fullNameQuestion}</DemoBubble>}
-                  {reached("phone") && <DemoBubble customer color={config.customerBubbleColor}>{demo.fullName}</DemoBubble>}
-                  {reached("phone") && <DemoBubble containerRef={step === "phone" ? activeStepRef : undefined}>{renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) })}</DemoBubble>}
-                  {reached("email") && <DemoBubble customer color={config.customerBubbleColor}>{demo.phone}</DemoBubble>}
-                  {reached("email") && demo.phone && <div ref={step === "email" ? activeStepRef : undefined} className="ml-10 mr-2 flex items-center gap-4 rounded-[18px] border border-[#dfe4e2] bg-[#f5f7f6] p-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-white text-[#239268]"><ShieldCheck className="h-6 w-6" /></div><div><strong className="text-[12px] text-[#3a3c41]">Your information stays private</strong><p className="mt-1 text-[11px] leading-5 text-[#6d837a]">We only use it for your booking and arrival updates.</p></div></div>}
-                  {reached("email") && <DemoBubble>{config.emailQuestion}</DemoBubble>}
-                  {reached("address") && <DemoBubble customer color={config.customerBubbleColor}>{demo.email}</DemoBubble>}
-                  {reached("address") && <DemoBubble containerRef={step === "address" ? activeStepRef : undefined}>{config.addressQuestion}</DemoBubble>}
-                  {reached("address") && <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:grid-cols-[42%_1fr]"><img src={CLEANER_TEAM_IMAGE_URL} alt="Professional cleaner holding supplies in a bright living room" className="h-44 w-full object-cover sm:h-full" /><div className="flex flex-col justify-center p-5"><span className="text-[10px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-3 text-[17px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#66736e]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#239268]" /><span>{config.resultTrustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-3 text-[11px] font-extrabold text-[#ff684c]">See our happiness promise</span></div></div>}
-                  {reached("checking") && <DemoBubble customer color={config.customerBubbleColor}>{demo.address}</DemoBubble>}
-                  {reached("checking") && <DemoBubble>{config.availabilityCheckMessage}</DemoBubble>}
-                  {step === "checking" && <div className="ml-10 flex items-center gap-1.5 text-[10px] text-[#77798b]"><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#ff9c89]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#ff9c89] [animation-delay:150ms]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#ff9c89] [animation-delay:300ms]" /><span className="ml-1">Checking teams nearby</span></div>}
-
-                  {step === "quote" && (
-                    <>
-                      <div ref={activeStepRef} className="ml-10 max-w-[82%] rounded-[20px] border border-[#dcd5ef] bg-gradient-to-br from-white to-[#fffaf8] p-4 shadow-[0_14px_36px_rgba(77,54,139,0.09)]">
-                        <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{config.resultTitle}</h2></div></div>
-                        <div className="flex items-center border-b border-[#e4e5e7] py-3"><CalendarDays className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">DATE & TIME</small><strong className="text-[11px] text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</strong></span></div>
-                        <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
-                        <div className="py-3"><div className="text-[12px] font-extrabold text-[#3a3c41]">{service.name}</div><div className="mt-1 text-[10px] leading-4 text-[#6f7279]">{detailLine}</div></div>
-                        <div className="space-y-1.5 border-t border-[#e4e5e7] py-3">{config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2 text-[10px] text-[#5f6168]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#23b982]" /><span>{point}</span></div>)}</div>
-                        <div className="flex items-center justify-between border-t border-[#e4e5e7] py-3 text-[12px] text-[#5f6168]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${service.price || "0"}</strong></div>
-                        <button type="button" onClick={() => setStep("confirm")} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e]"><CreditCard className="h-4 w-4" />{formatBookingButtonLabel(config.bookingButtonLabel, service.price)}<ArrowRight className="h-4 w-4" /></button>
-                        <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />Visual demo only · no charge will be made</p>
-                      </div>
-                    </>
-                  )}
-
-                  {step === "confirm" && (
-                    <div ref={activeStepRef} className="ml-10 max-w-[82%] overflow-hidden rounded-[20px] border border-[#e4e5e7] bg-white shadow-[0_14px_36px_rgba(22,20,33,0.08)]">
-                      <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <div className="text-[20px] font-extrabold text-[#3a3c41]">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div>
-                            <div className="mt-1 text-[11px] text-[#6f7279]">Review your cleaning, then preview payment.</div>
-                          </div>
-                          <span className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Demo checkout</span>
-                        </div>
-                        <div className="mt-4 space-y-3 rounded-xl border border-[#e4e5e7] bg-white p-4 text-[11px]">
-                          <div><div className="font-extrabold text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-[#6f7279]">{service.name} · {detailLine}</div></div>
-                          <div className="border-t border-[#e4e5e7] pt-3 text-[#6f7279]">{demo.address}</div>
-                          <div className="flex items-center justify-between border-t border-[#e4e5e7] pt-3"><span className="font-medium text-[#6f7279]">Total</span><strong className="text-[19px] text-[#3a3c41]">${service.price}</strong></div>
-                        </div>
-                      </div>
-
-                      <div className="p-5">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-[13px] font-extrabold text-[#3a3c41]">Payment</div>
-                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6f7279]"><Lock className="h-3.5 w-3.5" /> Stripe-style payment preview</div>
-                        </div>
-                        <p className="mt-1 text-[10px] text-[#b46a29]">Mock fields only. Do not enter real card information.</p>
-
-                        <div className="mt-4 overflow-hidden rounded-xl border border-[#d7d8dc] bg-white shadow-sm">
-                          <div role="textbox" aria-readonly="true" aria-label="Demo card number" tabIndex={0} className="border-b border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20">
-                            <div className="text-[10px] font-medium text-[#6f7279]">Card number</div>
-                            <div className="mt-1 flex items-center justify-between gap-3 font-mono text-[12px] tracking-wide"><span>4242 4242 4242 4242</span><span className="flex items-center gap-1.5 font-sans text-[10px] font-extrabold uppercase text-[#e9573e]"><CreditCard className="h-4 w-4" /> {config.demoCardBrand}</span></div>
-                          </div>
-                          <div className="grid grid-cols-2">
-                            <div role="textbox" aria-readonly="true" aria-label="Demo card expiry" tabIndex={0} className="px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">MM / YY</div><div className="mt-1 font-mono text-[12px]">12 / 34</div></div>
-                            <div role="textbox" aria-readonly="true" aria-label="Demo card security code" tabIndex={0} className="border-l border-[#e4e5e7] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">CVC</div><div className="mt-1 flex items-center justify-between font-mono text-[12px]"><span>123</span><Lock className="h-3.5 w-3.5 text-[#9a9ba5]" /></div></div>
-                          </div>
-                        </div>
-
-                        <div role="textbox" aria-readonly="true" aria-label="Demo name on card" tabIndex={0} className="mt-3 rounded-xl border border-[#d7d8dc] bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#ff684c]/20"><div className="text-[10px] font-medium text-[#6f7279]">Name on card</div><div className="mt-1 text-[12px]">{demo.fullName}</div></div>
-
-                        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-[#f5f5f3] p-3 text-[11px] text-[#5f6168]">
-                          <input type="checkbox" checked={savePaymentDetails} onChange={(event) => setSavePaymentDetails(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-[#d7d8dc] accent-[#ff684c]" />
-                          <span>Save my payment details for faster bookings next time <span className="text-[9px] text-[#9a9ba5]">(demo only)</span></span>
-                        </label>
-
-                        <p className="mt-4 text-[10px] leading-5 text-[#6f7279]">{config.demoPaymentNotice}</p>
-                        <button type="button" onClick={() => step === "confirm" && setStep("complete")} disabled={step !== "confirm"} className="mt-4 w-full rounded-xl bg-[#ff684c] px-4 py-3.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-default disabled:bg-[#ffb6a8]">{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {step === "complete" && <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, service.price)}</DemoBubble>}
-                  {step === "complete" && (
-                    <div ref={activeStepRef} className="ml-10 max-w-[82%] rounded-[20px] border border-[#d9f1e6] bg-white p-5 shadow-sm">
-                      <div className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#168d61]"><CheckCircle2 className="h-4 w-4" />{config.confirmedEyebrow}</div>
-                      <div className="mt-3 text-[18px] font-extrabold text-[#3a3c41]">{config.confirmedTitle}</div>
-                      <div className="mt-3 text-[11px] leading-5 text-[#6f7279]">{renderBookingWidgetTemplate(config.confirmedScheduleTemplate, { providerName: service.providerName, day: demo.schedule || `${service.availabilityDay} at ${service.availabilityTime}`, time: service.availabilityTime })}</div>
-                      <div className="mt-4 space-y-2 rounded-xl border border-[#e4e5e7] p-4 text-[11px]">
-                        <div className="flex justify-between gap-4"><span>{service.name}</span><strong>${service.price}</strong></div>
-                        <div className="flex justify-between gap-4 text-gray-500"><span>Address</span><span className="text-right">{demo.address}</span></div>
-                        <div className="flex justify-between gap-4 text-gray-500"><span>Payment</span><span>•••• {config.demoCardLast4}</span></div>
-                      </div>
-                      <p className="mt-4 text-[10px] text-[#6f7279]">{config.demoPaymentNotice}</p>
-                    </div>
-                  )}
-                  {step === "complete" && <DemoBubble>{config.finalReminder}</DemoBubble>}
+                  <div className="flex shrink-0 items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
+                  <div data-completed-history className="flex shrink-0 flex-col gap-4">
+                    {history.map((entry) => <div key={entry.id} data-history-entry className="relative min-w-0"><DemoHistoryRow entry={entry} customerColor={config.customerBubbleColor} trustPoints={config.resultTrustPoints} /></div>)}
+                  </div>
+                  <div ref={activeStageRef} data-active-stage data-step={step} className="relative flex shrink-0 flex-col gap-4">
+                    {activeStage}
+                  </div>
                 </div>
 
                 <form onSubmit={(event) => { event.preventDefault(); submitComposer(); }} className="shrink-0 border-t border-[#e4e5e7] bg-white px-4 py-3 sm:px-5">
