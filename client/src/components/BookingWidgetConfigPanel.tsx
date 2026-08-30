@@ -97,7 +97,7 @@ const BOOKING_CONFIRMATION_EXPECTATIONS = [
 ] as const;
 const CLEANER_TEAM_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/KoTsWjcUFAcYYhVB.png";
 const WELCOME_VIDEO_WISTIA_MEDIA_ID = "bzlt49ipk1";
-const WELCOME_VIDEO_SWATCH_URL = `https://fast.wistia.com/embed/medias/${WELCOME_VIDEO_WISTIA_MEDIA_ID}/swatch`;
+const WELCOME_VIDEO_POSTER_URL = "https://embed-ssl.wistia.com/deliveries/de3b8af433c63d912143e78eab71c6b3.jpg?image_crop_resized=960x540";
 const WELCOME_VIDEO_IFRAME_URL = `https://fast.wistia.net/embed/iframe/${WELCOME_VIDEO_WISTIA_MEDIA_ID}?seo=false&videoFoam=true&autoplay=1`;
 
 function normalizeCalendarDate(date: Date): Date {
@@ -981,7 +981,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
               onClick={openWelcomeVideo}
               className="group relative mt-3 h-[146px] w-full overflow-hidden rounded-[14px] bg-[#151515] text-left text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2"
             >
-              <img src={WELCOME_VIDEO_SWATCH_URL} alt="Maids in Black welcome video" className="h-full w-full object-cover object-[center_38%] transition duration-300 group-hover:scale-[1.025]" />
+              <img src={WELCOME_VIDEO_POSTER_URL} width={960} height={540} alt="Maids in Black welcome video" className="h-full w-full object-cover object-[center_38%] transition duration-300 group-hover:scale-[1.025]" />
               <span className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.74),rgba(0,0,0,0.12)),linear-gradient(0deg,rgba(0,0,0,0.35),transparent_60%)]" />
               <span className="absolute left-4 top-4 grid h-[42px] w-[42px] place-items-center rounded-full bg-[#ff684c] shadow-[0_7px_22px_rgba(0,0,0,0.22)]"><Play className="ml-0.5 h-[19px] w-[19px] fill-current" /></span>
               <span className="absolute bottom-[15px] left-4 grid gap-[3px]"><strong className="text-[14px]">Meet Maids in Black</strong><small className="text-[10px] text-white/80">Watch our 20-second welcome</small></span>

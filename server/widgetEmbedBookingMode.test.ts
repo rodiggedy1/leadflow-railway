@@ -55,12 +55,12 @@ describe("reversible Maids in Black booking embed", () => {
     expect(embedSource).toContain("function applyPanelLayout() {");
     expect(embedSource).toContain("var isCompact = window.innerWidth < 592");
     expect(embedSource).toContain("right: isCompact ? '12px' : '24px'");
-    expect(embedSource).toContain("width: isCompact ? 'calc(100vw - 24px)' : 'min(560px, calc(100vw - 32px))'");
+    expect(embedSource).toContain("width: isCompact ? 'calc(100vw - 24px)' : 'min(500px, calc(100vw - 32px))'");
     expect(embedSource).toContain("window.addEventListener('resize', applyPanelLayout)");
   });
 
-  it("uses the final focused desktop width and full-screen mobile geometry without changing legacy SMS dimensions", () => {
-    expect(embedSource).toContain("width: isBooking ? 'min(560px, calc(100vw - 32px))' : '340px'");
+  it("uses the narrower 500px desktop width and full-screen mobile geometry without changing legacy SMS dimensions", () => {
+    expect(embedSource).toContain("width: isBooking ? 'min(500px, calc(100vw - 32px))' : '340px'");
     for (const marker of [
       "bottom: '0'",
       "right: '0'",

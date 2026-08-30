@@ -19,7 +19,10 @@ describe("booking widget customer-intake flow contract", () => {
 
   it("adds the supplied Wistia welcome experience only at the beginning of the request stage", () => {
     expect(componentSource).toContain('const WELCOME_VIDEO_WISTIA_MEDIA_ID = "bzlt49ipk1"');
-    expect(componentSource).toContain("WELCOME_VIDEO_SWATCH_URL");
+    expect(componentSource).toContain("WELCOME_VIDEO_POSTER_URL");
+    expect(componentSource).toContain("de3b8af433c63d912143e78eab71c6b3.jpg?image_crop_resized=960x540");
+    expect(componentSource).toContain('src={WELCOME_VIDEO_POSTER_URL} width={960} height={540}');
+    expect(componentSource).not.toContain(`/embed/medias/${"bzlt49ipk1"}/swatch`);
     expect(componentSource).toContain("WELCOME_VIDEO_IFRAME_URL");
     expect(componentSource).toContain("Before we get started, here&apos;s a quick hello from our team 👋");
     expect(componentSource).toContain("Meet Maids in Black");
