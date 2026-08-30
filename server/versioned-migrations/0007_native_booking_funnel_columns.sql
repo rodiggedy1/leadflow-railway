@@ -1,4 +1,3 @@
-ALTER TABLE `bookings` ADD COLUMN `funnelStage` varchar(32) NOT NULL DEFAULT 'lead' AFTER `source`;
 ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `funnelStage` varchar(32) NOT NULL DEFAULT 'lead' AFTER `source`;
 ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `stripeCardAuthToken` varchar(64) NULL AFTER `priceSnapshot`;
 ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `stripeCustomerId` varchar(255) NULL AFTER `stripeCardAuthToken`;

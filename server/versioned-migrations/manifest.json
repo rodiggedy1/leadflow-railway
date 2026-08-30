@@ -52,7 +52,7 @@
       "id": "0007_native_booking_funnel_columns",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0007_native_booking_funnel_columns.sql",
-      "sha256": "cc35404fe4f615b88032855030ec2a275c7aa6be5e2edecc6788c4a5fd4ae6d6",
+      "sha256": "ec53a828cc9b63a0714ea9e8f3fba6aea221f5096ef38ffe6325b9f5f09379ec",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0007_native_booking_funnel_columns.postconditions.json"
     },
