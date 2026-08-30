@@ -224,7 +224,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
       // On mobile: stretch to fill the screen width minus margins
       // On desktop: legacy SMS is 340px; booking is capped for a focused chat-sized panel
       left: isMobile ? '16px' : 'auto',
-      width: isBooking ? 'min(680px, calc(100vw - 32px))' : (isMobile ? 'auto' : '340px'),
+      width: isBooking ? 'min(620px, calc(100vw - 32px))' : (isMobile ? 'auto' : '340px'),
       height: isBooking ? (isMobile ? 'calc(100dvh - 112px)' : 'min(860px, calc(100vh - 120px))') : 'auto',
       maxHeight: 'calc(100vh - 120px)',
       zIndex: String(Z_PANEL),

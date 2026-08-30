@@ -1347,10 +1347,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
         </div>}
 
         <div className={mode === "editor" ? "xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]" : surface === "popup" ? "h-dvh" : "min-h-[calc(100dvh-1.5rem)] sm:min-h-[calc(100dvh-3rem)]"}>
-          <Card className={`gap-0 overflow-hidden py-0 xl:flex xl:flex-col ${mode === "editor" ? "border-gray-200 shadow-lg xl:h-full" : surface === "popup" ? "h-dvh rounded-none border-0 shadow-none" : "min-h-[calc(100dvh-1.5rem)] border-gray-200 shadow-lg sm:min-h-[calc(100dvh-3rem)]"}`}>
+          <Card className={`gap-0 overflow-hidden py-0 ${mode === "editor" ? "border-gray-200 shadow-lg xl:flex xl:h-full xl:flex-col" : surface === "popup" ? "flex h-dvh flex-col rounded-none border-0 shadow-none" : "min-h-[calc(100dvh-1.5rem)] border-gray-200 shadow-lg xl:flex xl:flex-col sm:min-h-[calc(100dvh-3rem)]"}`}>
             {mode === "editor" && <CardHeader className="border-b border-gray-100 bg-white py-4 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>}
-            <CardContent className={`bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden ${mode === "live" && surface === "popup" ? "p-0" : "p-3 sm:p-5"}`}>
-              <div className={`mx-auto flex w-full flex-col overflow-hidden bg-white xl:min-h-0 xl:flex-1 ${mode === "live" && surface === "popup" ? "max-w-none rounded-none border-0 shadow-none" : "max-w-[720px] rounded-[28px] border border-[#dfe0e2] shadow-[0_28px_80px_rgba(17,17,17,0.16)]"}`} style={{ color: config.primaryColor }}>
+            <CardContent className={`bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] ${mode === "live" && surface === "popup" ? "flex min-h-0 flex-1 flex-col overflow-hidden p-0" : "p-3 sm:p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden"}`}>
+              <div className={`mx-auto flex w-full flex-col overflow-hidden bg-white ${mode === "live" && surface === "popup" ? "min-h-0 flex-1 max-w-none rounded-none border-0 shadow-none" : "max-w-[720px] rounded-[28px] border border-[#dfe0e2] shadow-[0_28px_80px_rgba(17,17,17,0.16)] xl:min-h-0 xl:flex-1"}`} style={{ color: config.primaryColor }}>
                 <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#282828] bg-[#111111] px-5 py-4 text-white sm:px-6">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white text-xl text-[#ff684c]">{config.brandLogoUrl ? <img src={config.brandLogoUrl} alt="Widget logo preview" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : config.headerIcon || <Bot className="h-5 w-5" />}</div>
@@ -1366,7 +1366,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
                   </div>
                 )}
 
-                <div ref={conversationRef} className="relative flex h-[680px] flex-col gap-4 overflow-y-auto overscroll-contain bg-gradient-to-b from-white to-[#fcfcfd] px-4 py-5 sm:px-6 xl:h-auto xl:min-h-0 xl:flex-1">
+                <div ref={conversationRef} className={`relative flex flex-col gap-4 overflow-y-auto overscroll-contain bg-gradient-to-b from-white to-[#fcfcfd] px-4 py-5 sm:px-6 ${mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"}`}>
                   <div className="flex shrink-0 items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
                   <div data-completed-history className="flex shrink-0 flex-col gap-4">
                     {history.map((entry) => <div key={entry.id} data-history-entry className="relative min-w-0"><DemoHistoryRow entry={entry} customerColor={config.customerBubbleColor} trustPoints={config.resultTrustPoints} /></div>)}

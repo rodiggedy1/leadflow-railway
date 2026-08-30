@@ -54,7 +54,7 @@ describe("reversible Maids in Black booking embed", () => {
     expect(embedSource).toContain("title: 'Book with Maids in Black'");
     expect(embedSource).toContain("right: '16px'");
     expect(embedSource).toContain("left: isMobile ? '16px' : 'auto'");
-    expect(embedSource).toContain("width: isBooking ? 'min(680px, calc(100vw - 32px))' : (isMobile ? 'auto' : '340px')");
+    expect(embedSource).toContain("width: isBooking ? 'min(620px, calc(100vw - 32px))' : (isMobile ? 'auto' : '340px')");
   });
 
   it("uses a thin public popup route and does not duplicate booking or pricing logic", () => {
@@ -71,10 +71,12 @@ describe("reversible Maids in Black booking embed", () => {
     expect(bookingRendererSource).toContain('surface === "popup" ? "h-dvh bg-[#f5f5f3] p-0"');
     expect(bookingRendererSource).toContain('surface === "popup" ? "h-dvh w-full max-w-none"');
     expect(bookingRendererSource).toContain('surface === "popup" ? "h-dvh"');
-    expect(bookingRendererSource).toContain('surface === "popup" ? "h-dvh rounded-none border-0 shadow-none"');
-    expect(bookingRendererSource).toContain('mode === "live" && surface === "popup" ? "p-0" : "p-3 sm:p-5"');
-    expect(bookingRendererSource).toContain('mode === "live" && surface === "popup" ? "max-w-none rounded-none border-0 shadow-none"');
-    expect(bookingRendererSource).toContain('"max-w-[720px] rounded-[28px] border border-[#dfe0e2] shadow-[0_28px_80px_rgba(17,17,17,0.16)]"');
+    expect(bookingRendererSource).toContain('surface === "popup" ? "flex h-dvh flex-col rounded-none border-0 shadow-none"');
+    expect(bookingRendererSource).toContain('mode === "live" && surface === "popup" ? "flex min-h-0 flex-1 flex-col overflow-hidden p-0"');
+    expect(bookingRendererSource).toContain('mode === "live" && surface === "popup" ? "min-h-0 flex-1 max-w-none rounded-none border-0 shadow-none"');
+    expect(bookingRendererSource).toContain('mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"');
+    expect(bookingRendererSource).toContain('<form onSubmit={(event) => { event.preventDefault(); submitComposer(); }} className="shrink-0');
+    expect(bookingRendererSource).toContain('"max-w-[720px] rounded-[28px] border border-[#dfe0e2] shadow-[0_28px_80px_rgba(17,17,17,0.16)] xl:min-h-0 xl:flex-1"');
     expect(bookingRendererSource).toContain('"mx-auto w-full max-w-[760px]"');
     expect(embedSource).toContain("panel.appendChild(header)");
     expect(embedSource).toContain("panel.appendChild(body)");
