@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { BeginBookingFunnelInput } from "../shared/bookingFunnel";
+import type { BeginBookingFunnelInput, UpdateBookingFunnelInput } from "../shared/bookingFunnel";
 import { normalizePhone } from "./utils/phone";
 
 export class BookingFunnelInputError extends Error {}
@@ -29,6 +29,21 @@ export function normalizeBookingFunnelLead(input: BeginBookingFunnelInput): Omit
     stage: "lead",
     version: 1,
   };
+}
+
+export function normalizeBookingFunnelPatch(patch: UpdateBookingFunnelInput["patch"]): UpdateBookingFunnelInput["patch"] {
+  const normalized = { ...patch };
+  if (patch.customerName !== undefined) {
+    const customerName = patch.customerName.trim().replace(/\s+/g, " ");
+    if (customerName.length < 2) throw new BookingFunnelInputError("Enter a first and last name.");
+    normalized.customerName = customerName;
+  }
+  if (patch.customerPhone !== undefined) {
+    const customerPhone = normalizePhone(patch.customerPhone);
+    if (!customerPhone) throw new BookingFunnelInputError("Enter a valid U.S. phone number.");
+    normalized.customerPhone = customerPhone;
+  }
+  return normalized;
 }
 
 export function createBookingFunnelNumber(): string {

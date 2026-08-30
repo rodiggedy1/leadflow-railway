@@ -17,6 +17,7 @@ import {
   createBookingFunnelNumber,
   isDuplicateBookingFunnelEntry,
   normalizeBookingFunnelLead,
+  normalizeBookingFunnelPatch,
   verifyBookingFunnelMutationToken,
 } from "./bookingFunnelService";
 
@@ -53,6 +54,15 @@ function affectedRows(result: unknown): number {
   const direct = result as { affectedRows?: number };
   const nested = (result as Array<{ affectedRows?: number }> | undefined)?.[0];
   return Number(direct?.affectedRows ?? nested?.affectedRows ?? 0);
+}
+
+function normalizedPatchOrThrow(patch: Parameters<typeof normalizeBookingFunnelPatch>[0]) {
+  try {
+    return normalizeBookingFunnelPatch(patch);
+  } catch (error) {
+    if (error instanceof BookingFunnelInputError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+    throw error;
+  }
 }
 
 export const bookingFunnelRouter = router({
@@ -120,9 +130,10 @@ export const bookingFunnelRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       }
       if (existing.version !== input.expectedVersion) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
+      const patch = normalizedPatchOrThrow(input.patch);
       const result = await db
         .update(bookingFunnelRecords)
-        .set({ ...input.patch, version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
+        .set({ ...patch, version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
         .where(and(eq(bookingFunnelRecords.id, existing.id), eq(bookingFunnelRecords.version, input.expectedVersion)));
       if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
       return {
@@ -156,9 +167,10 @@ export const bookingFunnelRouter = router({
       }
       if (existing.stage !== "lead") throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_STAGE_CONFLICT" });
       if (existing.version !== input.expectedVersion) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
+      const patch = normalizedPatchOrThrow(input.patch);
       const result = await db
         .update(bookingFunnelRecords)
-        .set({ ...input.patch, stage: "payment_incomplete", version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
+        .set({ ...patch, stage: "payment_incomplete", version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
         .where(and(
           eq(bookingFunnelRecords.id, existing.id),
           eq(bookingFunnelRecords.stage, "lead"),
