@@ -15,6 +15,8 @@ export const beginBookingFunnelInputSchema = z.object({
 export type BeginBookingFunnelInput = z.infer<typeof beginBookingFunnelInputSchema>;
 
 const progressiveFieldsSchema = z.object({
+  customerName: z.string().trim().min(2).max(255).optional(),
+  customerPhone: z.string().trim().min(10).max(30).optional(),
   customerEmail: z.string().trim().email().max(320).nullable().optional(),
   serviceId: z.string().trim().min(1).max(32).nullable().optional(),
   serviceName: z.string().trim().min(1).max(120).nullable().optional(),

@@ -27,11 +27,43 @@ describe("public Book Now UI contract", () => {
     expect(pageSource).toContain("config.services.map");
   });
 
-  it("keeps this first phase UI-only with no booking, lead, Stripe, or payment write", () => {
-    expect(pageSource).not.toContain("useMutation");
-    expect(pageSource).not.toContain("bookingFunnel.begin");
-    expect(pageSource).not.toContain("bookingFunnel.update");
+  it("creates one guarded lead identity after valid name and phone capture", () => {
+    expect(pageSource).toContain("trpc.bookingFunnel.begin.useMutation");
+    expect(pageSource).toContain("trpc.bookingFunnel.update.useMutation");
+    expect(pageSource).toContain("bookingAttemptIdRef");
+    expect(pageSource).toContain("leadCapturePromiseRef");
+    expect(pageSource).toContain('validateBookingWidgetIntakeField("fullName", fullName)');
+    expect(pageSource).toContain('validateBookingWidgetIntakeField("phone", phone)');
+    expect(pageSource).toContain('source: "book-page"');
+    expect(pageSource).toContain("rememberFunnelRecord(current)");
+    expect(pageSource).toContain("initialSnapshotSavedRef");
+    expect(pageSource).toContain("onBlur={() => void saveLeadContactIfReady()}");
+    expect(pageSource).toContain("if (leadCapturePromiseRef.current) return leadCapturePromiseRef.current");
+  });
+
+  it("advances the same token-bound record to payment incomplete before showing the card step", () => {
+    expect(pageSource).toContain("trpc.bookingFunnel.reserve.useMutation");
+    expect(pageSource).toContain("publicFunnelNumber: current.publicFunnelNumber");
+    expect(pageSource).toContain("mutationToken: current.mutationToken");
+    expect(pageSource).toContain("expectedVersion: current.version");
+    expect(pageSource).toContain('current.stage === "lead"');
+    expect(pageSource).toContain("await reserveFunnelMutation.mutateAsync(input)");
+    expect(pageSource.indexOf("await reserveFunnelMutation.mutateAsync(input)")).toBeLessThan(pageSource.indexOf("setStep(4)"));
+    expect(pageSource).toContain('validateBookingWidgetIntakeField("email", email)');
+    expect(pageSource).toContain('address.trim().length >= 5');
+    expect(pageSource).toContain("customerEmail: email.trim() || null");
+    expect(pageSource).toContain("requestedLocalDate: date.iso");
+    expect(pageSource).toContain("requestedLocalTime: timeLabelTo24Hour(time)");
+    expect(pageSource).toContain("firstCleaningTotalCents: Math.round(priceBreakdown.total * 100)");
+    expect(pageSource).toContain("disabled={(step === 3 && funnelMutationPending)");
+    expect(pageSource).toContain("bookingAttemptIdRef.current = createBookingAttemptId()");
+  });
+
+  it("keeps Stripe and final native booking creation out of this slice", () => {
     expect(pageSource).not.toContain("bookings.prepare");
+    expect(pageSource).not.toContain("stripe.createSetupIntent");
+    expect(pageSource).not.toContain("stripe.confirmCardSaved");
+    expect(pageSource).not.toContain("confirmCardSetup");
     expect(pageSource).not.toContain("stripe.confirm");
     expect(pageSource).toContain("UI preview only.");
     expect(pageSource).toContain("No card data is collected or stored.");
