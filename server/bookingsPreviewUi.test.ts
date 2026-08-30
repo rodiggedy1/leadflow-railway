@@ -106,6 +106,17 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain('aria-label={`Booking details for ${active.customerName}`}');
   });
 
+  it("keeps an explicit right-detail close dismissed until another row is selected", () => {
+    expect(pageSource).toContain("const [activeKey, setRawActiveKey] = useState<string | null>(null)");
+    expect(pageSource).toContain("const detailDismissedRef = useRef(false)");
+    expect(pageSource).toContain("detailDismissedRef.current = key === null");
+    expect(pageSource).toContain("if (!rows.length) return setRawActiveKey(null)");
+    expect(pageSource).toContain("if (!detailDismissedRef.current) setActiveKey(rows[0].key)");
+    expect(pageSource).toContain("onClick={() => setActiveKey(row.key)}");
+    expect(pageSource).toContain('onClick={() => setActiveKey(null)} aria-label="Close booking detail panel"');
+    expect(pageSource).not.toContain("if (activeKey === null || !rows.some");
+  });
+
   it("keeps the existing MIB Chat suppression unchanged during the navigation-only redesign", () => {
     expect(appSource).toContain('const isBookingsWorkspace = location === "/admin/bookings";');
     expect(appSource).toContain("(location.startsWith(\"/admin\") && !isBookingsWorkspace)");

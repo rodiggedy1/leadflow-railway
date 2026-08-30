@@ -1,7 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import { CalendarDays, CreditCard, Filter, Loader2, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "@/pages/bookings-preview.css";
 
 type StatusFilter = "All" | "Confirmed" | "Needs attention" | "Completed";
@@ -63,7 +63,12 @@ const notesFrom = (value: unknown): string[] => Array.isArray(value) ? value.fil
 
 export default function NativeBookingsWorkspace() {
   const [view, setView] = useState<"bookings" | "leads">("bookings");
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeKey, setRawActiveKey] = useState<string | null>(null);
+  const detailDismissedRef = useRef(false);
+  const setActiveKey = (key: string | null) => {
+    detailDismissedRef.current = key === null;
+    setRawActiveKey(key);
+  };
   const [date, setDate] = useState(businessDate);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("All");
@@ -129,8 +134,9 @@ export default function NativeBookingsWorkspace() {
     return funnelRows.filter((row) => row.status === "lead");
   }, [bookings, date, funnelLeads, view]);
   useEffect(() => {
-    if (!rows.length) return setActiveKey(null);
-    if (activeKey === null || !rows.some((row) => row.key === activeKey)) setActiveKey(rows[0].key);
+    if (!rows.length) return setRawActiveKey(null);
+    if (activeKey !== null && rows.some((row) => row.key === activeKey)) return;
+    if (!detailDismissedRef.current) setActiveKey(rows[0].key);
   }, [activeKey, rows]);
   const active = useMemo<WorkspaceRow | null>(() => {
     if (selectedBookingId !== null && detailQuery.data) {
