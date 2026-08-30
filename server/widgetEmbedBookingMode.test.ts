@@ -52,9 +52,27 @@ describe("reversible Maids in Black booking embed", () => {
     expect(embedSource).toContain("src: API_BASE + '/book/widget'");
     expect(embedSource).toContain("id: 'mib-booking-frame'");
     expect(embedSource).toContain("title: 'Book with Maids in Black'");
+    expect(embedSource).toContain("function applyPanelLayout() {");
+    expect(embedSource).toContain("var isCompact = window.innerWidth < 592");
+    expect(embedSource).toContain("right: isCompact ? '12px' : '24px'");
+    expect(embedSource).toContain("width: isCompact ? 'calc(100vw - 24px)' : 'min(560px, calc(100vw - 32px))'");
+    expect(embedSource).toContain("window.addEventListener('resize', applyPanelLayout)");
+  });
+
+  it("uses the final focused desktop width and full-screen mobile geometry without changing legacy SMS dimensions", () => {
+    expect(embedSource).toContain("width: isBooking ? 'min(560px, calc(100vw - 32px))' : '340px'");
+    for (const marker of [
+      "bottom: '0'",
+      "right: '0'",
+      "left: '0'",
+      "width: '100vw'",
+      "height: '100dvh'",
+      "maxHeight: '100dvh'",
+      "borderRadius: '0'",
+    ]) expect(embedSource).toContain(marker);
     expect(embedSource).toContain("right: '16px'");
-    expect(embedSource).toContain("left: isMobile ? '16px' : 'auto'");
-    expect(embedSource).toContain("width: isBooking ? 'min(620px, calc(100vw - 32px))' : (isMobile ? 'auto' : '340px')");
+    expect(embedSource).toContain("width: isMobile ? 'auto' : '340px'");
+    expect(embedSource).toContain("borderRadius: '16px'");
   });
 
   it("uses a thin public popup route and does not duplicate booking or pricing logic", () => {

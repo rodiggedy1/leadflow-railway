@@ -18,7 +18,7 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.5.0";
+const WIDGET_VERSION = "2.6.0";
 const WIDGET_CONTENT_MODE: "booking" | "sms" = "booking";
 
 export function registerWidgetEmbedRoute(app: Express) {
@@ -211,21 +211,59 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     (document.body || document.documentElement).appendChild(btn);
   }
 
+  function applyPanelLayout() {
+    if (!panel) return;
+    var isMobile = window.innerWidth < 480;
+    var isCompact = window.innerWidth < 592;
+    var isBooking = CONTENT_MODE === 'booking';
+
+    if (!isBooking) {
+      s(panel, {
+        bottom: 'calc(' + (isMobile ? '88px' : '96px') + ' + env(safe-area-inset-bottom, 0px))',
+        right: '16px',
+        left: isMobile ? '16px' : 'auto',
+        width: isMobile ? 'auto' : '340px',
+        height: 'auto',
+        maxHeight: 'calc(100vh - 120px)',
+        borderRadius: '16px',
+      });
+      return;
+    }
+
+    if (isMobile) {
+      s(panel, {
+        bottom: '0',
+        right: '0',
+        left: '0',
+        width: '100vw',
+        height: '100dvh',
+        maxHeight: '100dvh',
+        borderRadius: '0',
+      });
+      return;
+    }
+
+    s(panel, {
+      bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+      right: isCompact ? '12px' : '24px',
+      left: 'auto',
+      width: isCompact ? 'calc(100vw - 24px)' : 'min(560px, calc(100vw - 32px))',
+      height: 'min(860px, calc(100vh - 120px))',
+      maxHeight: 'calc(100vh - 120px)',
+      borderRadius: '28px',
+    });
+  }
+
   // ── Build panel ──────────────────────────────────────────────────────────────
   function buildPanel() {
-    // On mobile the panel takes full width minus margins; on desktop it's 340px
-    var isMobile = window.innerWidth < 480;
     var isBooking = CONTENT_MODE === 'booking';
     panel = el('div', {
       position: 'fixed',
-      // Sit just above the floating button (button height 60px + gap 12px + safe area)
-      bottom: 'calc(' + (isMobile ? '88px' : '96px') + ' + env(safe-area-inset-bottom, 0px))',
-      right: '16px',
-      // On mobile: stretch to fill the screen width minus margins
-      // On desktop: legacy SMS is 340px; booking is capped for a focused chat-sized panel
-      left: isMobile ? '16px' : 'auto',
-      width: isBooking ? 'min(620px, calc(100vw - 32px))' : (isMobile ? 'auto' : '340px'),
-      height: isBooking ? (isMobile ? 'calc(100dvh - 112px)' : 'min(860px, calc(100vh - 120px))') : 'auto',
+      bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+      right: '24px',
+      left: 'auto',
+      width: isBooking ? 'min(560px, calc(100vw - 32px))' : '340px',
+      height: isBooking ? 'min(860px, calc(100vh - 120px))' : 'auto',
       maxHeight: 'calc(100vh - 120px)',
       zIndex: String(Z_PANEL),
       borderRadius: isBooking ? '28px' : '16px',
@@ -362,6 +400,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
       panel.appendChild(footer);
     }
     (document.body || document.documentElement).appendChild(panel);
+    applyPanelLayout();
   }
 
   // ── Render body content ──────────────────────────────────────────────────────
@@ -724,6 +763,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
   function init() {
     buildButton();
     buildPanel();
+    window.addEventListener('resize', applyPanelLayout);
     scheduleAutoOpen();
     setupExitIntent();
   }

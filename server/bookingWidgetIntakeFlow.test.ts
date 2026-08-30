@@ -238,12 +238,24 @@ describe("booking widget customer-intake flow contract", () => {
 
   it("keeps recurring choices compact and removes the requested trust and sample-address UI", () => {
     const quoteSource = componentSource.slice(componentSource.indexOf('if (step === "quote")'), componentSource.indexOf('if (step === "confirm"'));
-    expect(componentSource).toContain("mt-3 grid grid-cols-1 gap-2 min-[480px]:grid-cols-3");
-    expect(componentSource).toContain("relative rounded-xl border px-2 py-2 text-center");
+    expect(componentSource).toContain("mt-2.5 grid grid-cols-1 gap-1.5 min-[480px]:grid-cols-3");
+    expect(componentSource).toContain("relative rounded-lg border px-1.5 py-1.5 text-center");
+    expect(componentSource).toContain('text-[9px] font-extrabold text-[#3a3c41]');
+    expect(componentSource).toContain('text-[13px] text-[#3a3c41]');
     expect(componentSource).not.toContain("mt-3 grid gap-2 sm:grid-cols-3");
     expect(quoteSource).not.toContain("config.resultTrustPoints.map");
     expect(componentSource).not.toContain("Use sample address");
     expect(componentSource).toContain("submitAddress(composerValue)");
+  });
+
+  it("uses 560px-friendly popup header, horizontal proof content, and compact single-column confirmation", () => {
+    expect(componentSource).toContain('min-[480px]:grid min-[480px]:grid-cols-[140px_1fr]');
+    expect(componentSource).toContain('h-36 w-full bg-[#f7f5f2] object-contain min-[480px]:h-full');
+    expect(componentSource).toContain('mode === "live" && surface === "popup" ? "px-4 py-3"');
+    expect(componentSource).toContain('mode === "live" && surface === "popup" ? "h-10 w-10 rounded-[14px] text-lg"');
+    expect(componentSource).toContain('className="mt-4 space-y-3"');
+    expect(componentSource).not.toContain('className="mt-5 space-y-5"');
+    expect(componentSource).toContain('className="grid gap-3 py-3 sm:grid-cols-3"');
   });
 
   it("imports the Save Draft loading icon that renders while the async save is pending", () => {
@@ -274,7 +286,7 @@ describe("booking widget customer-intake flow contract", () => {
     for (const expectedText of ["📩", "Booking confirmation", "🔔", "Helpful reminders", "🚗", "Track your team", "👋", "Arrival updates", "🧹", "Fully equipped professionals", "💳", "Payment after service", "💬", "Need to change something?"]) {
       expect(componentSource).toContain(expectedText);
     }
-    expect(componentSource).toContain('className="mt-5 space-y-5"');
+    expect(componentSource).toContain('className="mt-4 space-y-3"');
     expect(componentSource).toContain("BOOKING_CONFIRMATION_EXPECTATIONS.map(({ emoji, title, description })");
     expect(componentSource).not.toContain("index === BOOKING_CONFIRMATION_EXPECTATIONS.length - 1");
     expect(componentSource).toContain("selectedRecurringOption && recurringFutureVisitPrice !== null");
@@ -308,7 +320,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/KoTsWjcUFAcYYhVB.png");
     expect(componentSource).toContain("object-contain");
     expect(componentSource).not.toContain("objectPosition");
-    expect(componentSource).toContain("sm:aspect-[2.75/1]");
+    expect(componentSource).toContain("min-[480px]:grid-cols-[140px_1fr]");
     expect(componentSource).toContain("Demo checkout");
     expect(componentSource).toContain("Stripe-style payment preview");
     expect(componentSource).toContain('aria-label="Demo card number"');

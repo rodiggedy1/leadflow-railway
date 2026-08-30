@@ -227,13 +227,13 @@ function DemoHistoryRow({ entry, customerColor, trustPoints }: { entry: DemoHist
     );
   }
   return (
-    <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] sm:grid sm:aspect-[2.75/1] sm:grid-cols-[42%_1fr]">
+    <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] min-[480px]:grid min-[480px]:grid-cols-[140px_1fr]">
       <img
         src={CLEANER_TEAM_IMAGE_URL}
         alt="Maids in Black professional holding cleaning supplies"
-        className="h-44 w-full bg-[#f7f5f2] object-contain sm:h-full"
+        className="h-36 w-full bg-[#f7f5f2] object-contain min-[480px]:h-full"
       />
-      <div className="flex flex-col justify-center p-5"><span className="text-[10px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-3 text-[17px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#66736e]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#239268]" /><span>{trustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-3 text-[11px] font-extrabold text-[#ff684c]">See our happiness promise</span></div>
+      <div className="flex flex-col justify-center p-4"><span className="text-[9px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-2 text-[15px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-2 flex items-start gap-2 text-[10px] leading-4 text-[#66736e]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#239268]" /><span>{trustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-2 text-[10px] font-extrabold text-[#ff684c]">See our happiness promise</span></div>
     </div>
   );
 }
@@ -1074,13 +1074,13 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
           <section aria-label="Recurring cleaning frequency" className="border-b border-[#e4e5e7] py-4">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#77798b]">Save on future cleanings</div><h3 className="mt-1 text-[15px] font-extrabold text-[#3a3c41]">Would you like to make it recurring?</h3></div><span className="rounded-full bg-[#fff1ed] px-2.5 py-1 text-[9px] font-extrabold text-[#e9573e]">First clean stays ${quotePrice}</span></div>
-            <div className="mt-3 grid grid-cols-1 gap-2 min-[480px]:grid-cols-3">{BOOKING_WIDGET_RECURRING_OPTIONS.map((option) => {
+            <div className="mt-2.5 grid grid-cols-1 gap-1.5 min-[480px]:grid-cols-3">{BOOKING_WIDGET_RECURRING_OPTIONS.map((option) => {
               const futurePrice = priceBreakdown ? calculateBookingWidgetRecurringPrice(priceBreakdown.total, option.id) : null;
               const selected = demo.recurringFrequency === option.id;
               return (
-                <button key={option.id} type="button" aria-pressed={selected} onClick={() => setDemo((current) => ({ ...current, recurringFrequency: option.id }))} className={`relative rounded-xl border px-2 py-2 text-center transition focus:outline-none focus:ring-2 focus:ring-[#ff684c]/35 ${selected ? "border-[#ff684c] bg-[#fff8f6] shadow-sm" : "border-[#dfe0e4] bg-white hover:border-[#ff9c89]"}`}>
-                  {option.badge && <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#3a3c41] px-1.5 py-0.5 text-[6px] font-extrabold tracking-wide text-white">{option.badge}</span>}
-                  <span className="block text-[10px] font-extrabold text-[#3a3c41]">{option.label}</span><strong className="mt-1 block text-[15px] text-[#3a3c41]">{formatItemizedCurrency(futurePrice ?? 0)}<small className="text-[8px] font-medium text-[#77798b]">/visit</small></strong><span className="mt-1 block text-[8px] font-extrabold text-[#168d61]">Save {option.discountPercent}%</span>
+                <button key={option.id} type="button" aria-pressed={selected} onClick={() => setDemo((current) => ({ ...current, recurringFrequency: option.id }))} className={`relative rounded-lg border px-1.5 py-1.5 text-center transition focus:outline-none focus:ring-2 focus:ring-[#ff684c]/35 ${selected ? "border-[#ff684c] bg-[#fff8f6] shadow-sm" : "border-[#dfe0e4] bg-white hover:border-[#ff9c89]"}`}>
+                  {option.badge && <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#3a3c41] px-1.5 py-0.5 text-[5.5px] font-extrabold tracking-wide text-white">{option.badge}</span>}
+                  <span className="block text-[9px] font-extrabold text-[#3a3c41]">{option.label}</span><strong className="mt-0.5 block text-[13px] text-[#3a3c41]">{formatItemizedCurrency(futurePrice ?? 0)}<small className="text-[7px] font-medium text-[#77798b]">/visit</small></strong><span className="mt-0.5 block text-[7px] font-extrabold text-[#168d61]">Save {option.discountPercent}%</span>
                 </button>
               );
             })}</div>
@@ -1161,7 +1161,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           </div>
           <div className="p-5">
             <div className="space-y-2 rounded-xl border border-[#e4e5e7] bg-[#fafaf9] p-4 text-[11px]"><div className="flex justify-between gap-4"><span className="font-bold text-[#3a3c41]">{service.name}</span><strong className="text-[#3a3c41]">${quotePrice}</strong></div><div className="flex justify-between gap-4 text-[#6f7279]"><span>Address</span><span className="text-right">{demo.address}</span></div>{selectedRecurringOption && recurringFutureVisitPrice !== null && <div className="flex justify-between gap-4 text-[#6f7279]"><span>{selectedRecurringOption.label}</span><span className="text-right">{formatItemizedCurrency(recurringFutureVisitPrice)}/visit from visit two</span></div>}<div className="flex justify-between gap-4 text-[#6f7279]"><span>Payment</span><span>{config.demoCardBrand} •••• {config.demoCardLast4}</span></div></div>
-            <section aria-label="What to expect after booking" className="mt-6"><p className="text-[13px] font-bold leading-6 text-[#3a3c41]">We’ll take it from here. Here’s what to expect:</p><div className="mt-5 space-y-5">{BOOKING_CONFIRMATION_EXPECTATIONS.map(({ emoji, title, description }) => <div key={title}><h3 className="text-[12px] font-extrabold text-[#3a3c41]"><span aria-hidden="true">{emoji}</span> {title}</h3><p className="mt-1.5 pl-7 text-[10px] leading-5 text-[#6f7279]">{description}</p></div>)}</div></section>
+            <section aria-label="What to expect after booking" className="mt-5"><p className="text-[13px] font-bold leading-6 text-[#3a3c41]">We’ll take it from here. Here’s what to expect:</p><div className="mt-4 space-y-3">{BOOKING_CONFIRMATION_EXPECTATIONS.map(({ emoji, title, description }) => <div key={title}><h3 className="text-[12px] font-extrabold text-[#3a3c41]"><span aria-hidden="true">{emoji}</span> {title}</h3><p className="mt-1 pl-7 text-[10px] leading-5 text-[#6f7279]">{description}</p></div>)}</div></section>
             <p className="mt-4 rounded-xl bg-[#f5f5f3] px-3.5 py-3 text-[9px] leading-4 text-[#6f7279]">{config.demoPaymentNotice}</p>
           </div>
         </div>
@@ -1350,12 +1350,12 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
             {mode === "editor" && <CardHeader className="border-b border-gray-100 bg-white py-4 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>}
             <CardContent className={`bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] ${mode === "live" && surface === "popup" ? "flex min-h-0 flex-1 flex-col overflow-hidden p-0" : "p-3 sm:p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden"}`}>
               <div className={`mx-auto flex w-full flex-col overflow-hidden bg-white ${mode === "live" && surface === "popup" ? "min-h-0 flex-1 max-w-none rounded-none border-0 shadow-none" : "max-w-[720px] rounded-[28px] border border-[#dfe0e2] shadow-[0_28px_80px_rgba(17,17,17,0.16)] xl:min-h-0 xl:flex-1"}`} style={{ color: config.primaryColor }}>
-                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#282828] bg-[#111111] px-5 py-4 text-white sm:px-6">
+                <div className={`flex shrink-0 items-center justify-between gap-3 border-b border-[#282828] bg-[#111111] text-white ${mode === "live" && surface === "popup" ? "px-4 py-3" : "px-5 py-4 sm:px-6"}`}>
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white text-xl text-[#ff684c]">{config.brandLogoUrl ? <img src={config.brandLogoUrl} alt="Widget logo preview" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : config.headerIcon || <Bot className="h-5 w-5" />}</div>
-                    <div className="min-w-0"><div className="truncate text-[18px] font-extrabold">{config.brandName || "Book with AI"}</div><div className="mt-1 flex items-center text-[12px] text-white/65"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#23b982] shadow-[0_0_0_4px_rgba(35,185,130,0.13)]" />{config.statusText}</div></div>
+                    <div className={`flex shrink-0 items-center justify-center overflow-hidden bg-white text-[#ff684c] ${mode === "live" && surface === "popup" ? "h-10 w-10 rounded-[14px] text-lg" : "h-11 w-11 rounded-2xl text-xl"}`}>{config.brandLogoUrl ? <img src={config.brandLogoUrl} alt="Widget logo preview" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : config.headerIcon || <Bot className="h-5 w-5" />}</div>
+                    <div className="min-w-0"><div className={`truncate font-extrabold ${mode === "live" && surface === "popup" ? "text-[16px]" : "text-[18px]"}`}>{config.brandName || "Book with AI"}</div><div className={`mt-0.5 flex items-center text-white/65 ${mode === "live" && surface === "popup" ? "text-[11px]" : "text-[12px]"}`}><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#23b982] shadow-[0_0_0_4px_rgba(35,185,130,0.13)]" />{config.statusText}</div></div>
                   </div>
-                  <button type="button" onClick={startOver} className="shrink-0 rounded-full border border-[#4a4a4a] bg-[#242424] px-3.5 py-2 text-[12px] font-bold text-white transition hover:border-[#ff684c] hover:bg-[#ff684c]">Start over</button>
+                  <button type="button" onClick={startOver} className={`shrink-0 rounded-full border border-[#4a4a4a] bg-[#242424] font-bold text-white transition hover:border-[#ff684c] hover:bg-[#ff684c] ${mode === "live" && surface === "popup" ? "px-3 py-1.5 text-[11px]" : "px-3.5 py-2 text-[12px]"}`}>Start over</button>
                 </div>
 
                 {showSummary && (
