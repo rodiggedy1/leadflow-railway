@@ -4208,3 +4208,84 @@ export const csDraftExamples = mysqlTable("cs_draft_examples", {
 ]);
 export type CsDraftExample = typeof csDraftExamples.$inferSelect;
 export type InsertCsDraftExample = typeof csDraftExamples.$inferInsert;
+
+// ── Native Book with AI bookings ──────────────────────────────────────────────
+export const bookings = mysqlTable("bookings", {
+  id: int("id").autoincrement().primaryKey(),
+  publicBookingNumber: varchar("publicBookingNumber", { length: 40 }).notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 36 }).notNull(),
+  commandHash: varchar("commandHash", { length: 64 }).notNull(),
+  source: varchar("source", { length: 20 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull().default("needs_attention"),
+  availabilityStatus: varchar("availabilityStatus", { length: 32 }).notNull().default("requested"),
+  assignmentStatus: varchar("assignmentStatus", { length: 32 }).notNull().default("unassigned"),
+  paymentStatus: varchar("paymentStatus", { length: 32 }).notNull().default("not_started"),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
+  customerEmail: varchar("customerEmail", { length: 320 }).notNull(),
+  serviceId: varchar("serviceId", { length: 32 }).notNull(),
+  serviceName: varchar("serviceName", { length: 120 }).notNull(),
+  bedrooms: int("bedrooms").notNull(),
+  bathrooms: int("bathrooms").notNull(),
+  extras: json("extras").$type<Array<{ id: string; label: string; quantity: number; unitPriceCents: number; totalCents: number }>>().notNull(),
+  specialRequestNotes: json("specialRequestNotes").$type<string[]>().notNull(),
+  address: varchar("address", { length: 500 }).notNull(),
+  requestedLocalDate: varchar("requestedLocalDate", { length: 10 }).notNull(),
+  requestedLocalTime: varchar("requestedLocalTime", { length: 5 }).notNull(),
+  requestedTimeZone: varchar("requestedTimeZone", { length: 64 }).notNull(),
+  requestedStartAt: bigint("requestedStartAt", { mode: "number" }).notNull(),
+  recurrence: varchar("recurrence", { length: 32 }).notNull().default("one-time"),
+  recurringIntentStatus: varchar("recurringIntentStatus", { length: 32 }),
+  pricingVersion: varchar("pricingVersion", { length: 64 }).notNull(),
+  firstCleaningTotalCents: int("firstCleaningTotalCents").notNull(),
+  futureVisitTotalCents: int("futureVisitTotalCents"),
+  priceSnapshot: json("priceSnapshot").notNull(),
+  expiresAt: bigint("expiresAt", { mode: "number" }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_bookings_public_number").on(t.publicBookingNumber),
+  uniqueIndex("uq_bookings_idempotency_key").on(t.idempotencyKey),
+  index("idx_bookings_requested_date").on(t.requestedLocalDate),
+  index("idx_bookings_status_date").on(t.status, t.requestedLocalDate),
+  index("idx_bookings_customer_phone").on(t.customerPhone),
+]);
+export type Booking = typeof bookings.$inferSelect;
+export type InsertBooking = typeof bookings.$inferInsert;
+
+export const bookingAssignments = mysqlTable("booking_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  bookingId: int("bookingId").notNull(),
+  teamId: int("teamId"),
+  teamName: varchar("teamName", { length: 255 }),
+  status: varchar("status", { length: 32 }).notNull().default("assigned"),
+  assignedByAgentId: int("assignedByAgentId"),
+  assignedAt: datetime("assignedAt", { mode: "date", fsp: 3 }).notNull(),
+  unassignedAt: datetime("unassignedAt", { mode: "date", fsp: 3 }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  index("idx_booking_assignments_booking").on(t.bookingId),
+  index("idx_booking_assignments_team").on(t.teamId),
+]);
+export type BookingAssignment = typeof bookingAssignments.$inferSelect;
+export type InsertBookingAssignment = typeof bookingAssignments.$inferInsert;
+
+export const bookingSeries = mysqlTable("booking_series", {
+  id: int("id").autoincrement().primaryKey(),
+  bookingId: int("bookingId").notNull(),
+  status: varchar("status", { length: 32 }).notNull().default("intent_pending"),
+  frequency: varchar("frequency", { length: 32 }).notNull(),
+  anchorLocalDate: varchar("anchorLocalDate", { length: 10 }).notNull(),
+  anchorLocalTime: varchar("anchorLocalTime", { length: 5 }).notNull(),
+  timeZone: varchar("timeZone", { length: 64 }).notNull(),
+  firstCleaningTotalCents: int("firstCleaningTotalCents").notNull(),
+  futureVisitTotalCents: int("futureVisitTotalCents").notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_booking_series_booking").on(t.bookingId),
+  index("idx_booking_series_status").on(t.status),
+]);
+export type BookingSeries = typeof bookingSeries.$inferSelect;
+export type InsertBookingSeries = typeof bookingSeries.$inferInsert;
