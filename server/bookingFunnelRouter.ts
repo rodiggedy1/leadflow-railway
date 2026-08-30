@@ -11,6 +11,7 @@ import {
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 import {
   BookingFunnelInputError,
   createBookingFunnelMutationToken,
@@ -109,6 +110,7 @@ export const bookingFunnelRouter = router({
         if (!row) throw error;
       }
       if (row.commandHash !== normalized.commandHash) throw new TRPCError({ code: "CONFLICT", message: "IDEMPOTENCY_CONFLICT" });
+      if (created) broadcastOpsUpdate("booking_funnel_update");
       return {
         publicFunnelNumber: row.publicFunnelNumber,
         mutationToken: createBookingFunnelMutationToken(ENV.cookieSecret, row.publicFunnelNumber, row.idempotencyKey),
@@ -136,6 +138,7 @@ export const bookingFunnelRouter = router({
         .set({ ...patch, version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
         .where(and(eq(bookingFunnelRecords.id, existing.id), eq(bookingFunnelRecords.version, input.expectedVersion)));
       if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
+      broadcastOpsUpdate("booking_funnel_update");
       return {
         publicFunnelNumber: existing.publicFunnelNumber,
         mutationToken: input.mutationToken,
@@ -177,6 +180,7 @@ export const bookingFunnelRouter = router({
           eq(bookingFunnelRecords.version, input.expectedVersion),
         ));
       if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
+      broadcastOpsUpdate("booking_funnel_update");
       return {
         publicFunnelNumber: existing.publicFunnelNumber,
         mutationToken: input.mutationToken,

@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import { CalendarDays, CreditCard, Filter, Loader2, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -61,7 +62,7 @@ const funnelExtrasFrom = (value: unknown): NativeExtra[] => Array.isArray(value)
   : [];
 const notesFrom = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-export default function NativeBookingsWorkspace() {
+export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeEnabled: boolean }) {
   const [view, setView] = useState<"bookings" | "leads">("bookings");
   const [activeKey, setRawActiveKey] = useState<string | null>(null);
   const detailDismissedRef = useRef(false);
@@ -80,6 +81,21 @@ export default function NativeBookingsWorkspace() {
   const selectedFunnelId = activeKey?.startsWith("funnel:") ? Number(activeKey.slice("funnel:".length)) : null;
   const detailQuery = trpc.bookings.get.useQuery({ id: selectedBookingId ?? 0 }, { enabled: selectedBookingId !== null, staleTime: 10_000 });
   const funnelDetailQuery = trpc.bookingFunnel.get.useQuery({ id: selectedFunnelId ?? 0 }, { enabled: selectedFunnelId !== null, staleTime: 10_000 });
+  const hasConnectedRef = useRef(false);
+  const refreshFunnelQueries = () => {
+    void funnelListQuery.refetch();
+    if (selectedFunnelId !== null) void funnelDetailQuery.refetch();
+  };
+  useOpsStream({
+    onBookingFunnelUpdate: refreshFunnelQueries,
+    onConnected: () => {
+      if (!hasConnectedRef.current) {
+        hasConnectedRef.current = true;
+        return;
+      }
+      refreshFunnelQueries();
+    },
+  }, { enabled: realtimeEnabled, label: "NativeBookings" });
   const bookings = listQuery.data ?? [];
   const funnelLeads = funnelListQuery.data ?? [];
   const rows = useMemo<WorkspaceRow[]>(() => {

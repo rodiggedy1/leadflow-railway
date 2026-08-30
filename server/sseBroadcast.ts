@@ -18,6 +18,7 @@
  *   "phone_update"    — update-lead-phone successfully linked a real phone to a lead
  *   "issue_comment"     — a comment was posted on an issue thread in Command Chat
  *   "lead_assignment"   — a lead was assigned to an agent from Lead Ops
+ *   "booking_funnel_update" — a booking funnel record was created or changed
  *   "ping"              — keepalive (sent every 25s to prevent proxy timeouts)
  *   "task_update"       — a task was created, updated, or completed
  *   "cs_mission_update" — a cs_mission was created, updated, or completed
@@ -41,7 +42,8 @@ export type OpsEventType =
   | "missed_call"
   | "missed_call_resolved"
   | "task_update"
-  | "cs_mission_update";
+  | "cs_mission_update"
+  | "booking_funnel_update";
 
 export interface OpsEvent {
   type: OpsEventType;

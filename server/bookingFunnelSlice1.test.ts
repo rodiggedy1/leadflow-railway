@@ -97,6 +97,19 @@ describe("native booking funnel slice 1", () => {
     expect(routerSource).not.toContain("stripePaymentMethod");
   });
 
+  it("emits one dedicated real-time refresh hint only after committed funnel writes", () => {
+    const routerSource = read("server/bookingFunnelRouter.ts");
+    const broadcastSource = read("server/sseBroadcast.ts");
+    const streamSource = read("client/src/hooks/useOpsStream.ts");
+    expect(broadcastSource).toContain('| "booking_funnel_update";');
+    expect(streamSource).toContain("onBookingFunnelUpdate?: () => void");
+    expect(streamSource).toContain('case "booking_funnel_update"');
+    expect(routerSource).toContain('if (created) broadcastOpsUpdate("booking_funnel_update")');
+    expect(routerSource.match(/broadcastOpsUpdate\("booking_funnel_update"\)/g)).toHaveLength(3);
+    expect(routerSource.indexOf('if (affectedRows(result) !== 1')).toBeLessThan(routerSource.indexOf('broadcastOpsUpdate("booking_funnel_update")', routerSource.indexOf('update: publicProcedure')));
+    expect(routerSource.indexOf('existing.stage === "payment_incomplete" || existing.stage === "booked"')).toBeLessThan(routerSource.lastIndexOf('broadcastOpsUpdate("booking_funnel_update")'));
+  });
+
   it("registers one checksum-locked, additive-only create-table migration", () => {
     const sql = read("server/versioned-migrations/0009_create_booking_funnel_records.sql");
     const postconditions = JSON.parse(read("server/versioned-migrations/0009_create_booking_funnel_records.postconditions.json"));

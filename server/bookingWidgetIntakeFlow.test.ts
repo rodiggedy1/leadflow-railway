@@ -236,6 +236,16 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("const FIRST_CLEAN_PRICE = 405");
   });
 
+  it("keeps recurring choices compact and removes the requested trust and sample-address UI", () => {
+    const quoteSource = componentSource.slice(componentSource.indexOf('if (step === "quote")'), componentSource.indexOf('if (step === "confirm"'));
+    expect(componentSource).toContain("mt-3 grid grid-cols-1 gap-2 min-[480px]:grid-cols-3");
+    expect(componentSource).toContain("relative rounded-xl border px-2 py-2 text-center");
+    expect(componentSource).not.toContain("mt-3 grid gap-2 sm:grid-cols-3");
+    expect(quoteSource).not.toContain("config.resultTrustPoints.map");
+    expect(componentSource).not.toContain("Use sample address");
+    expect(componentSource).toContain("submitAddress(composerValue)");
+  });
+
   it("imports the Save Draft loading icon that renders while the async save is pending", () => {
     expect(componentSource).toMatch(/import \{[^}]*\bLoader2\b[^}]*\} from "lucide-react";/);
     expect(componentSource).toContain('saving ? <Loader2 className="h-4 w-4 animate-spin" />');

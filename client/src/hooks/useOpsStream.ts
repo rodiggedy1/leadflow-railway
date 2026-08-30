@@ -46,6 +46,8 @@ export type OpsStreamCallbacks = {
   onTaskUpdate?: () => void;
   /** Called when a cs_mission is created, updated, or completed for a session */
   onCsMissionUpdate?: (sessionId: number) => void;
+  /** Called after a booking funnel record is created or changed */
+  onBookingFunnelUpdate?: () => void;
 };
 
 // Minimum 5s before first reconnect attempt — prevents thundering herd when
@@ -146,6 +148,9 @@ export function useOpsStream(
               break;
             case "cs_mission_update":
               cbRef.current.onCsMissionUpdate?.(event.sessionId ?? 0);
+              break;
+            case "booking_funnel_update":
+              cbRef.current.onBookingFunnelUpdate?.();
               break;
             case "ping":
               // keepalive — no action needed
