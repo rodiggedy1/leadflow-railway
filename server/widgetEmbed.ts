@@ -18,12 +18,13 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.4.0";
+const WIDGET_VERSION = "2.5.0";
+const WIDGET_CONTENT_MODE: "booking" | "sms" = "booking";
 
 export function registerWidgetEmbedRoute(app: Express) {
   app.get("/api/widget.js", (_req, res) => {
     const API_BASE = "https://quote.maidinblack.com";
-    const script = buildWidgetScript(API_BASE, WIDGET_VERSION);
+    const script = buildWidgetScript(API_BASE, WIDGET_VERSION, WIDGET_CONTENT_MODE);
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Access-Control-Allow-Origin", "*");
     // Never cache — always serve the latest version.
@@ -35,7 +36,7 @@ export function registerWidgetEmbedRoute(app: Express) {
   });
 }
 
-function buildWidgetScript(apiBase: string, version: string): string {
+function buildWidgetScript(apiBase: string, version: string, contentMode: "booking" | "sms"): string {
   return `
 (function () {
   'use strict';
@@ -46,7 +47,9 @@ function buildWidgetScript(apiBase: string, version: string): string {
   if (window.__MIB_WIDGET_LOADED__) return;
   window.__MIB_WIDGET_LOADED__ = true;
 
-  var API_BASE = '${apiBase}';
+  var scriptElement = document.currentScript;
+  var API_BASE = scriptElement && scriptElement.src ? new URL(scriptElement.src).origin : '${apiBase}';
+  var CONTENT_MODE = '${contentMode}';
   var CORAL = '#E8735A';
   var CORAL_DARK = '#C9563D';
   var Z_BTN = 2147483647;
@@ -212,18 +215,20 @@ function buildWidgetScript(apiBase: string, version: string): string {
   function buildPanel() {
     // On mobile the panel takes full width minus margins; on desktop it's 340px
     var isMobile = window.innerWidth < 480;
+    var isBooking = CONTENT_MODE === 'booking';
     panel = el('div', {
       position: 'fixed',
       // Sit just above the floating button (button height 60px + gap 12px + safe area)
       bottom: 'calc(' + (isMobile ? '88px' : '96px') + ' + env(safe-area-inset-bottom, 0px))',
-      right: '16px',
+      right: isMobile && isBooking ? '8px' : '16px',
       // On mobile: stretch to fill the screen width minus margins
-      // On desktop: fixed 340px
-      left: isMobile ? '16px' : 'auto',
-      width: isMobile ? 'auto' : '340px',
+      // On desktop: legacy SMS is 340px; booking uses its existing 760px live layout
+      left: isMobile ? (isBooking ? '8px' : '16px') : 'auto',
+      width: isMobile ? 'auto' : (isBooking ? '780px' : '340px'),
+      height: isBooking ? (isMobile ? 'calc(100dvh - 112px)' : 'min(860px, calc(100vh - 120px))') : 'auto',
       maxHeight: 'calc(100vh - 120px)',
       zIndex: String(Z_PANEL),
-      borderRadius: '16px',
+      borderRadius: isBooking ? '28px' : '16px',
       overflow: 'hidden',
       boxShadow: '0 8px 40px rgba(0,0,0,0.2)',
       display: 'none',
@@ -337,9 +342,25 @@ function buildWidgetScript(apiBase: string, version: string): string {
     footerText.textContent = 'Powered by Maids in Black LeadFlow';
     footer.appendChild(footerText);
 
-    panel.appendChild(header);
-    panel.appendChild(body);
-    panel.appendChild(footer);
+    if (isBooking) {
+      var bookingFrame = el('iframe', {
+        width: '100%',
+        height: '100%',
+        border: '0',
+        display: 'block',
+        background: '#F5F5F3',
+      }, {
+        src: API_BASE + '/book/widget',
+        title: 'Book with Maids in Black',
+        allow: 'autoplay; fullscreen; picture-in-picture',
+        id: 'mib-booking-frame',
+      });
+      panel.appendChild(bookingFrame);
+    } else {
+      panel.appendChild(header);
+      panel.appendChild(body);
+      panel.appendChild(footer);
+    }
     (document.body || document.documentElement).appendChild(panel);
   }
 
