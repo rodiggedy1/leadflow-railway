@@ -52,7 +52,7 @@
       "id": "0007_native_booking_funnel_columns",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0007_native_booking_funnel_columns.sql",
-      "sha256": "3f440fd16976c650a295a48bf55f04cca6073505134268631d272c04d17060cf",
+      "sha256": "cc35404fe4f615b88032855030ec2a275c7aa6be5e2edecc6788c4a5fd4ae6d6",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0007_native_booking_funnel_columns.postconditions.json"
     },
@@ -60,7 +60,7 @@
       "id": "0008_card_auth_native_booking",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0008_card_auth_native_booking.sql",
-      "sha256": "e6402ec5b47fd47bc1b554baf3db25adf05b9088248cb51af152ad8509b08d5a",
+      "sha256": "0b05ed937508f9735c2c90475ef4c99fead5337717bf7332158b9c787d867a82",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0008_card_auth_native_booking.postconditions.json"
     }
