@@ -47,6 +47,22 @@
       "sha256": "c90cb4e37ba4c49ee7d1a031b84335c9f0c725038626c2a9fbd4f8f7d312f1cb",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0006_create_booking_series.postconditions.json"
+    },
+    {
+      "id": "0007_native_booking_funnel_columns",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0007_native_booking_funnel_columns.sql",
+      "sha256": "3f440fd16976c650a295a48bf55f04cca6073505134268631d272c04d17060cf",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0007_native_booking_funnel_columns.postconditions.json"
+    },
+    {
+      "id": "0008_card_auth_native_booking",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0008_card_auth_native_booking.sql",
+      "sha256": "e6402ec5b47fd47bc1b554baf3db25adf05b9088248cb51af152ad8509b08d5a",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0008_card_auth_native_booking.postconditions.json"
     }
   ]
 }

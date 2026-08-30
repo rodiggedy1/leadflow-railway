@@ -7,10 +7,13 @@ import {
 } from "../shared/bookingWidgetConfig";
 import {
   NATIVE_BOOKING_PRICING_VERSION,
+  type BeginBookingPaymentInput,
   type BookingPriceSnapshot,
+  type CaptureBookingLeadInput,
   type PrepareBookingInput,
   type PrepareBookingResult,
   type SafePreparedBookingSummary,
+  type UpdateBookingLeadInput,
 } from "../shared/booking";
 import { normalizePhone } from "./utils/phone";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
@@ -23,10 +26,11 @@ export type PreparedNativeBooking = {
   idempotencyKey: string;
   commandHash: string;
   source: PrepareBookingInput["surface"];
-  status: "needs_attention";
+  funnelStage: "lead" | "pending_payment";
+  status: "needs_attention" | "pending_payment";
   availabilityStatus: "requested";
   assignmentStatus: "unassigned";
-  paymentStatus: "not_started";
+  paymentStatus: "not_started" | "pending";
   customerName: string;
   customerPhone: string;
   customerEmail: string;
@@ -73,8 +77,8 @@ function publicBookingNumberFor(idempotencyKey: string): string {
 }
 
 export function buildPreparedNativeBooking(
-  input: PrepareBookingInput,
-  options: { nowMs: number; timeZone: string },
+  input: PrepareBookingInput | CaptureBookingLeadInput,
+  options: { nowMs: number; timeZone: string; funnelStage?: "lead" | "pending_payment" },
 ): { type: "price_changed"; result: Extract<PrepareBookingResult, { type: "price_changed" }> } | { type: "ready"; prepared: PreparedNativeBooking } {
   const phone = normalizePhone(input.customer.phone);
   if (!phone) throw new NativeBookingInputError("Enter a valid US phone number.");
@@ -149,8 +153,8 @@ export function buildPreparedNativeBooking(
   }
 
   const customerName = normalizeText(input.customer.fullName);
-  const customerEmail = input.customer.email.trim().toLowerCase();
-  const address = normalizeText(input.address);
+  const customerEmail = input.customer.email?.trim().toLowerCase() ?? "";
+  const address = normalizeText(input.address ?? "");
   const specialRequestNotes = input.service.specialRequestNotes.map(normalizeText).filter(Boolean);
   const materialCommand = {
     customer: { fullName: customerName, phone, email: customerEmail },
@@ -198,10 +202,11 @@ export function buildPreparedNativeBooking(
       idempotencyKey: input.idempotencyKey,
       commandHash,
       source: input.surface,
-      status: "needs_attention",
+      funnelStage: options.funnelStage ?? "lead",
+      status: options.funnelStage === "pending_payment" ? "pending_payment" : "needs_attention",
       availabilityStatus: "requested",
       assignmentStatus: "unassigned",
-      paymentStatus: "not_started",
+      paymentStatus: options.funnelStage === "pending_payment" ? "pending" : "not_started",
       customerName,
       customerPhone: phone,
       customerEmail,
@@ -229,10 +234,14 @@ export function buildPreparedNativeBooking(
 }
 
 export async function prepareNativeBooking(
-  input: PrepareBookingInput,
+  input: PrepareBookingInput | CaptureBookingLeadInput | BeginBookingPaymentInput,
   options: { nowMs: number; timeZone: string; persist: PersistPreparedBooking },
+  behavior: { funnelStage?: "lead" | "pending_payment"; requireCompleteCustomer?: boolean } = {},
 ): Promise<PrepareBookingResult> {
-  const built = buildPreparedNativeBooking(input, options);
+  if (behavior.requireCompleteCustomer !== false && (!input.customer.email || !input.address)) {
+    throw new NativeBookingInputError("Complete the customer email and address before booking.");
+  }
+  const built = buildPreparedNativeBooking(input, { ...options, funnelStage: behavior.funnelStage });
   if (built.type === "price_changed") return built.result;
   const persisted = await options.persist(built.prepared);
   if (persisted.booking.commandHash !== built.prepared.commandHash) {
@@ -245,5 +254,18 @@ export async function prepareNativeBooking(
     created: persisted.created,
     replayed: !persisted.created,
     summary: built.prepared.summary,
+  };
+}
+
+export function updatePreparedNativeBooking(
+  existing: { customerEmail: string; address: string },
+  input: UpdateBookingLeadInput | BeginBookingPaymentInput,
+): { customerEmail: string; address: string } {
+  if ("service" in input) {
+    return { customerEmail: input.customer.email.trim().toLowerCase(), address: normalizeText(input.address) };
+  }
+  return {
+    customerEmail: input.email ? input.email.trim().toLowerCase() : existing.customerEmail,
+    address: input.address ? normalizeText(input.address) : existing.address,
   };
 }

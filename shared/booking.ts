@@ -43,6 +43,24 @@ export const prepareBookingInputSchema = z.object({
   }),
 });
 
+export const captureBookingLeadInputSchema = prepareBookingInputSchema.extend({
+  customer: prepareBookingInputSchema.shape.customer.extend({
+    email: z.string().trim().email().max(320).or(z.literal("")),
+  }),
+  address: z.string().trim().max(500).default(""),
+});
+
+export const updateBookingLeadInputSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  publicBookingNumber: z.string().trim().min(6).max(64),
+  email: z.string().trim().email().max(320).optional(),
+  address: z.string().trim().min(5).max(500).optional(),
+});
+
+export const beginBookingPaymentInputSchema = prepareBookingInputSchema.extend({
+  publicBookingNumber: z.string().trim().min(6).max(64),
+});
+
 export const bookingListInputSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   status: z.enum(["needs_attention", "pending_payment", "confirmed", "completed", "cancelled", "expired"]).optional(),
@@ -53,6 +71,9 @@ export const bookingListInputSchema = z.object({
 export const bookingGetInputSchema = z.object({ id: z.number().int().positive() });
 
 export type PrepareBookingInput = z.infer<typeof prepareBookingInputSchema>;
+export type CaptureBookingLeadInput = z.infer<typeof captureBookingLeadInputSchema>;
+export type UpdateBookingLeadInput = z.infer<typeof updateBookingLeadInputSchema>;
+export type BeginBookingPaymentInput = z.infer<typeof beginBookingPaymentInputSchema>;
 export type BookingSurface = z.infer<typeof bookingSurfaceSchema>;
 export type NativeBookingStatus = "needs_attention" | "pending_payment" | "confirmed" | "completed" | "cancelled" | "expired";
 export type NativePaymentStatus = "not_started" | "pending" | "card_on_file" | "failed";
