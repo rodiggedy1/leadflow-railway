@@ -6,6 +6,28 @@ const root = path.resolve(import.meta.dirname, "..");
 const source = fs.readFileSync(path.join(root, "client/src/components/AdminHeader.tsx"), "utf8");
 
 describe("AdminHeader Staff navigation contract", () => {
+  it("groups Leads, Pipeline, and Voice tools into one Leads dropdown", () => {
+    const leadsStart = source.indexOf('id: "leads-group"');
+    const staffStart = source.indexOf('id: "staff"');
+    expect(leadsStart).toBeGreaterThan(-1);
+    expect(staffStart).toBeGreaterThan(leadsStart);
+
+    const leadsBlock = source.slice(leadsStart, staffStart);
+    expect(leadsBlock).toContain('{ id: "leads",         label: "Leads",        href: "/admin/leads"');
+    expect(leadsBlock).toContain('{ id: "pipeline",      label: "Pipeline",     href: "/admin/leads?tab=pipeline"');
+    expect(leadsBlock).toContain('{ id: "callbacks",    label: "Callbacks",    href: "/admin/leads?tab=callbacks"');
+    expect(leadsBlock).toContain('{ id: "calls",        label: "All Calls",    href: "/admin/calls"');
+    expect(leadsBlock).toContain('{ id: "missed-calls", label: "Missed Calls", href: "/admin/missed-calls"');
+    expect(source).not.toContain('id: "voice",');
+  });
+
+  it("keeps the Voice pending-count badge on the consolidated Leads trigger", () => {
+    expect(source).toContain('entry.id === "leads-group" && <VoicePendingBadge />');
+    expect(source).toContain("trpc.voice.listCallbacks.useQuery");
+    expect(source).toContain("trpc.missedCalls.getPendingCount.useQuery");
+    expect(source).toContain("onMissedCall: () => refetchMissed()");
+  });
+
   it("groups Reviews, Hiring, and Focus under Staff with their existing routes and IDs", () => {
     const staffStart = source.indexOf('id: "staff"');
     const campaignsStart = source.indexOf('id: "campaigns-group"');
@@ -19,6 +41,8 @@ describe("AdminHeader Staff navigation contract", () => {
   });
 
   it("keeps one permission-filtered navigation definition for each regrouped page", () => {
+    expect(source.match(/id: "leads"/g)).toHaveLength(1);
+    expect(source.match(/id: "pipeline"/g)).toHaveLength(1);
     expect(source.match(/id: "review-tracker"/g)).toHaveLength(1);
     expect(source.match(/id: "hiring"/g)).toHaveLength(1);
     expect(source.match(/id: "madison-focus"/g)).toHaveLength(1);

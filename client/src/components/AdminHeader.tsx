@@ -325,24 +325,12 @@ const NAV_ENTRIES: NavEntry[] = [
     ],
   },
   {
-    id: "leads",
+    id: "leads-group",
     label: "Leads",
     icon: <Phone className="w-3.5 h-3.5" />,
-    href: "/admin/leads",
-    tabId: "leads",
-  },
-  {
-    id: "pipeline",
-    label: "Pipeline",
-    icon: <Columns className="w-3.5 h-3.5" />,
-    href: "/admin/leads?tab=pipeline",
-    tabId: "pipeline",
-  },
-  {
-    id: "voice",
-    label: "Voice",
-    icon: <Mic className="w-3.5 h-3.5" />,
     children: [
+      { id: "leads",         label: "Leads",        href: "/admin/leads",               icon: <Phone className="w-3.5 h-3.5" /> },
+      { id: "pipeline",      label: "Pipeline",     href: "/admin/leads?tab=pipeline",  icon: <Columns className="w-3.5 h-3.5" /> },
       { id: "callbacks",    label: "Callbacks",    href: "/admin/leads?tab=callbacks", icon: <PhoneIncoming className="w-3.5 h-3.5" /> },
       { id: "calls",        label: "All Calls",    href: "/admin/calls",               icon: <Mic className="w-3.5 h-3.5" /> },
       { id: "missed-calls", label: "Missed Calls", href: "/admin/missed-calls",        icon: <PhoneMissed className="w-3.5 h-3.5" /> },
@@ -492,7 +480,7 @@ function NavDropdown({
       >
         {entry.icon}
         {entry.label}
-        {entry.id === "voice" && <VoicePendingBadge />}
+        {entry.id === "leads-group" && <VoicePendingBadge />}
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
