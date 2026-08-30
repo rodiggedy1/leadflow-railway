@@ -7,6 +7,7 @@ import {
   createBookingFunnelMutationToken,
   isDuplicateBookingFunnelEntry,
   normalizeBookingFunnelLead,
+  normalizeBookingFunnelPatch,
   verifyBookingFunnelMutationToken,
 } from "./bookingFunnelService";
 
@@ -42,6 +43,17 @@ describe("native booking funnel slice 1", () => {
     })).toThrow(BookingFunnelInputError);
   });
 
+  it("normalizes corrected contact fields before updating the same funnel row", () => {
+    expect(normalizeBookingFunnelPatch({
+      customerName: "  Rohan   Gilkes ",
+      customerPhone: "(302) 981-6191",
+    })).toEqual({
+      customerName: "Rohan Gilkes",
+      customerPhone: "+13029816191",
+    });
+    expect(() => normalizeBookingFunnelPatch({ customerPhone: "123" })).toThrow(BookingFunnelInputError);
+  });
+
   it("signs mutation access for one funnel identity", () => {
     const token = createBookingFunnelMutationToken("test-secret", "MIB-FABC123", "11111111-1111-4111-8111-111111111111");
     expect(verifyBookingFunnelMutationToken("test-secret", token, "MIB-FABC123", "11111111-1111-4111-8111-111111111111")).toBe(true);
@@ -72,11 +84,14 @@ describe("native booking funnel slice 1", () => {
     const routerSource = read("server/bookingFunnelRouter.ts");
     expect(sharedSource).toContain("reserveBookingFunnelInputSchema");
     expect(sharedSource).toContain("patch: progressiveFieldsSchema.refine");
+    expect(sharedSource).toContain("customerName:");
+    expect(sharedSource).toContain("customerPhone:");
     expect(routerSource).toContain("verifyBookingFunnelMutationToken");
+    expect(routerSource).toContain("normalizedPatchOrThrow(input.patch)");
     expect(routerSource).toContain('existing.stage === "payment_incomplete" || existing.stage === "booked"');
     expect(routerSource).toContain('if (existing.stage !== "lead")');
     expect(routerSource).toContain('stage: "payment_incomplete"');
-    expect(routerSource).toContain("...input.patch");
+    expect(routerSource).toContain("...patch");
     expect(routerSource).toContain("eq(bookingFunnelRecords.version, input.expectedVersion)");
     expect(routerSource).not.toContain("prepareNativeBooking");
     expect(routerSource).not.toContain("stripePaymentMethod");
