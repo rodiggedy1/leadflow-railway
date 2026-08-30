@@ -14,8 +14,11 @@ describe("bookings UI preview contract", () => {
   it("wires a guarded lazy admin route and consistent external route entry", () => {
     expect(appSource).toContain('const NativeBookings = lazy(() => import("./pages/NativeBookings"));');
     expect(appSource).toContain('<Route path={"/admin/bookings"} component={NativeBookings} />');
-    expect(pageWrapperSource).toContain('<AdminPageGuard pageId="bookings"><NativeBookingsWorkspace /></AdminPageGuard>');
-    expect(pageSource).not.toContain("AdminHeader");
+    expect(pageWrapperSource).toContain('<AdminPageGuard pageId="bookings">');
+    expect(pageWrapperSource).toContain('<AdminHeader activeTab="bookings" pagePermissions={pagePermissions} isAdmin={isAdmin} />');
+    expect(pageWrapperSource).toContain("bookings-leadflow-shell");
+    expect(pageWrapperSource).toContain("useAgentPermissions()");
+    expect(pageWrapperSource).toContain("<NativeBookingsWorkspace />");
     expect(headerSource).toContain('| "bookings";');
     expect(headerSource).toContain('label: "Bookings",      href: "/admin/bookings"');
     expect(guardSource).toContain('"bookings":          "/admin/bookings"');
@@ -23,10 +26,16 @@ describe("bookings UI preview contract", () => {
     expect(sharedConstSource).toContain('{ id: "bookings",          label: "Bookings",      group: "Operations" }');
   });
 
-  it("preserves the supplied self-contained sidebar, workspace, and detail panel around native data", () => {
-    for (const marker of ["Bookings workspace navigation", "MiB", "Bookings", "Teams", "Inbox", "Payments", "Rohan", "Administrator", "Select booking date", "Booking metrics", "Native LeadFlow bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "REQUESTED REVENUE", "Search customer, address, or request number", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING PREFERENCE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
+  it("uses the standard LeadFlow navigation while preserving the workspace and detail panel around native data", () => {
+    for (const marker of ["Bookings", "Select booking date", "Booking metrics", "Native LeadFlow bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "REQUESTED REVENUE", "Search customer, address, or request number", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING PREFERENCE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
       expect(pageSource).toContain(marker);
     }
+    expect(headerSource).toContain("Fast Leads");
+    expect(headerSource).toContain('activeTab={activeTab}');
+    expect(pageSource).not.toContain("bookings-ops-nav");
+    expect(pageSource).not.toContain("Bookings workspace navigation");
+    expect(pageSource).not.toContain("Rohan");
+    expect(pageSource).not.toContain("Administrator");
     expect(pageSource).toContain("trpc.bookings.list.useQuery");
     expect(pageSource).toContain("trpc.bookings.get.useQuery");
     expect(pageSource).toContain("trpc.bookingFunnel.list.useQuery");
@@ -35,9 +44,13 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain("useState");
   });
 
-  it("matches the supplied desktop shell geometry and responsive breakpoint contract", () => {
-    expect(pageStyles).toContain("grid-template-columns:82px minmax(720px,1fr) 410px");
-    expect(pageStyles).toContain("height:100vh;background:#171719");
+  it("aligns the workspace and detail panel beneath the standard LeadFlow header responsively", () => {
+    expect(pageStyles).toContain("grid-template-columns:minmax(720px,1fr) 410px");
+    expect(pageStyles).toContain("top:var(--admin-header-height,0px)");
+    expect(pageStyles).toContain("height:calc(100vh - var(--admin-header-height,0px))");
+    expect(pageStyles).toContain(".bookings-leadflow-shell>header>div:last-child>*{flex-shrink:0}");
+    expect(pageStyles).not.toContain("grid-template-columns:82px");
+    expect(pageStyles).not.toContain(".bookings-ops-nav");
     expect(pageStyles).toContain("padding:36px 38px 60px");
     expect(pageStyles).toContain("grid-template-columns:1.6fr 1.25fr 1fr .78fr .42fr 20px");
     expect(pageStyles).toContain("@media(max-width:1120px)");
@@ -89,11 +102,11 @@ describe("bookings UI preview contract", () => {
   it("provides responsive list and full-width mobile detail-panel behavior", () => {
     expect(pageStyles).toContain(".bookings-detail-panel{width:100%}");
     expect(pageStyles).toContain(".bookings-row{grid-template-columns:1fr auto;padding:14px}");
-    expect(pageStyles).toContain(".bookings-ops-nav{position:fixed;left:0;right:0;bottom:0");
+    expect(pageStyles).toContain(".bookings-ops-main{padding:22px 14px 48px}");
     expect(pageSource).toContain('aria-label={`Booking details for ${active.customerName}`}');
   });
 
-  it("suppresses the inherited MIB Chat chrome on the self-contained Bookings route", () => {
+  it("keeps the existing MIB Chat suppression unchanged during the navigation-only redesign", () => {
     expect(appSource).toContain('const isBookingsWorkspace = location === "/admin/bookings";');
     expect(appSource).toContain("(location.startsWith(\"/admin\") && !isBookingsWorkspace)");
     expect(appSource).toContain("hasBeenMounted && !isBookingsWorkspace");
