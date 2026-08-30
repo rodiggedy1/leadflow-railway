@@ -74,7 +74,10 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain("Reservation started / Payment incomplete");
     expect(pageSource).toContain("status: lead.stage");
     expect(pageSource).not.toContain('stage: "lead" as const');
-    expect(pageSource).toContain('if (view === "bookings") return [...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows]');
+    expect(pageSource).toContain('if (view === "bookings") {');
+    expect(pageSource).toContain('[...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows]');
+    expect(pageSource).toContain('.filter((row) => row.requestedLocalDate === date)');
+    expect(pageSource).toContain('[bookings, date, funnelLeads, view]');
     expect(pageSource).toContain('return funnelRows.filter((row) => row.status === "lead")');
     expect(pageSource).toContain("Details in progress");
     expect(pageSource).toContain("Email not entered yet");
