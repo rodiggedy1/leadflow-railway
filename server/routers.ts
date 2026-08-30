@@ -56,6 +56,7 @@ import { callMatrixRouter } from "./callMatrixRouter";
 import { stripeRouter } from "./stripeRouter";
 import { tasksRouter } from "./tasksRouter";
 import { bookingsRouter } from "./bookingsRouter";
+import { bookingFunnelRouter } from "./bookingFunnelRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 import { computeSessionSummary } from './sessionSummary';
 import { responseTemplatesRouter } from './responseTemplatesRouter';
@@ -111,6 +112,7 @@ export const appRouter = router({
   stripe: stripeRouter,
   tasks: tasksRouter,
   bookings: bookingsRouter,
+  bookingFunnel: bookingFunnelRouter,
   responseTemplates: responseTemplatesRouter,
 
   auth: router({
