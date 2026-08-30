@@ -87,6 +87,7 @@ describe("booking widget interactive demo configuration", () => {
       addressQuestion: "Great choice. What address should we send the team to?",
       paymentConfirmationTemplate: "Perfect. I found your address. For this demo I’ll use a saved {cardBrand} ending in {last4}.",
       confirmButtonLabel: "Confirm booking",
+      confirmedTitle: "You’re all set.",
       confirmedScheduleTemplate: "{providerName} is scheduled for {day}, {time}.",
       demoPaymentNotice: "Your card is only a demo. No payment was processed.",
     };
@@ -99,7 +100,9 @@ describe("booking widget interactive demo configuration", () => {
     expect(migrated.bookingButtonLabel).toBe("Book for ${price} →");
     expect(migrated.paymentConfirmationTemplate).toBe("Almost done ✨");
     expect(migrated.confirmButtonLabel).toBe("Confirm & book — ${price}");
+    expect(migrated.confirmedTitle).toBe("You’re booked! 🎉");
     expect(parseBookingWidgetDraft(JSON.stringify({ ...versionFive, scheduleQuestion: "Which date works for you?" })).scheduleQuestion).toBe("Which date works for you?");
+    expect(parseBookingWidgetDraft(JSON.stringify({ ...versionFive, confirmedTitle: "See you Saturday!" })).confirmedTitle).toBe("See you Saturday!");
   });
 
   it("migrates version-six extras to the fixed catalog while preserving prompt and custom questions", () => {

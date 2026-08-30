@@ -199,6 +199,27 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("recurringMutation");
   });
 
+  it("places the approved Stripe reservation notice above the mock card fields", () => {
+    const notice = "Add a card to reserve your cleaning. You won’t be charged until after service. Your payment information is securely handled by Stripe and is never stored on our servers.";
+    expect(componentSource).toContain(notice);
+    expect(componentSource.indexOf(notice)).toBeLessThan(componentSource.indexOf('aria-label="Demo card number"'));
+    expect(componentSource).toContain("Mock fields only. Do not enter real card information.");
+  });
+
+  it("renders the complete relaxed emoji-led post-booking list without removing price or recurring details", () => {
+    expect(componentSource).toContain("BOOKING_CONFIRMATION_EXPECTATIONS.map");
+    expect(componentSource).toContain('aria-label="What to expect after booking"');
+    for (const expectedText of ["📩", "Booking confirmation", "🔔", "Helpful reminders", "🚗", "Track your team", "👋", "Arrival updates", "🧹", "Fully equipped professionals", "💳", "Payment after service", "💬", "Need to change something?"]) {
+      expect(componentSource).toContain(expectedText);
+    }
+    expect(componentSource).toContain('className="mt-5 space-y-5"');
+    expect(componentSource).toContain("BOOKING_CONFIRMATION_EXPECTATIONS.map(({ emoji, title, description })");
+    expect(componentSource).not.toContain("index === BOOKING_CONFIRMATION_EXPECTATIONS.length - 1");
+    expect(componentSource).toContain("selectedRecurringOption && recurringFutureVisitPrice !== null");
+    expect(componentSource).toContain("{formatItemizedCurrency(recurringFutureVisitPrice)}/visit from visit two");
+    expect(componentSource).toContain('className="text-[#3a3c41]">${quotePrice}</strong>');
+  });
+
   it("keeps special requests as unpriced browser-only review notes and clears them on Start over", () => {
     expect(componentSource).toContain("specialRequestNotes: string[]");
     expect(componentSource).toContain("specialRequestNotes: []");
