@@ -123,9 +123,12 @@ export default function NativeBookingsWorkspace() {
       paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started",
       firstCleaningTotalCents: lead.firstCleaningTotalCents,
     }));
-    if (view === "bookings") return [...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows];
+    if (view === "bookings") {
+      return [...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows]
+        .filter((row) => row.requestedLocalDate === date);
+    }
     return funnelRows.filter((row) => row.status === "lead");
-  }, [bookings, funnelLeads, view]);
+  }, [bookings, date, funnelLeads, view]);
   useEffect(() => {
     if (!rows.length) return setActiveKey(null);
     if (activeKey === null || !rows.some((row) => row.key === activeKey)) setActiveKey(rows[0].key);
