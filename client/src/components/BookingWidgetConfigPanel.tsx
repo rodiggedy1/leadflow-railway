@@ -272,6 +272,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const openingPromptRef = useRef<HTMLButtonElement>(null);
   const welcomeVideoReturnFocusRef = useRef<"trigger" | "prompt">("trigger");
   const historyIdRef = useRef(0);
+  const phoneCaptureInFlightRef = useRef(false);
   const demoToday = useMemo(() => normalizeCalendarDate(new Date()), []);
   const demoCalendarEnd = useMemo(() => {
     const end = new Date(demoToday);
@@ -745,31 +746,44 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   };
 
   const submitPhone = async () => {
+    if (phoneCaptureInFlightRef.current) return;
     const trimmed = composerValue.trim();
     const error = validateBookingWidgetIntakeField("phone", trimmed);
     if (error) {
       setComposerError(error);
       return;
     }
+    if (mode === "live") {
+      if (!selectedDate || !selectedTime || !priceBreakdown) {
+        setComposerError("Choose a date and time before continuing.");
+        return;
+      }
+      phoneCaptureInFlightRef.current = true;
+      try {
+        const result = await captureLeadMutation.mutateAsync({
+          idempotencyKey: bookingAttemptIdRef.current,
+          surface,
+          customer: { fullName: demo.fullName, phone: trimmed, email: "" },
+          service: { serviceId: demo.serviceId, bedrooms: bedroomCount ?? 0, bathrooms: bathroomCount ?? 0, extras: selectedExtras.map((choice) => { const extra = findBookingWidgetPricedExtra(choice); if (!extra) throw new Error(`Unsupported extra: ${choice}`); return { id: extra.id, quantity: extra.quantityUnit ? demo.extraQuantities[extra.id] ?? 1 : 1 }; }), specialRequestNotes: demo.specialRequestNotes },
+          address: "",
+          requestedSchedule: { localDate: formatLocalDate(selectedDate), localTime: timeLabelTo24Hour(selectedTime) },
+          recurrence: demo.recurringFrequency,
+          acceptedPricing: { version: NATIVE_BOOKING_PRICING_VERSION, totalCents: Math.round(priceBreakdown.total * 100) },
+        });
+        if (result.type !== "prepared") throw new Error("Unable to save this lead.");
+        setFunnelBookingNumber(result.publicBookingNumber);
+      } catch (captureError) {
+        setComposerError(captureError instanceof Error ? captureError.message : "Unable to save this lead. Please try again.");
+        return;
+      } finally {
+        phoneCaptureInFlightRef.current = false;
+      }
+    }
     appendHistory(
       { kind: "message", sender: "assistant", text: renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) }) },
       { kind: "message", sender: "customer", text: trimmed },
       { kind: "privacy" },
     );
-    if (mode === "live" && selectedDate && selectedTime && priceBreakdown) {
-      const result = await captureLeadMutation.mutateAsync({
-        idempotencyKey: bookingAttemptIdRef.current,
-        surface,
-        customer: { fullName: demo.fullName, phone: trimmed, email: "" },
-        service: { serviceId: demo.serviceId, bedrooms: bedroomCount ?? 0, bathrooms: bathroomCount ?? 0, extras: selectedExtras.map((choice) => { const extra = findBookingWidgetPricedExtra(choice); if (!extra) throw new Error(`Unsupported extra: ${choice}`); return { id: extra.id, quantity: extra.quantityUnit ? demo.extraQuantities[extra.id] ?? 1 : 1 }; }), specialRequestNotes: demo.specialRequestNotes },
-        address: "",
-        requestedSchedule: { localDate: formatLocalDate(selectedDate), localTime: timeLabelTo24Hour(selectedTime) },
-        recurrence: demo.recurringFrequency,
-        acceptedPricing: { version: NATIVE_BOOKING_PRICING_VERSION, totalCents: Math.round(priceBreakdown.total * 100) },
-      });
-      if (result.type !== "prepared") throw new Error("Unable to save this lead.");
-      setFunnelBookingNumber(result.publicBookingNumber);
-    }
     setDemo((current) => ({ ...current, phone: trimmed, leadCaptured: true }));
     setComposerValue("");
     setComposerError("");
@@ -1312,8 +1326,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
                   {step === "address" && <div className="mb-2 flex gap-2"><button type="button" onClick={() => setComposerValue(config.addressExample)} className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-3 py-1.5 text-[9px] font-bold text-[#d95740]">Use sample address</button></div>}
                   <div className="flex items-center gap-2 rounded-2xl border border-[#e4e5e7] bg-white p-1.5 pl-3 shadow-[0_5px_18px_rgba(29,25,42,0.04)] focus-within:border-[#ff684c] focus-within:ring-4 focus-within:ring-[#ff684c]/10">
                     <MessageCircle className="h-4 w-4 shrink-0 text-[#a1a2ad]" />
-                    <Input value={composerValue} onChange={(event) => { setComposerValue(event.target.value); if (composerError) setComposerError(""); }} disabled={!composerEnabled} placeholder={composerPlaceholder} aria-label={mode === "live" ? "Booking response" : "Demo booking response"} aria-invalid={Boolean(composerError)} className="h-10 flex-1 border-0 bg-transparent px-1 text-[12px] shadow-none focus-visible:ring-0 disabled:cursor-default disabled:opacity-100" />
-                    <button type="submit" aria-label={mode === "live" ? "Send booking response" : "Send demo response"} disabled={!composerEnabled || !composerValue.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff684c] text-white transition hover:bg-[#e9573e] disabled:bg-[#f1c9c1] disabled:text-white/80"><Send className="h-4 w-4" /></button>
+                    <Input value={composerValue} onChange={(event) => { setComposerValue(event.target.value); if (composerError) setComposerError(""); }} disabled={!composerEnabled || (step === "phone" && captureLeadMutation.isPending)} placeholder={composerPlaceholder} aria-label={mode === "live" ? "Booking response" : "Demo booking response"} aria-invalid={Boolean(composerError)} className="h-10 flex-1 border-0 bg-transparent px-1 text-[12px] shadow-none focus-visible:ring-0 disabled:cursor-default disabled:opacity-100" />
+                    <button type="submit" aria-label={mode === "live" ? "Send booking response" : "Send demo response"} disabled={!composerEnabled || !composerValue.trim() || (step === "phone" && captureLeadMutation.isPending)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff684c] text-white transition hover:bg-[#e9573e] disabled:bg-[#f1c9c1] disabled:text-white/80"><Send className="h-4 w-4" /></button>
                   </div>
                   {composerError && <p className="mt-2 text-[10px] font-bold text-red-600" role="alert">{composerError}</p>}
                   <p className="mt-2 text-center text-[9px] text-[#a1a2ad]">{composerEnabled ? "Press Enter to send · " : ""}{config.helperText}</p>

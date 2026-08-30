@@ -106,6 +106,21 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("updatePricing");
   });
 
+  it("persists a phone lead before appending history and advances only after one successful capture", () => {
+    const phoneHandler = componentSource.slice(
+      componentSource.indexOf("const submitPhone = async () =>"),
+      componentSource.indexOf("const confirmScheduleSelection ="),
+    );
+    expect(phoneHandler).toContain("if (phoneCaptureInFlightRef.current) return");
+    expect(phoneHandler).toContain("phoneCaptureInFlightRef.current = true");
+    expect(phoneHandler).toContain("phoneCaptureInFlightRef.current = false");
+    expect(phoneHandler.indexOf("captureLeadMutation.mutateAsync")).toBeLessThan(phoneHandler.indexOf("appendHistory("));
+    expect(phoneHandler.indexOf("appendHistory(")).toBeLessThan(phoneHandler.indexOf('setStep("email")'));
+    expect(phoneHandler).toContain("setComposerError(captureError instanceof Error");
+    expect(componentSource).toContain('disabled={!composerEnabled || (step === "phone" && captureLeadMutation.isPending)}');
+    expect(componentSource).toContain('disabled={!composerEnabled || !composerValue.trim() || (step === "phone" && captureLeadMutation.isPending)}');
+  });
+
   it("uses one append-only ordered history data structure for completed messages and cards", () => {
     expect(componentSource).toContain("type DemoHistoryEntry = DemoHistoryItem & { id: number }");
     expect(componentSource).toContain("const [history, setHistory] = useState<DemoHistoryEntry[]>([])");
