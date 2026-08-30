@@ -280,6 +280,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   }, [demoToday]);
   const beginFunnelMutation = trpc.bookingFunnel.begin.useMutation();
   const updateFunnelMutation = trpc.bookingFunnel.update.useMutation();
+  const reserveFunnelMutation = trpc.bookingFunnel.reserve.useMutation();
 
   useEffect(() => {
     setConfig(savedConfig);
@@ -471,6 +472,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     setAcceptedPricing({ version: NATIVE_BOOKING_PRICING_VERSION, totalCents: 0 });
     beginFunnelMutation.reset();
     updateFunnelMutation.reset();
+    reserveFunnelMutation.reset();
     phoneCaptureInFlightRef.current = false;
     bookingAttemptIdRef.current = createBookingAttemptId();
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
@@ -875,7 +877,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           : step === "address"
             ? config.addressPlaceholder
             : config.inputPlaceholder;
-  const funnelMutationPending = mode === "live" && (beginFunnelMutation.isPending || updateFunnelMutation.isPending);
+  const funnelMutationPending = mode === "live" && (beginFunnelMutation.isPending || updateFunnelMutation.isPending || reserveFunnelMutation.isPending);
   const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step) && !funnelMutationPending;
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
   const roomSummary = detailLine.split(" · ").slice(0, 2).join(" · ");
@@ -891,25 +893,32 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     if (mode !== "live" || !funnelRecord || !selectedDate || !selectedTime || !priceBreakdown) return;
     setComposerError("");
     try {
-      const result = await persistFunnelPatch({
-        customerEmail: demo.email,
-        serviceId: demo.serviceId,
-        serviceName: service.name,
-        bedrooms: bedroomCount ?? 0,
-        bathrooms: bathroomCount ?? 0,
-        extras: itemizedExtras.map(({ pricedExtra, quantity }) => ({ id: pricedExtra.id, quantity })),
-        specialRequestNotes: demo.specialRequestNotes,
-        address: demo.address,
-        requestedLocalDate: formatLocalDate(selectedDate),
-        requestedLocalTime: timeLabelTo24Hour(selectedTime),
-        requestedTimeZone: "America/New_York",
-        recurrence: demo.recurringFrequency,
-        pricingVersion: pricing.version,
-        firstCleaningTotalCents: pricing.totalCents,
-        futureVisitTotalCents: recurringFutureVisitPrice === null ? null : Math.round(recurringFutureVisitPrice * 100),
-        priceSnapshot: priceBreakdown,
+      const current = funnelRecordRef.current;
+      if (!current) throw new Error("Lead record is unavailable. Start over and try again.");
+      const result = await reserveFunnelMutation.mutateAsync({
+        publicFunnelNumber: current.publicFunnelNumber,
+        mutationToken: current.mutationToken,
+        expectedVersion: current.version,
+        patch: {
+          customerEmail: demo.email,
+          serviceId: demo.serviceId,
+          serviceName: service.name,
+          bedrooms: bedroomCount ?? 0,
+          bathrooms: bathroomCount ?? 0,
+          extras: itemizedExtras.map(({ pricedExtra, quantity }) => ({ id: pricedExtra.id, quantity })),
+          specialRequestNotes: demo.specialRequestNotes,
+          address: demo.address,
+          requestedLocalDate: formatLocalDate(selectedDate),
+          requestedLocalTime: timeLabelTo24Hour(selectedTime),
+          requestedTimeZone: "America/New_York",
+          recurrence: demo.recurringFrequency,
+          pricingVersion: pricing.version,
+          firstCleaningTotalCents: pricing.totalCents,
+          futureVisitTotalCents: recurringFutureVisitPrice === null ? null : Math.round(recurringFutureVisitPrice * 100),
+          priceSnapshot: priceBreakdown,
+        },
       });
-      if (!result) throw new Error("Lead record is unavailable. Start over and try again.");
+      rememberFunnelRecord(result);
       setAcceptedPricing(pricing);
       setPriceChange(null);
       setPreparedBooking({

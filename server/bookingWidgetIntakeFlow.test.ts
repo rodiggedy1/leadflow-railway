@@ -99,6 +99,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('if (mode === "editor") setStep("complete")');
     expect(componentSource).toContain("trpc.bookingFunnel.begin.useMutation()");
     expect(componentSource).toContain("trpc.bookingFunnel.update.useMutation()");
+    expect(componentSource).toContain("trpc.bookingFunnel.reserve.useMutation()");
     expect(componentSource).not.toContain("trpc.bookings.prepare.useMutation()");
     expect(componentSource).not.toContain("prepareBookingMutation.mutateAsync");
     expect(componentSource).not.toContain("createLead");
@@ -133,6 +134,16 @@ describe("booking widget customer-intake flow contract", () => {
       expect(componentSource).toContain(`${field}:`);
     }
     expect(componentSource).toContain("beginFunnelMutation.isPending || updateFunnelMutation.isPending");
+  });
+
+  it("atomically advances the same funnel identity when the final live action succeeds", () => {
+    expect(componentSource).toContain("await reserveFunnelMutation.mutateAsync");
+    expect(componentSource).toContain("publicFunnelNumber: current.publicFunnelNumber");
+    expect(componentSource).toContain("mutationToken: current.mutationToken");
+    expect(componentSource).toContain("expectedVersion: current.version");
+    expect(componentSource).toContain("rememberFunnelRecord(result)");
+    expect(componentSource).toContain("reserveFunnelMutation.isPending");
+    expect(componentSource).not.toContain("prepareBookingMutation.mutateAsync");
   });
 
   it("uses one append-only ordered history data structure for completed messages and cards", () => {

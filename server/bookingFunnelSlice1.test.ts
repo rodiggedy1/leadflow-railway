@@ -59,11 +59,27 @@ describe("native booking funnel slice 1", () => {
     const appRouterSource = read("server/routers.ts");
     expect(routerSource).toMatch(/begin:\s*publicProcedure/);
     expect(routerSource).toMatch(/update:\s*publicProcedure/);
+    expect(routerSource).toMatch(/reserve:\s*publicProcedure/);
     expect(routerSource).toMatch(/list:\s*adminAgentProcedure/);
     expect(routerSource).toMatch(/get:\s*adminAgentProcedure/);
     expect(routerSource).toContain("BOOKING_FUNNEL_VERSION_CONFLICT");
     expect(routerSource).toContain("IDEMPOTENCY_CONFLICT");
     expect(appRouterSource).toContain("bookingFunnel: bookingFunnelRouter");
+  });
+
+  it("reserves the same token-bound row through one atomic forward transition", () => {
+    const sharedSource = read("shared/bookingFunnel.ts");
+    const routerSource = read("server/bookingFunnelRouter.ts");
+    expect(sharedSource).toContain("reserveBookingFunnelInputSchema");
+    expect(sharedSource).toContain("patch: progressiveFieldsSchema.refine");
+    expect(routerSource).toContain("verifyBookingFunnelMutationToken");
+    expect(routerSource).toContain('existing.stage === "payment_incomplete" || existing.stage === "booked"');
+    expect(routerSource).toContain('if (existing.stage !== "lead")');
+    expect(routerSource).toContain('stage: "payment_incomplete"');
+    expect(routerSource).toContain("...input.patch");
+    expect(routerSource).toContain("eq(bookingFunnelRecords.version, input.expectedVersion)");
+    expect(routerSource).not.toContain("prepareNativeBooking");
+    expect(routerSource).not.toContain("stripePaymentMethod");
   });
 
   it("registers one checksum-locked, additive-only create-table migration", () => {
