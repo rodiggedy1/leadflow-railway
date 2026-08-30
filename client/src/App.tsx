@@ -62,6 +62,7 @@ const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
+const BookingsPreview = lazy(() => import("./pages/BookingsPreview"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 
 /**
@@ -120,6 +121,7 @@ function Router() {
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={SettingsPage} />
+        <Route path={"/admin/bookings"} component={BookingsPreview} />
         <Route path={"/admin/settings"} component={SettingsPage} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
