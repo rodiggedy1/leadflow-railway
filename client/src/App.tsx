@@ -16,6 +16,7 @@ import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
 const Book = lazy(() => import("./pages/Book"));
+const BookWidget = lazy(() => import("./pages/BookWidget"));
 const BookNow = lazy(() => import("./pages/BookNow"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AgentDashboard = lazy(() => import("./pages/AgentDashboard"));
@@ -106,6 +107,7 @@ function Router() {
       <Switch>
         <Route path={"/"} component={Home} />
         <Route path={"/book"} component={Book} />
+        <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
