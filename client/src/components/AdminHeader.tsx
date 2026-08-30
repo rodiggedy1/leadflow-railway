@@ -2,8 +2,7 @@
  * AdminHeader — shared header for all admin sub-pages.
  * Renders the full "Fast Leads" logo row + grouped nav tabs.
  *
- * Nav structure (7 entries, 3 with dropdowns):
- *   Leads | Pipeline | Voice ▾ | Staff ▾ | Campaigns ▾ | Happiness | Jobs
+ * Nav structure uses grouped dropdowns to keep related admin tools together.
  *
  * activeTab values: "leads" | "pipeline" | "callbacks" | "calls" |
  *   "agents" | "leaderboard" | "campaigns" | "always-on" |
@@ -356,6 +355,9 @@ const NAV_ENTRIES: NavEntry[] = [
     children: [
       { id: "agents",      label: "Team",        href: "/admin/leads?tab=agents",      icon: <Users className="w-3.5 h-3.5" /> },
       { id: "leaderboard", label: "Leaderboard", href: "/admin/leads?tab=leaderboard", icon: <Trophy className="w-3.5 h-3.5" /> },
+      { id: "review-tracker", label: "Reviews", href: "/admin/review-tracker", icon: <Star className="w-3.5 h-3.5" /> },
+      { id: "hiring", label: "Hiring", href: "/admin/hiring", icon: <Users className="w-3.5 h-3.5" /> },
+      { id: "madison-focus", label: "Focus", href: "/admin/madison-focus", icon: <Sparkles className="w-3.5 h-3.5" /> },
     ],
   },
   {
@@ -402,32 +404,11 @@ const NAV_ENTRIES: NavEntry[] = [
     ],
   },
   {
-    id: "review-tracker",
-    label: "Reviews",
-    icon: <Star className="w-3.5 h-3.5" />,
-    href: "/admin/review-tracker",
-    tabId: "review-tracker",
-  },
-  {
-    id: "hiring",
-    label: "Hiring",
-    icon: <Users className="w-3.5 h-3.5" />,
-    href: "/admin/hiring",
-    tabId: "hiring" as AdminTab,
-  },
-  {
     id: "invoices",
     label: "Invoices",
     icon: <Receipt className="w-3.5 h-3.5" />,
     href: "/admin/invoices",
     tabId: "invoices" as AdminTab,
-  },
-  {
-    id: "madison-focus",
-    label: "Focus",
-    icon: <Sparkles className="w-3.5 h-3.5" />,
-    href: "/admin/madison-focus",
-    tabId: "madison-focus",
   },
   {
     id: "settings",

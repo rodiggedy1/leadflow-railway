@@ -31,3 +31,57 @@
 .book-now-confirmation-page{display:grid;place-items:center;padding:28px;background:radial-gradient(circle at 10% 10%,#ffe5df,transparent 32%),#f7f7f5}.book-now-confirmation-card{width:min(760px,100%);padding:48px;border:1px solid var(--line);border-radius:26px;background:#fff;text-align:center;box-shadow:0 25px 85px rgba(24,24,27,.1)}.book-now-big-check{width:62px;height:62px;margin:0 auto 14px;border-radius:20px;background:#e4f8ef;color:#168d61;display:grid;place-items:center}.book-now-big-check svg{width:28px}.book-now-confirmation-card>small{color:#168d61;font-size:8px;letter-spacing:.12em;font-weight:850}.book-now-confirmation-card h1{font:34px Georgia,serif;margin:7px}.book-now-confirmation-card>p{color:#777;font-size:10px}.book-now-confirmation-details{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:25px 0;text-align:left}.book-now-confirmation-details>div{display:flex;gap:9px;padding:13px;border-radius:12px;background:#f7f7f6}.book-now-confirmation-details svg{width:17px;color:var(--coral)}.book-now-confirmation-details span{display:grid}.book-now-confirmation-details small{font-size:6px;color:#999;font-weight:850}.book-now-confirmation-details strong{font-size:8px}.book-now-expect-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.book-now-expect-grid article{padding:15px;border:1px solid var(--line);border-radius:13px;text-align:left}.book-now-expect-grid article>span{font-size:20px}.book-now-expect-grid strong{display:block;margin-top:8px;font-size:8px}.book-now-expect-grid p{margin:4px 0 0;color:#777;font-size:7px;line-height:1.5}.book-now-confirmation-card>button{margin-top:20px;border:0;border-radius:11px;background:#2c2e33;color:#fff;padding:12px 17px;font-size:8px;font-weight:850}
 @media(max-width:850px){.book-now-layout{grid-template-columns:1fr}.book-now-summary{position:static;grid-row:1}.book-now-service-grid{grid-template-columns:1fr}.book-now-service-card{min-height:auto}.book-now-extras-grid{grid-template-columns:1fr 1fr}.book-now-time-grid,.book-now-frequency-grid{grid-template-columns:1fr 1fr}.book-now-secure-copy{display:none}}
 @media(max-width:560px){.book-now-header{height:62px;padding:0 14px}.book-now-header>button{display:none}.book-now-progress{padding:0 14px}.book-now-layout{padding:18px 10px 60px}.book-now-step-panel{padding:21px 16px}.book-now-step-heading h1{font-size:28px}.book-now-home-controls,.book-now-form-grid{grid-template-columns:1fr}.book-now-extras-grid{grid-template-columns:1fr}.book-now-date-grid{grid-template-columns:repeat(4,1fr)}.book-now-step-actions{padding:13px 16px}.book-now-confirmation-card{padding:28px 17px}.book-now-confirmation-details,.book-now-expect-grid{grid-template-columns:1fr}}
+
+/* Readable public booking typography — geometry and behavior remain unchanged. */
+.book-now-secure-copy,.book-now-header>button{font-size:12px}
+.book-now-progress span,.book-now-step-heading small{font-size:9px}
+.book-now-progress strong{font-size:13px}
+.book-now-step-heading p{font-size:14px;line-height:1.5}
+.book-now-field-label{font-size:12px}
+.book-now-field-label span{font-size:10px}
+.book-now-service-card strong{font-size:13px}
+.book-now-service-card p{font-size:10px;line-height:1.5}
+.book-now-service-card small{font-size:11px}
+.book-now-counter small{font-size:9px}
+.book-now-counter strong{font-size:12px}
+.book-now-counter>div:last-child>strong{font-size:15px}
+.book-now-extra-toggle strong,.book-now-extra-toggle small{font-size:10px}
+.book-now-extra-quantity strong{font-size:11px}
+.book-now-step-actions button{font-size:12px}
+.book-now-summary-top>span{font-size:9px}
+.book-now-summary-top button{font-size:11px}
+.book-now-summary>p{font-size:11px;line-height:1.45}
+.book-now-summary-list div,.book-now-summary-total,.book-now-future-summary{font-size:11px}
+.book-now-summary-total span{font-size:13px}
+.book-now-summary-total strong{font-size:25px}
+.book-now-future-summary small{font-size:9px}
+.book-now-appointment-preview small{font-size:9px}
+.book-now-appointment-preview strong{font-size:11px}
+.book-now-appointment-preview span{font-size:10px}
+.book-now-summary-proof strong{font-size:10px}
+.book-now-summary-proof p{font-size:9px;line-height:1.4}
+.book-now-summary-guarantee p{font-size:10px}
+.book-now-date-choice small{font-size:9px}
+.book-now-selected-date small{font-size:9px}
+.book-now-selected-date strong{font-size:11px}
+.book-now-time-choice,.book-now-frequency-card{font-size:11px}
+.book-now-time-choice small,.book-now-frequency-card span{font-size:9px}
+.book-now-frequency-card b{font-size:8px}
+.book-now-first-clean-note p,.book-now-privacy-note p{font-size:10px}
+.book-now-form-grid label>span,.book-now-stripe-shell label>span{font-size:10px}
+.book-now-form-grid input,.book-now-form-grid textarea,.book-now-stripe-shell input{font-size:12px}
+.book-now-privacy-note strong{font-size:11px}
+.book-now-form-error,.book-now-save-status{font-size:11px}
+.book-now-demo-notice p{font-size:10px}
+.book-now-stripe-top strong{font-size:12px}
+.book-now-stripe-top p{font-size:10px}
+.book-now-stripe-top>span{font-size:15px}
+.book-now-save-card,.book-now-card-saved{font-size:11px}
+.book-now-trust-row{font-size:9px}
+.book-now-confirmation-card>small{font-size:10px}
+.book-now-confirmation-card>p{font-size:13px;line-height:1.5}
+.book-now-confirmation-details small{font-size:9px}
+.book-now-confirmation-details strong{font-size:11px}
+.book-now-expect-grid strong{font-size:11px}
+.book-now-expect-grid p{font-size:10px}
+.book-now-confirmation-card>button{font-size:11px}
