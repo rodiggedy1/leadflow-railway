@@ -183,8 +183,9 @@ function GlobalOpsChat() {
   // causes the position to reset to 0. However, it must NOT be mounted at all
   // on public pages (e.g. the quote form at /) to prevent notification sounds
   // from leaking onto those pages.
+  const isBookingsWorkspace = location === "/admin/bookings";
   const isEligible =
-    location.startsWith("/admin") ||
+    (location.startsWith("/admin") && !isBookingsWorkspace) ||
     location.startsWith("/agent") ||
     location.startsWith("/call-assist");
 
@@ -212,7 +213,7 @@ function GlobalOpsChat() {
 
   // Only render OpsChat if we are on (or have visited) an eligible route.
   // This prevents the sound hooks from being active on the public quote form.
-  const shouldRenderOpsChat = hasBeenMounted;
+  const shouldRenderOpsChat = hasBeenMounted && !isBookingsWorkspace;
 
   return (
     <>
