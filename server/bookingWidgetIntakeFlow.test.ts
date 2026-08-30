@@ -184,6 +184,11 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("const FIRST_CLEAN_PRICE = 405");
   });
 
+  it("imports the Save Draft loading icon that renders while the async save is pending", () => {
+    expect(componentSource).toMatch(/import \{[^}]*\bLoader2\b[^}]*\} from "lucide-react";/);
+    expect(componentSource).toContain('saving ? <Loader2 className="h-4 w-4 animate-spin" />');
+  });
+
   it("keeps the first-clean Book total and propagates only future-visit information to checkout and confirmation", () => {
     expect(componentSource).toContain("formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)");
     expect(componentSource).toContain("First cleaning total");
