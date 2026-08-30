@@ -6,7 +6,6 @@ const service = readFileSync(new URL("./bookingsService.ts", import.meta.url), "
 const schema = readFileSync(new URL("../drizzle/schema.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../drizzle/0094_native_bookings.sql", import.meta.url), "utf8");
 const widget = readFileSync(new URL("../client/src/components/BookingWidgetConfigPanel.tsx", import.meta.url), "utf8");
-const stripeForm = readFileSync(new URL("../client/src/components/BookingStripeCardForm.tsx", import.meta.url), "utf8");
 const experience = readFileSync(new URL("../client/src/components/BookingExperience.tsx", import.meta.url), "utf8");
 const popup = readFileSync(new URL("../client/src/components/BookWithAIWidget.tsx", import.meta.url), "utf8");
 const bookPage = readFileSync(new URL("../client/src/pages/Book.tsx", import.meta.url), "utf8");
@@ -23,11 +22,8 @@ describe("native booking source contract", () => {
     expect(migration).not.toMatch(/\b(DROP|TRUNCATE|DELETE|UPDATE)\b/i);
   });
 
-  it("exposes only the scoped public funnel writes and protects list/get", () => {
+  it("keeps only prepare public and protects list/get", () => {
     expect(router).toContain("prepare: publicProcedure");
-    expect(router).toContain("captureLead: publicProcedure");
-    expect(router).toContain("updateLead: publicProcedure");
-    expect(router).toContain("beginPayment: publicProcedure");
     expect(router).toContain("list: adminAgentProcedure");
     expect(router).toContain("get: adminAgentProcedure");
   });
@@ -45,17 +41,10 @@ describe("native booking source contract", () => {
     expect(app).toContain('<Route path={"/book"} component={Book} />');
   });
 
-  it("keeps the admin editor inert and reuses the secure Stripe booking flow", () => {
-    expect(widget).toContain('mode === "live"');
-    expect(widget).toContain("trpc.bookings.captureLead.useMutation()");
-    expect(widget).toContain("trpc.bookings.beginPayment.useMutation()");
-    expect(widget).toContain("<BookingStripeCardForm");
-    expect(widget).toContain("config.confirmedTitle");
-    expect(widget).not.toContain("Request received");
-    expect(stripeForm).toContain("<PaymentElement");
-    expect(stripeForm).toContain("stripe.confirmSetup");
-    expect(stripeForm).toContain("confirmSaved.mutateAsync");
-    expect(stripeForm).not.toContain("cardNumber");
-    expect(stripeForm).not.toContain("cvc");
+  it("keeps the admin editor inert and uses exact safe result copy", () => {
+    expect(widget).toContain('if (mode !== "live"');
+    expect(widget).toContain('if (mode === "editor") setStep("complete")');
+    expect(widget).toContain("Request received");
+    expect(widget).toContain("We received your requested date and time. We’ll confirm the appointment after reviewing availability.");
   });
 });
