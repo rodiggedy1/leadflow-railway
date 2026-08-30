@@ -1190,7 +1190,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   ) : null;
 
   return (
-    <div className={mode === "live" ? "min-h-screen bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-6" : "space-y-5"}>
+    <div className={mode === "live" ? surface === "popup" ? "h-dvh bg-[#f5f5f3] p-0" : "min-h-screen bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-6" : "space-y-5"}>
       {welcomeVideoDialog}
       {mode === "editor" && <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
         <p className="text-sm font-semibold text-violet-900">Fully interactive demo · internal preview only</p>
@@ -1199,7 +1199,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
         </p>
       </div>}
 
-      <div className={mode === "editor" ? "grid gap-5 xl:grid-cols-[minmax(0,430px)_minmax(560px,1fr)] xl:items-start" : "mx-auto w-full max-w-[760px]"}>
+      <div className={mode === "editor" ? "grid gap-5 xl:grid-cols-[minmax(0,430px)_minmax(560px,1fr)] xl:items-start" : surface === "popup" ? "h-dvh w-full max-w-none" : "mx-auto w-full max-w-[760px]"}>
         {mode === "editor" && <div className="space-y-5">
           <Card className="border-gray-200 shadow-sm">
             <CardHeader className="pb-3">
@@ -1346,11 +1346,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           </div>
         </div>}
 
-        <div className={mode === "editor" ? "xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]" : "min-h-[calc(100dvh-1.5rem)] sm:min-h-[calc(100dvh-3rem)]"}>
-          <Card className={`gap-0 overflow-hidden border-gray-200 py-0 shadow-lg xl:flex xl:flex-col ${mode === "editor" ? "xl:h-full" : "min-h-[calc(100dvh-1.5rem)] sm:min-h-[calc(100dvh-3rem)]"}`}>
+        <div className={mode === "editor" ? "xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]" : surface === "popup" ? "h-dvh" : "min-h-[calc(100dvh-1.5rem)] sm:min-h-[calc(100dvh-3rem)]"}>
+          <Card className={`gap-0 overflow-hidden py-0 xl:flex xl:flex-col ${mode === "editor" ? "border-gray-200 shadow-lg xl:h-full" : surface === "popup" ? "h-dvh rounded-none border-0 shadow-none" : "min-h-[calc(100dvh-1.5rem)] border-gray-200 shadow-lg sm:min-h-[calc(100dvh-3rem)]"}`}>
             {mode === "editor" && <CardHeader className="border-b border-gray-100 bg-white py-4 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>}
-            <CardContent className="bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden">
-              <div className="mx-auto flex w-full max-w-[720px] flex-col overflow-hidden rounded-[28px] border border-[#dfe0e2] bg-white shadow-[0_28px_80px_rgba(17,17,17,0.16)] xl:min-h-0 xl:flex-1" style={{ color: config.primaryColor }}>
+            <CardContent className={`bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden ${mode === "live" && surface === "popup" ? "p-0" : "p-3 sm:p-5"}`}>
+              <div className={`mx-auto flex w-full flex-col overflow-hidden bg-white xl:min-h-0 xl:flex-1 ${mode === "live" && surface === "popup" ? "max-w-none rounded-none border-0 shadow-none" : "max-w-[720px] rounded-[28px] border border-[#dfe0e2] shadow-[0_28px_80px_rgba(17,17,17,0.16)]"}`} style={{ color: config.primaryColor }}>
                 <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#282828] bg-[#111111] px-5 py-4 text-white sm:px-6">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white text-xl text-[#ff684c]">{config.brandLogoUrl ? <img src={config.brandLogoUrl} alt="Widget logo preview" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : config.headerIcon || <Bot className="h-5 w-5" />}</div>

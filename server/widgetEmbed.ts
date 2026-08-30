@@ -220,11 +220,11 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
       position: 'fixed',
       // Sit just above the floating button (button height 60px + gap 12px + safe area)
       bottom: 'calc(' + (isMobile ? '88px' : '96px') + ' + env(safe-area-inset-bottom, 0px))',
-      right: isMobile && isBooking ? '8px' : '16px',
+      right: '16px',
       // On mobile: stretch to fill the screen width minus margins
-      // On desktop: legacy SMS is 340px; booking uses its existing 760px live layout
-      left: isMobile ? (isBooking ? '8px' : '16px') : 'auto',
-      width: isMobile ? 'auto' : (isBooking ? '780px' : '340px'),
+      // On desktop: legacy SMS is 340px; booking is capped for a focused chat-sized panel
+      left: isMobile ? '16px' : 'auto',
+      width: isBooking ? 'min(680px, calc(100vw - 32px))' : (isMobile ? 'auto' : '340px'),
       height: isBooking ? (isMobile ? 'calc(100dvh - 112px)' : 'min(860px, calc(100vh - 120px))') : 'auto',
       maxHeight: 'calc(100vh - 120px)',
       zIndex: String(Z_PANEL),
