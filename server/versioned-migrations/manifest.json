@@ -47,6 +47,14 @@
       "sha256": "c90cb4e37ba4c49ee7d1a031b84335c9f0c725038626c2a9fbd4f8f7d312f1cb",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0006_create_booking_series.postconditions.json"
+    },
+    {
+      "id": "0009_create_booking_funnel_records",
+      "mode": "create-table",
+      "sqlFile": "0009_create_booking_funnel_records.sql",
+      "sha256": "e23555c6098a91af3330db8a08bcbb6de8abbc011eb429a4a94ccfd82a266326",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0009_create_booking_funnel_records.postconditions.json"
     }
   ]
 }

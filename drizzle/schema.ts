@@ -4289,3 +4289,47 @@ export const bookingSeries = mysqlTable("booking_series", {
 ]);
 export type BookingSeries = typeof bookingSeries.$inferSelect;
 export type InsertBookingSeries = typeof bookingSeries.$inferInsert;
+
+// ── Native Book with AI progressive funnel ───────────────────────────────────
+// One row follows a customer from phone capture through payment and booking.
+// Customer and booking details intentionally remain nullable until collected.
+export const bookingFunnelRecords = mysqlTable("booking_funnel_records", {
+  id: int("id").autoincrement().primaryKey(),
+  publicFunnelNumber: varchar("publicFunnelNumber", { length: 40 }).notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 36 }).notNull(),
+  commandHash: varchar("commandHash", { length: 64 }).notNull(),
+  source: varchar("source", { length: 24 }).notNull(),
+  stage: varchar("stage", { length: 32 }).notNull().default("lead"),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
+  customerEmail: varchar("customerEmail", { length: 320 }),
+  serviceId: varchar("serviceId", { length: 32 }),
+  serviceName: varchar("serviceName", { length: 120 }),
+  bedrooms: int("bedrooms"),
+  bathrooms: int("bathrooms"),
+  extras: json("extras").$type<Array<{ id: string; quantity: number }>>(),
+  specialRequestNotes: json("specialRequestNotes").$type<string[]>(),
+  address: varchar("address", { length: 500 }),
+  requestedLocalDate: varchar("requestedLocalDate", { length: 10 }),
+  requestedLocalTime: varchar("requestedLocalTime", { length: 5 }),
+  requestedTimeZone: varchar("requestedTimeZone", { length: 64 }),
+  recurrence: varchar("recurrence", { length: 32 }),
+  pricingVersion: varchar("pricingVersion", { length: 64 }),
+  firstCleaningTotalCents: int("firstCleaningTotalCents"),
+  futureVisitTotalCents: int("futureVisitTotalCents"),
+  priceSnapshot: json("priceSnapshot"),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+  stripePaymentMethodId: varchar("stripePaymentMethodId", { length: 255 }),
+  paymentBrand: varchar("paymentBrand", { length: 40 }),
+  paymentLast4: varchar("paymentLast4", { length: 4 }),
+  version: int("version").notNull().default(1),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_booking_funnel_public_number").on(t.publicFunnelNumber),
+  uniqueIndex("uq_booking_funnel_idempotency_key").on(t.idempotencyKey),
+  index("idx_booking_funnel_phone").on(t.customerPhone),
+  index("idx_booking_funnel_stage_updated").on(t.stage, t.updatedAt),
+]);
+export type BookingFunnelRecord = typeof bookingFunnelRecords.$inferSelect;
+export type InsertBookingFunnelRecord = typeof bookingFunnelRecords.$inferInsert;
