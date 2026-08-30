@@ -91,6 +91,19 @@ describe("public Book Now UI contract", () => {
     expect(cssSource).toContain("@media(max-width:560px)");
   });
 
+  it("uses a readable typography scale across the public booking flow without changing geometry", () => {
+    expect(cssSource).toContain("Readable public booking typography");
+    expect(cssSource).toContain(".book-now-step-heading p{font-size:14px;line-height:1.5}");
+    expect(cssSource).toContain(".book-now-service-card strong{font-size:13px}");
+    expect(cssSource).toContain(".book-now-service-card p{font-size:10px;line-height:1.5}");
+    expect(cssSource).toContain(".book-now-extra-toggle strong,.book-now-extra-toggle small{font-size:10px}");
+    expect(cssSource).toContain(".book-now-step-actions button{font-size:12px}");
+    expect(cssSource).toContain(".book-now-summary-list div,.book-now-summary-total,.book-now-future-summary{font-size:11px}");
+    expect(cssSource).toContain(".book-now-time-choice,.book-now-frequency-card{font-size:11px}");
+    expect(cssSource).toContain(".book-now-form-grid input,.book-now-form-grid textarea,.book-now-stripe-shell input{font-size:12px}");
+    expect(cssSource).toContain(".book-now-confirmation-card>p{font-size:13px;line-height:1.5}");
+  });
+
   it("does not hardcode a fabricated customer rating, review count, or testimonial", () => {
     expect(pageSource).not.toMatch(/2,100|4\.9 from|customer review|testimonial/i);
   });
