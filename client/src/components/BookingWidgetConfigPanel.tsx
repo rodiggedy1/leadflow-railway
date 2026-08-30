@@ -7,6 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/lib/trpc";
+import {
+  NATIVE_BOOKING_PRICING_VERSION,
+  type BookingPriceSnapshot,
+  type BookingSurface,
+  type PrepareBookingResult,
+} from "@shared/booking";
 import {
   BOOKING_WIDGET_BATHROOM_UNIT_PRICE,
   BOOKING_WIDGET_BEDROOM_BASE_PRICES,
@@ -40,7 +47,9 @@ import {
 
 type BookingWidgetConfigPanelProps = {
   savedValue?: string;
-  onSave: (value: string) => Promise<void>;
+  onSave?: (value: string) => Promise<void>;
+  mode?: "editor" | "live";
+  surface?: BookingSurface;
 };
 
 type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "complete";
@@ -94,6 +103,30 @@ function normalizeCalendarDate(date: Date): Date {
   const normalized = new Date(date);
   normalized.setHours(12, 0, 0, 0);
   return normalized;
+}
+
+function createBookingAttemptId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function timeLabelTo24Hour(time: string): string {
+  const match = /^(\d{1,2}):(\d{2})\s+(AM|PM)$/i.exec(time.trim());
+  if (!match) throw new Error("Select a valid requested time.");
+  const rawHour = Number(match[1]);
+  const hour = rawHour % 12 + (match[3].toUpperCase() === "PM" ? 12 : 0);
+  return `${String(hour).padStart(2, "0")}:${match[2]}`;
 }
 
 function suggestedDateForRequest(requestedDay: string | undefined, today: Date): Date | undefined {
@@ -204,7 +237,7 @@ function DemoHistoryRow({ entry, customerColor, trustPoints }: { entry: DemoHist
   );
 }
 
-export default function BookingWidgetConfigPanel({ savedValue, onSave }: BookingWidgetConfigPanelProps) {
+export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "editor", surface = "full_page" }: BookingWidgetConfigPanelProps) {
   const savedConfig = useMemo(() => parseBookingWidgetDraft(savedValue), [savedValue]);
   const [config, setConfig] = useState<BookingWidgetDraftConfig>(savedConfig);
   const [saving, setSaving] = useState(false);
@@ -222,6 +255,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   const [specialRequestDraft, setSpecialRequestDraft] = useState("");
   const [welcomeVideoOpen, setWelcomeVideoOpen] = useState(false);
   const [history, setHistory] = useState<DemoHistoryEntry[]>([]);
+  const [acceptedPricing, setAcceptedPricing] = useState({ version: NATIVE_BOOKING_PRICING_VERSION, totalCents: 0 });
+  const [priceChange, setPriceChange] = useState<Extract<PrepareBookingResult, { type: "price_changed" }> | null>(null);
+  const [preparedBooking, setPreparedBooking] = useState<Extract<PrepareBookingResult, { type: "prepared" }> | null>(null);
+  const bookingAttemptIdRef = useRef(createBookingAttemptId());
   const conversationRef = useRef<HTMLDivElement>(null);
   const activeStageRef = useRef<HTMLDivElement>(null);
   const checkoutRef = useRef<HTMLDivElement>(null);
@@ -237,6 +274,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     end.setMonth(end.getMonth() + 6);
     return end;
   }, [demoToday]);
+  const prepareBookingMutation = trpc.bookings.prepare.useMutation();
 
   useEffect(() => {
     setConfig(savedConfig);
@@ -404,6 +442,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setSavePaymentDetails(false);
     setItemizationPanel("none");
     setSpecialRequestDraft("");
+    setPriceChange(null);
+    setPreparedBooking(null);
+    setAcceptedPricing({ version: NATIVE_BOOKING_PRICING_VERSION, totalCents: 0 });
+    prepareBookingMutation.reset();
+    bookingAttemptIdRef.current = createBookingAttemptId();
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
 
@@ -730,6 +773,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   };
 
   const handleSave = async () => {
+    if (!onSave) return;
     setSaving(true);
     try {
       await onSave(serialized);
@@ -768,7 +812,56 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     setSpecialRequestDraft("");
     setStep("confirm");
   };
-  const completeCheckout = () => setStep("complete");
+  const submitLiveBooking = async (
+    pricing = { version: NATIVE_BOOKING_PRICING_VERSION, totalCents: Math.round(Number(quotePrice) * 100) },
+  ) => {
+    if (mode !== "live" || !selectedDate || !selectedTime || !priceBreakdown) return;
+    setComposerError("");
+    try {
+      const result = await prepareBookingMutation.mutateAsync({
+        idempotencyKey: bookingAttemptIdRef.current,
+        surface,
+        customer: { fullName: demo.fullName, phone: demo.phone, email: demo.email },
+        service: {
+          serviceId: demo.serviceId,
+          bedrooms: bedroomCount ?? 0,
+          bathrooms: bathroomCount ?? 0,
+          extras: selectedExtras.map((choice) => {
+            const extra = findBookingWidgetPricedExtra(choice);
+            if (!extra) throw new Error(`Unsupported extra: ${choice}`);
+            return { id: extra.id, quantity: extra.quantityUnit ? demo.extraQuantities[extra.id] ?? 1 : 1 };
+          }),
+          specialRequestNotes: demo.specialRequestNotes,
+        },
+        address: demo.address,
+        requestedSchedule: {
+          localDate: formatLocalDate(selectedDate),
+          localTime: timeLabelTo24Hour(selectedTime),
+        },
+        recurrence: demo.recurringFrequency,
+        acceptedPricing: pricing,
+      });
+      if (result.type === "price_changed") {
+        setPriceChange(result as Extract<PrepareBookingResult, { type: "price_changed" }>);
+        return;
+      }
+      setAcceptedPricing(pricing);
+      setPriceChange(null);
+      setPreparedBooking(result as Extract<PrepareBookingResult, { type: "prepared" }>);
+      setStep("complete");
+    } catch (error) {
+      setComposerError(error instanceof Error ? error.message : "We could not submit your request. Please try again.");
+    }
+  };
+  const acceptChangedPrice = () => {
+    if (!priceChange) return;
+    const accepted = { version: priceChange.pricingVersion, totalCents: priceChange.totalCents };
+    setAcceptedPricing(accepted);
+    void submitLiveBooking(accepted);
+  };
+  const completeCheckout = () => {
+    if (mode === "editor") setStep("complete");
+  };
   const openWelcomeVideo = () => {
     welcomeVideoReturnFocusRef.current = "trigger";
     setWelcomeVideoOpen(true);
@@ -833,7 +926,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                 <Calendar mode="single" selected={selectedDate} onSelect={(date) => { setSelectedDate(date); setSelectedTime(""); }} defaultMonth={selectedDate ?? demoToday} startMonth={demoToday} endMonth={demoCalendarEnd} disabled={{ before: demoToday }} className="mx-auto mt-2 bg-transparent p-0 [--cell-size:2.15rem]" classNames={{ caption_label: "text-[12px] font-extrabold text-[#3a3c41]", button_previous: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", button_next: "size-(--cell-size) rounded-lg border border-[#e4e5e7] bg-white p-0 text-[#3a3c41] hover:bg-[#fff1ed]", weekday: "flex-1 text-[10px] font-bold text-[#9a9ba5]", today: "rounded-lg bg-[#fff1ed] text-[#e9573e]" }} />
               </div>
               <div className="border-t border-[#e4e5e7] pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
-                <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><Clock className="h-4 w-4 text-[#ff684c]" /> Available times <span className="font-normal text-[#9a9ba5]">(demo)</span></div>
+                <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#3a3c41]"><Clock className="h-4 w-4 text-[#ff684c]" /> {mode === "live" ? "Requested times" : "Available times"} {mode === "editor" && <span className="font-normal text-[#9a9ba5]">(demo)</span>}</div>
                 <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-1">{DEMO_TIME_SLOTS.map((time) => <button key={time} type="button" aria-pressed={selectedTime === time} onClick={() => setSelectedTime(time)} className={`rounded-xl border px-3 py-2.5 text-[12px] font-bold transition ${selectedTime === time ? "border-[#ff684c] bg-[#ff684c] text-white shadow-sm" : "border-[#ffd2c8] bg-[#fff8f6] text-[#d95740] hover:border-[#ff9c89]"}`}>{time}</button>)}</div>
                 <div className="mt-4 rounded-xl bg-[#f5f5f3] px-3 py-2.5 text-[12px] text-[#6f7279]">{selectedDate ? selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }) : "Select a date"}{selectedTime ? ` · ${selectedTime}` : " · Select a time"}</div>
                 <button type="button" onClick={confirmScheduleSelection} disabled={!selectedDate || !selectedTime} className="mt-3 w-full rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white shadow-sm transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:bg-[#ececef] disabled:text-[#a6a7af]">Continue →</button>
@@ -884,8 +977,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
     if (step === "quote") {
       return (
         <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#dcd5ef] bg-gradient-to-br from-white to-[#fffaf8] p-4 shadow-[0_14px_36px_rgba(77,54,139,0.09)]">
-          <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{config.resultTitle}</h2></div></div>
-          <div className="flex items-center border-b border-[#e4e5e7] py-3"><CalendarDays className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">DATE & TIME</small><strong className="text-[11px] text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</strong></span></div>
+          <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{mode === "live" ? "REQUEST REVIEW" : config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{mode === "live" ? "Your request summary" : config.resultTitle}</h2></div></div>
+          <div className="flex items-center border-b border-[#e4e5e7] py-3"><CalendarDays className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">{mode === "live" ? "REQUESTED DATE & TIME" : "DATE & TIME"}</small><strong className="text-[11px] text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</strong></span></div>
           <div className="flex items-center justify-between border-b border-[#e4e5e7] py-3"><div className="flex min-w-0 items-center"><MapPin className="mr-2.5 h-5 w-5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">ADDRESS</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div><Check className="h-4 w-4 shrink-0 text-[#23b982]" /></div>
           <section aria-label="Recurring cleaning frequency" className="border-b border-[#e4e5e7] py-4">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#77798b]">Save on future cleanings</div><h3 className="mt-1 text-[15px] font-extrabold text-[#3a3c41]">Would you like to make it recurring?</h3></div><span className="rounded-full bg-[#fff1ed] px-2.5 py-1 text-[9px] font-extrabold text-[#e9573e]">First clean stays ${quotePrice}</span></div>
@@ -932,12 +1025,13 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
           </section>
           <div className="space-y-1.5 border-t border-[#e4e5e7] py-3">{config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2 text-[10px] text-[#5f6168]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#23b982]" /><span>{point}</span></div>)}</div>
           <div className="space-y-1.5 border-t border-[#e4e5e7] py-3 text-[10px] text-[#5f6168]"><div className="flex justify-between gap-4"><span>Standard subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.standardSubtotal ?? 0)}</strong></div>{(priceBreakdown?.serviceAdjustment ?? 0) > 0 && <><div className="flex justify-between gap-4"><span>{service.name} adjustment · 20%</span><strong>+{formatItemizedCurrency(priceBreakdown?.serviceAdjustment ?? 0)}</strong></div><div className="flex justify-between gap-4"><span>Adjusted subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.adjustedSubtotal ?? 0)}</strong></div></>}<div className="mt-2 flex items-center justify-between border-t border-[#e4e5e7] pt-3 text-[12px]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${quotePrice}</strong></div></div>
-          <button type="button" onClick={openCheckout} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e]"><CreditCard className="h-4 w-4" />{formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />Visual demo only · no charge will be made</p>
+          {priceChange && mode === "live" && <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-5 text-amber-900"><strong className="block text-[11px]">Your price changed to ${(priceChange.totalCents / 100).toFixed(0)}</strong>Review and accept the updated server-calculated total before sending your request.<button type="button" onClick={acceptChangedPrice} disabled={prepareBookingMutation.isPending} className="mt-2 w-full rounded-lg bg-amber-700 px-3 py-2 font-bold text-white disabled:opacity-50">Accept updated price &amp; send request</button></div>}
+          <button type="button" onClick={mode === "live" ? () => void submitLiveBooking() : openCheckout} disabled={prepareBookingMutation.isPending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-wait disabled:opacity-60">{mode === "editor" && <CreditCard className="h-4 w-4" />}{prepareBookingMutation.isPending ? "Sending request…" : mode === "live" ? `Send request — $${quotePrice}` : formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />{mode === "live" ? "Requested time only · no charge will be made" : "Visual demo only · no charge will be made"}</p>
         </div>
       );
     }
-    if (step === "confirm") {
+    if (step === "confirm" && mode === "editor") {
       return (
         <div ref={checkoutRef} tabIndex={-1} aria-label="Demo checkout" className="ml-10 max-w-[82%] overflow-hidden rounded-[20px] border border-[#e4e5e7] bg-white shadow-[0_14px_36px_rgba(22,20,33,0.08)] outline-none focus:ring-2 focus:ring-[#ff684c]/30">
           <div className="border-b border-[#e4e5e7] bg-gradient-to-br from-white to-[#fff5f2] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-[20px] font-extrabold text-[#3a3c41]">{renderBookingWidgetTemplate(config.paymentConfirmationTemplate, { cardBrand: config.demoCardBrand, last4: config.demoCardLast4 })}</div><div className="mt-1 text-[11px] text-[#6f7279]">Review your cleaning, then preview payment.</div></div><span className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Demo checkout</span></div><div className="mt-4 space-y-3 rounded-xl border border-[#e4e5e7] bg-white p-4 text-[11px]"><div><div className="font-extrabold text-[#3a3c41]">{demo.schedule || `${service.availabilityDay} · ${service.availabilityTime}`}</div><div className="mt-1 text-[#6f7279]">{service.name} · {detailLine}</div></div><div className="border-t border-[#e4e5e7] pt-3 text-[#6f7279]">{demo.address}</div>{selectedRecurringOption && recurringFutureVisitPrice !== null && <div className="flex items-start justify-between gap-4 border-t border-[#e4e5e7] pt-3"><span className="text-[#6f7279]">Then {selectedRecurringOption.label.toLowerCase()} beginning with visit two</span><strong className="shrink-0 text-[#3a3c41]">{formatItemizedCurrency(recurringFutureVisitPrice)}/visit</strong></div>}<div className="flex items-center justify-between border-t border-[#e4e5e7] pt-3"><span className="font-medium text-[#6f7279]">First cleaning total</span><strong className="text-[19px] text-[#3a3c41]">${quotePrice}</strong></div></div></div>
@@ -945,6 +1039,28 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
         </div>
       );
     }
+    if (mode === "live") return (
+      <div className="flex flex-col gap-4">
+        <DemoBubble customer color={config.customerBubbleColor}>Send my request</DemoBubble>
+        <div className="max-w-full overflow-hidden rounded-[22px] border border-[#cfe9df] bg-white shadow-[0_16px_40px_rgba(22,141,97,0.11)] sm:ml-10 sm:max-w-[calc(100%-2.5rem)]">
+          <div className="border-b border-[#d9f1e6] bg-gradient-to-br from-[#f2fcf7] via-white to-[#fff8f6] p-5">
+            <div className="flex items-start gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#168d61] text-white shadow-sm"><CheckCircle2 className="h-6 w-6" /></span>
+              <div>
+                <h2 className="text-[20px] font-extrabold text-[#3a3c41]">Request received</h2>
+                <p className="mt-2 text-[11px] leading-5 text-[#5f716a]">We received your requested date and time. We’ll confirm the appointment after reviewing availability.</p>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3 p-5 text-[11px]">
+            <div className="flex justify-between gap-4"><span className="text-[#6f7279]">Request number</span><strong>{preparedBooking?.publicBookingNumber}</strong></div>
+            <div className="flex justify-between gap-4"><span className="text-[#6f7279]">Requested time</span><strong className="text-right">{demo.schedule}</strong></div>
+            <div className="flex justify-between gap-4"><span className="text-[#6f7279]">Request total</span><strong>${((preparedBooking?.summary.totalCents ?? acceptedPricing.totalCents) / 100).toFixed(0)}</strong></div>
+            {demo.recurringFrequency !== "one-time" && <div className="rounded-xl bg-[#fff8f6] p-3 text-[#6f7279]"><strong className="block text-[#3a3c41]">Recurring preference: {selectedRecurringOption?.label}</strong>We’ll confirm your recurring schedule when we review your requested appointment.</div>}
+          </div>
+        </div>
+      </div>
+    );
     return (
       <div className="flex flex-col gap-4">
         <DemoBubble customer color={config.customerBubbleColor}>{formatBookingButtonLabel(config.confirmButtonLabel, quotePrice)}</DemoBubble>
@@ -982,17 +1098,17 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
   ) : null;
 
   return (
-    <div className="space-y-5">
+    <div className={mode === "live" ? "min-h-screen bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-6" : "space-y-5"}>
       {welcomeVideoDialog}
-      <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+      {mode === "editor" && <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
         <p className="text-sm font-semibold text-violet-900">Fully interactive demo · internal preview only</p>
         <p className="mt-0.5 text-xs leading-relaxed text-violet-700">
           This simulation never saves customer details, creates a lead or booking, processes a card, checks live availability, changes the quote form, or contacts a customer.
         </p>
-      </div>
+      </div>}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,430px)_minmax(560px,1fr)] xl:items-start">
-        <div className="space-y-5">
+      <div className={mode === "editor" ? "grid gap-5 xl:grid-cols-[minmax(0,430px)_minmax(560px,1fr)] xl:items-start" : "mx-auto w-full max-w-[760px]"}>
+        {mode === "editor" && <div className="space-y-5">
           <Card className="border-gray-200 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-[#E8735A]" /> Brand and opening</CardTitle>
@@ -1136,11 +1252,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
               <Button type="button" className="gap-2 bg-[#E8735A] text-white hover:bg-[#d4614a]" disabled={!isDirty || saving} onClick={handleSave}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? "Saving…" : "Save draft"}</Button>
             </div>
           </div>
-        </div>
+        </div>}
 
-        <div className="xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]">
-          <Card className="gap-0 overflow-hidden border-gray-200 py-0 shadow-lg xl:flex xl:h-full xl:flex-col">
-            <CardHeader className="border-b border-gray-100 bg-white py-4 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>
+        <div className={mode === "editor" ? "xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]" : "min-h-[calc(100dvh-1.5rem)] sm:min-h-[calc(100dvh-3rem)]"}>
+          <Card className={`gap-0 overflow-hidden border-gray-200 py-0 shadow-lg xl:flex xl:flex-col ${mode === "editor" ? "xl:h-full" : "min-h-[calc(100dvh-1.5rem)] sm:min-h-[calc(100dvh-3rem)]"}`}>
+            {mode === "editor" && <CardHeader className="border-b border-gray-100 bg-white py-4 xl:shrink-0"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-[#E8735A]" /> Interactive customer preview</CardTitle><CardDescription>Run the complete demo here. Start over resets only this preview.</CardDescription></CardHeader>}
             <CardContent className="bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden">
               <div className="mx-auto flex w-full max-w-[720px] flex-col overflow-hidden rounded-[28px] border border-[#dfe0e2] bg-white shadow-[0_28px_80px_rgba(17,17,17,0.16)] xl:min-h-0 xl:flex-1" style={{ color: config.primaryColor }}>
                 <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#282828] bg-[#111111] px-5 py-4 text-white sm:px-6">
@@ -1172,8 +1288,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave }: Booking
                   {step === "address" && <div className="mb-2 flex gap-2"><button type="button" onClick={() => setComposerValue(config.addressExample)} className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-3 py-1.5 text-[9px] font-bold text-[#d95740]">Use sample address</button></div>}
                   <div className="flex items-center gap-2 rounded-2xl border border-[#e4e5e7] bg-white p-1.5 pl-3 shadow-[0_5px_18px_rgba(29,25,42,0.04)] focus-within:border-[#ff684c] focus-within:ring-4 focus-within:ring-[#ff684c]/10">
                     <MessageCircle className="h-4 w-4 shrink-0 text-[#a1a2ad]" />
-                    <Input value={composerValue} onChange={(event) => { setComposerValue(event.target.value); if (composerError) setComposerError(""); }} disabled={!composerEnabled} placeholder={composerPlaceholder} aria-label="Demo booking response" aria-invalid={Boolean(composerError)} className="h-10 flex-1 border-0 bg-transparent px-1 text-[12px] shadow-none focus-visible:ring-0 disabled:cursor-default disabled:opacity-100" />
-                    <button type="submit" aria-label="Send demo response" disabled={!composerEnabled || !composerValue.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff684c] text-white transition hover:bg-[#e9573e] disabled:bg-[#f1c9c1] disabled:text-white/80"><Send className="h-4 w-4" /></button>
+                    <Input value={composerValue} onChange={(event) => { setComposerValue(event.target.value); if (composerError) setComposerError(""); }} disabled={!composerEnabled} placeholder={composerPlaceholder} aria-label={mode === "live" ? "Booking response" : "Demo booking response"} aria-invalid={Boolean(composerError)} className="h-10 flex-1 border-0 bg-transparent px-1 text-[12px] shadow-none focus-visible:ring-0 disabled:cursor-default disabled:opacity-100" />
+                    <button type="submit" aria-label={mode === "live" ? "Send booking response" : "Send demo response"} disabled={!composerEnabled || !composerValue.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff684c] text-white transition hover:bg-[#e9573e] disabled:bg-[#f1c9c1] disabled:text-white/80"><Send className="h-4 w-4" /></button>
                   </div>
                   {composerError && <p className="mt-2 text-[10px] font-bold text-red-600" role="alert">{composerError}</p>}
                   <p className="mt-2 text-center text-[9px] text-[#a1a2ad]">{composerEnabled ? "Press Enter to send · " : ""}{config.helperText}</p>

@@ -15,6 +15,7 @@ import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
+const Book = lazy(() => import("./pages/Book"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AgentDashboard = lazy(() => import("./pages/AgentDashboard"));
 const ReactivationCampaigns = lazy(() => import("./pages/ReactivationCampaigns"));
@@ -62,7 +63,7 @@ const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
-const BookingsPreview = lazy(() => import("./pages/BookingsPreview"));
+const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 
 /**
@@ -103,6 +104,7 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path={"/"} component={Home} />
+        <Route path={"/book"} component={Book} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
@@ -121,7 +123,7 @@ function Router() {
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={SettingsPage} />
-        <Route path={"/admin/bookings"} component={BookingsPreview} />
+        <Route path={"/admin/bookings"} component={NativeBookings} />
         <Route path={"/admin/settings"} component={SettingsPage} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const pageSource = readFileSync(new URL("../client/src/pages/BookingsPreview.tsx", import.meta.url), "utf8");
+const pageSource = readFileSync(new URL("../client/src/components/NativeBookingsWorkspace.tsx", import.meta.url), "utf8");
+const pageWrapperSource = readFileSync(new URL("../client/src/pages/NativeBookings.tsx", import.meta.url), "utf8");
 const pageStyles = readFileSync(new URL("../client/src/pages/bookings-preview.css", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
 const headerSource = readFileSync(new URL("../client/src/components/AdminHeader.tsx", import.meta.url), "utf8");
@@ -11,9 +12,9 @@ const sharedConstSource = readFileSync(new URL("../shared/const.ts", import.meta
 
 describe("bookings UI preview contract", () => {
   it("wires a guarded lazy admin route and consistent external route entry", () => {
-    expect(appSource).toContain('const BookingsPreview = lazy(() => import("./pages/BookingsPreview"));');
-    expect(appSource).toContain('<Route path={"/admin/bookings"} component={BookingsPreview} />');
-    expect(pageSource).toContain('<AdminPageGuard pageId="bookings"><BookingsPreviewContent /></AdminPageGuard>');
+    expect(appSource).toContain('const NativeBookings = lazy(() => import("./pages/NativeBookings"));');
+    expect(appSource).toContain('<Route path={"/admin/bookings"} component={NativeBookings} />');
+    expect(pageWrapperSource).toContain('<AdminPageGuard pageId="bookings"><NativeBookingsWorkspace /></AdminPageGuard>');
     expect(pageSource).not.toContain("AdminHeader");
     expect(headerSource).toContain('| "bookings";');
     expect(headerSource).toContain('label: "Bookings",      href: "/admin/bookings"');
@@ -22,15 +23,14 @@ describe("bookings UI preview contract", () => {
     expect(sharedConstSource).toContain('{ id: "bookings",          label: "Bookings",      group: "Operations" }');
   });
 
-  it("preserves the supplied self-contained sidebar, workspace, detail panel, and browser-only interactions", () => {
-    for (const marker of ["Bookings workspace navigation", "MiB", "Bookings", "Teams", "Inbox", "Payments", "Rohan", "Administrator", "Select demo booking date", "Demo booking metrics", "Demo bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "BOOKED REVENUE", "Search customer, address, or team", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING SERVICE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
+  it("preserves the supplied self-contained sidebar, workspace, and detail panel around native data", () => {
+    for (const marker of ["Bookings workspace navigation", "MiB", "Bookings", "Teams", "Inbox", "Payments", "Rohan", "Administrator", "Select booking date", "Booking metrics", "Native LeadFlow bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "REQUESTED REVENUE", "Search customer, address, or request number", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING PREFERENCE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
       expect(pageSource).toContain(marker);
     }
+    expect(pageSource).toContain("trpc.bookings.list.useQuery");
+    expect(pageSource).toContain("trpc.bookings.get.useQuery");
     expect(pageSource).toContain("useMemo");
     expect(pageSource).toContain("useState");
-    expect(pageSource).toContain("const update =");
-    expect(pageSource).toContain("toggleExtra");
-    expect(pageSource).toContain("assignTeam");
   });
 
   it("matches the supplied desktop shell geometry and responsive breakpoint contract", () => {
@@ -43,21 +43,22 @@ describe("bookings UI preview contract", () => {
     expect(pageStyles).toContain("grid-template-columns:repeat(4,1fr)");
   });
 
-  it("labels every record and disconnected action as UI-only demo content", () => {
-    expect(pageSource).toContain("OPERATIONS · UI PREVIEW");
-    expect(pageSource).toContain("Sample records only.");
-    expect(pageSource).toContain("sample values only");
-    expect(pageSource).toContain("Demo Customer A");
-    expect(pageSource).toContain("id: 1842");
-    expect(pageSource).toContain("Nothing was sent, booked, charged, or saved.");
-    expect(pageSource).toContain("No booking was saved.");
+  it("removes sample records and disables every unimplemented operational write", () => {
+    expect(pageSource).toContain("OPERATIONS · NATIVE REQUESTS");
+    expect(pageSource).toContain("New Book with AI requests appear here immediately for review.");
+    expect(pageSource).not.toContain("Demo Customer A");
+    expect(pageSource).not.toContain("SEED_BOOKINGS");
+    expect(pageSource).toContain('disabled title="Manual booking creation is not connected in this release"');
+    expect(pageSource).toContain("Assignment is not connected in this release");
+    expect(pageSource).toContain("Card collection is not connected in this release");
+    expect(pageSource).not.toContain("useMutation");
     for (const prototypeIdentity of ["Rohan Gilkes", "Maya Thompson", "Derek Collins", "Nia Robinson", "Jordan Lee", "302) 981-6191"]) {
       expect(pageSource).not.toContain(prototypeIdentity);
     }
   });
 
-  it("contains no real booking, customer, payment, messaging, persistence, or data-fetch integration", () => {
-    for (const prohibited of ["trpc.", "fetch(", "axios", "useQuery", "useMutation", "createBooking", "sendSms", "processPayment", "storagePut", "localStorage", "sessionStorage"]) {
+  it("reads only native bookings and contains no booking/customer/payment/messaging writes", () => {
+    for (const prohibited of ["fetch(", "axios", "useMutation", "sendSms", "processPayment", "storagePut", "localStorage", "sessionStorage"]) {
       expect(pageSource).not.toContain(prohibited);
     }
   });
@@ -66,7 +67,7 @@ describe("bookings UI preview contract", () => {
     expect(pageStyles).toContain(".bookings-detail-panel{width:100%}");
     expect(pageStyles).toContain(".bookings-row{grid-template-columns:1fr auto;padding:14px}");
     expect(pageStyles).toContain(".bookings-ops-nav{position:fixed;left:0;right:0;bottom:0");
-    expect(pageSource).toContain('aria-label={`Demo booking details for ${active.name}`}');
+    expect(pageSource).toContain('aria-label={`Booking details for ${active.customerName}`}');
   });
 
   it("suppresses the inherited MIB Chat chrome on the self-contained Bookings route", () => {

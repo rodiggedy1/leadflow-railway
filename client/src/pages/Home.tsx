@@ -3,7 +3,8 @@
  * Design: Warm Coral Hospitality
  */
 import QuoteForm from "@/components/QuoteForm";
+import BookWithAIWidget from "@/components/BookWithAIWidget";
 
 export default function Home() {
-  return <QuoteForm />;
+  return <><QuoteForm /><BookWithAIWidget /></>;
 }
