@@ -24,6 +24,7 @@ export const ADMIN_PAGES = [
   { id: "always-on",         label: "Always-On",     group: "Campaigns" },
   { id: "campaign-approval", label: "Approvals",     group: "Campaigns" },
   { id: "field-management",  label: "Field Mgmt",    group: "Operations" },
+  { id: "bookings",          label: "Bookings",      group: "Operations" },
   { id: "quality",           label: "Jobs",          group: "Operations" },
   { id: "tracker-flow",      label: "Journey",       group: "Operations" },
   { id: "settings",          label: "Settings",      group: "Admin" },

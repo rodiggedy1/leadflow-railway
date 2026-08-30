@@ -34,6 +34,7 @@ describe("ADMIN_PAGES constant", () => {
     expect(ids).toContain("command-center");
     expect(ids).toContain("settings");
     expect(ids).toContain("field-management");
+    expect(ids).toContain("bookings");
   });
 
   it("has no duplicate ids", () => {

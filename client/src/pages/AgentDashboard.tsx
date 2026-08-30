@@ -2020,6 +2020,7 @@ export default function AgentDashboard() {
             "always-on":         "/admin/always-on",
             "campaign-approval": "/admin/campaign-approval",
             "field-management":  "/admin/field-management",
+            "bookings":          "/admin/bookings",
             "quality":           "/admin/quality",
             "tracker-flow":      "/admin/tracker-flow",
             "settings":          "/admin/settings",

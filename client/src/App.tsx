@@ -15,6 +15,9 @@ import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
+const Book = lazy(() => import("./pages/Book"));
+const BookWidget = lazy(() => import("./pages/BookWidget"));
+const BookNow = lazy(() => import("./pages/BookNow"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AgentDashboard = lazy(() => import("./pages/AgentDashboard"));
 const ReactivationCampaigns = lazy(() => import("./pages/ReactivationCampaigns"));
@@ -62,6 +65,7 @@ const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
+const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 
 /**
@@ -102,6 +106,9 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path={"/"} component={Home} />
+        <Route path={"/book"} component={Book} />
+        <Route path={"/book/widget"} component={BookWidget} />
+        <Route path={"/book-now"} component={BookNow} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
@@ -119,6 +126,8 @@ function Router() {
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
+        <Route path={"/admin/widget-config"} component={SettingsPage} />
+        <Route path={"/admin/bookings"} component={NativeBookings} />
         <Route path={"/admin/settings"} component={SettingsPage} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
@@ -180,8 +189,9 @@ function GlobalOpsChat() {
   // causes the position to reset to 0. However, it must NOT be mounted at all
   // on public pages (e.g. the quote form at /) to prevent notification sounds
   // from leaking onto those pages.
+  const isBookingsWorkspace = location === "/admin/bookings";
   const isEligible =
-    location.startsWith("/admin") ||
+    (location.startsWith("/admin") && !isBookingsWorkspace) ||
     location.startsWith("/agent") ||
     location.startsWith("/call-assist");
 
@@ -209,7 +219,7 @@ function GlobalOpsChat() {
 
   // Only render OpsChat if we are on (or have visited) an eligible route.
   // This prevents the sound hooks from being active on the public quote form.
-  const shouldRenderOpsChat = hasBeenMounted;
+  const shouldRenderOpsChat = hasBeenMounted && !isBookingsWorkspace;
 
   return (
     <>

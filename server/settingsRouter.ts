@@ -6,10 +6,11 @@
  */
 
 import { z } from "zod";
-import { protectedProcedure, router } from "./_core/trpc";
+import { adminAgentProcedure, protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { appSettings, customPayRules } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { BOOKING_WIDGET_DRAFT_SETTING } from "../shared/bookingWidgetConfig";
 
 // ── Default settings seeded on first access ──────────────────────────────────
 
@@ -296,6 +297,7 @@ const DEFAULT_SETTINGS = [
     description: "Comma-separated list of service types to completely suppress — no leads saved, no SMS sent, no alerts fired. Leave blank to allow all services.",
     fieldType: "textarea",
   },
+  BOOKING_WIDGET_DRAFT_SETTING,
 ] as const;
 
 async function seedDefaultSettings() {
@@ -412,6 +414,35 @@ export async function getPayRules(): Promise<PayRules> {
 }
 
 export const settingsRouter = router({
+  /**
+   * Book with AI draft access uses the same admin-agent session as the page guard.
+   * It is intentionally isolated from the legacy settings procedures below.
+   */
+  getBookingWidgetDraft: adminAgentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    await seedDefaultSettings();
+    const rows = await db
+      .select()
+      .from(appSettings)
+      .where(eq(appSettings.key, BOOKING_WIDGET_DRAFT_SETTING.key))
+      .limit(1);
+    return rows[0] ?? null;
+  }),
+
+  updateBookingWidgetDraft: adminAgentProcedure
+    .input(z.object({ value: z.string().min(2).max(60_000) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await seedDefaultSettings();
+      await db
+        .update(appSettings)
+        .set({ value: input.value })
+        .where(eq(appSettings.key, BOOKING_WIDGET_DRAFT_SETTING.key));
+      return { success: true };
+    }),
+
   /**
    * Get all settings. Seeds defaults on first access.
    */

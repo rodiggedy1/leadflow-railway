@@ -94,6 +94,34 @@ async function withCreateTableMigrationDirectory<T>(run: (directory: string) => 
   }
 }
 
+async function withInitialMigrationDirectory<T>(run: (directory: string) => Promise<T>): Promise<T> {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "managed-initial-migrations-"));
+  const fileNames = [
+    "0001_create_focus_points.sql",
+    "0001_create_focus_points.postconditions.json",
+    "0002_last_inbound_phone_number_id.sql",
+    "0002_last_inbound_phone_number_id.postconditions.json",
+    "0003_madison_deferred_until.sql",
+    "0003_madison_deferred_until.postconditions.json",
+  ];
+  try {
+    const manifest = JSON.parse(await readFile(path.join(migrationDirectory, "manifest.json"), "utf8"));
+    manifest.migrations = manifest.migrations.filter((migration: { id: string }) =>
+      ["0001_create_focus_points", "0002_last_inbound_phone_number_id", "0003_madison_deferred_until"].includes(migration.id),
+    );
+    await Promise.all([
+      writeFile(path.join(directory, "manifest.json"), JSON.stringify(manifest)),
+      ...fileNames.map(async fileName => {
+        const content = await readFile(path.join(migrationDirectory, fileName), "utf8");
+        await writeFile(path.join(directory, fileName), content);
+      }),
+    ]);
+    return await run(directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 function createAdditiveFakeDb(options: {
   tableExists?: boolean;
   columnState?: "missing" | "correct" | "wrong-type" | "wrong-nullability";
@@ -339,21 +367,23 @@ describe("managed versioned migration runner", () => {
   });
 
   it("skips and re-verifies applied 0001 before executing the two pending additive ALTERs", async () => {
-    const fake = createApplied0001Pending0002FakeDb();
-    const results = await runManagedMigrations({ db: fake.db, migrationsDirectory: migrationDirectory, logger: console });
-    expect(results).toEqual([
-      { id: "0001_create_focus_points", outcome: "skipped" },
-      { id: "0002_last_inbound_phone_number_id", outcome: "applied" },
-      { id: "0003_madison_deferred_until", outcome: "applied" },
-    ]);
-    expect(fake.calls.some(sql => sql.includes("CREATE TABLE IF NOT EXISTS `focus_points`"))).toBe(false);
-    expect(fake.calls.filter(sql => sql.includes("ADD COLUMN IF NOT EXISTS `lastInboundPhoneNumberId`")).length).toBe(1);
-    expect(fake.calls.filter(sql => sql.includes("ADD COLUMN IF NOT EXISTS `madisonDeferredUntil`")).length).toBe(1);
-    expect(fake.state().phoneColumnState).toBe("correct");
-    expect(fake.state().madisonColumnState).toBe("correct");
-    expect(fake.state().ledger.get("0001_create_focus_points")).toBe("applied");
-    expect(fake.state().ledger.get("0002_last_inbound_phone_number_id")).toBe("applied");
-    expect(fake.state().ledger.get("0003_madison_deferred_until")).toBe("applied");
+    await withInitialMigrationDirectory(async directory => {
+      const fake = createApplied0001Pending0002FakeDb();
+      const results = await runManagedMigrations({ db: fake.db, migrationsDirectory: directory, logger: console });
+      expect(results).toEqual([
+        { id: "0001_create_focus_points", outcome: "skipped" },
+        { id: "0002_last_inbound_phone_number_id", outcome: "applied" },
+        { id: "0003_madison_deferred_until", outcome: "applied" },
+      ]);
+      expect(fake.calls.some(sql => sql.includes("CREATE TABLE IF NOT EXISTS `focus_points`"))).toBe(false);
+      expect(fake.calls.filter(sql => sql.includes("ADD COLUMN IF NOT EXISTS `lastInboundPhoneNumberId`")).length).toBe(1);
+      expect(fake.calls.filter(sql => sql.includes("ADD COLUMN IF NOT EXISTS `madisonDeferredUntil`")).length).toBe(1);
+      expect(fake.state().phoneColumnState).toBe("correct");
+      expect(fake.state().madisonColumnState).toBe("correct");
+      expect(fake.state().ledger.get("0001_create_focus_points")).toBe("applied");
+      expect(fake.state().ledger.get("0002_last_inbound_phone_number_id")).toBe("applied");
+      expect(fake.state().ledger.get("0003_madison_deferred_until")).toBe("applied");
+    });
   });
 
   it("executes additive SQL only for an existing table with a missing declared column", async () => {
