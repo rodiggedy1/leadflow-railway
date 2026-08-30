@@ -29,6 +29,8 @@ describe("bookings UI preview contract", () => {
     }
     expect(pageSource).toContain("trpc.bookings.list.useQuery");
     expect(pageSource).toContain("trpc.bookings.get.useQuery");
+    expect(pageSource).toContain("trpc.bookingFunnel.list.useQuery");
+    expect(pageSource).toContain("trpc.bookingFunnel.get.useQuery");
     expect(pageSource).toContain("useMemo");
     expect(pageSource).toContain("useState");
   });
@@ -46,6 +48,7 @@ describe("bookings UI preview contract", () => {
   it("removes sample records and disables every unimplemented operational write", () => {
     expect(pageSource).toContain("OPERATIONS · NATIVE REQUESTS");
     expect(pageSource).toContain("New Book with AI requests appear here immediately for review.");
+    expect(pageSource).toContain("Phone-captured booking leads appear here while customers finish the flow.");
     expect(pageSource).not.toContain("Demo Customer A");
     expect(pageSource).not.toContain("SEED_BOOKINGS");
     expect(pageSource).toContain('disabled title="Manual booking creation is not connected in this release"');
@@ -57,10 +60,23 @@ describe("bookings UI preview contract", () => {
     }
   });
 
-  it("reads only native bookings and contains no booking/customer/payment/messaging writes", () => {
+  it("reads native bookings and funnel leads but contains no booking/customer/payment/messaging writes", () => {
     for (const prohibited of ["fetch(", "axios", "useMutation", "sendSms", "processPayment", "storagePut", "localStorage", "sessionStorage"]) {
       expect(pageSource).not.toContain(prohibited);
     }
+  });
+
+  it("keeps bookings and progressive leads in separate tabs with safe incomplete-field rendering", () => {
+    expect(pageSource).toContain('useState<"bookings" | "leads">("bookings")');
+    expect(pageSource).toContain('onClick={() => setView("bookings")}');
+    expect(pageSource).toContain('onClick={() => setView("leads")}');
+    expect(pageSource).toContain('if (view === "bookings") return bookingRows');
+    expect(pageSource).toContain("Lead / In progress");
+    expect(pageSource).toContain("Details in progress");
+    expect(pageSource).toContain("Email not entered yet");
+    expect(pageSource).not.toContain("mutationToken");
+    expect(pageSource).not.toContain("idempotencyKey");
+    expect(pageSource).not.toContain("commandHash");
   });
 
   it("provides responsive list and full-width mobile detail-panel behavior", () => {

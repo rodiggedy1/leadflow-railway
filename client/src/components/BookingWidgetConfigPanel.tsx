@@ -14,6 +14,7 @@ import {
   type BookingSurface,
   type PrepareBookingResult,
 } from "@shared/booking";
+import type { BookingFunnelPublicResult, UpdateBookingFunnelInput } from "@shared/bookingFunnel";
 import {
   BOOKING_WIDGET_BATHROOM_UNIT_PRICE,
   BOOKING_WIDGET_BEDROOM_BASE_PRICES,
@@ -258,7 +259,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const [acceptedPricing, setAcceptedPricing] = useState({ version: NATIVE_BOOKING_PRICING_VERSION, totalCents: 0 });
   const [priceChange, setPriceChange] = useState<Extract<PrepareBookingResult, { type: "price_changed" }> | null>(null);
   const [preparedBooking, setPreparedBooking] = useState<Extract<PrepareBookingResult, { type: "prepared" }> | null>(null);
+  const [funnelRecord, setFunnelRecord] = useState<BookingFunnelPublicResult | null>(null);
   const bookingAttemptIdRef = useRef(createBookingAttemptId());
+  const funnelRecordRef = useRef<BookingFunnelPublicResult | null>(null);
+  const phoneCaptureInFlightRef = useRef(false);
   const conversationRef = useRef<HTMLDivElement>(null);
   const activeStageRef = useRef<HTMLDivElement>(null);
   const checkoutRef = useRef<HTMLDivElement>(null);
@@ -274,7 +278,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     end.setMonth(end.getMonth() + 6);
     return end;
   }, [demoToday]);
-  const prepareBookingMutation = trpc.bookings.prepare.useMutation();
+  const beginFunnelMutation = trpc.bookingFunnel.begin.useMutation();
+  const updateFunnelMutation = trpc.bookingFunnel.update.useMutation();
 
   useEffect(() => {
     setConfig(savedConfig);
@@ -380,6 +385,24 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     setHistory((current) => [...current, ...entries]);
   };
 
+  const rememberFunnelRecord = (record: BookingFunnelPublicResult | null) => {
+    funnelRecordRef.current = record;
+    setFunnelRecord(record);
+  };
+
+  const persistFunnelPatch = async (patch: UpdateBookingFunnelInput["patch"]) => {
+    const current = funnelRecordRef.current;
+    if (mode !== "live" || !current) return current;
+    const next = await updateFunnelMutation.mutateAsync({
+      publicFunnelNumber: current.publicFunnelNumber,
+      mutationToken: current.mutationToken,
+      expectedVersion: current.version,
+      patch,
+    });
+    rememberFunnelRecord(next);
+    return next;
+  };
+
   const update = <K extends keyof BookingWidgetDraftConfig>(key: K, value: BookingWidgetDraftConfig[K]) => {
     setConfig((current) => ({ ...current, [key]: value }));
     setSaved(false);
@@ -444,8 +467,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     setSpecialRequestDraft("");
     setPriceChange(null);
     setPreparedBooking(null);
+    rememberFunnelRecord(null);
     setAcceptedPricing({ version: NATIVE_BOOKING_PRICING_VERSION, totalCents: 0 });
-    prepareBookingMutation.reset();
+    beginFunnelMutation.reset();
+    updateFunnelMutation.reset();
+    phoneCaptureInFlightRef.current = false;
     bookingAttemptIdRef.current = createBookingAttemptId();
     requestAnimationFrame(() => conversationRef.current?.scrollTo({ top: 0 }));
   };
@@ -695,11 +721,17 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     advanceFromQuestion();
   };
 
-  const submitIntakeField = (field: BookingWidgetIntakeField, nextStep: DemoStep) => {
+  const submitIntakeField = async (field: BookingWidgetIntakeField, nextStep: DemoStep) => {
     const trimmed = composerValue.trim();
     const error = validateBookingWidgetIntakeField(field, trimmed);
     if (error) {
       setComposerError(error);
+      return;
+    }
+    try {
+      if (field === "email" && mode === "live") await persistFunnelPatch({ customerEmail: trimmed });
+    } catch (updateError) {
+      setComposerError(updateError instanceof Error ? updateError.message : "We could not save your email. Please try again.");
       return;
     }
     const questionText = field === "fullName" ? config.fullNameQuestion : field === "email" ? config.emailQuestion : "";
@@ -715,9 +747,15 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     setStep(nextStep);
   };
 
-  const submitAddress = (address: string) => {
+  const submitAddress = async (address: string) => {
     const trimmed = address.trim();
     if (!trimmed) return;
+    try {
+      if (mode === "live") await persistFunnelPatch({ address: trimmed });
+    } catch (updateError) {
+      setComposerError(updateError instanceof Error ? updateError.message : "We could not save your address. Please try again.");
+      return;
+    }
     appendHistory(
       { kind: "message", sender: "assistant", text: config.addressQuestion },
       { kind: "proof" },
@@ -730,12 +768,46 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     setStep("quote");
   };
 
-  const submitPhone = () => {
+  const submitPhone = async () => {
     const trimmed = composerValue.trim();
     const error = validateBookingWidgetIntakeField("phone", trimmed);
     if (error) {
       setComposerError(error);
       return;
+    }
+    if (mode === "live") {
+      if (phoneCaptureInFlightRef.current) return;
+      phoneCaptureInFlightRef.current = true;
+      try {
+        const begun = await beginFunnelMutation.mutateAsync({
+          idempotencyKey: bookingAttemptIdRef.current,
+          source: surface === "popup" ? "widget-popup" : "book-page",
+          customerName: demo.fullName,
+          customerPhone: trimmed,
+        });
+        rememberFunnelRecord(begun);
+        await persistFunnelPatch({
+          serviceId: demo.serviceId,
+          serviceName: service.name,
+          bedrooms: bedroomCount ?? 0,
+          bathrooms: bathroomCount ?? 0,
+          extras: itemizedExtras.map(({ pricedExtra, quantity }) => ({ id: pricedExtra.id, quantity })),
+          specialRequestNotes: demo.specialRequestNotes,
+          requestedLocalDate: selectedDate ? formatLocalDate(selectedDate) : null,
+          requestedLocalTime: selectedTime ? timeLabelTo24Hour(selectedTime) : null,
+          requestedTimeZone: "America/New_York",
+          recurrence: demo.recurringFrequency,
+          pricingVersion: NATIVE_BOOKING_PRICING_VERSION,
+          firstCleaningTotalCents: Math.round(Number(quotePrice) * 100),
+          futureVisitTotalCents: recurringFutureVisitPrice === null ? null : Math.round(recurringFutureVisitPrice * 100),
+          priceSnapshot: priceBreakdown,
+        });
+      } catch (captureError) {
+        setComposerError(captureError instanceof Error ? captureError.message : "We could not save your phone number. Please try again.");
+        return;
+      } finally {
+        phoneCaptureInFlightRef.current = false;
+      }
     }
     appendHistory(
       { kind: "message", sender: "assistant", text: renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) }) },
@@ -766,10 +838,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     if (step === "serviceDetails") return submitCombinedServiceDetails();
     if (step === "questions") return selectQuestionAnswer(composerValue);
     if (step === "extras") return selectExtrasAnswer(composerValue);
-    if (step === "fullName") return submitIntakeField("fullName", "phone");
-    if (step === "phone") return submitPhone();
-    if (step === "email") return submitIntakeField("email", "address");
-    if (step === "address") return submitAddress(composerValue);
+    if (step === "fullName") return void submitIntakeField("fullName", "phone");
+    if (step === "phone") return void submitPhone();
+    if (step === "email") return void submitIntakeField("email", "address");
+    if (step === "address") return void submitAddress(composerValue);
   };
 
   const handleSave = async () => {
@@ -803,7 +875,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           : step === "address"
             ? config.addressPlaceholder
             : config.inputPlaceholder;
-  const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step);
+  const funnelMutationPending = mode === "live" && (beginFunnelMutation.isPending || updateFunnelMutation.isPending);
+  const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step) && !funnelMutationPending;
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
   const roomSummary = detailLine.split(" · ").slice(0, 2).join(" · ");
   const showSummary = !["request", "serviceDetails", "questions"].includes(step);
@@ -815,39 +888,49 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const submitLiveBooking = async (
     pricing = { version: NATIVE_BOOKING_PRICING_VERSION, totalCents: Math.round(Number(quotePrice) * 100) },
   ) => {
-    if (mode !== "live" || !selectedDate || !selectedTime || !priceBreakdown) return;
+    if (mode !== "live" || !funnelRecord || !selectedDate || !selectedTime || !priceBreakdown) return;
     setComposerError("");
     try {
-      const result = await prepareBookingMutation.mutateAsync({
-        idempotencyKey: bookingAttemptIdRef.current,
-        surface,
-        customer: { fullName: demo.fullName, phone: demo.phone, email: demo.email },
-        service: {
-          serviceId: demo.serviceId,
-          bedrooms: bedroomCount ?? 0,
-          bathrooms: bathroomCount ?? 0,
-          extras: selectedExtras.map((choice) => {
-            const extra = findBookingWidgetPricedExtra(choice);
-            if (!extra) throw new Error(`Unsupported extra: ${choice}`);
-            return { id: extra.id, quantity: extra.quantityUnit ? demo.extraQuantities[extra.id] ?? 1 : 1 };
-          }),
-          specialRequestNotes: demo.specialRequestNotes,
-        },
+      const result = await persistFunnelPatch({
+        customerEmail: demo.email,
+        serviceId: demo.serviceId,
+        serviceName: service.name,
+        bedrooms: bedroomCount ?? 0,
+        bathrooms: bathroomCount ?? 0,
+        extras: itemizedExtras.map(({ pricedExtra, quantity }) => ({ id: pricedExtra.id, quantity })),
+        specialRequestNotes: demo.specialRequestNotes,
         address: demo.address,
-        requestedSchedule: {
-          localDate: formatLocalDate(selectedDate),
-          localTime: timeLabelTo24Hour(selectedTime),
-        },
+        requestedLocalDate: formatLocalDate(selectedDate),
+        requestedLocalTime: timeLabelTo24Hour(selectedTime),
+        requestedTimeZone: "America/New_York",
         recurrence: demo.recurringFrequency,
-        acceptedPricing: pricing,
+        pricingVersion: pricing.version,
+        firstCleaningTotalCents: pricing.totalCents,
+        futureVisitTotalCents: recurringFutureVisitPrice === null ? null : Math.round(recurringFutureVisitPrice * 100),
+        priceSnapshot: priceBreakdown,
       });
-      if (result.type === "price_changed") {
-        setPriceChange(result as Extract<PrepareBookingResult, { type: "price_changed" }>);
-        return;
-      }
+      if (!result) throw new Error("Lead record is unavailable. Start over and try again.");
       setAcceptedPricing(pricing);
       setPriceChange(null);
-      setPreparedBooking(result as Extract<PrepareBookingResult, { type: "prepared" }>);
+      setPreparedBooking({
+        type: "prepared",
+        publicBookingNumber: result.publicFunnelNumber,
+        status: "needs_attention",
+        created: result.created,
+        replayed: !result.created,
+        summary: {
+          customerName: demo.fullName,
+          serviceName: service.name,
+          homeSummary: roomItemizationLabel,
+          address: demo.address,
+          requestedLocalDate: formatLocalDate(selectedDate),
+          requestedLocalTime: timeLabelTo24Hour(selectedTime),
+          requestedTimeZone: "America/New_York",
+          totalCents: pricing.totalCents,
+          recurrence: demo.recurringFrequency,
+          futureVisitTotalCents: recurringFutureVisitPrice === null ? null : Math.round(recurringFutureVisitPrice * 100),
+        },
+      });
       setStep("complete");
     } catch (error) {
       setComposerError(error instanceof Error ? error.message : "We could not submit your request. Please try again.");
@@ -1025,8 +1108,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           </section>
           <div className="space-y-1.5 border-t border-[#e4e5e7] py-3">{config.resultTrustPoints.map((point, index) => <div key={`${point}-${index}`} className="flex items-start gap-2 text-[10px] text-[#5f6168]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#23b982]" /><span>{point}</span></div>)}</div>
           <div className="space-y-1.5 border-t border-[#e4e5e7] py-3 text-[10px] text-[#5f6168]"><div className="flex justify-between gap-4"><span>Standard subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.standardSubtotal ?? 0)}</strong></div>{(priceBreakdown?.serviceAdjustment ?? 0) > 0 && <><div className="flex justify-between gap-4"><span>{service.name} adjustment · 20%</span><strong>+{formatItemizedCurrency(priceBreakdown?.serviceAdjustment ?? 0)}</strong></div><div className="flex justify-between gap-4"><span>Adjusted subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.adjustedSubtotal ?? 0)}</strong></div></>}<div className="mt-2 flex items-center justify-between border-t border-[#e4e5e7] pt-3 text-[12px]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${quotePrice}</strong></div></div>
-          {priceChange && mode === "live" && <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-5 text-amber-900"><strong className="block text-[11px]">Your price changed to ${(priceChange.totalCents / 100).toFixed(0)}</strong>Review and accept the updated server-calculated total before sending your request.<button type="button" onClick={acceptChangedPrice} disabled={prepareBookingMutation.isPending} className="mt-2 w-full rounded-lg bg-amber-700 px-3 py-2 font-bold text-white disabled:opacity-50">Accept updated price &amp; send request</button></div>}
-          <button type="button" onClick={mode === "live" ? () => void submitLiveBooking() : openCheckout} disabled={prepareBookingMutation.isPending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-wait disabled:opacity-60">{mode === "editor" && <CreditCard className="h-4 w-4" />}{prepareBookingMutation.isPending ? "Sending request…" : mode === "live" ? `Send request — $${quotePrice}` : formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
+          {priceChange && mode === "live" && <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-5 text-amber-900"><strong className="block text-[11px]">Your price changed to ${(priceChange.totalCents / 100).toFixed(0)}</strong>Review and accept the updated server-calculated total before sending your request.<button type="button" onClick={acceptChangedPrice} disabled={funnelMutationPending} className="mt-2 w-full rounded-lg bg-amber-700 px-3 py-2 font-bold text-white disabled:opacity-50">Accept updated price &amp; send request</button></div>}
+          <button type="button" onClick={mode === "live" ? () => void submitLiveBooking() : openCheckout} disabled={funnelMutationPending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-wait disabled:opacity-60">{mode === "editor" && <CreditCard className="h-4 w-4" />}{funnelMutationPending ? "Sending request…" : mode === "live" ? `Send request — $${quotePrice}` : formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
           <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />{mode === "live" ? "Requested time only · no charge will be made" : "Visual demo only · no charge will be made"}</p>
         </div>
       );

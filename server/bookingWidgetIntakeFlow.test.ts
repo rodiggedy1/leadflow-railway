@@ -10,7 +10,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('if (step === "serviceDetails") return submitCombinedServiceDetails()');
     expect(componentSource).toContain("confirmScheduleSelection");
     expect(componentSource).toContain('submitIntakeField("fullName", "phone")');
-    expect(componentSource).toContain('if (step === "phone") return submitPhone()');
+    expect(componentSource).toContain('if (step === "phone") return void submitPhone()');
     expect(componentSource).toContain('submitIntakeField("email", "address")');
     expect(componentSource).toContain('setStep("quote")');
     expect(componentSource).toContain('setStep("confirm")');
@@ -92,18 +92,47 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain('submitIntakeField("schedule", "extras")');
   });
 
-  it("keeps the internal editor structurally isolated while live mode uses the native prepare procedure", () => {
+  it("keeps the internal editor structurally isolated while live mode uses one progressive funnel identity", () => {
     expect(componentSource).toContain("leadCaptured: true");
     expect(componentSource).toContain('mode = "editor"');
     expect(componentSource).toContain('if (mode !== "live"');
     expect(componentSource).toContain('if (mode === "editor") setStep("complete")');
-    expect(componentSource).toContain("trpc.bookings.prepare.useMutation()");
-    expect(componentSource).toContain("prepareBookingMutation.mutateAsync");
+    expect(componentSource).toContain("trpc.bookingFunnel.begin.useMutation()");
+    expect(componentSource).toContain("trpc.bookingFunnel.update.useMutation()");
+    expect(componentSource).not.toContain("trpc.bookings.prepare.useMutation()");
+    expect(componentSource).not.toContain("prepareBookingMutation.mutateAsync");
     expect(componentSource).not.toContain("createLead");
     expect(componentSource).not.toContain("sendSms");
     expect(componentSource).not.toContain("processPayment");
     expect(componentSource).not.toContain("savePricing");
     expect(componentSource).not.toContain("updatePricing");
+  });
+
+  it("creates one lead before phone history advances and locks duplicate submissions while pending", () => {
+    const submitPhoneStart = componentSource.indexOf("const submitPhone = async () => {");
+    const beginCall = componentSource.indexOf("await beginFunnelMutation.mutateAsync", submitPhoneStart);
+    const phoneHistory = componentSource.indexOf("appendHistory(", beginCall);
+    const phoneAdvance = componentSource.indexOf('setStep("email")', phoneHistory);
+    expect(submitPhoneStart).toBeGreaterThan(-1);
+    expect(componentSource).toContain("phoneCaptureInFlightRef.current");
+    expect(componentSource).toContain("if (phoneCaptureInFlightRef.current) return");
+    expect(componentSource).toContain('source: surface === "popup" ? "widget-popup" : "book-page"');
+    expect(beginCall).toBeGreaterThan(submitPhoneStart);
+    expect(phoneHistory).toBeGreaterThan(beginCall);
+    expect(phoneAdvance).toBeGreaterThan(phoneHistory);
+  });
+
+  it("updates the same token-bound funnel record and replaces its optimistic version after success", () => {
+    expect(componentSource).toContain('publicFunnelNumber: current.publicFunnelNumber');
+    expect(componentSource).toContain("mutationToken: current.mutationToken");
+    expect(componentSource).toContain("expectedVersion: current.version");
+    expect(componentSource).toContain("rememberFunnelRecord(next)");
+    expect(componentSource).toContain('if (field === "email" && mode === "live") await persistFunnelPatch({ customerEmail: trimmed })');
+    expect(componentSource).toContain('if (mode === "live") await persistFunnelPatch({ address: trimmed })');
+    for (const field of ["serviceId", "serviceName", "bedrooms", "bathrooms", "extras", "specialRequestNotes", "requestedLocalDate", "requestedLocalTime", "requestedTimeZone", "recurrence", "pricingVersion", "firstCleaningTotalCents", "futureVisitTotalCents", "priceSnapshot"]) {
+      expect(componentSource).toContain(`${field}:`);
+    }
+    expect(componentSource).toContain("beginFunnelMutation.isPending || updateFunnelMutation.isPending");
   });
 
   it("uses one append-only ordered history data structure for completed messages and cards", () => {
@@ -232,7 +261,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('className="text-[#3a3c41]">${quotePrice}</strong>');
   });
 
-  it("keeps special requests as unpriced browser-only review notes and clears them on Start over", () => {
+  it("keeps special requests unpriced, persists them as review notes, and clears them on Start over", () => {
     expect(componentSource).toContain("specialRequestNotes: string[]");
     expect(componentSource).toContain("specialRequestNotes: []");
     expect(componentSource).toContain('specialRequestNotes: [...current.specialRequestNotes, note]');
