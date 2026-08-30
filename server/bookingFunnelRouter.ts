@@ -5,6 +5,7 @@ import {
   beginBookingFunnelInputSchema,
   bookingFunnelGetInputSchema,
   bookingFunnelListInputSchema,
+  reserveBookingFunnelInputSchema,
   updateBookingFunnelInputSchema,
 } from "../shared/bookingFunnel";
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
@@ -128,6 +129,46 @@ export const bookingFunnelRouter = router({
         publicFunnelNumber: existing.publicFunnelNumber,
         mutationToken: input.mutationToken,
         stage: existing.stage,
+        version: existing.version + 1,
+        created: false,
+      };
+    }),
+
+  reserve: publicProcedure
+    .input(reserveBookingFunnelInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      assertBookingFunnelRateLimit(requestKey(ctx.req));
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const rows = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
+      const existing = rows[0];
+      if (!existing || !verifyBookingFunnelMutationToken(ENV.cookieSecret, input.mutationToken, existing.publicFunnelNumber, existing.idempotencyKey)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
+      }
+      if (existing.stage === "payment_incomplete" || existing.stage === "booked") {
+        return {
+          publicFunnelNumber: existing.publicFunnelNumber,
+          mutationToken: input.mutationToken,
+          stage: existing.stage,
+          version: existing.version,
+          created: false,
+        };
+      }
+      if (existing.stage !== "lead") throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_STAGE_CONFLICT" });
+      if (existing.version !== input.expectedVersion) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
+      const result = await db
+        .update(bookingFunnelRecords)
+        .set({ ...input.patch, stage: "payment_incomplete", version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
+        .where(and(
+          eq(bookingFunnelRecords.id, existing.id),
+          eq(bookingFunnelRecords.stage, "lead"),
+          eq(bookingFunnelRecords.version, input.expectedVersion),
+        ));
+      if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
+      return {
+        publicFunnelNumber: existing.publicFunnelNumber,
+        mutationToken: input.mutationToken,
+        stage: "payment_incomplete" as const,
         version: existing.version + 1,
         created: false,
       };

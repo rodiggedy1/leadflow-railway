@@ -41,6 +41,14 @@ export const updateBookingFunnelInputSchema = z.object({
 });
 export type UpdateBookingFunnelInput = z.infer<typeof updateBookingFunnelInputSchema>;
 
+export const reserveBookingFunnelInputSchema = z.object({
+  publicFunnelNumber: z.string().trim().min(8).max(40),
+  mutationToken: z.string().trim().min(32).max(128),
+  expectedVersion: z.number().int().min(1),
+  patch: progressiveFieldsSchema.refine((value) => Object.keys(value).length > 0, "At least one field is required."),
+});
+export type ReserveBookingFunnelInput = z.infer<typeof reserveBookingFunnelInputSchema>;
+
 export const bookingFunnelListInputSchema = z.object({
   stage: bookingFunnelStageSchema.optional(),
   query: z.string().trim().max(255).optional(),

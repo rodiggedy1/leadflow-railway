@@ -72,6 +72,10 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain('onClick={() => setView("leads")}');
     expect(pageSource).toContain('if (view === "bookings") return bookingRows');
     expect(pageSource).toContain("Lead / In progress");
+    expect(pageSource).toContain("Reservation started / Payment incomplete");
+    expect(pageSource).toContain("All funnel stages");
+    expect(pageSource).toContain("status: lead.stage");
+    expect(pageSource).not.toContain('stage: "lead" as const');
     expect(pageSource).toContain("Details in progress");
     expect(pageSource).toContain("Email not entered yet");
     expect(pageSource).not.toContain("mutationToken");
