@@ -21,7 +21,7 @@ import Stripe from "stripe";
 import { publicProcedure, agentProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cardAuthTokens, stripeCustomers, paymentAuthorizations } from "../drizzle/schema";
+import { bookings, cardAuthTokens, stripeCustomers, paymentAuthorizations } from "../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
@@ -181,6 +181,7 @@ export const stripeRouter = router({
         metadata: {
           customerPhone: phone,
           cardAuthToken: input.token,
+          ...(tokenRow.nativeBookingId ? { nativeBookingId: String(tokenRow.nativeBookingId) } : {}),
         },
       });
 
@@ -266,6 +267,25 @@ export const stripeRouter = router({
         .update(cardAuthTokens)
         .set({ used: 1, completedAt: now })
         .where(eq(cardAuthTokens.token, input.token));
+
+      if (tokenRow.nativeBookingId) {
+        await db
+          .update(bookings)
+          .set({
+            funnelStage: "booked",
+            status: "confirmed",
+            paymentStatus: "card_on_file",
+            stripeCustomerId: customerRow?.stripeCustomerId ?? null,
+            stripePaymentMethodId: input.paymentMethodId,
+            cardBrand: brand,
+            cardLast4: last4,
+            cardExpMonth: exp_month,
+            cardExpYear: exp_year,
+            cardSavedAt: now,
+            updatedAt: new Date(),
+          })
+          .where(eq(bookings.id, tokenRow.nativeBookingId));
+      }
 
       return {
         success: true,

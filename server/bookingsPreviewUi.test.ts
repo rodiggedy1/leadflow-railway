@@ -24,7 +24,7 @@ describe("bookings UI preview contract", () => {
   });
 
   it("preserves the supplied self-contained sidebar, workspace, and detail panel around native data", () => {
-    for (const marker of ["Bookings workspace navigation", "MiB", "Bookings", "Teams", "Inbox", "Payments", "Rohan", "Administrator", "Select booking date", "Booking metrics", "Native LeadFlow bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "REQUESTED REVENUE", "Search customer, address, or request number", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING PREFERENCE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
+    for (const marker of ["Bookings workspace navigation", "MiB", "Bookings", "Teams", "Inbox", "Payments", "Rohan", "Administrator", "Select booking date", "Booking metrics", "Native LeadFlow bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "BOOKED REVENUE", "Search customer, address, or booking number", "Lead", "Payment incomplete", "Booked", "Completed", "SERVICE & EXTRAS", "RECURRING SERVICE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
       expect(pageSource).toContain(marker);
     }
     expect(pageSource).toContain("trpc.bookings.list.useQuery");
@@ -44,13 +44,13 @@ describe("bookings UI preview contract", () => {
   });
 
   it("removes sample records and disables every unimplemented operational write", () => {
-    expect(pageSource).toContain("OPERATIONS · NATIVE REQUESTS");
-    expect(pageSource).toContain("New Book with AI requests appear here immediately for review.");
+    expect(pageSource).toContain("OPERATIONS · BOOKINGS");
+    expect(pageSource).toContain("Every Book with AI lead appears here from phone capture through completed booking.");
     expect(pageSource).not.toContain("Demo Customer A");
     expect(pageSource).not.toContain("SEED_BOOKINGS");
     expect(pageSource).toContain('disabled title="Manual booking creation is not connected in this release"');
     expect(pageSource).toContain("Assignment is not connected in this release");
-    expect(pageSource).toContain("Card collection is not connected in this release");
+    expect(pageSource).toContain("Customer reached the secure card step");
     expect(pageSource).not.toContain("useMutation");
     for (const prototypeIdentity of ["Rohan Gilkes", "Maya Thompson", "Derek Collins", "Nia Robinson", "Jordan Lee", "302) 981-6191"]) {
       expect(pageSource).not.toContain(prototypeIdentity);

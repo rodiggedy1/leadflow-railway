@@ -10,8 +10,8 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('if (step === "serviceDetails") return submitCombinedServiceDetails()');
     expect(componentSource).toContain("confirmScheduleSelection");
     expect(componentSource).toContain('submitIntakeField("fullName", "phone")');
-    expect(componentSource).toContain('if (step === "phone") return submitPhone()');
-    expect(componentSource).toContain('submitIntakeField("email", "address")');
+    expect(componentSource).toContain('if (step === "phone") return void submitPhone()');
+    expect(componentSource).toContain('if (mode === "live" && funnelBookingNumber) void updateLeadMutation.mutateAsync');
     expect(componentSource).toContain('setStep("quote")');
     expect(componentSource).toContain('setStep("confirm")');
     expect(componentSource).toContain('setStep("complete")');
@@ -92,16 +92,16 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain('submitIntakeField("schedule", "extras")');
   });
 
-  it("keeps the internal editor structurally isolated while live mode uses the native prepare procedure", () => {
+  it("keeps the internal editor isolated while live mode uses one native funnel record", () => {
     expect(componentSource).toContain("leadCaptured: true");
     expect(componentSource).toContain('mode = "editor"');
-    expect(componentSource).toContain('if (mode !== "live"');
-    expect(componentSource).toContain('if (mode === "editor") setStep("complete")');
-    expect(componentSource).toContain("trpc.bookings.prepare.useMutation()");
-    expect(componentSource).toContain("prepareBookingMutation.mutateAsync");
-    expect(componentSource).not.toContain("createLead");
+    expect(componentSource).toContain("trpc.bookings.captureLead.useMutation()");
+    expect(componentSource).toContain("trpc.bookings.updateLead.useMutation()");
+    expect(componentSource).toContain("trpc.bookings.beginPayment.useMutation()");
+    expect(componentSource).toContain("captureLeadMutation.mutateAsync");
+    expect(componentSource).toContain("updateLeadMutation.mutateAsync");
+    expect(componentSource).toContain("beginPaymentMutation.mutateAsync");
     expect(componentSource).not.toContain("sendSms");
-    expect(componentSource).not.toContain("processPayment");
     expect(componentSource).not.toContain("savePricing");
     expect(componentSource).not.toContain("updatePricing");
   });
@@ -143,11 +143,12 @@ describe("booking widget customer-intake flow contract", () => {
 
   it("replaces quote with a dedicated focused checkout and replaces checkout with confirmation", () => {
     expect(componentSource).toContain("const checkoutRef = useRef<HTMLDivElement>(null)");
-    expect(componentSource).toContain("const openCheckout = () => {");
+    expect(componentSource).toContain("const openCheckout = async (");
     expect(componentSource).toContain('setItemizationPanel("none")');
     expect(componentSource).toContain('setStep("confirm")');
     expect(componentSource).toContain('if (mode === "editor") setStep("complete")');
-    expect(componentSource).toContain('mode === "live" ? () => void submitLiveBooking() : openCheckout');
+    expect(componentSource).toContain("beginPaymentMutation.mutateAsync");
+    expect(componentSource).toContain("<BookingStripeCardForm");
     expect(componentSource).toContain("onClick={completeCheckout}");
     expect(componentSource).toContain('ref={checkoutRef} tabIndex={-1} aria-label="Demo checkout"');
     expect(componentSource).toContain('checkoutRef.current?.focus({ preventScroll: true })');
@@ -157,18 +158,18 @@ describe("booking widget customer-intake flow contract", () => {
   });
 
   it("uses native buttons for Book and Confirm so pointer, Enter, and Space share the same activation path", () => {
-    expect(componentSource).toContain('onClick={mode === "live" ? () => void submitLiveBooking() : openCheckout}');
+    expect(componentSource).toContain('onClick={() => void openCheckout()}');
     expect(componentSource).toContain('<button type="button" onClick={completeCheckout}');
     expect(componentSource).not.toContain("onKeyDown={openCheckout}");
     expect(componentSource).not.toContain("onKeyDown={completeCheckout}");
   });
 
-  it("uses requested-time language and exact safe completion copy in live mode", () => {
-    expect(componentSource).toContain('mode === "live" ? "Requested times" : "Available times"');
-    expect(componentSource).toContain('mode === "live" ? "REQUESTED DATE & TIME" : "DATE & TIME"');
-    expect(componentSource).toContain("Request received");
-    expect(componentSource).toContain("We received your requested date and time. We’ll confirm the appointment after reviewing availability.");
-    expect(componentSource).toContain("We’ll confirm your recurring schedule when we review your requested appointment.");
+  it("uses Book and the approved booked confirmation after secure card setup", () => {
+    expect(componentSource).toContain("formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)");
+    expect(componentSource).toContain("Secure card collection · charged only after service");
+    expect(componentSource).toContain("config.confirmedTitle");
+    expect(componentSource).toContain("BOOKING_CONFIRMATION_EXPECTATIONS");
+    expect(componentSource).not.toContain("Request received");
   });
 
   it("renders one editable itemized order with authoritative base, extras, adjustments, and final total", () => {
