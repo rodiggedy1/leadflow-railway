@@ -106,6 +106,26 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain('aria-label={`Booking details for ${active.customerName}`}');
   });
 
+  it("uses a readable typography scale without changing the workspace geometry", () => {
+    for (const marker of [
+      ".bookings-list-head{padding:11px 15px;border-bottom:1px solid var(--line);background:#fafafa;color:#85888f;font-size:9px",
+      ".bookings-customer-cell>b{font-size:13px}",
+      ".bookings-customer-cell strong,.bookings-service-cell strong,.bookings-team-cell strong{font-size:12px}",
+      ".bookings-customer-cell small,.bookings-service-cell small,.bookings-team-cell small{display:flex;align-items:center;color:#7d8189;font-size:10px",
+      ".bookings-payment-ok,.bookings-payment-missing{display:flex;align-items:center;gap:5px;font-size:10px",
+      ".bookings-row-price{font-size:14px}",
+      ".bookings-detail-panel h2{margin:4px 0 7px;font-family:Georgia,serif;font-size:28px}",
+      ".bookings-detail-summary strong{font-size:11px;line-height:1.45}",
+      ".bookings-home-line{margin:0 0 10px;color:#696d75;font-size:11px;line-height:1.45}",
+      ".bookings-detail-panel>footer button{height:40px;border-radius:10px;font-size:11px",
+    ]) {
+      expect(pageStyles).toContain(marker);
+    }
+    expect(pageStyles).toContain("grid-template-columns:minmax(720px,1fr) 410px");
+    expect(pageStyles).toContain("grid-template-columns:1.6fr 1.25fr 1fr .78fr .42fr 20px");
+    expect(pageStyles).not.toMatch(/font-size:[6-8]px/);
+  });
+
   it("keeps an explicit right-detail close dismissed until another row is selected", () => {
     expect(pageSource).toContain("const [activeKey, setRawActiveKey] = useState<string | null>(null)");
     expect(pageSource).toContain("const detailDismissedRef = useRef(false)");
