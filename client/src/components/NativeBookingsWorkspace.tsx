@@ -1,8 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
-import { CalendarDays, CreditCard, Filter, Loader2, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Sparkles, Users, X } from "lucide-react";
+import { CalendarDays, CreditCard, Filter, Loader2, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import "@/pages/bookings-preview.css";
 
 type StatusFilter = "All" | "Confirmed" | "Needs attention" | "Completed";
@@ -190,10 +189,7 @@ export default function NativeBookingsWorkspace() {
   const revenueCents = rows.reduce((total, row) => total + (row.firstCleaningTotalCents ?? 0), 0);
   const assigned = rows.filter((row) => row.assignmentStatus === "assigned").length;
   const cards = rows.filter((row) => row.paymentStatus === "card_on_file").length;
-  const unavailable = (action: string) => toast.info(`${action} is not connected in this first release.`);
-
   return <main className={`bookings-ops-shell ${active ? "has-detail" : ""}`}>
-    <aside className="bookings-ops-nav" aria-label="Bookings workspace navigation"><div className="bookings-ops-logo"><Sparkles /><span>MiB</span></div><nav><button type="button" className="nav-active"><CalendarDays />Bookings</button><button type="button" onClick={() => unavailable("Teams")}><Users />Teams</button><button type="button" onClick={() => unavailable("Inbox")}><MessageCircle />Inbox</button><button type="button" onClick={() => unavailable("Payments")}><CreditCard />Payments</button></nav><div className="bookings-nav-user"><span>RG</span><div><strong>Rohan</strong><small>Administrator</small></div></div></aside>
     <section className="bookings-ops-main">
       <header className="bookings-ops-header"><div><p>OPERATIONS · NATIVE REQUESTS</p><h1>Bookings</h1><span>{view === "bookings" ? "New Book with AI requests appear here immediately for review." : "Phone-captured booking leads appear here while customers finish the flow."}</span></div><button type="button" className="bookings-new-booking" disabled title="Manual booking creation is not connected in this release"><Plus />New booking</button></header>
       <div className="bookings-toolbar"><div className="bookings-status-tabs" aria-label="Bookings workspace view"><button type="button" className={view === "bookings" ? "active" : ""} onClick={() => setView("bookings")}>Bookings</button><button type="button" className={view === "leads" ? "active" : ""} onClick={() => setView("leads")}>Leads</button></div></div>
