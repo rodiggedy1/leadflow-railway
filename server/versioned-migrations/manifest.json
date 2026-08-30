@@ -23,6 +23,30 @@
       "sha256": "dc6c46dce7a7beaebf8529711c5f383a5abf756e2f2ca8b4db38e7e727c0e25d",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0003_madison_deferred_until.postconditions.json"
+    },
+    {
+      "id": "0004_create_native_bookings",
+      "mode": "create-table",
+      "sqlFile": "0004_create_native_bookings.sql",
+      "sha256": "3bdd394ecbd45a12c5dd56a93a4beafcba05935b6ff4100fec5c0ffd6f5d3951",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0004_create_native_bookings.postconditions.json"
+    },
+    {
+      "id": "0005_create_booking_assignments",
+      "mode": "create-table",
+      "sqlFile": "0005_create_booking_assignments.sql",
+      "sha256": "a4d185e1f04f578b042c1f2e5ad56d7d895d5e4b8108764a6943479dac5dffe0",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0005_create_booking_assignments.postconditions.json"
+    },
+    {
+      "id": "0006_create_booking_series",
+      "mode": "create-table",
+      "sqlFile": "0006_create_booking_series.sql",
+      "sha256": "c90cb4e37ba4c49ee7d1a031b84335c9f0c725038626c2a9fbd4f8f7d312f1cb",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0006_create_booking_series.postconditions.json"
     }
   ]
 }
