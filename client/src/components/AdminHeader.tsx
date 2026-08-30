@@ -46,6 +46,7 @@ import {
   TrendingUp,
   CreditCard,
   Receipt,
+  CalendarDays,
 } from "lucide-react";
 
 // ── Delayed-enable hook — prevents health checks from joining the initial page-load batch.
@@ -291,7 +292,8 @@ export type AdminTab =
   | "sms-campaigns"
   | "invoices"
   | "madison-debrief"
-  | "madison-focus";
+  | "madison-focus"
+  | "bookings";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -382,6 +384,7 @@ const NAV_ENTRIES: NavEntry[] = [
     label: "Jobs",
     icon: <ClipboardCheck className="w-3.5 h-3.5" />,
     children: [
+      { id: "bookings",           label: "Bookings",      href: "/admin/bookings",             icon: <CalendarDays className="w-3.5 h-3.5" /> },
       { id: "quality",            label: "Jobs",          href: "/admin/quality",              icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
       { id: "team-pay",           label: "Team Pay",      href: "/admin/team-pay",             icon: <Trophy className="w-3.5 h-3.5" /> },
       { id: "confirmation-calls", label: "Confirm Calls",  href: "/admin/confirmation-calls",  icon: <Phone className="w-3.5 h-3.5" /> },
