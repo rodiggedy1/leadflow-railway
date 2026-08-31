@@ -3207,6 +3207,7 @@ export type InsertStripeCustomer = typeof stripeCustomers.$inferInsert;
 export const paymentAuthorizations = mysqlTable("payment_authorizations", {
   id: int("id").autoincrement().primaryKey(),
   cleanerJobId: int("cleanerJobId"),
+  bookingPaymentProfileId: int("bookingPaymentProfileId"),
   jobLabel: varchar("jobLabel", { length: 255 }),
   customerPhone: varchar("customerPhone", { length: 30 }).notNull(),
   customerName: varchar("customerName", { length: 255 }),
@@ -3215,12 +3216,14 @@ export const paymentAuthorizations = mysqlTable("payment_authorizations", {
   stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 64 }),
   amountCents: int("amountCents").notNull(),
   currency: varchar("currency", { length: 8 }).notNull().default("usd"),
+  operation: varchar("operation", { length: 32 }).notNull().default("authorization"),
   status: varchar("status", { length: 32 }).notNull().default("authorized"),
   errorMessage: text("errorMessage"),
   createdBy: varchar("createdBy", { length: 128 }),
   actionBy: varchar("actionBy", { length: 128 }),
   notes: text("notes"),
   authorizedAt: bigint("authorizedAt", { mode: "number" }),
+  captureBefore: bigint("captureBefore", { mode: "number" }),
   capturedAt: bigint("capturedAt", { mode: "number" }),
   cancelledAt: bigint("cancelledAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -4300,6 +4303,7 @@ export const bookingFunnelRecords = mysqlTable("booking_funnel_records", {
   commandHash: varchar("commandHash", { length: 64 }).notNull(),
   source: varchar("source", { length: 24 }).notNull(),
   stage: varchar("stage", { length: 32 }).notNull().default("lead"),
+  bookingId: int("bookingId"),
   customerName: varchar("customerName", { length: 255 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
   customerEmail: varchar("customerEmail", { length: 320 }),
@@ -4333,3 +4337,54 @@ export const bookingFunnelRecords = mysqlTable("booking_funnel_records", {
 ]);
 export type BookingFunnelRecord = typeof bookingFunnelRecords.$inferSelect;
 export type InsertBookingFunnelRecord = typeof bookingFunnelRecords.$inferInsert;
+
+/** One payment profile belongs to one existing native booking, never a phone number. */
+export const bookingPaymentProfiles = mysqlTable("booking_payment_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  bookingId: int("bookingId").notNull(),
+  funnelRecordId: int("funnelRecordId").notNull(),
+  paymentStatus: varchar("paymentStatus", { length: 32 }).notNull().default("not_started"),
+  version: int("version").notNull().default(1),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+  stripePaymentMethodId: varchar("stripePaymentMethodId", { length: 255 }),
+  stripeSetupIntentId: varchar("stripeSetupIntentId", { length: 255 }),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }),
+  cardBrand: varchar("cardBrand", { length: 40 }),
+  cardLast4: varchar("cardLast4", { length: 4 }),
+  cardExpMonth: int("cardExpMonth"),
+  cardExpYear: int("cardExpYear"),
+  consentVersion: varchar("consentVersion", { length: 64 }),
+  consentText: text("consentText"),
+  consentAcceptedAt: bigint("consentAcceptedAt", { mode: "number" }),
+  authorizationExpiresAt: bigint("authorizationExpiresAt", { mode: "number" }),
+  authorizedAt: bigint("authorizedAt", { mode: "number" }),
+  capturedAt: bigint("capturedAt", { mode: "number" }),
+  failureCode: varchar("failureCode", { length: 128 }),
+  failureMessage: text("failureMessage"),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_booking_payment_profile_booking").on(t.bookingId),
+  uniqueIndex("uq_booking_payment_profile_funnel").on(t.funnelRecordId),
+  uniqueIndex("uq_booking_payment_profile_setup_intent").on(t.stripeSetupIntentId),
+  index("idx_booking_payment_profile_status").on(t.paymentStatus),
+]);
+export type BookingPaymentProfile = typeof bookingPaymentProfiles.$inferSelect;
+
+/** Each signed Stripe event is stored once before it can update an existing booking profile. */
+export const stripeWebhookEvents = mysqlTable("stripe_webhook_events", {
+  id: int("id").autoincrement().primaryKey(),
+  stripeEventId: varchar("stripeEventId", { length: 255 }).notNull(),
+  eventType: varchar("eventType", { length: 128 }).notNull(),
+  objectId: varchar("objectId", { length: 255 }).notNull(),
+  bookingPaymentProfileId: int("bookingPaymentProfileId"),
+  status: varchar("status", { length: 32 }).notNull().default("received"),
+  errorMessage: text("errorMessage"),
+  receivedAt: datetime("receivedAt", { mode: "date", fsp: 3 }).notNull(),
+  processedAt: datetime("processedAt", { mode: "date", fsp: 3 }),
+}, (t) => [
+  uniqueIndex("uq_stripe_webhook_event_id").on(t.stripeEventId),
+  index("idx_stripe_webhook_payment_profile").on(t.bookingPaymentProfileId),
+  index("idx_stripe_webhook_object").on(t.objectId),
+]);
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;

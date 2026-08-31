@@ -55,6 +55,38 @@
       "sha256": "e23555c6098a91af3330db8a08bcbb6de8abbc011eb429a4a94ccfd82a266326",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0009_create_booking_funnel_records.postconditions.json"
+    },
+    {
+      "id": "0010_add_booking_funnel_booking_id",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0010_add_booking_funnel_booking_id.sql",
+      "sha256": "60f7cc1a6969f1b5057a04b6b3493db659e8a38051c1829fbbc4c17f9804b5cc",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0010_add_booking_funnel_booking_id.postconditions.json"
+    },
+    {
+      "id": "0011_create_booking_payment_profiles",
+      "mode": "create-table",
+      "sqlFile": "0011_create_booking_payment_profiles.sql",
+      "sha256": "bd972a220c5cb8c36b2fd5d00979981c42f9a8c85c91ea57cfbeceef1165320d",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0011_create_booking_payment_profiles.postconditions.json"
+    },
+    {
+      "id": "0012_add_payment_authorization_booking_link",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0012_add_payment_authorization_booking_link.sql",
+      "sha256": "741b00943ad765413768e6098b4421744d4a042d829a7f952aba2233d285b65e",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0012_add_payment_authorization_booking_link.postconditions.json"
+    },
+    {
+      "id": "0013_create_stripe_webhook_events",
+      "mode": "create-table",
+      "sqlFile": "0013_create_stripe_webhook_events.sql",
+      "sha256": "5d2a0624e8efa0445ab0137ad130fea569dd87850d2b06fb22af9e1045572df5",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0013_create_stripe_webhook_events.postconditions.json"
     }
   ]
 }

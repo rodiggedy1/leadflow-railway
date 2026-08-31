@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import { CalendarDays, CreditCard, Filter, Loader2, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -53,11 +54,11 @@ const extrasFrom = (value: unknown): NativeExtra[] => Array.isArray(value)
   : [];
 const funnelExtrasFrom = (value: unknown): NativeExtra[] => Array.isArray(value)
   ? value.flatMap((item) => {
-      if (!item || typeof item !== "object") return [];
-      const candidate = item as { id?: unknown; quantity?: unknown };
-      if (typeof candidate.id !== "string" || typeof candidate.quantity !== "number") return [];
-      return [{ id: candidate.id, label: BOOKING_WIDGET_PRICED_EXTRAS.find((extra) => extra.id === candidate.id)?.label ?? candidate.id, quantity: candidate.quantity }];
-    })
+    if (!item || typeof item !== "object") return [];
+    const candidate = item as { id?: unknown; quantity?: unknown };
+    if (typeof candidate.id !== "string" || typeof candidate.quantity !== "number") return [];
+    return [{ id: candidate.id, label: BOOKING_WIDGET_PRICED_EXTRAS.find((extra) => extra.id === candidate.id)?.label ?? candidate.id, quantity: candidate.quantity }];
+  })
   : [];
 const notesFrom = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
@@ -105,7 +106,7 @@ export default function NativeBookingsWorkspace() {
       paymentStatus: booking.paymentStatus,
       firstCleaningTotalCents: booking.firstCleaningTotalCents,
     }));
-    const funnelRows = funnelLeads.map((lead) => ({
+    const funnelRows = funnelLeads.filter((lead) => !lead.bookingId).map((lead) => ({
       key: `funnel:${lead.id}`,
       source: "funnel" as const,
       id: lead.id,
@@ -127,74 +128,47 @@ export default function NativeBookingsWorkspace() {
       paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started",
       firstCleaningTotalCents: lead.firstCleaningTotalCents,
     }));
-    if (view === "bookings") {
-      return [...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows]
-        .filter((row) => row.requestedLocalDate === date);
-    }
+    if (view === "bookings") return [...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows].filter((row) => row.requestedLocalDate === date);
     return funnelRows.filter((row) => row.status === "lead");
   }, [bookings, date, funnelLeads, view]);
+
   useEffect(() => {
     if (!rows.length) return setRawActiveKey(null);
     if (activeKey !== null && rows.some((row) => row.key === activeKey)) return;
     if (!detailDismissedRef.current) setActiveKey(rows[0].key);
   }, [activeKey, rows]);
+
   const active = useMemo<WorkspaceRow | null>(() => {
     if (selectedBookingId !== null && detailQuery.data) {
       const booking = detailQuery.data;
       return {
-        key: `booking:${booking.id}`,
-        source: "booking",
-        id: booking.id,
-        publicNumber: booking.publicBookingNumber,
-        customerName: booking.customerName,
-        customerPhone: booking.customerPhone,
-        customerEmail: booking.customerEmail,
-        status: booking.status,
-        requestedLocalDate: booking.requestedLocalDate,
-        requestedLocalTime: booking.requestedLocalTime,
-        address: booking.address,
-        serviceName: booking.serviceName,
-        bedrooms: booking.bedrooms,
-        bathrooms: booking.bathrooms,
-        recurrence: booking.recurrence,
-        extras: extrasFrom(booking.extras),
-        specialRequestNotes: notesFrom(booking.specialRequestNotes),
-        assignmentStatus: booking.assignmentStatus,
-        paymentStatus: booking.paymentStatus,
-        firstCleaningTotalCents: booking.firstCleaningTotalCents,
+        key: `booking:${booking.id}`, source: "booking", id: booking.id, publicNumber: booking.publicBookingNumber,
+        customerName: booking.customerName, customerPhone: booking.customerPhone, customerEmail: booking.customerEmail,
+        status: booking.status, requestedLocalDate: booking.requestedLocalDate, requestedLocalTime: booking.requestedLocalTime,
+        address: booking.address, serviceName: booking.serviceName, bedrooms: booking.bedrooms, bathrooms: booking.bathrooms,
+        recurrence: booking.recurrence, extras: extrasFrom(booking.extras), specialRequestNotes: notesFrom(booking.specialRequestNotes),
+        assignmentStatus: booking.assignmentStatus, paymentStatus: booking.paymentStatus, firstCleaningTotalCents: booking.firstCleaningTotalCents,
       };
     }
     if (selectedFunnelId !== null && funnelDetailQuery.data) {
       const lead = funnelDetailQuery.data;
       return {
-        key: `funnel:${lead.id}`,
-        source: "funnel",
-        id: lead.id,
-        publicNumber: lead.publicFunnelNumber,
-        customerName: lead.customerName,
-        customerPhone: lead.customerPhone,
-        customerEmail: lead.customerEmail,
-        status: lead.stage,
-        requestedLocalDate: lead.requestedLocalDate,
-        requestedLocalTime: lead.requestedLocalTime,
-        address: lead.address,
-        serviceName: lead.serviceName,
-        bedrooms: lead.bedrooms,
-        bathrooms: lead.bathrooms,
-        recurrence: lead.recurrence,
-        extras: funnelExtrasFrom(lead.extras),
-        specialRequestNotes: notesFrom(lead.specialRequestNotes),
-        assignmentStatus: "unassigned",
-        paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started",
-        firstCleaningTotalCents: lead.firstCleaningTotalCents,
+        key: `funnel:${lead.id}`, source: "funnel", id: lead.id, publicNumber: lead.publicFunnelNumber,
+        customerName: lead.customerName, customerPhone: lead.customerPhone, customerEmail: lead.customerEmail,
+        status: lead.stage, requestedLocalDate: lead.requestedLocalDate, requestedLocalTime: lead.requestedLocalTime,
+        address: lead.address, serviceName: lead.serviceName, bedrooms: lead.bedrooms, bathrooms: lead.bathrooms,
+        recurrence: lead.recurrence, extras: funnelExtrasFrom(lead.extras), specialRequestNotes: notesFrom(lead.specialRequestNotes),
+        assignmentStatus: "unassigned", paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started", firstCleaningTotalCents: lead.firstCleaningTotalCents,
       };
     }
     return rows.find((row) => row.key === activeKey) ?? null;
   }, [activeKey, detailQuery.data, funnelDetailQuery.data, rows, selectedBookingId, selectedFunnelId]);
+
   const dates = useMemo(() => [-1, 0, 1, 2].map((offset) => shiftDate(date, offset)), [date]);
   const revenueCents = rows.reduce((total, row) => total + (row.firstCleaningTotalCents ?? 0), 0);
   const assigned = rows.filter((row) => row.assignmentStatus === "assigned").length;
   const cards = rows.filter((row) => row.paymentStatus === "card_on_file").length;
+
   return <main className={`bookings-ops-shell ${active ? "has-detail" : ""}`}>
     <section className="bookings-ops-main">
       <header className="bookings-ops-header"><div><p>OPERATIONS · NATIVE REQUESTS</p><h1>Bookings</h1><span>{view === "bookings" ? "New Book with AI requests appear here immediately for review." : "Phone-captured booking leads appear here while customers finish the flow."}</span></div><button type="button" className="bookings-new-booking" disabled title="Manual booking creation is not connected in this release"><Plus />New booking</button></header>
@@ -204,6 +178,6 @@ export default function NativeBookingsWorkspace() {
       <div className="bookings-toolbar"><div className="bookings-search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, address, or request number" /></div>{view === "bookings" ? <div className="bookings-status-tabs">{(["All", "Confirmed", "Needs attention", "Completed"] as const).map((option) => <button type="button" key={option} className={status === option ? "active" : ""} onClick={() => setStatus(option)}>{option}</button>)}</div> : <div className="bookings-status-tabs"><button type="button" className="active">Lead / In progress</button></div>}<button type="button" className="bookings-filter-button" disabled><Filter />Filters</button></div>
       <div className="bookings-list" aria-label={view === "bookings" ? "Native LeadFlow bookings list" : "Native LeadFlow leads list"}><div className="bookings-list-head"><span>TIME & CUSTOMER</span><span>SERVICE</span><span>TEAM</span><span>PAYMENT</span><span>TOTAL</span><span /></div>{(listQuery.isLoading || funnelListQuery.isLoading) ? <div className="bookings-empty-day"><Loader2 className="animate-spin" /><h3>Loading {view}</h3></div> : (listQuery.error || funnelListQuery.error) ? <div className="bookings-empty-day"><X /><h3>Could not load {view}</h3><p>{listQuery.error?.message ?? funnelListQuery.error?.message}</p></div> : rows.length ? rows.map((row) => { const home = row.bedrooms === null || row.bathrooms === null ? "Details in progress" : row.bedrooms === 0 ? `Studio · ${row.bathrooms} baths` : `${row.bedrooms} bed · ${row.bathrooms} baths`; const hasCard = row.paymentStatus === "card_on_file"; return <button type="button" className={activeKey === row.key ? "bookings-row selected" : "bookings-row"} key={row.key} onClick={() => setActiveKey(row.key)}><span className="bookings-customer-cell"><b>{row.requestedLocalTime ? displayTime(row.requestedLocalTime) : "Lead"}</b><i className={row.status === "lead" || row.status === "needs_attention" ? "bookings-status-dot attention" : "bookings-status-dot"} /><span><strong>{row.customerName}</strong><small><MapPin /> {row.address ?? "Details in progress"}</small></span></span><span className="bookings-service-cell"><strong>{row.serviceName ?? "Booking lead"}</strong><small>{home}{row.recurrence ? ` · ${labelRecurrence(row.recurrence)}` : ""}</small>{row.source === "funnel" ? <em>{labelStatus(row.status)}</em> : row.extras.length > 0 && <em>+{row.extras.length} extra{row.extras.length > 1 ? "s" : ""}</em>}</span><span className="bookings-team-cell"><i className="bookings-team-avatar gray">?</i><span><strong>Unassigned</strong><small>Needs review</small></span></span><span className={hasCard ? "bookings-payment-ok" : "bookings-payment-missing"}><CreditCard />{hasCard ? "Card on file" : "Not started"}</span><strong className="bookings-row-price">{row.firstCleaningTotalCents === null ? "—" : `$${(row.firstCleaningTotalCents / 100).toFixed(0)}`}</strong><MoreHorizontal /></button>; }) : <div className="bookings-empty-day"><CalendarDays /><h3>No {view} found</h3><p>{view === "bookings" ? "Try another date or clear your filters." : "New phone-captured leads will appear here."}</p></div>}</div>
     </section>
-    {active && <aside className="bookings-detail-panel" aria-label={`Booking details for ${active.customerName}`}><header><div><small>{active.publicNumber}</small><h2>{active.customerName}</h2><span className={active.status === "lead" || active.status === "needs_attention" ? "bookings-detail-status attention" : "bookings-detail-status"}>{labelStatus(active.status)}</span></div><button type="button" onClick={() => setActiveKey(null)} aria-label="Close booking detail panel"><X /></button></header><div className="bookings-detail-scroll"><section className="bookings-detail-summary"><div><CalendarDays /><span><small>REQUESTED TIME</small><strong>{active.requestedLocalTime && active.requestedLocalDate ? `${displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}` : "Not selected yet"}</strong></span></div><div><MapPin /><span><small>ADDRESS</small><strong>{active.address ?? "Not entered yet"}</strong></span></div></section><section className="bookings-editor-section"><div className="bookings-section-title"><div><small>SERVICE & EXTRAS</small><h3>{active.serviceName ?? "Booking details in progress"}</h3></div><strong>{active.firstCleaningTotalCents === null ? "—" : `$${(active.firstCleaningTotalCents / 100).toFixed(0)}`}</strong></div><p className="bookings-home-line">{active.bedrooms === null || active.bathrooms === null ? "Room details not entered yet" : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}</p><div className="bookings-selected-extras">{active.extras.length ? active.extras.map((extra) => <button type="button" disabled key={extra.id}>{extra.label}{extra.quantity > 1 ? ` × ${extra.quantity}` : ""}</button>) : <button type="button" disabled>Nothing extra</button>}</div></section><section className="bookings-editor-section"><small>RECURRING PREFERENCE</small><div className="bookings-choice-grid"><button type="button" className="choice-active" disabled>{active.recurrence ? labelRecurrence(active.recurrence) : "Not selected"}{active.recurrence && active.recurrence !== "one-time" && <span>Intent pending</span>}</button></div><p className="bookings-editor-hint">{!active.recurrence ? "Preference not entered yet." : active.recurrence === "one-time" ? "One-time request." : "No future visits were created. Confirm the recurring plan during review."}</p></section><section className="bookings-editor-section"><small>ASSIGNED TEAM</small><div className="bookings-team-select"><button type="button" className="bookings-team-option active" disabled><i className="bookings-team-avatar gray">?</i><span><strong>Unassigned</strong><small>Assignment is not connected in this release</small></span></button></div></section><section className="bookings-editor-section"><small>PAYMENT</small><div className="bookings-card-panel missing"><CreditCard /><div><strong>Payment not started</strong><p>Card collection is not connected in this release</p></div></div></section><section className="bookings-editor-section"><small>CUSTOMER</small><p className="bookings-home-line">{active.customerPhone}<br />{active.customerEmail ?? "Email not entered yet"}</p></section><section className="bookings-editor-section"><small>NOTES & SPECIAL REQUESTS</small><textarea value={active.specialRequestNotes.join("\n")} readOnly placeholder="No special requests" /><div className="bookings-customer-actions"><button type="button" disabled><MessageCircle />Text customer</button><button type="button" disabled><CalendarDays />Reschedule</button></div></section></div><footer><button type="button" className="bookings-cancel-button" disabled>Cancel booking</button><button type="button" className="bookings-save-button" disabled>Save changes</button></footer></aside>}
+    {active && <aside className="bookings-detail-panel" aria-label={`Booking details for ${active.customerName}`}><header><div><small>{active.publicNumber}</small><h2>{active.customerName}</h2><span className={active.status === "lead" || active.status === "needs_attention" ? "bookings-detail-status attention" : "bookings-detail-status"}>{labelStatus(active.status)}</span></div><button type="button" onClick={() => setActiveKey(null)} aria-label="Close booking detail panel"><X /></button></header><div className="bookings-detail-scroll"><section className="bookings-detail-summary"><div><CalendarDays /><span><small>REQUESTED TIME</small><strong>{active.requestedLocalTime && active.requestedLocalDate ? `${displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}` : "Not selected yet"}</strong></span></div><div><MapPin /><span><small>ADDRESS</small><strong>{active.address ?? "Not entered yet"}</strong></span></div></section><section className="bookings-editor-section"><div className="bookings-section-title"><div><small>SERVICE & EXTRAS</small><h3>{active.serviceName ?? "Booking details in progress"}</h3></div><strong>{active.firstCleaningTotalCents === null ? "—" : `$${(active.firstCleaningTotalCents / 100).toFixed(0)}`}</strong></div><p className="bookings-home-line">{active.bedrooms === null || active.bathrooms === null ? "Room details not entered yet" : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}</p><div className="bookings-selected-extras">{active.extras.length ? active.extras.map((extra) => <button type="button" disabled key={extra.id}>{extra.label}{extra.quantity > 1 ? ` × ${extra.quantity}` : ""}</button>) : <button type="button" disabled>Nothing extra</button>}</div></section><section className="bookings-editor-section"><small>RECURRING PREFERENCE</small><div className="bookings-choice-grid"><button type="button" className="choice-active" disabled>{active.recurrence ? labelRecurrence(active.recurrence) : "Not selected"}{active.recurrence && active.recurrence !== "one-time" && <span>Intent pending</span>}</button></div><p className="bookings-editor-hint">{!active.recurrence ? "Preference not entered yet." : active.recurrence === "one-time" ? "One-time request." : "No future visits were created. Confirm the recurring plan during review."}</p></section><section className="bookings-editor-section"><small>ASSIGNED TEAM</small><div className="bookings-team-select"><button type="button" className="bookings-team-option active" disabled><i className="bookings-team-avatar gray">?</i><span><strong>Unassigned</strong><small>Assignment is not connected in this release</small></span></button></div></section><section className="bookings-editor-section"><small>PAYMENT</small>{active.source === "booking" && active.firstCleaningTotalCents !== null ? <BookingPaymentActions bookingId={active.id} totalCents={active.firstCleaningTotalCents} paymentStatus={active.paymentStatus} /> : <div className="bookings-card-panel missing"><CreditCard /><div><strong>Payment not started</strong><p>Card collection is not connected for this in-progress lead.</p></div></div>}</section><section className="bookings-editor-section"><small>CUSTOMER</small><p className="bookings-home-line">{active.customerPhone}<br />{active.customerEmail ?? "Email not entered yet"}</p></section><section className="bookings-editor-section"><small>NOTES & SPECIAL REQUESTS</small><textarea value={active.specialRequestNotes.join("\n")} readOnly placeholder="No special requests" /><div className="bookings-customer-actions"><button type="button" disabled><MessageCircle />Text customer</button><button type="button" disabled><CalendarDays />Reschedule</button></div></section></div><footer><button type="button" className="bookings-cancel-button" disabled>Cancel booking</button><button type="button" className="bookings-save-button" disabled>Save changes</button></footer></aside>}
   </main>;
 }

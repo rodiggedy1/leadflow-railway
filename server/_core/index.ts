@@ -14,6 +14,7 @@ import { registerCallCenterCronRoute } from "../callCommandCenterCron";
 import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
+import { registerStripeWebhookRoute } from "../stripeWebhookRoute";
 import { registerSseTestRoutes } from "../sseTest";
 import { registerOpsStreamRoute } from "../opsStream";
 import { registerCsElevateStreamRoute } from "../csElevateStream";
@@ -980,6 +981,9 @@ async function startServer() {
   // CORS — must be before all other middleware so preflight OPTIONS requests are handled
   app.use(corsMiddleware);
   app.options("*", corsMiddleware); // handle preflight for all routes
+
+  // Stripe requires the unmodified signed request body, so this must precede express.json().
+  registerStripeWebhookRoute(app);
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
