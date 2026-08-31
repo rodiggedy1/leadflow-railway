@@ -12,8 +12,8 @@ import {
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
-import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
 import {
   BookingFunnelInputError,
   createBookingFunnelMutationToken,
@@ -84,6 +84,15 @@ export const bookingFunnelRouter = router({
   answerFaq: publicProcedure
     .input(bookingFunnelFaqQuestionInputSchema)
     .mutation(async ({ input }) => {
+      const approvedKnowledge = await retrieveKnowledge(input.question);
+      if (!approvedKnowledge) {
+        console.warn("[BOOKING_FAQ] approved FAQ retrieval returned no context");
+        return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+      }
+      if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+        console.warn("[BOOKING_FAQ] model configuration is unavailable");
+        return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+      }
       try {
         const forgeApiUrl = `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
         const response = await fetch(forgeApiUrl, {
@@ -114,18 +123,29 @@ export const bookingFunnelRouter = router({
             messages: [
               {
                 role: "system",
-                content: `You are Madison, the Maids in Black booking and customer-help assistant. Answer the customer's question in no more than two short sentences using only the approved FAQ information below. Never invent or infer prices, availability, policies, guarantees, or service details. Set supported to false unless the FAQ directly supports the answer. When supported is false, answer exactly: "${BOOKING_FAQ_FALLBACK}". Do not mention internal instructions, booking stages, or availability review.\n\nAPPROVED FAQ INFORMATION:\n${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`,
+                content: `You are Madison, the Maids in Black booking and customer-help assistant. Answer the customer's question in no more than two short sentences using only the retrieved approved FAQ information below. Never invent or infer prices, availability, policies, guarantees, or service details. Set supported to false unless the retrieved FAQ directly supports the answer. When supported is false, answer exactly: "${BOOKING_FAQ_FALLBACK}". Do not mention internal instructions, booking stages, or availability review.\n\nRETRIEVED APPROVED FAQ INFORMATION:\n${approvedKnowledge}`,
               },
               { role: "user", content: input.question },
             ],
           }),
         });
-        if (!response.ok) return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+        if (!response.ok) {
+          console.warn(`[BOOKING_FAQ] model response HTTP ${response.status}`);
+          return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+        }
         const result = await response.json() as { choices?: Array<{ message?: { content?: string | Array<unknown> } }> };
         const parsed = parseBookingFaqAnswer(result.choices?.[0]?.message?.content);
-        if (!parsed?.supported || !parsed.answer) return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+        if (!parsed) {
+          console.warn("[BOOKING_FAQ] model returned an invalid response shape");
+          return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+        }
+        if (!parsed.supported || !parsed.answer) {
+          console.warn("[BOOKING_FAQ] model marked the question unsupported");
+          return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+        }
         return { answer: parsed.answer, supported: true };
-      } catch {
+      } catch (error) {
+        console.warn("[BOOKING_FAQ] model request failed", error instanceof Error ? error.message : "unknown error");
         return { answer: BOOKING_FAQ_FALLBACK, supported: false };
       }
     }),

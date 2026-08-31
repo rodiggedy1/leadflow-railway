@@ -393,18 +393,6 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     setHistory((current) => [...current, ...entries]);
   };
 
-  const currentUnansweredBookingPrompt = () => {
-    if (step === "request") return config.greeting;
-    if (step === "serviceDetails") return config.combinedDetailsQuestion;
-    if (step === "questions" && currentQuestion) return currentQuestion.prompt;
-    if (step === "extras" && extrasQuestion) return extrasQuestion.prompt;
-    if (step === "fullName") return config.fullNameQuestion;
-    if (step === "phone") return renderBookingWidgetTemplate(config.phoneQuestionTemplate, { firstName: firstNameFromFullName(demo.fullName) });
-    if (step === "email") return config.emailQuestion;
-    if (step === "address") return config.addressQuestion;
-    return "";
-  };
-
   const rememberFunnelRecord = (record: BookingFunnelPublicResult | null) => {
     funnelRecordRef.current = record;
     setFunnelRecord(record);
@@ -857,19 +845,12 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const submitComposer = () => {
     const question = composerValue.trim();
     if (question && looksLikeBookingQuestion(question)) {
-      const currentPrompt = currentUnansweredBookingPrompt();
       setComposerError("");
       appendHistory({ kind: "message", sender: "customer", text: question });
       setComposerValue("");
       void bookingFaqMutation.mutateAsync({ question })
-        .then((result) => appendHistory(
-          { kind: "message", sender: "assistant", text: result.answer },
-          ...(currentPrompt ? [{ kind: "message" as const, sender: "assistant" as const, text: currentPrompt }] : []),
-        ))
-        .catch(() => appendHistory(
-          { kind: "message", sender: "assistant", text: "I’m not completely sure about that. I can have the team help." },
-          ...(currentPrompt ? [{ kind: "message" as const, sender: "assistant" as const, text: currentPrompt }] : []),
-        ));
+        .then((result) => appendHistory({ kind: "message", sender: "assistant", text: result.answer }))
+        .catch(() => appendHistory({ kind: "message", sender: "assistant", text: "I’m not completely sure about that. I can have the team help." }));
       return;
     }
     if (step === "request") return selectRequest(composerValue);

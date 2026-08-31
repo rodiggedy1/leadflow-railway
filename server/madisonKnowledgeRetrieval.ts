@@ -10,10 +10,22 @@
 
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 
+const QUESTION_STOP_WORDS = new Set([
+  "about", "could", "does", "form", "from", "have", "many", "need",
+  "take", "that", "their", "there", "these", "this", "what", "when",
+  "where", "which", "will", "with", "would", "your",
+]);
+
 // KB sections extracted by heading
 const KB_SECTIONS = parseKbSections(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
 
 interface KbSection {
+  heading: string;
+  content: string;
+  keywords: string[];
+}
+
+interface KbPassage {
   heading: string;
   content: string;
   keywords: string[];
@@ -55,7 +67,21 @@ function extractKeywords(text: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 3);
+    .filter((word) => word.length > 3 && !QUESTION_STOP_WORDS.has(word));
+}
+
+function extractPassages(section: KbSection): KbPassage[] {
+  if (section.heading !== "Frequently Asked Questions") return [section];
+  const matches = [...section.content.matchAll(/\*\*Q:\s*(.+?)\*\*\s*\nA:\s*(.+?)(?=\n\n\*\*Q:|$)/gs)];
+  if (matches.length === 0) return [section];
+  return matches.map((match) => {
+    const content = `**Q: ${match[1].trim()}**\nA: ${match[2].trim()}`;
+    return {
+      heading: section.heading,
+      content,
+      keywords: extractKeywords(content),
+    };
+  });
 }
 
 /**
@@ -65,13 +91,16 @@ function extractKeywords(text: string): string[] {
 export async function retrieveKnowledge(question: string): Promise<string> {
   const questionKeywords = extractKeywords(question);
 
-  // Score each section by keyword overlap
-  const scored = KB_SECTIONS.map((section) => {
-    const overlap = questionKeywords.filter((kw) => section.keywords.includes(kw)).length;
-    return { section, score: overlap };
+  // Score factual sections and compact FAQ entries individually so a long FAQ
+  // section cannot crowd out the most relevant approved source material.
+  const passages = KB_SECTIONS.flatMap(extractPassages);
+  const scored = passages.map((passage) => {
+    const overlap = questionKeywords.filter((kw) => passage.keywords.includes(kw)).length;
+    return { passage, score: overlap };
   }).sort((a, b) => b.score - a.score);
 
-  // Take top 2 most relevant sections (max ~800 chars)
+  // Use at most two compact approved passages so both the direct FAQ wording
+  // and the governing factual section remain visible to the answer model.
   const relevant = scored.slice(0, 2).filter((s) => s.score > 0);
 
   if (relevant.length === 0) {
@@ -83,7 +112,7 @@ export async function retrieveKnowledge(question: string): Promise<string> {
   }
 
   return relevant
-    .map((r) => `## ${r.section.heading}\n${r.section.content}`)
+    .map((r) => `## ${r.passage.heading}\n${r.passage.content}`)
     .join("\n\n")
-    .slice(0, 1200);
+    .slice(0, 1600);
 }
