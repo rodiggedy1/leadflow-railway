@@ -39,4 +39,18 @@ describe("shared booking Stripe checkout", () => {
     expect(adapter).not.toContain("paymentIntents.cancel");
     expect(adapter).toContain('status: "needs_attention", paymentStatus: "card_on_file"');
   });
+
+  it("confirms a real booking by first name without availability-review or UI-preview language", () => {
+    const widget = read("client/src/components/BookingWidgetConfigPanel.tsx");
+    const bookNow = read("client/src/pages/BookNow.tsx");
+    expect(widget).toContain("You&apos;re booked, {firstNameFromFullName(demo.fullName)}!");
+    expect(widget).toContain("Your cleaning is booked. You will not be charged today.");
+    expect(widget).not.toContain("awaiting availability review");
+    expect(bookNow).toContain("BOOKING CONFIRMED");
+    expect(bookNow).toContain("You&apos;re booked, {firstName}");
+    expect(bookNow).toContain("Your cleaning is booked. We&apos;ll text and email your appointment details shortly.");
+    expect(bookNow).not.toContain("UI PREVIEW COMPLETE");
+    expect(bookNow).not.toContain("This visual preview shows how the confirmation screen will look.");
+    expect(bookNow).not.toContain("awaiting availability review");
+  });
 });
