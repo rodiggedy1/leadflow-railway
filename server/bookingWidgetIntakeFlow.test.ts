@@ -8,7 +8,8 @@ const widgetEmbedSource = fs.readFileSync(path.resolve("server/widgetEmbed.ts"),
 describe("booking widget customer-intake flow contract", () => {
   it("keeps the deterministic combined-details, calendar, extras, contact, address, quote, checkout, and confirmation steps", () => {
     expect(componentSource).toContain('type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "payment" | "complete"');
-    expect(componentSource).toContain('if (step === "serviceDetails") return submitCombinedServiceDetails()');
+    expect(componentSource).toContain("const continueServiceDetails = () => {");
+    expect(componentSource).not.toContain('if (step === "serviceDetails") return submitCombinedServiceDetails()');
     expect(componentSource).toContain("confirmScheduleSelection");
     expect(componentSource).toContain('submitIntakeField("fullName", "phone")');
     expect(componentSource).toContain('if (step === "phone") return void submitPhone()');
@@ -69,10 +70,17 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain('{ kind: "video" }');
   });
 
-  it("requires supported combined room counts and preserves custom questions with fixed multi-select extras", () => {
+  it("uses bounded click controls for room counts and preserves custom questions with fixed multi-select extras", () => {
     expect(componentSource).toContain("buildInferredQuestionAnswers(resolved, config.questions)");
-    expect(componentSource).toContain("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
     expect(componentSource).toContain("Enter a bedroom count from 0 through 7.");
+    expect(componentSource).toContain('<RoomCountControl label="Bedrooms" value={selectedBedrooms} minimum={0} maximum={7} onChange={updateItemizedBedrooms} />');
+    expect(componentSource).toContain('<RoomCountControl label="Bathrooms" value={selectedBathrooms} minimum={0} maximum={20} onChange={updateItemizedBathrooms} />');
+    expect(componentSource).toContain('aria-label={`Decrease ${label}`}');
+    expect(componentSource).toContain('aria-label={`Increase ${label}`}');
+    expect(componentSource).toContain('onClick={continueServiceDetails}');
+    expect(componentSource).toContain('Math.min(7, Math.max(0, Math.floor(bedrooms)))');
+    expect(componentSource).toContain('Math.min(20, Math.max(0, Math.floor(bathrooms)))');
+    expect(componentSource).toContain('["request", "questions", "extras", "fullName", "phone", "email", "address"].includes(step)');
     expect(componentSource).toContain("nextUnansweredCustomQuestionIndex");
     expect(componentSource).toContain('config.questions[index].role === "custom"');
     expect(componentSource).toContain('config.questions.find((question) => question.role === "extras")');
@@ -291,8 +299,8 @@ describe("booking widget customer-intake flow contract", () => {
   });
 
   it("uses narrow-popup presentation with blush-stone conversation depth and a distinct pinned composer", () => {
-    expect(componentSource).toContain('min-[480px]:grid min-[480px]:grid-cols-[140px_1fr]');
-    expect(componentSource).toContain('h-36 w-full bg-[#f7f5f2] object-contain min-[480px]:h-full');
+    expect(componentSource).toContain('min-[360px]:grid min-[360px]:grid-cols-[112px_1fr]');
+    expect(componentSource).toContain('h-36 w-full bg-[#f7f5f2] object-contain min-[360px]:h-full');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "px-4 py-3"');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "h-10 w-10 rounded-[14px] text-lg"');
     expect(componentSource).toContain('bg-[radial-gradient(circle_at_90%_5%,rgba(255,224,215,0.32),transparent_34%),linear-gradient(145deg,#faf8f6_0%,#f8f4f1_55%,#fff8f5_100%)]');
@@ -378,7 +386,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/KoTsWjcUFAcYYhVB.png");
     expect(componentSource).toContain("object-contain");
     expect(componentSource).not.toContain("objectPosition");
-    expect(componentSource).toContain("min-[480px]:grid-cols-[140px_1fr]");
+    expect(componentSource).toContain("min-[360px]:grid-cols-[112px_1fr]");
     expect(componentSource).toContain("Demo checkout");
     expect(componentSource).toContain("Stripe-style payment preview");
     expect(componentSource).toContain('aria-label="Demo card number"');

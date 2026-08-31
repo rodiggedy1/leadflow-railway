@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, Bot, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronUp, Circle, Clock, CreditCard, Eye, Home, Loader2, Lock, MapPin, MessageCircle, Play, Plus, RotateCcw, Save, Send, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowRight, Bot, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronUp, Circle, Clock, CreditCard, Eye, Home, Loader2, Lock, MapPin, MessageCircle, Minus, Play, Plus, RotateCcw, Save, Send, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -211,6 +211,22 @@ function DemoChip({ children, onClick, selected = false, color, buttonRef }: { c
   );
 }
 
+function RoomCountControl({ label, value, minimum, maximum, onChange }: { label: string; value: number; minimum: number; maximum: number; onChange: (next: number) => void }) {
+  return (
+    <div className="rounded-[18px] border border-[#e4e5e7] bg-white p-3 shadow-[0_3px_9px_rgba(22,20,33,0.03)]">
+      <div className="flex items-center gap-2 text-[#3a3c41]">
+        <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0ec] text-[#ff684c]"><Home className="h-4 w-4" /></span>
+        <span className="grid"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#8b8d96]">HOME SIZE</small><strong className="text-[12px] font-extrabold">{label}</strong></span>
+      </div>
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-[#f8f8f7] p-1.5">
+        <button type="button" aria-label={`Decrease ${label}`} disabled={value <= minimum} onClick={() => onChange(Math.max(minimum, value - 1))} className="grid h-9 w-9 place-items-center rounded-lg bg-white text-[#d95740] shadow-sm transition hover:bg-[#fff1ed] disabled:cursor-not-allowed disabled:opacity-35"><Minus className="h-4 w-4" /></button>
+        <strong className="min-w-8 text-center text-[16px] font-extrabold text-[#3a3c41]">{value}</strong>
+        <button type="button" aria-label={`Increase ${label}`} disabled={value >= maximum} onClick={() => onChange(Math.min(maximum, value + 1))} className="grid h-9 w-9 place-items-center rounded-lg bg-[#ff684c] text-white shadow-sm transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-35"><Plus className="h-4 w-4" /></button>
+      </div>
+    </div>
+  );
+}
+
 function formatItemizedCurrency(amount: number): string {
   return amount.toLocaleString("en-US", {
     style: "currency",
@@ -233,11 +249,11 @@ function DemoHistoryRow({ entry, customerColor, trustPoints }: { entry: DemoHist
     );
   }
   return (
-    <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] min-[480px]:grid min-[480px]:grid-cols-[140px_1fr]">
+    <div className="ml-10 mr-2 overflow-hidden rounded-[18px] border border-[#e0e1e4] bg-white shadow-[0_8px_24px_rgba(22,20,33,0.05)] min-[360px]:grid min-[360px]:grid-cols-[112px_1fr]">
       <img
         src={CLEANER_TEAM_IMAGE_URL}
         alt="Maids in Black professional holding cleaning supplies"
-        className="h-36 w-full bg-[#f7f5f2] object-contain min-[480px]:h-full"
+        className="h-36 w-full bg-[#f7f5f2] object-contain min-[360px]:h-full"
       />
       <div className="flex flex-col justify-center p-4"><span className="text-[9px] font-extrabold tracking-[0.12em] text-[#ff684c]">WHY PEOPLE BOOK US</span><h3 className="mt-2 text-[15px] font-extrabold text-[#3a3c41]">Professional, vetted cleaners</h3><div className="mt-2 flex items-start gap-2 text-[10px] leading-4 text-[#66736e]"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#239268]" /><span>{trustPoints.filter(Boolean).join(" · ")}</span></div><span className="mt-2 text-[10px] font-extrabold text-[#ff684c]">See our happiness promise</span></div>
     </div>
@@ -544,38 +560,6 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     else setStep("schedule");
   };
 
-  const submitCombinedServiceDetails = () => {
-    const resolved = resolveDemoRequest(composerValue);
-    if (resolved.bedrooms !== undefined && BOOKING_WIDGET_BEDROOM_BASE_PRICES[resolved.bedrooms] === undefined) {
-      setComposerError("Enter a bedroom count from 0 through 7.");
-      return;
-    }
-    const inferred = buildInferredQuestionAnswers(resolved, config.questions);
-    const nextAnswers = { ...demo.answers, ...inferred.answers };
-    const hasBedrooms = config.questions.every((question) => question.role !== "bedrooms" || (nextAnswers[question.id] ?? []).length > 0);
-    const hasBathrooms = config.questions.every((question) => question.role !== "bathrooms" || (nextAnswers[question.id] ?? []).length > 0);
-    if (!hasBedrooms || !hasBathrooms || resolved.bedrooms === undefined || resolved.bathrooms === undefined) {
-      setComposerError("Enter both bedrooms and bathrooms, for example: 2 bed 2 bath.");
-      return;
-    }
-    appendHistory(
-      { kind: "message", sender: "assistant", text: config.combinedDetailsQuestion },
-      { kind: "message", sender: "customer", text: composerValue.trim() },
-    );
-    setDemo((current) => ({
-      ...current,
-      serviceDetailsAnswer: composerValue.trim(),
-      bedrooms: resolved.bedrooms,
-      bathrooms: resolved.bathrooms,
-      fallbackBedrooms: resolved.bedrooms,
-      answers: nextAnswers,
-      inferredQuestionIds: [...new Set([...current.inferredQuestionIds, ...inferred.inferredQuestionIds])],
-    }));
-    setComposerValue("");
-    setComposerError("");
-    nextAfterServiceDetails(nextAnswers);
-  };
-
   const selectQuestionAnswer = (answer: string) => {
     const trimmed = answer.trim();
     if (!trimmed || !currentQuestion) return;
@@ -702,17 +686,18 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   };
 
   const updateItemizedBedrooms = (bedrooms: number) => {
+    const nextBedrooms = Math.min(7, Math.max(0, Math.floor(bedrooms)));
     setDemo((current) => {
       const answers = { ...current.answers };
       for (const question of config.questions) {
-        if (question.role === "bedrooms") answers[question.id] = [bedrooms === 0 ? "Studio" : `${bedrooms} bedroom${bedrooms === 1 ? "" : "s"}`];
+        if (question.role === "bedrooms") answers[question.id] = [nextBedrooms === 0 ? "Studio" : `${nextBedrooms} bedroom${nextBedrooms === 1 ? "" : "s"}`];
       }
-      return { ...current, bedrooms, fallbackBedrooms: bedrooms, answers };
+      return { ...current, bedrooms: nextBedrooms, fallbackBedrooms: nextBedrooms, answers };
     });
   };
 
   const updateItemizedBathrooms = (bathrooms: number) => {
-    const nextBathrooms = Math.max(0, Math.floor(bathrooms));
+    const nextBathrooms = Math.min(20, Math.max(0, Math.floor(bathrooms)));
     setDemo((current) => {
       const answers = { ...current.answers };
       for (const question of config.questions) {
@@ -720,6 +705,32 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
       }
       return { ...current, bathrooms: nextBathrooms, answers };
     });
+  };
+
+  const continueServiceDetails = () => {
+    const nextBedrooms = Math.min(7, Math.max(0, Math.floor(bedroomCount ?? 0)));
+    const nextBathrooms = Math.min(20, Math.max(0, Math.floor(bathroomCount ?? 0)));
+    const nextAnswers = { ...demo.answers };
+    for (const question of config.questions) {
+      if (question.role === "bedrooms") nextAnswers[question.id] = [nextBedrooms === 0 ? "Studio" : `${nextBedrooms} bedroom${nextBedrooms === 1 ? "" : "s"}`];
+      if (question.role === "bathrooms") nextAnswers[question.id] = [`${nextBathrooms} bathroom${nextBathrooms === 1 ? "" : "s"}`];
+    }
+    const customerAnswer = `${nextBedrooms === 0 ? "Studio" : `${nextBedrooms} bedroom${nextBedrooms === 1 ? "" : "s"}`} · ${nextBathrooms} bathroom${nextBathrooms === 1 ? "" : "s"}`;
+    appendHistory(
+      { kind: "message", sender: "assistant", text: config.combinedDetailsQuestion },
+      { kind: "message", sender: "customer", text: customerAnswer },
+    );
+    setDemo((current) => ({
+      ...current,
+      serviceDetailsAnswer: customerAnswer,
+      bedrooms: nextBedrooms,
+      bathrooms: nextBathrooms,
+      fallbackBedrooms: nextBedrooms,
+      answers: nextAnswers,
+    }));
+    setComposerValue("");
+    setComposerError("");
+    nextAfterServiceDetails(nextAnswers);
   };
 
   const continueCustomQuestion = () => {
@@ -856,7 +867,6 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
       return;
     }
     if (step === "request") return selectRequest(composerValue);
-    if (step === "serviceDetails") return submitCombinedServiceDetails();
     if (step === "questions") return selectQuestionAnswer(composerValue);
     if (step === "extras") return selectExtrasAnswer(composerValue);
     if (step === "fullName") return void submitIntakeField("fullName", "phone");
@@ -889,7 +899,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   };
 
   const composerPlaceholder = step === "serviceDetails"
-    ? config.combinedDetailsPlaceholder
+    ? "Choose your home size above"
     : step === "fullName"
     ? config.fullNamePlaceholder
     : step === "phone"
@@ -902,7 +912,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
             ? config.addressPlaceholder
             : config.inputPlaceholder;
   const funnelMutationPending = mode === "live" && (beginFunnelMutation.isPending || updateFunnelMutation.isPending || reserveFunnelMutation.isPending);
-  const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step) && !funnelMutationPending && !bookingFaqMutation.isPending;
+  const composerEnabled = ["request", "questions", "extras", "fullName", "phone", "email", "address"].includes(step) && !funnelMutationPending && !bookingFaqMutation.isPending;
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
   const roomSummary = detailLine.split(" · ").slice(0, 2).join(" · ");
   const showSummary = !["request", "serviceDetails", "questions"].includes(step);
@@ -1018,7 +1028,20 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
         </div>
       );
     }
-    if (step === "serviceDetails") return <DemoBubble>{config.combinedDetailsQuestion}</DemoBubble>;
+    if (step === "serviceDetails") {
+      const selectedBedrooms = Math.min(7, Math.max(0, Math.floor(bedroomCount ?? 0)));
+      const selectedBathrooms = Math.min(20, Math.max(0, Math.floor(bathroomCount ?? 0)));
+      return (
+        <div className="flex flex-col gap-4">
+          <DemoBubble>{config.combinedDetailsQuestion}</DemoBubble>
+          <div className="ml-10 grid max-w-[82%] gap-3 sm:grid-cols-2">
+            <RoomCountControl label="Bedrooms" value={selectedBedrooms} minimum={0} maximum={7} onChange={updateItemizedBedrooms} />
+            <RoomCountControl label="Bathrooms" value={selectedBathrooms} minimum={0} maximum={20} onChange={updateItemizedBathrooms} />
+          </div>
+          <button type="button" onClick={continueServiceDetails} className="ml-10 w-fit rounded-xl bg-[#ff684c] px-5 py-2.5 text-[12px] font-bold text-white transition hover:bg-[#e9573e]">Continue →</button>
+        </div>
+      );
+    }
     if (step === "questions" && currentQuestion) {
       const answer = demo.answers[currentQuestion.id] ?? [];
       return (
