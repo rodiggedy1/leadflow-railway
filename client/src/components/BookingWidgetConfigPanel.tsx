@@ -116,6 +116,11 @@ function createBookingAttemptId(): string {
   });
 }
 
+function looksLikeBookingQuestion(value: string): boolean {
+  const normalized = value.trim();
+  return normalized.endsWith("?") || /^(?:can|could|would|will|do|does|did|is|are|what|when|where|why|how)\b/i.test(normalized);
+}
+
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -282,6 +287,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const beginFunnelMutation = trpc.bookingFunnel.begin.useMutation();
   const updateFunnelMutation = trpc.bookingFunnel.update.useMutation();
   const reserveFunnelMutation = trpc.bookingFunnel.reserve.useMutation();
+  const bookingFaqMutation = trpc.bookingFunnel.answerFaq.useMutation();
 
   useEffect(() => {
     setConfig(savedConfig);
@@ -291,7 +297,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     const container = conversationRef.current;
     if (!container) return;
     requestAnimationFrame(() => {
-      if (step === "request") {
+      if (step === "request" && history.length === 0) {
         container.scrollTo({ top: 0, behavior: "auto" });
         return;
       }
@@ -837,6 +843,16 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   };
 
   const submitComposer = () => {
+    const question = composerValue.trim();
+    if (question && looksLikeBookingQuestion(question)) {
+      setComposerError("");
+      appendHistory({ kind: "message", sender: "customer", text: question });
+      setComposerValue("");
+      void bookingFaqMutation.mutateAsync({ question })
+        .then((result) => appendHistory({ kind: "message", sender: "assistant", text: result.answer }))
+        .catch(() => appendHistory({ kind: "message", sender: "assistant", text: "I’m not completely sure about that. I can have the team help." }));
+      return;
+    }
     if (step === "request") return selectRequest(composerValue);
     if (step === "serviceDetails") return submitCombinedServiceDetails();
     if (step === "questions") return selectQuestionAnswer(composerValue);
@@ -865,6 +881,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     startOver();
   };
 
+  const closePopup = () => {
+    if (surface !== "popup" || window.parent === window) return;
+    window.parent.postMessage({ type: "mib-booking-widget-close" }, "*");
+  };
+
   const composerPlaceholder = step === "serviceDetails"
     ? config.combinedDetailsPlaceholder
     : step === "fullName"
@@ -879,7 +900,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
             ? config.addressPlaceholder
             : config.inputPlaceholder;
   const funnelMutationPending = mode === "live" && (beginFunnelMutation.isPending || updateFunnelMutation.isPending || reserveFunnelMutation.isPending);
-  const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step) && !funnelMutationPending;
+  const composerEnabled = ["request", "serviceDetails", "questions", "extras", "fullName", "phone", "email", "address"].includes(step) && !funnelMutationPending && !bookingFaqMutation.isPending;
   const colorValue = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
   const roomSummary = detailLine.split(" · ").slice(0, 2).join(" · ");
   const showSummary = !["request", "serviceDetails", "questions"].includes(step);
@@ -1364,7 +1385,10 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
                     <div className={`flex shrink-0 items-center justify-center overflow-hidden bg-white text-[#ff684c] ${mode === "live" && surface === "popup" ? "h-10 w-10 rounded-[14px] text-lg" : "h-11 w-11 rounded-2xl text-xl"}`}>{config.brandLogoUrl ? <img src={config.brandLogoUrl} alt="Widget logo preview" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : config.headerIcon || <Bot className="h-5 w-5" />}</div>
                     <div className="min-w-0"><div className={`truncate font-extrabold ${mode === "live" && surface === "popup" ? "text-[16px]" : "text-[18px]"}`}>{config.brandName || "Book with AI"}</div><div className={`mt-0.5 flex items-center text-white/65 ${mode === "live" && surface === "popup" ? "text-[11px]" : "text-[12px]"}`}><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#23b982] shadow-[0_0_0_4px_rgba(35,185,130,0.13)]" />{config.statusText}</div></div>
                   </div>
-                  <button type="button" onClick={startOver} className={`shrink-0 rounded-full border border-[#4a4a4a] bg-[#242424] font-bold text-white transition hover:border-[#ff684c] hover:bg-[#ff684c] ${mode === "live" && surface === "popup" ? "px-3 py-1.5 text-[11px]" : "px-3.5 py-2 text-[12px]"}`}>Start over</button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button type="button" onClick={startOver} className={`rounded-full border border-[#4a4a4a] bg-[#242424] font-bold text-white transition hover:border-[#ff684c] hover:bg-[#ff684c] ${mode === "live" && surface === "popup" ? "px-3 py-1.5 text-[11px]" : "px-3.5 py-2 text-[12px]"}`}>Start over</button>
+                    {mode === "live" && surface === "popup" && <button type="button" onClick={closePopup} aria-label="Close booking widget" className="flex h-8 w-8 items-center justify-center rounded-full border border-[#4a4a4a] bg-[#242424] text-white transition hover:border-[#ff684c] hover:bg-[#ff684c]"><X className="h-4 w-4" /></button>}
+                  </div>
                 </div>
 
                 {showSummary && (

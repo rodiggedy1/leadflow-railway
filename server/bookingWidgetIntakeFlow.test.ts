@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const componentSource = fs.readFileSync(path.resolve("client/src/components/BookingWidgetConfigPanel.tsx"), "utf8");
+const widgetEmbedSource = fs.readFileSync(path.resolve("server/widgetEmbed.ts"), "utf8");
 
 describe("booking widget customer-intake flow contract", () => {
   it("keeps the deterministic combined-details, calendar, extras, contact, address, quote, checkout, and confirmation steps", () => {
@@ -16,6 +17,20 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('setStep("confirm")');
     expect(componentSource).toContain('setStep("payment")');
     expect(componentSource).toContain('setStep("complete")');
+  });
+
+  it("keeps the booking popup viewport-safe on mobile and never lets its launcher cover the composer", () => {
+    expect(widgetEmbedSource).toContain('const WIDGET_VERSION = "2.6.1"');
+    expect(widgetEmbedSource).toContain("var isMobile = window.innerWidth < 640;");
+    expect(widgetEmbedSource).toContain("top: 'max(12px, env(safe-area-inset-top, 0px))'");
+    expect(widgetEmbedSource).toContain("bottom: 'max(12px, env(safe-area-inset-bottom, 0px))'");
+    expect(widgetEmbedSource).toContain("width: 'auto'");
+    expect(widgetEmbedSource).toContain("height: 'auto'");
+    expect(widgetEmbedSource).toContain("btn && CONTENT_MODE === 'booking'");
+    expect(widgetEmbedSource).toContain("btn.style.display = val ? 'none' : '-webkit-flex'");
+    expect(widgetEmbedSource).toContain("event.data.type !== 'mib-booking-widget-close'");
+    expect(componentSource).toContain('window.parent.postMessage({ type: "mib-booking-widget-close" }, "*")');
+    expect(componentSource).toContain('aria-label="Close booking widget"');
   });
 
   it("adds the supplied Wistia welcome experience only at the beginning of the request stage", () => {

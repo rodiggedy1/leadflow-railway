@@ -18,7 +18,7 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.6.0";
+const WIDGET_VERSION = "2.6.1";
 const WIDGET_CONTENT_MODE: "booking" | "sms" = "booking";
 
 export function registerWidgetEmbedRoute(app: Express) {
@@ -213,7 +213,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
 
   function applyPanelLayout() {
     if (!panel) return;
-    var isMobile = window.innerWidth < 480;
+    var isMobile = window.innerWidth < 640;
     var isCompact = window.innerWidth < 592;
     var isBooking = CONTENT_MODE === 'booking';
 
@@ -232,13 +232,14 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
 
     if (isMobile) {
       s(panel, {
-        bottom: '0',
-        right: '0',
-        left: '0',
-        width: '100vw',
-        height: '100dvh',
-        maxHeight: '100dvh',
-        borderRadius: '0',
+        top: 'max(12px, env(safe-area-inset-top, 0px))',
+        bottom: 'max(12px, env(safe-area-inset-bottom, 0px))',
+        right: 'max(12px, env(safe-area-inset-right, 0px))',
+        left: 'max(12px, env(safe-area-inset-left, 0px))',
+        width: 'auto',
+        height: 'auto',
+        maxHeight: 'none',
+        borderRadius: '24px',
       });
       return;
     }
@@ -720,12 +721,22 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
   function setOpen(val) {
     state.open = val;
     if (panel) panel.style.display = val ? 'flex' : 'none';
-    // Update button icon
-    if (btn) {
+    // The booking panel owns its close button. Hide the launcher entirely while
+    // the panel is open so it cannot cover the booking composer on mobile.
+    if (btn && CONTENT_MODE === 'booking') {
+      btn.style.display = val ? 'none' : '-webkit-flex';
+      btn.setAttribute('aria-hidden', val ? 'true' : 'false');
+    } else if (btn) {
       var iconSpan = btn.querySelector('span:last-child');
       if (iconSpan) iconSpan.textContent = val ? '\u00D7' : '\uD83D\uDCAC';
     }
     if (val) renderBody();
+  }
+
+  function closeBookingWidget(event) {
+    if (!event || event.origin !== API_BASE || !event.data || event.data.type !== 'mib-booking-widget-close') return;
+    state.dismissed = true;
+    setOpen(false);
   }
 
   // ── Auto-open after 15 seconds ───────────────────────────────────────────────
@@ -764,6 +775,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     buildButton();
     buildPanel();
     window.addEventListener('resize', applyPanelLayout);
+    window.addEventListener('message', closeBookingWidget);
     scheduleAutoOpen();
     setupExitIntent();
   }

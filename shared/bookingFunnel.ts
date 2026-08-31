@@ -59,6 +59,10 @@ export const bookingFunnelListInputSchema = z.object({
 
 export const bookingFunnelGetInputSchema = z.object({ id: z.number().int().positive() });
 
+export const bookingFunnelFaqQuestionInputSchema = z.object({
+  question: z.string().trim().min(2).max(700),
+});
+
 export const bookingFunnelPublicResultSchema = z.object({
   publicFunnelNumber: z.string(),
   mutationToken: z.string(),
