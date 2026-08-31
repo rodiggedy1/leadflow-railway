@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, Bot, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronUp, Clock, CreditCard, Eye, Home, Loader2, Lock, MapPin, MessageCircle, Play, Plus, RotateCcw, Save, Send, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowRight, Bot, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronUp, Circle, Clock, CreditCard, Eye, Home, Loader2, Lock, MapPin, MessageCircle, Play, Plus, RotateCcw, Save, Send, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -260,6 +260,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const [savePaymentDetails, setSavePaymentDetails] = useState(false);
   const [itemizationPanel, setItemizationPanel] = useState<ItemizationPanel>("none");
   const [specialRequestDraft, setSpecialRequestDraft] = useState("");
+  const [recurringChoiceTouched, setRecurringChoiceTouched] = useState(false);
   const [welcomeVideoOpen, setWelcomeVideoOpen] = useState(false);
   const [history, setHistory] = useState<DemoHistoryEntry[]>([]);
   const [acceptedPricing, setAcceptedPricing] = useState({ version: NATIVE_BOOKING_PRICING_VERSION, totalCents: 0 });
@@ -473,6 +474,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     setSavePaymentDetails(false);
     setItemizationPanel("none");
     setSpecialRequestDraft("");
+    setRecurringChoiceTouched(false);
     setPriceChange(null);
     setPreparedBooking(null);
     rememberFunnelRecord(null);
@@ -1089,6 +1091,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     }
     if (step === "checking") return <DemoBubble>{config.availabilityCheckMessage}</DemoBubble>;
     if (step === "quote") {
+      const oneTimeSelected = recurringChoiceTouched && demo.recurringFrequency === "one-time";
       return (
         <div className="ml-10 max-w-[82%] rounded-[20px] border border-[#dcd5ef] bg-gradient-to-br from-white to-[#fffaf8] p-4 shadow-[0_14px_36px_rgba(77,54,139,0.09)]">
           <div className="flex items-center gap-3 border-b border-[#e4e5e7] pb-4"><span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-[#e7fbf2] text-[#168d61]"><Check className="h-5 w-5" /></span><div><small className="text-[9px] font-extrabold tracking-[0.1em] text-[#77798b]">{mode === "live" ? "REQUEST REVIEW" : config.openingEyebrow}</small><h2 className="mt-1 text-[18px] font-extrabold text-[#3a3c41]">{mode === "live" ? "Your request summary" : config.resultTitle}</h2></div></div>
@@ -1100,14 +1103,14 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
               const futurePrice = priceBreakdown ? calculateBookingWidgetRecurringPrice(priceBreakdown.total, option.id) : null;
               const selected = demo.recurringFrequency === option.id;
               return (
-                <button key={option.id} type="button" aria-pressed={selected} onClick={() => setDemo((current) => ({ ...current, recurringFrequency: option.id }))} className={`relative rounded-lg border px-1.5 py-1.5 text-center transition focus:outline-none focus:ring-2 focus:ring-[#ff684c]/35 ${selected ? "border-[#ff684c] bg-[#fff8f6] shadow-sm" : "border-[#dfe0e4] bg-white hover:border-[#ff9c89]"}`}>
+                <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setRecurringChoiceTouched(true); setDemo((current) => ({ ...current, recurringFrequency: option.id })); }} className={`relative rounded-lg border px-1.5 py-1.5 text-center transition focus:outline-none focus:ring-2 focus:ring-[#ff684c]/35 ${selected ? "border-[#ff684c] bg-[#fff8f6] shadow-sm" : "border-[#dfe0e4] bg-white hover:border-[#ff9c89]"}`}>
                   {option.badge && <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#3a3c41] px-1.5 py-0.5 text-[5.5px] font-extrabold tracking-wide text-white">{option.badge}</span>}
                   <span className="block text-[9px] font-extrabold text-[#3a3c41]">{option.label}</span><strong className="mt-0.5 block text-[13px] text-[#3a3c41]">{formatItemizedCurrency(futurePrice ?? 0)}<small className="text-[7px] font-medium text-[#77798b]">/visit</small></strong><span className="mt-0.5 block text-[7px] font-extrabold text-[#168d61]">Save {option.discountPercent}%</span>
                 </button>
               );
             })}</div>
             <p className="mt-3 text-[10px] leading-5 text-[#6f7279]">Your first cleaning remains full price. Savings begin with visit two.</p>
-            <button type="button" aria-pressed={demo.recurringFrequency === "one-time"} onClick={() => setDemo((current) => ({ ...current, recurringFrequency: "one-time" }))} className={`mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[10px] font-bold transition ${demo.recurringFrequency === "one-time" ? "bg-[#eef9f4] text-[#276b53]" : "bg-[#f5f5f3] text-[#5f6168] hover:bg-[#efefec]"}`}><CheckCircle2 className="h-4 w-4 shrink-0" />No thanks, keep this as a one-time cleaning</button>
+            <button type="button" aria-pressed={oneTimeSelected} onClick={() => { setRecurringChoiceTouched(true); setDemo((current) => ({ ...current, recurringFrequency: "one-time" })); }} className={`mt-2 flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[10px] font-bold transition ${oneTimeSelected ? "border-[#8fd2b7] bg-[#eef9f4] text-[#276b53]" : "border-[#dfe0e4] bg-white text-[#5f6168] hover:border-[#ff9c89] hover:bg-[#fff8f6]"}`}>{oneTimeSelected ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <Circle className="h-4 w-4 shrink-0 text-[#8b8e94]" />}No thanks, keep this as a one-time cleaning</button>
           </section>
           <section aria-label="Editable itemized cleaning order" className="border-b border-[#e4e5e7] py-4">
             <div className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#77798b]">Your cleaning</div>

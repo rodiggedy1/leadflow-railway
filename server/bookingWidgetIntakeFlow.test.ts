@@ -267,6 +267,17 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("const FIRST_CLEAN_PRICE = 405");
   });
 
+  it("keeps the default one-time option visibly neutral until the customer explicitly selects it", () => {
+    expect(componentSource).toContain('const [recurringChoiceTouched, setRecurringChoiceTouched] = useState(false)');
+    expect(componentSource).toContain('const oneTimeSelected = recurringChoiceTouched && demo.recurringFrequency === "one-time"');
+    expect(componentSource).toContain('aria-pressed={oneTimeSelected}');
+    expect(componentSource).toContain('setRecurringChoiceTouched(true); setDemo((current) => ({ ...current, recurringFrequency: "one-time" }))');
+    expect(componentSource).toContain('oneTimeSelected ? <CheckCircle2');
+    expect(componentSource).toContain(': <Circle className="h-4 w-4 shrink-0 text-[#8b8e94]" />');
+    expect(componentSource).toContain('border-[#dfe0e4] bg-white text-[#5f6168]');
+    expect(componentSource).toContain('setRecurringChoiceTouched(false)');
+  });
+
   it("keeps recurring choices compact and removes the requested trust and sample-address UI", () => {
     const quoteSource = componentSource.slice(componentSource.indexOf('if (step === "quote")'), componentSource.indexOf('if (step === "confirm"'));
     expect(componentSource).toContain("mt-2.5 grid grid-cols-1 gap-1.5 min-[480px]:grid-cols-3");
