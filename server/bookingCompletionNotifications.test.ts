@@ -22,7 +22,11 @@ describe("booking completion notifications", () => {
   it("uses booking-scoped idempotency and never introduces retry, hold, capture, or charge behavior", () => {
     expect(schema).toContain('export const bookingNotificationDeliveries = mysqlTable("booking_notification_deliveries"');
     expect(schema).toContain('uniqueIndex("uq_booking_notification_delivery_channel").on(t.bookingId, t.channel)');
-    expect(dispatcher).toContain("if (isDuplicateEntry(error)) continue;");
+    expect(dispatcher).toContain("const [delivery] = await db.select().from(bookingNotificationDeliveries)");
+    expect(dispatcher).toContain('eq(bookingNotificationDeliveries.status, "pending")');
+    expect(dispatcher).toContain('eq(bookingNotificationDeliveries.claimToken, claimToken)');
+    expect(dispatcher).toContain('status: "sending"');
+    expect(dispatcher).not.toContain("insertId");
     expect(dispatcher).toContain('profile.paymentStatus !== "card_on_file"');
     expect(dispatcher).not.toContain("setTimeout(");
     expect(dispatcher).not.toContain("capture");

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   bookingNotificationDeliveries,
@@ -63,19 +64,49 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
   for (const channel of CHANNELS) {
     let deliveryId: number | null = null;
     try {
-      const result = await db.insert(bookingNotificationDeliveries).values({
+      await db.insert(bookingNotificationDeliveries).values({
         bookingId,
         channel,
         status: "pending",
+        claimToken: null,
+        claimedAt: null,
         providerMessageId: null,
         errorMessage: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      deliveryId = Number((result as { insertId?: number }).insertId);
-      if (!Number.isInteger(deliveryId) || deliveryId < 1) throw new Error("Notification delivery insert did not return an ID.");
     } catch (error) {
-      if (isDuplicateEntry(error)) continue;
+      if (!isDuplicateEntry(error)) {
+        console.error(`[BookingCompletionNotifications] Could not create ${channel} delivery:`, error);
+        continue;
+      }
+    }
+
+    try {
+      const [delivery] = await db.select().from(bookingNotificationDeliveries).where(and(
+        eq(bookingNotificationDeliveries.bookingId, bookingId),
+        eq(bookingNotificationDeliveries.channel, channel),
+      )).limit(1);
+      if (!delivery || delivery.status !== "pending") continue;
+
+      const claimToken = randomUUID();
+      await db.update(bookingNotificationDeliveries).set({
+        status: "sending",
+        claimToken,
+        claimedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(and(
+        eq(bookingNotificationDeliveries.id, delivery.id),
+        eq(bookingNotificationDeliveries.status, "pending"),
+      ));
+      const [claimedDelivery] = await db.select().from(bookingNotificationDeliveries).where(and(
+        eq(bookingNotificationDeliveries.id, delivery.id),
+        eq(bookingNotificationDeliveries.claimToken, claimToken),
+        eq(bookingNotificationDeliveries.status, "sending"),
+      )).limit(1);
+      if (!claimedDelivery) continue;
+      deliveryId = claimedDelivery.id;
+    } catch (error) {
       console.error(`[BookingCompletionNotifications] Could not create ${channel} delivery:`, error);
       continue;
     }

@@ -1,0 +1,1 @@
+{"format":1,"table":"booking_notification_deliveries","columns":[{"name":"claimToken","columnType":"varchar(64)","nullable":true},{"name":"claimedAt","columnType":"datetime(3)","nullable":true}],"indexes":[]}

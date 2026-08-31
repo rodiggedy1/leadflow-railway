@@ -95,6 +95,14 @@
       "sha256": "c36bdc64b58bd930c1d4416f1510e5ef6846926cc26a3e50ffd30ae27cea5288",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0014_create_booking_notification_deliveries.postconditions.json"
+    },
+    {
+      "id": "0015_add_booking_notification_claim",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0015_add_booking_notification_claim.sql",
+      "sha256": "59270ef039ec68e348332c829d6034251b93ca7f5c6cd3ade5499fbb4262bf59",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0015_add_booking_notification_claim.postconditions.json"
     }
   ]
 }

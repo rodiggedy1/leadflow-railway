@@ -4395,6 +4395,8 @@ export const bookingNotificationDeliveries = mysqlTable("booking_notification_de
   bookingId: int("bookingId").notNull(),
   channel: varchar("channel", { length: 32 }).notNull(),
   status: varchar("status", { length: 32 }).notNull().default("pending"),
+  claimToken: varchar("claimToken", { length: 64 }),
+  claimedAt: datetime("claimedAt", { mode: "date", fsp: 3 }),
   providerMessageId: varchar("providerMessageId", { length: 255 }),
   errorMessage: text("errorMessage"),
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
