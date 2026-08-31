@@ -13,30 +13,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useSearch } from "wouter";
 import { loadStripe } from "@stripe/stripe-js";
-import {
-  Elements,
-  CardElement,
-  useStripe,
-  useElements,
-} from "@stripe/react-stripe-js";
+import { Elements, CardElement } from "@stripe/react-stripe-js";
 import { trpc } from "@/lib/trpc";
+import { CARD_ELEMENT_OPTIONS, useStripeCardSetup } from "@/components/useStripeCardSetup";
 
 const STRIPE_PK = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string;
-
-// ── Stripe Elements card style ───────────────────────────────────────────────
-const CARD_ELEMENT_OPTIONS = {
-  style: {
-    base: {
-      fontSize: "15px",
-      color: "#1e2430",
-      fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, Arial, sans-serif",
-      "::placeholder": { color: "#a0aab8" },
-      iconColor: "#ff6b1a",
-    },
-    invalid: { color: "#e53e3e", iconColor: "#e53e3e" },
-  },
-  hidePostalCode: false,
-};
 
 // ── Design tokens (inline, no new deps) ─────────────────────────────────────
 const T = {
@@ -671,56 +652,16 @@ function StripeCardForm({
   clientSecret: string;
   onSuccess: (name: string) => void;
 }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [name, setName] = useState(prefillName);
-  const [cardError, setCardError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
   const confirmCardSaved = trpc.stripe.confirmCardSaved.useMutation();
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!stripe || !elements) return;
-    setLoading(true);
-    setCardError(null);
-
-    try {
-      const cardElement = elements.getElement(CardElement);
-      if (!cardElement) throw new Error("Card element not found");
-
-      const { setupIntent, error } = await stripe.confirmCardSetup(clientSecret, {
-        payment_method: {
-          card: cardElement,
-          billing_details: { name },
-        },
-      });
-
-      if (error) {
-        setCardError(error.message ?? "Card declined. Please try a different card.");
-        setLoading(false);
-        return;
-      }
-
-      if (!setupIntent?.payment_method) {
-        setCardError("Something went wrong. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      await confirmCardSaved.mutateAsync({
-        token,
-        paymentMethodId: setupIntent.payment_method as string,
-      });
-
-      onSuccess(name);
+  const { stripeReady, name, setName, cardError, loading, handleSubmit } = useStripeCardSetup({
+    clientSecret,
+    prefillName,
+    onSetupSucceeded: async (paymentMethodId, billingName) => {
+      await confirmCardSaved.mutateAsync({ token, paymentMethodId });
+      onSuccess(billingName);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
-      setCardError(msg);
-      setLoading(false);
-    }
-  }
+    },
+  });
 
   return (
     <form
@@ -834,7 +775,7 @@ function StripeCardForm({
       {/* CTA */}
       <button
         type="submit"
-        disabled={loading || !stripe}
+        disabled={loading || !stripeReady}
         className="w-full border-0 rounded-[18px] text-white font-black text-[17px] cursor-pointer transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
         style={{
           height: "60px",

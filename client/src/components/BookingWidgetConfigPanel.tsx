@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { BookingPaymentCheckout } from "@/components/BookingPaymentCheckout";
 import {
   NATIVE_BOOKING_PRICING_VERSION,
   type BookingPriceSnapshot,
@@ -53,7 +54,7 @@ type BookingWidgetConfigPanelProps = {
   surface?: BookingSurface;
 };
 
-type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "complete";
+type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "payment" | "complete";
 type ItemizationPanel = "none" | "base" | "extras" | "note";
 
 type DemoHistoryItem =
@@ -940,7 +941,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           futureVisitTotalCents: recurringFutureVisitPrice === null ? null : Math.round(recurringFutureVisitPrice * 100),
         },
       });
-      setStep("complete");
+      setStep("payment");
     } catch (error) {
       setComposerError(error instanceof Error ? error.message : "We could not submit your request. Please try again.");
     }
@@ -1117,8 +1118,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           </section>
           <div className="space-y-1.5 border-t border-[#e4e5e7] py-3 text-[10px] text-[#5f6168]"><div className="flex justify-between gap-4"><span>Standard subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.standardSubtotal ?? 0)}</strong></div>{(priceBreakdown?.serviceAdjustment ?? 0) > 0 && <><div className="flex justify-between gap-4"><span>{service.name} adjustment · 20%</span><strong>+{formatItemizedCurrency(priceBreakdown?.serviceAdjustment ?? 0)}</strong></div><div className="flex justify-between gap-4"><span>Adjusted subtotal</span><strong>{formatItemizedCurrency(priceBreakdown?.adjustedSubtotal ?? 0)}</strong></div></>}<div className="mt-2 flex items-center justify-between border-t border-[#e4e5e7] pt-3 text-[12px]"><span>Total</span><strong className="text-[22px] text-[#3a3c41]">${quotePrice}</strong></div></div>
           {priceChange && mode === "live" && <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-5 text-amber-900"><strong className="block text-[11px]">Your price changed to ${(priceChange.totalCents / 100).toFixed(0)}</strong>Review and accept the updated server-calculated total before sending your request.<button type="button" onClick={acceptChangedPrice} disabled={funnelMutationPending} className="mt-2 w-full rounded-lg bg-amber-700 px-3 py-2 font-bold text-white disabled:opacity-50">Accept updated price &amp; send request</button></div>}
-          <button type="button" onClick={mode === "live" ? () => void submitLiveBooking() : openCheckout} disabled={funnelMutationPending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-wait disabled:opacity-60">{mode === "editor" && <CreditCard className="h-4 w-4" />}{funnelMutationPending ? "Sending request…" : mode === "live" ? `Send request — $${quotePrice}` : formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />{mode === "live" ? "Requested time only · no charge will be made" : "Visual demo only · no charge will be made"}</p>
+          <button type="button" onClick={mode === "live" ? () => void submitLiveBooking() : openCheckout} disabled={funnelMutationPending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-bold text-white transition hover:bg-[#e9573e] disabled:cursor-wait disabled:opacity-60">{mode === "editor" && <CreditCard className="h-4 w-4" />}{funnelMutationPending ? "Saving reservation…" : mode === "live" ? `Book for $${quotePrice}` : formatBookingButtonLabel(config.bookingButtonLabel, quotePrice)}<ArrowRight className="h-4 w-4" /></button>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-[9px] text-[#77798b]"><ShieldCheck className="h-3.5 w-3.5" />{mode === "live" ? "Secure card entry is next · no charge today" : "Visual demo only · no charge will be made"}</p>
         </div>
       );
     }
@@ -1130,6 +1131,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
         </div>
       );
     }
+    if (step === "payment" && mode === "live" && funnelRecord) {
+      return <div className="flex flex-col gap-4"><DemoBubble customer color={config.customerBubbleColor}>Book for ${quotePrice}</DemoBubble><div ref={checkoutRef} tabIndex={-1} className="sm:ml-10 sm:max-w-[calc(100%-2.5rem)]"><BookingPaymentCheckout publicFunnelNumber={funnelRecord.publicFunnelNumber} mutationToken={funnelRecord.mutationToken} customerName={demo.fullName} amountCents={acceptedPricing.totalCents} onComplete={(result) => { setPreparedBooking((current) => current ? { ...current, publicBookingNumber: current.publicBookingNumber } : current); setDemo((current) => ({ ...current })); setStep("complete"); }} /></div></div>;
+    }
     if (mode === "live") return (
       <div className="flex flex-col gap-4">
         <DemoBubble customer color={config.customerBubbleColor}>Send my request</DemoBubble>
@@ -1138,8 +1142,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
             <div className="flex items-start gap-3">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#168d61] text-white shadow-sm"><CheckCircle2 className="h-6 w-6" /></span>
               <div>
-                <h2 className="text-[20px] font-extrabold text-[#3a3c41]">Request received</h2>
-                <p className="mt-2 text-[11px] leading-5 text-[#5f716a]">We received your requested date and time. We’ll confirm the appointment after reviewing availability.</p>
+                <h2 className="text-[20px] font-extrabold text-[#3a3c41]">Card saved securely</h2>
+                <p className="mt-2 text-[11px] leading-5 text-[#5f716a]">Your requested appointment is awaiting availability review. You will not be charged today.</p>
               </div>
             </div>
           </div>

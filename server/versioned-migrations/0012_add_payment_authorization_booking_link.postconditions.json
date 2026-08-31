@@ -1,0 +1,1 @@
+{"format":1,"table":"payment_authorizations","columns":[{"name":"bookingPaymentProfileId","columnType":"int","nullable":true},{"name":"operation","columnType":"varchar(32)","nullable":false,"default":"authorization"},{"name":"captureBefore","columnType":"bigint","nullable":true}],"indexes":[]}
