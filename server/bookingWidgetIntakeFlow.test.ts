@@ -6,7 +6,7 @@ const componentSource = fs.readFileSync(path.resolve("client/src/components/Book
 
 describe("booking widget customer-intake flow contract", () => {
   it("keeps the deterministic combined-details, calendar, extras, contact, address, quote, checkout, and confirmation steps", () => {
-    expect(componentSource).toContain('type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "complete"');
+    expect(componentSource).toContain('type DemoStep = "request" | "serviceDetails" | "questions" | "schedule" | "extras" | "fullName" | "phone" | "email" | "address" | "checking" | "quote" | "confirm" | "payment" | "complete"');
     expect(componentSource).toContain('if (step === "serviceDetails") return submitCombinedServiceDetails()');
     expect(componentSource).toContain("confirmScheduleSelection");
     expect(componentSource).toContain('submitIntakeField("fullName", "phone")');
@@ -14,6 +14,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('submitIntakeField("email", "address")');
     expect(componentSource).toContain('setStep("quote")');
     expect(componentSource).toContain('setStep("confirm")');
+    expect(componentSource).toContain('setStep("payment")');
     expect(componentSource).toContain('setStep("complete")');
   });
 
@@ -206,12 +207,15 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).not.toContain("onKeyDown={completeCheckout}");
   });
 
-  it("uses requested-time language and exact safe completion copy in live mode", () => {
+  it("keeps request language only before booking and uses real-booking confirmation copy after card setup", () => {
     expect(componentSource).toContain('mode === "live" ? "Requested times" : "Available times"');
     expect(componentSource).toContain('mode === "live" ? "REQUESTED DATE & TIME" : "DATE & TIME"');
-    expect(componentSource).toContain("Request received");
-    expect(componentSource).toContain("We received your requested date and time. We’ll confirm the appointment after reviewing availability.");
-    expect(componentSource).toContain("We’ll confirm your recurring schedule when we review your requested appointment.");
+    expect(componentSource).toContain("Booking confirmed");
+    expect(componentSource).toContain("You&apos;re booked, {firstNameFromFullName(demo.fullName)}!");
+    expect(componentSource).toContain("Your cleaning is booked. We&apos;ll text your appointment details and arrival updates shortly.");
+    expect(componentSource).not.toContain("Request received");
+    expect(componentSource).not.toContain("We received your requested date and time. We’ll confirm the appointment after reviewing availability.");
+    expect(componentSource).not.toContain("We’ll confirm your recurring schedule when we review your requested appointment.");
   });
 
   it("renders one editable itemized order with authoritative base, extras, adjustments, and final total", () => {
@@ -251,12 +255,12 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("submitAddress(composerValue)");
   });
 
-  it("uses narrow-popup presentation with warm conversation depth and a distinct pinned composer", () => {
+  it("uses narrow-popup presentation with distributed green conversation depth and a distinct pinned composer", () => {
     expect(componentSource).toContain('min-[480px]:grid min-[480px]:grid-cols-[140px_1fr]');
     expect(componentSource).toContain('h-36 w-full bg-[#f7f5f2] object-contain min-[480px]:h-full');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "px-4 py-3"');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "h-10 w-10 rounded-[14px] text-lg"');
-    expect(componentSource).toContain('bg-[radial-gradient(circle_at_85%_10%,rgba(255,104,76,0.055),transparent_34%),radial-gradient(circle_at_10%_85%,rgba(255,205,190,0.08),transparent_32%),linear-gradient(180deg,#ffffff_0%,#fffaf8_58%,#f8f7f5_100%)]');
+    expect(componentSource).toContain('bg-[radial-gradient(circle_at_86%_10%,rgba(213,244,228,0.72),transparent_34%),radial-gradient(circle_at_8%_48%,rgba(228,248,237,0.78),transparent_40%),radial-gradient(circle_at_72%_92%,rgba(207,241,222,0.62),transparent_35%),linear-gradient(180deg,#fbfffd_0%,#f2fbf6_52%,#eaf7ef_100%)]');
     expect(componentSource).toContain('border-[rgba(35,35,40,0.08)] bg-[rgba(255,253,252,0.97)]');
     expect(componentSource).toContain('shadow-[0_-8px_24px_rgba(45,31,26,0.035)]');
     expect(componentSource).toContain('className="mt-4 space-y-3"');
@@ -298,6 +302,19 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("selectedRecurringOption && recurringFutureVisitPrice !== null");
     expect(componentSource).toContain("{formatItemizedCurrency(recurringFutureVisitPrice)}/visit from visit two");
     expect(componentSource).toContain('className="text-[#3a3c41]">${quotePrice}</strong>');
+  });
+
+  it("adapts the public booking confirmation hierarchy into a compact live widget card", () => {
+    const liveCompletionStart = componentSource.indexOf('if (mode === "live") return (');
+    const liveCompletionEnd = componentSource.indexOf('\n    return (\n      <div className="flex flex-col gap-4">', liveCompletionStart);
+    const liveCompletion = componentSource.slice(liveCompletionStart, liveCompletionEnd);
+    for (const expectedText of ["Booking confirmed", "WHEN", "WHERE", "SERVICE", "TOTAL", "What happens next", "Confirmation", "Team updates", "Pay after"]) {
+      expect(liveCompletion).toContain(expectedText);
+    }
+    expect(liveCompletion).not.toContain("Request number");
+    expect(liveCompletion).not.toContain("Requested time");
+    expect(liveCompletion).not.toContain("Request total");
+    expect(liveCompletion).not.toContain("review your requested appointment");
   });
 
   it("keeps special requests unpriced, persists them as review notes, and clears them on Start over", () => {

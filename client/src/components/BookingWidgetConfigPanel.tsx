@@ -1136,22 +1136,27 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     }
     if (mode === "live") return (
       <div className="flex flex-col gap-4">
-        <DemoBubble customer color={config.customerBubbleColor}>Send my request</DemoBubble>
+        <DemoBubble customer color={config.customerBubbleColor}>Book my cleaning</DemoBubble>
         <div className="max-w-full overflow-hidden rounded-[22px] border border-[#cfe9df] bg-white shadow-[0_16px_40px_rgba(22,141,97,0.11)] sm:ml-10 sm:max-w-[calc(100%-2.5rem)]">
           <div className="border-b border-[#d9f1e6] bg-gradient-to-br from-[#f2fcf7] via-white to-[#fff8f6] p-5">
             <div className="flex items-start gap-3">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#168d61] text-white shadow-sm"><CheckCircle2 className="h-6 w-6" /></span>
               <div>
+                <div className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#168d61]">Booking confirmed</div>
                 <h2 className="text-[20px] font-extrabold text-[#3a3c41]">You&apos;re booked, {firstNameFromFullName(demo.fullName)}!</h2>
-                <p className="mt-2 text-[11px] leading-5 text-[#5f716a]">Your cleaning is booked. You will not be charged today.</p>
+                <p className="mt-2 text-[11px] leading-5 text-[#5f716a]">Your cleaning is booked. We&apos;ll text your appointment details and arrival updates shortly.</p>
               </div>
             </div>
           </div>
-          <div className="space-y-3 p-5 text-[11px]">
-            <div className="flex justify-between gap-4"><span className="text-[#6f7279]">Request number</span><strong>{preparedBooking?.publicBookingNumber}</strong></div>
-            <div className="flex justify-between gap-4"><span className="text-[#6f7279]">Requested time</span><strong className="text-right">{demo.schedule}</strong></div>
-            <div className="flex justify-between gap-4"><span className="text-[#6f7279]">Request total</span><strong>${((preparedBooking?.summary.totalCents ?? acceptedPricing.totalCents) / 100).toFixed(0)}</strong></div>
-            {demo.recurringFrequency !== "one-time" && <div className="rounded-xl bg-[#fff8f6] p-3 text-[#6f7279]"><strong className="block text-[#3a3c41]">Recurring preference: {selectedRecurringOption?.label}</strong>We’ll confirm your recurring schedule when we review your requested appointment.</div>}
+          <div className="p-5 text-[11px]">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="col-span-2 flex items-center gap-2.5 rounded-xl border border-[#e4e5e7] bg-[#fafaf9] p-3"><CalendarDays className="h-4.5 w-4.5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">WHEN</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.schedule}</strong></span></div>
+              <div className="col-span-2 flex items-center gap-2.5 rounded-xl border border-[#e4e5e7] bg-[#fafaf9] p-3"><MapPin className="h-4.5 w-4.5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">WHERE</small><strong className="truncate text-[11px] text-[#3a3c41]">{demo.address}</strong></span></div>
+              <div className="flex items-center gap-2.5 rounded-xl border border-[#e4e5e7] bg-[#fafaf9] p-3"><Sparkles className="h-4.5 w-4.5 shrink-0 text-[#ff684c]" /><span className="grid min-w-0"><small className="text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">SERVICE</small><strong className="truncate text-[11px] text-[#3a3c41]">{service.name}</strong></span></div>
+              <div className="flex items-center justify-between gap-2.5 rounded-xl border border-[#e4e5e7] bg-[#fafaf9] p-3"><span><small className="block text-[8px] font-extrabold tracking-[0.08em] text-[#77798b]">TOTAL</small><strong className="text-[16px] text-[#3a3c41]">${((preparedBooking?.summary.totalCents ?? acceptedPricing.totalCents) / 100).toFixed(0)}</strong></span><CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-[#168d61]" /></div>
+            </div>
+            {demo.recurringFrequency !== "one-time" && <div className="mt-3 rounded-xl bg-[#eef9f4] p-3 text-[10px] leading-5 text-[#41695a]"><strong className="block text-[11px] text-[#276b53]">Recurring cleaning: {selectedRecurringOption?.label}</strong>Your recurring plan begins with visit two.</div>}
+            <section aria-label="What happens next" className="mt-4"><p className="text-[12px] font-extrabold text-[#3a3c41]">What happens next</p><div className="mt-2 grid grid-cols-3 gap-2"><div className="rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span aria-hidden="true" className="text-[14px]">📩</span><strong className="mt-1 block text-[9px] text-[#3a3c41]">Confirmation</strong><p className="mt-1 text-[8px] leading-4 text-[#6f7279]">We&apos;ll text your details.</p></div><div className="rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span aria-hidden="true" className="text-[14px]">🚗</span><strong className="mt-1 block text-[9px] text-[#3a3c41]">Team updates</strong><p className="mt-1 text-[8px] leading-4 text-[#6f7279]">Updates on service day.</p></div><div className="rounded-xl border border-[#e4e5e7] bg-white p-2.5"><span aria-hidden="true" className="text-[14px]">💳</span><strong className="mt-1 block text-[9px] text-[#3a3c41]">Pay after</strong><p className="mt-1 text-[8px] leading-4 text-[#6f7279]">No charge today.</p></div></div></section>
           </div>
         </div>
       </div>
@@ -1369,7 +1374,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
                   </div>
                 )}
 
-                <div ref={conversationRef} className={`relative flex flex-col gap-4 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_85%_10%,rgba(255,104,76,0.055),transparent_34%),radial-gradient(circle_at_10%_85%,rgba(255,205,190,0.08),transparent_32%),linear-gradient(180deg,#ffffff_0%,#fffaf8_58%,#f8f7f5_100%)] px-4 py-5 sm:px-6 ${mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"}`}>
+                <div ref={conversationRef} className={`relative flex flex-col gap-4 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_86%_10%,rgba(213,244,228,0.72),transparent_34%),radial-gradient(circle_at_8%_48%,rgba(228,248,237,0.78),transparent_40%),radial-gradient(circle_at_72%_92%,rgba(207,241,222,0.62),transparent_35%),linear-gradient(180deg,#fbfffd_0%,#f2fbf6_52%,#eaf7ef_100%)] px-4 py-5 sm:px-6 ${mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"}`}>
                   <div className="flex shrink-0 items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
                   <div data-completed-history className="flex shrink-0 flex-col gap-4">
                     {history.map((entry) => <div key={entry.id} data-history-entry className="relative min-w-0"><DemoHistoryRow entry={entry} customerColor={config.customerBubbleColor} trustPoints={config.resultTrustPoints} /></div>)}
