@@ -4406,3 +4406,21 @@ export const bookingNotificationDeliveries = mysqlTable("booking_notification_de
   index("idx_booking_notification_delivery_status").on(t.status),
 ]);
 export type BookingNotificationDelivery = typeof bookingNotificationDeliveries.$inferSelect;
+
+/** Each first-widget-lead owner SMS delivery is claimed once per funnel record; failed rows are recorded without automatic retry. */
+export const leadNotificationDeliveries = mysqlTable("lead_notification_deliveries", {
+  id: int("id").autoincrement().primaryKey(),
+  funnelRecordId: int("funnelRecordId").notNull(),
+  channel: varchar("channel", { length: 32 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull().default("pending"),
+  claimToken: varchar("claimToken", { length: 64 }),
+  claimedAt: datetime("claimedAt", { mode: "date", fsp: 3 }),
+  providerMessageId: varchar("providerMessageId", { length: 255 }),
+  errorMessage: text("errorMessage"),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_lead_notification_delivery_channel").on(t.funnelRecordId, t.channel),
+  index("idx_lead_notification_delivery_status").on(t.status),
+]);
+export type LeadNotificationDelivery = typeof leadNotificationDeliveries.$inferSelect;

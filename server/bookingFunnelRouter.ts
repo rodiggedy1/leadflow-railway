@@ -15,6 +15,7 @@ import { invokeLLM } from "./_core/llm";
 import { getDb } from "./db";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
+import { sendWidgetLeadCreatedNotifications } from "./bookingLeadCreatedNotifications";
 import {
   BookingFunnelInputError,
   createBookingFunnelMutationToken,
@@ -181,6 +182,11 @@ export const bookingFunnelRouter = router({
       }
       if (row.commandHash !== normalized.commandHash) throw new TRPCError({ code: "CONFLICT", message: "IDEMPOTENCY_CONFLICT" });
       if (created) broadcastOpsUpdate("booking_funnel_update");
+      if (created && normalized.source === "widget-popup") {
+        void sendWidgetLeadCreatedNotifications(row.publicFunnelNumber).catch((error) =>
+          console.error("[BookingFunnelRouter] Widget lead-created notifications failed:", error)
+        );
+      }
       return {
         publicFunnelNumber: row.publicFunnelNumber,
         mutationToken: createBookingFunnelMutationToken(ENV.cookieSecret, row.publicFunnelNumber, row.idempotencyKey),

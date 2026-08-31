@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "table": "lead_notification_deliveries",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "funnelRecordId", "columnType": "int", "nullable": false },
+    { "name": "channel", "columnType": "varchar(32)", "nullable": false },
+    { "name": "status", "columnType": "varchar(32)", "nullable": false, "default": "pending" },
+    { "name": "claimToken", "columnType": "varchar(64)", "nullable": true },
+    { "name": "claimedAt", "columnType": "datetime(3)", "nullable": true },
+    { "name": "providerMessageId", "columnType": "varchar(255)", "nullable": true },
+    { "name": "errorMessage", "columnType": "text", "nullable": true },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "uq_lead_notification_delivery_channel", "unique": true, "columns": ["funnelRecordId", "channel"] },
+    { "name": "idx_lead_notification_delivery_status", "unique": false, "columns": ["status"] }
+  ]
+}

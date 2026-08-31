@@ -103,6 +103,14 @@
       "sha256": "59270ef039ec68e348332c829d6034251b93ca7f5c6cd3ade5499fbb4262bf59",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0015_add_booking_notification_claim.postconditions.json"
+    },
+    {
+      "id": "0016_create_lead_notification_deliveries",
+      "mode": "create-table",
+      "sqlFile": "0016_create_lead_notification_deliveries.sql",
+      "sha256": "468d6df37ba472e0e5900a8ad348e710bd90d715e5ba33db8f7fd755647e6492",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0016_create_lead_notification_deliveries.postconditions.json"
     }
   ]
 }
