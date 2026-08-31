@@ -1374,7 +1374,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
                   </div>
                 )}
 
-                <div ref={conversationRef} className={`relative flex flex-col gap-4 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_86%_10%,rgba(213,244,228,0.72),transparent_34%),radial-gradient(circle_at_8%_48%,rgba(228,248,237,0.78),transparent_40%),radial-gradient(circle_at_72%_92%,rgba(207,241,222,0.62),transparent_35%),linear-gradient(180deg,#fbfffd_0%,#f2fbf6_52%,#eaf7ef_100%)] px-4 py-5 sm:px-6 ${mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"}`}>
+                <div ref={conversationRef} className={`relative flex flex-col gap-4 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_90%_5%,rgba(255,224,215,0.32),transparent_34%),linear-gradient(145deg,#faf8f6_0%,#f8f4f1_55%,#fff8f5_100%)] px-4 py-5 sm:px-6 ${mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"}`}>
                   <div className="flex shrink-0 items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
                   <div data-completed-history className="flex shrink-0 flex-col gap-4">
                     {history.map((entry) => <div key={entry.id} data-history-entry className="relative min-w-0"><DemoHistoryRow entry={entry} customerColor={config.customerBubbleColor} trustPoints={config.resultTrustPoints} /></div>)}

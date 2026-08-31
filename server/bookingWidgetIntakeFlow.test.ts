@@ -255,12 +255,12 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("submitAddress(composerValue)");
   });
 
-  it("uses narrow-popup presentation with distributed green conversation depth and a distinct pinned composer", () => {
+  it("uses narrow-popup presentation with blush-stone conversation depth and a distinct pinned composer", () => {
     expect(componentSource).toContain('min-[480px]:grid min-[480px]:grid-cols-[140px_1fr]');
     expect(componentSource).toContain('h-36 w-full bg-[#f7f5f2] object-contain min-[480px]:h-full');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "px-4 py-3"');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "h-10 w-10 rounded-[14px] text-lg"');
-    expect(componentSource).toContain('bg-[radial-gradient(circle_at_86%_10%,rgba(213,244,228,0.72),transparent_34%),radial-gradient(circle_at_8%_48%,rgba(228,248,237,0.78),transparent_40%),radial-gradient(circle_at_72%_92%,rgba(207,241,222,0.62),transparent_35%),linear-gradient(180deg,#fbfffd_0%,#f2fbf6_52%,#eaf7ef_100%)]');
+    expect(componentSource).toContain('bg-[radial-gradient(circle_at_90%_5%,rgba(255,224,215,0.32),transparent_34%),linear-gradient(145deg,#faf8f6_0%,#f8f4f1_55%,#fff8f5_100%)]');
     expect(componentSource).toContain('border-[rgba(35,35,40,0.08)] bg-[rgba(255,253,252,0.97)]');
     expect(componentSource).toContain('shadow-[0_-8px_24px_rgba(45,31,26,0.035)]');
     expect(componentSource).toContain('className="mt-4 space-y-3"');
