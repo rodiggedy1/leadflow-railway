@@ -35,6 +35,13 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ff684c]');
   });
 
+  it("uses the requested orange booking header while retaining the existing start-over and close controls", () => {
+    expect(componentSource).toContain('border-b border-[#d94f35] bg-[linear-gradient(135deg,#ff684c_0%,#e9573e_100%)] text-white');
+    expect(componentSource).toContain('border border-white/35 bg-white/15 font-bold text-white transition hover:border-white/55 hover:bg-white/25');
+    expect(componentSource).toContain('aria-label="Close booking widget"');
+    expect(componentSource).toContain('onClick={startOver}');
+  });
+
   it("adds the supplied Wistia welcome experience only at the beginning of the request stage", () => {
     expect(componentSource).toContain('const WELCOME_VIDEO_WISTIA_MEDIA_ID = "bzlt49ipk1"');
     expect(componentSource).toContain("WELCOME_VIDEO_POSTER_URL");
