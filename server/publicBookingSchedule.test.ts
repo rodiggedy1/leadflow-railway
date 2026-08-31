@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const bookNow = readFileSync(resolve(import.meta.dirname, "../client/src/pages/BookNow.tsx"), "utf8");
+const styles = readFileSync(resolve(import.meta.dirname, "../client/src/pages/book-now.css"), "utf8");
 
 describe("public booking date and time controls", () => {
   it("keeps quick cards and hides the future-date calendar until the selected-date-row control is clicked", () => {
@@ -27,5 +28,12 @@ describe("public booking date and time controls", () => {
     expect(bookNow).toContain('timeZone: BUSINESS_TIME_ZONE');
     expect(bookNow).toContain('easternParts.hour > 16 || (easternParts.hour === 16 && easternParts.minute >= 30)');
     expect(bookNow).toContain("start.setDate(start.getDate() + 1)");
+  });
+
+  it("keeps the opened calendar compact instead of stretching day cells across the workspace", () => {
+    expect(styles).toContain(".book-now-date-calendar{width:min(340px,100%)");
+    expect(styles).toContain("margin-left:auto");
+    expect(styles).toContain("--cell-size:32px");
+    expect(styles).toContain(".book-now-date-calendar .rdp-day_button{width:32px;min-width:0;height:32px}");
   });
 });
