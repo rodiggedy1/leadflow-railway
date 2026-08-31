@@ -179,7 +179,7 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("data-step={step}");
     expect(componentSource).toContain("{activeStage}");
     expect(componentSource).toContain("overscroll-contain");
-    expect(componentSource).toContain('className="shrink-0 border-t border-[#e4e5e7]');
+    expect(componentSource).toContain('className="shrink-0 border-t border-[rgba(35,35,40,0.08)]');
     expect(componentSource.indexOf("data-completed-history")).toBeLessThan(componentSource.indexOf("data-active-stage"));
     expect(componentSource.indexOf("data-active-stage")).toBeLessThan(componentSource.indexOf('<form onSubmit={(event)'));
   });
@@ -251,11 +251,14 @@ describe("booking widget customer-intake flow contract", () => {
     expect(componentSource).toContain("submitAddress(composerValue)");
   });
 
-  it("uses 560px-friendly popup header, horizontal proof content, and compact single-column confirmation", () => {
+  it("uses narrow-popup presentation with warm conversation depth and a distinct pinned composer", () => {
     expect(componentSource).toContain('min-[480px]:grid min-[480px]:grid-cols-[140px_1fr]');
     expect(componentSource).toContain('h-36 w-full bg-[#f7f5f2] object-contain min-[480px]:h-full');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "px-4 py-3"');
     expect(componentSource).toContain('mode === "live" && surface === "popup" ? "h-10 w-10 rounded-[14px] text-lg"');
+    expect(componentSource).toContain('bg-[radial-gradient(circle_at_85%_10%,rgba(255,104,76,0.055),transparent_34%),radial-gradient(circle_at_10%_85%,rgba(255,205,190,0.08),transparent_32%),linear-gradient(180deg,#ffffff_0%,#fffaf8_58%,#f8f7f5_100%)]');
+    expect(componentSource).toContain('border-[rgba(35,35,40,0.08)] bg-[rgba(255,253,252,0.97)]');
+    expect(componentSource).toContain('shadow-[0_-8px_24px_rgba(45,31,26,0.035)]');
     expect(componentSource).toContain('className="mt-4 space-y-3"');
     expect(componentSource).not.toContain('className="mt-5 space-y-5"');
     expect(componentSource).toContain('className="grid gap-3 py-3 sm:grid-cols-3"');

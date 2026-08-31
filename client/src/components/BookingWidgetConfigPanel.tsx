@@ -1365,7 +1365,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
                   </div>
                 )}
 
-                <div ref={conversationRef} className={`relative flex flex-col gap-4 overflow-y-auto overscroll-contain bg-gradient-to-b from-white to-[#fcfcfd] px-4 py-5 sm:px-6 ${mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"}`}>
+                <div ref={conversationRef} className={`relative flex flex-col gap-4 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_85%_10%,rgba(255,104,76,0.055),transparent_34%),radial-gradient(circle_at_10%_85%,rgba(255,205,190,0.08),transparent_32%),linear-gradient(180deg,#ffffff_0%,#fffaf8_58%,#f8f7f5_100%)] px-4 py-5 sm:px-6 ${mode === "live" && surface === "popup" ? "min-h-0 flex-1" : "h-[680px] xl:h-auto xl:min-h-0 xl:flex-1"}`}>
                   <div className="flex shrink-0 items-center gap-3 pb-1"><span className="h-px flex-1 bg-[#e4e5e7]" /><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#a1a2ad]">Today</span><span className="h-px flex-1 bg-[#e4e5e7]" /></div>
                   <div data-completed-history className="flex shrink-0 flex-col gap-4">
                     {history.map((entry) => <div key={entry.id} data-history-entry className="relative min-w-0"><DemoHistoryRow entry={entry} customerColor={config.customerBubbleColor} trustPoints={config.resultTrustPoints} /></div>)}
@@ -1375,7 +1375,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
                   </div>
                 </div>
 
-                <form onSubmit={(event) => { event.preventDefault(); submitComposer(); }} className="shrink-0 border-t border-[#e4e5e7] bg-white px-4 py-3 sm:px-5">
+                <form onSubmit={(event) => { event.preventDefault(); submitComposer(); }} className="shrink-0 border-t border-[rgba(35,35,40,0.08)] bg-[rgba(255,253,252,0.97)] px-4 py-3 shadow-[0_-8px_24px_rgba(45,31,26,0.035)] sm:px-5">
                   <div className="flex items-center gap-2 rounded-2xl border border-[#e4e5e7] bg-white p-1.5 pl-3 shadow-[0_5px_18px_rgba(29,25,42,0.04)] focus-within:border-[#ff684c] focus-within:ring-4 focus-within:ring-[#ff684c]/10">
                     <MessageCircle className="h-4 w-4 shrink-0 text-[#a1a2ad]" />
                     <Input value={composerValue} onChange={(event) => { setComposerValue(event.target.value); if (composerError) setComposerError(""); }} disabled={!composerEnabled} placeholder={composerPlaceholder} aria-label={mode === "live" ? "Booking response" : "Demo booking response"} aria-invalid={Boolean(composerError)} className="h-10 flex-1 border-0 bg-transparent px-1 text-[12px] shadow-none focus-visible:ring-0 disabled:cursor-default disabled:opacity-100" />
