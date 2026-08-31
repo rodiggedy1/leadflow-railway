@@ -31,6 +31,8 @@ describe("booking widget customer-intake flow contract", () => {
     expect(widgetEmbedSource).toContain("event.data.type !== 'mib-booking-widget-close'");
     expect(componentSource).toContain('window.parent.postMessage({ type: "mib-booking-widget-close" }, "*")');
     expect(componentSource).toContain('aria-label="Close booking widget"');
+    expect(componentSource).toContain('text-[16px] shadow-none focus-visible:ring-0 disabled:cursor-default disabled:opacity-100 sm:h-10 sm:text-[12px]');
+    expect(componentSource).toContain('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ff684c]');
   });
 
   it("adds the supplied Wistia welcome experience only at the beginning of the request stage", () => {
