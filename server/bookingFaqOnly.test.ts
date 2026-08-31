@@ -12,8 +12,12 @@ describe("booking FAQ-only question handling", () => {
     expect(sharedSource).toContain("question: z.string().trim().min(2).max(700)");
     expect(faqProcedure).toContain("publicProcedure");
     expect(faqProcedure).toContain("bookingFunnelFaqQuestionInputSchema");
-    expect(faqProcedure).toContain("await retrieveKnowledge(input.question)");
     expect(faqProcedure).toContain("MAIDS_IN_BLACK_KNOWLEDGE_BASE");
+    expect(faqProcedure).toContain('model: "gpt-5-mini"');
+    expect(faqProcedure).toContain("max_completion_tokens: 180");
+    expect(faqProcedure).toContain("${ENV.forgeApiUrl.replace(/\\/$/, \"\")}/v1/chat/completions");
+    expect(faqProcedure).toContain("authorization: `Bearer ${ENV.forgeApiKey}`");
+    expect(faqProcedure).not.toContain("retrieveKnowledge");
     expect(faqProcedure).toContain("Never invent or infer prices, availability, policies, guarantees, or service details.");
     expect(faqProcedure).toContain("BOOKING_FAQ_FALLBACK");
     expect(faqProcedure).not.toContain("getDb()");
@@ -24,9 +28,12 @@ describe("booking FAQ-only question handling", () => {
     const composerSource = widgetSource.slice(widgetSource.indexOf("const submitComposer = () =>"), widgetSource.indexOf("const handleSave = async"));
     expect(widgetSource).toContain("trpc.bookingFunnel.answerFaq.useMutation()");
     expect(composerSource).toContain("looksLikeBookingQuestion(question)");
+    expect(widgetSource).toContain("const currentUnansweredBookingPrompt = () =>");
+    expect(composerSource).toContain("const currentPrompt = currentUnansweredBookingPrompt()");
     expect(composerSource).toContain('appendHistory({ kind: "message", sender: "customer", text: question })');
     expect(composerSource).toContain("bookingFaqMutation.mutateAsync({ question })");
-    expect(composerSource).toContain('appendHistory({ kind: "message", sender: "assistant", text: result.answer })');
+    expect(composerSource).toContain('{ kind: "message", sender: "assistant", text: result.answer },');
+    expect(composerSource).toContain('text: currentPrompt');
     expect(composerSource).not.toContain("setStep(");
     expect(composerSource).not.toContain("setDemo(");
     expect(widgetSource).toContain('step === "request" && history.length === 0');

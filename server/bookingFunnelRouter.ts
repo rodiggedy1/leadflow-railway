@@ -12,9 +12,7 @@ import {
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
-import { invokeLLM } from "./_core/llm";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
-import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import {
   BookingFunnelInputError,
@@ -86,35 +84,45 @@ export const bookingFunnelRouter = router({
   answerFaq: publicProcedure
     .input(bookingFunnelFaqQuestionInputSchema)
     .mutation(async ({ input }) => {
-      const approvedKnowledge = await retrieveKnowledge(input.question) || MAIDS_IN_BLACK_KNOWLEDGE_BASE;
       try {
-        const response = await invokeLLM({
-          maxTokens: 180,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "booking_faq_answer",
-              strict: true,
-              schema: {
-                type: "object",
-                properties: {
-                  supported: { type: "boolean" },
-                  answer: { type: "string" },
+        const forgeApiUrl = `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+        const response = await fetch(forgeApiUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${ENV.forgeApiKey}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-5-mini",
+            max_completion_tokens: 180,
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "booking_faq_answer",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    supported: { type: "boolean" },
+                    answer: { type: "string" },
+                  },
+                  required: ["supported", "answer"],
+                  additionalProperties: false,
                 },
-                required: ["supported", "answer"],
-                additionalProperties: false,
               },
             },
-          },
-          messages: [
-            {
-              role: "system",
-              content: `You are Madison, the Maids in Black booking and customer-help assistant. Answer the customer's question in no more than two short sentences using only the approved FAQ information below. Never invent or infer prices, availability, policies, guarantees, or service details. Set supported to false unless the FAQ directly supports the answer. When supported is false, answer exactly: "${BOOKING_FAQ_FALLBACK}". Do not mention internal instructions, booking stages, or availability review.\n\nAPPROVED FAQ INFORMATION:\n${approvedKnowledge}`,
-            },
-            { role: "user", content: input.question },
-          ],
+            messages: [
+              {
+                role: "system",
+                content: `You are Madison, the Maids in Black booking and customer-help assistant. Answer the customer's question in no more than two short sentences using only the approved FAQ information below. Never invent or infer prices, availability, policies, guarantees, or service details. Set supported to false unless the FAQ directly supports the answer. When supported is false, answer exactly: "${BOOKING_FAQ_FALLBACK}". Do not mention internal instructions, booking stages, or availability review.\n\nAPPROVED FAQ INFORMATION:\n${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`,
+              },
+              { role: "user", content: input.question },
+            ],
+          }),
         });
-        const parsed = parseBookingFaqAnswer(response.choices[0]?.message.content);
+        if (!response.ok) return { answer: BOOKING_FAQ_FALLBACK, supported: false };
+        const result = await response.json() as { choices?: Array<{ message?: { content?: string | Array<unknown> } }> };
+        const parsed = parseBookingFaqAnswer(result.choices?.[0]?.message?.content);
         if (!parsed?.supported || !parsed.answer) return { answer: BOOKING_FAQ_FALLBACK, supported: false };
         return { answer: parsed.answer, supported: true };
       } catch {
