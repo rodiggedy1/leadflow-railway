@@ -6,6 +6,7 @@ const dispatcher = readFileSync(resolve(import.meta.dirname, "bookingCompletionN
 const paymentRouter = readFileSync(resolve(import.meta.dirname, "bookingPaymentRouter.ts"), "utf8");
 const webhook = readFileSync(resolve(import.meta.dirname, "stripeWebhookRoute.ts"), "utf8");
 const schema = readFileSync(resolve(import.meta.dirname, "../drizzle/schema.ts"), "utf8");
+const migrationPostconditions = JSON.parse(readFileSync(resolve(import.meta.dirname, "versioned-migrations/0014_create_booking_notification_deliveries.postconditions.json"), "utf8"));
 
 describe("booking completion notifications", () => {
   it("uses the established purchaser, CS, owner, and Command Chat channels after verified card setup", () => {
@@ -26,5 +27,19 @@ describe("booking completion notifications", () => {
     expect(dispatcher).not.toContain("setTimeout(");
     expect(dispatcher).not.toContain("capture");
     expect(dispatcher).not.toContain("createPaymentIntent");
+  });
+
+  it("ships valid managed-migration postconditions for the booking notification ledger", () => {
+    expect(migrationPostconditions).toMatchObject({
+      format: 1,
+      table: "booking_notification_deliveries",
+    });
+    expect(migrationPostconditions.columns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "bookingId", columnType: "int", nullable: false }),
+      expect.objectContaining({ name: "channel", columnType: "varchar(32)", nullable: false }),
+    ]));
+    expect(migrationPostconditions.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "uq_booking_notification_delivery_channel", unique: true, columns: ["bookingId", "channel"] }),
+    ]));
   });
 });
