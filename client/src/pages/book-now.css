@@ -32,6 +32,11 @@
 @media(max-width:850px){.book-now-layout{grid-template-columns:1fr}.book-now-summary{position:static;grid-row:1}.book-now-service-grid{grid-template-columns:1fr}.book-now-service-card{min-height:auto}.book-now-extras-grid{grid-template-columns:1fr 1fr}.book-now-time-grid,.book-now-frequency-grid{grid-template-columns:1fr 1fr}.book-now-secure-copy{display:none}}
 @media(max-width:560px){.book-now-header{height:62px;padding:0 14px}.book-now-header>button{display:none}.book-now-progress{padding:0 14px}.book-now-layout{padding:18px 10px 60px}.book-now-step-panel{padding:21px 16px}.book-now-step-heading h1{font-size:28px}.book-now-home-controls,.book-now-form-grid{grid-template-columns:1fr}.book-now-extras-grid{grid-template-columns:1fr}.book-now-date-grid{grid-template-columns:repeat(4,1fr)}.book-now-step-actions{padding:13px 16px}.book-now-confirmation-card{padding:28px 17px}.book-now-confirmation-details,.book-now-expect-grid{grid-template-columns:1fr}}
 
+/* Compact date picker — never stretch day cells across the booking workspace. */
+.book-now-date-calendar{width:min(340px,100%);margin-left:auto;padding:8px;box-shadow:0 14px 30px rgba(42,34,30,.08)}
+.book-now-date-calendar [data-slot="calendar"]{width:max-content;max-width:100%;--cell-size:32px}
+.book-now-date-calendar .rdp-weekday,.book-now-date-calendar .rdp-day{flex:0 0 32px;width:32px}
+.book-now-date-calendar .rdp-day_button{width:32px;min-width:0;height:32px}
 /* Readable public booking typography — geometry and behavior remain unchanged. */
 .book-now-secure-copy,.book-now-header>button{font-size:12px}
 .book-now-progress span,.book-now-step-heading small{font-size:9px}
