@@ -1143,8 +1143,8 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
             <div className="flex items-start gap-3">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#168d61] text-white shadow-sm"><CheckCircle2 className="h-6 w-6" /></span>
               <div>
-                <h2 className="text-[20px] font-extrabold text-[#3a3c41]">Card saved securely</h2>
-                <p className="mt-2 text-[11px] leading-5 text-[#5f716a]">Your requested appointment is awaiting availability review. You will not be charged today.</p>
+                <h2 className="text-[20px] font-extrabold text-[#3a3c41]">You&apos;re booked, {firstNameFromFullName(demo.fullName)}!</h2>
+                <p className="mt-2 text-[11px] leading-5 text-[#5f716a]">Your cleaning is booked. You will not be charged today.</p>
               </div>
             </div>
           </div>
