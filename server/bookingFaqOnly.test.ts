@@ -16,10 +16,11 @@ describe("booking FAQ-only question handling", () => {
     expect(faqProcedure).toContain("await retrieveKnowledge(input.question)");
     expect(faqProcedure).toContain("RETRIEVED APPROVED FAQ INFORMATION");
     expect(faqProcedure).not.toContain("getApprovedBookingFaqAnswer");
-    expect(faqProcedure).toContain('model: "gpt-5-mini"');
-    expect(faqProcedure).toContain("max_completion_tokens: 180");
-    expect(faqProcedure).toContain("${ENV.forgeApiUrl.replace(/\\/$/, \"\")}/v1/chat/completions");
-    expect(faqProcedure).toContain("authorization: `Bearer ${ENV.forgeApiKey}`");
+    expect(routerSource).toContain('import { invokeLLM } from "./_core/llm"');
+    expect(faqProcedure).toContain("await invokeLLM({");
+    expect(faqProcedure).not.toContain("ENV.forgeApiUrl");
+    expect(faqProcedure).not.toContain("ENV.forgeApiKey");
+    expect(faqProcedure).not.toContain("/v1/chat/completions");
     expect(faqProcedure).toContain("await retrieveKnowledge(input.question)");
     expect(faqProcedure).toContain("Never invent or infer prices, availability, policies, guarantees, or service details.");
     expect(faqProcedure).toContain("BOOKING_FAQ_FALLBACK");
