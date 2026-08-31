@@ -87,6 +87,14 @@
       "sha256": "5d2a0624e8efa0445ab0137ad130fea569dd87850d2b06fb22af9e1045572df5",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0013_create_stripe_webhook_events.postconditions.json"
+    },
+    {
+      "id": "0014_create_booking_notification_deliveries",
+      "mode": "create-table",
+      "sqlFile": "0014_create_booking_notification_deliveries.sql",
+      "sha256": "c36bdc64b58bd930c1d4416f1510e5ef6846926cc26a3e50ffd30ae27cea5288",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0014_create_booking_notification_deliveries.postconditions.json"
     }
   ]
 }

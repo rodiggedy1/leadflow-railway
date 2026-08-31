@@ -4388,3 +4388,19 @@ export const stripeWebhookEvents = mysqlTable("stripe_webhook_events", {
   index("idx_stripe_webhook_object").on(t.objectId),
 ]);
 export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+
+/** Each booking-completion delivery is claimed once per channel; failed rows are recorded without automatic retry. */
+export const bookingNotificationDeliveries = mysqlTable("booking_notification_deliveries", {
+  id: int("id").autoincrement().primaryKey(),
+  bookingId: int("bookingId").notNull(),
+  channel: varchar("channel", { length: 32 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull().default("pending"),
+  providerMessageId: varchar("providerMessageId", { length: 255 }),
+  errorMessage: text("errorMessage"),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_booking_notification_delivery_channel").on(t.bookingId, t.channel),
+  index("idx_booking_notification_delivery_status").on(t.status),
+]);
+export type BookingNotificationDelivery = typeof bookingNotificationDeliveries.$inferSelect;

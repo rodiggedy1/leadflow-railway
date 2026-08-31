@@ -19,6 +19,7 @@ import { createBookingFunnelMutationToken, verifyBookingFunnelMutationToken } fr
 import { buildPreparedNativeBooking, NativeBookingInputError } from "./bookingsService";
 import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingPaymentService";
 import { getStripeClient } from "./stripeClient";
+import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import { TRPCError } from "@trpc/server";
 
 function asBookingInput(record: typeof bookingFunnelRecords.$inferSelect): PrepareBookingInput {
@@ -271,6 +272,9 @@ export const bookingPaymentRouter = router({
         }).where(eq(bookingFunnelRecords.id, record.id));
       });
       broadcastOpsUpdate("booking_funnel_update");
+      void sendBookingCompletionNotifications(record.bookingId).catch((error) =>
+        console.error("[BookingPaymentRouter] Booking completion notifications failed:", error)
+      );
       return {
         bookingId: record.bookingId,
         paymentStatus: "card_on_file" as const,
