@@ -28,6 +28,8 @@ describe("installed Maids in Black guide-first widget contract", () => {
     expect(guideSource).toContain("data-book-home-cleaning");
     expect(guideSource).toContain("Book Home Cleaning");
     expect(guideSource).toContain("onClick={() => setBookingPanelOpen(true)}");
+    expect(guideSource).toContain("sticky bottom-0");
+    expect(guideSource.indexOf("data-book-home-cleaning")).toBeLessThan(guideSource.indexOf('aria-label="Ask Madison a question"'));
   });
 
   it("opens the existing real booking-page flow inside the live widget panel and returns to the guide", () => {

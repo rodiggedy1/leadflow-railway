@@ -1303,6 +1303,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
               {guideMessages.map((message) => message.sender === "customer" ? <div key={message.id} className="ml-auto max-w-[84%] rounded-[18px_18px_6px_18px] border border-[#f1e5c6] bg-[#fff4da] px-4 py-3 text-[13px] leading-6 text-[#3a3c41]">{message.text}</div> : <div key={message.id} className="flex items-end gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-[#ffe3dc] text-[#ff684c]"><Sparkles className="h-3.5 w-3.5" /></span><div className="max-w-[82%] rounded-[18px_18px_18px_6px] border border-[#e4e5e7] bg-white px-4 py-3 shadow-[0_3px_9px_rgba(22,20,33,0.03)]"><span className="mb-1 block text-[10px] font-extrabold tracking-wide text-[#ff684c]">Madison</span><p className="whitespace-pre-wrap text-[13px] leading-6 text-[#3a3c41]">{message.text}</p></div></div>)}
               {bookingFaqMutation.isPending && <div className="flex items-center gap-2 text-[12px] font-semibold text-[#77798b]"><Loader2 className="h-4 w-4 animate-spin text-[#ff684c]" />Madison is checking that for you…</div>}
             </div>}
+            <div className="sticky bottom-0 z-10 -mx-4 border-t border-[#eadfd9] bg-[linear-gradient(180deg,rgba(250,248,246,0.82),rgba(250,248,246,0.98))] px-4 pb-1 pt-3 sm:-mx-5 sm:px-5">
+              <button data-book-home-cleaning type="button" onClick={() => setBookingPanelOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#303238] px-4 py-3.5 text-[13px] font-extrabold text-white shadow-[0_12px_26px_rgba(48,50,56,0.22)] transition hover:bg-[#1f2024] focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2"><Home className="h-4 w-4" />Book Home Cleaning<ArrowRight className="h-4 w-4" /></button>
+            </div>
           </div>
         </div>
 
@@ -1312,7 +1315,6 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
             <Input value={guideQuestion} onChange={(event) => setGuideQuestion(event.target.value)} disabled={bookingFaqMutation.isPending} placeholder="Ask Madison a question…" aria-label="Ask Madison a question" className="h-11 flex-1 border-0 bg-transparent px-1 text-[16px] shadow-none focus-visible:ring-0 disabled:cursor-wait sm:h-10 sm:text-[12px]" />
             <button type="submit" aria-label="Send question to Madison" disabled={bookingFaqMutation.isPending || !guideQuestion.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ff684c] text-white transition hover:bg-[#e9573e] disabled:bg-[#f1c9c1] disabled:text-white/80 sm:h-10 sm:w-10"><Send className="h-4 w-4" /></button>
           </form>
-          <button data-book-home-cleaning type="button" onClick={() => setBookingPanelOpen(true)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#303238] px-4 py-3.5 text-[13px] font-extrabold text-white shadow-[0_12px_26px_rgba(48,50,56,0.22)] transition hover:bg-[#1f2024] focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2"><Home className="h-4 w-4" />Book Home Cleaning<ArrowRight className="h-4 w-4" /></button>
         </div>
       </div>
     );
