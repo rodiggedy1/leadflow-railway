@@ -207,14 +207,16 @@ describe("booking widget customer-intake flow contract", () => {
   });
 
   it("mounts exactly one active stage outside completed history and keeps the composer pinned outside the transcript", () => {
+    const transcriptStart = componentSource.indexOf("data-completed-history");
+    const transcriptSource = componentSource.slice(transcriptStart);
     expect(componentSource).toContain("const activeStage = (() => {");
     expect(componentSource).toContain("data-active-stage");
     expect(componentSource).toContain("data-step={step}");
     expect(componentSource).toContain("{activeStage}");
     expect(componentSource).toContain("overscroll-contain");
     expect(componentSource).toContain('className="shrink-0 border-t border-[rgba(35,35,40,0.08)]');
-    expect(componentSource.indexOf("data-completed-history")).toBeLessThan(componentSource.indexOf("data-active-stage"));
-    expect(componentSource.indexOf("data-active-stage")).toBeLessThan(componentSource.indexOf('<form onSubmit={(event)'));
+    expect(transcriptSource.indexOf("data-completed-history")).toBeLessThan(transcriptSource.indexOf("data-active-stage"));
+    expect(transcriptSource.indexOf("data-active-stage")).toBeLessThan(transcriptSource.indexOf('<form onSubmit={(event)'));
   });
 
   it("replaces quote with a dedicated focused checkout and replaces checkout with confirmation", () => {

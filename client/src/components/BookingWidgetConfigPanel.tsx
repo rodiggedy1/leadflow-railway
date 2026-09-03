@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { BookingPaymentCheckout } from "@/components/BookingPaymentCheckout";
+import BookNow from "@/pages/BookNow";
 import {
   NATIVE_BOOKING_PRICING_VERSION,
   type BookingPriceSnapshot,
@@ -64,6 +65,12 @@ type DemoHistoryItem =
 
 type DemoHistoryEntry = DemoHistoryItem & { id: number };
 
+type GuideMessage = {
+  id: number;
+  sender: "assistant" | "customer";
+  text: string;
+};
+
 type DemoSession = {
   prompt: string;
   serviceDetailsAnswer: string;
@@ -100,6 +107,11 @@ const CLEANER_TEAM_IMAGE_URL = "https://files.manuscdn.com/user_upload_by_module
 const WELCOME_VIDEO_WISTIA_MEDIA_ID = "bzlt49ipk1";
 const WELCOME_VIDEO_POSTER_URL = "https://embed-ssl.wistia.com/deliveries/de3b8af433c63d912143e78eab71c6b3.jpg?image_crop_resized=960x540";
 const WELCOME_VIDEO_IFRAME_URL = `https://fast.wistia.net/embed/iframe/${WELCOME_VIDEO_WISTIA_MEDIA_ID}?seo=false&videoFoam=true&autoplay=1`;
+const GUIDE_SHORTCUTS = [
+  "How does pricing work?",
+  "What is included in a deep cleaning?",
+  "Do you offer move-out cleaning?",
+] as const;
 
 function normalizeCalendarDate(date: Date): Date {
   const normalized = new Date(date);
@@ -279,6 +291,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const [recurringChoiceTouched, setRecurringChoiceTouched] = useState(false);
   const [welcomeVideoOpen, setWelcomeVideoOpen] = useState(false);
   const [history, setHistory] = useState<DemoHistoryEntry[]>([]);
+  const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
+  const [guideQuestion, setGuideQuestion] = useState("");
+  const [bookingPanelOpen, setBookingPanelOpen] = useState(false);
   const [acceptedPricing, setAcceptedPricing] = useState({ version: NATIVE_BOOKING_PRICING_VERSION, totalCents: 0 });
   const [priceChange, setPriceChange] = useState<Extract<PrepareBookingResult, { type: "price_changed" }> | null>(null);
   const [preparedBooking, setPreparedBooking] = useState<Extract<PrepareBookingResult, { type: "prepared" }> | null>(null);
@@ -295,6 +310,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const openingPromptRef = useRef<HTMLButtonElement>(null);
   const welcomeVideoReturnFocusRef = useRef<"trigger" | "prompt">("trigger");
   const historyIdRef = useRef(0);
+  const guideMessageIdRef = useRef(0);
   const demoToday = useMemo(() => normalizeCalendarDate(new Date()), []);
   const demoCalendarEnd = useMemo(() => {
     const end = new Date(demoToday);
@@ -898,6 +914,18 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     window.parent.postMessage({ type: "mib-booking-widget-close" }, "*");
   };
 
+  const submitGuideQuestion = (value = guideQuestion) => {
+    const question = value.trim();
+    if (!question || bookingFaqMutation.isPending) return;
+    setGuideMessages((current) => [...current, { id: ++guideMessageIdRef.current, sender: "customer", text: question }]);
+    setGuideQuestion("");
+    void bookingFaqMutation.mutateAsync({ question })
+      .then((result) => setGuideMessages((current) => [...current, { id: ++guideMessageIdRef.current, sender: "assistant", text: result.answer }]))
+      .catch(() => setGuideMessages((current) => [...current, { id: ++guideMessageIdRef.current, sender: "assistant", text: "I’m not completely sure about that. I can have the team help." }]));
+  };
+
+  const closeBookingPanel = () => setBookingPanelOpen(false);
+
   const composerPlaceholder = step === "serviceDetails"
     ? "Choose your home size above"
     : step === "fullName"
@@ -1243,6 +1271,52 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     </div>,
     document.body,
   ) : null;
+
+  if (mode === "live" && surface === "popup") {
+    if (bookingPanelOpen) {
+      return <BookNow embedded onClose={closeBookingPanel} />;
+    }
+
+    return (
+      <div data-widget-guide-shell className="flex h-dvh min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_92%_4%,rgba(255,224,215,0.55),transparent_30%),linear-gradient(145deg,#faf8f6_0%,#f8f4f1_55%,#fff8f5_100%)] text-[#3a3c41]">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#d94f35] bg-[linear-gradient(135deg,#ff684c_0%,#e9573e_100%)] px-4 py-3 text-white">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-white/18 text-[17px] font-extrabold">M</span>
+            <div className="min-w-0"><strong className="block truncate text-[16px] font-extrabold">Madison</strong><span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/75"><i className="h-2 w-2 rounded-full bg-[#23b982] shadow-[0_0_0_4px_rgba(35,185,130,0.13)]" />Here to help</span></div>
+          </div>
+          <button type="button" onClick={closePopup} aria-label="Close booking widget" className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/35 bg-white/15 text-white transition hover:border-white/55 hover:bg-white/25"><X className="h-4 w-4" /></button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
+          <div className="mx-auto flex max-w-[420px] flex-col gap-4">
+            <div className="rounded-[22px] border border-[#f0d9d3] bg-white/95 p-5 shadow-[0_16px_40px_rgba(68,49,42,0.08)]">
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Maids in Black guide</span>
+              <h1 className="mt-2 font-serif text-[27px] leading-[1.08] text-[#303238]">How can I help with your home today?</h1>
+              <p className="mt-3 text-[13px] leading-6 text-[#666970]">Ask a question about our cleaning services, or start a booking whenever you&apos;re ready.</p>
+            </div>
+
+            <div className="flex flex-wrap gap-2" aria-label="Common cleaning questions">
+              {GUIDE_SHORTCUTS.map((prompt) => <button key={prompt} type="button" onClick={() => submitGuideQuestion(prompt)} disabled={bookingFaqMutation.isPending} className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-3.5 py-2 text-left text-[12px] font-bold text-[#d95740] transition hover:border-[#ff9c89] hover:bg-[#fff1ed] disabled:cursor-wait disabled:opacity-60">{prompt}</button>)}
+            </div>
+
+            {guideMessages.length > 0 && <div data-guide-history className="flex flex-col gap-3 pb-2">
+              {guideMessages.map((message) => message.sender === "customer" ? <div key={message.id} className="ml-auto max-w-[84%] rounded-[18px_18px_6px_18px] border border-[#f1e5c6] bg-[#fff4da] px-4 py-3 text-[13px] leading-6 text-[#3a3c41]">{message.text}</div> : <div key={message.id} className="flex items-end gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-[#ffe3dc] text-[#ff684c]"><Sparkles className="h-3.5 w-3.5" /></span><div className="max-w-[82%] rounded-[18px_18px_18px_6px] border border-[#e4e5e7] bg-white px-4 py-3 shadow-[0_3px_9px_rgba(22,20,33,0.03)]"><span className="mb-1 block text-[10px] font-extrabold tracking-wide text-[#ff684c]">Madison</span><p className="whitespace-pre-wrap text-[13px] leading-6 text-[#3a3c41]">{message.text}</p></div></div>)}
+              {bookingFaqMutation.isPending && <div className="flex items-center gap-2 text-[12px] font-semibold text-[#77798b]"><Loader2 className="h-4 w-4 animate-spin text-[#ff684c]" />Madison is checking that for you…</div>}
+            </div>}
+          </div>
+        </div>
+
+        <div className="shrink-0 border-t border-[rgba(35,35,40,0.08)] bg-[rgba(255,253,252,0.97)] px-4 pb-4 pt-3 shadow-[0_-8px_24px_rgba(45,31,26,0.035)] sm:px-5">
+          <form onSubmit={(event) => { event.preventDefault(); submitGuideQuestion(); }} className="flex items-center gap-2 rounded-2xl border border-[#e4e5e7] bg-white p-1.5 pl-3 shadow-[0_5px_18px_rgba(29,25,42,0.04)] focus-within:border-[#ff684c] focus-within:ring-4 focus-within:ring-[#ff684c]/10">
+            <MessageCircle className="h-4 w-4 shrink-0 text-[#a1a2ad]" />
+            <Input value={guideQuestion} onChange={(event) => setGuideQuestion(event.target.value)} disabled={bookingFaqMutation.isPending} placeholder="Ask Madison a question…" aria-label="Ask Madison a question" className="h-11 flex-1 border-0 bg-transparent px-1 text-[16px] shadow-none focus-visible:ring-0 disabled:cursor-wait sm:h-10 sm:text-[12px]" />
+            <button type="submit" aria-label="Send question to Madison" disabled={bookingFaqMutation.isPending || !guideQuestion.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ff684c] text-white transition hover:bg-[#e9573e] disabled:bg-[#f1c9c1] disabled:text-white/80 sm:h-10 sm:w-10"><Send className="h-4 w-4" /></button>
+          </form>
+          <button data-book-home-cleaning type="button" onClick={() => setBookingPanelOpen(true)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#303238] px-4 py-3.5 text-[13px] font-extrabold text-white shadow-[0_12px_26px_rgba(48,50,56,0.22)] transition hover:bg-[#1f2024] focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2"><Home className="h-4 w-4" />Book Home Cleaning<ArrowRight className="h-4 w-4" /></button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={mode === "live" ? surface === "popup" ? "h-dvh bg-[#f5f5f3] p-0" : "min-h-screen bg-[radial-gradient(circle_at_8%_0%,rgba(255,104,76,0.18),transparent_30%),radial-gradient(circle_at_96%_100%,rgba(204,51,102,0.08),transparent_28%),#f5f5f3] p-3 sm:p-6" : "space-y-5"}>

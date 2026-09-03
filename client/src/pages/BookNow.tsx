@@ -26,6 +26,7 @@ import {
   Plus,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { BookingPaymentCheckout } from "@/components/BookingPaymentCheckout";
@@ -102,7 +103,12 @@ function buildAppointmentDates(now = new Date()): AppointmentDate[] {
   });
 }
 
-export default function BookNow() {
+type BookNowProps = {
+  embedded?: boolean;
+  onClose?: () => void;
+};
+
+export default function BookNow({ embedded = false, onClose }: BookNowProps) {
   const configQuery = trpc.bookings.getPublicWidgetConfig.useQuery(undefined, { staleTime: 5 * 60_000 });
   const beginFunnelMutation = trpc.bookingFunnel.begin.useMutation();
   const updateFunnelMutation = trpc.bookingFunnel.update.useMutation();
@@ -205,7 +211,7 @@ export default function BookNow() {
       if (!current) {
         current = await beginFunnelMutation.mutateAsync({
           idempotencyKey: bookingAttemptIdRef.current,
-          source: "book-page",
+          source: embedded ? "widget-popup" : "book-page",
           customerName: fullName,
           customerPhone: phone,
         });
@@ -307,17 +313,25 @@ export default function BookNow() {
     reserveFunnelMutation.reset();
   };
 
+  const pageClassName = embedded ? "mib-booking-panel" : "book-now-page";
+
   if (configQuery.isLoading) {
-    return <main className="book-now-page book-now-loading"><Loader2 className="book-now-spinner" aria-label="Loading booking page" /></main>;
+    return <main className={`${pageClassName} book-now-loading`}><Loader2 className="book-now-spinner" aria-label="Loading booking page" /></main>;
   }
 
   if (done) {
-    return <main className="book-now-page book-now-confirmation-page"><section className="book-now-confirmation-card"><span className="book-now-big-check"><Check /></span><small>BOOKING CONFIRMED</small><h1>You&apos;re booked, {firstName} 🎉</h1><p>Your cleaning is booked. We&apos;ll text and email your appointment details shortly.</p><div className="book-now-confirmation-details"><div><CalendarDays /><span><small>WHEN</small><strong>{date.full} · {time}</strong></span></div><div><MapPin /><span><small>WHERE</small><strong>{address || "Service address"}</strong></span></div></div><div className="book-now-expect-grid"><article><span>📩</span><strong>Helpful reminders</strong><p>We&apos;ll text you before your cleaning.</p></article><article><span>🚗</span><strong>Track your team</strong><p>Get a tracking link when they&apos;re on the way.</p></article><article><span>💳</span><strong>Pay after service</strong><p>Your card won&apos;t be charged until the cleaning is complete.</p></article></div><button type="button" onClick={resetDemo}>Start over</button></section></main>;
+    return <main className={`${pageClassName} book-now-confirmation-page`}><section className="book-now-confirmation-card"><span className="book-now-big-check"><Check /></span><small>BOOKING CONFIRMED</small><h1>You&apos;re booked, {firstName} 🎉</h1><p>Your cleaning is booked. We&apos;ll text and email your appointment details shortly.</p><div className="book-now-confirmation-details"><div><CalendarDays /><span><small>WHEN</small><strong>{date.full} · {time}</strong></span></div><div><MapPin /><span><small>WHERE</small><strong>{address || "Service address"}</strong></span></div></div><div className="book-now-expect-grid"><article><span>📩</span><strong>Helpful reminders</strong><p>We&apos;ll text you before your cleaning.</p></article><article><span>🚗</span><strong>Track your team</strong><p>Get a tracking link when they&apos;re on the way.</p></article><article><span>💳</span><strong>Pay after service</strong><p>Your card won&apos;t be charged until the cleaning is complete.</p></article></div><button type="button" onClick={onClose ?? resetDemo}>{embedded ? "Return to Madison" : "Start over"}</button></section></main>;
   }
 
-  return <main className="book-now-page">
-    <header className="book-now-header"><div className="book-now-customer-logo"><Sparkles /><span>Maids in Black</span></div><div className="book-now-secure-copy"><ShieldCheck />Vetted teams · Satisfaction guaranteed</div><button type="button" disabled title="Customer support link will be connected later">Need help? <strong>Text us</strong></button></header>
-    <div className="book-now-progress"><div><span>STEP {step} OF 4</span><strong>{step === 1 ? "Your cleaning" : step === 2 ? "Choose a time" : step === 3 ? "Your details" : "Secure booking"}</strong></div><div className="book-now-progress-track"><i style={{ width: `${progress}%` }} /></div></div>
+  return <main className={pageClassName}>
+    {embedded ? (
+      <header className="mib-booking-panel__header">
+        <button type="button" onClick={onClose} aria-label="Return to Madison" className="mib-booking-panel__back"><ArrowLeft className="h-4 w-4" />Guide</button>
+        <div className="min-w-0 text-center"><span className="block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Book home cleaning</span><strong className="block truncate text-[13px] text-[#303238]">{step === 1 ? "Your cleaning" : step === 2 ? "Choose a time" : step === 3 ? "Your details" : "Secure booking"}</strong></div>
+        <button type="button" onClick={onClose} aria-label="Close booking panel" className="mib-booking-panel__close"><X className="h-4 w-4" /></button>
+      </header>
+    ) : <header className="book-now-header"><div className="book-now-customer-logo"><Sparkles /><span>Maids in Black</span></div><div className="book-now-secure-copy"><ShieldCheck />Vetted teams · Satisfaction guaranteed</div><button type="button" disabled title="Customer support link will be connected later">Need help? <strong>Text us</strong></button></header>}
+    <div className={embedded ? "mib-booking-panel__progress" : "book-now-progress"}><div><span>STEP {step} OF 4</span><strong>{step === 1 ? "Your cleaning" : step === 2 ? "Choose a time" : step === 3 ? "Your details" : "Secure booking"}</strong></div><div className="book-now-progress-track"><i style={{ width: `${progress}%` }} /></div>{embedded && <div className="book-now-embedded-total"><span>Current total</span><strong>${priceBreakdown.total}</strong></div>}</div>
     <div className="book-now-layout"><section className="book-now-workspace">
       {step === 1 && <div className="book-now-step-panel"><div className="book-now-step-heading"><small>BUILD YOUR CLEANING</small><h1>A cleaner home starts here.</h1><p>Tell us what you need. Your price updates instantly.</p></div><label className="book-now-field-label">Choose your service</label><div className="book-now-service-grid">{config.services.map((item) => { const minimum = calculateBookingWidgetPrice({ serviceId: item.id, bedrooms: 1, bathrooms: 1 }).total; return <button type="button" key={item.id} className={serviceId === item.id ? "book-now-service-card active" : "book-now-service-card"} onClick={() => setServiceId(item.id)}><span className="book-now-service-icon">{SERVICE_ICONS[item.id]}</span><strong>{item.name}</strong><p>{SERVICE_COPY[item.id]}</p><small>From ${minimum}</small>{serviceId === item.id && <i><Check /></i>}</button>; })}</div><label className="book-now-field-label">Tell us about your home</label><div className="book-now-home-controls"><Counter label="Bedrooms" value={bedrooms} minimum={0} maximum={7} setValue={setBedrooms} /><Counter label="Bathrooms" value={bathrooms} minimum={0} maximum={20} setValue={setBathrooms} /></div><label className="book-now-field-label">Make it yours <span>Optional</span></label><div className="book-now-extras-grid">{BOOKING_WIDGET_PRICED_EXTRAS.map((extra) => { const selected = selectedExtraIds.includes(extra.id); const quantity = extraQuantities[extra.id] ?? 1; return <div key={extra.id} className={selected ? "book-now-extra-card active" : "book-now-extra-card"}><button type="button" className="book-now-extra-toggle" onClick={() => toggleExtra(extra.id)}><span>{selected ? <Check /> : <Plus />}</span><strong>{extra.label}</strong><small>+${extra.unitPrice}{extra.quantityUnit ? `/${extra.quantityUnit}` : ""}</small></button>{selected && extra.quantityUnit && <div className="book-now-extra-quantity"><button type="button" aria-label={`Decrease ${extra.label} quantity`} onClick={() => changeExtraQuantity(extra.id, quantity - 1)}><Minus /></button><strong>{quantity}</strong><button type="button" aria-label={`Increase ${extra.label} quantity`} onClick={() => changeExtraQuantity(extra.id, quantity + 1)}><Plus /></button></div>}</div>; })}</div></div>}
       {step === 2 && <div className="book-now-step-panel"><div className="book-now-step-heading"><small>YOUR APPOINTMENT</small><h1>When should we come?</h1><p>Choose a date and arrival window.</p></div><label className="book-now-field-label">Quick dates</label><div className="book-now-date-grid">{dates.map((item) => <button type="button" key={item.iso} className={date.iso === item.iso ? "book-now-date-choice active" : "book-now-date-choice"} onClick={() => setDate(item)}><small>{item.day}</small><strong>{item.date}</strong>{date.iso === item.iso && <i />}</button>)}</div><div className="book-now-selected-date"><CalendarDays /><span><small>SELECTED DATE</small><strong>{date.full}</strong></span><button type="button" aria-expanded={showOtherDates} aria-controls="other-booking-dates" onClick={() => setShowOtherDates((open) => !open)}><CalendarDays />Choose other dates</button></div>{showOtherDates && <div id="other-booking-dates" className="book-now-date-calendar"><Calendar mode="single" selected={selectedCalendarDate} defaultMonth={selectedCalendarDate} startMonth={firstBookableDate} disabled={{ before: firstBookableDate }} onSelect={(nextDate) => { if (!nextDate) return; setDate(toAppointmentDate(nextDate)); setShowOtherDates(false); }} /></div>}<label className="book-now-field-label">Arrival window</label><div className="book-now-time-grid">{TIME_SLOTS.map((item) => <button type="button" key={item} className={time === item ? "book-now-time-choice active" : "book-now-time-choice"} onClick={() => setTime(item)}>{item}</button>)}</div><label className="book-now-field-label">How often?</label><div className="book-now-frequency-grid"><button type="button" className={frequency === "one-time" ? "book-now-frequency-card active" : "book-now-frequency-card"} onClick={() => setFrequency("one-time")}><strong>One-time</strong><span>No commitment</span></button>{BOOKING_WIDGET_RECURRING_OPTIONS.map((option) => <button type="button" key={option.id} className={frequency === option.id ? "book-now-frequency-card active" : "book-now-frequency-card"} onClick={() => setFrequency(option.id)}><strong>{option.label}</strong><span>Save {option.discountPercent}%</span>{option.badge && <b>{option.badge}</b>}</button>)}</div>{recurringOption && recurringPrice !== null && <div className="book-now-first-clean-note"><ShieldCheck /><p><strong>Your first cleaning remains ${priceBreakdown.total}.</strong><br />Your {recurringOption.discountPercent}% savings begin with visit two — ${recurringPrice} per future visit.</p></div>}</div>}

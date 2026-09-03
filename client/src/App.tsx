@@ -67,7 +67,6 @@ const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
-const GuideBookingMock = lazy(() => import("./pages/GuideBookingMock"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -162,7 +161,6 @@ function Router() {
         <Route path={"/madison-debug"} component={MadisonDebugPanel} />
         <Route path={"/welcome/:firstName"} component={WelcomePage} />
         <Route path={"/icon-picker"} component={IconPicker} />
-        <Route path={"/mock/guide-booking"} component={GuideBookingMock} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

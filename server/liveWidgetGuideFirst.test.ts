@@ -1,0 +1,53 @@
+import fs from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const widgetSource = fs.readFileSync(path.resolve("client/src/components/BookingWidgetConfigPanel.tsx"), "utf8");
+const bookingPageSource = fs.readFileSync(path.resolve("client/src/pages/BookNow.tsx"), "utf8");
+const appSource = fs.readFileSync(path.resolve("client/src/App.tsx"), "utf8");
+const embedSource = fs.readFileSync(path.resolve("server/widgetEmbed.ts"), "utf8");
+
+describe("installed Maids in Black guide-first widget contract", () => {
+  it("keeps the installed external launcher and its existing /book/widget iframe target", () => {
+    expect(embedSource).toContain("app.get(\"/api/widget.js\"");
+    expect(embedSource).toContain("src: API_BASE + '/book/widget'");
+    expect(embedSource).toContain("btn.style.display = val ? 'none' : '-webkit-flex'");
+    expect(embedSource).toContain("width: isCompact ? 'calc(100vw - 24px)' : 'min(470px, calc(100vw - 32px))'");
+  });
+
+  it("renders a guide first and keeps the Book Home Cleaning action visible independently of Q&A", () => {
+    const guideStart = widgetSource.indexOf('if (mode === "live" && surface === "popup")');
+    const guideSource = widgetSource.slice(guideStart);
+
+    expect(guideStart).toBeGreaterThan(-1);
+    expect(guideSource).toContain("data-widget-guide-shell");
+    expect(guideSource).toContain("GUIDE_SHORTCUTS.map");
+    expect(guideSource).toContain('aria-label="Ask Madison a question"');
+    expect(widgetSource).toContain("bookingFaqMutation.mutateAsync({ question })");
+    expect(guideSource).toContain("data-guide-history");
+    expect(guideSource).toContain("data-book-home-cleaning");
+    expect(guideSource).toContain("Book Home Cleaning");
+    expect(guideSource).toContain("onClick={() => setBookingPanelOpen(true)}");
+  });
+
+  it("opens the existing real booking-page flow inside the live widget panel and returns to the guide", () => {
+    expect(widgetSource).toContain('import BookNow from "@/pages/BookNow"');
+    expect(widgetSource).toContain("return <BookNow embedded onClose={closeBookingPanel} />");
+    expect(widgetSource).toContain("const closeBookingPanel = () => setBookingPanelOpen(false)");
+    expect(bookingPageSource).toContain("export default function BookNow({ embedded = false, onClose }: BookNowProps)");
+    expect(bookingPageSource).toContain('source: embedded ? "widget-popup" : "book-page"');
+    expect(bookingPageSource).toContain("trpc.bookingFunnel.begin.useMutation()");
+    expect(bookingPageSource).toContain("trpc.bookingFunnel.update.useMutation()");
+    expect(bookingPageSource).toContain("trpc.bookingFunnel.reserve.useMutation()");
+    expect(bookingPageSource).toContain("BookingPaymentCheckout");
+    expect(bookingPageSource).toContain('const pageClassName = embedded ? "mib-booking-panel" : "book-now-page"');
+    expect(bookingPageSource).toContain('className="mib-booking-panel__header"');
+    expect(bookingPageSource).toContain('aria-label="Close booking panel"');
+    expect(bookingPageSource).toContain('aria-label="Return to Madison"');
+  });
+
+  it("removes the mistaken standalone mock route instead of exposing a second widget surface", () => {
+    expect(appSource).not.toContain("GuideBookingMock");
+    expect(appSource).not.toContain('/mock/guide-booking');
+  });
+});
