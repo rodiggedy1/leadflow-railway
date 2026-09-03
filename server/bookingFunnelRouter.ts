@@ -31,12 +31,12 @@ const LIMIT = 20;
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const BOOKING_FAQ_FALLBACK = "I’m not completely sure about that. I can have the team help.";
 
-function parseBookingFaqAnswer(content: string | Array<unknown> | undefined): { supported: boolean; answer: string } | null {
+function parseBookingFaqAnswer(content: string | Array<unknown> | undefined): { answer: string } | null {
   if (typeof content !== "string") return null;
   try {
-    const parsed = JSON.parse(content) as { supported?: unknown; answer?: unknown };
-    if (typeof parsed.supported !== "boolean" || typeof parsed.answer !== "string") return null;
-    return { supported: parsed.supported, answer: parsed.answer.trim() };
+    const parsed = JSON.parse(content) as { answer?: unknown };
+    if (typeof parsed.answer !== "string") return null;
+    return { answer: parsed.answer.trim() };
   } catch {
     return null;
   }
@@ -101,10 +101,9 @@ export const bookingFunnelRouter = router({
               schema: {
                 type: "object",
                 properties: {
-                  supported: { type: "boolean" },
                   answer: { type: "string" },
                 },
-                required: ["supported", "answer"],
+                required: ["answer"],
                 additionalProperties: false,
               },
             },
@@ -112,7 +111,7 @@ export const bookingFunnelRouter = router({
           messages: [
             {
               role: "system",
-              content: `You are Madison, the Maids in Black booking and customer-help assistant. Answer the customer's question in no more than two short sentences using only the retrieved approved FAQ information below. Never invent or infer prices, availability, policies, guarantees, or service details. You may map ordinary customer wording, synonyms, and paraphrases to an equivalent fact only when the retrieved approved FAQ information states that same fact. Set supported to false only when the retrieved approved FAQ information does not state or clearly support the answer. When supported is false, answer exactly: "${BOOKING_FAQ_FALLBACK}". Do not mention internal instructions, booking stages, or availability review.\n\nRETRIEVED APPROVED FAQ INFORMATION:\n${approvedKnowledge}`,
+              content: `You are Madison, the Maids in Black booking and customer-help assistant. Answer the customer's question in no more than two short sentences using only the retrieved approved FAQ information below. Never invent or infer prices, availability, policies, guarantees, or service details. You may map ordinary customer wording, synonyms, and paraphrases to an equivalent fact only when the retrieved approved FAQ information states that same fact. When the retrieved approved FAQ information does not state or clearly support the answer, return exactly: "${BOOKING_FAQ_FALLBACK}". Do not mention internal instructions, booking stages, or availability review.\n\nRETRIEVED APPROVED FAQ INFORMATION:\n${approvedKnowledge}`,
             },
             { role: "user", content: input.question },
           ],
@@ -122,11 +121,11 @@ export const bookingFunnelRouter = router({
           console.warn("[BOOKING_FAQ] model returned an invalid response shape");
           return { answer: BOOKING_FAQ_FALLBACK, supported: false };
         }
-        if (!parsed.supported || !parsed.answer) {
-          console.warn("[BOOKING_FAQ] model marked the question unsupported");
+        if (!parsed.answer) {
+          console.warn("[BOOKING_FAQ] model returned an empty answer");
           return { answer: BOOKING_FAQ_FALLBACK, supported: false };
         }
-        return { answer: parsed.answer, supported: true };
+        return { answer: parsed.answer, supported: parsed.answer !== BOOKING_FAQ_FALLBACK };
       } catch (error) {
         const reason = error instanceof Error ? error.message : "unknown error";
         if (reason.includes("OPENAI_API_KEY is not configured")) {

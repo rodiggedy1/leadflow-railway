@@ -25,6 +25,10 @@ describe("booking FAQ-only question handling", () => {
     expect(faqProcedure).toContain("Never invent or infer prices, availability, policies, guarantees, or service details.");
     expect(faqProcedure).toContain("ordinary customer wording, synonyms, and paraphrases");
     expect(faqProcedure).toContain("BOOKING_FAQ_FALLBACK");
+    expect(faqProcedure).toContain('required: ["answer"]');
+    expect(faqProcedure).not.toContain('supported: { type: "boolean" }');
+    expect(faqProcedure).not.toContain("model marked the question unsupported");
+    expect(faqProcedure).toContain("supported: parsed.answer !== BOOKING_FAQ_FALLBACK");
     expect(faqProcedure).toContain("[BOOKING_FAQ]");
     expect(faqProcedure).not.toContain("getDb()");
     expect(faqProcedure).not.toContain("sendSms");
