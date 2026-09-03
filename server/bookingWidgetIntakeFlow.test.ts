@@ -21,7 +21,7 @@ describe("booking widget customer-intake flow contract", () => {
   });
 
   it("keeps the booking popup viewport-safe on mobile and never lets its launcher cover the composer", () => {
-    expect(widgetEmbedSource).toContain('const WIDGET_VERSION = "2.6.1"');
+    expect(widgetEmbedSource).toContain('const WIDGET_VERSION = "2.6.3"');
     expect(widgetEmbedSource).toContain("var isMobile = window.innerWidth < 640;");
     expect(widgetEmbedSource).toContain("top: 'max(12px, env(safe-area-inset-top, 0px))'");
     expect(widgetEmbedSource).toContain("bottom: 'max(12px, env(safe-area-inset-bottom, 0px))'");

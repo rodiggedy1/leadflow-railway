@@ -28,7 +28,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BookingPaymentCheckout } from "@/components/BookingPaymentCheckout";
 import { Calendar } from "@/components/ui/calendar";
 import "./book-now.css";
@@ -119,6 +119,7 @@ export default function BookNow({ embedded = false, onClose }: BookNowProps) {
   const funnelRecordRef = useRef<BookingFunnelPublicResult | null>(null);
   const leadCapturePromiseRef = useRef<Promise<BookingFunnelPublicResult | null> | null>(null);
   const initialSnapshotSavedRef = useRef(false);
+  const embeddedPanelRef = useRef<HTMLElement | null>(null);
   const [step, setStep] = useState(1);
   const [serviceId, setServiceId] = useState<BookingWidgetServiceId>("deep");
   const [bedrooms, setBedrooms] = useState(2);
@@ -158,6 +159,11 @@ export default function BookNow({ embedded = false, onClose }: BookNowProps) {
   const funnelMutationPending = beginFunnelMutation.isPending || updateFunnelMutation.isPending || reserveFunnelMutation.isPending;
   const selectedCalendarDate = useMemo(() => appointmentDateFromIso(date.iso), [date.iso]);
   const firstBookableDate = useMemo(() => appointmentDateFromIso(dates[0].iso), [dates]);
+
+  useEffect(() => {
+    if (!embedded) return;
+    embeddedPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [embedded, step, done]);
 
   const rememberFunnelRecord = (record: BookingFunnelPublicResult | null) => {
     funnelRecordRef.current = record;
@@ -323,7 +329,7 @@ export default function BookNow({ embedded = false, onClose }: BookNowProps) {
     return <main className={`${pageClassName} book-now-confirmation-page`}><section className="book-now-confirmation-card"><span className="book-now-big-check"><Check /></span><small>BOOKING CONFIRMED</small><h1>You&apos;re booked, {firstName} 🎉</h1><p>Your cleaning is booked. We&apos;ll text and email your appointment details shortly.</p><div className="book-now-confirmation-details"><div><CalendarDays /><span><small>WHEN</small><strong>{date.full} · {time}</strong></span></div><div><MapPin /><span><small>WHERE</small><strong>{address || "Service address"}</strong></span></div></div><div className="book-now-expect-grid"><article><span>📩</span><strong>Helpful reminders</strong><p>We&apos;ll text you before your cleaning.</p></article><article><span>🚗</span><strong>Track your team</strong><p>Get a tracking link when they&apos;re on the way.</p></article><article><span>💳</span><strong>Pay after service</strong><p>Your card won&apos;t be charged until the cleaning is complete.</p></article></div><button type="button" onClick={onClose ?? resetDemo}>{embedded ? "Return to Madison" : "Start over"}</button></section></main>;
   }
 
-  return <main className={pageClassName}>
+  return <main ref={embedded ? embeddedPanelRef : undefined} className={pageClassName}>
     {embedded ? (
       <>
         <header className="mib-booking-panel__header">

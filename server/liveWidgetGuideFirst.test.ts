@@ -52,10 +52,19 @@ describe("installed Maids in Black guide-first widget contract", () => {
     expect(bookingPageSource).toContain('className="mib-booking-panel__header"');
     expect(bookingPageSource).toContain('aria-label="Close booking panel"');
     expect(bookingPageSource).toContain('aria-label="Return to Madison"');
+    expect(bookingPageSource).toContain("const embeddedPanelRef = useRef<HTMLElement | null>(null)");
+    expect(bookingPageSource).toContain("embeddedPanelRef.current?.scrollTo({ top: 0, behavior: \"smooth\" })");
+    expect(bookingPageSource).toContain("}, [embedded, step, done])");
   });
 
   it("removes the mistaken standalone mock route instead of exposing a second widget surface", () => {
     expect(appSource).not.toContain("GuideBookingMock");
     expect(appSource).not.toContain('/mock/guide-booking');
+  });
+
+  it("keeps the desktop popup at its original size and lowers only its bottom anchor", () => {
+    expect(embedSource).toContain("bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))'");
+    expect(embedSource).toContain("height: 'min(860px, calc(100vh - 120px))'");
+    expect(embedSource).toContain("height: isBooking ? 'min(860px, calc(100vh - 120px))' : 'auto'");
   });
 });

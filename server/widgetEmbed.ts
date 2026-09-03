@@ -18,7 +18,7 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.6.1";
+const WIDGET_VERSION = "2.6.3";
 const WIDGET_CONTENT_MODE: "booking" | "sms" = "booking";
 
 export function registerWidgetEmbedRoute(app: Express) {
@@ -245,7 +245,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     }
 
     s(panel, {
-      bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+      bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
       right: isCompact ? '12px' : '24px',
       left: 'auto',
       width: isCompact ? 'calc(100vw - 24px)' : 'min(470px, calc(100vw - 32px))',
@@ -260,7 +260,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     var isBooking = CONTENT_MODE === 'booking';
     panel = el('div', {
       position: 'fixed',
-      bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+      bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
       right: '24px',
       left: 'auto',
       width: isBooking ? 'min(470px, calc(100vw - 32px))' : '340px',
