@@ -59,8 +59,9 @@ describe("installed Maids in Black guide-first widget contract", () => {
     expect(bookingPageSource).toContain("if (!embedded || funnelRecordRef.current || leadCapturePromiseRef.current) return");
     expect(bookingPageSource).toContain('validateBookingWidgetIntakeField("fullName", fullName) || validateBookingWidgetIntakeField("phone", phone)');
     expect(bookingPageSource).toContain("void captureLeadIfReady()");
-    expect(bookingPageStyles).toContain("overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none");
-    expect(bookingPageStyles).toContain(".mib-booking-panel::-webkit-scrollbar{display:none;width:0;height:0}");
+    expect(bookingPageStyles).toContain("overflow-y:auto;scrollbar-width:none;scrollbar-color:transparent transparent;-ms-overflow-style:none");
+    expect(bookingPageStyles).toContain(".mib-booking-panel::-webkit-scrollbar{width:0!important;height:0!important;background:transparent!important}");
+    expect(bookingPageStyles).toContain(".mib-booking-panel::-webkit-scrollbar-thumb{background:transparent!important;border:0!important}");
   });
 
   it("removes the mistaken standalone mock route instead of exposing a second widget surface", () => {
