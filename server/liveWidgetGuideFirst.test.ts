@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const widgetSource = fs.readFileSync(path.resolve("client/src/components/BookingWidgetConfigPanel.tsx"), "utf8");
 const bookingPageSource = fs.readFileSync(path.resolve("client/src/pages/BookNow.tsx"), "utf8");
+const bookingPageStyles = fs.readFileSync(path.resolve("client/src/pages/book-now.css"), "utf8");
 const appSource = fs.readFileSync(path.resolve("client/src/App.tsx"), "utf8");
 const embedSource = fs.readFileSync(path.resolve("server/widgetEmbed.ts"), "utf8");
 
@@ -55,6 +56,11 @@ describe("installed Maids in Black guide-first widget contract", () => {
     expect(bookingPageSource).toContain("const embeddedPanelRef = useRef<HTMLElement | null>(null)");
     expect(bookingPageSource).toContain("embeddedPanelRef.current?.scrollTo({ top: 0, behavior: \"smooth\" })");
     expect(bookingPageSource).toContain("}, [embedded, step, done])");
+    expect(bookingPageSource).toContain("if (!embedded || funnelRecordRef.current || leadCapturePromiseRef.current) return");
+    expect(bookingPageSource).toContain('validateBookingWidgetIntakeField("fullName", fullName) || validateBookingWidgetIntakeField("phone", phone)');
+    expect(bookingPageSource).toContain("void captureLeadIfReady()");
+    expect(bookingPageStyles).toContain("overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none");
+    expect(bookingPageStyles).toContain(".mib-booking-panel::-webkit-scrollbar{display:none;width:0;height:0}");
   });
 
   it("removes the mistaken standalone mock route instead of exposing a second widget surface", () => {

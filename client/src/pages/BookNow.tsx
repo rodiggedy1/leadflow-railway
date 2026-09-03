@@ -275,6 +275,12 @@ export default function BookNow({ embedded = false, onClose }: BookNowProps) {
     await sync;
   };
 
+  useEffect(() => {
+    if (!embedded || funnelRecordRef.current || leadCapturePromiseRef.current) return;
+    if (validateBookingWidgetIntakeField("fullName", fullName) || validateBookingWidgetIntakeField("phone", phone)) return;
+    void captureLeadIfReady();
+  }, [embedded, fullName, phone]);
+
   const continueToSecureBooking = async () => {
     const error = validateBookingWidgetIntakeField("fullName", fullName)
       ?? validateBookingWidgetIntakeField("phone", phone)
