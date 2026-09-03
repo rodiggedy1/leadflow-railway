@@ -23,25 +23,32 @@ describe("booking FAQ-only question handling", () => {
     expect(faqProcedure).not.toContain("/v1/chat/completions");
     expect(faqProcedure).toContain("await retrieveKnowledge(input.question)");
     expect(faqProcedure).toContain("Never invent or infer prices, availability, policies, guarantees, or service details.");
+    expect(faqProcedure).toContain("ordinary customer wording, synonyms, and paraphrases");
     expect(faqProcedure).toContain("BOOKING_FAQ_FALLBACK");
     expect(faqProcedure).toContain("[BOOKING_FAQ]");
     expect(faqProcedure).not.toContain("getDb()");
     expect(faqProcedure).not.toContain("sendSms");
   });
 
-  it("retrieves compact approved payment and team passages instead of using a duplicate answer list", async () => {
-    await expect(retrieveKnowledge("what form of payment do you take?")).resolves.toContain("Accepts all major credit and debit cards");
-    await expect(retrieveKnowledge("how many cleaners come?")).resolves.toContain("Teams of **two cleaners** for most homes");
+  it("retrieves the complete approved source so shortcut and everyday wording remain grounded without a duplicate answer list", async () => {
+    const approvedKnowledge = await retrieveKnowledge("how many people come to the house");
+    expect(approvedKnowledge).toContain("Accepts all major credit and debit cards");
+    expect(approvedKnowledge).toContain("Teams of **two cleaners** for most homes");
+    expect(approvedKnowledge).toContain("Move-In / Move-Out Cleaning");
+    expect(approvedKnowledge).toContain("Everything in standard cleaning, plus:");
     expect(routerSource).not.toContain("getApprovedBookingFaqAnswer");
   });
 
   it("returns the approved pricing passage for the reported guide question without any customer-write path", async () => {
     const pricingKnowledge = await retrieveKnowledge("How does pricing work?");
+    const moveOutKnowledge = await retrieveKnowledge("Do you offer move-out cleaning?");
+    const teamKnowledge = await retrieveKnowledge("how many people come to the house");
     const faqProcedure = routerSource.slice(routerSource.indexOf("answerFaq:"), routerSource.indexOf("begin: publicProcedure"));
 
     expect(pricingKnowledge).toContain("## Pricing");
     expect(pricingKnowledge).toContain("Pricing is based on the number of bedrooms and bathrooms");
-    expect(pricingKnowledge.indexOf("## Pricing")).toBeLessThan(pricingKnowledge.indexOf("## Services Offered"));
+    expect(moveOutKnowledge).toContain("Move-In / Move-Out Cleaning");
+    expect(teamKnowledge).toContain("Teams of **two cleaners** for most homes");
     for (const prohibitedWritePath of ["getDb()", "bookingFunnelRecords", "sendWidgetLeadCreatedNotifications", "broadcastOpsUpdate", "sendSms", "BookingPaymentCheckout"]) {
       expect(faqProcedure).not.toContain(prohibitedWritePath);
     }

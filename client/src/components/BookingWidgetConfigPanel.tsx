@@ -302,6 +302,9 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
   const funnelRecordRef = useRef<BookingFunnelPublicResult | null>(null);
   const phoneCaptureInFlightRef = useRef(false);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const guideConversationRef = useRef<HTMLDivElement>(null);
+  const guideLatestMessageRef = useRef<HTMLDivElement>(null);
+  const guideBookingBarRef = useRef<HTMLDivElement>(null);
   const activeStageRef = useRef<HTMLDivElement>(null);
   const checkoutRef = useRef<HTMLDivElement>(null);
   const welcomeVideoTriggerRef = useRef<HTMLButtonElement>(null);
@@ -342,6 +345,22 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
       if (step === "confirm") checkoutRef.current?.focus({ preventScroll: true });
     });
   }, [step, currentQuestionIndex, history.length]);
+
+  useEffect(() => {
+    if (mode !== "live" || surface !== "popup" || bookingPanelOpen || guideMessages.length === 0) return;
+    requestAnimationFrame(() => {
+      const container = guideConversationRef.current;
+      const latestMessage = guideLatestMessageRef.current;
+      const bookingBar = guideBookingBarRef.current;
+      if (!container || !latestMessage || !bookingBar) return;
+      const containerRect = container.getBoundingClientRect();
+      const messageRect = latestMessage.getBoundingClientRect();
+      const bookingBarRect = bookingBar.getBoundingClientRect();
+      const visibleBottom = Math.min(containerRect.bottom, bookingBarRect.top) - 12;
+      const delta = messageRect.bottom - visibleBottom;
+      if (delta > 0) container.scrollTo({ top: container.scrollTop + delta, behavior: "smooth" });
+    });
+  }, [bookingPanelOpen, guideMessages.length, mode, surface]);
 
   useEffect(() => {
     if (!welcomeVideoOpen) return;
@@ -1287,7 +1306,7 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
           <button type="button" onClick={closePopup} aria-label="Close booking widget" className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/35 bg-white/15 text-white transition hover:border-white/55 hover:bg-white/25"><X className="h-4 w-4" /></button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
+        <div ref={guideConversationRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
           <div className="mx-auto flex max-w-[420px] flex-col gap-4">
             <div className="rounded-[22px] border border-[#f0d9d3] bg-white/95 p-5 shadow-[0_16px_40px_rgba(68,49,42,0.08)]">
               <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Maids in Black guide</span>
@@ -1299,11 +1318,11 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
               {GUIDE_SHORTCUTS.map((prompt) => <button key={prompt} type="button" onClick={() => submitGuideQuestion(prompt)} disabled={bookingFaqMutation.isPending} className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-3.5 py-2 text-left text-[12px] font-bold text-[#d95740] transition hover:border-[#ff9c89] hover:bg-[#fff1ed] disabled:cursor-wait disabled:opacity-60">{prompt}</button>)}
             </div>
 
-            {guideMessages.length > 0 && <div data-guide-history className="flex flex-col gap-3 pb-2">
-              {guideMessages.map((message) => message.sender === "customer" ? <div key={message.id} className="ml-auto max-w-[84%] rounded-[18px_18px_6px_18px] border border-[#f1e5c6] bg-[#fff4da] px-4 py-3 text-[13px] leading-6 text-[#3a3c41]">{message.text}</div> : <div key={message.id} className="flex items-end gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-[#ffe3dc] text-[#ff684c]"><Sparkles className="h-3.5 w-3.5" /></span><div className="max-w-[82%] rounded-[18px_18px_18px_6px] border border-[#e4e5e7] bg-white px-4 py-3 shadow-[0_3px_9px_rgba(22,20,33,0.03)]"><span className="mb-1 block text-[10px] font-extrabold tracking-wide text-[#ff684c]">Madison</span><p className="whitespace-pre-wrap text-[13px] leading-6 text-[#3a3c41]">{message.text}</p></div></div>)}
+            {guideMessages.length > 0 && <div data-guide-history className="flex flex-col gap-3 pb-24">
+              {guideMessages.map((message, index) => message.sender === "customer" ? <div ref={index === guideMessages.length - 1 ? guideLatestMessageRef : undefined} key={message.id} className="ml-auto max-w-[84%] rounded-[18px_18px_6px_18px] border border-[#f1e5c6] bg-[#fff4da] px-4 py-3 text-[13px] leading-6 text-[#3a3c41]">{message.text}</div> : <div ref={index === guideMessages.length - 1 ? guideLatestMessageRef : undefined} key={message.id} className="flex items-end gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-[#ffe3dc] text-[#ff684c]"><Sparkles className="h-3.5 w-3.5" /></span><div className="max-w-[82%] rounded-[18px_18px_18px_6px] border border-[#e4e5e7] bg-white px-4 py-3 shadow-[0_3px_9px_rgba(22,20,33,0.03)]"><span className="mb-1 block text-[10px] font-extrabold tracking-wide text-[#ff684c]">Madison</span><p className="whitespace-pre-wrap text-[13px] leading-6 text-[#3a3c41]">{message.text}</p></div></div>)}
               {bookingFaqMutation.isPending && <div className="flex items-center gap-2 text-[12px] font-semibold text-[#77798b]"><Loader2 className="h-4 w-4 animate-spin text-[#ff684c]" />Madison is checking that for you…</div>}
             </div>}
-            <div className="sticky bottom-0 z-10 -mx-4 border-t border-[#eadfd9] bg-[linear-gradient(180deg,rgba(250,248,246,0.82),rgba(250,248,246,0.98))] px-4 pb-1 pt-3 sm:-mx-5 sm:px-5">
+            <div ref={guideBookingBarRef} className="sticky bottom-0 z-10 -mx-4 border-t border-[#eadfd9] bg-[linear-gradient(180deg,rgba(250,248,246,0.82),rgba(250,248,246,0.98))] px-4 pb-1 pt-3 sm:-mx-5 sm:px-5">
               <button data-book-home-cleaning type="button" onClick={() => setBookingPanelOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#303238] px-4 py-3.5 text-[13px] font-extrabold text-white shadow-[0_12px_26px_rgba(48,50,56,0.22)] transition hover:bg-[#1f2024] focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2"><Home className="h-4 w-4" />Book Home Cleaning<ArrowRight className="h-4 w-4" /></button>
             </div>
           </div>

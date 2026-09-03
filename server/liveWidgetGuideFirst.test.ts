@@ -30,6 +30,12 @@ describe("installed Maids in Black guide-first widget contract", () => {
     expect(guideSource).toContain("onClick={() => setBookingPanelOpen(true)}");
     expect(guideSource).toContain("sticky bottom-0");
     expect(guideSource.indexOf("data-book-home-cleaning")).toBeLessThan(guideSource.indexOf('aria-label="Ask Madison a question"'));
+    expect(widgetSource).toContain("const guideConversationRef = useRef<HTMLDivElement>(null)");
+    expect(widgetSource).toContain("const guideLatestMessageRef = useRef<HTMLDivElement>(null)");
+    expect(widgetSource).toContain("const guideBookingBarRef = useRef<HTMLDivElement>(null)");
+    expect(widgetSource).toContain("const visibleBottom = Math.min(containerRect.bottom, bookingBarRect.top) - 12");
+    expect(widgetSource).toContain("container.scrollTo({ top: container.scrollTop + delta, behavior: \"smooth\" })");
+    expect(guideSource).toContain("pb-24");
   });
 
   it("opens the existing real booking-page flow inside the live widget panel and returns to the guide", () => {
