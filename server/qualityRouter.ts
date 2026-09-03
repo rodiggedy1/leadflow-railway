@@ -770,6 +770,9 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const result = await getCompletedBookingsForDate(dateStr, { includeAll: true });
+  if (result.error) {
+    throw new Error(`Launch27 sync failed for ${dateStr}: ${result.error}`);
+  }
   const bookings = result.bookings;
   let created = 0;
   let updated = 0;
@@ -1877,6 +1880,12 @@ export const qualityRouter = router({
 
       // Fetch ALL bookings for the date (not just completed — include assigned too)
       const result = await getCompletedBookingsForDate(dateStr, { includeAll: true });
+      if (result.error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Launch27 sync failed: ${result.error}`,
+        });
+      }
       const bookings = result.bookings;
 
       let created = 0;
