@@ -148,8 +148,11 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
       paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started",
       firstCleaningTotalCents: lead.firstCleaningTotalCents,
     }));
-    if (view === "bookings") return [...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows].filter((row) => row.requestedLocalDate === date);
-    return funnelRows.filter((row) => row.status === "lead");
+    const inProgressFunnelRows = funnelRows.filter((row) => row.status === "lead");
+    const scheduledRows = [...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows]
+      .filter((row) => row.requestedLocalDate === date);
+    if (view === "bookings") return [...inProgressFunnelRows, ...scheduledRows];
+    return inProgressFunnelRows;
   }, [bookings, date, funnelLeads, view]);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ const experience = readFileSync(new URL("../client/src/components/BookingExperie
 const popup = readFileSync(new URL("../client/src/components/BookWithAIWidget.tsx", import.meta.url), "utf8");
 const bookPage = readFileSync(new URL("../client/src/pages/Book.tsx", import.meta.url), "utf8");
 const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
+const workspace = readFileSync(new URL("../client/src/components/NativeBookingsWorkspace.tsx", import.meta.url), "utf8");
 
 describe("native booking source contract", () => {
   it("adds only idempotent native tables and no destructive migration", () => {
@@ -43,8 +44,14 @@ describe("native booking source contract", () => {
 
   it("keeps the admin editor inert and uses exact safe result copy", () => {
     expect(widget).toContain('if (mode !== "live"');
-    expect(widget).toContain('if (mode === "editor") setStep("complete")');
-    expect(widget).toContain("Request received");
-    expect(widget).toContain("We received your requested date and time. We’ll confirm the appointment after reviewing availability.");
+    expect(widget).toContain('if (step === "confirm" && mode === "editor")');
+    expect(widget).toContain("This simulation never saves customer details, creates a lead or booking, processes a card");
+  });
+
+  it("shows existing in-progress funnel leads in the default Booking section immediately without hiding them behind the separate Leads tab", () => {
+    expect(workspace).toContain('const inProgressFunnelRows = funnelRows.filter((row) => row.status === "lead")');
+    expect(workspace).toContain('if (view === "bookings") return [...inProgressFunnelRows, ...scheduledRows]');
+    expect(workspace).toContain("return inProgressFunnelRows");
+    expect(workspace).toContain("onBookingFunnelUpdate: refreshBookingAndFunnelQueries");
   });
 });
