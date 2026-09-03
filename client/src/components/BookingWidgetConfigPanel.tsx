@@ -1297,43 +1297,43 @@ export default function BookingWidgetConfigPanel({ savedValue, onSave, mode = "e
     }
 
     return (
-      <div data-widget-guide-shell className="flex h-dvh min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_92%_4%,rgba(255,224,215,0.55),transparent_30%),linear-gradient(145deg,#faf8f6_0%,#f8f4f1_55%,#fff8f5_100%)] text-[#3a3c41]">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#d94f35] bg-[linear-gradient(135deg,#ff684c_0%,#e9573e_100%)] px-4 py-3 text-white">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-white/18 text-[17px] font-extrabold">M</span>
-            <div className="min-w-0"><strong className="block truncate text-[16px] font-extrabold">Madison</strong><span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/75"><i className="h-2 w-2 rounded-full bg-[#23b982] shadow-[0_0_0_4px_rgba(35,185,130,0.13)]" />Here to help</span></div>
+      <div data-widget-guide-shell className="flex h-dvh min-h-0 flex-col overflow-hidden bg-white text-[#1e2530]">
+        <header className="flex min-h-[96px] shrink-0 items-center justify-between gap-4 bg-[radial-gradient(circle_at_70%_50%,rgba(88,56,44,0.25),transparent_30%),linear-gradient(135deg,#11151b,#252b34)] px-5 py-4 text-white sm:min-h-[112px] sm:px-[22px] sm:py-5">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <span className="relative grid h-[58px] w-[58px] shrink-0 place-items-center rounded-full bg-[#05070a] text-[28px] font-bold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">M<i className="absolute bottom-[5px] right-[-1px] h-4 w-4 rounded-full border-[3px] border-[#171b21] bg-[#23c990]" /></span>
+            <div className="min-w-0"><strong className="block truncate text-[22px] font-bold tracking-[-0.02em]">Madison</strong><span className="mt-1.5 block text-[16px] text-white/70">Here to help</span></div>
           </div>
-          <button type="button" onClick={closePopup} aria-label="Close booking widget" className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/35 bg-white/15 text-white transition hover:border-white/55 hover:bg-white/25"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={closePopup} aria-label="Close booking widget" className="grid h-[50px] w-[50px] shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.05] text-[30px] font-extralight text-white transition hover:scale-[1.03] hover:bg-white/10"><X className="h-6 w-6" strokeWidth={1.5} /></button>
         </header>
 
-        <div ref={guideConversationRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
-          <div className="mx-auto flex max-w-[420px] flex-col gap-4">
-            <div className="rounded-[22px] border border-[#f0d9d3] bg-white/95 p-5 shadow-[0_16px_40px_rgba(68,49,42,0.08)]">
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#e9573e]">Maids in Black guide</span>
-              <h1 className="mt-2 font-serif text-[27px] leading-[1.08] text-[#303238]">How can I help with your home today?</h1>
-              <p className="mt-3 text-[13px] leading-6 text-[#666970]">Ask a question about our cleaning services, or start a booking whenever you&apos;re ready.</p>
+        <div ref={guideConversationRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(to_bottom,#ffffff,#fcfcfb)] px-[18px] py-[22px] sm:px-[22px]">
+          <div className="mx-auto flex max-w-[430px] flex-col gap-[18px]">
+            <div className="flex items-end gap-2.5">
+              <span className="mb-[23px] grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#10141a,#282f39)] text-[17px] font-bold text-white">M</span>
+              <div className="max-w-[76%]"><div className="rounded-[22px_22px_22px_8px] border border-[#e5e7eb] bg-white px-[18px] py-4 text-[16px] leading-[1.55] tracking-[-0.01em] shadow-[0_8px_25px_rgba(0,0,0,0.05)]">Hi — I can answer questions about our services, timing, and how booking works. When you&apos;re ready, I&apos;ll open the right booking form.</div><span className="mt-[7px] block text-[12px] text-[#8a919d]">Madison</span></div>
             </div>
 
-            <div className="flex flex-wrap gap-2" aria-label="Common cleaning questions">
-              {GUIDE_SHORTCUTS.map((prompt) => <button key={prompt} type="button" onClick={() => submitGuideQuestion(prompt)} disabled={bookingFaqMutation.isPending} className="rounded-full border border-[#ffd2c8] bg-[#fff8f6] px-3.5 py-2 text-left text-[12px] font-bold text-[#d95740] transition hover:border-[#ff9c89] hover:bg-[#fff1ed] disabled:cursor-wait disabled:opacity-60">{prompt}</button>)}
+            <div className="grid grid-cols-1 gap-2 min-[450px]:grid-cols-3" aria-label="Common cleaning questions">
+              {GUIDE_SHORTCUTS.map((prompt, index) => <button key={prompt} type="button" onClick={() => submitGuideQuestion(prompt)} disabled={bookingFaqMutation.isPending} className="flex min-h-16 items-center gap-2.5 rounded-[14px] border border-[#e5e7eb] bg-white px-3 py-2.5 text-left text-[13px] leading-[1.25] text-[#1e2530] transition hover:-translate-y-px hover:border-[#cfd3d9] hover:shadow-[0_6px_18px_rgba(0,0,0,0.05)] disabled:cursor-wait disabled:opacity-60">{index === 0 ? <CreditCard className="h-[25px] w-[25px] shrink-0 text-[#2a2f38]" strokeWidth={1.7} /> : index === 1 ? <Sparkles className="h-[25px] w-[25px] shrink-0 text-[#2a2f38]" strokeWidth={1.7} /> : <Home className="h-[25px] w-[25px] shrink-0 text-[#2a2f38]" strokeWidth={1.7} />}<span>{prompt}</span></button>)}
             </div>
 
             {guideMessages.length > 0 && <div data-guide-history className="flex flex-col gap-3 pb-24">
-              {guideMessages.map((message, index) => message.sender === "customer" ? <div ref={index === guideMessages.length - 1 ? guideLatestMessageRef : undefined} key={message.id} className="ml-auto max-w-[84%] rounded-[18px_18px_6px_18px] border border-[#f1e5c6] bg-[#fff4da] px-4 py-3 text-[13px] leading-6 text-[#3a3c41]">{message.text}</div> : <div ref={index === guideMessages.length - 1 ? guideLatestMessageRef : undefined} key={message.id} className="flex items-end gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-[#ffe3dc] text-[#ff684c]"><Sparkles className="h-3.5 w-3.5" /></span><div className="max-w-[82%] rounded-[18px_18px_18px_6px] border border-[#e4e5e7] bg-white px-4 py-3 shadow-[0_3px_9px_rgba(22,20,33,0.03)]"><span className="mb-1 block text-[10px] font-extrabold tracking-wide text-[#ff684c]">Madison</span><p className="whitespace-pre-wrap text-[13px] leading-6 text-[#3a3c41]">{message.text}</p></div></div>)}
-              {bookingFaqMutation.isPending && <div className="flex items-center gap-2 text-[12px] font-semibold text-[#77798b]"><Loader2 className="h-4 w-4 animate-spin text-[#ff684c]" />Madison is checking that for you…</div>}
+              {guideMessages.map((message, index) => message.sender === "customer" ? <div ref={index === guideMessages.length - 1 ? guideLatestMessageRef : undefined} key={message.id} className="ml-auto max-w-[76%]"><div className="rounded-[22px_22px_8px_22px] border border-[#f1dfbf] bg-[linear-gradient(180deg,#fffaf0,#fff8ec)] px-[18px] py-4 text-[16px] leading-[1.55] tracking-[-0.01em]">{message.text}</div></div> : <div ref={index === guideMessages.length - 1 ? guideLatestMessageRef : undefined} key={message.id} className="flex items-end gap-2.5"><span className="mb-[23px] grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#10141a,#282f39)] text-[17px] font-bold text-white">M</span><div className="max-w-[76%]"><div className="rounded-[22px_22px_22px_8px] border border-[#e5e7eb] bg-white px-[18px] py-4 text-[16px] leading-[1.55] tracking-[-0.01em] shadow-[0_8px_25px_rgba(0,0,0,0.05)]"><p className="whitespace-pre-wrap">{message.text}</p></div><span className="mt-[7px] block text-[12px] text-[#8a919d]">Madison</span></div></div>)}
+              {bookingFaqMutation.isPending && <div className="flex items-center gap-2 text-[13px] text-[#8a919d]"><Loader2 className="h-4 w-4 animate-spin text-[#171a20]" />Madison is checking that for you…</div>}
             </div>}
-            <div ref={guideBookingBarRef} className="sticky bottom-0 z-10 -mx-4 border-t border-[#eadfd9] bg-[linear-gradient(180deg,rgba(250,248,246,0.82),rgba(250,248,246,0.98))] px-4 pb-1 pt-3 sm:-mx-5 sm:px-5">
-              <button data-book-home-cleaning type="button" onClick={() => setBookingPanelOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#303238] px-4 py-3.5 text-[13px] font-extrabold text-white shadow-[0_12px_26px_rgba(48,50,56,0.22)] transition hover:bg-[#1f2024] focus:outline-none focus:ring-2 focus:ring-[#ff684c] focus:ring-offset-2"><Home className="h-4 w-4" />Book Home Cleaning<ArrowRight className="h-4 w-4" /></button>
+            <div ref={guideBookingBarRef} className="sticky bottom-0 z-10 -mx-[18px] border-t border-[#ececec] bg-white/95 px-[18px] pb-1 pt-4 backdrop-blur-sm sm:-mx-[22px] sm:px-[22px]">
+              <button data-book-home-cleaning type="button" onClick={() => setBookingPanelOpen(true)} className="relative flex h-[62px] w-full items-center justify-center gap-3 rounded-[18px] bg-[linear-gradient(135deg,#161a20,#292e36)] px-4 text-[17px] font-bold text-white transition hover:-translate-y-px hover:shadow-[0_10px_22px_rgba(0,0,0,0.14)] focus:outline-none focus:ring-2 focus:ring-[#171a20] focus:ring-offset-2"><CalendarDays className="h-[21px] w-[21px]" />Book Home Cleaning<ArrowRight className="absolute right-[22px] h-[26px] w-[26px]" strokeWidth={1.4} /></button>
             </div>
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-[rgba(35,35,40,0.08)] bg-[rgba(255,253,252,0.97)] px-4 pb-4 pt-3 shadow-[0_-8px_24px_rgba(45,31,26,0.035)] sm:px-5">
-          <form onSubmit={(event) => { event.preventDefault(); submitGuideQuestion(); }} className="flex items-center gap-2 rounded-2xl border border-[#e4e5e7] bg-white p-1.5 pl-3 shadow-[0_5px_18px_rgba(29,25,42,0.04)] focus-within:border-[#ff684c] focus-within:ring-4 focus-within:ring-[#ff684c]/10">
-            <MessageCircle className="h-4 w-4 shrink-0 text-[#a1a2ad]" />
-            <Input value={guideQuestion} onChange={(event) => setGuideQuestion(event.target.value)} disabled={bookingFaqMutation.isPending} placeholder="Ask Madison a question…" aria-label="Ask Madison a question" className="h-11 flex-1 border-0 bg-transparent px-1 text-[16px] shadow-none focus-visible:ring-0 disabled:cursor-wait sm:h-10 sm:text-[12px]" />
-            <button type="submit" aria-label="Send question to Madison" disabled={bookingFaqMutation.isPending || !guideQuestion.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ff684c] text-white transition hover:bg-[#e9573e] disabled:bg-[#f1c9c1] disabled:text-white/80 sm:h-10 sm:w-10"><Send className="h-4 w-4" /></button>
+        <div className="shrink-0 border-t border-[#ececec] bg-white px-[18px] pb-[14px] pt-[14px] sm:px-[18px]">
+          <form onSubmit={(event) => { event.preventDefault(); submitGuideQuestion(); }} className="flex h-[66px] items-center gap-2.5 rounded-[22px] border border-[#dfe2e6] bg-white p-2 pl-4 shadow-[0_4px_18px_rgba(0,0,0,0.03)] focus-within:border-[#b8bec6]">
+            <MessageCircle className="h-[25px] w-[25px] shrink-0 text-[#9aa1ad]" strokeWidth={1.7} />
+            <Input value={guideQuestion} onChange={(event) => setGuideQuestion(event.target.value)} disabled={bookingFaqMutation.isPending} placeholder="Ask Madison a question..." aria-label="Ask Madison a question" className="h-full flex-1 border-0 bg-transparent px-0 text-[16px] text-[#1e2530] shadow-none focus-visible:ring-0 disabled:cursor-wait" />
+            <button type="submit" aria-label="Send question to Madison" disabled={bookingFaqMutation.isPending || !guideQuestion.trim()} className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#11151b] text-white transition hover:scale-[1.04] hover:bg-[#242a33] disabled:cursor-not-allowed disabled:bg-[#aeb3bb]"><Send className="h-[22px] w-[22px]" strokeWidth={1.7} /></button>
           </form>
+          <p className="mt-2.5 text-center text-[11px] text-[#9a9fa8]"><Lock className="mr-1 inline h-[13px] w-[13px] align-[-2px]" />Your information is safe and never shared.</p>
         </div>
       </div>
     );
