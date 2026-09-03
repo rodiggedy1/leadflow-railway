@@ -35,6 +35,18 @@ describe("booking FAQ-only question handling", () => {
     expect(routerSource).not.toContain("getApprovedBookingFaqAnswer");
   });
 
+  it("returns the approved pricing passage for the reported guide question without any customer-write path", async () => {
+    const pricingKnowledge = await retrieveKnowledge("How does pricing work?");
+    const faqProcedure = routerSource.slice(routerSource.indexOf("answerFaq:"), routerSource.indexOf("begin: publicProcedure"));
+
+    expect(pricingKnowledge).toContain("## Pricing");
+    expect(pricingKnowledge).toContain("Pricing is based on the number of bedrooms and bathrooms");
+    expect(pricingKnowledge.indexOf("## Pricing")).toBeLessThan(pricingKnowledge.indexOf("## Services Offered"));
+    for (const prohibitedWritePath of ["getDb()", "bookingFunnelRecords", "sendWidgetLeadCreatedNotifications", "broadcastOpsUpdate", "sendSms", "BookingPaymentCheckout"]) {
+      expect(faqProcedure).not.toContain(prohibitedWritePath);
+    }
+  });
+
   it("appends an FAQ question and answer without advancing the current booking stage or changing collected input", () => {
     const composerSource = widgetSource.slice(widgetSource.indexOf("const submitComposer = () =>"), widgetSource.indexOf("const handleSave = async"));
     expect(widgetSource).toContain("trpc.bookingFunnel.answerFaq.useMutation()");

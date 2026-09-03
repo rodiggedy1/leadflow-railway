@@ -15,6 +15,7 @@ const QUESTION_STOP_WORDS = new Set([
   "take", "that", "their", "there", "these", "this", "what", "when",
   "where", "which", "will", "with", "would", "your",
 ]);
+const MAX_RETRIEVED_PASSAGE_CHARS = 700;
 
 // KB sections extracted by heading
 const KB_SECTIONS = parseKbSections(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
@@ -96,8 +97,10 @@ export async function retrieveKnowledge(question: string): Promise<string> {
   const passages = KB_SECTIONS.flatMap(extractPassages);
   const scored = passages.map((passage) => {
     const overlap = questionKeywords.filter((kw) => passage.keywords.includes(kw)).length;
-    return { passage, score: overlap };
-  }).sort((a, b) => b.score - a.score);
+    const headingKeywords = extractKeywords(passage.heading);
+    const headingOverlap = questionKeywords.filter((kw) => headingKeywords.includes(kw)).length;
+    return { passage, score: overlap, headingOverlap };
+  }).sort((a, b) => b.headingOverlap - a.headingOverlap || b.score - a.score);
 
   // Use at most two compact approved passages so both the direct FAQ wording
   // and the governing factual section remain visible to the answer model.
@@ -112,7 +115,7 @@ export async function retrieveKnowledge(question: string): Promise<string> {
   }
 
   return relevant
-    .map((r) => `## ${r.passage.heading}\n${r.passage.content}`)
+    .map((r) => `## ${r.passage.heading}\n${r.passage.content.slice(0, MAX_RETRIEVED_PASSAGE_CHARS)}`)
     .join("\n\n")
     .slice(0, 1600);
 }
