@@ -187,7 +187,18 @@ export const bookingPaymentRouter = router({
       const stripe = getStripeClient();
 
       if (target.profile.paymentStatus === "card_on_file") {
-        return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const };
+        let portalAccessCode: string | null = null;
+        try {
+          portalAccessCode = await createCustomerPortalHandoff(db, {
+            customerName: record.customerName,
+            customerPhone: record.customerPhone,
+            customerEmail: record.customerEmail,
+          });
+        } catch (error) {
+          // Portal access is additive. An existing verified card result must remain successful if handoff creation fails.
+          console.error("[BookingPaymentRouter] Customer portal handoff creation failed:", error);
+        }
+        return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const, portalAccessCode };
       }
       if (target.profile.stripeSetupIntentId) {
         const existing = await stripe.setupIntents.retrieve(target.profile.stripeSetupIntentId);

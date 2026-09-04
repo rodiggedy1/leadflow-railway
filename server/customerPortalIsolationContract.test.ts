@@ -30,6 +30,8 @@ describe("customer portal isolation", () => {
     expect(payment.lastIndexOf("createCustomerPortalHandoff(")).toBeGreaterThan(payment.indexOf("await db.transaction"));
     expect(payment).toContain("Customer portal handoff creation failed");
     expect(payment).toContain("portalAccessCode");
+    expect(payment).toContain('if (target.profile.paymentStatus === "card_on_file")');
+    expect(payment).toContain('return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const, portalAccessCode }');
     expect(bookingPage).toContain("setCardOnFile(true); if (!result.portalAccessCode) return;");
     expect(widget).toContain("event.data.type === 'mib-booking-widget-portal'");
     expect(widget).toContain("event.data.type !== 'mib-booking-widget-close'");
