@@ -50,7 +50,7 @@ describe("native booking source contract", () => {
 
   it("shows existing in-progress funnel leads in the default Booking section immediately without hiding them behind the separate Leads tab", () => {
     expect(workspace).toContain('const inProgressFunnelRows = funnelRows.filter((row) => row.status === "lead")');
-    expect(workspace).toContain('if (view === "bookings") return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows]');
+    expect(workspace).toContain('if (view === "bookings") return [...inProgressFunnelRows, ...scheduledRows]');
     expect(workspace).toContain("return inProgressFunnelRows");
     expect(workspace).toContain("onBookingFunnelUpdate: refreshBookingAndFunnelQueries");
   });
