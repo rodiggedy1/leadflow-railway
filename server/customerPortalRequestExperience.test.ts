@@ -46,4 +46,23 @@ describe("customer portal service request experience", () => {
     expect(router).toContain("innerJoin(bookings, eq(bookingPaymentProfiles.bookingId, bookings.id))");
     expect(router).toContain('profile.paymentStatus === "card_on_file" && Boolean(profile.cardLast4)');
   });
+
+  it("opens home cleaning as a prefilled in-portal rebook without replacing its existing booking lifecycle", async () => {
+    const [portal, bookingPage] = await Promise.all([
+      readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
+      readFile(path.resolve(root, "client/src/pages/BookNow.tsx"), "utf8"),
+    ]);
+    expect(portal).toContain('const [showCleaningRebook, setShowCleaningRebook] = useState(false);');
+    expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning');
+    expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><div className="mib-portal-service-icon"><Home /></div>');
+    expect(portal).not.toContain('<a className="mib-portal-primary" href="/book-now"><Plus /> Book home cleaning');
+    expect(portal).toContain('<BookNow portalRebook={{ customerName: portal.data.account.name, phone: portal.data.account.phone, email: portal.data.account.email, address: homeAddress }} onClose={closeCleaningRebook} />');
+    expect(bookingPage).toContain('portalRebook?: { customerName: string; phone: string; email: string | null; address: string };');
+    expect(bookingPage).toContain('const [address, setAddress] = useState(portalRebook?.address ?? "");');
+    expect(bookingPage).toContain('Use a different address');
+    expect(bookingPage).toContain('Use my home-cleaning address');
+    expect(bookingPage).toContain('source: embedded ? "widget-popup" : "book-page"');
+    expect(bookingPage).toContain('if (portalRebook) return;');
+    expect(bookingPage).toContain('window.location.assign("/my-home")');
+  });
 });

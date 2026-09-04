@@ -5,6 +5,7 @@ import { CUSTOMER_PORTAL_SERVICES, type CustomerPortalService } from "@shared/cu
 import { calculateCustomerPortalEstimate } from "@shared/customerPortalPricing";
 import { CustomerPortalAppointmentCalendar } from "@/components/CustomerPortalAppointmentCalendar";
 import { customerPortalAppointmentWindows, formatCustomerPortalDate, formatCustomerPortalDateKey, formatCustomerPortalTime, type CustomerPortalAppointmentWindow } from "@/lib/customerPortalAppointment";
+import BookNow from "./BookNow";
 import "./customer-portal.css";
 import "./customer-portal-request-upgrades.css";
 
@@ -70,6 +71,8 @@ function ServiceRequestForm({ service, homeAddress, onClose }: { service: Custom
 export default function CustomerPortal() {
   const [selectedService, setSelectedService] = useState<CustomerPortalService | null>(null);
   const [showAllServices, setShowAllServices] = useState(false);
+  const [showCleaningRebook, setShowCleaningRebook] = useState(false);
+  const utils = trpc.useUtils();
   const portal = trpc.customerPortal.me.useQuery();
 
   const featuredServices = useMemo(() => FEATURED_SERVICE_IDS.map(id => CUSTOMER_PORTAL_SERVICES.find(service => service.id === id)).filter((service): service is CustomerPortalService => Boolean(service)), []);
@@ -84,12 +87,13 @@ export default function CustomerPortal() {
   const customerName = portal.data.account.name.split(" ")[0];
   const homeAddress = portal.data.cleanings.find(cleaning => Boolean(cleaning.address))?.address ?? "";
   const savedCardLabel = portal.data.savedCard?.last4 ? `${portal.data.savedCard.brand ? `${portal.data.savedCard.brand} ` : "Card "}ending in ${portal.data.savedCard.last4}` : "No saved card on file";
+  const closeCleaningRebook = () => { setShowCleaningRebook(false); void utils.customerPortal.me.invalidate(); };
 
   return <main className="mib-portal-shell">
     <header className="mib-portal-topbar"><a href="/my-home"><span className="mib-portal-mark">M</span> Maids in Black</a><b>{customerName}</b></header>
     <section className="mib-portal-hero">
       <div><small>MY HOME · MAIDS IN BLACK</small><h1>Welcome back, {customerName}.</h1><p>Your home requests, timing, and updates are all here.</p></div>
-      <a className="mib-portal-primary" href="/book-now"><Plus /> Book home cleaning</a>
+      <button className="mib-portal-primary" type="button" onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning</button>
     </section>
     <section className="mib-portal-stats" aria-label="Account summary">
       <article><ClipboardList /><div><span>Active bookings</span><strong>{activeCleanings.length}</strong></div></article>
@@ -102,7 +106,7 @@ export default function CustomerPortal() {
         <button className="mib-portal-text-action" type="button" onClick={() => setShowAllServices(current => !current)} aria-expanded={showAllServices}>{showAllServices ? "Show fewer services" : "View all services"} <ArrowRight /></button>
       </div>
       <div className="mib-portal-services">
-        <a className="mib-portal-service mib-portal-service-cleaning" href="/book-now"><div className="mib-portal-service-icon"><Home /></div><div><strong>Home cleaning</strong><p>One-time or recurring</p><em>Book cleaning <ArrowRight /></em></div></a>
+        <button className="mib-portal-service mib-portal-service-cleaning" type="button" onClick={() => setShowCleaningRebook(true)}><div className="mib-portal-service-icon"><Home /></div><div><strong>Home cleaning</strong><p>One-time or recurring</p><em>Book cleaning <ArrowRight /></em></div></button>
         {visibleServices.map(service => {
           const Icon = SERVICE_ICONS[service.id] ?? Wrench;
           return <button className="mib-portal-service" type="button" key={service.id} onClick={() => setSelectedService(service)}><div className="mib-portal-service-icon"><Icon /></div><div><strong>{service.name}</strong><p>{service.detail}</p><span className="block mb-1 text-[11px] font-bold text-[#202020]">Starting at {formatCurrency(service.startingPrice * 100)}</span><em>Start request <ArrowRight /></em></div></button>;
@@ -123,5 +127,6 @@ export default function CustomerPortal() {
       </div>
     </section>
     {selectedService && <ServiceRequestForm service={selectedService} homeAddress={homeAddress} onClose={() => setSelectedService(null)} />}
+    {showCleaningRebook && <div className="mib-portal-rebook-overlay" role="dialog" aria-modal="true" aria-label="Rebook home cleaning"><BookNow portalRebook={{ customerName: portal.data.account.name, phone: portal.data.account.phone, email: portal.data.account.email, address: homeAddress }} onClose={closeCleaningRebook} /></div>}
   </main>;
 }
