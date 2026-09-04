@@ -27,12 +27,14 @@ describe("customer portal isolation", () => {
     expect(source).toContain(">Start request <ArrowRight /></em>");
   });
 
-  it("uses the established Maids in Black warm-coral palette without changing portal behavior", async () => {
+  it("uses a neutral Maids in Black portal surface with coral reserved for precise accents", async () => {
     const css = await readFile(path.resolve(root, "client/src/pages/customer-portal.css"), "utf8");
     expect(css).toContain("--mib-coral:#e8603c");
     expect(css).toContain("--mib-coral-dark:#c94a28");
-    expect(css).toContain("--mib-warm-bg:#fff8f5");
-    expect(css).toContain("--mib-peach:#fff0ec");
+    expect(css).toContain("--mib-warm-bg:#faf9f6");
+    expect(css).toContain("--mib-border:#e9e6e0");
+    expect(css).toContain(".mib-portal-stats article{display:flex");
+    expect(css).toContain("background:#fff;box-shadow");
     expect(css).not.toContain("#173829");
     expect(css).not.toContain("#41654c");
   });
