@@ -19,7 +19,6 @@
 import cron from "node-cron";
 import { runNurtureEnrollment, runNurtureSend } from "./nurtureCron";
 import { runNightlySync } from "./cronSync";
-import { runSyncTodayJobs } from "./qualityRouter";
 import { runSilenceFollowUp, runScheduledFollowUp, runFollowUpDueAlerts } from "./followUpCron";
 import { runFollowUpReminders } from "./followUpsRouter";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
@@ -331,20 +330,9 @@ export function startInternalCron(): void {
       console.error("[InternalCron] TomorrowSync failed:", msg);
       await recordHeartbeat("tomorrow-sync", `error: ${msg}`, false);
     }
-    // Also sync cleanerJobs for tomorrow so the integrity check runs and alerts on any mismatch
-    try {
-      const qResult = await runSyncTodayJobs(tomorrowDate);
-      const qSummary = `date: ${qResult.date}, created: ${qResult.jobsCreated}, updated: ${qResult.jobsUpdated}, mismatches: ${qResult.mismatches.length}`;
-      console.log(`[InternalCron] TomorrowSync (cleanerJobs) — ${qSummary}`);
-      if (qResult.mismatches.length > 0) {
-        console.warn(`[InternalCron] TomorrowSync mismatches: ${qResult.mismatches.join(" | ")}`);
-      }
-      await recordHeartbeat("tomorrow-sync-jobs", qSummary.slice(0, 500), true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] TomorrowSync (cleanerJobs) failed:", msg);
-      await recordHeartbeat("tomorrow-sync-jobs", `error: ${msg}`, false);
-    }
+    // Automatic cleanerJobs synchronization is paused by request. The manual sync
+    // procedure remains available; this avoids stale cleanup deleting jobs when
+    // Launch27 returns an empty result for a scheduled run.
   }, { timezone: "America/New_York" });
 
   // ── Today's schedule sync: every 60 min, 6 AM–8 PM ET ──────────────────────
@@ -370,24 +358,9 @@ export function startInternalCron(): void {
       console.error("[InternalCron] TodaySync failed:", msg);
       await recordHeartbeat("today-sync", `error: ${msg}`, false);
     }
-    // Sync cleanerJobs (Day Board) — picks up new bookings and status changes mid-day
-    try {
-      const qResult = await runSyncTodayJobs(todayDate);
-      const qSummary = `date: ${qResult.date}, created: ${qResult.jobsCreated}, updated: ${qResult.jobsUpdated}, mismatches: ${qResult.mismatches.length}`;
-      console.log(`[InternalCron] TodaySync (cleanerJobs) — ${qSummary}`);
-      if (qResult.mismatches.length > 0) {
-        console.warn(`[InternalCron] Sync mismatches detected: ${qResult.mismatches.join(" | ")}`);
-      }
-      if (qResult.errors.length > 0) {
-        console.warn(`[InternalCron] Sync errors: ${qResult.errors.join(" | ")}`);
-      }
-      const mismatchNote = qResult.mismatches.length > 0 ? ` | MISMATCHES: ${qResult.mismatches.join("; ")}` : "";
-      await recordHeartbeat("today-sync-jobs", (qSummary + mismatchNote).slice(0, 500), qResult.jobsCreated > 0 || qResult.jobsUpdated > 0);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] TodaySync (cleanerJobs) failed:", msg);
-      await recordHeartbeat("today-sync-jobs", `error: ${msg}`, false);
-    }
+    // Automatic cleanerJobs synchronization is paused by request. The manual sync
+    // procedure remains available; this avoids stale cleanup deleting jobs when
+    // Launch27 returns an empty result for a scheduled run.
   }, { timezone: "America/New_York" });
 
   // ── Always-On batch generation: 10 AM ET Mon–Sat ───────────────────────────

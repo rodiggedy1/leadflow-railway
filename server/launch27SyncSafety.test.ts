@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("./qualityRouter.ts", import.meta.url), "utf8");
+const internalCronSource = readFileSync(new URL("./internalCron.ts", import.meta.url), "utf8");
 
 function sliceBetween(startMarker: string, endMarker: string) {
   const start = source.indexOf(startMarker);
@@ -46,5 +47,11 @@ describe("Launch27 cleaner-job sync safety", () => {
 
   it("does not change the valid empty-response path", () => {
     expect(source).not.toContain("if (result.bookings.length === 0) {\n        throw");
+  });
+
+  it("does not run the destructive cleaner-job sync from scheduled cron jobs", () => {
+    expect(internalCronSource).not.toContain("runSyncTodayJobs(");
+    expect(internalCronSource).toContain("Automatic cleanerJobs synchronization is paused by request.");
+    expect(source).toContain("syncTodayJobs: agentProcedure");
   });
 });
