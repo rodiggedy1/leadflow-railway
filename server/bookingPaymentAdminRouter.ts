@@ -10,6 +10,7 @@ import { TRPCError } from "@trpc/server";
 
 const confirmedBookingInput = z.object({ bookingId: z.number().int().positive(), confirmed: z.literal(true) });
 const confirmedPortalRequestInput = z.object({ requestId: z.number().int().positive(), confirmed: z.literal(true) });
+type PortalRequest = typeof customerPortalServiceRequests.$inferSelect;
 
 async function paymentTargetOrThrow(bookingId: number) {
   const db = await getDb();
@@ -38,6 +39,20 @@ async function portalRequestPaymentTargetOrThrow(requestId: number) {
   return { db, request };
 }
 
+async function portalRequestStripeCardOrThrow(request: PortalRequest) {
+  const stripe = getStripeClient();
+  const paymentMethod = await stripe.paymentMethods.retrieve(request.stripePaymentMethodId!);
+  if (paymentMethod.type !== "card" || !paymentMethod.card || !paymentMethod.customer || paymentMethod.card.last4 !== request.paymentLast4) {
+    throw new TRPCError({ code: "CONFLICT", message: "The selected request card is no longer available for charging." });
+  }
+  return { stripe, customerId: typeof paymentMethod.customer === "string" ? paymentMethod.customer : paymentMethod.customer.id };
+}
+
+async function activePortalRequestHold(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, requestId: number) {
+  const [authorization] = await db.select().from(paymentAuthorizations).where(and(eq(paymentAuthorizations.customerPortalServiceRequestId, requestId), eq(paymentAuthorizations.status, "authorized"))).orderBy(desc(paymentAuthorizations.createdAt)).limit(1);
+  return authorization ?? null;
+}
+
 export const bookingPaymentAdminRouter = router({
   getForBooking: agentProcedure
     .input(z.object({ bookingId: z.number().int().positive() }))
@@ -54,13 +69,15 @@ export const bookingPaymentAdminRouter = router({
   getForPortalRequest: agentProcedure
     .input(z.object({ requestId: z.number().int().positive() }))
     .query(async ({ input }) => {
-      const { request } = await portalRequestPaymentTargetOrThrow(input.requestId);
+      const { db, request } = await portalRequestPaymentTargetOrThrow(input.requestId);
+      const activeHold = await activePortalRequestHold(db, request.id);
       return {
         requestId: request.id,
         paymentStatus: request.paymentChargedAt ? "captured" as const : "card_on_file" as const,
         cardBrand: request.paymentBrand,
         cardLast4: request.paymentLast4,
         paymentChargedAt: request.paymentChargedAt,
+        activeHold: activeHold ? { authorizationId: activeHold.id, captureBefore: activeHold.captureBefore } : null,
       };
     }),
 
@@ -217,6 +234,97 @@ export const bookingPaymentAdminRouter = router({
       return { success: true, paymentStatus: "captured" as const };
     }),
 
+  placePortalRequestHold: agentProcedure
+    .input(confirmedPortalRequestInput)
+    .mutation(async ({ input, ctx }) => {
+      const { db, request } = await portalRequestPaymentTargetOrThrow(input.requestId);
+      if (request.paymentChargedAt || request.stripePaymentIntentId) throw new TRPCError({ code: "CONFLICT", message: "This service request has already been charged." });
+      if (await activePortalRequestHold(db, request.id)) throw new TRPCError({ code: "CONFLICT", message: "An active hold already exists for this service request." });
+      const priorAttempts = await db.select({ id: paymentAuthorizations.id }).from(paymentAuthorizations).where(eq(paymentAuthorizations.customerPortalServiceRequestId, request.id));
+      const { stripe, customerId } = await portalRequestStripeCardOrThrow(request);
+      const agentName = ctx.agent?.agentName ?? "admin";
+      let intent: Stripe.PaymentIntent;
+      try {
+        intent = await stripe.paymentIntents.create({
+          amount: request.estimatedTotalCents,
+          currency: "usd",
+          customer: customerId,
+          payment_method: request.stripePaymentMethodId,
+          capture_method: "manual",
+          confirm: true,
+          off_session: true,
+          description: `LeadFlow service request ${request.publicRequestNumber}`,
+          metadata: { source: "customer_portal_service_request", customerPortalServiceRequestId: String(request.id), operation: "authorization", createdBy: agentName },
+        }, { idempotencyKey: `leadflow:portal-request:${request.id}:authorization:v${priorAttempts.length + 1}` });
+      } catch (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Stripe hold failed: ${stripeFailureMessage(error, "Stripe hold failed")}` });
+      }
+      if (intent.status !== "requires_capture") throw new TRPCError({ code: "CONFLICT", message: "Stripe did not authorize this hold." });
+      const now = Date.now();
+      const captureBefore = typeof intent.payment_method_options?.card?.capture_before === "number" ? intent.payment_method_options.card.capture_before * 1000 : null;
+      const result = await db.insert(paymentAuthorizations).values({
+        cleanerJobId: null,
+        bookingPaymentProfileId: null,
+        customerPortalServiceRequestId: request.id,
+        jobLabel: `Service request ${request.publicRequestNumber}`,
+        customerPhone: request.customerPhone,
+        customerName: request.customerName,
+        stripeCustomerId: customerId,
+        stripePaymentMethodId: request.stripePaymentMethodId,
+        stripePaymentIntentId: intent.id,
+        amountCents: request.estimatedTotalCents,
+        currency: "usd",
+        operation: "authorization",
+        status: "authorized",
+        errorMessage: null,
+        createdBy: agentName,
+        authorizedAt: now,
+        captureBefore,
+        notes: null,
+      });
+      return { authorizationId: Number((result as { insertId?: number }).insertId), paymentStatus: "authorized" as const, captureBefore };
+    }),
+
+  capturePortalRequestHold: agentProcedure
+    .input(confirmedPortalRequestInput)
+    .mutation(async ({ input, ctx }) => {
+      const { db, request } = await portalRequestPaymentTargetOrThrow(input.requestId);
+      const authorization = await activePortalRequestHold(db, request.id);
+      if (!authorization?.stripePaymentIntentId) throw new TRPCError({ code: "BAD_REQUEST", message: "No active service request hold is available to capture." });
+      const stripe = getStripeClient();
+      const agentName = ctx.agent?.agentName ?? "admin";
+      try {
+        await stripe.paymentIntents.capture(authorization.stripePaymentIntentId, { amount_to_capture: request.estimatedTotalCents });
+      } catch (error) {
+        const message = stripeFailureMessage(error, "Stripe capture failed");
+        await db.update(paymentAuthorizations).set({ status: "failed", errorMessage: message, actionBy: agentName }).where(eq(paymentAuthorizations.id, authorization.id));
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Stripe capture failed: ${message}` });
+      }
+      const paymentChargedAt = Date.now();
+      await db.transaction(async (tx) => {
+        await tx.update(paymentAuthorizations).set({ status: "captured", capturedAt: paymentChargedAt, actionBy: agentName, amountCents: request.estimatedTotalCents }).where(eq(paymentAuthorizations.id, authorization.id));
+        await tx.update(customerPortalServiceRequests).set({ stripePaymentIntentId: authorization.stripePaymentIntentId, paymentChargedAt, updatedAt: new Date() }).where(eq(customerPortalServiceRequests.id, request.id));
+      });
+      return { success: true, paymentStatus: "captured" as const };
+    }),
+
+  cancelPortalRequestHold: agentProcedure
+    .input(confirmedPortalRequestInput)
+    .mutation(async ({ input, ctx }) => {
+      const { db, request } = await portalRequestPaymentTargetOrThrow(input.requestId);
+      const authorization = await activePortalRequestHold(db, request.id);
+      if (!authorization?.stripePaymentIntentId) throw new TRPCError({ code: "BAD_REQUEST", message: "No active service request hold is available to cancel." });
+      const stripe = getStripeClient();
+      const agentName = ctx.agent?.agentName ?? "admin";
+      try {
+        await stripe.paymentIntents.cancel(authorization.stripePaymentIntentId);
+      } catch (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Stripe cancellation failed: ${stripeFailureMessage(error, "Unknown error")}` });
+      }
+      await db.update(paymentAuthorizations).set({ status: "cancelled", cancelledAt: Date.now(), actionBy: agentName }).where(eq(paymentAuthorizations.id, authorization.id));
+      return { success: true, paymentStatus: "card_on_file" as const };
+    }),
+
   chargePortalRequestSavedCard: agentProcedure
     .input(confirmedPortalRequestInput)
     .mutation(async ({ input, ctx }) => {
@@ -224,12 +332,9 @@ export const bookingPaymentAdminRouter = router({
       if (request.paymentChargedAt || request.stripePaymentIntentId) {
         throw new TRPCError({ code: "CONFLICT", message: "This service request has already been charged." });
       }
-      const stripe = getStripeClient();
-      const paymentMethod = await stripe.paymentMethods.retrieve(request.stripePaymentMethodId!);
-      if (paymentMethod.type !== "card" || !paymentMethod.card || !paymentMethod.customer || paymentMethod.card.last4 !== request.paymentLast4) {
-        throw new TRPCError({ code: "CONFLICT", message: "The selected request card is no longer available for charging." });
-      }
-      const customerId = typeof paymentMethod.customer === "string" ? paymentMethod.customer : paymentMethod.customer.id;
+      if (await activePortalRequestHold(db, request.id)) throw new TRPCError({ code: "CONFLICT", message: "Capture or cancel the active hold before charging this service request." });
+      const priorAttempts = await db.select({ id: paymentAuthorizations.id }).from(paymentAuthorizations).where(eq(paymentAuthorizations.customerPortalServiceRequestId, request.id));
+      const { stripe, customerId } = await portalRequestStripeCardOrThrow(request);
       const agentName = ctx.agent?.agentName ?? "admin";
       let intent: Stripe.PaymentIntent;
       try {
@@ -242,7 +347,7 @@ export const bookingPaymentAdminRouter = router({
           off_session: true,
           description: `LeadFlow service request ${request.publicRequestNumber}`,
           metadata: { source: "customer_portal_service_request", customerPortalServiceRequestId: String(request.id), operation: "direct_charge", createdBy: agentName },
-        }, { idempotencyKey: `leadflow:portal-request:${request.id}:direct_charge` });
+        }, { idempotencyKey: `leadflow:portal-request:${request.id}:direct_charge:v${priorAttempts.length + 1}` });
       } catch (error) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Stripe charge failed: ${stripeFailureMessage(error, "Stripe charge failed")}` });
       }
@@ -250,7 +355,30 @@ export const bookingPaymentAdminRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "Stripe requires further action before this card can be charged." });
       }
       const paymentChargedAt = Date.now();
-      await db.update(customerPortalServiceRequests).set({ stripePaymentIntentId: intent.id, paymentChargedAt, updatedAt: new Date() }).where(eq(customerPortalServiceRequests.id, request.id));
+      await db.transaction(async (tx) => {
+        await tx.insert(paymentAuthorizations).values({
+          cleanerJobId: null,
+          bookingPaymentProfileId: null,
+          customerPortalServiceRequestId: request.id,
+          jobLabel: `Service request ${request.publicRequestNumber}`,
+          customerPhone: request.customerPhone,
+          customerName: request.customerName,
+          stripeCustomerId: customerId,
+          stripePaymentMethodId: request.stripePaymentMethodId,
+          stripePaymentIntentId: intent.id,
+          amountCents: request.estimatedTotalCents,
+          currency: "usd",
+          operation: "direct_charge",
+          status: "captured",
+          errorMessage: null,
+          createdBy: agentName,
+          actionBy: agentName,
+          authorizedAt: paymentChargedAt,
+          capturedAt: paymentChargedAt,
+          notes: null,
+        });
+        await tx.update(customerPortalServiceRequests).set({ stripePaymentIntentId: intent.id, paymentChargedAt, updatedAt: new Date() }).where(eq(customerPortalServiceRequests.id, request.id));
+      });
       return { success: true, paymentStatus: "captured" as const, paymentChargedAt };
     }),
 });

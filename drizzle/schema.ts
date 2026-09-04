@@ -3208,6 +3208,7 @@ export const paymentAuthorizations = mysqlTable("payment_authorizations", {
   id: int("id").autoincrement().primaryKey(),
   cleanerJobId: int("cleanerJobId"),
   bookingPaymentProfileId: int("bookingPaymentProfileId"),
+  customerPortalServiceRequestId: int("customerPortalServiceRequestId"),
   jobLabel: varchar("jobLabel", { length: 255 }),
   customerPhone: varchar("customerPhone", { length: 30 }).notNull(),
   customerName: varchar("customerName", { length: 255 }),
