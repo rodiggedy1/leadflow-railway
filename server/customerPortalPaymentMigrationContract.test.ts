@@ -14,6 +14,7 @@ describe("customer portal request payment snapshot migration", () => {
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS `paymentBrand`");
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS `paymentLast4`");
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS `stripePaymentMethodId`");
+    expect(sql.match(/--> statement-breakpoint/g)).toHaveLength(2);
     expect(sql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/i);
   });
 });
