@@ -12,6 +12,7 @@ import {
 } from "../shared/bookingPayment";
 import { NATIVE_BOOKING_PRICING_VERSION, type PrepareBookingInput } from "../shared/booking";
 import { router, publicProcedure } from "./_core/trpc";
+import type { TrpcContext } from "./_core/context";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -20,7 +21,10 @@ import { buildPreparedNativeBooking, NativeBookingInputError } from "./bookingsS
 import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingPaymentService";
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
-import { createCustomerPortalHandoff } from "./customerPortalService";
+import { createCustomerPortalHandoff, ensureCustomerPortalAccount } from "./customerPortalService";
+import { signCustomerPortalSession } from "./_core/customerPortalAuth";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { CUSTOMER_PORTAL_COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { TRPCError } from "@trpc/server";
 
 function asBookingInput(record: typeof bookingFunnelRecords.$inferSelect): PrepareBookingInput {
@@ -169,6 +173,34 @@ function verifiedFunnelTokenOrThrow(record: typeof bookingFunnelRecords.$inferSe
   }
 }
 
+async function establishDirectPortalSession(
+  ctx: Pick<TrpcContext, "req" | "res">,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  record: typeof bookingFunnelRecords.$inferSelect,
+): Promise<boolean> {
+  if (record.source !== "book-page") return false;
+  try {
+    const account = await ensureCustomerPortalAccount(db, {
+      customerName: record.customerName,
+      customerPhone: record.customerPhone,
+      customerEmail: record.customerEmail,
+    });
+    const sessionToken = await signCustomerPortalSession({
+      accountId: account.id,
+      customerName: account.customerName,
+      customerPhone: account.customerPhone,
+    });
+    ctx.res.cookie(CUSTOMER_PORTAL_COOKIE_NAME, sessionToken, {
+      ...getSessionCookieOptions(ctx.req),
+      maxAge: ONE_YEAR_MS,
+    });
+    return true;
+  } catch (error) {
+    console.error("[BookingPaymentRouter] Direct customer portal session creation failed:", error);
+    return false;
+  }
+}
+
 const publicFunnelInput = z.object({
   publicFunnelNumber: z.string().trim().min(1).max(40),
   mutationToken: z.string().trim().min(1).max(512),
@@ -177,7 +209,7 @@ const publicFunnelInput = z.object({
 export const bookingPaymentRouter = router({
   startSetup: publicProcedure
     .input(publicFunnelInput.extend({ consentAccepted: z.literal(true) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
       const [record] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
@@ -187,8 +219,9 @@ export const bookingPaymentRouter = router({
       const stripe = getStripeClient();
 
       if (target.profile.paymentStatus === "card_on_file") {
+        const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
         let portalAccessCode: string | null = null;
-        try {
+        if (record.source !== "book-page") try {
           portalAccessCode = await createCustomerPortalHandoff(db, {
             customerName: record.customerName,
             customerPhone: record.customerPhone,
@@ -198,7 +231,7 @@ export const bookingPaymentRouter = router({
           // Portal access is additive. An existing verified card result must remain successful if handoff creation fails.
           console.error("[BookingPaymentRouter] Customer portal handoff creation failed:", error);
         }
-        return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const, portalAccessCode };
+        return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const, portalAccessCode, directPortalSessionReady };
       }
       if (target.profile.stripeSetupIntentId) {
         const existing = await stripe.setupIntents.retrieve(target.profile.stripeSetupIntentId);
@@ -238,7 +271,7 @@ export const bookingPaymentRouter = router({
 
   confirmSetup: publicProcedure
     .input(publicFunnelInput.extend({ paymentMethodId: z.string().trim().min(1).max(255) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
       const [record] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
@@ -287,8 +320,9 @@ export const bookingPaymentRouter = router({
       void sendBookingCompletionNotifications(record.bookingId).catch((error) =>
         console.error("[BookingPaymentRouter] Booking completion notifications failed:", error)
       );
+      const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
       let portalAccessCode: string | null = null;
-      try {
+      if (record.source !== "book-page") try {
         portalAccessCode = await createCustomerPortalHandoff(db, {
           customerName: record.customerName,
           customerPhone: record.customerPhone,
@@ -306,6 +340,7 @@ export const bookingPaymentRouter = router({
         cardExpMonth: paymentMethod.card.exp_month,
         cardExpYear: paymentMethod.card.exp_year,
         portalAccessCode,
+        directPortalSessionReady,
       };
     }),
 });

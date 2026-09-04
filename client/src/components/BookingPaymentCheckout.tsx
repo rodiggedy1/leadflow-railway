@@ -13,7 +13,7 @@ type BookingPaymentCheckoutProps = {
   mutationToken: string;
   customerName: string;
   amountCents: number;
-  onComplete: (result: { bookingId: number; cardBrand: string; cardLast4: string; portalAccessCode?: string | null }) => void;
+  onComplete: (result: { bookingId: number; cardBrand: string; cardLast4: string; portalAccessCode?: string | null; directPortalSessionReady?: boolean }) => void;
 };
 
 type SetupFormProps = {
@@ -60,7 +60,7 @@ export function BookingPaymentCheckout({ publicFunnelNumber, mutationToken, cust
     try {
       const result = await startSetup.mutateAsync({ publicFunnelNumber, mutationToken, consentAccepted: true });
       if (result.alreadyComplete) {
-        onComplete({ bookingId: result.bookingId, cardBrand: "Card", cardLast4: "saved", portalAccessCode: result.portalAccessCode });
+        onComplete({ bookingId: result.bookingId, cardBrand: "Card", cardLast4: "saved", portalAccessCode: result.portalAccessCode, directPortalSessionReady: result.directPortalSessionReady });
         return;
       }
       setClientSecret(result.clientSecret);
