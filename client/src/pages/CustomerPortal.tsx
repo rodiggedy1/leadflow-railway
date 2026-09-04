@@ -3,7 +3,10 @@ import { Armchair, ArrowRight, CalendarClock, CalendarDays, CheckCircle2, Clipbo
 import { trpc } from "@/lib/trpc";
 import { CUSTOMER_PORTAL_SERVICES, type CustomerPortalService } from "@shared/customerPortalServices";
 import { calculateCustomerPortalEstimate } from "@shared/customerPortalPricing";
+import { CustomerPortalAppointmentCalendar } from "@/components/CustomerPortalAppointmentCalendar";
+import { customerPortalAppointmentWindows, formatCustomerPortalDate, formatCustomerPortalDateKey, formatCustomerPortalTime, type CustomerPortalAppointmentWindow } from "@/lib/customerPortalAppointment";
 import "./customer-portal.css";
+import "./customer-portal-request-upgrades.css";
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
 const SERVICE_ICONS: Record<string, typeof Wrench> = {
@@ -27,15 +30,17 @@ function formatCurrency(cents: number | null | undefined) {
   return typeof cents === "number" ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100) : "—";
 }
 
-function ServiceRequestForm({ service, onClose }: { service: CustomerPortalService; onClose: () => void }) {
+function ServiceRequestForm({ service, homeAddress, onClose }: { service: CustomerPortalService; homeAddress: string; onClose: () => void }) {
   const utils = trpc.useUtils();
   const createRequest = trpc.customerPortal.createRequest.useMutation({ onSuccess: () => { void utils.customerPortal.me.invalidate(); onClose(); } });
   const [selections, setSelections] = useState<Record<string, string>>({});
-  const [address, setAddress] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  const [useDifferentAddress, setUseDifferentAddress] = useState(false);
+  const [address, setAddress] = useState(homeAddress);
+  const [date, setDate] = useState<Date | null>(null);
+  const [timeWindow, setTimeWindow] = useState<CustomerPortalAppointmentWindow | null>(null);
   const [notes, setNotes] = useState("");
-  const canSubmit = service.fields.every(field => selections[field.label]?.trim()) && address.trim().length >= 5 && Boolean(date) && Boolean(time);
+  const selectedAddress = useDifferentAddress || !homeAddress ? address.trim() : homeAddress;
+  const canSubmit = service.fields.every(field => selections[field.label]?.trim()) && selectedAddress.length >= 5 && Boolean(date) && Boolean(timeWindow);
   const estimate = calculateCustomerPortalEstimate(service.id, selections);
 
   return <div className="mib-portal-modal" role="dialog" aria-modal="true" aria-labelledby="mib-service-title">
@@ -46,8 +51,8 @@ function ServiceRequestForm({ service, onClose }: { service: CustomerPortalServi
       <p>{service.detail}.</p>
       <div className="mib-portal-form-fields">
         {service.fields.map(field => <label key={field.label}><span>{field.label}</span>{field.options ? <select value={selections[field.label] ?? ""} onChange={event => setSelections(current => ({ ...current, [field.label]: event.target.value }))}><option value="">Choose one</option>{field.options.map(option => <option key={option}>{option}</option>)}</select> : <textarea placeholder={field.placeholder} value={selections[field.label] ?? ""} onChange={event => setSelections(current => ({ ...current, [field.label]: event.target.value }))} />}</label>)}
-        <label><span>Service address</span><input value={address} onChange={event => setAddress(event.target.value)} placeholder="Street address" /></label>
-        <div className="mib-portal-form-row"><label><span>Preferred date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><label><span>Preferred time</span><input value={time} onChange={event => setTime(event.target.value)} placeholder="Morning, afternoon, etc." /></label></div>
+        {homeAddress && !useDifferentAddress ? <div className="mib-portal-address-choice"><span>Service address</span><strong>{homeAddress}</strong><button type="button" onClick={() => setUseDifferentAddress(true)}>Use a different address</button></div> : <label><span>Service address</span><input value={address} onChange={event => setAddress(event.target.value)} placeholder="Street address" autoComplete="street-address" />{homeAddress && <button className="mib-portal-inline-text-action" type="button" onClick={() => { setAddress(homeAddress); setUseDifferentAddress(false); }}>Use my home-cleaning address</button>}</label>}
+        <div className="mib-portal-appointment-field"><div className="mib-portal-appointment-field-head"><span>Preferred appointment</span><small>We&apos;ll confirm this window before dispatch.</small></div><CustomerPortalAppointmentCalendar value={date} onChange={nextDate => setDate(nextDate)} /><div className="mib-portal-time-window-grid" role="group" aria-label="Choose a preferred time window">{customerPortalAppointmentWindows.map(window => <button type="button" key={window.id} className={timeWindow?.id === window.id ? "selected" : ""} onClick={() => setTimeWindow(window)} aria-pressed={timeWindow?.id === window.id}><strong>{window.label}</strong><span>{window.detail}</span></button>)}</div>{date && <p className="mib-portal-appointment-selection">Preferred: <strong>{formatCustomerPortalDate(date)}{timeWindow ? ` · ${formatCustomerPortalTime(timeWindow)}` : ""}</strong></p>}</div>
         <label><span>Anything else?</span><textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Optional details" /></label>
       </div>
       <div className="mt-4 grid gap-1 rounded-[17px] border border-[#e9e6e0] bg-[#f7f5f1] p-[18px]">
@@ -57,7 +62,7 @@ function ServiceRequestForm({ service, onClose }: { service: CustomerPortalServi
         {estimate.lineItems.length > 1 && <div className="mt-2 grid gap-1 border-t border-[#e1ddd6] pt-2">{estimate.lineItems.slice(1).map(item => <span className="flex justify-between gap-3 text-[11px] font-semibold text-[#746f69]" key={item.label}>{item.label}<b className="text-[#202020]">+{formatCurrency(item.cents)}</b></span>)}</div>}
       </div>
       {createRequest.error && <p className="mib-portal-error">{createRequest.error.message}</p>}
-      <button type="button" className="mib-portal-primary" disabled={!canSubmit || createRequest.isPending} onClick={() => createRequest.mutate({ serviceId: service.id, selections, address, requestedLocalDate: date, requestedLocalTime: time, notes: notes || undefined })}>{createRequest.isPending ? "Sending request…" : "Send service request"}<ArrowRight /></button>
+      <button type="button" className="mib-portal-primary" disabled={!canSubmit || createRequest.isPending} onClick={() => { if (!date || !timeWindow) return; createRequest.mutate({ serviceId: service.id, selections, address: selectedAddress, requestedLocalDate: formatCustomerPortalDateKey(date), requestedLocalTime: formatCustomerPortalTime(timeWindow), notes: notes || undefined }); }}>{createRequest.isPending ? "Sending request…" : "Send service request"}<ArrowRight /></button>
     </div>
   </div>;
 }
@@ -77,6 +82,8 @@ export default function CustomerPortal() {
 
   const totalRecords = portal.data.cleanings.length + portal.data.requests.length;
   const customerName = portal.data.account.name.split(" ")[0];
+  const homeAddress = portal.data.cleanings.find(cleaning => Boolean(cleaning.address))?.address ?? "";
+  const savedCardLabel = portal.data.savedCard?.last4 ? `${portal.data.savedCard.brand ? `${portal.data.savedCard.brand} ` : "Card "}ending in ${portal.data.savedCard.last4}` : "No saved card on file";
 
   return <main className="mib-portal-shell">
     <header className="mib-portal-topbar"><a href="/my-home"><span className="mib-portal-mark">M</span> Maids in Black</a><b>{customerName}</b></header>
@@ -106,15 +113,15 @@ export default function CustomerPortal() {
       <div className="mib-portal-heading"><div><small>YOUR BOOKINGS</small><h2 id="mib-bookings-heading">Everything we&apos;re handling for you.</h2></div>{totalRecords > 0 && <span>{totalRecords} {totalRecords === 1 ? "request" : "requests"}</span>}</div>
       <div className="mib-portal-records">
         {totalRecords === 0 ? <div className="mib-portal-empty"><Sparkles /><h3>Your home history starts here.</h3><p>Your cleaning and service requests will appear here.</p></div> : <>
+          {portal.data.requests.map(request => <article className="mib-portal-request-card" key={`request-${request.id}`}><div className="mib-portal-request-top"><div><small>HOME SERVICE REQUEST</small><h3>{request.serviceName}</h3><span className="mib-portal-status">{formatStatus(request.status)}</span></div><div className="mib-portal-request-price"><span>{request.estimateRequiresReview ? "Estimate · review required" : "Estimated total"}</span><strong>{formatCurrency(request.estimatedTotalCents)}</strong></div></div><div className="mib-portal-request-grid"><div><CalendarDays /><span>PREFERRED APPOINTMENT</span><strong>{formatLocalDate(request.requestedLocalDate)} · {request.requestedLocalTime}</strong><p>Your preferred time is awaiting confirmation.</p></div><div><MapPin /><span>LOCATION</span><strong>{request.address}</strong><p>{request.customerRequest}</p></div><div><CreditCard /><span>PAYMENT</span><strong>{savedCardLabel}</strong><p>{portal.data.savedCard?.last4 ? "Your saved card is securely on file. No charge today." : "A payment method has not been saved."}</p></div></div><div className="mib-portal-request-footer"><div><CheckCircle2 />{request.publicRequestNumber ? `Request ${request.publicRequestNumber} saved` : "Request saved"}</div><span>{formatStatus(request.status)}</span></div></article>)}
           {portal.data.cleanings.map(cleaning => <article className="mib-portal-booking-card" key={`cleaning-${cleaning.id}`}>
             <div className="mib-portal-booking-top"><div><small>HOME CLEANING</small><h3>{cleaning.serviceName}</h3><span className="mib-portal-status">{formatStatus(cleaning.status)}</span></div><div className="mib-portal-price"><span>First cleaning</span><strong>{formatCurrency(cleaning.firstCleaningTotalCents)}</strong></div></div>
             <div className="mib-portal-booking-grid"><div><CalendarDays /><span>PREFERRED APPOINTMENT</span><strong>{formatLocalDate(cleaning.requestedLocalDate)}{cleaning.requestedLocalTime ? ` · ${cleaning.requestedLocalTime}` : ""}</strong><p>{cleaning.status === "needs_attention" ? "Your appointment is awaiting confirmation." : "We will keep you updated here."}</p></div><div><MapPin /><span>LOCATION</span><strong>{cleaning.address || "Address saved with booking"}</strong><p>We will confirm the right cleaning team for your home.</p></div><div><CreditCard /><span>PAYMENT</span><strong>{cleaning.paymentStatus === "card_on_file" ? "Card on file" : formatStatus(cleaning.paymentStatus)}</strong><p>{cleaning.paymentStatus === "card_on_file" ? "Your card is securely saved. No charge today." : "Payment status is saved with this booking."}</p></div></div>
             <div className="mib-portal-booking-footer"><div><i />{cleaning.publicBookingNumber ? `Booking ${cleaning.publicBookingNumber} saved` : "Booking saved"}</div><span>{formatStatus(cleaning.status)}</span></div>
           </article>)}
-          {portal.data.requests.map(request => <article className="mib-portal-request-card" key={`request-${request.id}`}><div><small>HOME SERVICE REQUEST</small><h3>{request.serviceName}</h3><p>{formatLocalDate(request.requestedLocalDate)} · {request.requestedLocalTime}</p></div><span className="mib-portal-status">{formatStatus(request.status)}</span></article>)}
         </>}
       </div>
     </section>
-    {selectedService && <ServiceRequestForm service={selectedService} onClose={() => setSelectedService(null)} />}
+    {selectedService && <ServiceRequestForm service={selectedService} homeAddress={homeAddress} onClose={() => setSelectedService(null)} />}
   </main>;
 }

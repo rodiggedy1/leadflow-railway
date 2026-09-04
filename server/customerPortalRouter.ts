@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
-import { bookings, customerPortalAccounts, customerPortalServiceRequests } from "../drizzle/schema";
+import { bookingPaymentProfiles, bookings, customerPortalAccounts, customerPortalServiceRequests } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
@@ -32,11 +32,13 @@ export const customerPortalRouter = router({
     const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
     const account = accounts[0];
     if (!account || account.customerPhone !== session.customerPhone) return { account: null, cleanings: [], requests: [] };
-    const [cleanings, requests] = await Promise.all([
+    const [cleanings, requests, paymentProfiles] = await Promise.all([
       db.select().from(bookings).where(eq(bookings.customerPhone, account.customerPhone)).orderBy(desc(bookings.createdAt)).limit(100),
       db.select().from(customerPortalServiceRequests).where(eq(customerPortalServiceRequests.accountId, account.id)).orderBy(desc(customerPortalServiceRequests.createdAt)).limit(100),
+      db.select({ paymentStatus: bookingPaymentProfiles.paymentStatus, cardBrand: bookingPaymentProfiles.cardBrand, cardLast4: bookingPaymentProfiles.cardLast4 }).from(bookingPaymentProfiles).innerJoin(bookings, eq(bookingPaymentProfiles.bookingId, bookings.id)).where(eq(bookings.customerPhone, account.customerPhone)).orderBy(desc(bookingPaymentProfiles.updatedAt)).limit(100),
     ]);
-    return { account: { name: account.customerName, phone: account.customerPhone, email: account.customerEmail }, cleanings, requests };
+    const savedCard = paymentProfiles.find(profile => profile.paymentStatus === "card_on_file" && Boolean(profile.cardLast4));
+    return { account: { name: account.customerName, phone: account.customerPhone, email: account.customerEmail }, cleanings, requests, savedCard: savedCard ? { brand: savedCard.cardBrand, last4: savedCard.cardLast4 } : null };
   }),
   createRequest: publicProcedure.input(requestSchema).mutation(async ({ ctx, input }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);

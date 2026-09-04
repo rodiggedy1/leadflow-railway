@@ -1,0 +1,44 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { customerPortalAppointmentWindows, firstCustomerPortalBookableDate, getCustomerPortalCalendarGrid, isCustomerPortalBookableDate } from "../client/src/lib/customerPortalAppointment";
+
+const root = process.cwd();
+
+describe("customer portal service request experience", () => {
+  it("uses Joe’s four preferred appointment windows and booking calendar range", () => {
+    expect(customerPortalAppointmentWindows).toEqual([
+      { id: "morning", label: "Morning", detail: "8:00–11:00 AM" },
+      { id: "midday", label: "Midday", detail: "11:00 AM–2:00 PM" },
+      { id: "afternoon", label: "Afternoon", detail: "2:00–5:00 PM" },
+      { id: "evening", label: "Evening", detail: "5:00–7:00 PM" },
+    ]);
+    const now = new Date(2026, 8, 3, 9, 0, 0, 0);
+    const firstDate = firstCustomerPortalBookableDate(now);
+    expect(firstDate).toEqual(new Date(2026, 8, 4, 12, 0, 0, 0));
+    expect(isCustomerPortalBookableDate(new Date(2026, 8, 3), now)).toBe(false);
+    expect(isCustomerPortalBookableDate(new Date(2026, 9, 29), now)).toBe(true);
+    expect(isCustomerPortalBookableDate(new Date(2026, 9, 30), now)).toBe(false);
+    expect(getCustomerPortalCalendarGrid(new Date(2026, 8, 1))).toHaveLength(42);
+  });
+
+  it("keeps service requests first in the list and reuses verified customer data in the form and card", async () => {
+    const [portal, router] = await Promise.all([
+      readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
+      readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8"),
+    ]);
+    expect(portal.indexOf("portal.data.requests.map(request")).toBeLessThan(portal.indexOf("portal.data.cleanings.map(cleaning"));
+    expect(portal).toContain("CustomerPortalAppointmentCalendar");
+    expect(portal).toContain("customerPortalAppointmentWindows");
+    expect(portal).not.toContain('input type="date"');
+    expect(portal).toContain("const [useDifferentAddress, setUseDifferentAddress] = useState(false);");
+    expect(portal).toContain("const selectedAddress = useDifferentAddress || !homeAddress ? address.trim() : homeAddress;");
+    expect(portal).toContain("Use a different address");
+    expect(portal).toContain("Use my home-cleaning address");
+    expect(portal).toContain("const savedCardLabel = portal.data.savedCard?.last4");
+    expect(portal).toContain("ending in ${portal.data.savedCard.last4}");
+    expect(router).toContain("bookingPaymentProfiles");
+    expect(router).toContain("innerJoin(bookings, eq(bookingPaymentProfiles.bookingId, bookings.id))");
+    expect(router).toContain('profile.paymentStatus === "card_on_file" && Boolean(profile.cardLast4)');
+  });
+});
