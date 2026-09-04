@@ -12,6 +12,21 @@ describe("customer portal isolation", () => {
     expect(CUSTOMER_PORTAL_SERVICES.every(service => service.fields.length > 0)).toBe(true);
   });
 
+  it("shows the approved six-service portal preview with the remaining catalog behind View all services", async () => {
+    const source = await readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8");
+    const expectedFeaturedIds = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"];
+    expect(CUSTOMER_PORTAL_SERVICES.filter(service => expectedFeaturedIds.includes(service.id)).map(service => service.id)).toEqual(expectedFeaturedIds);
+    expect(CUSTOMER_PORTAL_SERVICES.find(service => service.id === "moving-help")?.detail).toBe("One helper for two hours · no truck");
+    expect(CUSTOMER_PORTAL_SERVICES.find(service => service.id === "lawn-yard-care")?.detail).toBe("Small maintained lawn · mow, edge, and blow");
+    expect(CUSTOMER_PORTAL_SERVICES.find(service => service.id === "junk-removal")?.detail).toBe("Small curbside or one-eighth truckload pickup");
+    expect(CUSTOMER_PORTAL_SERVICES.find(service => service.id === "pressure-washing")?.detail).toBe("Small ground-level patio or walkway");
+    expect(source).toContain('const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;');
+    expect(source).toContain("const visibleServices = showAllServices ? CUSTOMER_PORTAL_SERVICES : featuredServices;");
+    expect(source).toContain('>Home cleaning</strong>');
+    expect(source).toContain('"View all services"');
+    expect(source).toContain(">Start request <ArrowRight /></em>");
+  });
+
   it("keeps staff portal-request failure outside the existing Bookings and Leads load/error gate", async () => {
     const source = await readFile(path.resolve(root, "client/src/components/NativeBookingsWorkspace.tsx"), "utf8");
     expect(source).toContain("trpc.customerPortal.staffRequests.useQuery");
