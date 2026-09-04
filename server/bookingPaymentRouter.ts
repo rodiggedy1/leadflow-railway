@@ -24,6 +24,7 @@ import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import { createCustomerPortalHandoff, ensureCustomerPortalAccount } from "./customerPortalService";
 import { getCustomerPortalSavedCard } from "./customerPortalPaymentService";
+import { normalizePhone } from "./utils/phone";
 import { getCustomerPortalSessionFromRequest, signCustomerPortalSession } from "./_core/customerPortalAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { CUSTOMER_PORTAL_COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
@@ -281,7 +282,7 @@ export const bookingPaymentRouter = router({
       const [record] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
       if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       verifiedFunnelTokenOrThrow(record, input.mutationToken);
-      if (record.customerPhone !== session.customerPhone) throw new TRPCError({ code: "FORBIDDEN", message: "The saved card does not belong to this booking." });
+      if (normalizePhone(record.customerPhone) !== session.customerPhone) throw new TRPCError({ code: "FORBIDDEN", message: "The saved card does not belong to this booking." });
       const target = await ensureBookingPaymentTarget(record);
       if (target.profile.paymentStatus === "card_on_file") {
         const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);

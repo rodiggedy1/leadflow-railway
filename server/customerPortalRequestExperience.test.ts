@@ -82,7 +82,7 @@ describe("customer portal service request experience", () => {
     expect(router).toContain('paymentBrand: savedCard.brand, paymentLast4: savedCard.last4');
     expect(router).not.toContain('paymentIntents.create');
     expect(paymentRouter).toContain('reuseSavedCard: publicProcedure');
-    expect(paymentRouter).toContain('if (record.customerPhone !== session.customerPhone)');
+    expect(paymentRouter).toContain('if (normalizePhone(record.customerPhone) !== session.customerPhone)');
     expect(paymentRouter).toContain('await tx.insert(stripeCustomers).values({');
     expect(paymentRouter).toContain('stripePaymentMethodId: paymentMethod.id');
     expect(paymentRouter).not.toContain('paymentIntents.create');
