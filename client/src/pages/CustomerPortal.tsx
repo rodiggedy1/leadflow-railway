@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Armchair, ArrowRight, CalendarClock, CalendarDays, CheckCircle2, ClipboardList, CreditCard, Home, MapPin, Plus, ShieldCheck, Sparkles, Trash2, Truck, Waves, Wrench } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { CUSTOMER_PORTAL_SERVICES, type CustomerPortalService } from "@shared/customerPortalServices";
+import { calculateCustomerPortalEstimate } from "@shared/customerPortalPricing";
 import "./customer-portal.css";
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
@@ -35,18 +36,25 @@ function ServiceRequestForm({ service, onClose }: { service: CustomerPortalServi
   const [time, setTime] = useState("");
   const [notes, setNotes] = useState("");
   const canSubmit = service.fields.every(field => selections[field.label]?.trim()) && address.trim().length >= 5 && Boolean(date) && Boolean(time);
+  const estimate = calculateCustomerPortalEstimate(service.id, selections);
 
   return <div className="mib-portal-modal" role="dialog" aria-modal="true" aria-labelledby="mib-service-title">
     <div className="mib-portal-modal-card">
       <button className="mib-portal-close" type="button" onClick={onClose} aria-label="Close request form">×</button>
       <small>MAIDS IN BLACK · HOME SERVICES</small>
       <h2 id="mib-service-title">Book {service.name}</h2>
-      <p>{service.detail}. Starting at ${service.startingPrice}; the final scope is confirmed by our team.</p>
+      <p>{service.detail}.</p>
       <div className="mib-portal-form-fields">
         {service.fields.map(field => <label key={field.label}><span>{field.label}</span>{field.options ? <select value={selections[field.label] ?? ""} onChange={event => setSelections(current => ({ ...current, [field.label]: event.target.value }))}><option value="">Choose one</option>{field.options.map(option => <option key={option}>{option}</option>)}</select> : <textarea placeholder={field.placeholder} value={selections[field.label] ?? ""} onChange={event => setSelections(current => ({ ...current, [field.label]: event.target.value }))} />}</label>)}
         <label><span>Service address</span><input value={address} onChange={event => setAddress(event.target.value)} placeholder="Street address" /></label>
         <div className="mib-portal-form-row"><label><span>Preferred date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><label><span>Preferred time</span><input value={time} onChange={event => setTime(event.target.value)} placeholder="Morning, afternoon, etc." /></label></div>
         <label><span>Anything else?</span><textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Optional details" /></label>
+      </div>
+      <div className="mt-4 grid gap-1 rounded-[17px] border border-[#e9e6e0] bg-[#f7f5f1] p-[18px]">
+        <span className="text-[11px] font-extrabold uppercase tracking-[.09em] text-[#746f69]">{estimate.requiresReview ? "Estimate · review required" : "Estimated total"}</span>
+        <strong className="text-[30px] tracking-[-.04em] text-[#202020]">{formatCurrency(estimate.estimatedCents)}</strong>
+        <small className="text-[12px] leading-5 text-[#746f69]">{estimate.requiresReview ? "This scope needs a Maids in Black review before a final price or appointment is confirmed." : "Based on your selected scope. Maids in Black confirms the final price before payment."}</small>
+        {estimate.lineItems.length > 1 && <div className="mt-2 grid gap-1 border-t border-[#e1ddd6] pt-2">{estimate.lineItems.slice(1).map(item => <span className="flex justify-between gap-3 text-[11px] font-semibold text-[#746f69]" key={item.label}>{item.label}<b className="text-[#202020]">+{formatCurrency(item.cents)}</b></span>)}</div>}
       </div>
       {createRequest.error && <p className="mib-portal-error">{createRequest.error.message}</p>}
       <button type="button" className="mib-portal-primary" disabled={!canSubmit || createRequest.isPending} onClick={() => createRequest.mutate({ serviceId: service.id, selections, address, requestedLocalDate: date, requestedLocalTime: time, notes: notes || undefined })}>{createRequest.isPending ? "Sending request…" : "Send service request"}<ArrowRight /></button>
@@ -90,7 +98,7 @@ export default function CustomerPortal() {
         <a className="mib-portal-service mib-portal-service-cleaning" href="/book-now"><div className="mib-portal-service-icon"><Home /></div><div><strong>Home cleaning</strong><p>One-time or recurring</p><em>Book cleaning <ArrowRight /></em></div></a>
         {visibleServices.map(service => {
           const Icon = SERVICE_ICONS[service.id] ?? Wrench;
-          return <button className="mib-portal-service" type="button" key={service.id} onClick={() => setSelectedService(service)}><div className="mib-portal-service-icon"><Icon /></div><div><strong>{service.name}</strong><p>{service.detail}</p><em>Start request <ArrowRight /></em></div></button>;
+          return <button className="mib-portal-service" type="button" key={service.id} onClick={() => setSelectedService(service)}><div className="mib-portal-service-icon"><Icon /></div><div><strong>{service.name}</strong><p>{service.detail}</p><span className="block mb-1 text-[11px] font-bold text-[#202020]">Starting at {formatCurrency(service.startingPrice * 100)}</span><em>Start request <ArrowRight /></em></div></button>;
         })}
       </div>
     </section>

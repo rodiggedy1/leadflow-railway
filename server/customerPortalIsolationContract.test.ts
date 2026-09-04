@@ -25,6 +25,8 @@ describe("customer portal isolation", () => {
     expect(source).toContain('>Home cleaning</strong>');
     expect(source).toContain('"View all services"');
     expect(source).toContain(">Start request <ArrowRight /></em>");
+    expect(source).toContain("Starting at {formatCurrency(service.startingPrice * 100)}");
+    expect(source).toContain("calculateCustomerPortalEstimate(service.id, selections)");
   });
 
   it("uses a neutral Maids in Black portal surface with coral reserved for precise accents", async () => {

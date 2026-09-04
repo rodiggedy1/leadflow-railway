@@ -4,6 +4,7 @@ import { bookings, customerPortalAccounts, customerPortalServiceRequests } from 
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
+import { calculateCustomerPortalEstimate } from "../shared/customerPortalPricing";
 import { createCustomerPortalRequestNumber } from "./customerPortalService";
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
 
@@ -49,13 +50,14 @@ export const customerPortalRouter = router({
     if (!service) throw new Error("Choose a supported service.");
     const validationError = validateCustomerPortalSelections(service, input.selections);
     if (validationError) throw new Error(validationError);
+    const estimate = calculateCustomerPortalEstimate(service.id, input.selections);
     const now = new Date();
     await db.insert(customerPortalServiceRequests).values({
       publicRequestNumber: createCustomerPortalRequestNumber(), accountId: account.id, serviceId: service.id, serviceName: service.name, status: "requested",
       customerName: account.customerName, customerPhone: account.customerPhone, customerEmail: account.customerEmail,
       customerRequest: input.notes?.trim() || service.fields.map(field => `${field.label}: ${input.selections[field.label]}`).join(" · "),
       scopeSelections: input.selections, address: input.address, requestedLocalDate: input.requestedLocalDate, requestedLocalTime: input.requestedLocalTime,
-      estimatedTotalCents: service.startingPrice * 100, estimateRequiresReview: 1, createdAt: now, updatedAt: now,
+      estimatedTotalCents: estimate.estimatedCents, estimateRequiresReview: estimate.requiresReview ? 1 : 0, createdAt: now, updatedAt: now,
     });
     return { ok: true };
   }),
