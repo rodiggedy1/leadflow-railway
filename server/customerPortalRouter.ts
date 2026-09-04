@@ -7,7 +7,7 @@ import { getCustomerPortalSessionFromRequest, signCustomerPortalSession } from "
 import { CUSTOMER_PORTAL_COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
 import { createCustomerPortalRequestNumber, redeemCustomerPortalHandoff } from "./customerPortalService";
-import { publicProcedure, router } from "./_core/trpc";
+import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
 
 const requestSchema = z.object({
   serviceId: z.string().trim().min(1).max(64),
@@ -20,6 +20,11 @@ const requestSchema = z.object({
 
 export const customerPortalRouter = router({
   services: publicProcedure.query(() => CUSTOMER_PORTAL_SERVICES),
+  staffRequests: adminAgentProcedure.input(z.object({ limit: z.number().int().min(1).max(200).default(200) })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    return db.select().from(customerPortalServiceRequests).orderBy(desc(customerPortalServiceRequests.createdAt)).limit(input.limit);
+  }),
   redeemHandoff: publicProcedure.input(z.object({ code: z.string().trim().min(32).max(128) })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) throw new Error("Customer portal is unavailable.");

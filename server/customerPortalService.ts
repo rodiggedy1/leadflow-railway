@@ -33,6 +33,19 @@ export async function ensureCustomerPortalAccount(db: DbClient, input: { custome
   }
 }
 
+export async function createCustomerPortalHandoff(db: DbClient, input: { customerName: string; customerPhone: string; customerEmail?: string | null }) {
+  const account = await ensureCustomerPortalAccount(db, input);
+  const code = randomBytes(32).toString("base64url");
+  const now = new Date();
+  await db.insert(customerPortalHandoffTokens).values({
+    accountId: account.id,
+    tokenHash: createHash("sha256").update(code).digest("hex"),
+    expiresAt: Date.now() + 15 * 60 * 1_000,
+    createdAt: now,
+  });
+  return code;
+}
+
 export async function redeemCustomerPortalHandoff(db: DbClient, code: string) {
   const tokenHash = createHash("sha256").update(code).digest("hex");
   const tokens = await db.select().from(customerPortalHandoffTokens).where(and(eq(customerPortalHandoffTokens.tokenHash, tokenHash), isNull(customerPortalHandoffTokens.usedAt))).limit(1);

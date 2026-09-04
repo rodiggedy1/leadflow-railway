@@ -20,6 +20,7 @@ import { buildPreparedNativeBooking, NativeBookingInputError } from "./bookingsS
 import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingPaymentService";
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
+import { createCustomerPortalHandoff } from "./customerPortalService";
 import { TRPCError } from "@trpc/server";
 
 function asBookingInput(record: typeof bookingFunnelRecords.$inferSelect): PrepareBookingInput {
@@ -275,6 +276,17 @@ export const bookingPaymentRouter = router({
       void sendBookingCompletionNotifications(record.bookingId).catch((error) =>
         console.error("[BookingPaymentRouter] Booking completion notifications failed:", error)
       );
+      let portalAccessCode: string | null = null;
+      try {
+        portalAccessCode = await createCustomerPortalHandoff(db, {
+          customerName: record.customerName,
+          customerPhone: record.customerPhone,
+          customerEmail: record.customerEmail,
+        });
+      } catch (error) {
+        // Portal access is additive. It must never turn a successful verified card save into a customer-facing failure.
+        console.error("[BookingPaymentRouter] Customer portal handoff creation failed:", error);
+      }
       return {
         bookingId: record.bookingId,
         paymentStatus: "card_on_file" as const,
@@ -282,6 +294,7 @@ export const bookingPaymentRouter = router({
         cardLast4: paymentMethod.card.last4,
         cardExpMonth: paymentMethod.card.exp_month,
         cardExpYear: paymentMethod.card.exp_year,
+        portalAccessCode,
       };
     }),
 });

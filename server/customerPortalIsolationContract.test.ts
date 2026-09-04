@@ -12,13 +12,27 @@ describe("customer portal isolation", () => {
     expect(CUSTOMER_PORTAL_SERVICES.every(service => service.fields.length > 0)).toBe(true);
   });
 
-  it("adds no portal dependency to existing widget, bookings workspace, payment, or booking-page sources", async () => {
-    const files = ["client/src/components/NativeBookingsWorkspace.tsx", "client/src/pages/BookNow.tsx", "client/src/components/BookingPaymentCheckout.tsx", "server/bookingPaymentRouter.ts", "server/widgetEmbed.ts"];
-    for (const file of files) {
-      const source = await readFile(path.resolve(root, file), "utf8");
-      expect(source).not.toContain("customerPortal");
-      expect(source).not.toContain("customer_portal");
-    }
+  it("keeps staff portal-request failure outside the existing Bookings and Leads load/error gate", async () => {
+    const source = await readFile(path.resolve(root, "client/src/components/NativeBookingsWorkspace.tsx"), "utf8");
+    expect(source).toContain("trpc.customerPortal.staffRequests.useQuery");
+    expect(source).toContain("(listQuery.isLoading || funnelListQuery.isLoading)");
+    expect(source).toContain("(listQuery.error || funnelListQuery.error)");
+    expect(source).not.toContain("portalRequestsQuery.isLoading ||");
+    expect(source).not.toContain("portalRequestsQuery.error ||");
+  });
+
+  it("makes portal access fail open only after the verified card transaction and preserves widget close behavior", async () => {
+    const [payment, bookingPage, widget] = await Promise.all([
+      readFile(path.resolve(root, "server/bookingPaymentRouter.ts"), "utf8"),
+      readFile(path.resolve(root, "client/src/pages/BookNow.tsx"), "utf8"),
+      readFile(path.resolve(root, "server/widgetEmbed.ts"), "utf8"),
+    ]);
+    expect(payment.lastIndexOf("createCustomerPortalHandoff(")).toBeGreaterThan(payment.indexOf("await db.transaction"));
+    expect(payment).toContain("Customer portal handoff creation failed");
+    expect(payment).toContain("portalAccessCode");
+    expect(bookingPage).toContain("setCardOnFile(true); if (!result.portalAccessCode) return;");
+    expect(widget).toContain("event.data.type === 'mib-booking-widget-portal'");
+    expect(widget).toContain("event.data.type !== 'mib-booking-widget-close'");
   });
 
   it("keeps customer portal procedures limited to the dedicated router and route", async () => {

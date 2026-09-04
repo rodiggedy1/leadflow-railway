@@ -13,7 +13,7 @@ type BookingPaymentCheckoutProps = {
   mutationToken: string;
   customerName: string;
   amountCents: number;
-  onComplete: (result: { bookingId: number; cardBrand: string; cardLast4: string }) => void;
+  onComplete: (result: { bookingId: number; cardBrand: string; cardLast4: string; portalAccessCode?: string | null }) => void;
 };
 
 type SetupFormProps = {

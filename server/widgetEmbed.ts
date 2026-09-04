@@ -734,7 +734,12 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
   }
 
   function closeBookingWidget(event) {
-    if (!event || event.origin !== API_BASE || !event.data || event.data.type !== 'mib-booking-widget-close') return;
+    if (!event || event.origin !== API_BASE || !event.data) return;
+    if (event.data.type === 'mib-booking-widget-portal' && typeof event.data.code === 'string' && /^[A-Za-z0-9_-]{32,128}$/.test(event.data.code)) {
+      window.location.assign(API_BASE + '/my-home?access=' + encodeURIComponent(event.data.code));
+      return;
+    }
+    if (event.data.type !== 'mib-booking-widget-close') return;
     state.dismissed = true;
     setOpen(false);
   }
