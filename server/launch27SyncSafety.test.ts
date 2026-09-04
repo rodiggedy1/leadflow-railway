@@ -55,4 +55,24 @@ describe("Launch27 cleaner-job sync safety", () => {
     expect(internalCronSource).toContain("Launch27 job sync:  manual only (all automatic schedules disabled)");
     expect(source).toContain("syncTodayJobs: agentProcedure");
   });
+
+  it("temporarily audits both sync entries and all four cleaner-job delete sites without changing the cleanup branches", () => {
+    expect(source).toContain('implementation: "runSyncTodayJobs"');
+    expect(source).toContain('implementation: "quality.syncTodayJobs"');
+    expect(source.match(/deleteCleanerJobWithAudit\(db, auditRun/g)).toHaveLength(4);
+    expect(source).toContain('deletionReason: "team_cleanup"');
+    expect(source).toContain('deletionReason: "stale_cleanup"');
+    expect(source).toContain("[CleanerJobsAudit]");
+    expect(source).toContain("deployed_commit_sha");
+    expect(source).toContain("server_process_instance");
+    expect(source).toContain("authenticated_actor_id");
+    expect(source).toContain("delete_site_name");
+    expect(source).toContain("candidate_cleaner_job_ids");
+    expect(source).toContain("database_affected_rows");
+    expect(source).toContain("stack_trace");
+    expect(source).toContain('deleteSiteName: "standalone_team_reassignment"');
+    expect(source).toContain('deleteSiteName: "standalone_stale"');
+    expect(source).toContain('deleteSiteName: "manual_team_reassignment"');
+    expect(source).toContain('deleteSiteName: "manual_stale"');
+  });
 });

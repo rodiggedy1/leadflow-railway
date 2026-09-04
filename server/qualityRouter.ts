@@ -45,6 +45,88 @@ import { invokeLLM } from "./_core/llm";
 import { getPayRules, DEFAULT_PAY_RULES, type PayRules } from "./settingsRouter";
 import { calculateCleanerJobPayroll, calculateEffectivePayroll, isNewPayrollPeriod } from "./payrollCalculator";
 
+type CleanerJobsAuditRun = {
+  runId: string;
+  implementation: "runSyncTodayJobs" | "quality.syncTodayJobs";
+  requestRouteOrRuntimeCaller: string;
+  authenticatedActorId: string | null;
+  targetDate: string;
+};
+
+type CleanerJobsAuditDetails = {
+  event: "sync_entry" | "sync_response" | "delete_attempt" | "delete_result" | "sync_complete";
+  launch27FetchedCount?: number | null;
+  responseState?: "not_fetched" | "upstream_error" | "empty_success" | "nonempty_success";
+  deletionReason?: "team_cleanup" | "stale_cleanup" | null;
+  deleteSiteName?: "standalone_team_reassignment" | "standalone_stale" | "manual_team_reassignment" | "manual_stale" | null;
+  candidateCleanerJobIds?: number[];
+  affectedRows?: number | null;
+  success?: boolean | null;
+  errorKind?: string | null;
+};
+
+/**
+ * TEMPORARY DIAGNOSTIC ONLY. This emits no customer, address, phone, email,
+ * Launch27 payload, authentication credential, or payment information.
+ */
+function logCleanerJobsAudit(run: CleanerJobsAuditRun, details: CleanerJobsAuditDetails) {
+  console.warn("[CleanerJobsAudit]", JSON.stringify({
+    temporary: true,
+    audit_run_id: run.runId,
+    timestamp: new Date().toISOString(),
+    deployed_commit_sha: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.COMMIT_SHA ?? "unknown",
+    server_process_instance: process.env.RAILWAY_REPLICA_ID ?? process.env.HOSTNAME ?? `pid-${process.pid}`,
+    function: run.implementation,
+    request_route_or_runtime_caller: run.requestRouteOrRuntimeCaller,
+    authenticated_actor_id: run.authenticatedActorId,
+    target_date: run.targetDate,
+    event: details.event,
+    launch27_fetched_count: details.launch27FetchedCount ?? null,
+    response_state: details.responseState ?? "not_fetched",
+    deletion_reason: details.deletionReason ?? null,
+    delete_site_name: details.deleteSiteName ?? null,
+    candidate_cleaner_job_ids: details.candidateCleanerJobIds ?? [],
+    candidate_count: details.candidateCleanerJobIds?.length ?? 0,
+    database_affected_rows: details.affectedRows ?? null,
+    success: details.success ?? null,
+    error_kind: details.errorKind ?? null,
+    stack_trace: new Error().stack ?? null,
+  }));
+}
+
+function getAffectedRows(result: unknown): number | null {
+  if (!result || typeof result !== "object") return null;
+  const value = (result as { affectedRows?: unknown }).affectedRows;
+  return typeof value === "number" ? value : null;
+}
+
+async function deleteCleanerJobWithAudit(
+  db: any,
+  run: CleanerJobsAuditRun,
+  details: Omit<CleanerJobsAuditDetails, "event" | "affectedRows" | "success" | "errorKind"> & { candidateCleanerJobIds: number[] },
+) {
+  logCleanerJobsAudit(run, { ...details, event: "delete_attempt", success: null });
+  try {
+    const result = await db.delete(cleanerJobs).where(eq(cleanerJobs.id, details.candidateCleanerJobIds[0]));
+    logCleanerJobsAudit(run, {
+      ...details,
+      event: "delete_result",
+      affectedRows: getAffectedRows(result),
+      success: true,
+    });
+    return result;
+  } catch (error) {
+    logCleanerJobsAudit(run, {
+      ...details,
+      event: "delete_result",
+      affectedRows: null,
+      success: false,
+      errorKind: error instanceof Error ? error.name : "unknown_error",
+    });
+    throw error;
+  }
+}
+
 /** Generate a URL-safe random tracker token (32 chars). */
 function generateTrackerToken(): string {
   return randomBytes(24).toString("base64url");
@@ -653,6 +735,11 @@ export async function handleRatingReply(
     }
   }
 
+  logCleanerJobsAudit(auditRun, {
+    event: "sync_complete",
+    launch27FetchedCount: bookings.length,
+    responseState,
+  });
   return {
     responseText: "Thank you for your feedback! 🙏",
     newStage: "QUALITY_RATING_DONE",
@@ -766,14 +853,34 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
   mismatches: string[];
   errors: string[];
 }> {
+  const auditRun: CleanerJobsAuditRun = {
+    runId: randomBytes(12).toString("hex"),
+    implementation: "runSyncTodayJobs",
+    requestRouteOrRuntimeCaller: "runtime:runSyncTodayJobs",
+    authenticatedActorId: null,
+    targetDate: dateStr,
+  };
+  logCleanerJobsAudit(auditRun, { event: "sync_entry" });
   const { getCompletedBookingsForDate } = await import("./launch27");
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const result = await getCompletedBookingsForDate(dateStr, { includeAll: true });
   if (result.error) {
+    logCleanerJobsAudit(auditRun, {
+      event: "sync_response",
+      launch27FetchedCount: null,
+      responseState: "upstream_error",
+      errorKind: "launch27_error",
+    });
     throw new Error(`Launch27 sync failed for ${dateStr}: ${result.error}`);
   }
   const bookings = result.bookings;
+  const responseState = bookings.length === 0 ? "empty_success" : "nonempty_success";
+  logCleanerJobsAudit(auditRun, {
+    event: "sync_response",
+    launch27FetchedCount: bookings.length,
+    responseState,
+  });
   let created = 0;
   let updated = 0;
   const errors: string[] = [];
@@ -932,7 +1039,13 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           // Clean up schedule_assignments before deleting the job row
           await db.delete(scheduleAssignments)
             .where(eq(scheduleAssignments.cleanerJobId, row.id));
-          await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+          await deleteCleanerJobWithAudit(db, auditRun, {
+            launch27FetchedCount: bookings.length,
+            responseState,
+            deletionReason: "team_cleanup",
+            deleteSiteName: "standalone_team_reassignment",
+            candidateCleanerJobIds: [row.id],
+          });
           teamReassignRemoved++;
         }
       }
@@ -1010,7 +1123,13 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
       // Delete the schedule_assignments row before deleting the job itself
       await db.delete(scheduleAssignments)
         .where(eq(scheduleAssignments.cleanerJobId, row.id));
-      await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+      await deleteCleanerJobWithAudit(db, auditRun, {
+        launch27FetchedCount: bookings.length,
+        responseState,
+        deletionReason: "stale_cleanup",
+        deleteSiteName: "standalone_stale",
+        candidateCleanerJobIds: [row.id],
+      });
       staleMarked++;
     }
   } catch (staleErr) {
@@ -1870,23 +1989,43 @@ export const qualityRouter = router({
    */
   syncTodayJobs: agentProcedure
     .input(z.object({ date: z.string().optional() })) // YYYY-MM-DD, defaults to today
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { getCompletedBookingsForDate } = await import("./launch27");
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
       // Use provided date or today in America/New_York
       const dateStr = input.date ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      const auditRun: CleanerJobsAuditRun = {
+        runId: randomBytes(12).toString("hex"),
+        implementation: "quality.syncTodayJobs",
+        requestRouteOrRuntimeCaller: ctx.req.originalUrl ?? ctx.req.url ?? "trpc:quality.syncTodayJobs",
+        authenticatedActorId: String(ctx.agent.agentId),
+        targetDate: dateStr,
+      };
+      logCleanerJobsAudit(auditRun, { event: "sync_entry" });
 
       // Fetch ALL bookings for the date (not just completed — include assigned too)
       const result = await getCompletedBookingsForDate(dateStr, { includeAll: true });
       if (result.error) {
+        logCleanerJobsAudit(auditRun, {
+          event: "sync_response",
+          launch27FetchedCount: null,
+          responseState: "upstream_error",
+          errorKind: "launch27_error",
+        });
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: `Launch27 sync failed: ${result.error}`,
         });
       }
       const bookings = result.bookings;
+      const responseState = bookings.length === 0 ? "empty_success" : "nonempty_success";
+      logCleanerJobsAudit(auditRun, {
+        event: "sync_response",
+        launch27FetchedCount: bookings.length,
+        responseState,
+      });
 
       let created = 0;
       let updated = 0;
@@ -2104,7 +2243,13 @@ export const qualityRouter = router({
               // Clean up schedule_assignments before deleting the job row
               await db.delete(scheduleAssignments)
                 .where(eq(scheduleAssignments.cleanerJobId, row.id));
-              await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+              await deleteCleanerJobWithAudit(db, auditRun, {
+                launch27FetchedCount: bookings.length,
+                responseState,
+                deletionReason: "team_cleanup",
+                deleteSiteName: "manual_team_reassignment",
+                candidateCleanerJobIds: [row.id],
+              });
               teamReassignRemoved++;
             }
           }
@@ -2166,13 +2311,24 @@ export const qualityRouter = router({
           // Delete the schedule_assignments row before deleting the job itself
           await db.delete(scheduleAssignments)
             .where(eq(scheduleAssignments.cleanerJobId, row.id));
-          await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+          await deleteCleanerJobWithAudit(db, auditRun, {
+            launch27FetchedCount: bookings.length,
+            responseState,
+            deletionReason: "stale_cleanup",
+            deleteSiteName: "manual_stale",
+            candidateCleanerJobIds: [row.id],
+          });
           staleMarked++;
         }
       } catch (staleErr) {
         errors.push(`Stale cleanup error: ${staleErr instanceof Error ? staleErr.message : String(staleErr)}`);
       }
 
+      logCleanerJobsAudit(auditRun, {
+        event: "sync_complete",
+        launch27FetchedCount: bookings.length,
+        responseState,
+      });
       return {
         date: dateStr,
         bookingsFetched: bookings.length,
