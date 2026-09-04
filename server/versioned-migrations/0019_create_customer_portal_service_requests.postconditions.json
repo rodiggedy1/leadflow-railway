@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "table": "customer_portal_service_requests",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "publicRequestNumber", "columnType": "varchar(40)", "nullable": false },
+    { "name": "accountId", "columnType": "int", "nullable": false },
+    { "name": "serviceId", "columnType": "varchar(64)", "nullable": false },
+    { "name": "serviceName", "columnType": "varchar(120)", "nullable": false },
+    { "name": "status", "columnType": "varchar(32)", "nullable": false, "default": "requested" },
+    { "name": "customerName", "columnType": "varchar(255)", "nullable": false },
+    { "name": "customerPhone", "columnType": "varchar(20)", "nullable": false },
+    { "name": "customerEmail", "columnType": "varchar(320)", "nullable": true },
+    { "name": "customerRequest", "columnType": "text", "nullable": false },
+    { "name": "scopeSelections", "columnType": "json", "nullable": false },
+    { "name": "address", "columnType": "varchar(500)", "nullable": false },
+    { "name": "requestedLocalDate", "columnType": "varchar(10)", "nullable": false },
+    { "name": "requestedLocalTime", "columnType": "varchar(80)", "nullable": false },
+    { "name": "estimatedTotalCents", "columnType": "int", "nullable": false },
+    { "name": "estimateRequiresReview", "columnType": "tinyint", "nullable": false, "default": "1" },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "uq_customer_portal_service_request_number", "unique": true, "columns": ["publicRequestNumber"] },
+    { "name": "idx_customer_portal_service_request_account", "unique": false, "columns": ["accountId", "createdAt"] },
+    { "name": "idx_customer_portal_service_request_schedule", "unique": false, "columns": ["requestedLocalDate", "status"] }
+  ]
+}

@@ -111,6 +111,30 @@
       "sha256": "468d6df37ba472e0e5900a8ad348e710bd90d715e5ba33db8f7fd755647e6492",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0016_create_lead_notification_deliveries.postconditions.json"
+    },
+    {
+      "id": "0017_create_customer_portal_accounts",
+      "mode": "create-table",
+      "sqlFile": "0017_create_customer_portal_accounts.sql",
+      "sha256": "236c50f404b6ad5df7a3ff8c6264f10a33790049fbfc9e03ee6bffd3b8b8d48c",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0017_create_customer_portal_accounts.postconditions.json"
+    },
+    {
+      "id": "0018_create_customer_portal_handoff_tokens",
+      "mode": "create-table",
+      "sqlFile": "0018_create_customer_portal_handoff_tokens.sql",
+      "sha256": "e582a2396cf937d32828e38a61a26a12eed3a14d04a7d6aebd76cf1f541fdd01",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0018_create_customer_portal_handoff_tokens.postconditions.json"
+    },
+    {
+      "id": "0019_create_customer_portal_service_requests",
+      "mode": "create-table",
+      "sqlFile": "0019_create_customer_portal_service_requests.sql",
+      "sha256": "be42b0aaabcc0b5e13c0872c7dd016fb2e4d583290ba2d66fe63dfdedc38c7ca",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0019_create_customer_portal_service_requests.postconditions.json"
     }
   ]
 }
