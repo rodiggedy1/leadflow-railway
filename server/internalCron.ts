@@ -8,7 +8,6 @@
  * Schedules (all times in ET via timezone option):
  *  - silence-followup  : every 5 minutes (active lead nudge)
  *  - scheduled-followup: 9 AM ET daily (circle-back SMS)
- *  - nightly-sync      : 12:00 PM ET daily (Launch27 → DB sync)
  *  - always-on-send    : 10 AM ET Mon–Sat (campaign SMS batch)
  *
  * Note: always-on groups are gated by their isActive flag in the DB.
@@ -18,7 +17,6 @@
 
 import cron from "node-cron";
 import { runNurtureEnrollment, runNurtureSend } from "./nurtureCron";
-import { runNightlySync } from "./cronSync";
 import { runSilenceFollowUp, runScheduledFollowUp, runFollowUpDueAlerts } from "./followUpCron";
 import { runFollowUpReminders } from "./followUpsRouter";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
@@ -279,88 +277,6 @@ export function startInternalCron(): void {
       console.error("[InternalCron] ScheduledFollowUp failed:", err);
       await recordHeartbeat("scheduled-followup", `error: ${err instanceof Error ? err.message : String(err)}`, false);
     }
-  }, { timezone: "America/New_York" });
-
-  // ── Nightly Launch27 sync: 12:00 PM ET daily ────────────────────────────────
-  // Syncs yesterday's completed bookings from Launch27 into the DB.
-  // Runs at noon so all morning jobs have had time to be marked complete.
-  cron.schedule("0 0 12 * * *", async () => {
-    console.log("[InternalCron] Running NightlySync...");
-    const startedAt = new Date();
-    try {
-      const result = await runNightlySync();
-      const summary = `date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`;
-      console.log(`[InternalCron] NightlySync — ${summary}`);
-      await recordHeartbeat("nightly-sync", summary, result.inserted > 0);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] NightlySync failed:", msg);
-      await recordHeartbeat("nightly-sync", `error: ${msg}`, false);
-      // recordSyncRun is already called inside runNightlySync on error,
-      // but if runNightlySync itself throws before reaching that, record here.
-      await recordSyncRun({
-        runType: "launch27-sync",
-        status: "error",
-        message: `Internal cron: NightlySync threw: ${msg}`,
-        errorDetail: msg,
-        startedAt,
-        durationMs: Date.now() - startedAt.getTime(),
-      });
-    }
-  }, { timezone: "America/New_York" });
-
-  // ── Tomorrow's schedule sync: 9 PM ET daily ──────────────────────────────
-  // Syncs tomorrow's bookings from Launch27 so cleaners see their jobs overnight.
-  // Uses the same runNightlySync logic, just called with tomorrow's date.
-  cron.schedule("0 0 21 * * *", async () => {
-    const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-    etNow.setDate(etNow.getDate() + 1);
-    const yyyy = etNow.getFullYear();
-    const mm = String(etNow.getMonth() + 1).padStart(2, "0");
-    const dd = String(etNow.getDate()).padStart(2, "0");
-    const tomorrowDate = `${yyyy}-${mm}-${dd}`;
-    console.log(`[InternalCron] Running TomorrowSync for ${tomorrowDate}...`);
-    try {
-      const result = await runNightlySync(tomorrowDate);
-      const summary = `date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`;
-      console.log(`[InternalCron] TomorrowSync — ${summary}`);
-      await recordHeartbeat("tomorrow-sync", summary, true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] TomorrowSync failed:", msg);
-      await recordHeartbeat("tomorrow-sync", `error: ${msg}`, false);
-    }
-    // Automatic cleanerJobs synchronization is paused by request. The manual sync
-    // procedure remains available; this avoids stale cleanup deleting jobs when
-    // Launch27 returns an empty result for a scheduled run.
-  }, { timezone: "America/New_York" });
-
-  // ── Today's schedule sync: every 60 min, 6 AM–8 PM ET ──────────────────────
-  // Re-syncs today's bookings hourly to catch reschedules, cancellations, and
-  // new bookings added during the day. Same logic as nightly sync, today's date.
-  // Starts at 6 AM (was 7 AM) to catch jobs added to Launch27 overnight after
-  // the midnight nightly sync — prevents missing jobs in the morning window.
-  cron.schedule("0 0 6-20 * * *", async () => {
-    const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-    const yyyy = etNow.getFullYear();
-    const mm = String(etNow.getMonth() + 1).padStart(2, "0");
-    const dd = String(etNow.getDate()).padStart(2, "0");
-    const todayDate = `${yyyy}-${mm}-${dd}`;
-    console.log(`[InternalCron] Running TodaySync for ${todayDate}...`);
-    const startedAt = new Date();
-    try {
-      const result = await runNightlySync(todayDate);
-      const summary = `date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`;
-      console.log(`[InternalCron] TodaySync — ${summary}`);
-      await recordHeartbeat("today-sync", summary, true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] TodaySync failed:", msg);
-      await recordHeartbeat("today-sync", `error: ${msg}`, false);
-    }
-    // Automatic cleanerJobs synchronization is paused by request. The manual sync
-    // procedure remains available; this avoids stale cleanup deleting jobs when
-    // Launch27 returns an empty result for a scheduled run.
   }, { timezone: "America/New_York" });
 
   // ── Always-On batch generation: 10 AM ET Mon–Sat ───────────────────────────
@@ -1095,9 +1011,7 @@ export function startInternalCron(): void {
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
-  console.log("  - NightlySync:        12:00 PM ET daily");
-  console.log("  - TomorrowSync:       9:00 PM ET daily");
-  console.log("  - TodaySync:          every hour 7 AM–8 PM ET");
+  console.log("  - Launch27 job sync:  manual only (all automatic schedules disabled)");
   console.log("  - AlwaysOnSend:       10 AM ET Mon-Sat (gated by isActive flag)");
   console.log("  - TrackerLinkSend:    8 AM ET daily");
   console.log("  - AiCacheWarmUp:      every 30 minutes");

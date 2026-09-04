@@ -49,9 +49,10 @@ describe("Launch27 cleaner-job sync safety", () => {
     expect(source).not.toContain("if (result.bookings.length === 0) {\n        throw");
   });
 
-  it("does not run the destructive cleaner-job sync from scheduled cron jobs", () => {
+  it("does not run any Launch27 job sync from scheduled cron jobs while preserving the manual active-job route", () => {
     expect(internalCronSource).not.toContain("runSyncTodayJobs(");
-    expect(internalCronSource).toContain("Automatic cleanerJobs synchronization is paused by request.");
+    expect(internalCronSource).not.toContain("runNightlySync(");
+    expect(internalCronSource).toContain("Launch27 job sync:  manual only (all automatic schedules disabled)");
     expect(source).toContain("syncTodayJobs: agentProcedure");
   });
 });
