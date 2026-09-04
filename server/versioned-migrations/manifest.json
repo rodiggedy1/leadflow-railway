@@ -143,6 +143,14 @@
       "sha256": "0f2978fc1c9bb30e4071977b19ae0d68cd0a2eba62ae88279b2053b6d3b72e18",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0020_add_customer_portal_request_payment_snapshot.postconditions.json"
+    },
+    {
+      "id": "0021_add_customer_portal_request_charge_state",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0021_add_customer_portal_request_charge_state.sql",
+      "sha256": "0016d747f736b7a7fb6bad30ea6868e18b592fe0a45959920307c4eb7b26e80f",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0021_add_customer_portal_request_charge_state.postconditions.json"
     }
   ]
 }

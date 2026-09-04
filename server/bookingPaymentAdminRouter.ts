@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { bookingPaymentProfiles, bookings, paymentAuthorizations } from "../drizzle/schema";
+import { bookingPaymentProfiles, bookings, customerPortalServiceRequests, paymentAuthorizations } from "../drizzle/schema";
 import { agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
@@ -9,6 +9,7 @@ import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingP
 import { TRPCError } from "@trpc/server";
 
 const confirmedBookingInput = z.object({ bookingId: z.number().int().positive(), confirmed: z.literal(true) });
+const confirmedPortalRequestInput = z.object({ requestId: z.number().int().positive(), confirmed: z.literal(true) });
 
 async function paymentTargetOrThrow(bookingId: number) {
   const db = await getDb();
@@ -26,6 +27,17 @@ function stripeFailureMessage(error: unknown, fallback: string) {
   return (error as Stripe.StripeRawError)?.message ?? fallback;
 }
 
+async function portalRequestPaymentTargetOrThrow(requestId: number) {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  const [request] = await db.select().from(customerPortalServiceRequests).where(eq(customerPortalServiceRequests.id, requestId)).limit(1);
+  if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "Service request not found" });
+  if (!request.stripePaymentMethodId || !request.paymentLast4) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "No saved card was selected for this service request." });
+  }
+  return { db, request };
+}
+
 export const bookingPaymentAdminRouter = router({
   getForBooking: agentProcedure
     .input(z.object({ bookingId: z.number().int().positive() }))
@@ -37,6 +49,19 @@ export const bookingPaymentAdminRouter = router({
         ? await db.select().from(paymentAuthorizations).where(eq(paymentAuthorizations.bookingPaymentProfileId, profile.id)).orderBy(desc(paymentAuthorizations.createdAt)).limit(10)
         : [];
       return { profile: profile ?? null, authorizations };
+    }),
+
+  getForPortalRequest: agentProcedure
+    .input(z.object({ requestId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const { request } = await portalRequestPaymentTargetOrThrow(input.requestId);
+      return {
+        requestId: request.id,
+        paymentStatus: request.paymentChargedAt ? "captured" as const : "card_on_file" as const,
+        cardBrand: request.paymentBrand,
+        cardLast4: request.paymentLast4,
+        paymentChargedAt: request.paymentChargedAt,
+      };
     }),
 
   placeHold: agentProcedure
@@ -190,5 +215,42 @@ export const bookingPaymentAdminRouter = router({
         await tx.update(bookingPaymentProfiles).set({ paymentStatus: "captured", stripePaymentIntentId: intent.id, capturedAt: now, failureMessage: null, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
       });
       return { success: true, paymentStatus: "captured" as const };
+    }),
+
+  chargePortalRequestSavedCard: agentProcedure
+    .input(confirmedPortalRequestInput)
+    .mutation(async ({ input, ctx }) => {
+      const { db, request } = await portalRequestPaymentTargetOrThrow(input.requestId);
+      if (request.paymentChargedAt || request.stripePaymentIntentId) {
+        throw new TRPCError({ code: "CONFLICT", message: "This service request has already been charged." });
+      }
+      const stripe = getStripeClient();
+      const paymentMethod = await stripe.paymentMethods.retrieve(request.stripePaymentMethodId!);
+      if (paymentMethod.type !== "card" || !paymentMethod.card || !paymentMethod.customer || paymentMethod.card.last4 !== request.paymentLast4) {
+        throw new TRPCError({ code: "CONFLICT", message: "The selected request card is no longer available for charging." });
+      }
+      const customerId = typeof paymentMethod.customer === "string" ? paymentMethod.customer : paymentMethod.customer.id;
+      const agentName = ctx.agent?.agentName ?? "admin";
+      let intent: Stripe.PaymentIntent;
+      try {
+        intent = await stripe.paymentIntents.create({
+          amount: request.estimatedTotalCents,
+          currency: "usd",
+          customer: customerId,
+          payment_method: request.stripePaymentMethodId,
+          confirm: true,
+          off_session: true,
+          description: `LeadFlow service request ${request.publicRequestNumber}`,
+          metadata: { source: "customer_portal_service_request", customerPortalServiceRequestId: String(request.id), operation: "direct_charge", createdBy: agentName },
+        }, { idempotencyKey: `leadflow:portal-request:${request.id}:direct_charge` });
+      } catch (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Stripe charge failed: ${stripeFailureMessage(error, "Stripe charge failed")}` });
+      }
+      if (intent.status !== "succeeded") {
+        throw new TRPCError({ code: "CONFLICT", message: "Stripe requires further action before this card can be charged." });
+      }
+      const paymentChargedAt = Date.now();
+      await db.update(customerPortalServiceRequests).set({ stripePaymentIntentId: intent.id, paymentChargedAt, updatedAt: new Date() }).where(eq(customerPortalServiceRequests.id, request.id));
+      return { success: true, paymentStatus: "captured" as const, paymentChargedAt };
     }),
 });

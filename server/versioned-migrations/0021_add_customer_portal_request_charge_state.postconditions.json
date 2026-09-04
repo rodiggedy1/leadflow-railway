@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "table": "customer_portal_service_requests",
+  "columns": [
+    { "name": "stripePaymentIntentId", "columnType": "varchar(255)", "nullable": true },
+    { "name": "paymentChargedAt", "columnType": "bigint", "nullable": true }
+  ],
+  "indexes": []
+}
