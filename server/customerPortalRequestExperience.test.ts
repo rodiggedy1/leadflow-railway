@@ -28,6 +28,11 @@ describe("customer portal service request experience", () => {
       readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8"),
     ]);
     expect(portal.indexOf("portal.data.requests.map(request")).toBeLessThan(portal.indexOf("portal.data.cleanings.map(cleaning"));
+    expect(portal).toContain('portal.data.requests.map(request => <article className="mib-portal-booking-card"');
+    expect(portal).not.toContain('portal.data.requests.map(request => <article className="mib-portal-request-card"');
+    expect(portal).toContain('<div className="mib-portal-booking-top"><div><small>HOME SERVICE REQUEST</small>');
+    expect(portal).toContain('<div className="mib-portal-booking-grid"><div><CalendarDays />');
+    expect(portal).toContain('<div className="mib-portal-booking-footer"><div><i />{request.publicRequestNumber');
     expect(portal).toContain("CustomerPortalAppointmentCalendar");
     expect(portal).toContain("customerPortalAppointmentWindows");
     expect(portal).not.toContain('input type="date"');
