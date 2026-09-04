@@ -79,7 +79,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     // fine-print text shown below the button. No checkbox needed.
   };
 
-  var btn, panel;
+  var btn, panel, bookingFrame;
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function timeLabel() {
@@ -382,7 +382,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     footer.appendChild(footerText);
 
     if (isBooking) {
-      var bookingFrame = el('iframe', {
+      bookingFrame = el('iframe', {
         width: '100%',
         height: '100%',
         border: '0',
@@ -735,8 +735,8 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
 
   function closeBookingWidget(event) {
     if (!event || event.origin !== API_BASE || !event.data) return;
-    if (event.data.type === 'mib-booking-widget-portal' && typeof event.data.code === 'string' && /^[A-Za-z0-9_-]{32,128}$/.test(event.data.code)) {
-      window.location.assign(API_BASE + '/my-home?access=' + encodeURIComponent(event.data.code));
+    if (event.data.type === 'mib-booking-widget-portal' && bookingFrame && event.source === bookingFrame.contentWindow && typeof event.data.code === 'string' && /^[A-Za-z0-9_-]{32,128}$/.test(event.data.code)) {
+      window.location.assign(API_BASE + '/customer-portal/handoff?access=' + encodeURIComponent(event.data.code));
       return;
     }
     if (event.data.type !== 'mib-booking-widget-close') return;

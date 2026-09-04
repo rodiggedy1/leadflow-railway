@@ -34,6 +34,7 @@ import { registerGbpRoutes } from "../gbpRoutes";
 import { backfillTeamGeocodesOnStartup } from "../schedulingUtils";
 import { startGlanceWorker, backfillGlanceQueue, clearBackfillCooldown } from "../gmailGlanceWorker";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
+import { registerCustomerPortalHandoffRoute } from "../customerPortalHandoffRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -1634,6 +1635,8 @@ async function startServer() {
   registerWebhookRoutes(app);
   // Embeddable widget script for external websites
   registerWidgetEmbedRoute(app);
+  // One-time customer portal code redemption must happen before the portal app renders.
+  registerCustomerPortalHandoffRoute(app);
   // SSE proof-of-concept test routes
   registerSseTestRoutes(app);
   // Production SSE stream for OpsChat real-time updates

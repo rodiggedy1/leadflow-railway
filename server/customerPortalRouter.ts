@@ -2,11 +2,9 @@ import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
 import { bookings, customerPortalAccounts, customerPortalServiceRequests } from "../drizzle/schema";
 import { getDb } from "./db";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { getCustomerPortalSessionFromRequest, signCustomerPortalSession } from "./_core/customerPortalAuth";
-import { CUSTOMER_PORTAL_COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
+import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
-import { createCustomerPortalRequestNumber, redeemCustomerPortalHandoff } from "./customerPortalService";
+import { createCustomerPortalRequestNumber } from "./customerPortalService";
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
 
 const requestSchema = z.object({
@@ -24,15 +22,6 @@ export const customerPortalRouter = router({
     const db = await getDb();
     if (!db) throw new Error("Customer portal is unavailable.");
     return db.select().from(customerPortalServiceRequests).orderBy(desc(customerPortalServiceRequests.createdAt)).limit(input.limit);
-  }),
-  redeemHandoff: publicProcedure.input(z.object({ code: z.string().trim().min(32).max(128) })).mutation(async ({ ctx, input }) => {
-    const db = await getDb();
-    if (!db) throw new Error("Customer portal is unavailable.");
-    const account = await redeemCustomerPortalHandoff(db, input.code);
-    if (!account) throw new Error("This portal link has expired. Please return to your booking confirmation.");
-    const token = await signCustomerPortalSession({ accountId: account.id, customerName: account.customerName, customerPhone: account.customerPhone });
-    ctx.res.cookie(CUSTOMER_PORTAL_COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
-    return { customerName: account.customerName };
   }),
   me: publicProcedure.query(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);

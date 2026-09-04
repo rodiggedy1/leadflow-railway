@@ -60,7 +60,7 @@ export function BookingPaymentCheckout({ publicFunnelNumber, mutationToken, cust
     try {
       const result = await startSetup.mutateAsync({ publicFunnelNumber, mutationToken, consentAccepted: true });
       if (result.alreadyComplete) {
-        onComplete({ bookingId: result.bookingId, cardBrand: "Card", cardLast4: "saved" });
+        onComplete({ bookingId: result.bookingId, cardBrand: "Card", cardLast4: "saved", portalAccessCode: result.portalAccessCode });
         return;
       }
       setClientSecret(result.clientSecret);
