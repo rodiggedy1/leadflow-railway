@@ -20,6 +20,7 @@ import { buildPreparedNativeBooking, NativeBookingInputError } from "./bookingsS
 import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingPaymentService";
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
+import { createPortalHandoffForBookingCustomer } from "./customerPortalRouter";
 import { TRPCError } from "@trpc/server";
 
 function asBookingInput(record: typeof bookingFunnelRecords.$inferSelect): PrepareBookingInput {
@@ -186,7 +187,8 @@ export const bookingPaymentRouter = router({
       const stripe = getStripeClient();
 
       if (target.profile.paymentStatus === "card_on_file") {
-        return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const };
+        const portalHandoffCode = await createPortalHandoffForBookingCustomer({ customerName: record.customerName, customerPhone: record.customerPhone, customerEmail: record.customerEmail });
+        return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const, portalHandoffCode };
       }
       if (target.profile.stripeSetupIntentId) {
         const existing = await stripe.setupIntents.retrieve(target.profile.stripeSetupIntentId);
@@ -275,6 +277,7 @@ export const bookingPaymentRouter = router({
       void sendBookingCompletionNotifications(record.bookingId).catch((error) =>
         console.error("[BookingPaymentRouter] Booking completion notifications failed:", error)
       );
+      const portalHandoffCode = await createPortalHandoffForBookingCustomer({ customerName: record.customerName, customerPhone: record.customerPhone, customerEmail: record.customerEmail });
       return {
         bookingId: record.bookingId,
         paymentStatus: "card_on_file" as const,
@@ -282,6 +285,7 @@ export const bookingPaymentRouter = router({
         cardLast4: paymentMethod.card.last4,
         cardExpMonth: paymentMethod.card.exp_month,
         cardExpYear: paymentMethod.card.exp_year,
+        portalHandoffCode,
       };
     }),
 });

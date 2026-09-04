@@ -18,7 +18,7 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.6.3";
+const WIDGET_VERSION = "2.7.0";
 const WIDGET_CONTENT_MODE: "booking" | "sms" = "booking";
 
 export function registerWidgetEmbedRoute(app: Express) {
@@ -733,10 +733,16 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     if (val) renderBody();
   }
 
-  function closeBookingWidget(event) {
-    if (!event || event.origin !== API_BASE || !event.data || event.data.type !== 'mib-booking-widget-close') return;
-    state.dismissed = true;
-    setOpen(false);
+  function handleBookingWidgetMessage(event) {
+    if (!event || event.origin !== API_BASE || !event.data) return;
+    if (event.data.type === 'mib-booking-widget-close') {
+      state.dismissed = true;
+      setOpen(false);
+      return;
+    }
+    if (event.data.type === 'mib-customer-portal-open' && typeof event.data.url === 'string' && event.data.url.indexOf(API_BASE + '/my-home?access=') === 0) {
+      window.location.assign(event.data.url);
+    }
   }
 
   // ── Auto-open after 15 seconds ───────────────────────────────────────────────
@@ -775,7 +781,7 @@ function buildWidgetScript(apiBase: string, version: string, contentMode: "booki
     buildButton();
     buildPanel();
     window.addEventListener('resize', applyPanelLayout);
-    window.addEventListener('message', closeBookingWidget);
+    window.addEventListener('message', handleBookingWidgetMessage);
     scheduleAutoOpen();
     setupExitIntent();
   }

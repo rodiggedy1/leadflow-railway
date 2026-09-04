@@ -18,6 +18,7 @@ const Home = lazy(() => import("./pages/Home"));
 const Book = lazy(() => import("./pages/Book"));
 const BookWidget = lazy(() => import("./pages/BookWidget"));
 const BookNow = lazy(() => import("./pages/BookNow"));
+const CustomerPortal = lazy(() => import("./pages/CustomerPortal"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AgentDashboard = lazy(() => import("./pages/AgentDashboard"));
 const ReactivationCampaigns = lazy(() => import("./pages/ReactivationCampaigns"));
@@ -109,6 +110,7 @@ function Router() {
         <Route path={"/book"} component={Book} />
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
+        <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
