@@ -5,6 +5,7 @@ import {
   bookingPaymentProfiles,
   bookingSeries,
   bookings,
+  stripeCustomers,
 } from "../drizzle/schema";
 import {
   BOOKING_PAYMENT_CONSENT_TEXT,
@@ -22,7 +23,8 @@ import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingP
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import { createCustomerPortalHandoff, ensureCustomerPortalAccount } from "./customerPortalService";
-import { signCustomerPortalSession } from "./_core/customerPortalAuth";
+import { getCustomerPortalSavedCard } from "./customerPortalPaymentService";
+import { getCustomerPortalSessionFromRequest, signCustomerPortalSession } from "./_core/customerPortalAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { CUSTOMER_PORTAL_COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { TRPCError } from "@trpc/server";
@@ -269,6 +271,37 @@ export const bookingPaymentRouter = router({
       return { alreadyComplete: false, bookingId: target.bookingId, paymentStatus: "setup_pending" as const, clientSecret: setupIntent.client_secret };
     }),
 
+  reuseSavedCard: publicProcedure
+    .input(publicFunnelInput)
+    .mutation(async ({ input, ctx }) => {
+      const session = await getCustomerPortalSessionFromRequest(ctx.req);
+      if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Open your portal to use a saved card." });
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const [record] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
+      if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
+      verifiedFunnelTokenOrThrow(record, input.mutationToken);
+      if (record.customerPhone !== session.customerPhone) throw new TRPCError({ code: "FORBIDDEN", message: "The saved card does not belong to this booking." });
+      const target = await ensureBookingPaymentTarget(record);
+      if (target.profile.paymentStatus === "card_on_file") {
+        const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
+        return { bookingId: target.bookingId, paymentStatus: "card_on_file" as const, cardBrand: target.profile.cardBrand ?? "Card", cardLast4: target.profile.cardLast4 ?? "saved", directPortalSessionReady };
+      }
+      const savedCard = await getCustomerPortalSavedCard(db, session.customerPhone);
+      if (!savedCard) throw new TRPCError({ code: "CONFLICT", message: "A saved card is not available. Please add a new card." });
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        const result = await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripeCustomerId: savedCard.stripeCustomerId, stripePaymentMethodId: savedCard.stripePaymentMethodId, cardBrand: savedCard.brand, cardLast4: savedCard.last4, cardExpMonth: savedCard.expMonth, cardExpYear: savedCard.expYear, version: sql`${bookingPaymentProfiles.version} + 1`, updatedAt: now }).where(and(eq(bookingPaymentProfiles.id, target.profile.id), eq(bookingPaymentProfiles.version, target.profile.version)));
+        if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "The payment method changed. Please try again." });
+        await tx.update(bookings).set({ status: "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, target.bookingId));
+        await tx.update(bookingFunnelRecords).set({ stripeCustomerId: savedCard.stripeCustomerId, stripePaymentMethodId: savedCard.stripePaymentMethodId, paymentBrand: savedCard.brand, paymentLast4: savedCard.last4, updatedAt: now }).where(eq(bookingFunnelRecords.id, record.id));
+      });
+      broadcastOpsUpdate("booking_funnel_update");
+      void sendBookingCompletionNotifications(target.bookingId).catch((error) => console.error("[BookingPaymentRouter] Booking completion notifications failed:", error));
+      const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
+      return { bookingId: target.bookingId, paymentStatus: "card_on_file" as const, cardBrand: savedCard.brand ?? "Card", cardLast4: savedCard.last4, directPortalSessionReady };
+    }),
+
   confirmSetup: publicProcedure
     .input(publicFunnelInput.extend({ paymentMethodId: z.string().trim().min(1).max(255) }))
     .mutation(async ({ input, ctx }) => {
@@ -315,6 +348,26 @@ export const bookingPaymentRouter = router({
           paymentLast4: paymentMethod.card.last4,
           updatedAt: now,
         }).where(eq(bookingFunnelRecords.id, record.id));
+        await tx.insert(stripeCustomers).values({
+          phone: record.customerPhone,
+          name: record.customerName,
+          stripeCustomerId: profile.stripeCustomerId,
+          stripePaymentMethodId: paymentMethod.id,
+          cardBrand: paymentMethod.card.brand,
+          cardLast4: paymentMethod.card.last4,
+          cardExpMonth: paymentMethod.card.exp_month,
+          cardExpYear: paymentMethod.card.exp_year,
+          cardSavedAt: Date.now(),
+        }).onDuplicateKeyUpdate({ set: {
+          name: record.customerName,
+          stripeCustomerId: profile.stripeCustomerId,
+          stripePaymentMethodId: paymentMethod.id,
+          cardBrand: paymentMethod.card.brand,
+          cardLast4: paymentMethod.card.last4,
+          cardExpMonth: paymentMethod.card.exp_month,
+          cardExpYear: paymentMethod.card.exp_year,
+          cardSavedAt: Date.now(),
+        } });
       });
       broadcastOpsUpdate("booking_funnel_update");
       void sendBookingCompletionNotifications(record.bookingId).catch((error) =>

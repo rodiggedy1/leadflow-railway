@@ -135,6 +135,14 @@
       "sha256": "be42b0aaabcc0b5e13c0872c7dd016fb2e4d583290ba2d66fe63dfdedc38c7ca",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0019_create_customer_portal_service_requests.postconditions.json"
+    },
+    {
+      "id": "0020_add_customer_portal_request_payment_snapshot",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0020_add_customer_portal_request_payment_snapshot.sql",
+      "sha256": "aa155ddbb67103def3a869495c075cdd970e6e32035cdc4af0e1c94bfd0e6b4c",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0020_add_customer_portal_request_payment_snapshot.postconditions.json"
     }
   ]
 }

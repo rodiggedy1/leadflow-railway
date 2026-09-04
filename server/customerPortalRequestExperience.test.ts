@@ -42,9 +42,8 @@ describe("customer portal service request experience", () => {
     expect(portal).toContain("Use my home-cleaning address");
     expect(portal).toContain("const savedCardLabel = portal.data.savedCard?.last4");
     expect(portal).toContain("ending in ${portal.data.savedCard.last4}");
-    expect(router).toContain("bookingPaymentProfiles");
-    expect(router).toContain("innerJoin(bookings, eq(bookingPaymentProfiles.bookingId, bookings.id))");
-    expect(router).toContain('profile.paymentStatus === "card_on_file" && Boolean(profile.cardLast4)');
+    expect(router).toContain('getCustomerPortalSavedCard(db, account.customerPhone)');
+    expect(router).toContain('savedCard: savedCard ? { brand: savedCard.brand, last4: savedCard.last4 } : null');
   });
 
   it("opens home cleaning as a prefilled in-portal rebook without replacing its existing booking lifecycle", async () => {
@@ -56,13 +55,37 @@ describe("customer portal service request experience", () => {
     expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning');
     expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><div className="mib-portal-service-icon"><Home /></div>');
     expect(portal).not.toContain('<a className="mib-portal-primary" href="/book-now"><Plus /> Book home cleaning');
-    expect(portal).toContain('<BookNow portalRebook={{ customerName: portal.data.account.name, phone: portal.data.account.phone, email: portal.data.account.email, address: homeAddress }} onClose={closeCleaningRebook} />');
-    expect(bookingPage).toContain('portalRebook?: { customerName: string; phone: string; email: string | null; address: string };');
+    expect(portal).toContain('<BookNow portalRebook={{ customerName: portal.data.account.name, phone: portal.data.account.phone, email: portal.data.account.email, address: homeAddress, savedCard: portal.data.savedCard }} onClose={closeCleaningRebook} />');
+    expect(bookingPage).toContain('portalRebook?: { customerName: string; phone: string; email: string | null; address: string; savedCard: { brand: string | null; last4: string } | null };');
     expect(bookingPage).toContain('const [address, setAddress] = useState(portalRebook?.address ?? "");');
     expect(bookingPage).toContain('Use a different address');
     expect(bookingPage).toContain('Use my home-cleaning address');
     expect(bookingPage).toContain('source: embedded ? "widget-popup" : "book-page"');
     expect(bookingPage).toContain('if (portalRebook) return;');
     expect(bookingPage).toContain('window.location.assign("/my-home")');
+  });
+
+  it("uses the same saved-card default and new-card choice for every portal service without charging", async () => {
+    const [portal, router, paymentRouter] = await Promise.all([
+      readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
+      readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8"),
+      readFile(path.resolve(root, "server/bookingPaymentRouter.ts"), "utf8"),
+    ]);
+    expect(portal).toContain('Use ${activeCard.brand ? `${activeCard.brand} ` : "card "}ending in ${activeCard.last4}');
+    expect(portal).toContain('Selected by default · no charge today');
+    expect(portal).toContain('Add a new card');
+    expect(portal).toContain('startNewCardSetup.mutateAsync().then(setNewCardSetup)');
+    expect(portal).toContain('request.paymentLast4');
+    expect(router).toContain('startNewCardSetup: publicProcedure');
+    expect(router).toContain('confirmNewCardSetup: publicProcedure');
+    expect(router).toContain('usage: "off_session"');
+    expect(router).toContain('paymentBrand: savedCard.brand, paymentLast4: savedCard.last4');
+    expect(router).not.toContain('paymentIntents.create');
+    expect(paymentRouter).toContain('reuseSavedCard: publicProcedure');
+    expect(paymentRouter).toContain('if (record.customerPhone !== session.customerPhone)');
+    expect(paymentRouter).toContain('await tx.insert(stripeCustomers).values({');
+    expect(paymentRouter).toContain('stripePaymentMethodId: paymentMethod.id');
+    expect(paymentRouter).not.toContain('paymentIntents.create');
+    expect(portal).toContain('Your home, managed in one place.');
   });
 });

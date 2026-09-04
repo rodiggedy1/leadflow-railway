@@ -4460,6 +4460,9 @@ export const customerPortalServiceRequests = mysqlTable("customer_portal_service
   requestedLocalTime: varchar("requestedLocalTime", { length: 80 }).notNull(),
   estimatedTotalCents: int("estimatedTotalCents").notNull(),
   estimateRequiresReview: tinyint("estimateRequiresReview").notNull().default(1),
+  paymentBrand: varchar("paymentBrand", { length: 40 }),
+  paymentLast4: varchar("paymentLast4", { length: 4 }),
+  stripePaymentMethodId: varchar("stripePaymentMethodId", { length: 255 }),
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
   updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
 }, (t) => [uniqueIndex("uq_customer_portal_service_request_number").on(t.publicRequestNumber), index("idx_customer_portal_service_request_account").on(t.accountId, t.createdAt), index("idx_customer_portal_service_request_schedule").on(t.requestedLocalDate, t.status)]);

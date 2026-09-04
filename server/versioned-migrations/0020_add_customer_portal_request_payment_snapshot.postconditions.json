@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "table": "customer_portal_service_requests",
+  "columns": [
+    { "name": "paymentBrand", "columnType": "varchar(40)", "nullable": true },
+    { "name": "paymentLast4", "columnType": "varchar(4)", "nullable": true },
+    { "name": "stripePaymentMethodId", "columnType": "varchar(255)", "nullable": true }
+  ],
+  "indexes": []
+}
