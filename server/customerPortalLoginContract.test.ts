@@ -28,16 +28,16 @@ describe("customer portal SMS re-entry contract", () => {
     }
   });
 
-  it("uses a short-lived keyed code hash and atomic single-use verification with failed-attempt lockout", () => {
+  it("uses a short-lived keyed submitted-code hash and atomic single-use verification", () => {
     expect(loginService).toContain('createHmac("sha256", ENV.cookieSecret)');
     expect(loginService).toContain("randomInt(0, 1_000_000)");
     expect(loginService).toContain("PORTAL_LOGIN_CODE_TTL_MS = 10 * 60 * 1_000");
-    expect(loginService).toContain("PORTAL_LOGIN_MAX_FAILED_ATTEMPTS = 5");
-    expect(loginService).toContain("PORTAL_LOGIN_LOCK_MS = 10 * 60 * 1_000");
     expect(loginService).toContain("isNull(customerPortalLoginCodes.usedAt)");
     expect(loginService).toContain("gt(customerPortalLoginCodes.expiresAt, now)");
     expect(loginService).toContain("eq(customerPortalLoginCodes.codeHash, codeHash)");
-    expect(loginService).toContain("failedAttempts >= PORTAL_LOGIN_MAX_FAILED_ATTEMPTS");
+    expect(loginService).toContain("eq(customerPortalLoginCodes.accountId, account.id), eq(customerPortalLoginCodes.codeHash, codeHash), isNull(customerPortalLoginCodes.usedAt)");
+    expect(loginService).not.toContain("const activeRows = await db.select().from(customerPortalLoginCodes)");
+    expect(loginService).not.toContain("active.codeHash !== codeHash");
     expect(loginService).toContain("if (!sent.success)");
     expect(loginService).toContain("usedAt: failedAt");
     expect(loginService).not.toMatch(/console\.(?:log|info|warn|error).*code/i);
