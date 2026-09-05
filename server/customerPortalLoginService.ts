@@ -1,5 +1,5 @@
 import { createHmac, randomInt } from "crypto";
-import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { customerPortalAccounts, customerPortalLoginCodes, customerPortalLoginRateLimits } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
@@ -81,24 +81,29 @@ export async function requestCustomerPortalLoginCode(db: DbClient, input: { phon
   const account = accounts[0];
   if (!account) return { sent: false };
 
-  const activeCodes = await db.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now))).limit(1);
-  if (activeCodes[0] && activeCodes[0].createdAt.getTime() > now - PORTAL_LOGIN_RESEND_COOLDOWN_MS) return { sent: false };
+  const issuance = await db.transaction(async tx => {
+    await tx.execute(sql`SELECT id FROM customer_portal_accounts WHERE id = ${account.id} FOR UPDATE`);
+    const activeCodes = await tx.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now))).orderBy(desc(customerPortalLoginCodes.createdAt)).limit(1);
+    if (activeCodes[0] && activeCodes[0].createdAt.getTime() > now - PORTAL_LOGIN_RESEND_COOLDOWN_MS) return null;
 
-  const code = resolvedDependencies.generateCode();
-  if (!/^\d{6}$/.test(code)) throw new Error("Portal login code generator returned an invalid code.");
-  const codeHash = loginCodeHash(account.id, code);
-  const createdAt = new Date(now);
-  await db.update(customerPortalLoginCodes).set({ usedAt: createdAt, updatedAt: createdAt }).where(and(eq(customerPortalLoginCodes.accountId, account.id), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now)));
-  await db.insert(customerPortalLoginCodes).values({ accountId: account.id, codeHash, expiresAt: now + PORTAL_LOGIN_CODE_TTL_MS, usedAt: null, failedAttempts: 0, lockedUntil: null, createdAt, updatedAt: createdAt });
+    const code = resolvedDependencies.generateCode();
+    if (!/^\d{6}$/.test(code)) throw new Error("Portal login code generator returned an invalid code.");
+    const codeHash = loginCodeHash(account.id, code);
+    const createdAt = new Date(now);
+    await tx.update(customerPortalLoginCodes).set({ usedAt: createdAt, updatedAt: createdAt }).where(and(eq(customerPortalLoginCodes.accountId, account.id), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now)));
+    await tx.insert(customerPortalLoginCodes).values({ accountId: account.id, codeHash, expiresAt: now + PORTAL_LOGIN_CODE_TTL_MS, usedAt: null, failedAttempts: 0, lockedUntil: null, createdAt, updatedAt: createdAt });
+    return { code, codeHash };
+  });
+  if (!issuance) return { sent: false };
   let sent: { success: boolean };
   try {
-    sent = await resolvedDependencies.sendCode(normalizedPhone, code);
+    sent = await resolvedDependencies.sendCode(normalizedPhone, issuance.code);
   } catch {
     sent = { success: false };
   }
   if (!sent.success) {
     const failedAt = new Date(resolvedDependencies.now());
-    await db.update(customerPortalLoginCodes).set({ usedAt: failedAt, updatedAt: failedAt }).where(and(eq(customerPortalLoginCodes.codeHash, codeHash), isNull(customerPortalLoginCodes.usedAt)));
+    await db.update(customerPortalLoginCodes).set({ usedAt: failedAt, updatedAt: failedAt }).where(and(eq(customerPortalLoginCodes.codeHash, issuance.codeHash), isNull(customerPortalLoginCodes.usedAt)));
     return { sent: false };
   }
   return { sent: true };
@@ -111,14 +116,16 @@ export async function verifyCustomerPortalLoginCode(db: DbClient, input: { phone
   const account = accounts[0];
   if (!account) return null;
   const codeHash = loginCodeHash(account.id, input.code);
-  const activeRows = await db.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now), or(isNull(customerPortalLoginCodes.lockedUntil), lt(customerPortalLoginCodes.lockedUntil, now)))).limit(1);
-  const active = activeRows[0];
-  if (!active) return null;
-  if (active.codeHash !== codeHash) {
+  const matchingRows = await db.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), eq(customerPortalLoginCodes.codeHash, codeHash), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now), or(isNull(customerPortalLoginCodes.lockedUntil), lt(customerPortalLoginCodes.lockedUntil, now)))).limit(1);
+  const matchingCode = matchingRows[0];
+  if (!matchingCode) {
+    const activeRows = await db.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now), or(isNull(customerPortalLoginCodes.lockedUntil), lt(customerPortalLoginCodes.lockedUntil, now)))).orderBy(desc(customerPortalLoginCodes.createdAt)).limit(1);
+    const active = activeRows[0];
+    if (!active) return null;
     const failedAttempts = active.failedAttempts + 1;
     await db.update(customerPortalLoginCodes).set({ failedAttempts, lockedUntil: failedAttempts >= PORTAL_LOGIN_MAX_FAILED_ATTEMPTS ? now + PORTAL_LOGIN_LOCK_MS : null, updatedAt: new Date(now) }).where(and(eq(customerPortalLoginCodes.id, active.id), eq(customerPortalLoginCodes.failedAttempts, active.failedAttempts), isNull(customerPortalLoginCodes.usedAt)));
     return null;
   }
-  const result = await db.update(customerPortalLoginCodes).set({ usedAt: new Date(now), updatedAt: new Date(now) }).where(and(eq(customerPortalLoginCodes.id, active.id), eq(customerPortalLoginCodes.codeHash, codeHash), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now), or(isNull(customerPortalLoginCodes.lockedUntil), lt(customerPortalLoginCodes.lockedUntil, now))));
+  const result = await db.update(customerPortalLoginCodes).set({ usedAt: new Date(now), updatedAt: new Date(now) }).where(and(eq(customerPortalLoginCodes.id, matchingCode.id), eq(customerPortalLoginCodes.codeHash, codeHash), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now), or(isNull(customerPortalLoginCodes.lockedUntil), lt(customerPortalLoginCodes.lockedUntil, now))));
   return affectedRows(result) === 1 ? account : null;
 }

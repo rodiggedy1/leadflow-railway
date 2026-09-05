@@ -43,6 +43,17 @@ describe("customer portal SMS re-entry contract", () => {
     expect(loginService).not.toMatch(/console\.(?:log|info|warn|error).*code/i);
   });
 
+  it("serializes issuance and never compares a valid submitted code with an arbitrary active row", () => {
+    expect(loginService).toContain("db.transaction(async tx => {");
+    expect(loginService).toContain("SELECT id FROM customer_portal_accounts WHERE id = ${account.id} FOR UPDATE");
+    expect(loginService).toContain("const matchingRows = await db.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), eq(customerPortalLoginCodes.codeHash, codeHash)");
+    expect(loginService).toContain("const matchingCode = matchingRows[0];");
+    expect(loginService).toContain("if (!matchingCode) {");
+    expect(loginService).toContain(".orderBy(desc(customerPortalLoginCodes.createdAt)).limit(1);");
+    expect(loginService).toContain("eq(customerPortalLoginCodes.id, matchingCode.id)");
+    expect(loginService).not.toContain("if (active.codeHash !== codeHash)");
+  });
+
   it("applies persisted phone and IP request limits, a server-side resend cooldown, and neutral results", () => {
     expect(loginService).toContain('consumeRateLimit(db, "phone", normalizedPhone || "invalid", PORTAL_LOGIN_PHONE_REQUEST_LIMIT, now)');
     expect(loginService).toContain('consumeRateLimit(db, "ip", safeIp, PORTAL_LOGIN_IP_REQUEST_LIMIT, now)');
