@@ -53,7 +53,7 @@ describe("customer portal service request experience", () => {
     ]);
     expect(portal).toContain('const [showCleaningRebook, setShowCleaningRebook] = useState(false);');
     expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning');
-    expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><div className="mib-portal-service-icon"><Home /></div>');
+    expect(portal).toContain('className="mib-portal-service mib-portal-service-cleaning" type="button" onClick={() => setShowCleaningRebook(true)}');
     expect(portal).not.toContain('<a className="mib-portal-primary" href="/book-now"><Plus /> Book home cleaning');
     expect(portal).toContain('<BookNow portalRebook={{ customerName: portal.data.account.name, phone: portal.data.account.phone, email: portal.data.account.email, address: homeAddress, savedCard: portal.data.savedCard }} onClose={closeCleaningRebook} />');
     expect(bookingPage).toContain('portalRebook?: { customerName: string; phone: string; email: string | null; address: string; savedCard: { brand: string | null; last4: string } | null };');

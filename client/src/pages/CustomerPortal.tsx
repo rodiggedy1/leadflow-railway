@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Armchair, ArrowRight, CalendarClock, CalendarDays, CheckCircle2, ClipboardList, CreditCard, Home, MapPin, Plus, ShieldCheck, Sparkles, Trash2, Truck, Waves, Wrench } from "lucide-react";
+import { Armchair, ArrowRight, Bell, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, CircleHelp, ClipboardList, CreditCard, Grid2X2, Home, MapPin, Plus, ReceiptText, ShieldCheck, Sparkles, Trash2, Truck, Waves, Wrench } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Elements, CardElement } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
@@ -11,6 +11,8 @@ import { customerPortalAppointmentWindows, formatCustomerPortalDate, formatCusto
 import BookNow from "./BookNow";
 import "./customer-portal.css";
 import "./customer-portal-request-upgrades.css";
+import "./customer-portal-dashboard.css";
+import "./customer-portal-dashboard-overrides.css";
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
@@ -21,6 +23,14 @@ const SERVICE_ICONS: Record<string, typeof Wrench> = {
   "junk-removal": Trash2,
   "pressure-washing": Waves,
 };
+const SERVICE_IMAGE_URLS: Record<string, string> = {
+  "furniture-assembly": "/manus-storage/maids-in-black-service-furniture-assembly_3aabfbd7.png",
+  "moving-help": "/manus-storage/maids-in-black-service-moving-help_a58ca741.png",
+  "lawn-yard-care": "/manus-storage/maids-in-black-service-lawn-yard_c8ae902e.png",
+  "junk-removal": "/manus-storage/maids-in-black-service-junk-removal_d80019ac.png",
+  "pressure-washing": "/manus-storage/maids-in-black-service-pressure-washing_af6e8f2b.png",
+};
+const PORTAL_HERO_IMAGE = "/manus-storage/maids-in-black-portal-hero-living-room_24258f28.png";
 
 function formatStatus(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, char => char.toUpperCase());
@@ -108,32 +118,42 @@ export default function CustomerPortal() {
   const homeAddress = portal.data.cleanings.find(cleaning => Boolean(cleaning.address))?.address ?? "";
   const savedCardLabel = portal.data.savedCard?.last4 ? `${portal.data.savedCard.brand ? `${portal.data.savedCard.brand} ` : "Card "}ending in ${portal.data.savedCard.last4}` : "No saved card on file";
   const closeCleaningRebook = () => { setShowCleaningRebook(false); void utils.customerPortal.me.invalidate(); };
+  const scrollToSection = (sectionId: string) => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const openService = (serviceId: string) => {
+    if (serviceId === "home-cleaning") { setShowCleaningRebook(true); return; }
+    const service = CUSTOMER_PORTAL_SERVICES.find(candidate => candidate.id === serviceId);
+    if (service) setSelectedService(service);
+  };
 
   return <main className="mib-portal-shell">
-    <header className="mib-portal-topbar"><a href="/my-home"><span className="mib-portal-mark">M<i /></span><span><strong>Maids in Black</strong><small>Your home, managed in one place.</small></span></a><b>{customerName}</b></header>
-    <section className="mib-portal-hero">
-      <div><small>MY HOME · MAIDS IN BLACK</small><h1>Welcome back, {customerName}.</h1><p>Your home requests, timing, and updates are all here.</p></div>
-      <button className="mib-portal-primary" type="button" onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning</button>
-    </section>
-    <section className="mib-portal-stats" aria-label="Account summary">
-      <article><ClipboardList /><div><span>Active bookings</span><strong>{activeCleanings.length}</strong></div></article>
-      <article><CalendarClock /><div><span>Next visit</span><strong>{nextCleaning ? formatLocalDate(nextCleaning.requestedLocalDate) : "—"}</strong></div></article>
-      <article><ShieldCheck /><div><span>Account access</span><strong>This device</strong></div></article>
-    </section>
-    <section className="mib-portal-section mib-portal-discovery" aria-labelledby="mib-services-heading">
-      <div className="mib-portal-heading">
-        <div><small>MORE MAIDS IN BLACK CAN HANDLE</small><h2 id="mib-services-heading">What else can we take off your list?</h2></div>
-        <button className="mib-portal-text-action" type="button" onClick={() => setShowAllServices(current => !current)} aria-expanded={showAllServices}>{showAllServices ? "Show fewer services" : "View all services"} <ArrowRight /></button>
-      </div>
-      <div className="mib-portal-services">
-        <button className="mib-portal-service mib-portal-service-cleaning" type="button" onClick={() => setShowCleaningRebook(true)}><div className="mib-portal-service-icon"><Home /></div><div><strong>Home cleaning</strong><p>One-time or recurring</p><em>Book cleaning <ArrowRight /></em></div></button>
-        {visibleServices.map(service => {
-          const Icon = SERVICE_ICONS[service.id] ?? Wrench;
-          return <button className="mib-portal-service" type="button" key={service.id} onClick={() => setSelectedService(service)}><div className="mib-portal-service-icon"><Icon /></div><div><strong>{service.name}</strong><p>{service.detail}</p><span className="block mb-1 text-[11px] font-bold text-[#202020]">Starting at {formatCurrency(service.startingPrice * 100)}</span><em>Start request <ArrowRight /></em></div></button>;
-        })}
-      </div>
-    </section>
-    <section className="mib-portal-section mib-portal-bookings" aria-labelledby="mib-bookings-heading">
+    <header className="mib-portal-topbar"><a href="/my-home"><span className="mib-portal-mark">M<i /></span><span><strong>Maids in Black</strong><small>Your home, managed in one place.</small></span></a><div className="mib-portal-topbar-actions"><span className="mib-portal-notification" aria-label="Notifications"><Bell /><i /></span><span className="mib-portal-customer-mark">{customerName.charAt(0).toUpperCase()}</span><b>{customerName}</b><ChevronDown /></div></header>
+    <div className="mib-portal-layout">
+      <aside className="mib-portal-sidebar" aria-label="Portal sections">
+        <button className="active" type="button" onClick={() => scrollToSection("mib-home")}><Home /><span>Home</span></button>
+        <button type="button" onClick={() => scrollToSection("mib-bookings")}><CalendarDays /><span>My bookings</span></button>
+        <button type="button" onClick={() => scrollToSection("mib-services")}><Grid2X2 /><span>Services</span></button>
+        <button type="button" onClick={() => scrollToSection("mib-bookings")}><ReceiptText /><span>Payments</span></button>
+        <span className="mib-portal-sidebar-help"><CircleHelp /><span>Need help?<br />Contact us</span></span>
+      </aside>
+      <div className="mib-portal-content">
+        <section className="mib-portal-hero" id="mib-home">
+          <div className="mib-portal-hero-copy"><small>MY HOME</small><h1>Welcome back,<br />{customerName}.</h1><p>Your home requests, timing, and updates are all here.</p><div className="mib-portal-hero-actions"><button className="mib-portal-primary" type="button" onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning</button><button className="mib-portal-hero-secondary" type="button" onClick={() => scrollToSection("mib-services")}>Browse all services <ArrowRight /></button></div></div>
+          <div className="mib-portal-hero-media"><img src={PORTAL_HERO_IMAGE} alt="A calm, light-filled home" /><div><span>A cleaner<br />home for a<br />calmer you.</span><i /></div></div>
+        </section>
+        <section className="mib-portal-stats" aria-label="Account summary">
+          <article><ClipboardList /><div><strong>{activeCleanings.length}</strong><span>Active bookings</span><button type="button" onClick={() => scrollToSection("mib-bookings")}>View and manage <ArrowRight /></button></div></article>
+          <article><CalendarClock /><div><strong>{nextCleaning ? formatLocalDate(nextCleaning.requestedLocalDate) : "—"}</strong><span>Next visit</span><button type="button" onClick={() => scrollToSection("mib-bookings")}>See details <ArrowRight /></button></div></article>
+          <article><ShieldCheck /><div><strong>This device</strong><span>Account access</span><em className="mib-portal-stat-note">Secure portal access</em></div></article>
+        </section>
+        <section className="mib-portal-section mib-portal-discovery" id="mib-services" aria-labelledby="mib-services-heading">
+          <div className="mib-portal-heading"><div><small>MORE MAIDS IN BLACK CAN HANDLE</small><h2 id="mib-services-heading">What else can we take off your list?</h2><p>Book trusted help without searching, calling around, or chasing quotes.</p></div><button className="mib-portal-text-action" type="button" onClick={() => setShowAllServices(current => !current)} aria-expanded={showAllServices}>{showAllServices ? "Show fewer services" : "View all services"} <ArrowRight /></button></div>
+          <div className="mib-portal-services">
+            <button className="mib-portal-service mib-portal-service-cleaning" type="button" onClick={() => setShowCleaningRebook(true)}><div className="mib-portal-service-content"><div className="mib-portal-service-icon"><Home /></div><div><strong>Home cleaning</strong><p>One-time or recurring</p></div><ul><li>Trusted, vetted cleaners</li><li>Same great quality</li><li>Flexible scheduling</li></ul><em>Book cleaning <ArrowRight /></em></div><img className="mib-portal-service-media" src={PORTAL_HERO_IMAGE} alt="Freshly prepared bedroom" /></button>
+            {visibleServices.map(service => { const Icon = SERVICE_ICONS[service.id] ?? Wrench; return <button className={`mib-portal-service mib-portal-service-${service.id}`} type="button" key={service.id} onClick={() => setSelectedService(service)}><img className="mib-portal-service-media" src={SERVICE_IMAGE_URLS[service.id]} alt="" /><div className="mib-portal-service-content"><div className="mib-portal-service-icon"><Icon /></div><div><strong>{service.name}</strong><p>{service.detail}</p><span>Starting at {formatCurrency(service.startingPrice * 100)}</span><em>Start request <ArrowRight /></em></div></div></button>; })}
+          </div>
+        </section>
+        <section className="mib-portal-ask-panel" aria-label="Need a different service"><div><small>DON&apos;T SEE WHAT YOU NEED?</small><h2>Just tell us.</h2><p>We&apos;ll help you find the right home service.</p></div><div><button className="mib-portal-ask-launcher" type="button" onClick={() => { setShowAllServices(true); scrollToSection("mib-services"); }}><Sparkles /><span>Browse all available services</span><ArrowRight /></button><div className="mib-portal-quick-services"><button type="button" onClick={() => openService("home-cleaning")}>Cleaning</button><button type="button" onClick={() => openService("furniture-assembly")}>Assembly</button><button type="button" onClick={() => openService("lawn-yard-care")}>Yard</button><button type="button" onClick={() => openService("moving-help")}>Moving</button></div></div></section>
+        <section className="mib-portal-section mib-portal-bookings" id="mib-bookings" aria-labelledby="mib-bookings-heading">
       <div className="mib-portal-heading"><div><small>YOUR BOOKINGS</small><h2 id="mib-bookings-heading">Everything we&apos;re handling for you.</h2></div>{totalRecords > 0 && <span>{totalRecords} {totalRecords === 1 ? "request" : "requests"}</span>}</div>
       <div className="mib-portal-records">
         {totalRecords === 0 ? <div className="mib-portal-empty"><Sparkles /><h3>Your home history starts here.</h3><p>Your cleaning and service requests will appear here.</p></div> : <>
@@ -145,7 +165,9 @@ export default function CustomerPortal() {
           </article>)}
         </>}
       </div>
-    </section>
+        </section>
+      </div>
+    </div>
     {selectedService && <ServiceRequestForm service={selectedService} homeAddress={homeAddress} savedCard={portal.data.savedCard} customerName={portal.data.account.name} onClose={() => setSelectedService(null)} />}
     {showCleaningRebook && <div className="mib-portal-rebook-overlay" role="dialog" aria-modal="true" aria-label="Rebook home cleaning"><BookNow portalRebook={{ customerName: portal.data.account.name, phone: portal.data.account.phone, email: portal.data.account.email, address: homeAddress, savedCard: portal.data.savedCard }} onClose={closeCleaningRebook} /></div>}
   </main>;
