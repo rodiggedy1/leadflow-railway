@@ -53,7 +53,7 @@ describe("customer portal service request experience", () => {
     ]);
     expect(portal).toContain('const [showCleaningRebook, setShowCleaningRebook] = useState(false);');
     expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning');
-    expect(portal).toContain('onClick={() => setShowCleaningRebook(true)}><div className="mib-portal-service-icon"><Home /></div>');
+    expect(portal).toContain('className="mib-direct-service mib-direct-service-feature" type="button" onClick={() => setShowCleaningRebook(true)}');
     expect(portal).not.toContain('<a className="mib-portal-primary" href="/book-now"><Plus /> Book home cleaning');
     expect(portal).toContain('<BookNow portalRebook={{ customerName: portal.data.account.name, phone: portal.data.account.phone, email: portal.data.account.email, address: homeAddress, savedCard: portal.data.savedCard }} onClose={closeCleaningRebook} />');
     expect(bookingPage).toContain('portalRebook?: { customerName: string; phone: string; email: string | null; address: string; savedCard: { brand: string | null; last4: string } | null };');
@@ -63,6 +63,18 @@ describe("customer portal service request experience", () => {
     expect(bookingPage).toContain('source: embedded ? "widget-popup" : "book-page"');
     expect(bookingPage).toContain('if (portalRebook) return;');
     expect(bookingPage).toContain('window.location.assign("/my-home")');
+  });
+
+  it("implements each supplied sidebar page only with verified existing data or a truthful unavailable state", async () => {
+    const portal = await readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8");
+    expect(portal).toContain('activePage === "bookings"');
+    expect(portal).toContain('activePage === "services"');
+    expect(portal).toContain('activePage === "payments"');
+    expect(portal).toContain('activePage === "messages"');
+    expect(portal).toContain('activePage === "account"');
+    expect(portal).toContain('Messages are not available in this portal yet.');
+    expect(portal).toContain('portal.data.account.phone');
+    expect(portal).toContain('startNewCardSetup.mutateAsync().then(setNewCardSetup)');
   });
 
   it("uses the same saved-card default and new-card choice for every portal service without charging", async () => {
