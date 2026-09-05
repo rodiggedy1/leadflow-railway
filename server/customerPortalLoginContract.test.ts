@@ -43,13 +43,16 @@ describe("customer portal SMS re-entry contract", () => {
     expect(loginService).not.toMatch(/console\.(?:log|info|warn|error).*code/i);
   });
 
-  it("applies persisted phone and IP request limits, a server-side resend cooldown, and neutral results", () => {
-    expect(loginService).toContain('consumeRateLimit(db, "phone", normalizedPhone || "invalid", PORTAL_LOGIN_PHONE_REQUEST_LIMIT, now)');
-    expect(loginService).toContain('consumeRateLimit(db, "ip", safeIp, PORTAL_LOGIN_IP_REQUEST_LIMIT, now)');
-    expect(loginService).toContain("PORTAL_LOGIN_RESEND_COOLDOWN_MS");
+  it("attempts the existing SMS send for every recognized booking phone and only shows code entry after a true send", () => {
+    expect(loginService).not.toContain("consumeRateLimit");
+    expect(loginService).not.toContain("PORTAL_LOGIN_RESEND_COOLDOWN_MS");
+    expect(loginService).not.toContain("customerPortalLoginRateLimits");
     expect(loginService).toContain("return { sent: false };");
-    expect(router).toContain('return { ok: true, resendAfterSeconds: 60 };');
+    expect(router).toContain("return { ok: result.sent };");
     expect(router).toContain("if (!account) return { ok: false };");
+    expect(portal).toContain("if (!result.ok) { setStage(\"phone\"); setSendFailed(true); return; }");
+    expect(portal).toContain("We couldn&apos;t send a sign-in code to that number.");
+    expect(portal).not.toContain("resendAfterSeconds");
   });
 
   it("sets only the established secure portal cookie after successful verification", () => {

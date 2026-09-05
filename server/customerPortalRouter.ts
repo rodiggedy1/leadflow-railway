@@ -31,13 +31,12 @@ export const customerPortalRouter = router({
     if (!db) throw new Error("Customer portal is unavailable.");
     ctx.res.set("Cache-Control", "no-store");
     ctx.res.set("Referrer-Policy", "no-referrer");
-    await requestCustomerPortalLoginCode(db, {
+    const result = await requestCustomerPortalLoginCode(db, {
       phone: input.phone,
-      requestIp: ctx.req.ip || ctx.req.socket.remoteAddress || "unknown",
     }, {
       sendCode: (phone, code) => sendSms({ to: phone, content: `Your Maids in Black sign-in code is ${code}. It expires in 10 minutes.` }),
     });
-    return { ok: true, resendAfterSeconds: 60 };
+    return { ok: result.sent };
   }),
   verifyLoginCode: publicProcedure.input(z.object({ phone: z.string().trim().min(1).max(40), code: z.string().trim().regex(/^\d{6}$/) })).mutation(async ({ ctx, input }) => {
     const db = await getDb();

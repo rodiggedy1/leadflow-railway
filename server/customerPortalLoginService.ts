@@ -1,6 +1,6 @@
 import { createHmac, randomInt } from "crypto";
 import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
-import { customerPortalAccounts, customerPortalLoginCodes, customerPortalLoginRateLimits } from "../drizzle/schema";
+import { customerPortalAccounts, customerPortalLoginCodes } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { normalizePhone } from "./utils/phone";
@@ -9,10 +9,6 @@ type DbClient = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type LoginAccount = typeof customerPortalAccounts.$inferSelect;
 
 export const PORTAL_LOGIN_CODE_TTL_MS = 10 * 60 * 1_000;
-export const PORTAL_LOGIN_RESEND_COOLDOWN_MS = 60 * 1_000;
-export const PORTAL_LOGIN_REQUEST_WINDOW_MS = 15 * 60 * 1_000;
-export const PORTAL_LOGIN_PHONE_REQUEST_LIMIT = 3;
-export const PORTAL_LOGIN_IP_REQUEST_LIMIT = 12;
 export const PORTAL_LOGIN_MAX_FAILED_ATTEMPTS = 5;
 export const PORTAL_LOGIN_LOCK_MS = 10 * 60 * 1_000;
 
@@ -40,49 +36,17 @@ function loginCodeHash(accountId: number, code: string) {
   return keyedHash(`customer-portal-login:${accountId}:${code}`);
 }
 
-function loginRateKey(scope: string, rawValue: string) {
-  return keyedHash(`customer-portal-login-rate:${scope}:${rawValue}`);
-}
-
-async function consumeRateLimit(db: DbClient, scope: "phone" | "ip", rawValue: string, limit: number, now: number) {
-  const keyHash = loginRateKey(scope, rawValue);
-  const rows = await db.select().from(customerPortalLoginRateLimits).where(and(eq(customerPortalLoginRateLimits.scope, scope), eq(customerPortalLoginRateLimits.keyHash, keyHash))).limit(1);
-  const current = rows[0];
-  const date = new Date(now);
-  if (!current) {
-    try {
-      await db.insert(customerPortalLoginRateLimits).values({ scope, keyHash, windowStartedAt: now, requestCount: 1, updatedAt: date });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  if (current.windowStartedAt <= now - PORTAL_LOGIN_REQUEST_WINDOW_MS) {
-    const result = await db.update(customerPortalLoginRateLimits).set({ windowStartedAt: now, requestCount: 1, updatedAt: date }).where(and(eq(customerPortalLoginRateLimits.id, current.id), eq(customerPortalLoginRateLimits.requestCount, current.requestCount)));
-    return affectedRows(result) === 1;
-  }
-  if (current.requestCount >= limit) return false;
-  const result = await db.update(customerPortalLoginRateLimits).set({ requestCount: current.requestCount + 1, updatedAt: date }).where(and(eq(customerPortalLoginRateLimits.id, current.id), eq(customerPortalLoginRateLimits.requestCount, current.requestCount)));
-  return affectedRows(result) === 1;
-}
-
-export async function requestCustomerPortalLoginCode(db: DbClient, input: { phone: string; requestIp: string }, dependencies: Partial<PortalLoginDependencies> = {}) {
+export async function requestCustomerPortalLoginCode(db: DbClient, input: { phone: string }, dependencies: Partial<PortalLoginDependencies> = {}) {
   const resolvedDependencies = { ...defaultDependencies, ...dependencies };
   const normalizedPhone = normalizePhone(input.phone);
   const now = resolvedDependencies.now();
-  const safeIp = input.requestIp.slice(0, 128) || "unknown";
-  const [phoneAllowed, ipAllowed] = await Promise.all([
-    consumeRateLimit(db, "phone", normalizedPhone || "invalid", PORTAL_LOGIN_PHONE_REQUEST_LIMIT, now),
-    consumeRateLimit(db, "ip", safeIp, PORTAL_LOGIN_IP_REQUEST_LIMIT, now),
-  ]);
-  if (!phoneAllowed || !ipAllowed || !normalizedPhone) return { sent: false };
+  if (!normalizedPhone) return { sent: false };
 
   const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.customerPhone, normalizedPhone)).limit(1);
   const account = accounts[0];
   if (!account) return { sent: false };
 
   const activeCodes = await db.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), isNull(customerPortalLoginCodes.usedAt), gt(customerPortalLoginCodes.expiresAt, now))).limit(1);
-  if (activeCodes[0] && activeCodes[0].createdAt.getTime() > now - PORTAL_LOGIN_RESEND_COOLDOWN_MS) return { sent: false };
 
   const code = resolvedDependencies.generateCode();
   if (!/^\d{6}$/.test(code)) throw new Error("Portal login code generator returned an invalid code.");
