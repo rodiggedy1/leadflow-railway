@@ -213,4 +213,18 @@ describe("customer portal isolation", () => {
     expect(source).toContain('onClick={() => goToPage("bookings")}>View and manage <ArrowRight /></button>');
     expect(source).not.toContain('scrollToSection("mib-bookings")');
   });
+
+  it("uses the approved read-only same-day status panel while restoring Home statistics when no active job exists", async () => {
+    const [portal, statusCss] = await Promise.all([
+      readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
+      readFile(path.resolve(root, "client/src/pages/customer-portal-live-status.css"), "utf8"),
+    ]);
+    expect(portal).toContain('import { PortalTodayStatus } from "@/components/PortalTodayStatus";');
+    expect(portal).toContain('trpc.customerPortal.todayJobStatus.useQuery');
+    expect(portal).toContain("refetchInterval: query => query.state.data?.job ? 60_000 : false");
+    expect(portal).toContain('todayJobStatus.data?.job ? <PortalTodayStatus job={todayJobStatus.data.job} onViewBooking={() => goToPage("bookings")} /> : <section className="mib-direct-stats"');
+    expect(statusCss).toContain(".mib-direct-live-status");
+    expect(statusCss).toContain(".mib-direct-live-status.is-running-late");
+    expect(statusCss).toContain("@media(max-width:650px)");
+  });
 });

@@ -16,6 +16,8 @@ import "./customer-portal-sidebar-pages.css";
 import "./customer-portal-home-images.css";
 import "./customer-portal-home-reference-refinement.css";
 import "./customer-portal-login.css";
+import "./customer-portal-live-status.css";
+import { PortalTodayStatus } from "@/components/PortalTodayStatus";
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
@@ -143,6 +145,7 @@ export default function CustomerPortal() {
   const [newCardSetup, setNewCardSetup] = useState<{ clientSecret: string; setupIntentId: string } | null>(null);
   const utils = trpc.useUtils();
   const portal = trpc.customerPortal.me.useQuery();
+  const todayJobStatus = trpc.customerPortal.todayJobStatus.useQuery(undefined, { enabled: Boolean(portal.data?.account), refetchInterval: query => query.state.data?.job ? 60_000 : false });
   const startNewCardSetup = trpc.customerPortal.startNewCardSetup.useMutation();
 
   const featuredServices = useMemo(() => FEATURED_SERVICE_IDS.map(id => CUSTOMER_PORTAL_SERVICES.find(service => service.id === id)).filter((service): service is CustomerPortalService => Boolean(service)), []);
@@ -187,11 +190,11 @@ export default function CustomerPortal() {
       </nav><div className="mib-direct-help"><CircleHelp /><span><b>Need help?</b>Contact us</span></div></aside>
       <main className="mib-direct-main">
         {activePage === "home" && <><section className="mib-direct-hero"><div><small>MY HOME</small><h1>Welcome back,<br />{customerName}.</h1><p>Your home requests, timing, and updates are all here.</p><div className="mib-direct-hero-actions"><button className="mib-direct-button mib-direct-button-primary" type="button" onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning</button><button className="mib-direct-button" type="button" onClick={() => goToPage("services")}>Browse all services <ArrowRight /></button></div></div><div className="mib-direct-hero-art" role="img" aria-label="A calm, tidy bedroom"><div className="mib-direct-hero-plant" /><div className="mib-direct-hero-sofa" /><span>A cleaner home<br />for a calmer you.</span></div></section>
-        <section className="mib-direct-stats" aria-label="Account summary">
+        {todayJobStatus.data?.job ? <PortalTodayStatus job={todayJobStatus.data.job} onViewBooking={() => goToPage("bookings")} /> : <section className="mib-direct-stats" aria-label="Account summary">
           <article><ClipboardList /><div><strong>{totalRecords}</strong><span>Active bookings</span><button type="button" onClick={() => goToPage("bookings")}>View and manage <ArrowRight /></button></div></article>
           <article><CalendarClock /><div><strong>{nextCleaning ? formatLocalDate(nextCleaning.requestedLocalDate) : "—"}</strong><span>Next visit</span><button type="button" onClick={() => goToPage("bookings")}>See details <ArrowRight /></button></div></article>
           <article><ShieldCheck /><div><strong>This device</strong><span>Account access</span><em>Secure portal access</em></div></article>
-        </section>
+        </section>}
         <section className="mib-direct-section mib-direct-discovery" id="mib-services" aria-labelledby="mib-services-heading"><div className="mib-direct-section-head"><div><small>MORE MAIDS IN BLACK CAN HANDLE</small><h2 id="mib-services-heading">What else can we take off your list?</h2><p>Book trusted help without searching, calling around, or chasing quotes.</p></div><button type="button" onClick={() => goToPage("services")}>View all services <ArrowRight /></button></div>
           <div className="mib-direct-services"><div className="mib-direct-services-top"><button className="mib-direct-service mib-direct-service-feature" type="button" onClick={() => setShowCleaningRebook(true)}><div><span className="mib-direct-service-icon"><Home /></span><h3>Home cleaning</h3><p>One-time or recurring</p><ul><li>Trusted, vetted cleaners</li><li>Same great quality</li><li>Flexible scheduling</li></ul><em>Book cleaning <ArrowRight /></em></div><div className="mib-direct-cleaning-art" aria-hidden="true" /></button>{featuredServices.slice(0, 2).map(service => { const Icon = SERVICE_ICONS[service.id] ?? Wrench; return <button className="mib-direct-service" type="button" key={service.id} onClick={() => setSelectedService(service)}><div className="mib-direct-service-art" aria-hidden="true" /><div className="mib-direct-service-body"><span className="mib-direct-service-icon"><Icon /></span><h3>{service.name}</h3><p>{FEATURED_CARD_DETAILS[service.id] ?? service.detail}</p><b>Starting at {formatCurrency(service.startingPrice * 100)}</b><em>{SERVICE_CTAS[service.id] ?? "Start request"} <ArrowRight /></em></div></button>; })}</div><div className="mib-direct-services-bottom">{featuredServices.slice(2).map(service => { const Icon = SERVICE_ICONS[service.id] ?? Wrench; return <button className="mib-direct-service" type="button" key={service.id} onClick={() => setSelectedService(service)}><div className="mib-direct-service-art" aria-hidden="true" /><div className="mib-direct-service-body"><span className="mib-direct-service-icon"><Icon /></span><h3>{service.name}</h3><p>{service.detail}</p><b>Starting at {formatCurrency(service.startingPrice * 100)}</b><em>{SERVICE_CTAS[service.id] ?? "Start request"} <ArrowRight /></em></div></button>; })}</div></div>
         </section>

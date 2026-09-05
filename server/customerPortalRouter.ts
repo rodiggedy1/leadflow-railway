@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
-import { bookings, customerPortalAccounts, customerPortalServiceRequests, stripeCustomers } from "../drizzle/schema";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { bookings, cleanerJobs, customerPortalAccounts, customerPortalServiceRequests, stripeCustomers } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
@@ -14,6 +14,8 @@ import { signCustomerPortalSession } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { requestCustomerPortalLoginCode, verifyCustomerPortalLoginCode } from "./customerPortalLoginService";
 import { sendSms } from "./openphone";
+import { extractUSDigits } from "./utils/phone";
+import { getCustomerPortalBusinessDate, isCustomerPortalLiveJob } from "../shared/customerPortalLiveStatus";
 
 const requestSchema = z.object({
   serviceId: z.string().trim().min(1).max(64),
@@ -68,6 +70,33 @@ export const customerPortalRouter = router({
       getCustomerPortalSavedCard(db, account.customerPhone),
     ]);
     return { account: { name: account.customerName, phone: account.customerPhone, email: account.customerEmail }, cleanings, requests, savedCard: savedCard ? { brand: savedCard.brand, last4: savedCard.last4 } : null };
+  }),
+  todayJobStatus: publicProcedure.query(async ({ ctx }) => {
+    const session = await getCustomerPortalSessionFromRequest(ctx.req);
+    if (!session) return { job: null };
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
+    const account = accounts[0];
+    if (!account || account.customerPhone !== session.customerPhone) return { job: null };
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    if (!phoneDigits) return { job: null };
+    ctx.res.set("Cache-Control", "no-store");
+    const rows = await db.select({
+      jobDate: cleanerJobs.jobDate,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      serviceType: cleanerJobs.serviceType,
+      teamName: cleanerJobs.teamName,
+      jobStatus: cleanerJobs.jobStatus,
+      bookingStatus: cleanerJobs.bookingStatus,
+      delayMinutes: cleanerJobs.delayMinutes,
+      etaTimestamp: cleanerJobs.etaTimestamp,
+      etaTimeStr: cleanerJobs.etaTimeStr,
+    }).from(cleanerJobs).where(and(
+      eq(cleanerJobs.jobDate, getCustomerPortalBusinessDate()),
+      sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phoneDigits}`,
+    )).orderBy(asc(cleanerJobs.serviceDateTime), desc(cleanerJobs.updatedAt)).limit(20);
+    return { job: rows.find(isCustomerPortalLiveJob) ?? null };
   }),
   startNewCardSetup: publicProcedure.mutation(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);
