@@ -54,7 +54,7 @@ type CleanerJobsAuditRun = {
 };
 
 type CleanerJobsAuditDetails = {
-  event: "sync_entry" | "sync_response" | "delete_attempt" | "delete_blocked" | "delete_result" | "sync_complete";
+  event: "sync_entry" | "sync_response" | "delete_attempt" | "delete_result" | "sync_complete";
   launch27FetchedCount?: number | null;
   responseState?: "not_fetched" | "upstream_error" | "empty_success" | "nonempty_success";
   deletionReason?: "team_cleanup" | "stale_cleanup" | null;
@@ -63,7 +63,6 @@ type CleanerJobsAuditDetails = {
   affectedRows?: number | null;
   success?: boolean | null;
   errorKind?: string | null;
-  deletionBlocked?: boolean | null;
 };
 
 /**
@@ -91,7 +90,6 @@ function logCleanerJobsAudit(run: CleanerJobsAuditRun, details: CleanerJobsAudit
     database_affected_rows: details.affectedRows ?? null,
     success: details.success ?? null,
     error_kind: details.errorKind ?? null,
-    deletion_blocked: details.deletionBlocked ?? false,
     stack_trace: new Error().stack ?? null,
   }));
 }
@@ -108,14 +106,25 @@ async function deleteCleanerJobWithAudit(
   details: Omit<CleanerJobsAuditDetails, "event" | "affectedRows" | "success" | "errorKind"> & { candidateCleanerJobIds: number[] },
 ) {
   logCleanerJobsAudit(run, { ...details, event: "delete_attempt", success: null });
-  logCleanerJobsAudit(run, {
-    ...details,
-    event: "delete_blocked",
-    affectedRows: 0,
-    errorKind: "cleaner_jobs_deletion_disabled",
-    deletionBlocked: true,
-  });
-  return { affectedRows: 0, deletionBlocked: true };
+  try {
+    const result = await db.delete(cleanerJobs).where(eq(cleanerJobs.id, details.candidateCleanerJobIds[0]));
+    logCleanerJobsAudit(run, {
+      ...details,
+      event: "delete_result",
+      affectedRows: getAffectedRows(result),
+      success: true,
+    });
+    return result;
+  } catch (error) {
+    logCleanerJobsAudit(run, {
+      ...details,
+      event: "delete_result",
+      affectedRows: null,
+      success: false,
+      errorKind: error instanceof Error ? error.name : "unknown_error",
+    });
+    throw error;
+  }
 }
 
 /** Generate a URL-safe random tracker token (32 chars). */
