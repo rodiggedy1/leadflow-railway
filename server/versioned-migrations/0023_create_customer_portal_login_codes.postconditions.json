@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "table": "customer_portal_login_codes",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "accountId", "columnType": "int", "nullable": false },
+    { "name": "codeHash", "columnType": "varchar(64)", "nullable": false },
+    { "name": "expiresAt", "columnType": "bigint", "nullable": false },
+    { "name": "usedAt", "columnType": "datetime(3)", "nullable": true },
+    { "name": "failedAttempts", "columnType": "int", "nullable": false },
+    { "name": "lockedUntil", "columnType": "bigint", "nullable": true },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "idx_customer_portal_login_code_account", "unique": false, "columns": ["accountId", "expiresAt"] },
+    { "name": "idx_customer_portal_login_code_expiry", "unique": false, "columns": ["expiresAt"] }
+  ]
+}

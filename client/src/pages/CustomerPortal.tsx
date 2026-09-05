@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bell, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, CircleHelp, ClipboardList, CreditCard, Grid2X2, Hammer, Home, Image, Lightbulb, MapPin, Menu, MessageSquare, Paintbrush, Plus, ShieldCheck, Sofa, Sparkles, SprayCan, Trash2, Truck, Tv, UserRound, Waves, Wrench } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Elements, CardElement } from "@stripe/react-stripe-js";
@@ -15,6 +15,7 @@ import "./customer-portal-direct-ui.css";
 import "./customer-portal-sidebar-pages.css";
 import "./customer-portal-home-images.css";
 import "./customer-portal-home-reference-refinement.css";
+import "./customer-portal-login.css";
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
@@ -117,6 +118,27 @@ function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onC
   </div>;
 }
 
+function PortalLoginGate({ onAuthenticated }: { onAuthenticated: () => void }) {
+  const requestLoginCode = trpc.customerPortal.requestLoginCode.useMutation();
+  const verifyLoginCode = trpc.customerPortal.verifyLoginCode.useMutation();
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [stage, setStage] = useState<"phone" | "code">("phone");
+  const [resendAfterSeconds, setResendAfterSeconds] = useState(0);
+  const [verificationFailed, setVerificationFailed] = useState(false);
+  useEffect(() => {
+    if (resendAfterSeconds <= 0) return;
+    const timeout = window.setTimeout(() => setResendAfterSeconds(seconds => Math.max(0, seconds - 1)), 1_000);
+    return () => window.clearTimeout(timeout);
+  }, [resendAfterSeconds]);
+  const requestCode = () => {
+    setVerificationFailed(false);
+    requestLoginCode.mutate({ phone }, { onSuccess: result => { setStage("code"); setCode(""); setResendAfterSeconds(result.resendAfterSeconds); } });
+  };
+  const verifyCode = () => verifyLoginCode.mutate({ phone, code }, { onSuccess: result => { if (!result.ok) { setVerificationFailed(true); return; } onAuthenticated(); } });
+  return <main className="mib-portal-gate mib-portal-login-gate"><div className="mib-portal-mark">M</div><small>MAIDS IN BLACK · MY HOME</small><h1>{stage === "phone" ? "Welcome back." : "Check your texts."}</h1>{stage === "phone" ? <><p>Enter the mobile number used for your Maids in Black booking and we&apos;ll send a secure sign-in code.</p><form onSubmit={event => { event.preventDefault(); requestCode(); }}><label><span>Mobile number</span><input required type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} placeholder="(202) 555-0123" /></label><button className="mib-portal-primary" type="submit" disabled={requestLoginCode.isPending}>{requestLoginCode.isPending ? "Sending code…" : "Text me a sign-in code"}<ArrowRight /></button></form><p className="mib-portal-login-note">If that number is eligible, a sign-in code is on its way.</p></> : <><p>We sent a six-digit sign-in code to the number you entered. It expires in 10 minutes.</p><form onSubmit={event => { event.preventDefault(); verifyCode(); }}><label><span>Six-digit code</span><input required type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, "").slice(0, 6)); setVerificationFailed(false); }} placeholder="000000" /></label>{verificationFailed && <p className="mib-portal-error">That code could not be verified. Try again or request a new code.</p>}<button className="mib-portal-primary" type="submit" disabled={verifyLoginCode.isPending || code.length !== 6}>{verifyLoginCode.isPending ? "Signing in…" : "Open my portal"}<ArrowRight /></button></form><div className="mib-portal-login-actions"><button type="button" onClick={() => { setStage("phone"); setCode(""); setVerificationFailed(false); }}>Use a different number</button><button type="button" disabled={resendAfterSeconds > 0 || requestLoginCode.isPending} onClick={requestCode}>{resendAfterSeconds > 0 ? `Resend in ${resendAfterSeconds}s` : "Resend code"}</button></div></>}<a className="mib-portal-login-book" href="/book-now">Book home cleaning <ArrowRight /></a></main>;
+}
+
 export default function CustomerPortal() {
   const [selectedService, setSelectedService] = useState<CustomerPortalService | null>(null);
   const [showCleaningRebook, setShowCleaningRebook] = useState(false);
@@ -132,7 +154,7 @@ export default function CustomerPortal() {
   const nextCleaning = useMemo(() => [...activeCleanings].sort((left, right) => left.requestedLocalDate.localeCompare(right.requestedLocalDate))[0], [activeCleanings]);
 
   if (portal.isLoading) return <main className="mib-portal-gate">Loading your home portal…</main>;
-  if (!portal.data?.account) return <main className="mib-portal-gate"><div className="mib-portal-mark">M</div><small>MAIDS IN BLACK · MY HOME</small><h1>Everything for your home, in one place.</h1><p>Your portal opens from your booking confirmation on this device.</p><a className="mib-portal-primary" href="/book-now">Book home cleaning <ArrowRight /></a></main>;
+  if (!portal.data?.account) return <PortalLoginGate onAuthenticated={() => { void portal.refetch(); }} />;
 
   const totalRecords = portal.data.cleanings.length + portal.data.requests.length;
   const customerName = portal.data.account.name.split(" ")[0];

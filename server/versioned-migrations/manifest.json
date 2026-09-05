@@ -159,6 +159,22 @@
       "sha256": "67ef346465b5ed15bf4eac98c81ca6c93873b101b24afe699134e45395abd430",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0022_add_portal_request_authorization_link.postconditions.json"
+    },
+    {
+      "id": "0023_create_customer_portal_login_codes",
+      "mode": "create-table",
+      "sqlFile": "0023_create_customer_portal_login_codes.sql",
+      "sha256": "ec3f521efe05f660196d732a59b26d9170f2f0210ced0cc7af76b084eb4e7a40",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0023_create_customer_portal_login_codes.postconditions.json"
+    },
+    {
+      "id": "0024_create_customer_portal_login_rate_limits",
+      "mode": "create-table",
+      "sqlFile": "0024_create_customer_portal_login_rate_limits.sql",
+      "sha256": "620216452f22887d8bb8e817f65073b5397572c5e56528089c7cb2a3a3db44d5",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0024_create_customer_portal_login_rate_limits.postconditions.json"
     }
   ]
 }

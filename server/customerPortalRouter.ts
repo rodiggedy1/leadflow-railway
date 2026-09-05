@@ -9,6 +9,11 @@ import { createCustomerPortalRequestNumber } from "./customerPortalService";
 import { getCustomerPortalSavedCard } from "./customerPortalPaymentService";
 import { getStripeClient } from "./stripeClient";
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { signCustomerPortalSession } from "./_core/customerPortalAuth";
+import { CUSTOMER_PORTAL_COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
+import { requestCustomerPortalLoginCode, verifyCustomerPortalLoginCode } from "./customerPortalLoginService";
+import { sendSms } from "./openphone";
 
 const requestSchema = z.object({
   serviceId: z.string().trim().min(1).max(64),
@@ -21,6 +26,30 @@ const requestSchema = z.object({
 
 export const customerPortalRouter = router({
   services: publicProcedure.query(() => CUSTOMER_PORTAL_SERVICES),
+  requestLoginCode: publicProcedure.input(z.object({ phone: z.string().trim().min(1).max(40) })).mutation(async ({ ctx, input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    ctx.res.set("Cache-Control", "no-store");
+    ctx.res.set("Referrer-Policy", "no-referrer");
+    await requestCustomerPortalLoginCode(db, {
+      phone: input.phone,
+      requestIp: ctx.req.ip || ctx.req.socket.remoteAddress || "unknown",
+    }, {
+      sendCode: (phone, code) => sendSms({ to: phone, content: `Your Maids in Black sign-in code is ${code}. It expires in 10 minutes.` }),
+    });
+    return { ok: true, resendAfterSeconds: 60 };
+  }),
+  verifyLoginCode: publicProcedure.input(z.object({ phone: z.string().trim().min(1).max(40), code: z.string().trim().regex(/^\d{6}$/) })).mutation(async ({ ctx, input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    ctx.res.set("Cache-Control", "no-store");
+    ctx.res.set("Referrer-Policy", "no-referrer");
+    const account = await verifyCustomerPortalLoginCode(db, input);
+    if (!account) return { ok: false };
+    const token = await signCustomerPortalSession({ accountId: account.id, customerName: account.customerName, customerPhone: account.customerPhone });
+    ctx.res.cookie(CUSTOMER_PORTAL_COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), sameSite: "lax", maxAge: ONE_YEAR_MS });
+    return { ok: true };
+  }),
   staffRequests: adminAgentProcedure.input(z.object({ limit: z.number().int().min(1).max(200).default(200) })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Customer portal is unavailable.");

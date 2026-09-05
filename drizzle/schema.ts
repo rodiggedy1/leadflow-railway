@@ -4444,6 +4444,27 @@ export const customerPortalHandoffTokens = mysqlTable("customer_portal_handoff_t
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
 }, (t) => [uniqueIndex("uq_customer_portal_handoff_hash").on(t.tokenHash), index("idx_customer_portal_handoff_account").on(t.accountId), index("idx_customer_portal_handoff_expiry").on(t.expiresAt)]);
 
+export const customerPortalLoginCodes = mysqlTable("customer_portal_login_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  accountId: int("accountId").notNull(),
+  codeHash: varchar("codeHash", { length: 64 }).notNull(),
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  usedAt: datetime("usedAt", { mode: "date", fsp: 3 }),
+  failedAttempts: int("failedAttempts").notNull().default(0),
+  lockedUntil: bigint("lockedUntil", { mode: "number" }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [index("idx_customer_portal_login_code_account").on(t.accountId, t.expiresAt), index("idx_customer_portal_login_code_expiry").on(t.expiresAt)]);
+
+export const customerPortalLoginRateLimits = mysqlTable("customer_portal_login_rate_limits", {
+  id: int("id").autoincrement().primaryKey(),
+  scope: varchar("scope", { length: 32 }).notNull(),
+  keyHash: varchar("keyHash", { length: 64 }).notNull(),
+  windowStartedAt: bigint("windowStartedAt", { mode: "number" }).notNull(),
+  requestCount: int("requestCount").notNull().default(0),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [uniqueIndex("uq_customer_portal_login_rate_limit").on(t.scope, t.keyHash), index("idx_customer_portal_login_rate_window").on(t.windowStartedAt)]);
+
 export const customerPortalServiceRequests = mysqlTable("customer_portal_service_requests", {
   id: int("id").autoincrement().primaryKey(),
   publicRequestNumber: varchar("publicRequestNumber", { length: 40 }).notNull(),

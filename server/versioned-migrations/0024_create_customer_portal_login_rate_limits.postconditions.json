@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "table": "customer_portal_login_rate_limits",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "scope", "columnType": "varchar(32)", "nullable": false },
+    { "name": "keyHash", "columnType": "varchar(64)", "nullable": false },
+    { "name": "windowStartedAt", "columnType": "bigint", "nullable": false },
+    { "name": "requestCount", "columnType": "int", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "uq_customer_portal_login_rate_limit", "unique": true, "columns": ["scope", "keyHash"] },
+    { "name": "idx_customer_portal_login_rate_window", "unique": false, "columns": ["windowStartedAt"] }
+  ]
+}
