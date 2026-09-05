@@ -1,7 +1,8 @@
 import { createHash } from "crypto";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { verifyCustomerPortalLoginCode } from "./customerPortalLoginService";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const loginService = read("server/customerPortalLoginService.ts");
@@ -41,6 +42,28 @@ describe("customer portal SMS re-entry contract", () => {
     expect(loginService).toContain("if (!sent.success)");
     expect(loginService).toContain("usedAt: failedAt");
     expect(loginService).not.toMatch(/console\.(?:log|info|warn|error).*code/i);
+  });
+
+  it("accepts the actual MySQL update tuple when the submitted code was consumed", async () => {
+    const account = { id: 42, customerPhone: "+12025550123" };
+    const consumeWhere = vi.fn().mockResolvedValue([{ affectedRows: 1 }, []]);
+    const db = {
+      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [account] }) }) })),
+      update: vi.fn(() => ({ set: () => ({ where: consumeWhere }) })),
+    } as any;
+
+    await expect(verifyCustomerPortalLoginCode(db, { phone: "2025550123", code: "123456" }, Date.now())).resolves.toBe(account);
+    expect(consumeWhere).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a MySQL update tuple when no matching submitted code was consumed", async () => {
+    const account = { id: 42, customerPhone: "+12025550123" };
+    const db = {
+      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [account] }) }) })),
+      update: vi.fn(() => ({ set: () => ({ where: async () => [{ affectedRows: 0 }, []] }) })),
+    } as any;
+
+    await expect(verifyCustomerPortalLoginCode(db, { phone: "2025550123", code: "123456" }, Date.now())).resolves.toBeNull();
   });
 
   it("attempts the existing SMS send for every recognized booking phone and only shows code entry after a true send", () => {

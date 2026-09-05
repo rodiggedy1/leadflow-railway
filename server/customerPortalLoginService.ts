@@ -25,6 +25,9 @@ const defaultDependencies: PortalLoginDependencies = {
 };
 
 function affectedRows(result: unknown) {
+  if (Array.isArray(result)) {
+    return Number((result[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0);
+  }
   return Number((result as { affectedRows?: number }).affectedRows ?? 0);
 }
 
