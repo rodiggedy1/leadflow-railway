@@ -14,8 +14,11 @@ describe("reversible Maids in Black booking embed", () => {
     expect(embedSource).toContain('res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")');
   });
 
-  it("uses one explicit booking-or-SMS switch with booking as the reversible default", () => {
-    expect(embedSource).toContain('const WIDGET_CONTENT_MODE: "booking" | "sms" = "booking"');
+  it("uses original SMS as the active website default with an explicit booking-or-SMS script-query switch", () => {
+    expect(embedSource).toContain('const WIDGET_CONTENT_MODE: WidgetContentMode = "sms"');
+    expect(embedSource).toContain('function getWidgetContentMode(mode: unknown): WidgetContentMode');
+    expect(embedSource).toContain('return mode === "booking" || mode === "sms" ? mode : WIDGET_CONTENT_MODE');
+    expect(embedSource).toContain('getWidgetContentMode(req.query.mode)');
     expect(embedSource).toContain('var CONTENT_MODE = \'${contentMode}\'');
     expect(embedSource).toContain("var isBooking = CONTENT_MODE === 'booking'");
     expect(embedSource).toContain("if (isBooking) {");

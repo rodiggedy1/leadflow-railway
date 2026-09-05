@@ -18,13 +18,19 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.6.3";
-const WIDGET_CONTENT_MODE: "booking" | "sms" = "booking";
+const WIDGET_VERSION = "2.6.4";
+type WidgetContentMode = "booking" | "sms";
+// The unparameterized website install restores the original SMS widget.
+const WIDGET_CONTENT_MODE: WidgetContentMode = "sms";
+
+function getWidgetContentMode(mode: unknown): WidgetContentMode {
+  return mode === "booking" || mode === "sms" ? mode : WIDGET_CONTENT_MODE;
+}
 
 export function registerWidgetEmbedRoute(app: Express) {
-  app.get("/api/widget.js", (_req, res) => {
+  app.get("/api/widget.js", (req, res) => {
     const API_BASE = "https://quote.maidinblack.com";
-    const script = buildWidgetScript(API_BASE, WIDGET_VERSION, WIDGET_CONTENT_MODE);
+    const script = buildWidgetScript(API_BASE, WIDGET_VERSION, getWidgetContentMode(req.query.mode));
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Access-Control-Allow-Origin", "*");
     // Never cache — always serve the latest version.
@@ -36,7 +42,7 @@ export function registerWidgetEmbedRoute(app: Express) {
   });
 }
 
-function buildWidgetScript(apiBase: string, version: string, contentMode: "booking" | "sms"): string {
+function buildWidgetScript(apiBase: string, version: string, contentMode: WidgetContentMode): string {
   return `
 (function () {
   'use strict';
