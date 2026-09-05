@@ -43,9 +43,9 @@ describe("customer portal SMS re-entry contract", () => {
     expect(loginService).not.toMatch(/console\.(?:log|info|warn|error).*code/i);
   });
 
-  it("serializes issuance and never compares a valid submitted code with an arbitrary active row", () => {
-    expect(loginService).toContain("db.transaction(async tx => {");
-    expect(loginService).toContain("SELECT id FROM customer_portal_accounts WHERE id = ${account.id} FOR UPDATE");
+  it("uses the established direct issuance sequence and never compares a valid submitted code with an arbitrary active row", () => {
+    expect(loginService).not.toContain("FOR UPDATE");
+    expect(loginService).not.toContain("db.transaction(async tx => {");
     expect(loginService).toContain("const matchingRows = await db.select().from(customerPortalLoginCodes).where(and(eq(customerPortalLoginCodes.accountId, account.id), eq(customerPortalLoginCodes.codeHash, codeHash)");
     expect(loginService).toContain("const matchingCode = matchingRows[0];");
     expect(loginService).toContain("if (!matchingCode) {");
