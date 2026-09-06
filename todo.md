@@ -1647,4 +1647,7 @@
 - [x] Design a no-delete one-day sync rule for imported bookings no longer returned by Launch27, including staff-visible status and audit data
 - [x] Mark imported bookings absent after a successful manual date sync as no longer in Launch27, exclude them from active work, and show a red Booking-list treatment
 - [x] Perform a final release-blocking audit of the manual Launch27 source-missing implementation before any production push
-- [ ] Push the validated source-missing Launch27 safeguard to production
+- [x] Push the validated source-missing Launch27 safeguard to production
+- [x] Add a Cleaner Portal Today and Tomorrow job switcher with the weekday and date in the Tomorrow tab and on every Tomorrow job card
+- [x] Refine the live Cleaner Portal V2 Tomorrow tab and cards with explicit weekday-and-date treatment, without changing job data or actions
+- [ ] Push the Cleaner Portal Tomorrow tab and card-label refinement to production

@@ -1848,11 +1848,28 @@ function formatWeekJobDate(dateStr: string): string {
   return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-function WeekJobCard({ job, onNotesClick }: { job: WeekJob; onNotesClick?: () => void }) {
+function formatShortWeekJobDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function easternDateKey(offsetDays = 0): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date(Date.now() + offsetDays * 86_400_000))
+    .replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
+}
+
+function WeekJobCard({ job, onNotesClick, highlightTomorrow = false }: { job: WeekJob; onNotesClick?: () => void; highlightTomorrow?: boolean }) {
   const { t } = useTranslation();
   const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
   return (
-    <div className={['rounded-2xl px-4 py-4 space-y-2', isDone ? 'bg-slate-800/40 border border-slate-700/30 opacity-60' : 'bg-slate-800/70 border border-slate-700/60'].join(' ')}>
+    <div className={[
+      'rounded-2xl px-4 py-4 space-y-2',
+      isDone ? 'bg-slate-800/40 border border-slate-700/30 opacity-60' : highlightTomorrow ? 'bg-amber-950/25 border border-amber-400/70' : 'bg-slate-800/70 border border-slate-700/60',
+    ].join(' ')}>
+      {highlightTomorrow && <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-950"><CalendarDays className="h-3 w-3" />{t('v2.briefing.tabTomorrow')} · {formatWeekJobDate(job.jobDate)}</div>}
       <div className="flex items-center gap-2">
         {isDone
           ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
@@ -1922,17 +1939,16 @@ function DayBriefing({
     return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   };
   // Today's date label shown in the header (e.g. "Monday, July 6th")
-  const todayDateLabel = formatJobDate(
-    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
-      .format(new Date())
-      .replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2')
-  );
+  const todayDateLabel = formatJobDate(easternDateKey());
+  const tomorrowDateKey = easternDateKey(1);
+  const tomorrowDateLabel = formatJobDate(tomorrowDateKey);
   const completedCount = jobs.filter(j => j.jobStatus === 'completed' || j.bookingStatus === 'completed').length;
   const allDone = completedCount === jobs.length && jobs.length > 0;
   const firstIncompleteIdx = jobs.findIndex(j => j.jobStatus !== 'completed' && j.bookingStatus !== 'completed');
+  const tomorrowTabLabel = `${t('v2.briefing.tabTomorrow')} · ${formatShortWeekJobDate(tomorrowDateKey)}`;
   const tabs: { id: 'today' | 'tomorrow' | 'week'; label: string; count: number }[] = [
     { id: 'today', label: t('v2.briefing.tabToday'), count: jobs.length },
-    { id: 'tomorrow', label: t('v2.briefing.tabTomorrow'), count: tomorrowJobs.length },
+    { id: 'tomorrow', label: tomorrowTabLabel, count: tomorrowJobs.length },
     { id: 'week', label: t('v2.briefing.tabWeek'), count: otherWeekJobs.length },
   ];
   return (
@@ -1968,7 +1984,7 @@ function DayBriefing({
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={[
-              'flex-1 py-2 rounded-lg text-sm font-semibold transition-all',
+              `${tab.id === 'tomorrow' ? 'flex-[1.7]' : 'flex-1'} min-w-0 py-2 rounded-lg text-xs leading-tight font-semibold transition-all`,
               activeTab === tab.id
                 ? 'bg-emerald-600 text-white shadow'
                 : 'text-slate-400 hover:text-white',
@@ -2043,7 +2059,7 @@ function DayBriefing({
         {activeTab === 'tomorrow' && (
           tomorrowJobs.length === 0
             ? <p className="text-slate-500 text-sm text-center py-8">{t('v2.briefing.noJobsTomorrow')}</p>
-            : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes, cleanerJobId: job.cleanerJobId })} />)
+            : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} highlightTomorrow onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes, cleanerJobId: job.cleanerJobId })} />)
         )}
         {activeTab === 'week' && (
           otherWeekJobs.length === 0
