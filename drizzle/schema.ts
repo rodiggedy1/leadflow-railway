@@ -1311,6 +1311,28 @@ export const cleanerPortalJobPhotos = mysqlTable("cleaner_portal_job_photos", {
 export type CleanerPortalJobPhoto = typeof cleanerPortalJobPhotos.$inferSelect;
 
 /**
+ * Customer-facing sign-off captured by the isolated Cleaner Portal. This is
+ * deliberately keyed to a LeadFlow job and has no legacy cleaner-job link.
+ */
+export const cleanerPortalJobSignoffs = mysqlTable("cleaner_portal_job_signoffs", {
+  id: int("id").autoincrement().primaryKey(),
+  leadflowJobId: int("leadflowJobId").notNull(),
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  teamId: int("teamId").notNull(),
+  signatureUrl: varchar("signatureUrl", { length: 1024 }),
+  customerResponse: varchar("customerResponse", { length: 16 }),
+  customerNotes: text("customerNotes"),
+  customerNotHome: boolean("customerNotHome").notNull().default(false),
+  signedOffAt: datetime("signedOffAt", { mode: "date", fsp: 3 }).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_cleaner_portal_job_signoff_job").on(t.leadflowJobId),
+  index("idx_cleaner_portal_job_signoff_team").on(t.teamId),
+]);
+export type CleanerPortalJobSignoff = typeof cleanerPortalJobSignoffs.$inferSelect;
+
+/**
  * jobPhotos — completion photos uploaded by cleaners for a specific job.
  */
 export const jobPhotos = mysqlTable("job_photos", {

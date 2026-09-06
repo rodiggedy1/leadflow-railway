@@ -51,7 +51,10 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(page).toContain("Select visit-condition and finished-result images from your photo library.");
     expect(page).toContain("trpc.cleanerPortalPhotos.getForJob.useQuery");
     expect(page).toContain("trpc.cleanerPortalPhotos.uploadPhoto.useMutation");
-    expect(page).toContain("Customer sign-off will be enabled after portal visibility is confirmed.");
+    expect(page).toContain("trpc.cleanerPortalSignoff.getForJob.useQuery");
+    expect(page).toContain("trpc.cleanerPortalSignoff.saveSignature.useMutation");
+    expect(page).toContain("trpc.cleanerPortalSignoff.saveNotHome.useMutation");
+    expect(page).toContain("Customer was not home");
     expect(page).not.toContain("cleanerJobId");
     expect(page).not.toContain("completedJobId");
   });

@@ -1630,3 +1630,6 @@
 - [x] Provide per-photo download from the staff Booking detail gallery without changing Cleaner Portal uploads
 - [ ] Normalize isolated photo references so every booking source in the Bookings workspace has one Before and After gallery
 - [x] Normalize isolated photo references so every booking source in the Bookings workspace has one Before and After gallery
+- [x] Restore the established customer signature capture flow using isolated LeadFlow job ownership
+- [x] Show the completed customer sign-off state after photos in every Booking detail panel
+- [x] Restore the separate completion-confirmation workflow after isolated customer sign-off

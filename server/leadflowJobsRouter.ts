@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobPhotos, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, leadflowJobs } from "../drizzle/schema";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
@@ -59,6 +59,21 @@ export const leadflowJobsRouter = router({
       .from(cleanerPortalJobPhotos)
       .where(eq(cleanerPortalJobPhotos.leadflowJobId, sourceId))
       .orderBy(asc(cleanerPortalJobPhotos.createdAt), asc(cleanerPortalJobPhotos.id));
+  }),
+
+  staffSignoff: adminAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
+    if (source !== "leadflow") return null;
+    const rows = await db.select({
+      signatureUrl: cleanerPortalJobSignoffs.signatureUrl,
+      customerResponse: cleanerPortalJobSignoffs.customerResponse,
+      customerNotes: cleanerPortalJobSignoffs.customerNotes,
+      customerNotHome: cleanerPortalJobSignoffs.customerNotHome,
+      signedOffAt: cleanerPortalJobSignoffs.signedOffAt,
+    }).from(cleanerPortalJobSignoffs).where(eq(cleanerPortalJobSignoffs.leadflowJobId, sourceId)).limit(1);
+    return rows[0] ?? null;
   }),
 
   importNextThirtyDays: adminAgentProcedure.mutation(async () => importNextThirtyDaysOfLaunch27Jobs()),

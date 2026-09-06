@@ -30,6 +30,7 @@ import { cleanerRouter } from "./cleanerRouter";
 import { cleanerPortalReadOnlyRouter } from "./cleanerPortalReadOnlyRouter";
 import { cleanerPortalProgressRouter } from "./cleanerPortalProgressRouter";
 import { cleanerPortalPhotoRouter } from "./cleanerPortalPhotoRouter";
+import { cleanerPortalSignoffRouter } from "./cleanerPortalSignoffRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
 import { smsCampaignRouter } from "./sms/smsCampaignRouter";
@@ -127,6 +128,7 @@ export const appRouter = router({
   cleanerPortalReadOnly: cleanerPortalReadOnlyRouter,
   cleanerPortalProgress: cleanerPortalProgressRouter,
   cleanerPortalPhotos: cleanerPortalPhotoRouter,
+  cleanerPortalSignoff: cleanerPortalSignoffRouter,
   responseTemplates: responseTemplatesRouter,
 
   auth: router({

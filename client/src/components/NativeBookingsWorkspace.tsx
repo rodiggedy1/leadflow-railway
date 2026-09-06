@@ -5,11 +5,13 @@ import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentAc
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import { CalendarDays, ChevronLeft, ChevronRight, CreditCard, Download, ExternalLink, Filter, ImageIcon, Loader2, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import "@/pages/bookings-preview.css";
 
 type StatusFilter = "All" | "Confirmed" | "Needs attention" | "Completed";
 type NativeExtra = { id: string; label: string; quantity: number };
 type StaffJobPhoto = { id: number; photoUrl: string; thumbnailUrl: string | null; filename: string | null; photoType: string; createdAt: Date };
+type StaffJobSignoff = { signatureUrl: string | null; customerResponse: string | null; customerNotes: string | null; customerNotHome: boolean; signedOffAt: Date } | null;
 type WorkspaceRow = {
   key: string;
   source: "booking" | "funnel" | "portal" | "leadflow";
@@ -85,6 +87,27 @@ const importedTimeFrom = (value: string | null): string | null => {
 };
 const photoDownloadName = (photo: StaffJobPhoto, index: number) => photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`;
 const photoDownloadUrl = (photo: StaffJobPhoto, index: number) => `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photoDownloadName(photo, index))}`;
+
+function BookingSignoffReview({ bookingKey, signoff, isLoading, isError }: { bookingKey: string; signoff: StaffJobSignoff | undefined; isLoading: boolean; isError: boolean }) {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const title = document.querySelector(".bookings-detail-panel .bookings-photo-review-title");
+    const photoSection = title?.closest(".bookings-editor-section");
+    const parent = photoSection?.parentElement;
+    if (!photoSection || !parent) {
+      setHost(null);
+      return;
+    }
+    const nextHost = document.createElement("div");
+    nextHost.className = "bookings-signoff-review-host";
+    parent.insertBefore(nextHost, photoSection.nextSibling);
+    setHost(nextHost);
+    return () => nextHost.remove();
+  }, [bookingKey]);
+  const responseLabel = signoff?.customerResponse === "great" ? "Everything looks great" : signoff?.customerResponse === "touchup" ? "Needs one touch-up" : "Major issue";
+  if (!host) return null;
+  return createPortal(<section className="bookings-editor-section bookings-signoff-review"><div className="bookings-photo-review-title"><div><small>CUSTOMER SIGN-OFF</small><h3>Visit confirmation</h3><p>Captured by the cleaner after the visit.</p></div></div>{isLoading ? <div className="bookings-photo-review-empty"><Loader2 className="animate-spin" />Loading sign-off…</div> : isError ? <div className="bookings-photo-review-empty error">Customer sign-off could not be loaded for this booking.</div> : !signoff ? <div className="bookings-photo-review-empty">No customer sign-off recorded.</div> : signoff.customerNotHome ? <div className="bookings-signoff-not-home">Customer was not home — sign-off bypassed.</div> : <div className="bookings-signoff-summary"><div><small>SATISFACTION</small><strong className={`bookings-signoff-response ${signoff.customerResponse ?? "issue"}`}>{responseLabel}</strong></div>{signoff.customerNotes && <div><small>CUSTOMER NOTES</small><p>{signoff.customerNotes}</p></div>}{signoff.signatureUrl && <div><small>SIGNATURE</small><img src={signoff.signatureUrl} alt="Customer signature" /></div>}</div>}</section>, host);
+}
 
 export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeEnabled: boolean }) {
   const [view, setView] = useState<"bookings" | "leads">("bookings");
@@ -224,6 +247,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
   }, [activeKey, detailQuery.data, funnelDetailQuery.data, rows, selectedBookingId, selectedFunnelId]);
   const activePhotoBookingKey = active ? `${active.source}:${active.id}` : "leadflow:0";
   const staffPhotosQuery = trpc.leadflowJobs.staffPhotos.useQuery({ bookingKey: activePhotoBookingKey }, { enabled: active !== null, staleTime: 10_000 });
+  const staffSignoffQuery = trpc.leadflowJobs.staffSignoff.useQuery({ bookingKey: activePhotoBookingKey }, { enabled: active !== null, staleTime: 10_000 });
   const staffPhotos = staffPhotosQuery.data ?? [];
   const beforePhotos = staffPhotos.filter(photo => photo.photoType === "before");
   const afterPhotos = staffPhotos.filter(photo => photo.photoType === "after" || photo.photoType === "general");
@@ -274,6 +298,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
   };
 
   return <main className={`bookings-ops-shell ${active ? "has-detail" : ""}`}>
+    {active && <BookingSignoffReview bookingKey={activePhotoBookingKey} signoff={staffSignoffQuery.data} isLoading={staffSignoffQuery.isLoading} isError={staffSignoffQuery.isError} />}
     <section className="bookings-ops-main">
       <header className="bookings-ops-header"><div><p>OPERATIONS · BOOKINGS</p><h1>Bookings</h1><span>{view === "bookings" ? "Native requests and isolated Launch27 imports appear here for review." : "Phone-captured booking leads appear here while customers finish the flow."}</span>{importSummary && <p>{importSummary}</p>}{importLeadflowJobs.error && <p role="alert">Import failed: {importLeadflowJobs.error.message}</p>}{refreshLeadflowJobDetails.error && <p role="alert">Launch27 detail refresh failed: {refreshLeadflowJobDetails.error.message}</p>}</div><button type="button" className="bookings-new-booking" disabled title="Manual booking creation is not connected in this release"><Plus />New booking</button><button type="button" className="bookings-new-booking" disabled={refreshLeadflowJobDetails.isPending} onClick={() => refreshLeadflowJobDetails.mutate(undefined, { onSuccess: (result) => { setImportSummary(`Launch27 details: ${result.refreshed}/${result.checked} jobs refreshed; ${result.dateErrors} day errors.`); void leadflowJobsQuery.refetch(); } })}><CreditCard />{refreshLeadflowJobDetails.isPending ? "Refreshing…" : "Refresh team & card details"}</button><button type="button" className="bookings-new-booking" disabled={importLeadflowJobs.isPending || leadflowJobsImportStatus.data?.completed === true} title={leadflowJobsImportStatus.data?.completed ? "The initial 30-day Launch27 import is complete." : undefined} onClick={() => importLeadflowJobs.mutate(undefined, { onSuccess: (result) => { setImportSummary(`30-day import: ${result.totals.active} active jobs; ${result.totals.created} added; ${result.totals.updated} refreshed; ${result.totals.errors} day errors.`); void leadflowJobsQuery.refetch(); void leadflowJobsImportStatus.refetch(); } })}><CalendarDays />{importLeadflowJobs.isPending ? "Importing…" : leadflowJobsImportStatus.data?.completed ? "Initial import completed" : "Import next 30 days"}</button></header>
       <div className="bookings-toolbar"><div className="bookings-status-tabs" aria-label="Bookings workspace view"><button type="button" className={view === "bookings" ? "active" : ""} onClick={() => setView("bookings")}>Bookings</button><button type="button" className={view === "leads" ? "active" : ""} onClick={() => setView("leads")}>Leads</button></div>{view === "bookings" && <><button type="button" className="bookings-filter-button" disabled={syncLeadflowJobsDate.isPending} onClick={() => syncLeadflowJobsDate.mutate({ date }, { onSuccess: (result) => { setImportSummary(`Launch27 ${result.date}: ${result.active} active jobs; ${result.created} added; ${result.updated} updated; ${result.alreadyPresent} already present.`); void leadflowJobsQuery.refetch(); } })}><CalendarDays />{syncLeadflowJobsDate.isPending ? "Syncing…" : `Sync ${displayDate(date)}`}</button><button type="button" className="bookings-filter-button" disabled={!active || cancellationPending} onClick={cancelActiveRecord}><X />{cancellationPending ? "Cancelling…" : "Cancel selected booking"}</button></>}</div>

@@ -142,7 +142,7 @@ function JobCard({ job, onOpen, onCall }: { job: PortalJob; onOpen: () => void; 
   );
 }
 
-function SignaturePad({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement | null> }) {
+function SignaturePad({ canvasRef, onDraw }: { canvasRef: RefObject<HTMLCanvasElement | null>; onDraw: () => void }) {
   const drawing = useRef(false);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
   const point = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -155,6 +155,7 @@ function SignaturePad({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement | 
     event.preventDefault();
     drawing.current = true;
     lastPoint.current = point(event);
+    onDraw();
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -176,15 +177,27 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
   const [pendingPhotoType, setPendingPhotoType] = useState<"before" | "after">("before");
   const [activePhotoType, setActivePhotoType] = useState<"before" | "after" | null>(null);
   const [localPhotoPreviews, setLocalPhotoPreviews] = useState<Array<{ url: string; photoType: "before" | "after" }>>([]);
+  const [satisfaction, setSatisfaction] = useState<"great" | "touchup" | "issue" | null>(null);
+  const [signoffNotes, setSignoffNotes] = useState("");
+  const [signoffSaved, setSignoffSaved] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [completionConfirm, setCompletionConfirm] = useState(false);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const progressQuery = trpc.cleanerPortalProgress.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
   const photosQuery = trpc.cleanerPortalPhotos.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
   const setEtaMutation = trpc.cleanerPortalProgress.setEta.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setEtaOpen(false); result.customerNotified ? toast.success("ETA recorded and client notified.") : toast.warning(result.notificationError ? "ETA recorded, but the client message could not be sent." : "ETA recorded. No customer phone is on this booking."); }, onError: error => toast.error(error.message || "The ETA could not be recorded.") });
   const arrivedMutation = trpc.cleanerPortalProgress.markArrived.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setArrivalConfirm(false); result.customerNotified ? toast.success("Arrival recorded and client notified.") : toast.warning(result.notificationError ? "Arrival recorded, but the client message could not be sent." : "Arrival recorded. No customer phone is on this booking."); }, onError: error => toast.error(error.message || "Arrival could not be recorded.") });
   const startMutation = trpc.cleanerPortalProgress.startJob.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); toast.success("Job started."); }, onError: error => toast.error(error.message || "The job could not be started.") });
   const uploadMutation = trpc.cleanerPortalPhotos.uploadPhoto.useMutation({ throwOnError: false, onError: error => toast.error(error.message || "Photo upload failed.") });
+  const signoffQuery = trpc.cleanerPortalSignoff.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
+  const saveSignatureMutation = trpc.cleanerPortalSignoff.saveSignature.useMutation({ throwOnError: false, onSuccess: async () => { await signoffQuery.refetch(); setSignoffSaved(true); setCompletionConfirm(true); toast.success("Customer sign-off saved."); }, onError: error => toast.error(error.message || "Customer sign-off could not be saved.") });
+  const saveNotHomeMutation = trpc.cleanerPortalSignoff.saveNotHome.useMutation({ throwOnError: false, onSuccess: async () => { await signoffQuery.refetch(); setSignoffSaved(true); setCompletionConfirm(true); toast.success("Customer not-home status saved."); }, onError: error => toast.error(error.message || "Customer status could not be saved.") });
+  const completeMutation = trpc.cleanerPortalSignoff.completeAfterSignoff.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setCompletionConfirm(false); toast.success("Job marked complete."); onClose(); }, onError: error => toast.error(error.message || "The job could not be completed.") });
   const actionUnavailable = progressQuery.isLoading || progressQuery.isError;
   const actionPending = setEtaMutation.isPending || arrivedMutation.isPending || startMutation.isPending;
   const uploading = uploadMutation.isPending;
+  const signoffUnavailable = signoffQuery.isLoading || signoffQuery.isError;
+  const signoffPending = saveSignatureMutation.isPending || saveNotHomeMutation.isPending;
   const photoInputId = `cleaner-photo-${job.portalJobKey}`;
   const progress = progressQuery.data;
   const displayedJob = progress ? { ...job, jobStatus: progress.jobStatus } : job;
@@ -202,6 +215,19 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
     setPendingPhotoType(photoType);
     setActivePhotoType(photoType);
     photoInputRef.current?.click();
+  };
+  const clearSignature = () => {
+    const canvas = signatureCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+  };
+  const saveCustomerSignoff = () => {
+    if (!satisfaction || signoffPending) return;
+    const dataUrl = signatureCanvasRef.current?.toDataURL("image/png") ?? "";
+    const signatureBase64 = dataUrl.split(",")[1];
+    if (!signatureBase64) return;
+    saveSignatureMutation.mutate({ portalJobKey: displayedJob.portalJobKey, signatureBase64, customerResponse: satisfaction, customerNotes: signoffNotes.trim() || undefined });
   };
   const uploadPhotos = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -260,11 +286,12 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
             })}
           </div>
         </section>
-        <section className="cp-detail-block cp-signoff"><span className="cp-eyebrow">Customer sign-off</span><h3>How did everything look?</h3><p>Customer sign-off will be enabled after portal visibility is confirmed.</p><div className="cp-feedback-options"><button disabled>Looks great</button><button disabled>Needs touch-up</button><button disabled>Report issue</button></div><textarea disabled placeholder="Optional note from the customer" /><button className="cp-btn cp-btn--primary cp-btn--wide" disabled><CheckCircle2 size={16} />Save customer sign-off</button></section>
+        <section className="cp-detail-block cp-signoff"><span className="cp-eyebrow">Customer sign-off</span><h3>How did everything look?</h3>{signoffQuery.isError ? <p className="cp-muted">Customer sign-off is temporarily unavailable. Your job and photos remain available.</p> : signoffQuery.data || signoffSaved ? <><p className="cp-muted">Customer sign-off is saved for this visit.</p><button className="cp-btn cp-btn--primary cp-btn--wide" disabled={completeMutation.isPending} onClick={() => setCompletionConfirm(true)}><CheckCircle2 size={16} />Mark job complete</button><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={onClose}>Close job details</button></> : <><p>Ask the customer before recording their response and signature.</p><div className="cp-feedback-options">{([{ value: "great", label: "Looks great" }, { value: "touchup", label: "Needs touch-up" }, { value: "issue", label: "Report issue" }] as const).map(option => <button type="button" key={option.value} className={satisfaction === option.value ? "is-selected" : ""} disabled={signoffUnavailable || signoffPending} onClick={() => setSatisfaction(option.value)}>{option.label}</button>)}</div><textarea value={signoffNotes} onChange={event => setSignoffNotes(event.target.value)} disabled={signoffUnavailable || signoffPending} placeholder="Optional note from the customer" /><SignaturePad canvasRef={signatureCanvasRef} onDraw={() => setHasSignature(true)} /><div className="cp-signature-row"><span>Customer signature</span><button type="button" className="cp-link-button" disabled={signoffUnavailable || signoffPending} onClick={clearSignature}>Clear signature</button></div><button className="cp-btn cp-btn--primary cp-btn--wide" disabled={!satisfaction || !hasSignature || signoffUnavailable || signoffPending} onClick={saveCustomerSignoff}><CheckCircle2 size={16} />{signoffPending ? "Saving…" : "Save customer sign-off"}</button><button type="button" className="cp-link-button" disabled={signoffUnavailable || signoffPending} onClick={() => saveNotHomeMutation.mutate({ portalJobKey: displayedJob.portalJobKey })}>Customer was not home</button></>}</section>
       </aside>
     </div>
     {etaOpen && <div className="cp-modal-backdrop" onClick={() => setEtaOpen(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Arrival update</span><h3>Set arrival ETA</h3><p>The client will receive the selected arrival time.</p><div className="cp-eta-options">{ETA_CHOICES.map(minutes => <button key={minutes} onClick={() => setSelectedEta(minutes)} className={selectedEta === minutes ? "is-selected" : ""}>{formatEta(minutes)}</button>)}</div><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setEtaOpen(false)}>Cancel</button><button className="cp-btn cp-btn--primary" onClick={() => setEtaMutation.mutate({ portalJobKey: displayedJob.portalJobKey, minutes: selectedEta })} disabled={setEtaMutation.isPending}>Send ETA</button></div></div></div>}
     {arrivalConfirm && <div className="cp-modal-backdrop" onClick={() => setArrivalConfirm(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Confirm arrival</span><h3>Tell the client you’ve arrived?</h3><p>This will record your arrival and message the client.</p><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setArrivalConfirm(false)}>Cancel</button><button className="cp-btn cp-btn--arrived" onClick={() => arrivedMutation.mutate({ portalJobKey: displayedJob.portalJobKey })} disabled={arrivedMutation.isPending}>Mark arrived</button></div></div></div>}
+    {completionConfirm && <div className="cp-modal-backdrop" onClick={() => setCompletionConfirm(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Complete job</span><h3>Mark this job complete?</h3><p>The customer sign-off is saved. This will complete the job in the Cleaner Portal and close these details.</p><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setCompletionConfirm(false)}>Cancel</button><button className="cp-btn cp-btn--primary" onClick={() => completeMutation.mutate({ portalJobKey: displayedJob.portalJobKey })} disabled={completeMutation.isPending}>{completeMutation.isPending ? "Completing…" : "Mark complete"}</button></div></div></div>}
   </>;
 }
 

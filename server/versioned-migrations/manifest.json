@@ -207,6 +207,14 @@
       "sha256": "017aad73993dc96b89e47a3a3405543db1dd01d2c32ba09a2579eb88a9bfeb11",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0028_create_cleaner_portal_job_photos.postconditions.json"
+    },
+    {
+      "id": "0029_create_cleaner_portal_job_signoffs",
+      "mode": "create-table",
+      "sqlFile": "0029_create_cleaner_portal_job_signoffs.sql",
+      "sha256": "6ce834caeea329d4c3de0c197a9cfbe58b05065f0d5dec806a033f50fef90503",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0029_create_cleaner_portal_job_signoffs.postconditions.json"
     }
   ]
 }
