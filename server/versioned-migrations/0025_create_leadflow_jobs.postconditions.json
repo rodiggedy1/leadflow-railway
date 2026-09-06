@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "table": "leadflow_jobs",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "origin", "columnType": "varchar(32)", "nullable": false },
+    { "name": "launch27BookingId", "columnType": "int", "nullable": true },
+    { "name": "bookingSeriesId", "columnType": "int", "nullable": true },
+    { "name": "jobDate", "columnType": "varchar(10)", "nullable": false },
+    { "name": "serviceDateTime", "columnType": "varchar(50)", "nullable": true },
+    { "name": "customerName", "columnType": "varchar(255)", "nullable": false },
+    { "name": "customerPhone", "columnType": "varchar(30)", "nullable": true },
+    { "name": "customerEmail", "columnType": "varchar(320)", "nullable": true },
+    { "name": "jobAddress", "columnType": "varchar(500)", "nullable": true },
+    { "name": "serviceName", "columnType": "varchar(500)", "nullable": true },
+    { "name": "bedrooms", "columnType": "int", "nullable": true },
+    { "name": "bathrooms", "columnType": "int", "nullable": true },
+    { "name": "extras", "columnType": "text", "nullable": true },
+    { "name": "frequency", "columnType": "varchar(100)", "nullable": true },
+    { "name": "bookingStatus", "columnType": "varchar(50)", "nullable": false },
+    { "name": "teamName", "columnType": "varchar(255)", "nullable": true },
+    { "name": "teamId", "columnType": "int", "nullable": true },
+    { "name": "customerNotes", "columnType": "text", "nullable": true },
+    { "name": "jobTotalCents", "columnType": "int", "nullable": false },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "uq_leadflow_jobs_launch27_booking", "unique": true, "columns": ["launch27BookingId"] },
+    { "name": "uq_leadflow_jobs_series_date", "unique": true, "columns": ["bookingSeriesId", "jobDate"] },
+    { "name": "idx_leadflow_jobs_job_date", "unique": false, "columns": ["jobDate"] },
+    { "name": "idx_leadflow_jobs_status_date", "unique": false, "columns": ["bookingStatus", "jobDate"] }
+  ]
+}

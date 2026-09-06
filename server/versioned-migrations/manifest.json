@@ -175,6 +175,14 @@
       "sha256": "620216452f22887d8bb8e817f65073b5397572c5e56528089c7cb2a3a3db44d5",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0024_create_customer_portal_login_rate_limits.postconditions.json"
+    },
+    {
+      "id": "0025_create_leadflow_jobs",
+      "mode": "create-table",
+      "sqlFile": "0025_create_leadflow_jobs.sql",
+      "sha256": "fba065dbdc4f30c95aa2a0f71b47194fd6581c8f4f3a52bbaa2f15a75251ca26",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0025_create_leadflow_jobs.postconditions.json"
     }
   ]
 }

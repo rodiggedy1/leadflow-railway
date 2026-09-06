@@ -25,6 +25,23 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(service).toContain("getConsecutiveBusinessDates(startDate)");
   });
 
+  it("registers the isolated table with Railway's active versioned migration runner", () => {
+    const manifest = JSON.parse(read("server/versioned-migrations/manifest.json")) as {
+      migrations: Array<{ id: string; mode?: string; sqlFile?: string; postconditionsFile?: string }>;
+    };
+    const migration = manifest.migrations.find((item) => item.id === "0025_create_leadflow_jobs");
+    const sql = read("server/versioned-migrations/0025_create_leadflow_jobs.sql");
+    const postconditions = read("server/versioned-migrations/0025_create_leadflow_jobs.postconditions.json");
+    expect(migration).toMatchObject({
+      mode: "create-table",
+      sqlFile: "0025_create_leadflow_jobs.sql",
+      postconditionsFile: "0025_create_leadflow_jobs.postconditions.json",
+    });
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS `leadflow_jobs`");
+    expect(sql).not.toMatch(/^\s*(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/im);
+    expect(postconditions).toContain('"table": "leadflow_jobs"');
+  });
+
   it("renders the isolated jobs in the existing Bookings workspace", () => {
     const workspace = read("client/src/components/NativeBookingsWorkspace.tsx");
     expect(workspace).toContain("trpc.leadflowJobs.list.useQuery");
