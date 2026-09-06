@@ -47,6 +47,7 @@ import { postOpsSummary } from "./opsSummaryEngine";
 import { runEscalationCalls } from "./escalationEngine";
 import { runMessageIntegrityCheck } from "./messageIntegrityEngine";
 import { setupGmailWatch, alertInvalidGrant } from "./gmailService";
+import { runLeadflowJobRecurrenceCron } from "./leadflowJobRecurrence";
 import { opsReminders, opsChatMessages, agents, jobAlerts, gmailState, conversationSessions, madisonSmsDrafts } from "../drizzle/schema";
 import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql, ne, inArray, or } from "drizzle-orm";
 
@@ -653,6 +654,16 @@ export function startInternalCron(): void {
       await recordHeartbeat("zombie-job-cleanup", summary, true);
     } catch (err) {
       console.error("[InternalCron] ZombieJobCleanup failed:", err);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── LeadFlow owned recurring jobs: 11:30 PM ET daily ─────────────────────
+  // Isolated from legacy cleaner_jobs and creates only the next interval job.
+  cron.schedule("0 30 23 * * *", async () => {
+    try {
+      await runLeadflowJobRecurrenceCron();
+    } catch (err) {
+      console.error("[InternalCron] LeadFlow job recurrence failed:", err);
     }
   }, { timezone: "America/New_York" });
 

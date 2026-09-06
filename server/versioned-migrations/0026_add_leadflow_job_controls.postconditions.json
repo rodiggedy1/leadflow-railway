@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "table": "leadflow_jobs",
+  "columns": [
+    { "name": "hasStripeCard", "columnType": "tinyint", "nullable": false },
+    { "name": "paymentBrand", "columnType": "varchar(50)", "nullable": true },
+    { "name": "paymentLast4", "columnType": "varchar(4)", "nullable": true },
+    { "name": "nextOccurrenceCreatedAt", "columnType": "datetime(3)", "nullable": true }
+  ],
+  "indexes": []
+}

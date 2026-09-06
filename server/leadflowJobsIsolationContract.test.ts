@@ -14,9 +14,14 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(schema).toContain('uniqueIndex("uq_leadflow_jobs_launch27_booking")');
     expect(service).toContain('getCompletedBookingsForDate(date, { includeAll: true })');
     expect(service).toContain("db.update(leadflowJobs)");
+    expect(service).toContain("runEndOfDayLeadflowJobRecurrence");
+    expect(service).toContain("refreshImportedLaunch27JobDetails");
+    expect(service).toContain("isSameLeadflowJobIdentity");
     expect(service).not.toContain("cleanerJobs");
     expect(service).not.toContain(".delete(");
     expect(router).not.toContain("cleanerJobs");
+    expect(router).toContain("A matching LeadFlow job already exists on that date.");
+    expect(router).toContain("importStatus");
   });
 
   it("keeps the manual import fixed to 30 individual dates", () => {
@@ -40,6 +45,16 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS `leadflow_jobs`");
     expect(sql).not.toMatch(/^\s*(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/im);
     expect(postconditions).toContain('"table": "leadflow_jobs"');
+
+    const controls = manifest.migrations.find((item) => item.id === "0026_add_leadflow_job_controls");
+    const controlsSql = read("server/versioned-migrations/0026_add_leadflow_job_controls.sql");
+    expect(controls).toMatchObject({
+      mode: "additive-columns-existing-table",
+      sqlFile: "0026_add_leadflow_job_controls.sql",
+      postconditionsFile: "0026_add_leadflow_job_controls.postconditions.json",
+    });
+    expect(controlsSql).toMatch(/^ALTER TABLE `leadflow_jobs` ADD COLUMN IF NOT EXISTS/m);
+    expect(controlsSql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/i);
   });
 
   it("renders the isolated jobs in the existing Bookings workspace", () => {
@@ -47,5 +62,9 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(workspace).toContain("trpc.leadflowJobs.list.useQuery");
     expect(workspace).toContain("leadflow:job:");
     expect(workspace).toContain("Import next 30 days");
+    expect(workspace).toContain("Launch27 assignment");
+    expect(workspace).toContain("Save date");
+    expect(workspace).toContain("Refresh team & card details");
+    expect(workspace).toContain("Initial import completed");
   });
 });

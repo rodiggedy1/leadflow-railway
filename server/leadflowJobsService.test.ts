@@ -3,6 +3,7 @@ import {
   getConsecutiveBusinessDates,
   isActiveLaunch27Booking,
   launch27BookingToLeadflowJob,
+  nextRecurringBusinessDate,
 } from "./leadflowJobsService";
 
 const booking = (overrides: Partial<Parameters<typeof isActiveLaunch27Booking>[0]> = {}) => ({
@@ -55,15 +56,34 @@ describe("isolated LeadFlow jobs import", () => {
     expect(isActiveLaunch27Booking(booking({ completed: true }))).toBe(false);
   });
 
-  it("maps one Launch27 booking into an isolated job record with its stable booking ID", () => {
-    const mapped = launch27BookingToLeadflowJob(booking(), "2026-09-06");
+  it("maps Launch27 team assignments and card-on-file details into an isolated job record", () => {
+    const mapped = launch27BookingToLeadflowJob(booking({
+      teams: [
+        { id: 9, title: "Team Casey", share: 55, bgColor: "#000000" },
+        { id: 10, title: "Team Jordan", share: 45, bgColor: "#111111" },
+      ],
+      hasStripeCard: true,
+      paymentBrand: "Visa",
+      paymentLast4: "4242",
+    }), "2026-09-06");
     expect(mapped).toMatchObject({
       origin: "launch27_import",
       launch27BookingId: 42,
       bookingSeriesId: null,
       jobDate: "2026-09-06",
-      teamName: "Team Casey",
+      teamName: "Team Casey, Team Jordan",
       jobTotalCents: 14500,
+      hasStripeCard: 1,
+      paymentBrand: "Visa",
+      paymentLast4: "4242",
     });
+  });
+
+  it("uses the displayed recurring interval and never creates a next date for one-time work", () => {
+    expect(nextRecurringBusinessDate("2026-09-06", "Weekly (20%OFF)")).toBe("2026-09-13");
+    expect(nextRecurringBusinessDate("2026-09-06", "Bi-weekly (15%OFF)")).toBe("2026-09-20");
+    expect(nextRecurringBusinessDate("2026-09-06", "Tri-weekly (10%OFF)")).toBe("2026-09-27");
+    expect(nextRecurringBusinessDate("2026-09-06", "Monthly (10%OFF)")).toBe("2026-10-06");
+    expect(nextRecurringBusinessDate("2026-09-06", "One time")).toBeNull();
   });
 });

@@ -1249,6 +1249,11 @@ export const leadflowJobs = mysqlTable("leadflow_jobs", {
   teamId: int("teamId"),
   customerNotes: text("customerNotes"),
   jobTotalCents: int("jobTotalCents").default(0).notNull(),
+  hasStripeCard: tinyint("hasStripeCard").default(0).notNull(),
+  paymentBrand: varchar("paymentBrand", { length: 50 }),
+  paymentLast4: varchar("paymentLast4", { length: 4 }),
+  /** Atomic end-of-day recurrence claim; null until this job has created or skipped its next occurrence. */
+  nextOccurrenceCreatedAt: datetime("nextOccurrenceCreatedAt", { mode: "date", fsp: 3 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
