@@ -1607,3 +1607,5 @@
 - [x] Build the approved authenticated Cleaner Portal UI on existing cleaner session, jobs, status, photos, signature, completion, availability, call-proxy, and earnings contracts
 - [x] Verified successful existing cleaner magic links already route to `/portal-v2`; the connected portal replaces that route without authentication changes
 - [x] Release the connected Cleaner Portal replacement for `/portal-v2` to production
+- [x] Fix the connected Cleaner Portal photo-add controls so they trigger the existing before/after upload flow
+- [x] Release the native Cleaner Portal photo-control fix to production

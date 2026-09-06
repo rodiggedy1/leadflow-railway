@@ -30,4 +30,12 @@ describe("connected Cleaner Portal contract", () => {
     expect(page).toContain('status: "on_the_way"');
     expect(page).toContain('status: "arrived"');
   });
+
+  it("uses native labeled file controls for explicit before and after uploads", () => {
+    expect(page).toContain('htmlFor={photoInputId}');
+    expect(page).toContain('setPendingPhotoType("before")');
+    expect(page).toContain('setPendingPhotoType("after")');
+    expect(page).toContain('photoType: index === 0 ? pendingPhotoType : "after"');
+    expect(page).not.toContain('photoInputRef.current?.click()');
+  });
 });
