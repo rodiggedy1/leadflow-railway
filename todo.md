@@ -1613,4 +1613,8 @@
 - [x] Release the Cleaner Portal photo-library picker correction to production
 - [x] Implement the read-only imported-job portal adapter for Mirna’s six verified September 6 jobs
 - [x] Make a failed Today query visible instead of rendering it as zero jobs
-- [ ] Confirm the six-job read-only portal visibility release before enabling any portal action
+- [x] Confirm the six-job read-only portal visibility release before enabling any portal action
+- [x] Restore ETA, arrival, and start through isolated portal execution records only
+- [x] Validate isolated ETA, arrival, and start ownership checks without changing job visibility or unrelated portal actions
+- [x] Connect the existing Customer Portal same-day status display to isolated ETA, arrival, and start progress
+- [x] Validate cleaner and customer same-day status parity without legacy job storage

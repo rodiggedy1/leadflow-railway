@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { bookings, cleanerJobs, customerPortalAccounts, customerPortalServiceRequests, leadflowJobs, stripeCustomers } from "../drizzle/schema";
+import { bookings, cleanerPortalJobProgress, customerPortalAccounts, customerPortalServiceRequests, leadflowJobs, stripeCustomers } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
@@ -110,20 +110,20 @@ export const customerPortalRouter = router({
     if (!phoneDigits) return { job: null };
     ctx.res.set("Cache-Control", "no-store");
     const rows = await db.select({
-      bookingId: cleanerJobs.bookingId,
-      jobDate: cleanerJobs.jobDate,
-      serviceDateTime: cleanerJobs.serviceDateTime,
-      serviceType: cleanerJobs.serviceType,
-      teamName: cleanerJobs.teamName,
-      jobStatus: cleanerJobs.jobStatus,
-      bookingStatus: cleanerJobs.bookingStatus,
-      delayMinutes: cleanerJobs.delayMinutes,
-      etaTimestamp: cleanerJobs.etaTimestamp,
-      etaTimeStr: cleanerJobs.etaTimeStr,
-    }).from(cleanerJobs).where(and(
-      eq(cleanerJobs.jobDate, getCustomerPortalBusinessDate()),
-      sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phoneDigits}`,
-    )).orderBy(asc(cleanerJobs.serviceDateTime), desc(cleanerJobs.updatedAt)).limit(20);
+      bookingId: leadflowJobs.launch27BookingId,
+      jobDate: leadflowJobs.jobDate,
+      serviceDateTime: leadflowJobs.serviceDateTime,
+      serviceType: leadflowJobs.serviceName,
+      teamName: leadflowJobs.teamName,
+      jobStatus: cleanerPortalJobProgress.jobStatus,
+      bookingStatus: leadflowJobs.bookingStatus,
+      delayMinutes: sql<number | null>`NULL`,
+      etaTimestamp: cleanerPortalJobProgress.etaTimestamp,
+      etaTimeStr: cleanerPortalJobProgress.etaTimeStr,
+    }).from(leadflowJobs).leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id)).where(and(
+      eq(leadflowJobs.jobDate, getCustomerPortalBusinessDate()),
+      sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
+    )).orderBy(asc(leadflowJobs.serviceDateTime), desc(leadflowJobs.updatedAt)).limit(20);
     return { job: rows.find(isCustomerPortalLiveJob) ?? null };
   }),
   updateLeadflowJobCustomerNote: publicProcedure.input(z.object({
