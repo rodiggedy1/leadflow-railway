@@ -81,6 +81,16 @@ function formatPayWeekDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 }
 
+function formatPortalDayAndDate(value: string, short = false) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: short ? "short" : "long",
+    month: short ? "short" : "long",
+    day: "numeric",
+    timeZone: "America/New_York",
+  }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
 function ordinal(index: number) {
   const words = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth"];
   return words[index - 1] ?? `Job ${index}`;
@@ -132,10 +142,12 @@ function StatusPill({ job }: { job: PortalJob | WeekJob }) {
   return <span className={`cp-status cp-status--${complete ? "complete" : "active"}`}>{complete ? "Complete" : statusLabel(job.jobStatus)}</span>;
 }
 
-function JobCard({ job, onOpen, onCall }: { job: PortalJob; onOpen: () => void; onCall: () => void }) {
+function JobCard({ job, onOpen, onCall, tomorrowLabel }: { job: PortalJob; onOpen?: () => void; onCall?: () => void; tomorrowLabel?: string }) {
   const complete = jobIsComplete(job);
+  const isTomorrow = Boolean(tomorrowLabel);
   return (
-    <article className={`cp-job-card ${complete ? "cp-job-card--complete" : ""}`}>
+    <article className={`cp-job-card ${complete ? "cp-job-card--complete" : ""}${isTomorrow ? " cp-job-card--tomorrow" : ""}`}>
+      {tomorrowLabel && <span className="cp-job-card__tomorrow-label"><CalendarDays size={13} />Tomorrow · {tomorrowLabel}</span>}
       <div className="cp-job-card__head">
         <div className="cp-timebox"><b>{parseTime(job.time).replace(" ", "\n")}</b></div>
         <div className="cp-job-card__main">
@@ -151,9 +163,9 @@ function JobCard({ job, onOpen, onCall }: { job: PortalJob; onOpen: () => void; 
         </div>
       </div>
       <div className="cp-job-card__actions">
-        {!complete && <button className="cp-btn cp-btn--subtle" onClick={onCall}><Phone size={15} />Call client</button>}
+        {!isTomorrow && !complete && <button className="cp-btn cp-btn--subtle" onClick={onCall}><Phone size={15} />Call client</button>}
         <button className="cp-btn cp-btn--subtle" onClick={() => openDirections(job.address)}><Navigation size={15} />Directions</button>
-        <button className="cp-btn cp-btn--primary" onClick={onOpen}>{complete ? "View job" : "Open job"}<ChevronRight size={15} /></button>
+        {!isTomorrow && onOpen && <button className="cp-btn cp-btn--primary" onClick={onOpen}>{complete ? "View job" : "Open job"}<ChevronRight size={15} /></button>}
       </div>
     </article>
   );
@@ -336,6 +348,7 @@ function CleanerPortalLogin() {
 
 function CleanerPortalConnected() {
   const [page, setPage] = useState<NavPage>("today");
+  const [routeDay, setRouteDay] = useState<"today" | "tomorrow">("today");
   const [selectedJob, setSelectedJob] = useState<PortalJob | null>(null);
   const [selectedPayWeek, setSelectedPayWeek] = useState<PayWeekKey>("current");
   const [progressByJobKey, setProgressByJobKey] = useState<Record<string, { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }>>({});
@@ -343,8 +356,10 @@ function CleanerPortalConnected() {
   const [menuOpen, setMenuOpen] = useState(false);
   const utils = trpc.useUtils();
   const todayDate = useMemo(() => etDate(), []);
+  const tomorrowDate = useMemo(() => etDate(1), []);
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: 1, throwOnError: false });
   const todayQuery = trpc.cleanerPortalReadOnly.getMyJobsToday.useQuery(undefined, { enabled: !!meQuery.data, retry: 1, throwOnError: false });
+  const tomorrowQuery = trpc.cleanerPortalReadOnly.getMyJobsTomorrow.useQuery(undefined, { enabled: !!meQuery.data && page === "today" && routeDay === "tomorrow", retry: 1, throwOnError: false });
   const weekQuery = trpc.cleanerPortalReadOnly.getMyJobsWeek.useQuery(undefined, { enabled: !!meQuery.data && page === "jobs", staleTime: 60_000, throwOnError: false });
   const portalDataQuery = trpc.cleaner.portalData.useQuery(undefined, { enabled: !!meQuery.data, staleTime: 300_000, throwOnError: false });
   const teamScheduleQuery = trpc.cleanerPortalReadOnly.getMyTeamSchedule.useQuery(undefined, { enabled: !!meQuery.data, staleTime: 300_000, throwOnError: false });
@@ -353,9 +368,15 @@ function CleanerPortalConnected() {
   const languageMutation = trpc.cleaner.updateLanguage.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
   const availabilityMutation = trpc.cleanerPortalAvailability.submitWeeklySchedule.useMutation({ throwOnError: false, onSuccess: async () => { await Promise.all([utils.cleanerPortalReadOnly.getMyTeamSchedule.invalidate(), utils.cleaner.portalData.invalidate()]); toast.success("Availability saved."); setAvailabilityOpen(false); }, onError: error => toast.error(error.message || "Availability could not be saved.") });
 
-  const jobs = ((todayQuery.data ?? []) as PortalJob[]).map(job => ({ ...job, ...progressByJobKey[job.portalJobKey] }));
+  const jobs = (((routeDay === "tomorrow" ? tomorrowQuery.data : todayQuery.data) ?? []) as PortalJob[]).map(job => ({ ...job, ...progressByJobKey[job.portalJobKey] }));
   const activeJobs = jobs.filter(job => !jobIsComplete(job));
   const nextJob = activeJobs[0] ?? jobs[0] ?? null;
+  const viewingTomorrow = routeDay === "tomorrow";
+  const displayedDate = viewingTomorrow ? tomorrowDate : todayDate;
+  const displayedDayLabel = viewingTomorrow ? "Tomorrow" : "Today";
+  const displayedDateLabel = formatPortalDayAndDate(displayedDate);
+  const routeLoading = viewingTomorrow && tomorrowQuery.isLoading;
+  const routeError = viewingTomorrow && tomorrowQuery.isError;
   const weekJobs = (weekQuery.data ?? []) as WeekJob[];
   const currentPayWeek = earningsQuery.data?.current as PayWeekSummary | undefined;
   const previousPayWeek = earningsQuery.data?.previous as PayWeekSummary | undefined;
@@ -380,9 +401,10 @@ function CleanerPortalConnected() {
     <header className="cp-topbar"><div className="cp-brand"><span className="cp-logo">M</span><span><b>Maids in Black</b><small>Cleaner Portal</small></span></div><div className="cp-user"><span className="cp-avatar">{initial}</span><span>{meQuery.data.name}</span><button className="cp-icon-button cp-menu-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Portal menu"><Menu size={19} /></button>{menuOpen && <div className="cp-user-menu"><button onClick={() => logoutMutation.mutate()}><LogOut size={15} />Log out</button></div>}</div></header>
     <div className="cp-shell"><aside className="cp-nav"><nav>{navItems.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => setPage(id)} className={page === id ? "is-active" : ""}><Icon size={17} /><span>{label}</span></button>)}</nav></aside>
       <main className="cp-main">
-        {page === "today" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Today · {todayDate}</span><h1>Good day, {firstName}.</h1><p>{activeJobs.length ? `You have ${activeJobs.length} active job${activeJobs.length === 1 ? "" : "s"} today.` : jobs.length ? "Today’s jobs are complete." : "No jobs assigned for today."}</p></div><div className="cp-head-actions"><button className="cp-btn cp-btn--subtle" onClick={() => setAvailabilityOpen(true)}><CalendarDays size={16} />Set availability</button></div></div>
-          {nextJob && <div className="cp-hero"><div><span className="cp-live">{jobIsComplete(nextJob) ? "DAY COMPLETE" : "NEXT JOB"}</span><h2>{jobIsComplete(nextJob) ? "Great work today." : `${ordinal(nextJob.jobIndex)} job is ready`}</h2><p>{nextJob.customerName} · {serviceLabel(nextJob)} · {nextJob.address}</p><div className="cp-hero-actions"><button className="cp-btn cp-btn--primary" onClick={() => setSelectedJob(nextJob)}>{jobIsComplete(nextJob) ? "Review job" : `View ${ordinal(nextJob.jobIndex).toLowerCase()} job`}<ChevronRight size={16} /></button><button className="cp-btn cp-btn--subtle" onClick={() => openDirections(nextJob.address)}><Navigation size={16} />Directions</button></div></div><div className="cp-hero-side"><span>Assigned jobs</span><strong>{jobs.length}</strong><small>{activeJobs.length} active today</small></div></div>}
-          <div className="cp-layout"><section className="cp-panel"><div className="cp-panel-title"><div><span className="cp-eyebrow">Today’s route</span><h2>Assigned jobs</h2></div><button className="cp-text-action" onClick={() => setPage("jobs")}>View all <ChevronRight size={15} /></button></div>{jobs.length === 0 ? <div className="cp-empty">No active jobs are assigned today.</div> : jobs.map(job => <JobCard key={job.portalJobKey} job={job} onOpen={() => setSelectedJob(job)} onCall={callClient} />)}</section><aside className="cp-side-stack"><section className="cp-panel"><span className="cp-eyebrow">Route</span><h3>Today’s drive</h3><div className="cp-route-list">{jobs.map(job => <div key={job.portalJobKey}><span className="cp-route-dot" /><p><b>{job.customerName}</b><small>{job.address || "Address pending"}</small></p><time>{job.time}</time></div>)}</div></section><section className="cp-panel"><span className="cp-eyebrow">Shift status</span><h3>{portalDataQuery.data?.tomorrowAvailability.submitted ? "Availability saved" : "Set tomorrow’s availability"}</h3><p className="cp-muted">Keep dispatch up to date with your current weekly schedule.</p><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={() => setAvailabilityOpen(true)}>Set availability</button></section></aside></div>
+        {page === "today" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">{displayedDayLabel} · {displayedDateLabel}</span><h1>{viewingTomorrow ? "Tomorrow’s work." : `Good day, ${firstName}.`}</h1><p>{routeLoading ? "Loading tomorrow’s assigned jobs…" : activeJobs.length ? `You have ${activeJobs.length} active job${activeJobs.length === 1 ? "" : "s"} ${viewingTomorrow ? "tomorrow" : "today"}.` : jobs.length ? `${displayedDayLabel}’s jobs are complete.` : `No jobs assigned for ${viewingTomorrow ? "tomorrow" : "today"}.`}</p></div><div className="cp-head-actions"><button className="cp-btn cp-btn--subtle" onClick={() => setAvailabilityOpen(true)}><CalendarDays size={16} />Set availability</button></div></div>
+          <div className="cp-day-switcher" role="tablist" aria-label="Job day"><button type="button" role="tab" aria-selected={!viewingTomorrow} className={!viewingTomorrow ? "is-active" : ""} onClick={() => setRouteDay("today")}>Today</button><button type="button" role="tab" aria-selected={viewingTomorrow} className={viewingTomorrow ? "is-active" : ""} onClick={() => setRouteDay("tomorrow")}>Tomorrow <span>· {formatPortalDayAndDate(tomorrowDate, true)}</span></button></div>
+          {!viewingTomorrow && nextJob && <div className="cp-hero"><div><span className="cp-live">{jobIsComplete(nextJob) ? "DAY COMPLETE" : "NEXT JOB"}</span><h2>{jobIsComplete(nextJob) ? "Great work today." : `${ordinal(nextJob.jobIndex)} job is ready`}</h2><p>{nextJob.customerName} · {serviceLabel(nextJob)} · {nextJob.address}</p><div className="cp-hero-actions"><button className="cp-btn cp-btn--primary" onClick={() => setSelectedJob(nextJob)}>{jobIsComplete(nextJob) ? "Review job" : `View ${ordinal(nextJob.jobIndex).toLowerCase()} job`}<ChevronRight size={16} /></button><button className="cp-btn cp-btn--subtle" onClick={() => openDirections(nextJob.address)}><Navigation size={16} />Directions</button></div></div><div className="cp-hero-side"><span>Assigned jobs</span><strong>{jobs.length}</strong><small>{activeJobs.length} active today</small></div></div>}
+          {routeLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading tomorrow’s assigned jobs…</div> : routeError ? <div className="cp-empty">Tomorrow’s assigned jobs could not be loaded. <button className="cp-text-action" onClick={() => tomorrowQuery.refetch()}>Try again</button></div> : <div className="cp-layout"><section className="cp-panel"><div className="cp-panel-title"><div><span className="cp-eyebrow">{displayedDayLabel}’s route</span><h2>Assigned jobs</h2></div><button className="cp-text-action" onClick={() => setPage("jobs")}>View all <ChevronRight size={15} /></button></div>{jobs.length === 0 ? <div className="cp-empty">No active jobs are assigned for {viewingTomorrow ? "tomorrow" : "today"}.</div> : jobs.map(job => <JobCard key={job.portalJobKey} job={job} tomorrowLabel={viewingTomorrow ? formatPortalDayAndDate(job.jobDate) : undefined} onOpen={() => setSelectedJob(job)} onCall={callClient} />)}</section><aside className="cp-side-stack"><section className="cp-panel"><span className="cp-eyebrow">Route</span><h3>{displayedDayLabel}’s drive</h3><div className="cp-route-list">{jobs.map(job => <div key={job.portalJobKey}><span className="cp-route-dot" /><p><b>{job.customerName}</b><small>{job.address || "Address pending"}</small></p><time>{job.time}</time></div>)}</div></section><section className="cp-panel"><span className="cp-eyebrow">Shift status</span><h3>{portalDataQuery.data?.tomorrowAvailability.submitted ? "Availability saved" : "Set tomorrow’s availability"}</h3><p className="cp-muted">Keep dispatch up to date with your current weekly schedule.</p><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={() => setAvailabilityOpen(true)}>Set availability</button></section></aside></div>}
         </section>}
         {page === "jobs" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">My work</span><h1>My jobs</h1><p>Your current workweek, using your existing assigned job list.</p></div></div><div className="cp-panel cp-job-list">{weekQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading assigned jobs…</div> : weekQuery.isError ? <div className="cp-empty">Your assigned jobs could not be loaded.</div> : weekJobs.length === 0 ? <div className="cp-empty">No upcoming jobs this week.</div> : weekJobs.map(job => <div className="cp-week-job" key={job.portalJobKey}><div className="cp-week-job__date"><b>{job.dateLabel === "today" ? "Today" : job.jobDate}</b><small>{job.time}</small></div><div><StatusPill job={job} /><h3>{job.customerName} · {serviceLabel(job)}</h3><p><MapPin size={14} />{job.address || "Address pending"}</p></div>{job.dateLabel === "today" && <button className="cp-btn cp-btn--primary cp-btn--small" onClick={() => { const todayJob = jobs.find(item => item.portalJobKey === job.portalJobKey); if (todayJob) setSelectedJob(todayJob); }}>Open</button>}</div>)}</div></section>}
         {page === "schedule" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Schedule</span><h1>Your availability</h1><p>Set the workdays that dispatch should use for your team schedule.</p></div><button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Set availability</button></div><div className="cp-panel cp-schedule-card"><CalendarDays size={25} /><h2>{teamScheduleQuery.data?.teamName ? `${teamScheduleQuery.data.teamName} schedule` : "Weekly availability"}</h2><p>Your existing weekly schedule and next-day availability check-in stay in one place.</p>{teamScheduleQuery.data?.schedule && <div className="cp-schedule-days">{WEEK_DAYS.map(day => <span key={day} className={teamScheduleQuery.data?.schedule?.[day.toLowerCase() as "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun"] === 1 ? "is-working" : ""}>{day}</span>)}</div>}<button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Update availability</button></div></section>}

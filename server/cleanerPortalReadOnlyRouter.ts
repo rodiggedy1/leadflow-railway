@@ -115,6 +115,11 @@ export const cleanerPortalReadOnlyRouter = router({
     const { cleaner, jobs } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, today, today);
     return jobs.map((job, index) => portalJob(job, cleaner.payPercent, index + 1, jobs.length));
   }),
+  getMyJobsTomorrow: cleanerProcedure.query(async ({ ctx }) => {
+    const tomorrow = etDate(1);
+    const { cleaner, jobs } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, tomorrow, tomorrow);
+    return jobs.map((job, index) => portalJob(job, cleaner.payPercent, index + 1, jobs.length));
+  }),
   getMyJobsWeek: cleanerProcedure.query(async ({ ctx }) => {
     const today = etDate();
     const tomorrow = etDate(1);

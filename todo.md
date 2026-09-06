@@ -1650,4 +1650,6 @@
 - [x] Push the validated source-missing Launch27 safeguard to production
 - [x] Add a Cleaner Portal Today and Tomorrow job switcher with the weekday and date in the Tomorrow tab and on every Tomorrow job card
 - [x] Refine the live Cleaner Portal V2 Tomorrow tab and cards with explicit weekday-and-date treatment, without changing job data or actions
-- [ ] Push the Cleaner Portal Tomorrow tab and card-label refinement to production
+- [x] Push the Cleaner Portal Tomorrow tab and card-label refinement to production
+- [x] Correct the visible white Cleaner Portal Today page with a Today and Tomorrow switcher and clear weekday-and-date Tomorrow labels on every card
+- [ ] Push the corrected Today and Tomorrow switcher on the exact Cleaner Portal screen to production
