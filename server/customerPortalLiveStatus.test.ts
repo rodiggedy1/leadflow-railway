@@ -4,11 +4,12 @@ import { describe, expect, it } from "vitest";
 import { getCustomerPortalBusinessDate, getCustomerPortalLiveStatusView, isCustomerPortalLiveJob, type CustomerPortalTodayJob } from "../shared/customerPortalLiveStatus";
 
 const root = process.cwd();
-const baseJob: CustomerPortalTodayJob = { jobDate: "2026-09-05", serviceDateTime: "2026-09-05T15:00:00Z", serviceType: "Home cleaning", teamName: "Team Ada", jobStatus: "on_the_way", bookingStatus: "assigned", delayMinutes: null, etaTimestamp: null, etaTimeStr: "11:00 AM" };
+const baseJob: CustomerPortalTodayJob = { bookingId: 42, jobDate: "2026-09-05", serviceDateTime: "2026-09-05T15:00:00Z", serviceType: "Home cleaning", teamName: "Team Ada", jobStatus: "on_the_way", bookingStatus: "assigned", delayMinutes: null, etaTimestamp: null, etaTimeStr: "11:00 AM" };
 
 describe("customer portal live same-day status", () => {
   it("uses the Eastern business day and never treats completed, cancelled, or rescheduled work as live", () => {
     expect(getCustomerPortalBusinessDate(new Date("2026-09-06T03:30:00Z"))).toBe("2026-09-05");
+    expect(getCustomerPortalBusinessDate(new Date("2026-09-06T04:22:00Z"))).toBe("2026-09-06");
     expect(isCustomerPortalLiveJob(baseJob)).toBe(true);
     expect(isCustomerPortalLiveJob({ ...baseJob, jobStatus: "completed" })).toBe(false);
     expect(isCustomerPortalLiveJob({ ...baseJob, bookingStatus: "cancelled" })).toBe(false);
@@ -21,7 +22,7 @@ describe("customer portal live same-day status", () => {
     expect(getCustomerPortalLiveStatusView({ ...baseJob, jobStatus: "running_late", delayMinutes: null, etaTimeStr: null }).detail).toBe("Your team is running a little behind");
   });
 
-  it("keeps the new portal query authenticated, read-only, safe-field-only, and active-refresh-only", async () => {
+  it("keeps the legacy status query authenticated and read-only while Home selects all active customer bookings by Eastern business date", async () => {
     const [router, portal] = await Promise.all([
       readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8"),
       readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
@@ -31,12 +32,19 @@ describe("customer portal live same-day status", () => {
     expect(statusProcedure).toContain("extractUSDigits(account.customerPhone)");
     expect(statusProcedure).toContain("REGEXP_REPLACE");
     expect(statusProcedure).toContain("isCustomerPortalLiveJob");
+    expect(statusProcedure).toContain("bookingId: cleanerJobs.bookingId");
     expect(statusProcedure).toContain("etaTimestamp: cleanerJobs.etaTimestamp");
     expect(statusProcedure).not.toMatch(/customerPhone:|customerName:|jobAddress:|staffNotes:|issueNote:|db\.(insert|update|delete)|sendSms|launch27/i);
-    expect(portal).toContain('trpc.customerPortal.todayJobStatus.useQuery');
-    expect(portal).toContain("refetchInterval: query => query.state.data?.job ? 60_000 : false");
+    expect(portal).toContain("getCustomerPortalBusinessDate");
+    expect(portal).toContain("const allCustomerBookings");
+    expect(portal).toContain("...activeCleanings.map");
+    expect(portal).toContain("...activeLeadflowJobs.map");
+    expect(portal).toContain("booking.jobDate === businessDate");
+    expect(portal).toContain("booking.jobDate >= businessDate");
+    expect(portal).toContain("trpc.customerPortal.todayJobStatus.useQuery");
+    expect(portal).toContain("todayBooking.bookingId === null || liveTodayStatus?.bookingId !== todayBooking.bookingId");
     expect(portal).toContain("PortalTodayStatus");
     expect(portal).toContain('onViewBooking={() => goToPage("bookings")}');
-    expect(portal).toContain("todayJobStatus.data?.job ?");
+    expect(portal).toContain("todayBookingWithLiveStatus ? <PortalTodayStatus job={todayBookingWithLiveStatus}");
   });
 });

@@ -78,6 +78,7 @@ export const customerPortalRouter = router({
       db.select().from(bookings).where(eq(bookings.customerPhone, account.customerPhone)).orderBy(desc(bookings.createdAt)).limit(100),
       phoneDigits ? db.select({
         id: leadflowJobs.id,
+        launch27BookingId: leadflowJobs.launch27BookingId,
         jobDate: leadflowJobs.jobDate,
         serviceDateTime: leadflowJobs.serviceDateTime,
         serviceName: leadflowJobs.serviceName,
@@ -108,6 +109,7 @@ export const customerPortalRouter = router({
     if (!phoneDigits) return { job: null };
     ctx.res.set("Cache-Control", "no-store");
     const rows = await db.select({
+      bookingId: cleanerJobs.bookingId,
       jobDate: cleanerJobs.jobDate,
       serviceDateTime: cleanerJobs.serviceDateTime,
       serviceType: cleanerJobs.serviceType,

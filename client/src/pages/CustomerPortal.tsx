@@ -18,6 +18,7 @@ import "./customer-portal-home-reference-refinement.css";
 import "./customer-portal-login.css";
 import "./customer-portal-live-status.css";
 import { PortalTodayStatus } from "@/components/PortalTodayStatus";
+import { getCustomerPortalBusinessDate, type CustomerPortalTodayJob } from "@shared/customerPortalLiveStatus";
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
@@ -69,6 +70,10 @@ function formatCurrency(cents: number | null | undefined) {
 
 function isActivePortalBookingStatus(status: string) {
   return !["completed", "cancelled", "canceled", "rescheduled"].includes(status.toLowerCase());
+}
+
+function compareCustomerPortalBookings(left: CustomerPortalTodayJob, right: CustomerPortalTodayJob) {
+  return left.jobDate.localeCompare(right.jobDate) || (left.serviceDateTime ?? "").localeCompare(right.serviceDateTime ?? "");
 }
 
 function PortalNewCardForm({ clientSecret, setupIntentId, customerName, onSaved }: { clientSecret: string; setupIntentId: string; customerName: string; onSaved: (card: { brand: string; last4: string }) => void }) {
@@ -155,15 +160,26 @@ export default function CustomerPortal() {
   const featuredServices = useMemo(() => FEATURED_SERVICE_IDS.map(id => CUSTOMER_PORTAL_SERVICES.find(service => service.id === id)).filter((service): service is CustomerPortalService => Boolean(service)), []);
   const activeCleanings = useMemo(() => (portal.data?.cleanings ?? []).filter(cleaning => isActivePortalBookingStatus(cleaning.status)), [portal.data?.cleanings]);
   const activeLeadflowJobs = useMemo(() => (portal.data?.leadflowJobs ?? []).filter(job => isActivePortalBookingStatus(job.bookingStatus)), [portal.data?.leadflowJobs]);
-  const nextCleaning = useMemo(() => [...activeCleanings].sort((left, right) => left.requestedLocalDate.localeCompare(right.requestedLocalDate))[0], [activeCleanings]);
-  const nextLeadflowJob = useMemo(() => [...activeLeadflowJobs].sort((left, right) => left.jobDate.localeCompare(right.jobDate) || (left.serviceDateTime ?? "").localeCompare(right.serviceDateTime ?? ""))[0], [activeLeadflowJobs]);
+  const businessDate = getCustomerPortalBusinessDate();
+  const allCustomerBookings = useMemo<CustomerPortalTodayJob[]>(() => [
+    ...activeCleanings.map(cleaning => ({ bookingId: null, jobDate: cleaning.requestedLocalDate, serviceDateTime: cleaning.requestedLocalTime ?? null, serviceType: cleaning.serviceName, teamName: null, jobStatus: null, bookingStatus: cleaning.status, delayMinutes: null, etaTimestamp: null, etaTimeStr: null })),
+    ...activeLeadflowJobs.map(job => ({ bookingId: job.launch27BookingId, jobDate: job.jobDate, serviceDateTime: job.serviceDateTime, serviceType: job.serviceName, teamName: job.teamName, jobStatus: null, bookingStatus: job.bookingStatus, delayMinutes: null, etaTimestamp: null, etaTimeStr: null })),
+  ], [activeCleanings, activeLeadflowJobs]);
+  const todayBooking = useMemo(() => [...allCustomerBookings].filter(booking => booking.jobDate === businessDate).sort(compareCustomerPortalBookings)[0] ?? null, [allCustomerBookings, businessDate]);
+  const liveTodayStatus = todayJobStatus.data?.job ?? null;
+  const todayBookingWithLiveStatus = useMemo(() => {
+    if (!todayBooking || todayBooking.bookingId === null || liveTodayStatus?.bookingId !== todayBooking.bookingId) return todayBooking;
+    return { ...todayBooking, teamName: liveTodayStatus.teamName ?? todayBooking.teamName, jobStatus: liveTodayStatus.jobStatus, bookingStatus: liveTodayStatus.bookingStatus ?? todayBooking.bookingStatus, delayMinutes: liveTodayStatus.delayMinutes, etaTimestamp: liveTodayStatus.etaTimestamp, etaTimeStr: liveTodayStatus.etaTimeStr };
+  }, [liveTodayStatus, todayBooking]);
+  const nextCustomerBooking = useMemo(() => [...allCustomerBookings].filter(booking => booking.jobDate >= businessDate).sort(compareCustomerPortalBookings)[0] ?? null, [allCustomerBookings, businessDate]);
+  const nextLeadflowJob = useMemo(() => [...activeLeadflowJobs].filter(job => job.jobDate >= businessDate).sort((left, right) => left.jobDate.localeCompare(right.jobDate) || (left.serviceDateTime ?? "").localeCompare(right.serviceDateTime ?? ""))[0], [activeLeadflowJobs, businessDate]);
 
   if (portal.isLoading) return <main className="mib-portal-gate">Loading your home portal…</main>;
   if (!portal.data?.account) return <PortalLoginGate onAuthenticated={() => { void portal.refetch(); }} />;
 
   const totalRecords = portal.data.cleanings.length + portal.data.leadflowJobs.length + portal.data.requests.length;
   const activeRecordCount = activeCleanings.length + activeLeadflowJobs.length + portal.data.requests.filter(request => isActivePortalBookingStatus(request.status)).length;
-  const nextVisitDate = [nextCleaning?.requestedLocalDate, nextLeadflowJob?.jobDate].filter((date): date is string => Boolean(date)).sort()[0] ?? null;
+  const nextVisitDate = nextCustomerBooking?.jobDate ?? null;
   const customerName = portal.data.account.name.split(" ")[0];
   const homeAddress = portal.data.cleanings.find(cleaning => Boolean(cleaning.address))?.address ?? portal.data.leadflowJobs.find(job => Boolean(job.jobAddress))?.jobAddress ?? "";
   const savedCardLabel = portal.data.savedCard?.last4 ? `${portal.data.savedCard.brand ? `${portal.data.savedCard.brand} ` : "Card "}ending in ${portal.data.savedCard.last4}` : "No saved card on file";
@@ -199,7 +215,7 @@ export default function CustomerPortal() {
       </nav><div className="mib-direct-help"><CircleHelp /><span><b>Need help?</b>Contact us</span></div></aside>
       <main className="mib-direct-main">
         {activePage === "home" && <><section className="mib-direct-hero"><div><small>MY HOME</small><h1>Welcome back,<br />{customerName}.</h1><p>Your home requests, timing, and updates are all here.</p><div className="mib-direct-hero-actions"><button className="mib-direct-button mib-direct-button-primary" type="button" onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning</button><button className="mib-direct-button" type="button" onClick={() => goToPage("services")}>Browse all services <ArrowRight /></button></div></div><div className="mib-direct-hero-art" role="img" aria-label="A calm, tidy bedroom"><div className="mib-direct-hero-plant" /><div className="mib-direct-hero-sofa" /><span>A cleaner home<br />for a calmer you.</span></div></section>
-        {todayJobStatus.data?.job ? <PortalTodayStatus job={todayJobStatus.data.job} onViewBooking={() => goToPage("bookings")} /> : <section className="mib-direct-stats" aria-label="Account summary">
+        {todayBookingWithLiveStatus ? <PortalTodayStatus job={todayBookingWithLiveStatus} onViewBooking={() => goToPage("bookings")} /> : <section className="mib-direct-stats" aria-label="Account summary">
           <article><ClipboardList /><div><strong>{activeRecordCount}</strong><span>Active bookings</span><button type="button" onClick={() => goToPage("bookings")}>View and manage <ArrowRight /></button></div></article>
           <article><CalendarClock /><div><strong>{nextVisitDate ? formatLocalDate(nextVisitDate) : "—"}</strong><span>Next visit</span><button type="button" onClick={() => goToPage("bookings")}>See details <ArrowRight /></button></div></article>
           <article><ShieldCheck /><div><strong>This device</strong><span>Account access</span><em>Secure portal access</em></div></article>

@@ -1,4 +1,5 @@
 export type CustomerPortalTodayJob = {
+  bookingId: number | null;
   jobDate: string;
   serviceDateTime: string | null;
   serviceType: string | null;
