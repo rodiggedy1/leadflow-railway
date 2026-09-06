@@ -32,7 +32,7 @@ function toE164(phone: string): string {
  * Cleaner dials their proxy number → Twilio bridges to client's real number.
  */
 export async function getOrCreateProxySession(
-  cleanerJobId: number | string,
+  cleanerJobId: number,
   cleanerPhone: string,
   clientPhone: string
 ): Promise<string> {
@@ -105,7 +105,7 @@ export async function getOrCreateProxySession(
  * Close the Twilio Proxy session for a job (by uniqueName).
  * Safe to call even if the session doesn't exist or is already closed.
  */
-export async function closeProxySession(cleanerJobId: number | string): Promise<void> {
+export async function closeProxySession(cleanerJobId: number): Promise<void> {
   if (!PROXY_SERVICE_SID) return;
   const uniqueName = `job-${cleanerJobId}`;
   try {

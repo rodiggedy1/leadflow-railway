@@ -1,9 +1,9 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { router, publicProcedure, adminAgentProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { appSettings, bookingAssignments, bookingSeries, bookings, schedulingTeams } from "../drizzle/schema";
+import { appSettings, bookingSeries, bookings } from "../drizzle/schema";
 import {
   BOOKING_WIDGET_DRAFT_SETTING,
   DEFAULT_BOOKING_WIDGET_DRAFT,
@@ -129,14 +129,13 @@ async function persistPreparedBooking(db: NonNullable<Awaited<ReturnType<typeof 
   }
 }
 
-function mapAdminBooking(row: typeof bookings.$inferSelect, assignment?: { teamName: string | null }) {
+function mapAdminBooking(row: typeof bookings.$inferSelect) {
   return {
     id: row.id,
     publicBookingNumber: row.publicBookingNumber,
     status: row.status,
     availabilityStatus: row.availabilityStatus,
-    assignmentStatus: assignment ? "assigned" : row.assignmentStatus,
-    assignedTeamName: assignment?.teamName ?? null,
+    assignmentStatus: row.assignmentStatus,
     paymentStatus: row.paymentStatus,
     customerName: row.customerName,
     customerPhone: row.customerPhone,
@@ -212,15 +211,9 @@ export const bookingsRouter = router({
         ? await query.where(and(...conditions)).orderBy(asc(bookings.requestedLocalTime), desc(bookings.createdAt)).limit(input?.limit ?? 200)
         : await query.orderBy(asc(bookings.requestedLocalDate), asc(bookings.requestedLocalTime), desc(bookings.createdAt)).limit(input?.limit ?? 200);
       const search = input?.query?.trim().toLowerCase();
-      const bookingIds = rows.map((row) => row.id);
-      const assignmentRows = bookingIds.length
-        ? await db.select().from(bookingAssignments).where(and(inArray(bookingAssignments.bookingId, bookingIds), eq(bookingAssignments.status, "assigned"), isNull(bookingAssignments.unassignedAt))).orderBy(desc(bookingAssignments.assignedAt), desc(bookingAssignments.id))
-        : [];
-      const activeAssignmentByBooking = new Map<number, { teamName: string | null }>();
-      for (const assignment of assignmentRows) if (!activeAssignmentByBooking.has(assignment.bookingId)) activeAssignmentByBooking.set(assignment.bookingId, assignment);
       return rows
         .filter((row) => !search || `${row.customerName} ${row.customerPhone} ${row.customerEmail} ${row.address} ${row.publicBookingNumber}`.toLowerCase().includes(search))
-        .map((row) => mapAdminBooking(row, activeAssignmentByBooking.get(row.id)));
+        .map(mapAdminBooking);
     }),
 
   get: adminAgentProcedure
@@ -230,31 +223,7 @@ export const bookingsRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
       const rows = await db.select().from(bookings).where(eq(bookings.id, input.id)).limit(1);
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
-      const assignments = await db.select().from(bookingAssignments).where(and(eq(bookingAssignments.bookingId, rows[0].id), eq(bookingAssignments.status, "assigned"), isNull(bookingAssignments.unassignedAt))).orderBy(desc(bookingAssignments.assignedAt), desc(bookingAssignments.id)).limit(1);
-      return mapAdminBooking(rows[0], assignments[0]);
-    }),
-  listAssignableTeams: adminAgentProcedure.query(async () => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
-    return db.select({ id: schedulingTeams.id, name: schedulingTeams.name, launch27TeamId: schedulingTeams.launch27TeamId }).from(schedulingTeams).where(and(eq(schedulingTeams.isActive, 1), isNotNull(schedulingTeams.launch27TeamId))).orderBy(asc(schedulingTeams.name));
-  }),
-  assignTeam: adminAgentProcedure
-    .input(z.object({ bookingId: z.number().int().positive(), schedulingTeamId: z.number().int().positive() }))
-    .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
-      const teamRows = await db.select({ name: schedulingTeams.name, launch27TeamId: schedulingTeams.launch27TeamId }).from(schedulingTeams).where(and(eq(schedulingTeams.id, input.schedulingTeamId), eq(schedulingTeams.isActive, 1))).limit(1);
-      const team = teamRows[0];
-      if (!team?.launch27TeamId) throw new TRPCError({ code: "BAD_REQUEST", message: "Selected team cannot be used for Cleaner Portal assignment." });
-      const bookingRows = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
-      if (!bookingRows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
-      const now = new Date();
-      await db.transaction(async (tx) => {
-        await tx.update(bookingAssignments).set({ status: "unassigned", unassignedAt: now, updatedAt: now }).where(and(eq(bookingAssignments.bookingId, input.bookingId), eq(bookingAssignments.status, "assigned"), isNull(bookingAssignments.unassignedAt)));
-        await tx.insert(bookingAssignments).values({ bookingId: input.bookingId, teamId: team.launch27TeamId, teamName: team.name, status: "assigned", assignedByAgentId: ctx.agent.id, assignedAt: now, unassignedAt: null, createdAt: now, updatedAt: now });
-        await tx.update(bookings).set({ assignmentStatus: "assigned", updatedAt: now }).where(eq(bookings.id, input.bookingId));
-      });
-      return { bookingId: input.bookingId, teamId: team.launch27TeamId, teamName: team.name };
+      return mapAdminBooking(rows[0]);
     }),
   cancel: adminAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))
