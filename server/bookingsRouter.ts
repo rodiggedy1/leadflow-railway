@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { router, publicProcedure, adminAgentProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import { appSettings, bookingSeries, bookings } from "../drizzle/schema";
@@ -223,5 +224,15 @@ export const bookingsRouter = router({
       const rows = await db.select().from(bookings).where(eq(bookings.id, input.id)).limit(1);
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
       return mapAdminBooking(rows[0]);
+    }),
+  cancel: adminAgentProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const rows = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, input.id)).limit(1);
+      if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
+      await db.update(bookings).set({ status: "cancelled", updatedAt: new Date() }).where(eq(bookings.id, input.id));
+      return { id: input.id, status: "cancelled" as const };
     }),
 });

@@ -57,6 +57,14 @@ export const customerPortalRouter = router({
     if (!db) throw new Error("Customer portal is unavailable.");
     return db.select().from(customerPortalServiceRequests).orderBy(desc(customerPortalServiceRequests.createdAt)).limit(input.limit);
   }),
+  cancelStaffRequest: adminAgentProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const rows = await db.select({ id: customerPortalServiceRequests.id }).from(customerPortalServiceRequests).where(eq(customerPortalServiceRequests.id, input.id)).limit(1);
+    if (!rows[0]) throw new Error("Service request not found.");
+    await db.update(customerPortalServiceRequests).set({ status: "cancelled", updatedAt: new Date() }).where(eq(customerPortalServiceRequests.id, input.id));
+    return { id: input.id, status: "cancelled" as const };
+  }),
   me: publicProcedure.query(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);
     if (!session) return { account: null, cleanings: [], leadflowJobs: [], requests: [] };

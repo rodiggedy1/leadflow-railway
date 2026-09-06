@@ -74,6 +74,25 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(workspace).toContain("Initial import completed");
     expect(workspace).toContain("syncLeadflowJobsDate");
     expect(workspace).toContain("cancelLeadflowJob");
-    expect(workspace).toContain("Cancel selected job");
+    expect(workspace).toContain("cancelActiveRecord");
+    expect(workspace).toContain("cancelBooking");
+    expect(workspace).toContain("cancelFunnel");
+    expect(workspace).toContain("cancelPortalRequest");
+    expect(workspace).toContain('disabled={cancellationPending} onClick={cancelActiveRecord}');
+  });
+
+  it("cancels each detail-panel record by status only without payment or cleaner job side effects", () => {
+    const funnel = read("server/bookingFunnelRouter.ts");
+    const nativeBookings = read("server/bookingsRouter.ts");
+    const portal = read("server/customerPortalRouter.ts");
+    expect(funnel).toContain("cancel: adminAgentProcedure");
+    expect(funnel).toContain('stage: "cancelled"');
+    expect(nativeBookings).toContain("cancel: adminAgentProcedure");
+    expect(nativeBookings).toContain('status: "cancelled"');
+    expect(portal).toContain("cancelStaffRequest: adminAgentProcedure");
+    expect(portal).toContain('status: "cancelled"');
+    expect(funnel).not.toContain("getStripeClient");
+    expect(nativeBookings).not.toContain("getStripeClient");
+    expect(portal.slice(portal.indexOf("cancelStaffRequest:"), portal.indexOf("me: publicProcedure"))).not.toContain("getStripeClient");
   });
 });

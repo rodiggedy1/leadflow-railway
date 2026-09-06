@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { bookingFunnelRecords } from "../drizzle/schema";
 import {
   beginBookingFunnelInputSchema,
@@ -287,5 +288,16 @@ export const bookingFunnelRouter = router({
       const rows = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.id, input.id)).limit(1);
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       return mapAdminRecord(rows[0]);
+    }),
+  cancel: adminAgentProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const rows = await db.select({ id: bookingFunnelRecords.id }).from(bookingFunnelRecords).where(eq(bookingFunnelRecords.id, input.id)).limit(1);
+      if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
+      await db.update(bookingFunnelRecords).set({ stage: "cancelled", updatedAt: new Date() }).where(eq(bookingFunnelRecords.id, input.id));
+      broadcastOpsUpdate("booking_funnel_update");
+      return { id: input.id, stage: "cancelled" as const };
     }),
 });
