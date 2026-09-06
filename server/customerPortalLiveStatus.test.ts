@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { getCustomerPortalBusinessDate, getCustomerPortalLiveStatusView, isCustomerPortalLiveJob, type CustomerPortalTodayJob } from "../shared/customerPortalLiveStatus";
 
 const root = process.cwd();
-const baseJob: CustomerPortalTodayJob = { bookingId: 90210, jobDate: "2026-09-05", serviceDateTime: "2026-09-05T15:00:00Z", serviceType: "Home cleaning", teamName: "Team Ada", jobAddress: "22 Example Street", customerNotes: "Please use the side entrance.", bedrooms: 2, bathrooms: 1, jobStatus: "on_the_way", bookingStatus: "assigned", delayMinutes: null, etaTimestamp: null, etaTimeStr: "11:00 AM" };
+const baseJob: CustomerPortalTodayJob = { jobDate: "2026-09-05", serviceDateTime: "2026-09-05T15:00:00Z", serviceType: "Home cleaning", teamName: "Team Ada", jobStatus: "on_the_way", bookingStatus: "assigned", delayMinutes: null, etaTimestamp: null, etaTimeStr: "11:00 AM" };
 
 describe("customer portal live same-day status", () => {
   it("uses the Eastern business day and never treats completed, cancelled, or rescheduled work as live", () => {
@@ -26,19 +26,17 @@ describe("customer portal live same-day status", () => {
       readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8"),
       readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
     ]);
-    const statusProcedure = router.slice(router.indexOf("todayJobStatus:"), router.indexOf("updateLeadflowJobCustomerNote:"));
+    const statusProcedure = router.slice(router.indexOf("todayJobStatus:"), router.indexOf("startNewCardSetup:"));
     expect(statusProcedure).toContain("getCustomerPortalSessionFromRequest(ctx.req)");
     expect(statusProcedure).toContain("extractUSDigits(account.customerPhone)");
     expect(statusProcedure).toContain("REGEXP_REPLACE");
     expect(statusProcedure).toContain("isCustomerPortalLiveJob");
     expect(statusProcedure).toContain("etaTimestamp: cleanerJobs.etaTimestamp");
-    for (const safeField of ["bookingId: cleanerJobs.bookingId", "jobAddress: cleanerJobs.jobAddress", "customerNotes: cleanerJobs.customerNotes", "bedrooms: cleanerJobs.bedrooms", "bathrooms: cleanerJobs.bathrooms"]) expect(statusProcedure).toContain(safeField);
-    expect(statusProcedure).not.toMatch(/customerPhone:|customerName:|staffNotes:|issueNote:|db\.(insert|update|delete)|sendSms|launch27/i);
+    expect(statusProcedure).not.toMatch(/customerPhone:|customerName:|jobAddress:|staffNotes:|issueNote:|db\.(insert|update|delete)|sendSms|launch27/i);
     expect(portal).toContain('trpc.customerPortal.todayJobStatus.useQuery');
     expect(portal).toContain("refetchInterval: query => query.state.data?.job ? 60_000 : false");
     expect(portal).toContain("PortalTodayStatus");
-    expect(portal).toContain("onViewBooking={openTodayBooking}");
-    expect(portal).toContain("portal-leadflow-job-${focusedLeadflowJobId}");
+    expect(portal).toContain('onViewBooking={() => goToPage("bookings")}');
     expect(portal).toContain("todayJobStatus.data?.job ?");
   });
 });

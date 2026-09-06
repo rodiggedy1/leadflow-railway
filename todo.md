@@ -1600,5 +1600,3 @@
 - [ ] Payload reduction — investigate reducing listChannelMessages response size (field selection, pagination)
 - [ ] Memoization/profiling — profile CommandChat with React DevTools after Madison SMS ships to identify remaining re-render hotspots
 - [x] Payroll Summary: implement a preview-only accessible team-row detail drawer using existing teamPay.getTeamDetail data, with new-period and legacy layouts, reconciled totals, and independent CSV behavior
-- [x] Release same-day portal booking detail: exact isolated-booking focus, customer-safe live details, and customer-owned LeadFlow note updates
-- [ ] Record the production commit and customer verification path for same-day portal booking detail
