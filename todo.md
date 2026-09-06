@@ -1637,3 +1637,5 @@
 - [x] Reuse the current system cleaner earnings calculation in the isolated portal without payment or payroll writes
 - [x] Display verified current and previous pay-week date ranges in the Cleaner Portal earnings view
 - [x] Validate the exact production server startup import path before releasing isolated Cleaner Portal earnings
+- [x] Make Current pay week and Previous pay week open their respective isolated job lists
+- [x] Restore the authoritative calculated team payment on Today job cards without adding it to job detail

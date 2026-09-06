@@ -49,6 +49,11 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(page).toContain("Previous pay week");
     expect(page).toContain("formatPayWeekDate(currentPayWeek.start)");
     expect(page).toContain("formatPayWeekDate(previousPayWeek.start)");
+    expect(page).toContain('setSelectedPayWeek("current")');
+    expect(page).toContain('setSelectedPayWeek("previous")');
+    expect(page).toContain("Pay-week jobs");
+    expect(page).toContain("Team payment");
+    expect(page).toContain("formatMoney(job.basePay)");
 
     expect(cleanerPortalPayWeeks(new Date("2026-09-06T16:00:00.000Z"))).toEqual({
       currentStart: "2026-09-06",

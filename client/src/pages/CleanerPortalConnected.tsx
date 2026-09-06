@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import "./cleaner-portal-connected.css";
+import "./cleaner-portal-earnings.css";
 import "./cleaner-portal-login.css";
 
 type PortalJob = {
@@ -60,6 +61,7 @@ type PayWeekSummary = {
 };
 
 type NavPage = "today" | "jobs" | "schedule" | "earnings" | "contact" | "profile";
+type PayWeekKey = "current" | "previous";
 type EtaChoice = 10 | 20 | 30 | 45 | 60 | 75 | 90 | 120;
 
 const ETA_CHOICES: EtaChoice[] = [10, 20, 30, 45, 60, 75, 90, 120];
@@ -145,6 +147,7 @@ function JobCard({ job, onOpen, onCall }: { job: PortalJob; onOpen: () => void; 
             <span>{job.bathrooms} bath{job.bathrooms === 1 ? "" : "s"}</span>
             {(job.extras ?? []).slice(0, 2).map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}
           </div>
+          <div className="cp-job-card__payment"><span>Team payment</span><strong>{formatMoney(job.basePay)}</strong></div>
         </div>
       </div>
       <div className="cp-job-card__actions">
@@ -334,6 +337,7 @@ function CleanerPortalLogin() {
 function CleanerPortalConnected() {
   const [page, setPage] = useState<NavPage>("today");
   const [selectedJob, setSelectedJob] = useState<PortalJob | null>(null);
+  const [selectedPayWeek, setSelectedPayWeek] = useState<PayWeekKey>("current");
   const [progressByJobKey, setProgressByJobKey] = useState<Record<string, { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }>>({});
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -353,7 +357,8 @@ function CleanerPortalConnected() {
   const weekJobs = (weekQuery.data ?? []) as WeekJob[];
   const currentPayWeek = earningsQuery.data?.current as PayWeekSummary | undefined;
   const previousPayWeek = earningsQuery.data?.previous as PayWeekSummary | undefined;
-  const completedPayJobs = [...(currentPayWeek?.jobs ?? []), ...(previousPayWeek?.jobs ?? [])].filter(job => job.status === "completed").sort((left, right) => right.jobDate.localeCompare(left.jobDate));
+  const displayedPayWeek = selectedPayWeek === "current" ? currentPayWeek : previousPayWeek;
+  const displayedPayWeekLabel = selectedPayWeek === "current" ? "Current pay week" : "Previous pay week";
   const initial = meQuery.data?.name?.trim().slice(0, 1).toUpperCase() || "C";
   const firstName = meQuery.data?.name?.split(" ")[0] || "there";
   const callClient = () => toast.info("Client calling will be enabled after portal visibility is confirmed.");
@@ -383,13 +388,13 @@ function CleanerPortalConnected() {
           <div className="cp-page-head"><div><span className="cp-eyebrow">Earnings</span><h1>Your earnings</h1><p>Calculated with the current Team Pay formula. Pay weeks run Sunday through Saturday.</p></div></div>
           {earningsQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading earnings…</div> : earningsQuery.isError ? <div className="cp-empty">Your earnings could not be loaded. Please try again.</div> : <>
             <div className="cp-money-grid">
-              <article><span>Current pay week</span><strong>{formatMoney(currentPayWeek?.totalPay)}</strong><small>{currentPayWeek ? `${formatPayWeekDate(currentPayWeek.start)} – ${formatPayWeekDate(currentPayWeek.end)}` : ""}</small></article>
-              <article><span>Previous pay week</span><strong>{formatMoney(previousPayWeek?.totalPay)}</strong><small>{previousPayWeek ? `${formatPayWeekDate(previousPayWeek.start)} – ${formatPayWeekDate(previousPayWeek.end)}` : ""}</small></article>
+              <button type="button" className={selectedPayWeek === "current" ? "is-selected" : ""} onClick={() => setSelectedPayWeek("current")} aria-pressed={selectedPayWeek === "current"}><span>Current pay week</span><strong>{formatMoney(currentPayWeek?.totalPay)}</strong><small>{currentPayWeek ? `${formatPayWeekDate(currentPayWeek.start)} – ${formatPayWeekDate(currentPayWeek.end)}` : ""}</small><em>View jobs</em></button>
+              <button type="button" className={selectedPayWeek === "previous" ? "is-selected" : ""} onClick={() => setSelectedPayWeek("previous")} aria-pressed={selectedPayWeek === "previous"}><span>Previous pay week</span><strong>{formatMoney(previousPayWeek?.totalPay)}</strong><small>{previousPayWeek ? `${formatPayWeekDate(previousPayWeek.start)} – ${formatPayWeekDate(previousPayWeek.end)}` : ""}</small><em>View jobs</em></button>
               <article><span>Current streak</span><strong>{portalDataQuery.data?.streakInfo.currentStreak ?? 0}</strong><small>Completed-job streak</small></article>
             </div>
             <div className="cp-panel">
-              <div className="cp-panel-title"><div><span className="cp-eyebrow">Completed work</span><h2>Completed jobs</h2></div>{currentPayWeek && <span className="cp-muted">{formatPayWeekDate(currentPayWeek.start)} – {formatPayWeekDate(currentPayWeek.end)}</span>}</div>
-              {completedPayJobs.length === 0 ? <div className="cp-empty">No completed jobs in the current or previous pay week.</div> : completedPayJobs.map(job => <div className="cp-earn-row" key={job.id}><div><b>{job.customerName || "Customer"}</b><span>{job.jobDate}</span></div><strong>{formatMoney(job.finalPay)}</strong></div>)}
+              <div className="cp-panel-title"><div><span className="cp-eyebrow">Pay-week jobs</span><h2>{displayedPayWeekLabel}</h2></div>{displayedPayWeek && <span className="cp-muted">{formatPayWeekDate(displayedPayWeek.start)} – {formatPayWeekDate(displayedPayWeek.end)}</span>}</div>
+              {displayedPayWeek?.jobs.length ? displayedPayWeek.jobs.map(job => <div className="cp-earn-row" key={job.id}><div><b>{job.customerName || "Customer"}</b><span>{formatPayWeekDate(job.jobDate)} · {statusLabel(job.status)}</span></div><strong>{formatMoney(job.finalPay)}</strong></div>) : <div className="cp-empty">No jobs in this pay week.</div>}
             </div>
           </>}
         </section>}
