@@ -1265,6 +1265,28 @@ export const leadflowJobs = mysqlTable("leadflow_jobs", {
 export type LeadflowJob = typeof leadflowJobs.$inferSelect;
 export type InsertLeadflowJob = typeof leadflowJobs.$inferInsert;
 
+/** Manual execution state for Cleaner Portal bookings, isolated from legacy job records. */
+export const cleanerPortalJobExecutions = mysqlTable("cleaner_portal_job_executions", {
+  id: int("id").autoincrement().primaryKey(),
+  recordKind: varchar("recordKind", { length: 20 }).notNull(),
+  sourceId: int("sourceId").notNull(),
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  teamId: int("teamId").notNull(),
+  jobStatus: varchar("jobStatus", { length: 50 }).notNull().default("assigned"),
+  etaTimestamp: bigint("etaTimestamp", { mode: "number" }), etaTimeStr: varchar("etaTimeStr", { length: 100 }), delayMinutes: int("delayMinutes"),
+  arrivedAt: datetime("arrivedAt", { mode: "date", fsp: 3 }), startedAt: datetime("startedAt", { mode: "date", fsp: 3 }), completedAt: datetime("completedAt", { mode: "date", fsp: 3 }),
+  signatureUrl: varchar("signatureUrl", { length: 1000 }), customerResponse: varchar("customerResponse", { length: 50 }), customerNotes: text("customerNotes"), customerNotHome: tinyint("customerNotHome").notNull().default(0),
+  jobRevenueCents: int("jobRevenueCents").notNull().default(0), payPercent: varchar("payPercent", { length: 10 }), basePayCents: int("basePayCents").notNull().default(0), photoAdjustmentCents: int("photoAdjustmentCents").notNull().default(0), ratingAdjustmentCents: int("ratingAdjustmentCents").notNull().default(0), manualAdjustmentCents: int("manualAdjustmentCents").notNull().default(0), finalPayCents: int("finalPayCents").notNull().default(0), checklistItems: text("checklistItems"), cleanerNotes: text("cleanerNotes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [uniqueIndex("uq_cleaner_portal_execution_source").on(t.recordKind, t.sourceId), index("idx_cleaner_portal_execution_team_status").on(t.teamId, t.jobStatus), index("idx_cleaner_portal_execution_cleaner").on(t.cleanerProfileId)]);
+export type CleanerPortalJobExecution = typeof cleanerPortalJobExecutions.$inferSelect;
+
+/** Object-storage metadata for a photo attached to an isolated Cleaner Portal booking. */
+export const cleanerPortalJobPhotos = mysqlTable("cleaner_portal_job_photos", {
+  id: int("id").autoincrement().primaryKey(), recordKind: varchar("recordKind", { length: 20 }).notNull(), sourceId: int("sourceId").notNull(), cleanerPortalJobExecutionId: int("cleanerPortalJobExecutionId"), cleanerProfileId: int("cleanerProfileId").notNull(), photoUrl: varchar("photoUrl", { length: 1000 }).notNull(), photoKey: varchar("photoKey", { length: 1000 }).notNull(), thumbnailUrl: varchar("thumbnailUrl", { length: 1000 }), thumbnailKey: varchar("thumbnailKey", { length: 1000 }), filename: varchar("filename", { length: 255 }), photoType: varchar("photoType", { length: 20 }).notNull().default("general"), createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [index("idx_cleaner_portal_photos_source").on(t.recordKind, t.sourceId), index("idx_cleaner_portal_photos_cleaner").on(t.cleanerProfileId)]);
+export type CleanerPortalJobPhoto = typeof cleanerPortalJobPhotos.$inferSelect;
+
 /**
  * jobPhotos — completion photos uploaded by cleaners for a specific job.
  */

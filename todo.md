@@ -1611,3 +1611,8 @@
 - [x] Release the native Cleaner Portal photo-control fix to production
 - [x] Restore the Cleaner Portal’s established photo-library picker instead of direct camera capture
 - [x] Release the Cleaner Portal photo-library picker correction to production
+- [x] Implement the isolated booking adapter behind the existing Cleaner Portal UI without markup or style redesign
+- [x] Replace every booking-dependent Cleaner Portal operation with an isolated source-agnostic procedure
+- [ ] Validate actual direct/imported production assignment parity before requesting another Cleaner Portal release
+- [x] Persist an exact active booking_assignments row from the direct-booking team-assignment action
+- [x] Prove the assignment write and isolated portal direct-booking visibility contracts without changing portal UI
