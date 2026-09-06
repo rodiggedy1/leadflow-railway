@@ -1622,3 +1622,5 @@
 - [x] Map and reuse the previously working Cleaner Portal photo picker, upload, metadata, and display flow with only an isolated job-reference adaptation
 - [x] Restore the proven photo-library picker, upload, thumbnail, metadata, and display workflow under isolated LeadFlow job ownership
 - [x] Validate that isolated photo failures cannot affect the working Cleaner Portal job list or ETA path
+- [x] Remove the redundant Add before photo control and make only the Before and After cards open the photo library
+- [x] Render each newly uploaded photo once after the saved-photo query refreshes

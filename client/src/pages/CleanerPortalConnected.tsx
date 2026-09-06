@@ -172,7 +172,6 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
   const [etaOpen, setEtaOpen] = useState(false);
   const [arrivalConfirm, setArrivalConfirm] = useState(false);
   const [selectedEta, setSelectedEta] = useState<EtaChoice>(30);
-  const photoInputRef = useRef<HTMLInputElement>(null);
   const [pendingPhotoType, setPendingPhotoType] = useState<"before" | "after">("before");
   const [localPhotoPreviews, setLocalPhotoPreviews] = useState<string[]>([]);
   const progressQuery = trpc.cleanerPortalProgress.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
@@ -180,7 +179,7 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
   const setEtaMutation = trpc.cleanerPortalProgress.setEta.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setEtaOpen(false); result.customerNotified ? toast.success("ETA recorded and client notified.") : toast.warning(result.notificationError ? "ETA recorded, but the client message could not be sent." : "ETA recorded. No customer phone is on this booking."); }, onError: error => toast.error(error.message || "The ETA could not be recorded.") });
   const arrivedMutation = trpc.cleanerPortalProgress.markArrived.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setArrivalConfirm(false); result.customerNotified ? toast.success("Arrival recorded and client notified.") : toast.warning(result.notificationError ? "Arrival recorded, but the client message could not be sent." : "Arrival recorded. No customer phone is on this booking."); }, onError: error => toast.error(error.message || "Arrival could not be recorded.") });
   const startMutation = trpc.cleanerPortalProgress.startJob.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); toast.success("Job started."); }, onError: error => toast.error(error.message || "The job could not be started.") });
-  const uploadMutation = trpc.cleanerPortalPhotos.uploadPhoto.useMutation({ throwOnError: false, onSuccess: () => { void photosQuery.refetch(); }, onError: error => toast.error(error.message || "Photo upload failed.") });
+  const uploadMutation = trpc.cleanerPortalPhotos.uploadPhoto.useMutation({ throwOnError: false, onError: error => toast.error(error.message || "Photo upload failed.") });
   const actionUnavailable = progressQuery.isLoading || progressQuery.isError;
   const actionPending = setEtaMutation.isPending || arrivedMutation.isPending || startMutation.isPending;
   const uploading = uploadMutation.isPending;
@@ -207,8 +206,11 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
           dataBase64,
           photoType: index === 0 ? pendingPhotoType : "after",
         });
+        setLocalPhotoPreviews(previous => previous.filter(item => item !== preview));
+        await photosQuery.refetch();
       } catch {
         // The mutation already presents the established photo-specific error toast.
+        setLocalPhotoPreviews(previous => previous.filter(item => item !== preview));
       }
     }
     event.target.value = "";
@@ -229,7 +231,7 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
         <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags"><span>{displayedJob.bathrooms} bathroom{displayedJob.bathrooms === 1 ? "" : "s"}</span>{displayedJob.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
         {displayedJob.customerNotes && <section className="cp-detail-block"><h3>Visit notes</h3><p><b>Customer:</b> {displayedJob.customerNotes}</p></section>}
         <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Cleaning checklist</h3><p>Checklist actions will be enabled after portal visibility is confirmed.</p></div></div><p className="cp-muted">No checklist has been added to this job.</p></section>
-        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Select visit-condition and finished-result images from your photo library.</p></div><label htmlFor={photoInputId} className="cp-btn cp-btn--subtle cp-btn--small" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("before"); }}>{uploading ? <Loader2 className="cp-spin" size={15} /> : <Camera size={15} />}Add before photo</label></div><input id={photoInputId} className="cp-hidden-input" ref={photoInputRef} type="file" accept="image/*" multiple onChange={uploadPhotos} disabled={uploading} />
+        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Select visit-condition and finished-result images from your photo library.</p></div></div><input id={photoInputId} className="cp-hidden-input" type="file" accept="image/*" multiple onChange={uploadPhotos} disabled={uploading} />
           {photosQuery.isError && <p className="cp-muted">Saved photos could not be loaded. You can keep working on this job.</p>}
           <div className="cp-photo-grid"><label htmlFor={photoInputId} className="cp-photo-tile" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("before"); }}><ImagePlus size={20} /><span>Before</span></label><label htmlFor={photoInputId} className="cp-photo-tile cp-photo-tile--after" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("after"); }}><ImagePlus size={20} /><span>After</span></label>{[...savedPhotoUrls, ...localPhotoPreviews].map((url, index) => <img key={url} src={url} className="cp-photo-preview" alt={`Uploaded job photo ${index + 1}`} />)}</div>
         </section>

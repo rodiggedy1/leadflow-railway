@@ -19,6 +19,14 @@ describe("isolated Cleaner Portal photo workflow", () => {
     expect(portal).toContain("photoType: index === 0 ? pendingPhotoType : \"after\"");
   });
 
+  it("uses only the Before and After cards as upload triggers and clears each saved local preview", () => {
+    expect(portal).not.toContain("Add before photo");
+    expect(portal).toContain('<span>Before</span>');
+    expect(portal).toContain('<span>After</span>');
+    expect(portal).toContain("previous.filter(item => item !== preview)");
+    expect(portal).toContain("await photosQuery.refetch()");
+  });
+
   it("reuses the established conversion, original upload, and thumbnail workflow", () => {
     expect(photoRouter).toContain('import heicConvert from "heic-convert"');
     expect(photoRouter).toContain("await heicConvert");
