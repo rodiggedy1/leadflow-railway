@@ -78,6 +78,7 @@ export const customerPortalRouter = router({
       db.select().from(bookings).where(eq(bookings.customerPhone, account.customerPhone)).orderBy(desc(bookings.createdAt)).limit(100),
       phoneDigits ? db.select({
         id: leadflowJobs.id,
+        launch27BookingId: leadflowJobs.launch27BookingId,
         jobDate: leadflowJobs.jobDate,
         serviceDateTime: leadflowJobs.serviceDateTime,
         serviceName: leadflowJobs.serviceName,
@@ -88,6 +89,7 @@ export const customerPortalRouter = router({
         bookingStatus: leadflowJobs.bookingStatus,
         teamName: leadflowJobs.teamName,
         jobAddress: leadflowJobs.jobAddress,
+        customerNotes: leadflowJobs.customerNotes,
         jobTotalCents: leadflowJobs.jobTotalCents,
         hasStripeCard: leadflowJobs.hasStripeCard,
       }).from(leadflowJobs).where(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`).orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id)).limit(100) : Promise.resolve([]),
@@ -108,10 +110,15 @@ export const customerPortalRouter = router({
     if (!phoneDigits) return { job: null };
     ctx.res.set("Cache-Control", "no-store");
     const rows = await db.select({
+      bookingId: cleanerJobs.bookingId,
       jobDate: cleanerJobs.jobDate,
       serviceDateTime: cleanerJobs.serviceDateTime,
       serviceType: cleanerJobs.serviceType,
       teamName: cleanerJobs.teamName,
+      jobAddress: cleanerJobs.jobAddress,
+      customerNotes: cleanerJobs.customerNotes,
+      bedrooms: cleanerJobs.bedrooms,
+      bathrooms: cleanerJobs.bathrooms,
       jobStatus: cleanerJobs.jobStatus,
       bookingStatus: cleanerJobs.bookingStatus,
       delayMinutes: cleanerJobs.delayMinutes,
@@ -122,6 +129,27 @@ export const customerPortalRouter = router({
       sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phoneDigits}`,
     )).orderBy(asc(cleanerJobs.serviceDateTime), desc(cleanerJobs.updatedAt)).limit(20);
     return { job: rows.find(isCustomerPortalLiveJob) ?? null };
+  }),
+  updateLeadflowJobCustomerNote: publicProcedure.input(z.object({
+    id: z.number().int().positive(),
+    note: z.string().trim().max(2_000),
+  })).mutation(async ({ ctx, input }) => {
+    const session = await getCustomerPortalSessionFromRequest(ctx.req);
+    if (!session) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
+    const account = accounts[0];
+    if (!account || account.customerPhone !== session.customerPhone) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    if (!phoneDigits) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const rows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(and(
+      eq(leadflowJobs.id, input.id),
+      sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
+    )).limit(1);
+    if (!rows[0]) throw new Error("BOOKING_NOT_FOUND");
+    await db.update(leadflowJobs).set({ customerNotes: input.note || null }).where(eq(leadflowJobs.id, input.id));
+    return { id: input.id, customerNotes: input.note || null };
   }),
   startNewCardSetup: publicProcedure.mutation(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);

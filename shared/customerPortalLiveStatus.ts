@@ -1,8 +1,13 @@
 export type CustomerPortalTodayJob = {
+  bookingId: number | null;
   jobDate: string;
   serviceDateTime: string | null;
   serviceType: string | null;
   teamName: string | null;
+  jobAddress: string | null;
+  customerNotes: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
   jobStatus: string | null;
   bookingStatus: string | null;
   delayMinutes: number | null;
