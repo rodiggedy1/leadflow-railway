@@ -312,7 +312,7 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
   </>;
 }
 
-function AvailabilityDialog({ open, schedule, onClose }: { open: boolean; schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null; onClose: () => void }) {
+function AvailabilityDialog({ open, schedule, onClose, onSave, saving }: { open: boolean; schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null; onClose: () => void; onSave: (values: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number; note: string | null }) => void; saving: boolean }) {
   const [days, setDays] = useState<Record<(typeof WEEK_DAYS)[number], boolean>>({ Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: false, Sun: false });
   const [note, setNote] = useState("");
   useEffect(() => {
@@ -320,7 +320,7 @@ function AvailabilityDialog({ open, schedule, onClose }: { open: boolean; schedu
     setDays({ Mon: schedule.mon === 1, Tue: schedule.tue === 1, Wed: schedule.wed === 1, Thu: schedule.thu === 1, Fri: schedule.fri === 1, Sat: schedule.sat === 1, Sun: schedule.sun === 1 });
   }, [open, schedule]);
   if (!open) return null;
-  return <div className="cp-modal-backdrop" onClick={onClose}><div className="cp-modal cp-modal--wide" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Availability</span><h3>Set weekly availability</h3><p>Availability changes will be enabled after portal visibility is confirmed.</p><div className="cp-week-days">{WEEK_DAYS.map(day => <button key={day} className={days[day] ? "is-selected" : ""} disabled>{day}</button>)}</div><textarea value={note} disabled placeholder="Optional note for dispatch" /><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={onClose}>Close</button><button className="cp-btn cp-btn--primary" disabled>Save availability</button></div></div></div>;
+  return <div className="cp-modal-backdrop" onClick={onClose}><div className="cp-modal cp-modal--wide" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Availability</span><h3>Set weekly availability</h3><p>Choose the days your team is available. Dispatch will use this weekly schedule.</p><div className="cp-week-days">{WEEK_DAYS.map(day => <button key={day} className={days[day] ? "is-selected" : ""} disabled={saving} onClick={() => setDays(current => ({ ...current, [day]: !current[day] }))}>{day}</button>)}</div><textarea value={note} disabled={saving} onChange={event => setNote(event.target.value)} placeholder="Optional note for dispatch" /><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={onClose} disabled={saving}>Close</button><button className="cp-btn cp-btn--primary" disabled={saving} onClick={() => onSave({ mon: Number(days.Mon), tue: Number(days.Tue), wed: Number(days.Wed), thu: Number(days.Thu), fri: Number(days.Fri), sat: Number(days.Sat), sun: Number(days.Sun), note: note.trim() || null })}>{saving ? "Saving…" : "Save availability"}</button></div></div></div>;
 }
 
 function CleanerPortalLogin() {
@@ -341,15 +341,17 @@ function CleanerPortalConnected() {
   const [progressByJobKey, setProgressByJobKey] = useState<Record<string, { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }>>({});
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const utils = trpc.useUtils();
   const todayDate = useMemo(() => etDate(), []);
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: 1, throwOnError: false });
   const todayQuery = trpc.cleanerPortalReadOnly.getMyJobsToday.useQuery(undefined, { enabled: !!meQuery.data, retry: 1, throwOnError: false });
   const weekQuery = trpc.cleanerPortalReadOnly.getMyJobsWeek.useQuery(undefined, { enabled: !!meQuery.data && page === "jobs", staleTime: 60_000, throwOnError: false });
   const portalDataQuery = trpc.cleaner.portalData.useQuery(undefined, { enabled: !!meQuery.data, staleTime: 300_000, throwOnError: false });
-  const teamScheduleQuery = trpc.cleanerPortalReadOnly.getMyTeamSchedule.useQuery(undefined, { enabled: !!meQuery.data && page === "schedule", staleTime: 300_000, throwOnError: false });
+  const teamScheduleQuery = trpc.cleanerPortalReadOnly.getMyTeamSchedule.useQuery(undefined, { enabled: !!meQuery.data, staleTime: 300_000, throwOnError: false });
   const earningsQuery = trpc.cleanerPortalReadOnly.getMyEarnings.useQuery(undefined, { enabled: !!meQuery.data && page === "earnings", staleTime: 60_000, throwOnError: false });
   const logoutMutation = trpc.cleaner.logout.useMutation({ throwOnError: false, onSuccess: () => window.location.replace("/cleaner") });
   const languageMutation = trpc.cleaner.updateLanguage.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
+  const availabilityMutation = trpc.cleanerPortalAvailability.submitWeeklySchedule.useMutation({ throwOnError: false, onSuccess: async () => { await Promise.all([utils.cleanerPortalReadOnly.getMyTeamSchedule.invalidate(), utils.cleaner.portalData.invalidate()]); toast.success("Availability saved."); setAvailabilityOpen(false); }, onError: error => toast.error(error.message || "Availability could not be saved.") });
 
   const jobs = ((todayQuery.data ?? []) as PortalJob[]).map(job => ({ ...job, ...progressByJobKey[job.portalJobKey] }));
   const activeJobs = jobs.filter(job => !jobIsComplete(job));
@@ -402,7 +404,7 @@ function CleanerPortalConnected() {
         {page === "profile" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Profile</span><h1>Cleaner profile</h1><p>Your authenticated portal account.</p></div></div><div className="cp-profile-grid"><section className="cp-panel"><h2>Contact</h2><dl><div><dt>Name</dt><dd>{meQuery.data.name}</dd></div><div><dt>Phone</dt><dd>{meQuery.data.phone || "Not available"}</dd></div></dl></section><section className="cp-panel"><h2>Portal language</h2><p className="cp-muted">Use your saved language preference.</p><div className="cp-language-buttons">{(["en", "es", "pt"] as const).map(language => <button key={language} className={meQuery.data?.language === language ? "is-selected" : ""} onClick={() => languageMutation.mutate({ language })}>{language === "en" ? "English" : language === "es" ? "Español" : "Português"}</button>)}</div></section><section className="cp-panel"><h2>Session</h2><button className="cp-btn cp-btn--subtle" onClick={() => logoutMutation.mutate()} disabled={logoutMutation.isPending}><LogOut size={16} />Log out</button></section></div></section>}
       </main>
     </div>
-    <AvailabilityDialog open={availabilityOpen} schedule={teamScheduleQuery.data?.schedule} onClose={() => setAvailabilityOpen(false)} />
+    <AvailabilityDialog open={availabilityOpen} schedule={teamScheduleQuery.data?.schedule} onClose={() => setAvailabilityOpen(false)} onSave={values => availabilityMutation.mutate(values)} saving={availabilityMutation.isPending} />
     {selectedJob && <JobDrawer job={{ ...selectedJob, ...progressByJobKey[selectedJob.portalJobKey] }} onClose={() => setSelectedJob(null)} onProgress={progress => setProgressByJobKey(current => ({ ...current, [selectedJob.portalJobKey]: progress }))} />}
   </div>;
 }

@@ -36,6 +36,7 @@ const PAGE_URLS: Record<string, string> = {
   "tracker-flow":      "/admin/tracker-flow",
   "settings":          "/admin/settings",
   "team-pay":          "/admin/team-pay",
+  "team-availability": "/admin/team-availability",
   "confirmation-calls": "/admin/confirmation-calls",
   "cleaner-calls":       "/admin/cleaner-calls",
   "payments":            "/admin/payments",

@@ -45,6 +45,7 @@ const Apply = lazy(() => import("./pages/Apply"));
 const AIInterview = lazy(() => import("./pages/AIInterview"));
 const HiringStatus = lazy(() => import("./pages/HiringStatus"));
 const TeamPay = lazy(() => import("./pages/TeamPay"));
+const TeamAvailability = lazy(() => import("./pages/TeamAvailability"));
 const ConfirmationCalls = lazy(() => import("./pages/ConfirmationCalls"));
 const MissedCalls = lazy(() => import("./pages/MissedCalls"));
 const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
@@ -143,6 +144,7 @@ function Router() {
         <Route path={"/interview/:candidateId"} component={AIInterview} />
         <Route path={"/hiring-status/:token"} component={HiringStatus} />
         <Route path={"/admin/team-pay"} component={TeamPay} />
+        <Route path={"/admin/team-availability"} component={TeamAvailability} />
         <Route path={"/admin/confirmation-calls"} component={ConfirmationCalls} />
         <Route path={"/admin/missed-calls"} component={MissedCalls} />
         <Route path={"/admin/payroll-summary"} component={PayrollSummary} />

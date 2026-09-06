@@ -1639,3 +1639,6 @@
 - [x] Validate the exact production server startup import path before releasing isolated Cleaner Portal earnings
 - [x] Make Current pay week and Previous pay week open their respective isolated job lists
 - [x] Restore the authoritative calculated team payment on Today job cards without adding it to job detail
+- [ ] Verify each displayed Cleaner Portal pay-week amount against source revenue, stored cleaner rate, and the authoritative payroll calculator
+- [x] Restore the existing team-owned weekly availability read and save behavior in the Cleaner Portal
+- [x] Add a staff dropdown Team availability page that reads the existing team schedule and next-day availability records

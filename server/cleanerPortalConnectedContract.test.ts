@@ -19,6 +19,7 @@ describe("isolated ETA Cleaner Portal contract", () => {
     for (const procedure of ["getMyJobsToday", "getMyJobsWeek", "getMyTeamSchedule", "getMyEarnings"]) {
       expect(page).toContain(`trpc.cleanerPortalReadOnly.${procedure}`);
     }
+    expect(page).toContain("trpc.cleanerPortalAvailability.submitWeeklySchedule");
     for (const legacyProcedure of ["getMyJobsToday", "getMyJobsWeek", "getMyTeamSchedule", "myJobsRange", "getChecklistForLanguage", "getNotesForLanguage", "getProxyNumber", "toggleChecklistItem", "updateJobStatus", "uploadPhoto", "saveSignature", "saveNotHome", "markComplete", "submitWeeklySchedule"]) {
       expect(page).not.toContain(`trpc.cleaner.${legacyProcedure}`);
     }
@@ -70,6 +71,16 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(page).toContain("if (todayQuery.isError)");
     expect(page).toContain("Your assigned jobs could not be loaded. Please try again.");
     expect(page).toContain("todayQuery.refetch()");
+  });
+
+  it("saves availability through stable cleaner-team ownership without legacy job resolution", () => {
+    const availabilityRouter = fs.readFileSync(path.join(root, "server/cleanerPortalAvailabilityRouter.ts"), "utf8");
+    expect(availabilityRouter).toContain("cleanerProfiles.launch27TeamId");
+    expect(availabilityRouter).toContain("schedulingTeams.launch27TeamId");
+    expect(availabilityRouter).toContain("teamWorkSchedule");
+    expect(availabilityRouter).toContain("teamAvailabilityCheckins");
+    expect(availabilityRouter).toContain("onDuplicateKeyUpdate");
+    expect(availabilityRouter).not.toMatch(/cleanerJobs|cleaner_jobs/);
   });
 
   it("keeps the existing portal layout while enabling the isolated progress and restored photo controls", () => {

@@ -281,6 +281,7 @@ export type AdminTab =
   | "review-tracker"
   | "hiring"
   | "team-pay"
+  | "team-availability"
   | "performance"
   | "metrics"
   | "lead-nurturing"
@@ -346,6 +347,7 @@ const NAV_ENTRIES: NavEntry[] = [
       { id: "review-tracker", label: "Reviews", href: "/admin/review-tracker", icon: <Star className="w-3.5 h-3.5" /> },
       { id: "hiring", label: "Hiring", href: "/admin/hiring", icon: <Users className="w-3.5 h-3.5" /> },
       { id: "madison-focus", label: "Focus", href: "/admin/madison-focus", icon: <Sparkles className="w-3.5 h-3.5" /> },
+      { id: "team-availability", label: "Availability", href: "/admin/team-availability", icon: <CalendarDays className="w-3.5 h-3.5" /> },
     ],
   },
   {

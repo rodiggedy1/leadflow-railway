@@ -21,6 +21,7 @@ export const ADMIN_PAGES = [
   { id: "calls",             label: "All Calls",     group: "Voice" },
   { id: "agents",            label: "Team",          group: "Staff" },
   { id: "leaderboard",       label: "Leaderboard",   group: "Staff" },
+  { id: "team-availability", label: "Availability",  group: "Staff" },
   { id: "campaigns",         label: "Campaigns",     group: "Campaigns" },
   { id: "always-on",         label: "Always-On",     group: "Campaigns" },
   { id: "campaign-approval", label: "Approvals",     group: "Campaigns" },
