@@ -172,8 +172,10 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
   const [etaOpen, setEtaOpen] = useState(false);
   const [arrivalConfirm, setArrivalConfirm] = useState(false);
   const [selectedEta, setSelectedEta] = useState<EtaChoice>(30);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [pendingPhotoType, setPendingPhotoType] = useState<"before" | "after">("before");
-  const [localPhotoPreviews, setLocalPhotoPreviews] = useState<string[]>([]);
+  const [activePhotoType, setActivePhotoType] = useState<"before" | "after" | null>(null);
+  const [localPhotoPreviews, setLocalPhotoPreviews] = useState<Array<{ url: string; photoType: "before" | "after" }>>([]);
   const progressQuery = trpc.cleanerPortalProgress.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
   const photosQuery = trpc.cleanerPortalPhotos.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
   const setEtaMutation = trpc.cleanerPortalProgress.setEta.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setEtaOpen(false); result.customerNotified ? toast.success("ETA recorded and client notified.") : toast.warning(result.notificationError ? "ETA recorded, but the client message could not be sent." : "ETA recorded. No customer phone is on this booking."); }, onError: error => toast.error(error.message || "The ETA could not be recorded.") });
@@ -186,12 +188,27 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
   const photoInputId = `cleaner-photo-${job.portalJobKey}`;
   const progress = progressQuery.data;
   const displayedJob = progress ? { ...job, jobStatus: progress.jobStatus } : job;
-  const savedPhotoUrls = (photosQuery.data ?? []).map(photo => photo.thumbnailUrl ?? photo.photoUrl);
+  const savedPhotos = photosQuery.data ?? [];
+  const beforePhotoUrls = [
+    ...savedPhotos.filter(photo => photo.photoType === "before").map(photo => photo.thumbnailUrl ?? photo.photoUrl),
+    ...localPhotoPreviews.filter(photo => photo.photoType === "before").map(photo => photo.url),
+  ];
+  const afterPhotoUrls = [
+    ...savedPhotos.filter(photo => photo.photoType !== "before").map(photo => photo.thumbnailUrl ?? photo.photoUrl),
+    ...localPhotoPreviews.filter(photo => photo.photoType === "after").map(photo => photo.url),
+  ];
+  const choosePhotoGroup = (photoType: "before" | "after") => {
+    if (uploading) return;
+    setPendingPhotoType(photoType);
+    setActivePhotoType(photoType);
+    photoInputRef.current?.click();
+  };
   const uploadPhotos = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
-    for (const [index, file] of files.entries()) {
+    const photoType = pendingPhotoType;
+    for (const file of files) {
       const preview = URL.createObjectURL(file);
-      setLocalPhotoPreviews(previous => [...previous, preview]);
+      setLocalPhotoPreviews(previous => [...previous, { url: preview, photoType }]);
       try {
         const dataBase64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -204,13 +221,13 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
           filename: file.name,
           mimeType: file.type || "image/jpeg",
           dataBase64,
-          photoType: index === 0 ? pendingPhotoType : "after",
+          photoType,
         });
-        setLocalPhotoPreviews(previous => previous.filter(item => item !== preview));
+        setLocalPhotoPreviews(previous => previous.filter(item => item.url !== preview));
         await photosQuery.refetch();
       } catch {
         // The mutation already presents the established photo-specific error toast.
-        setLocalPhotoPreviews(previous => previous.filter(item => item !== preview));
+        setLocalPhotoPreviews(previous => previous.filter(item => item.url !== preview));
       }
     }
     event.target.value = "";
@@ -231,9 +248,17 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
         <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags"><span>{displayedJob.bathrooms} bathroom{displayedJob.bathrooms === 1 ? "" : "s"}</span>{displayedJob.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
         {displayedJob.customerNotes && <section className="cp-detail-block"><h3>Visit notes</h3><p><b>Customer:</b> {displayedJob.customerNotes}</p></section>}
         <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Cleaning checklist</h3><p>Checklist actions will be enabled after portal visibility is confirmed.</p></div></div><p className="cp-muted">No checklist has been added to this job.</p></section>
-        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Select visit-condition and finished-result images from your photo library.</p></div></div><input id={photoInputId} className="cp-hidden-input" type="file" accept="image/*" multiple onChange={uploadPhotos} disabled={uploading} />
+        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Select visit-condition and finished-result images from your photo library.</p></div></div><input id={photoInputId} className="cp-hidden-input" ref={photoInputRef} type="file" accept="image/*" multiple onChange={uploadPhotos} disabled={uploading} />
           {photosQuery.isError && <p className="cp-muted">Saved photos could not be loaded. You can keep working on this job.</p>}
-          <div className="cp-photo-grid"><label htmlFor={photoInputId} className="cp-photo-tile" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("before"); }}><ImagePlus size={20} /><span>Before</span></label><label htmlFor={photoInputId} className="cp-photo-tile cp-photo-tile--after" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("after"); }}><ImagePlus size={20} /><span>After</span></label>{[...savedPhotoUrls, ...localPhotoPreviews].map((url, index) => <img key={url} src={url} className="cp-photo-preview" alt={`Uploaded job photo ${index + 1}`} />)}</div>
+          <div className="cp-photo-groups">
+            {(["before", "after"] as const).map(photoType => {
+              const isBefore = photoType === "before";
+              const label = isBefore ? "Before" : "After";
+              const detail = isBefore ? "visit condition" : "finished result";
+              const photoUrls = isBefore ? beforePhotoUrls : afterPhotoUrls;
+              return <section key={photoType} className={`cp-photo-group cp-photo-group--${photoType}`}><header className="cp-photo-group__head"><h4>{label} <small>({detail})</small></h4><span>{photoUrls.length} photo{photoUrls.length === 1 ? "" : "s"}</span></header><div className="cp-photo-group__grid"><button type="button" className={`cp-photo-tile cp-photo-tile--${photoType} ${activePhotoType === photoType ? "is-selected" : ""}`} aria-pressed={activePhotoType === photoType} disabled={uploading} onClick={() => choosePhotoGroup(photoType)}>{uploading && activePhotoType === photoType ? <Loader2 className="cp-spin" size={20} /> : <ImagePlus size={20} />}<span>Add photo</span></button>{photoUrls.map((url, index) => <img key={url} src={url} className="cp-photo-preview" alt={`${label} job photo ${index + 1}`} />)}</div>{activePhotoType === photoType && <p className="cp-photo-selection-state" role="status">{uploading ? `Uploading ${label.toLowerCase()} photos…` : `${label} selected — choose photos from your library.`}</p>}</section>;
+            })}
+          </div>
         </section>
         <section className="cp-detail-block cp-signoff"><span className="cp-eyebrow">Customer sign-off</span><h3>How did everything look?</h3><p>Customer sign-off will be enabled after portal visibility is confirmed.</p><div className="cp-feedback-options"><button disabled>Looks great</button><button disabled>Needs touch-up</button><button disabled>Report issue</button></div><textarea disabled placeholder="Optional note from the customer" /><button className="cp-btn cp-btn--primary cp-btn--wide" disabled><CheckCircle2 size={16} />Save customer sign-off</button></section>
       </aside>

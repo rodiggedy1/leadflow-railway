@@ -1624,3 +1624,5 @@
 - [x] Validate that isolated photo failures cannot affect the working Cleaner Portal job list or ETA path
 - [x] Remove the redundant Add before photo control and make only the Before and After cards open the photo library
 - [x] Render each newly uploaded photo once after the saved-photo query refreshes
+- [x] Make Before and After picker cards visibly respond to selection and keep the selected group clear
+- [x] Group saved photos by before/after with compact responsive previews and no photo limit

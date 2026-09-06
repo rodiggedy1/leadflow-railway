@@ -16,15 +16,27 @@ describe("isolated Cleaner Portal photo workflow", () => {
     expect(portal).toContain('type="file" accept="image/*" multiple');
     expect(portal).not.toMatch(/\bcapture\b/);
     expect(portal).toContain("FileReader");
-    expect(portal).toContain("photoType: index === 0 ? pendingPhotoType : \"after\"");
+    expect(portal).toContain("const photoType = pendingPhotoType;");
+    expect(portal).toContain("photoType,");
   });
 
   it("uses only the Before and After cards as upload triggers and clears each saved local preview", () => {
     expect(portal).not.toContain("Add before photo");
-    expect(portal).toContain('<span>Before</span>');
-    expect(portal).toContain('<span>After</span>');
-    expect(portal).toContain("previous.filter(item => item !== preview)");
+    expect(portal).toContain('const label = isBefore ? "Before" : "After"');
+    expect(portal).toContain("choosePhotoGroup(photoType)");
+    expect(portal).toContain("photoInputRef.current?.click()");
+    expect(portal).toContain("previous.filter(item => item.url !== preview)");
     expect(portal).toContain("await photosQuery.refetch()");
+  });
+
+  it("keeps unlimited compact Before and After groups without changing the upload backend", () => {
+    expect(portal).toContain("cp-photo-groups");
+    expect(portal).toContain("beforePhotoUrls");
+    expect(portal).toContain("afterPhotoUrls");
+    expect(portal).not.toMatch(/10\s*(photo|image)/i);
+    expect(portal).toContain("photoType,");
+    expect(photoRouter).not.toContain("MAX_PHOTOS");
+    expect(photoRouter).not.toContain("photoCount >=");
   });
 
   it("reuses the established conversion, original upload, and thumbnail workflow", () => {
