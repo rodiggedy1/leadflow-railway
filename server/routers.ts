@@ -60,6 +60,7 @@ import { bookingFunnelRouter } from "./bookingFunnelRouter";
 import { bookingPaymentRouter } from "./bookingPaymentRouter";
 import { bookingPaymentAdminRouter } from "./bookingPaymentAdminRouter";
 import { customerPortalRouter } from "./customerPortalRouter";
+import { leadflowJobsRouter } from "./leadflowJobsRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 import { computeSessionSummary } from './sessionSummary';
 import { responseTemplatesRouter } from './responseTemplatesRouter';
@@ -119,6 +120,7 @@ export const appRouter = router({
   bookingPayments: bookingPaymentRouter,
   bookingPaymentAdmin: bookingPaymentAdminRouter,
   customerPortal: customerPortalRouter,
+  leadflowJobs: leadflowJobsRouter,
   responseTemplates: responseTemplatesRouter,
 
   auth: router({
