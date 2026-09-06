@@ -57,7 +57,7 @@ const AICallMatrix = lazy(() => import("./pages/AICallMatrix"));
 const CleanerCalls = lazy(() => import("./pages/CleanerCalls"));
 const CardAuth = lazy(() => import("./pages/CardAuth"));
 const AdminPayments = lazy(() => import("./pages/AdminPayments"));
-const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalV2"));
+const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalConnected"));
 const SmsCampaigns = lazy(() => import("./pages/SmsCampaigns"));
 const IconPicker = lazy(() => import("./pages/IconPicker"));
 const ReadinessDashboard = lazy(() => import("./pages/ReadinessDashboard"));

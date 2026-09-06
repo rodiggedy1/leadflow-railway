@@ -1604,3 +1604,6 @@
 - [x] Restore same-day View booking focus, customer-safe booking details, and signed-in customer note editing without changing all-bookings visibility
 - [x] Refine the same-day note editor layout and sort all My Bookings cards newest-date first
 - [x] Release the portal note-editor and reverse-date booking-order refinement to production
+- [x] Build the approved authenticated Cleaner Portal UI on existing cleaner session, jobs, status, photos, signature, completion, availability, call-proxy, and earnings contracts
+- [x] Verified successful existing cleaner magic links already route to `/portal-v2`; the connected portal replaces that route without authentication changes
+- [x] Release the connected Cleaner Portal replacement for `/portal-v2` to production
