@@ -119,6 +119,45 @@ export function launch27BookingToLeadflowJob(booking: Launch27Booking, jobDate: 
   };
 }
 
+/**
+ * Imports one selected business date into the isolated table only.
+ * It deliberately has no stale-row cleanup or delete behavior.
+ */
+export async function importLaunch27JobsForDate(date: string): Promise<LeadflowJobImportDay> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const response = await getCompletedBookingsForDate(date, { includeAll: true });
+  if (response.error) {
+    return { date, fetched: 0, active: 0, created: 0, updated: 0, alreadyPresent: 0, error: response.error };
+  }
+
+  const activeBookings = response.bookings.filter(isActiveLaunch27Booking);
+  const seenBookingIds = new Set<number>();
+  let created = 0;
+  let updated = 0;
+  let alreadyPresent = 0;
+
+  for (const booking of activeBookings) {
+    if (seenBookingIds.has(booking.id)) continue;
+    seenBookingIds.add(booking.id);
+    const existing = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
+    const values = launch27BookingToLeadflowJob(booking, date);
+    if (existing.length > 0) {
+      await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));
+      updated++;
+      continue;
+    }
+    try {
+      await db.insert(leadflowJobs).values(values);
+      created++;
+    } catch (error) {
+      if (!isDuplicateEntry(error)) throw error;
+      alreadyPresent++;
+    }
+  }
+  return { date, fetched: response.fetched, active: seenBookingIds.size, created, updated, alreadyPresent, error: null };
+}
+
 export async function importNextThirtyDaysOfLaunch27Jobs(now = new Date()): Promise<{
   startDate: string;
   days: LeadflowJobImportDay[];
@@ -141,37 +180,7 @@ export async function importNextThirtyDaysOfLaunch27Jobs(now = new Date()): Prom
   const days: LeadflowJobImportDay[] = [];
 
   for (const date of dates) {
-    const response = await getCompletedBookingsForDate(date, { includeAll: true });
-    if (response.error) {
-      days.push({ date, fetched: 0, active: 0, created: 0, updated: 0, alreadyPresent: 0, error: response.error });
-      continue;
-    }
-
-    const activeBookings = response.bookings.filter(isActiveLaunch27Booking);
-    const seenBookingIds = new Set<number>();
-    let created = 0;
-    let updated = 0;
-    let alreadyPresent = 0;
-
-    for (const booking of activeBookings) {
-      if (seenBookingIds.has(booking.id)) continue;
-      seenBookingIds.add(booking.id);
-      const existing = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
-      const values = launch27BookingToLeadflowJob(booking, date);
-      if (existing.length > 0) {
-        await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));
-        updated++;
-        continue;
-      }
-      try {
-        await db.insert(leadflowJobs).values(values);
-        created++;
-      } catch (error) {
-        if (!isDuplicateEntry(error)) throw error;
-        alreadyPresent++;
-      }
-    }
-    days.push({ date, fetched: response.fetched, active: seenBookingIds.size, created, updated, alreadyPresent, error: null });
+    days.push(await importLaunch27JobsForDate(date));
   }
 
   return {

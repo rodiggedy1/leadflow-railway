@@ -3,7 +3,7 @@ import { z } from "zod";
 import { leadflowJobs } from "../drizzle/schema";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
+import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 
 const listInput = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -30,6 +30,10 @@ export const leadflowJobsRouter = router({
   }),
 
   importNextThirtyDays: adminAgentProcedure.mutation(async () => importNextThirtyDaysOfLaunch27Jobs()),
+
+  syncDate: adminAgentProcedure.input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).mutation(async ({ input }) => (
+    importLaunch27JobsForDate(input.date)
+  )),
 
   importStatus: adminAgentProcedure.query(async () => {
     const db = await getDb();
