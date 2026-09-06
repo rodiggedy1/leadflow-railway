@@ -10,6 +10,7 @@ const progressRouter = fs.readFileSync(path.join(root, "server/cleanerPortalProg
 const migration = fs.readFileSync(path.join(root, "drizzle/0098_cleaner_portal_job_progress.sql"), "utf8");
 const managedMigration = fs.readFileSync(path.join(root, "server/versioned-migrations/0027_create_cleaner_portal_job_progress.sql"), "utf8");
 const managedManifest = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/manifest.json"), "utf8")) as { migrations: Array<{ id: string; mode?: string; sqlFile: string; postconditionsFile: string; sha256: string }> };
+const managedPostconditions = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/0027_create_cleaner_portal_job_progress.postconditions.json"), "utf8")) as { columns: Array<{ name: string; default?: string }> };
 
 describe("isolated ETA Cleaner Portal contract", () => {
   it("keeps every working job list read on the frozen read-only source", () => {
@@ -80,5 +81,7 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(managedMigration).toContain("CREATE TABLE IF NOT EXISTS `cleaner_portal_job_progress`");
     expect(managedMigration).not.toMatch(/^\s*(DELETE|UPDATE|INSERT|DROP|TRUNCATE)\b/im);
     expect(entry?.sha256).toBe(createHash("sha256").update(managedMigration).digest("hex"));
+    expect(managedPostconditions.columns.find(column => column.name === "createdAt")?.default).toBe("current_timestamp(3)");
+    expect(managedPostconditions.columns.find(column => column.name === "updatedAt")?.default).toBe("current_timestamp(3)");
   });
 });

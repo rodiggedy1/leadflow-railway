@@ -11,8 +11,8 @@
     { "name": "etaTimeStr", "columnType": "varchar(32)", "nullable": true },
     { "name": "arrivedAt", "columnType": "datetime(3)", "nullable": true },
     { "name": "startedAt", "columnType": "datetime(3)", "nullable": true },
-    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false, "default": "current_timestamp" },
-    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false, "default": "current_timestamp" }
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false, "default": "current_timestamp(3)" },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false, "default": "current_timestamp(3)" }
   ],
   "indexes": [
     { "name": "PRIMARY", "unique": true, "columns": ["id"] },
