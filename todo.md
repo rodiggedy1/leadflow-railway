@@ -1609,3 +1609,5 @@
 - [x] Release the connected Cleaner Portal replacement for `/portal-v2` to production
 - [x] Fix the connected Cleaner Portal photo-add controls so they trigger the existing before/after upload flow
 - [x] Release the native Cleaner Portal photo-control fix to production
+- [x] Restore the Cleaner Portal’s established photo-library picker instead of direct camera capture
+- [x] Release the Cleaner Portal photo-library picker correction to production

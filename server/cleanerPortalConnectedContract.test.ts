@@ -37,5 +37,6 @@ describe("connected Cleaner Portal contract", () => {
     expect(page).toContain('setPendingPhotoType("after")');
     expect(page).toContain('photoType: index === 0 ? pendingPhotoType : "after"');
     expect(page).not.toContain('photoInputRef.current?.click()');
+    expect(page).not.toContain('capture="environment"');
   });
 });
