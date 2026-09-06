@@ -1611,3 +1611,15 @@
 - [x] Release the native Cleaner Portal photo-control fix to production
 - [x] Restore the Cleaner Portal’s established photo-library picker instead of direct camera capture
 - [x] Release the Cleaner Portal photo-library picker correction to production
+- [x] Fix the connected Cleaner Portal regression that reports no jobs today for a cleaner with current assigned jobs
+- [x] Replace legacy Cleaner Portal job visibility with isolated LeadFlow booking records and preserve only action paths proven compatible
+- [x] Make Cleaner Portal Today use the same assigned-job source and eligibility logic as Bookings
+- [x] Block release until the new Cleaner Portal has no legacy cleaner_jobs visibility dependency
+- [x] Build every Cleaner Portal job, status, photo, sign-off, completion, availability, contact, and earnings operation on isolated LeadFlow-owned records only
+- [x] Include both direct Book Now and imported LeadFlow bookings by exact internal team assignment without source-specific parsing
+- [x] Guarantee every booking with an active stored team assignment appears in that exact team’s Cleaner Portal regardless of creation source
+- [x] Add direct Book Now bookings joined by their active stored team assignment to the isolated Cleaner Portal adapter
+- [x] Normalize direct and imported booking references so the isolated Cleaner Portal manual actions remain source-agnostic
+- [x] Complete final audit of direct and imported team-assigned booking coverage, isolated action compatibility, and zero cleaner_jobs dependency
+- [x] Freeze implementation and rescope the direct Book Now assignment adapter before any further isolated portal change
+- [x] Produce detailed frozen scope for source-agnostic booking normalization and isolated Cleaner Portal actions

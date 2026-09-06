@@ -27,6 +27,7 @@ import { activityRouter } from "./activityRouter";
 import { voiceRouter } from "./voiceRouter";
 import { qualityRouter } from "./qualityRouter";
 import { cleanerRouter } from "./cleanerRouter";
+import { cleanerIsolatedRouter } from "./cleanerIsolatedRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
 import { smsCampaignRouter } from "./sms/smsCampaignRouter";
@@ -121,6 +122,7 @@ export const appRouter = router({
   bookingPaymentAdmin: bookingPaymentAdminRouter,
   customerPortal: customerPortalRouter,
   leadflowJobs: leadflowJobsRouter,
+  cleanerIsolated: cleanerIsolatedRouter,
   responseTemplates: responseTemplatesRouter,
 
   auth: router({
