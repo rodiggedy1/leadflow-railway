@@ -1611,3 +1611,6 @@
 - [x] Release the native Cleaner Portal photo-control fix to production
 - [x] Restore the Cleaner Portal’s established photo-library picker instead of direct camera capture
 - [x] Release the Cleaner Portal photo-library picker correction to production
+- [x] Implement the read-only imported-job portal adapter for Mirna’s six verified September 6 jobs
+- [x] Make a failed Today query visible instead of rendering it as zero jobs
+- [ ] Confirm the six-job read-only portal visibility release before enabling any portal action

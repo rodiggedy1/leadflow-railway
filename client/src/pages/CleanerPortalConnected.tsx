@@ -10,8 +10,7 @@ import "./cleaner-portal-connected.css";
 import "./cleaner-portal-login.css";
 
 type PortalJob = {
-  cleanerJobId: number;
-  completedJobId: number;
+  portalJobKey: string;
   customerName: string;
   customerPhone: string;
   address: string;
@@ -31,7 +30,7 @@ type PortalJob = {
 };
 
 type WeekJob = {
-  cleanerJobId: number;
+  portalJobKey: string;
   customerName: string;
   address: string;
   time: string;
@@ -169,112 +168,40 @@ function SignaturePad({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement | 
   return <canvas className="cp-signature" ref={canvasRef} width={1000} height={260} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drawing.current = false; lastPoint.current = null; }} onPointerLeave={() => { drawing.current = false; lastPoint.current = null; }} />;
 }
 
-function JobDrawer({
-  job, language, onClose, onComplete, onCall,
-}: { job: PortalJob; language: "en" | "es" | "pt"; onClose: () => void; onComplete: () => void; onCall: () => void }) {
-  const utils = trpc.useUtils();
-  const [etaOpen, setEtaOpen] = useState(false);
-  const [arrivalConfirm, setArrivalConfirm] = useState(false);
-  const [completeConfirm, setCompleteConfirm] = useState(false);
-  const [selectedEta, setSelectedEta] = useState<EtaChoice>(30);
-  const [response, setResponse] = useState<"great" | "touchup" | "issue">("great");
-  const [feedback, setFeedback] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [pendingPhotoType, setPendingPhotoType] = useState<"before" | "after">("before");
-  const signatureRef = useRef<HTMLCanvasElement>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const photoInputId = `cleaner-job-photo-${job.cleanerJobId}`;
-  const checklistQuery = trpc.cleaner.getChecklistForLanguage.useQuery({ cleanerJobId: job.cleanerJobId, lang: language }, { staleTime: 300_000, throwOnError: false });
-  const notesQuery = trpc.cleaner.getNotesForLanguage.useQuery({ cleanerJobId: job.cleanerJobId, lang: language }, { staleTime: 300_000, throwOnError: false });
-  const statusMutation = trpc.cleaner.updateJobStatus.useMutation({
-    throwOnError: false,
-    onSuccess: () => { utils.cleaner.getMyJobsToday.invalidate(); utils.cleaner.getMyJobsWeek.invalidate(); },
-    onError: error => toast.error(error.message),
-  });
-  const proxyMutation = trpc.cleaner.getProxyNumber.useMutation({
-    throwOnError: false,
-    onSuccess: ({ proxyNumber }) => { window.location.href = `tel:${proxyNumber}`; },
-    onError: error => toast.error(error.message),
-  });
-  const uploadMutation = trpc.cleaner.uploadPhoto.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
-  const signatureMutation = trpc.cleaner.saveSignature.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
-  const notHomeMutation = trpc.cleaner.saveNotHome.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
-  const checklistMutation = trpc.cleaner.toggleChecklistItem.useMutation({ throwOnError: false, onSuccess: () => { checklistQuery.refetch(); utils.cleaner.getMyJobsToday.invalidate(); }, onError: error => toast.error(error.message) });
-  const completeMutation = trpc.cleaner.markComplete.useMutation({
-    throwOnError: false,
-    onSuccess: () => { utils.cleaner.getMyJobsToday.invalidate(); utils.cleaner.getMyJobsWeek.invalidate(); utils.cleaner.myJobsRange.invalidate(); onComplete(); },
-    onError: error => toast.error(error.message),
-  });
-
-  const callClient = () => proxyMutation.mutate({ cleanerJobId: job.cleanerJobId });
-  const setEta = () => statusMutation.mutate({
-    cleanerJobId: job.cleanerJobId, status: "on_the_way", etaLabel: formatEta(selectedEta), etaTimestampOverride: Date.now() + selectedEta * 60_000,
-  }, { onSuccess: () => { setEtaOpen(false); toast.success(`ETA sent: ${formatEta(selectedEta)}`); } });
-  const confirmArrived = () => statusMutation.mutate({ cleanerJobId: job.cleanerJobId, status: "arrived" }, { onSuccess: () => { setArrivalConfirm(false); toast.success("Arrival recorded"); } });
-  const startJob = () => statusMutation.mutate({ cleanerJobId: job.cleanerJobId, status: "in_progress" }, { onSuccess: () => toast.success("Job started") });
-  const uploadPhotos = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []).filter(file => file.size <= 7 * 1024 * 1024);
-    if (files.length === 0) return;
-    setUploading(true);
-    for (const [index, file] of files.entries()) {
-      const preview = URL.createObjectURL(file);
-      setPhotos(previous => [...previous, preview]);
-      const dataBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1] ?? ""); reader.onerror = reject; reader.readAsDataURL(file);
-      });
-      await uploadMutation.mutateAsync({ cleanerJobId: job.cleanerJobId, completedJobId: job.completedJobId, filename: file.name, mimeType: file.type || "image/jpeg", dataBase64, photoType: index === 0 ? pendingPhotoType : "after" });
-    }
-    setUploading(false);
-    event.target.value = "";
-  };
-  const saveSignoff = async () => {
-    const signature = signatureRef.current?.toDataURL("image/png") ?? "";
-    if (!signature || signature === "data:,") { toast.error("Please collect the customer signature first."); return; }
-    await signatureMutation.mutateAsync({ cleanerJobId: job.cleanerJobId, signatureBase64: signature.split(",")[1] ?? "", customerResponse: response, customerNotes: feedback.trim() || undefined });
-    setCompleteConfirm(true);
-  };
-  const markComplete = () => completeMutation.mutate({ cleanerJobId: job.cleanerJobId });
-  const clearSignature = () => { const canvas = signatureRef.current; const ctx = canvas?.getContext("2d"); if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height); };
-
+function JobDrawer({ job, onClose }: { job: PortalJob; onClose: () => void }) {
   return (
     <div className="cp-drawer-backdrop" onClick={onClose}>
       <aside className="cp-drawer" onClick={event => event.stopPropagation()} aria-label={`Details for ${job.customerName}`}>
         <header className="cp-drawer__header"><div><span className="cp-eyebrow">{ordinal(job.jobIndex)} job · Today</span><h2>{job.customerName}</h2><p>{serviceLabel(job)} · {job.time}</p></div><button className="cp-icon-button" onClick={onClose} aria-label="Close job details"><X size={20} /></button></header>
         <section className="cp-detail-block cp-detail-block--address"><MapPin size={20} /><div><span>Service address</span><strong>{job.address || "Address pending"}</strong></div></section>
         <section className="cp-action-grid">
-          <button className="cp-btn cp-btn--subtle" onClick={callClient} disabled={proxyMutation.isPending}><Phone size={16} />{proxyMutation.isPending ? "Connecting…" : "Call client"}</button>
+          <button className="cp-btn cp-btn--subtle" disabled><Phone size={16} />Call client</button>
           <button className="cp-btn cp-btn--subtle" onClick={() => openDirections(job.address)}><Navigation size={16} />Directions</button>
-          <button className="cp-btn cp-btn--dark" onClick={() => setEtaOpen(true)}><Clock3 size={16} />Set ETA</button>
-          <button className="cp-btn cp-btn--arrived" onClick={() => setArrivalConfirm(true)}><CheckCircle2 size={16} />I’ve arrived</button>
-          <button className="cp-btn cp-btn--primary cp-action-grid__wide" onClick={startJob} disabled={statusMutation.isPending}><CheckCircle2 size={16} />Start job</button>
+          <button className="cp-btn cp-btn--dark" disabled><Clock3 size={16} />Set ETA</button>
+          <button className="cp-btn cp-btn--arrived" disabled><CheckCircle2 size={16} />I’ve arrived</button>
+          <button className="cp-btn cp-btn--primary cp-action-grid__wide" disabled><CheckCircle2 size={16} />Start job</button>
         </section>
         <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags"><span>{job.bathrooms} bathroom{job.bathrooms === 1 ? "" : "s"}</span>{job.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
-        {(notesQuery.data?.customerNotes || notesQuery.data?.staffNotes || job.customerNotes || job.staffNotes) && <section className="cp-detail-block"><h3>Visit notes</h3>{(notesQuery.data?.customerNotes ?? job.customerNotes) && <p><b>Customer:</b> {notesQuery.data?.customerNotes ?? job.customerNotes}</p>}{(notesQuery.data?.staffNotes ?? job.staffNotes) && <p><b>Team:</b> {notesQuery.data?.staffNotes ?? job.staffNotes}</p>}</section>}
-        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Cleaning checklist</h3><p>Mark each completed task using your existing job checklist.</p></div></div>{checklistQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" size={16} />Loading checklist…</div> : checklistQuery.data?.items.length ? <div className="cp-checklist">{checklistQuery.data.items.map((item, index) => <button key={`${index}-${item.text}`} className={item.checked ? "is-done" : ""} onClick={() => checklistMutation.mutate({ jobId: job.cleanerJobId, itemIndex: index, checked: !item.checked })}><span>{item.checked && <Check size={14} />}</span>{item.text}</button>)}</div> : <p className="cp-muted">No checklist has been added to this job.</p>}</section>
-        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Select visit-condition and finished-result images from your photo library.</p></div><label htmlFor={photoInputId} className="cp-btn cp-btn--subtle cp-btn--small" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("before"); }}>{uploading ? <Loader2 className="cp-spin" size={15} /> : <Camera size={15} />}Add before photo</label></div><input id={photoInputId} className="cp-hidden-input" ref={photoInputRef} type="file" accept="image/*" multiple onChange={uploadPhotos} disabled={uploading} />
-          <div className="cp-photo-grid"><label htmlFor={photoInputId} className="cp-photo-tile" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("before"); }}><ImagePlus size={20} /><span>Before</span></label><label htmlFor={photoInputId} className="cp-photo-tile cp-photo-tile--after" aria-disabled={uploading} onClick={event => { if (uploading) event.preventDefault(); else setPendingPhotoType("after"); }}><ImagePlus size={20} /><span>After</span></label>{photos.map((url, index) => <img key={url} src={url} className="cp-photo-preview" alt={`Uploaded job photo ${index + 1}`} />)}</div>
+        {job.customerNotes && <section className="cp-detail-block"><h3>Visit notes</h3><p><b>Customer:</b> {job.customerNotes}</p></section>}
+        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Cleaning checklist</h3><p>Checklist actions will be enabled after portal visibility is confirmed.</p></div></div><p className="cp-muted">No checklist has been added to this job.</p></section>
+        <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Photo actions will be enabled after portal visibility is confirmed.</p></div><button className="cp-btn cp-btn--subtle cp-btn--small" disabled><Camera size={15} />Add before photo</button></div>
+          <div className="cp-photo-grid"><div className="cp-photo-tile" aria-disabled><ImagePlus size={20} /><span>Before</span></div><div className="cp-photo-tile cp-photo-tile--after" aria-disabled><ImagePlus size={20} /><span>After</span></div></div>
         </section>
-        <section className="cp-detail-block cp-signoff"><span className="cp-eyebrow">Customer sign-off</span><h3>How did everything look?</h3><p>Let the customer select a response, then sign.</p><div className="cp-feedback-options">{(["great", "touchup", "issue"] as const).map(value => <button key={value} className={response === value ? "is-selected" : ""} onClick={() => setResponse(value)}>{value === "great" ? "Looks great" : value === "touchup" ? "Needs touch-up" : "Report issue"}</button>)}</div><textarea value={feedback} onChange={event => setFeedback(event.target.value)} placeholder="Optional note from the customer" maxLength={2000} /><SignaturePad canvasRef={signatureRef} /><div className="cp-signature-row"><button className="cp-link-button" onClick={clearSignature}>Clear signature</button><span>Customer signs here</span></div><button className="cp-btn cp-btn--primary cp-btn--wide" onClick={saveSignoff} disabled={signatureMutation.isPending}>{signatureMutation.isPending ? <Loader2 className="cp-spin" size={16} /> : <CheckCircle2 size={16} />}Save customer sign-off</button><button className="cp-link-button" onClick={() => notHomeMutation.mutate({ cleanerJobId: job.cleanerJobId }, { onSuccess: () => setCompleteConfirm(true) })}>Customer was not home</button></section>
+        <section className="cp-detail-block cp-signoff"><span className="cp-eyebrow">Customer sign-off</span><h3>How did everything look?</h3><p>Customer sign-off will be enabled after portal visibility is confirmed.</p><div className="cp-feedback-options"><button disabled>Looks great</button><button disabled>Needs touch-up</button><button disabled>Report issue</button></div><textarea disabled placeholder="Optional note from the customer" /><button className="cp-btn cp-btn--primary cp-btn--wide" disabled><CheckCircle2 size={16} />Save customer sign-off</button></section>
       </aside>
-      {etaOpen && <div className="cp-modal-backdrop" onClick={() => setEtaOpen(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Arrival update</span><h3>Set arrival ETA</h3><p>The client will receive the selected arrival time.</p><div className="cp-eta-options">{ETA_CHOICES.map(minutes => <button key={minutes} onClick={() => setSelectedEta(minutes)} className={selectedEta === minutes ? "is-selected" : ""}>{minutes < 60 ? `${minutes} min` : minutes === 60 ? "1 hour" : minutes === 120 ? "2 hours" : `${minutes / 60} hrs`}</button>)}</div><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setEtaOpen(false)}>Cancel</button><button className="cp-btn cp-btn--primary" onClick={setEta} disabled={statusMutation.isPending}>Send ETA</button></div></div></div>}
-      {arrivalConfirm && <div className="cp-modal-backdrop" onClick={() => setArrivalConfirm(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Confirm arrival</span><h3>Tell the client you’ve arrived?</h3><p>This will send the existing arrival update and start this job’s in-progress status.</p><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setArrivalConfirm(false)}>Cancel</button><button className="cp-btn cp-btn--arrived" onClick={confirmArrived} disabled={statusMutation.isPending}>Mark arrived</button></div></div></div>}
-      {completeConfirm && <div className="cp-modal-backdrop" onClick={() => setCompleteConfirm(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Job completion</span><h3>Mark this job complete?</h3><p>This uses the current completion flow, including the existing pay calculation and client follow-up.</p><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setCompleteConfirm(false)}>Not yet</button><button className="cp-btn cp-btn--primary" onClick={markComplete} disabled={completeMutation.isPending}>{completeMutation.isPending ? <Loader2 className="cp-spin" size={16} /> : "Complete job"}</button></div></div></div>}
     </div>
   );
 }
 
 function AvailabilityDialog({ open, schedule, onClose }: { open: boolean; schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null; onClose: () => void }) {
-  const utils = trpc.useUtils();
   const [days, setDays] = useState<Record<(typeof WEEK_DAYS)[number], boolean>>({ Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: false, Sun: false });
   const [note, setNote] = useState("");
-  const scheduleMutation = trpc.cleaner.submitWeeklySchedule.useMutation({ throwOnError: false, onSuccess: () => { utils.cleaner.portalData.invalidate(); toast.success("Availability saved"); onClose(); }, onError: error => toast.error(error.message) });
   useEffect(() => {
     if (!schedule || !open) return;
     setDays({ Mon: schedule.mon === 1, Tue: schedule.tue === 1, Wed: schedule.wed === 1, Thu: schedule.thu === 1, Fri: schedule.fri === 1, Sat: schedule.sat === 1, Sun: schedule.sun === 1 });
   }, [open, schedule]);
   if (!open) return null;
-  return <div className="cp-modal-backdrop" onClick={onClose}><div className="cp-modal cp-modal--wide" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Availability</span><h3>Set weekly availability</h3><p>This updates the existing team schedule and next-day availability record.</p><div className="cp-week-days">{WEEK_DAYS.map(day => <button key={day} className={days[day] ? "is-selected" : ""} onClick={() => setDays(current => ({ ...current, [day]: !current[day] }))}>{day}</button>)}</div><textarea value={note} onChange={event => setNote(event.target.value)} maxLength={500} placeholder="Optional note for dispatch" /><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={onClose}>Cancel</button><button className="cp-btn cp-btn--primary" disabled={scheduleMutation.isPending} onClick={() => scheduleMutation.mutate({ mon: days.Mon ? 1 : 0, tue: days.Tue ? 1 : 0, wed: days.Wed ? 1 : 0, thu: days.Thu ? 1 : 0, fri: days.Fri ? 1 : 0, sat: days.Sat ? 1 : 0, sun: days.Sun ? 1 : 0, note: note.trim() || null })}>Save availability</button></div></div></div>;
+  return <div className="cp-modal-backdrop" onClick={onClose}><div className="cp-modal cp-modal--wide" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Availability</span><h3>Set weekly availability</h3><p>Availability changes will be enabled after portal visibility is confirmed.</p><div className="cp-week-days">{WEEK_DAYS.map(day => <button key={day} className={days[day] ? "is-selected" : ""} disabled>{day}</button>)}</div><textarea value={note} disabled placeholder="Optional note for dispatch" /><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={onClose}>Close</button><button className="cp-btn cp-btn--primary" disabled>Save availability</button></div></div></div>;
 }
 
 function CleanerPortalLogin() {
@@ -289,7 +216,6 @@ function CleanerPortalLogin() {
 }
 
 function CleanerPortalConnected() {
-  const utils = trpc.useUtils();
   const [page, setPage] = useState<NavPage>("today");
   const [selectedJob, setSelectedJob] = useState<PortalJob | null>(null);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
@@ -297,14 +223,13 @@ function CleanerPortalConnected() {
   const todayDate = useMemo(() => etDate(), []);
   const weekStart = useMemo(() => mondayEtDate(), []);
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: 1, throwOnError: false });
-  const todayQuery = trpc.cleaner.getMyJobsToday.useQuery(undefined, { enabled: !!meQuery.data, retry: 1, throwOnError: false });
-  const weekQuery = trpc.cleaner.getMyJobsWeek.useQuery(undefined, { enabled: !!meQuery.data && page === "jobs", staleTime: 60_000, throwOnError: false });
+  const todayQuery = trpc.cleanerPortalReadOnly.getMyJobsToday.useQuery(undefined, { enabled: !!meQuery.data, retry: 1, throwOnError: false });
+  const weekQuery = trpc.cleanerPortalReadOnly.getMyJobsWeek.useQuery(undefined, { enabled: !!meQuery.data && page === "jobs", staleTime: 60_000, throwOnError: false });
   const portalDataQuery = trpc.cleaner.portalData.useQuery(undefined, { enabled: !!meQuery.data, staleTime: 300_000, throwOnError: false });
-  const teamScheduleQuery = trpc.cleaner.getMyTeamSchedule.useQuery(undefined, { enabled: !!meQuery.data && page === "schedule", staleTime: 300_000, throwOnError: false });
-  const payQuery = trpc.cleaner.myJobsRange.useQuery({ from: weekStart, to: todayDate }, { enabled: !!meQuery.data && page === "earnings", staleTime: 60_000, throwOnError: false });
+  const teamScheduleQuery = trpc.cleanerPortalReadOnly.getMyTeamSchedule.useQuery(undefined, { enabled: !!meQuery.data && page === "schedule", staleTime: 300_000, throwOnError: false });
+  const payQuery = trpc.cleanerPortalReadOnly.myJobsRange.useQuery({ from: weekStart, to: todayDate }, { enabled: !!meQuery.data && page === "earnings", staleTime: 60_000, throwOnError: false });
   const logoutMutation = trpc.cleaner.logout.useMutation({ throwOnError: false, onSuccess: () => window.location.replace("/cleaner") });
   const languageMutation = trpc.cleaner.updateLanguage.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
-  const proxyMutation = trpc.cleaner.getProxyNumber.useMutation({ throwOnError: false, onSuccess: ({ proxyNumber }) => { window.location.href = `tel:${proxyNumber}`; }, onError: error => toast.error(error.message) });
 
   const jobs = (todayQuery.data ?? []) as PortalJob[];
   const activeJobs = jobs.filter(job => !jobIsComplete(job));
@@ -316,11 +241,11 @@ function CleanerPortalConnected() {
   const pendingPay = jobs.filter(job => !jobIsComplete(job)).reduce((sum, job) => sum + (job.basePay ?? 0), 0);
   const initial = meQuery.data?.name?.trim().slice(0, 1).toUpperCase() || "C";
   const firstName = meQuery.data?.name?.split(" ")[0] || "there";
-  const callClient = (job: PortalJob) => proxyMutation.mutate({ cleanerJobId: job.cleanerJobId });
-  const completeAndClose = () => { setSelectedJob(null); utils.cleaner.getMyJobsToday.invalidate(); };
+  const callClient = () => toast.info("Client calling will be enabled after portal visibility is confirmed.");
 
   if (meQuery.isLoading || (meQuery.data && todayQuery.isLoading)) return <div className="cp-loading"><Loader2 className="cp-spin" size={30} />Loading your workday…</div>;
   if (meQuery.isError) return <div className="cp-loading"><div><p>We could not reach your Cleaner Portal right now.</p><button className="cp-btn cp-btn--subtle" onClick={() => window.location.reload()}>Try again</button></div></div>;
+  if (todayQuery.isError) return <div className="cp-loading"><div><p>Your assigned jobs could not be loaded. Please try again.</p><button className="cp-btn cp-btn--subtle" onClick={() => todayQuery.refetch()}>Try again</button></div></div>;
   if (!meQuery.data) return <CleanerPortalLogin />;
 
   const navItems: Array<{ id: NavPage; label: string; icon: typeof CalendarDays }> = [
@@ -335,9 +260,9 @@ function CleanerPortalConnected() {
       <main className="cp-main">
         {page === "today" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Today · {todayDate}</span><h1>Good day, {firstName}.</h1><p>{activeJobs.length ? `You have ${activeJobs.length} active job${activeJobs.length === 1 ? "" : "s"} today.` : jobs.length ? "Today’s jobs are complete." : "No jobs assigned for today."}</p></div><div className="cp-head-actions"><button className="cp-btn cp-btn--subtle" onClick={() => setAvailabilityOpen(true)}><CalendarDays size={16} />Set availability</button></div></div>
           {nextJob && <div className="cp-hero"><div><span className="cp-live">{jobIsComplete(nextJob) ? "DAY COMPLETE" : "NEXT JOB"}</span><h2>{jobIsComplete(nextJob) ? "Great work today." : `${ordinal(nextJob.jobIndex)} job is ready`}</h2><p>{nextJob.customerName} · {serviceLabel(nextJob)} · {nextJob.address}</p><div className="cp-hero-actions"><button className="cp-btn cp-btn--primary" onClick={() => setSelectedJob(nextJob)}>{jobIsComplete(nextJob) ? "Review job" : `View ${ordinal(nextJob.jobIndex).toLowerCase()} job`}<ChevronRight size={16} /></button><button className="cp-btn cp-btn--subtle" onClick={() => openDirections(nextJob.address)}><Navigation size={16} />Directions</button></div></div><div className="cp-hero-side"><span>Assigned jobs</span><strong>{jobs.length}</strong><small>{activeJobs.length} active today</small></div></div>}
-          <div className="cp-layout"><section className="cp-panel"><div className="cp-panel-title"><div><span className="cp-eyebrow">Today’s route</span><h2>Assigned jobs</h2></div><button className="cp-text-action" onClick={() => setPage("jobs")}>View all <ChevronRight size={15} /></button></div>{jobs.length === 0 ? <div className="cp-empty">No active jobs are assigned today.</div> : jobs.map(job => <JobCard key={job.cleanerJobId} job={job} onOpen={() => setSelectedJob(job)} onCall={() => callClient(job)} />)}</section><aside className="cp-side-stack"><section className="cp-panel"><span className="cp-eyebrow">Route</span><h3>Today’s drive</h3><div className="cp-route-list">{jobs.map(job => <div key={job.cleanerJobId}><span className="cp-route-dot" /><p><b>{job.customerName}</b><small>{job.address || "Address pending"}</small></p><time>{job.time}</time></div>)}</div></section><section className="cp-panel"><span className="cp-eyebrow">Shift status</span><h3>{portalDataQuery.data?.tomorrowAvailability.submitted ? "Availability saved" : "Set tomorrow’s availability"}</h3><p className="cp-muted">Keep dispatch up to date with your current weekly schedule.</p><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={() => setAvailabilityOpen(true)}>Set availability</button></section></aside></div>
+          <div className="cp-layout"><section className="cp-panel"><div className="cp-panel-title"><div><span className="cp-eyebrow">Today’s route</span><h2>Assigned jobs</h2></div><button className="cp-text-action" onClick={() => setPage("jobs")}>View all <ChevronRight size={15} /></button></div>{jobs.length === 0 ? <div className="cp-empty">No active jobs are assigned today.</div> : jobs.map(job => <JobCard key={job.portalJobKey} job={job} onOpen={() => setSelectedJob(job)} onCall={callClient} />)}</section><aside className="cp-side-stack"><section className="cp-panel"><span className="cp-eyebrow">Route</span><h3>Today’s drive</h3><div className="cp-route-list">{jobs.map(job => <div key={job.portalJobKey}><span className="cp-route-dot" /><p><b>{job.customerName}</b><small>{job.address || "Address pending"}</small></p><time>{job.time}</time></div>)}</div></section><section className="cp-panel"><span className="cp-eyebrow">Shift status</span><h3>{portalDataQuery.data?.tomorrowAvailability.submitted ? "Availability saved" : "Set tomorrow’s availability"}</h3><p className="cp-muted">Keep dispatch up to date with your current weekly schedule.</p><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={() => setAvailabilityOpen(true)}>Set availability</button></section></aside></div>
         </section>}
-        {page === "jobs" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">My work</span><h1>My jobs</h1><p>Your current workweek, using your existing assigned job list.</p></div></div><div className="cp-panel cp-job-list">{weekQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading assigned jobs…</div> : weekJobs.length === 0 ? <div className="cp-empty">No upcoming jobs this week.</div> : weekJobs.map(job => <div className="cp-week-job" key={job.cleanerJobId}><div className="cp-week-job__date"><b>{job.dateLabel === "today" ? "Today" : job.jobDate}</b><small>{job.time}</small></div><div><StatusPill job={job} /><h3>{job.customerName} · {serviceLabel(job)}</h3><p><MapPin size={14} />{job.address || "Address pending"}</p></div>{job.dateLabel === "today" && <button className="cp-btn cp-btn--primary cp-btn--small" onClick={() => { const todayJob = jobs.find(item => item.cleanerJobId === job.cleanerJobId); if (todayJob) setSelectedJob(todayJob); }}>Open</button>}</div>)}</div></section>}
+        {page === "jobs" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">My work</span><h1>My jobs</h1><p>Your current workweek, using your existing assigned job list.</p></div></div><div className="cp-panel cp-job-list">{weekQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading assigned jobs…</div> : weekQuery.isError ? <div className="cp-empty">Your assigned jobs could not be loaded.</div> : weekJobs.length === 0 ? <div className="cp-empty">No upcoming jobs this week.</div> : weekJobs.map(job => <div className="cp-week-job" key={job.portalJobKey}><div className="cp-week-job__date"><b>{job.dateLabel === "today" ? "Today" : job.jobDate}</b><small>{job.time}</small></div><div><StatusPill job={job} /><h3>{job.customerName} · {serviceLabel(job)}</h3><p><MapPin size={14} />{job.address || "Address pending"}</p></div>{job.dateLabel === "today" && <button className="cp-btn cp-btn--primary cp-btn--small" onClick={() => { const todayJob = jobs.find(item => item.portalJobKey === job.portalJobKey); if (todayJob) setSelectedJob(todayJob); }}>Open</button>}</div>)}</div></section>}
         {page === "schedule" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Schedule</span><h1>Your availability</h1><p>Set the workdays that dispatch should use for your team schedule.</p></div><button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Set availability</button></div><div className="cp-panel cp-schedule-card"><CalendarDays size={25} /><h2>{teamScheduleQuery.data?.teamName ? `${teamScheduleQuery.data.teamName} schedule` : "Weekly availability"}</h2><p>Your existing weekly schedule and next-day availability check-in stay in one place.</p>{teamScheduleQuery.data?.schedule && <div className="cp-schedule-days">{WEEK_DAYS.map(day => <span key={day} className={teamScheduleQuery.data?.schedule?.[day.toLowerCase() as "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun"] === 1 ? "is-working" : ""}>{day}</span>)}</div>}<button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Update availability</button></div></section>}
         {page === "earnings" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Earnings</span><h1>Your earnings</h1><p>Amounts shown here come from the existing job and payroll records.</p></div></div><div className="cp-money-grid"><article><span>Completed this week</span><strong>{formatMoney(completedPay)}</strong><small>{paidJobs.length} completed job{paidJobs.length === 1 ? "" : "s"}</small></article><article><span>Scheduled today</span><strong>{formatMoney(pendingPay)}</strong><small>{activeJobs.length} active job{activeJobs.length === 1 ? "" : "s"}</small></article><article><span>Current streak</span><strong>{portalDataQuery.data?.streakInfo.currentStreak ?? 0}</strong><small>Completed-job streak</small></article></div><div className="cp-panel"><h2>Recent work</h2>{payQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading earnings…</div> : paidJobs.length === 0 ? <div className="cp-empty">No completed jobs in this week’s current range.</div> : paidJobs.slice().reverse().map(job => <div className="cp-earn-row" key={job.id}><div><b>{job.customerName || "Customer"}</b><span>{job.jobDate}</span></div><strong>{formatMoney(job.finalPay ?? job.basePay)}</strong></div>)}</div></section>}
         {page === "contact" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Contact</span><h1>Client contact</h1><p>For a current job, use the existing masked Call client flow.</p></div></div><div className="cp-panel cp-contact-panel"><Phone size={26} /><h2>Call a current client</h2><p>Open a job to call its client through the existing protected phone proxy. There is no separate cleaner message inbox to duplicate here.</p>{nextJob && <button className="cp-btn cp-btn--primary" onClick={() => callClient(nextJob)}>Call {nextJob.customerName}</button>}</div></section>}
@@ -345,7 +270,7 @@ function CleanerPortalConnected() {
       </main>
     </div>
     <AvailabilityDialog open={availabilityOpen} schedule={teamScheduleQuery.data?.schedule} onClose={() => setAvailabilityOpen(false)} />
-    {selectedJob && <JobDrawer job={selectedJob} language={meQuery.data.language as "en" | "es" | "pt"} onClose={() => setSelectedJob(null)} onComplete={completeAndClose} onCall={() => callClient(selectedJob)} />}
+    {selectedJob && <JobDrawer job={selectedJob} onClose={() => setSelectedJob(null)} />}
   </div>;
 }
 
