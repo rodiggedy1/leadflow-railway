@@ -29,6 +29,7 @@ import { qualityRouter } from "./qualityRouter";
 import { cleanerRouter } from "./cleanerRouter";
 import { cleanerPortalReadOnlyRouter } from "./cleanerPortalReadOnlyRouter";
 import { cleanerPortalProgressRouter } from "./cleanerPortalProgressRouter";
+import { cleanerPortalPhotoRouter } from "./cleanerPortalPhotoRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
 import { smsCampaignRouter } from "./sms/smsCampaignRouter";
@@ -125,6 +126,7 @@ export const appRouter = router({
   leadflowJobs: leadflowJobsRouter,
   cleanerPortalReadOnly: cleanerPortalReadOnlyRouter,
   cleanerPortalProgress: cleanerPortalProgressRouter,
+  cleanerPortalPhotos: cleanerPortalPhotoRouter,
   responseTemplates: responseTemplatesRouter,
 
   auth: router({

@@ -38,7 +38,7 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(page).toContain("todayQuery.refetch()");
   });
 
-  it("keeps the existing portal layout while enabling only the three isolated progress controls", () => {
+  it("keeps the existing portal layout while enabling the isolated progress and restored photo controls", () => {
     expect(page).toContain('className="cp-topbar"');
     expect(page).toContain('className="cp-shell"');
     expect(page).toContain('className="cp-drawer"');
@@ -48,7 +48,9 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(page).toContain("trpc.cleanerPortalProgress.startJob.useMutation");
     expect(page).toContain("The client will receive the selected arrival time.");
     expect(page).toContain("This will record your arrival and message the client.");
-    expect(page).toContain("Photo actions will be enabled after portal visibility is confirmed.");
+    expect(page).toContain("Select visit-condition and finished-result images from your photo library.");
+    expect(page).toContain("trpc.cleanerPortalPhotos.getForJob.useQuery");
+    expect(page).toContain("trpc.cleanerPortalPhotos.uploadPhoto.useMutation");
     expect(page).toContain("Customer sign-off will be enabled after portal visibility is confirmed.");
     expect(page).not.toContain("cleanerJobId");
     expect(page).not.toContain("completedJobId");

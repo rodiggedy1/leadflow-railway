@@ -1619,3 +1619,6 @@
 - [x] Validate that a progress-path failure cannot affect the Cleaner Portal job list or Customer Portal page
 - [x] Diagnose and repair the production ETA-unavailable state without altering the working Cleaner Portal job-list query
 - [x] Correct the managed ETA table postconditions for the production-reported CURRENT_TIMESTAMP(3) defaults
+- [x] Map and reuse the previously working Cleaner Portal photo picker, upload, metadata, and display flow with only an isolated job-reference adaptation
+- [x] Restore the proven photo-library picker, upload, thumbnail, metadata, and display workflow under isolated LeadFlow job ownership
+- [x] Validate that isolated photo failures cannot affect the working Cleaner Portal job list or ETA path

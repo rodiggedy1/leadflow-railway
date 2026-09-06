@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "table": "cleaner_portal_job_photos",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "leadflowJobId", "columnType": "int", "nullable": false },
+    { "name": "cleanerProfileId", "columnType": "int", "nullable": false },
+    { "name": "photoUrl", "columnType": "varchar(1024)", "nullable": false },
+    { "name": "photoKey", "columnType": "varchar(512)", "nullable": false },
+    { "name": "thumbnailUrl", "columnType": "varchar(1024)", "nullable": true },
+    { "name": "thumbnailKey", "columnType": "varchar(512)", "nullable": true },
+    { "name": "filename", "columnType": "varchar(255)", "nullable": true },
+    { "name": "photoType", "columnType": "varchar(20)", "nullable": false, "default": "general" },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false, "default": "current_timestamp(3)" }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "idx_cleaner_portal_job_photos_leadflow_job", "unique": false, "columns": ["leadflowJobId"] },
+    { "name": "idx_cleaner_portal_job_photos_cleaner", "unique": false, "columns": ["cleanerProfileId"] }
+  ]
+}

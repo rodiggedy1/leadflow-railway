@@ -1289,6 +1289,28 @@ export const cleanerPortalJobProgress = mysqlTable("cleaner_portal_job_progress"
 export type CleanerPortalJobProgress = typeof cleanerPortalJobProgress.$inferSelect;
 
 /**
+ * Cleaner Portal photo metadata for LeadFlow-owned jobs. The storage and
+ * thumbnail behavior mirrors the established cleaner photo workflow without
+ * linking a portal upload to legacy cleaner_jobs records.
+ */
+export const cleanerPortalJobPhotos = mysqlTable("cleaner_portal_job_photos", {
+  id: int("id").autoincrement().primaryKey(),
+  leadflowJobId: int("leadflowJobId").notNull(),
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  photoUrl: varchar("photoUrl", { length: 1024 }).notNull(),
+  photoKey: varchar("photoKey", { length: 512 }).notNull(),
+  thumbnailUrl: varchar("thumbnailUrl", { length: 1024 }),
+  thumbnailKey: varchar("thumbnailKey", { length: 512 }),
+  filename: varchar("filename", { length: 255 }),
+  photoType: varchar("photoType", { length: 20 }).default("general").notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  index("idx_cleaner_portal_job_photos_leadflow_job").on(t.leadflowJobId),
+  index("idx_cleaner_portal_job_photos_cleaner").on(t.cleanerProfileId),
+]);
+export type CleanerPortalJobPhoto = typeof cleanerPortalJobPhotos.$inferSelect;
+
+/**
  * jobPhotos — completion photos uploaded by cleaners for a specific job.
  */
 export const jobPhotos = mysqlTable("job_photos", {
