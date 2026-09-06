@@ -17,12 +17,14 @@ import "./customer-portal-home-images.css";
 import "./customer-portal-home-reference-refinement.css";
 import "./customer-portal-login.css";
 import "./customer-portal-live-status.css";
+import "./customer-portal-same-day-detail.css";
 import { PortalTodayStatus } from "@/components/PortalTodayStatus";
 import { getCustomerPortalBusinessDate, type CustomerPortalTodayJob } from "@shared/customerPortalLiveStatus";
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
 type PortalPage = "home" | "bookings" | "services" | "payments" | "messages" | "account";
+type PortalHomeBooking = CustomerPortalTodayJob & { focusTargetId: string; leadflowJobId: number | null };
 const SERVICE_ICONS: Record<string, typeof Wrench> = {
   "tv-mounting": Tv,
   "furniture-assembly": Sofa,
@@ -152,20 +154,23 @@ export default function CustomerPortal() {
   const [activePage, setActivePage] = useState<PortalPage>("home");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [newCardSetup, setNewCardSetup] = useState<{ clientSecret: string; setupIntentId: string } | null>(null);
+  const [focusedBookingId, setFocusedBookingId] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const portal = trpc.customerPortal.me.useQuery();
   const todayJobStatus = trpc.customerPortal.todayJobStatus.useQuery(undefined, { enabled: Boolean(portal.data?.account), refetchInterval: query => query.state.data?.job ? 60_000 : false });
+  const updateLeadflowJobCustomerNote = trpc.customerPortal.updateLeadflowJobCustomerNote.useMutation({ onSuccess: () => { void utils.customerPortal.me.invalidate(); } });
   const startNewCardSetup = trpc.customerPortal.startNewCardSetup.useMutation();
 
   const featuredServices = useMemo(() => FEATURED_SERVICE_IDS.map(id => CUSTOMER_PORTAL_SERVICES.find(service => service.id === id)).filter((service): service is CustomerPortalService => Boolean(service)), []);
   const activeCleanings = useMemo(() => (portal.data?.cleanings ?? []).filter(cleaning => isActivePortalBookingStatus(cleaning.status)), [portal.data?.cleanings]);
   const activeLeadflowJobs = useMemo(() => (portal.data?.leadflowJobs ?? []).filter(job => isActivePortalBookingStatus(job.bookingStatus)), [portal.data?.leadflowJobs]);
   const businessDate = getCustomerPortalBusinessDate();
-  const allCustomerBookings = useMemo<CustomerPortalTodayJob[]>(() => [
-    ...activeCleanings.map(cleaning => ({ bookingId: null, jobDate: cleaning.requestedLocalDate, serviceDateTime: cleaning.requestedLocalTime ?? null, serviceType: cleaning.serviceName, teamName: null, jobStatus: null, bookingStatus: cleaning.status, delayMinutes: null, etaTimestamp: null, etaTimeStr: null })),
-    ...activeLeadflowJobs.map(job => ({ bookingId: job.launch27BookingId, jobDate: job.jobDate, serviceDateTime: job.serviceDateTime, serviceType: job.serviceName, teamName: job.teamName, jobStatus: null, bookingStatus: job.bookingStatus, delayMinutes: null, etaTimestamp: null, etaTimeStr: null })),
+  const allCustomerBookings = useMemo<PortalHomeBooking[]>(() => [
+    ...activeCleanings.map(cleaning => ({ bookingId: null, focusTargetId: `portal-cleaning-${cleaning.id}`, leadflowJobId: null, jobDate: cleaning.requestedLocalDate, serviceDateTime: cleaning.requestedLocalTime ?? null, serviceType: cleaning.serviceName, teamName: null, jobStatus: null, bookingStatus: cleaning.status, delayMinutes: null, etaTimestamp: null, etaTimeStr: null })),
+    ...activeLeadflowJobs.map(job => ({ bookingId: job.launch27BookingId, focusTargetId: `portal-leadflow-job-${job.id}`, leadflowJobId: job.id, jobDate: job.jobDate, serviceDateTime: job.serviceDateTime, serviceType: job.serviceName, teamName: job.teamName, jobStatus: null, bookingStatus: job.bookingStatus, delayMinutes: null, etaTimestamp: null, etaTimeStr: null })),
   ], [activeCleanings, activeLeadflowJobs]);
   const todayBooking = useMemo(() => [...allCustomerBookings].filter(booking => booking.jobDate === businessDate).sort(compareCustomerPortalBookings)[0] ?? null, [allCustomerBookings, businessDate]);
+  const todayLeadflowBooking = useMemo(() => todayBooking?.leadflowJobId === null || !todayBooking ? null : portal.data?.leadflowJobs.find(job => job.id === todayBooking.leadflowJobId) ?? null, [portal.data?.leadflowJobs, todayBooking]);
   const liveTodayStatus = todayJobStatus.data?.job ?? null;
   const todayBookingWithLiveStatus = useMemo(() => {
     if (!todayBooking || todayBooking.bookingId === null || liveTodayStatus?.bookingId !== todayBooking.bookingId) return todayBooking;
@@ -173,6 +178,13 @@ export default function CustomerPortal() {
   }, [liveTodayStatus, todayBooking]);
   const nextCustomerBooking = useMemo(() => [...allCustomerBookings].filter(booking => booking.jobDate >= businessDate).sort(compareCustomerPortalBookings)[0] ?? null, [allCustomerBookings, businessDate]);
   const nextLeadflowJob = useMemo(() => [...activeLeadflowJobs].filter(job => job.jobDate >= businessDate).sort((left, right) => left.jobDate.localeCompare(right.jobDate) || (left.serviceDateTime ?? "").localeCompare(right.serviceDateTime ?? ""))[0], [activeLeadflowJobs, businessDate]);
+
+  useEffect(() => {
+    if (activePage !== "bookings" || !focusedBookingId) return;
+    const target = window.document.getElementById(focusedBookingId);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    target?.focus({ preventScroll: true });
+  }, [activePage, focusedBookingId]);
 
   if (portal.isLoading) return <main className="mib-portal-gate">Loading your home portal…</main>;
   if (!portal.data?.account) return <PortalLoginGate onAuthenticated={() => { void portal.refetch(); }} />;
@@ -186,6 +198,11 @@ export default function CustomerPortal() {
   const closeCleaningRebook = () => { setShowCleaningRebook(false); void utils.customerPortal.me.invalidate(); };
 
   const goToPage = (page: PortalPage) => { setActivePage(page); setMobileNavOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const openTodayBooking = () => {
+    if (!todayBooking) return;
+    setFocusedBookingId(todayBooking.focusTargetId);
+    goToPage("bookings");
+  };
   const openService = (serviceId: string) => {
     if (serviceId === "home-cleaning") {
       setShowCleaningRebook(true);
@@ -197,8 +214,8 @@ export default function CustomerPortal() {
   const records = <div className="mib-portal-records">
     {totalRecords === 0 ? <div className="mib-portal-empty"><Sparkles /><h3>Your home history starts here.</h3><p>Your cleaning and service requests will appear here.</p></div> : <>
       {portal.data.requests.map(request => <article className="mib-portal-booking-card" key={`request-${request.id}`}><div className="mib-portal-booking-top"><div><small>HOME SERVICE REQUEST</small><h3>{request.serviceName}</h3><span className="mib-portal-status">{formatStatus(request.status)}</span></div><div className="mib-portal-price"><span>{request.estimateRequiresReview ? "Estimate · review required" : "Estimated total"}</span><strong>{formatCurrency(request.estimatedTotalCents)}</strong></div></div><div className="mib-portal-booking-grid"><div><CalendarDays /><span>PREFERRED APPOINTMENT</span><strong>{formatLocalDate(request.requestedLocalDate)} · {request.requestedLocalTime}</strong><p>Your preferred time is awaiting confirmation.</p></div><div><MapPin /><span>LOCATION</span><strong>{request.address}</strong><p>{request.customerRequest}</p></div><div><CreditCard /><span>PAYMENT</span><strong>{request.paymentLast4 ? `${request.paymentBrand ? `${request.paymentBrand} ` : "Card "}ending in ${request.paymentLast4}` : savedCardLabel}</strong><p>{request.paymentLast4 ? "Your selected card is securely on file. No charge today." : "A payment method has not been saved."}</p></div></div><div className="mib-portal-booking-footer"><div><i />{request.publicRequestNumber ? `Request ${request.publicRequestNumber} saved` : "Request saved"}</div><span>{formatStatus(request.status)}</span></div></article>)}
-      {portal.data.cleanings.map(cleaning => <article className="mib-portal-booking-card" key={`cleaning-${cleaning.id}`}><div className="mib-portal-booking-top"><div><small>HOME CLEANING</small><h3>{cleaning.serviceName}</h3><span className="mib-portal-status">{formatStatus(cleaning.status)}</span></div><div className="mib-portal-price"><span>First cleaning</span><strong>{formatCurrency(cleaning.firstCleaningTotalCents)}</strong></div></div><div className="mib-portal-booking-grid"><div><CalendarDays /><span>PREFERRED APPOINTMENT</span><strong>{formatLocalDate(cleaning.requestedLocalDate)}{cleaning.requestedLocalTime ? ` · ${cleaning.requestedLocalTime}` : ""}</strong><p>{cleaning.status === "needs_attention" ? "Your appointment is awaiting confirmation." : "We will keep you updated here."}</p></div><div><MapPin /><span>LOCATION</span><strong>{cleaning.address || "Address saved with booking"}</strong><p>We will confirm the right cleaning team for your home.</p></div><div><CreditCard /><span>PAYMENT</span><strong>{cleaning.paymentStatus === "card_on_file" ? "Card on file" : formatStatus(cleaning.paymentStatus)}</strong><p>{cleaning.paymentStatus === "card_on_file" ? "Your card is securely saved. No charge today." : "Payment status is saved with this booking."}</p></div></div><div className="mib-portal-booking-footer"><div><i />{cleaning.publicBookingNumber ? `Booking ${cleaning.publicBookingNumber} saved` : "Booking saved"}</div><span>{formatStatus(cleaning.status)}</span></div></article>)}
-      {portal.data.leadflowJobs.map(job => <article className="mib-portal-booking-card" key={`leadflow-job-${job.id}`}><div className="mib-portal-booking-top"><div><small>HOME CLEANING</small><h3>{job.serviceName || "Home cleaning"}</h3><span className="mib-portal-status">{formatStatus(job.bookingStatus)}</span></div><div className="mib-portal-price"><span>Scheduled total</span><strong>{formatCurrency(job.jobTotalCents)}</strong></div></div><div className="mib-portal-booking-grid"><div><CalendarDays /><span>SCHEDULED APPOINTMENT</span><strong>{formatLocalDate(job.jobDate)}</strong><p>{job.serviceDateTime ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(job.serviceDateTime)) : "Time will be confirmed here."}</p></div><div><MapPin /><span>LOCATION</span><strong>{job.jobAddress || "Address saved with booking"}</strong><p>{job.teamName ? `${job.teamName} is assigned to your service.` : "Your team assignment will appear here."}</p></div><div><CreditCard /><span>PAYMENT</span><strong>{job.hasStripeCard ? "Card on file" : "Payment details on request"}</strong><p>{job.frequency || "One-time service"}{job.bedrooms ? ` · ${job.bedrooms} bedroom${job.bedrooms === 1 ? "" : "s"}` : ""}{job.bathrooms ? ` · ${job.bathrooms} bath${job.bathrooms === 1 ? "" : "s"}` : ""}</p></div></div><div className="mib-portal-booking-footer"><div><i />{job.frequency || "One-time service"}</div><span>{formatStatus(job.bookingStatus)}</span></div></article>)}
+      {portal.data.cleanings.map(cleaning => <article id={`portal-cleaning-${cleaning.id}`} className={`mib-portal-booking-card${focusedBookingId === `portal-cleaning-${cleaning.id}` ? " is-focused" : ""}`} key={`cleaning-${cleaning.id}`} tabIndex={focusedBookingId === `portal-cleaning-${cleaning.id}` ? -1 : undefined}><div className="mib-portal-booking-top"><div><small>{focusedBookingId === `portal-cleaning-${cleaning.id}` ? "TODAY’S BOOKING" : "HOME CLEANING"}</small><h3>{cleaning.serviceName}</h3><span className="mib-portal-status">{formatStatus(cleaning.status)}</span></div><div className="mib-portal-price"><span>First cleaning</span><strong>{formatCurrency(cleaning.firstCleaningTotalCents)}</strong></div></div><div className="mib-portal-booking-grid"><div><CalendarDays /><span>PREFERRED APPOINTMENT</span><strong>{formatLocalDate(cleaning.requestedLocalDate)}{cleaning.requestedLocalTime ? ` · ${cleaning.requestedLocalTime}` : ""}</strong><p>{cleaning.status === "needs_attention" ? "Your appointment is awaiting confirmation." : "We will keep you updated here."}</p></div><div><MapPin /><span>LOCATION</span><strong>{cleaning.address || "Address saved with booking"}</strong><p>We will confirm the right cleaning team for your home.</p></div><div><CreditCard /><span>PAYMENT</span><strong>{cleaning.paymentStatus === "card_on_file" ? "Card on file" : formatStatus(cleaning.paymentStatus)}</strong><p>{cleaning.paymentStatus === "card_on_file" ? "Your card is securely saved. No charge today." : "Payment status is saved with this booking."}</p></div></div><div className="mib-portal-booking-footer"><div><i />{cleaning.publicBookingNumber ? `Booking ${cleaning.publicBookingNumber} saved` : "Booking saved"}</div><span>{formatStatus(cleaning.status)}</span></div></article>)}
+      {portal.data.leadflowJobs.map(job => <article id={`portal-leadflow-job-${job.id}`} className={`mib-portal-booking-card${focusedBookingId === `portal-leadflow-job-${job.id}` ? " is-focused" : ""}`} key={`leadflow-job-${job.id}`} tabIndex={focusedBookingId === `portal-leadflow-job-${job.id}` ? -1 : undefined}><div className="mib-portal-booking-top"><div><small>{focusedBookingId === `portal-leadflow-job-${job.id}` ? "TODAY’S BOOKING" : "HOME CLEANING"}</small><h3>{job.serviceName || "Home cleaning"}</h3><span className="mib-portal-status">{formatStatus(job.bookingStatus)}</span></div><div className="mib-portal-price"><span>Scheduled total</span><strong>{formatCurrency(job.jobTotalCents)}</strong></div></div><div className="mib-portal-booking-grid"><div><CalendarDays /><span>SCHEDULED APPOINTMENT</span><strong>{formatLocalDate(job.jobDate)}</strong><p>{job.serviceDateTime ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(job.serviceDateTime)) : "Time will be confirmed here."}</p></div><div><MapPin /><span>LOCATION</span><strong>{job.jobAddress || "Address saved with booking"}</strong><p>{job.teamName ? `${job.teamName} is assigned to your service.` : "Your team assignment will appear here."}</p></div><div><CreditCard /><span>PAYMENT</span><strong>{job.hasStripeCard ? "Card on file" : "Payment details on request"}</strong><p>{job.frequency || "One-time service"}{job.bedrooms ? ` · ${job.bedrooms} bedroom${job.bedrooms === 1 ? "" : "s"}` : ""}{job.bathrooms ? ` · ${job.bathrooms} bath${job.bathrooms === 1 ? "" : "s"}` : ""}</p></div></div>{job.customerNotes && <div className="mib-portal-booking-note"><strong>Notes for your team</strong><p>{job.customerNotes}</p></div>}<div className="mib-portal-booking-footer"><div><i />{job.frequency || "One-time service"}</div><span>{formatStatus(job.bookingStatus)}</span></div></article>)}
     </>}
   </div>;
 
@@ -215,7 +232,7 @@ export default function CustomerPortal() {
       </nav><div className="mib-direct-help"><CircleHelp /><span><b>Need help?</b>Contact us</span></div></aside>
       <main className="mib-direct-main">
         {activePage === "home" && <><section className="mib-direct-hero"><div><small>MY HOME</small><h1>Welcome back,<br />{customerName}.</h1><p>Your home requests, timing, and updates are all here.</p><div className="mib-direct-hero-actions"><button className="mib-direct-button mib-direct-button-primary" type="button" onClick={() => setShowCleaningRebook(true)}><Plus /> Book home cleaning</button><button className="mib-direct-button" type="button" onClick={() => goToPage("services")}>Browse all services <ArrowRight /></button></div></div><div className="mib-direct-hero-art" role="img" aria-label="A calm, tidy bedroom"><div className="mib-direct-hero-plant" /><div className="mib-direct-hero-sofa" /><span>A cleaner home<br />for a calmer you.</span></div></section>
-        {todayBookingWithLiveStatus ? <PortalTodayStatus job={todayBookingWithLiveStatus} onViewBooking={() => goToPage("bookings")} /> : <section className="mib-direct-stats" aria-label="Account summary">
+        {todayBookingWithLiveStatus ? <PortalTodayStatus job={todayBookingWithLiveStatus} booking={todayLeadflowBooking} savingNote={updateLeadflowJobCustomerNote.isPending} onUpdateNote={todayLeadflowBooking ? note => updateLeadflowJobCustomerNote.mutate({ id: todayLeadflowBooking.id, note }) : undefined} onViewBooking={openTodayBooking} /> : <section className="mib-direct-stats" aria-label="Account summary">
           <article><ClipboardList /><div><strong>{activeRecordCount}</strong><span>Active bookings</span><button type="button" onClick={() => goToPage("bookings")}>View and manage <ArrowRight /></button></div></article>
           <article><CalendarClock /><div><strong>{nextVisitDate ? formatLocalDate(nextVisitDate) : "—"}</strong><span>Next visit</span><button type="button" onClick={() => goToPage("bookings")}>See details <ArrowRight /></button></div></article>
           <article><ShieldCheck /><div><strong>This device</strong><span>Account access</span><em>Secure portal access</em></div></article>

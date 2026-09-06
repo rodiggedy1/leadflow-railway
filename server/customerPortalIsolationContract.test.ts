@@ -222,7 +222,8 @@ describe("customer portal isolation", () => {
     expect(portal).toContain('import { PortalTodayStatus } from "@/components/PortalTodayStatus";');
     expect(portal).toContain('trpc.customerPortal.todayJobStatus.useQuery');
     expect(portal).toContain("refetchInterval: query => query.state.data?.job ? 60_000 : false");
-    expect(portal).toContain('todayJobStatus.data?.job ? <PortalTodayStatus job={todayJobStatus.data.job} onViewBooking={() => goToPage("bookings")} /> : <section className="mib-direct-stats"');
+    expect(portal).toContain("todayBookingWithLiveStatus ? <PortalTodayStatus job={todayBookingWithLiveStatus} booking={todayLeadflowBooking}");
+    expect(portal).toContain('<section className="mib-direct-stats"');
     expect(statusCss).toContain(".mib-direct-live-status");
     expect(statusCss).toContain(".mib-direct-live-status.is-running-late");
     expect(statusCss).toContain("@media(max-width:650px)");

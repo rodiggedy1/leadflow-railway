@@ -27,7 +27,7 @@ describe("customer portal live same-day status", () => {
       readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8"),
       readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
     ]);
-    const statusProcedure = router.slice(router.indexOf("todayJobStatus:"), router.indexOf("startNewCardSetup:"));
+    const statusProcedure = router.slice(router.indexOf("todayJobStatus:"), router.indexOf("updateLeadflowJobCustomerNote:"));
     expect(statusProcedure).toContain("getCustomerPortalSessionFromRequest(ctx.req)");
     expect(statusProcedure).toContain("extractUSDigits(account.customerPhone)");
     expect(statusProcedure).toContain("REGEXP_REPLACE");
@@ -44,7 +44,7 @@ describe("customer portal live same-day status", () => {
     expect(portal).toContain("trpc.customerPortal.todayJobStatus.useQuery");
     expect(portal).toContain("todayBooking.bookingId === null || liveTodayStatus?.bookingId !== todayBooking.bookingId");
     expect(portal).toContain("PortalTodayStatus");
-    expect(portal).toContain('onViewBooking={() => goToPage("bookings")}');
+    expect(portal).toContain("onViewBooking={openTodayBooking}");
     expect(portal).toContain("todayBookingWithLiveStatus ? <PortalTodayStatus job={todayBookingWithLiveStatus}");
   });
 });
