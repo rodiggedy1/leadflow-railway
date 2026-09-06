@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "crypto";
-import { and, eq, isNull } from "drizzle-orm";
-import { customerPortalAccounts, customerPortalHandoffTokens } from "../drizzle/schema";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { customerPortalAccounts, customerPortalHandoffTokens, leadflowJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { normalizePhone } from "./utils/phone";
+import { extractUSDigits, normalizePhone } from "./utils/phone";
 
 type DbClient = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
@@ -31,6 +31,35 @@ export async function ensureCustomerPortalAccount(db: DbClient, input: { custome
     if (!rows[0]) throw error;
     return rows[0];
   }
+}
+
+/**
+ * Lazily creates the established portal account only when a valid imported
+ * LeadFlow customer asks to sign in. It sends no SMS and never alters a job.
+ */
+export async function ensureCustomerPortalAccountForLeadflowPhone(db: DbClient, phone: string) {
+  const customerPhone = normalizePhone(phone);
+  if (!customerPhone) return null;
+
+  const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.customerPhone, customerPhone)).limit(1);
+  if (accounts[0]) return accounts[0];
+
+  const phoneDigits = extractUSDigits(customerPhone);
+  if (!phoneDigits) return null;
+  const jobs = await db.select({
+    customerName: leadflowJobs.customerName,
+    customerPhone: leadflowJobs.customerPhone,
+    customerEmail: leadflowJobs.customerEmail,
+  }).from(leadflowJobs).where(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`)
+    .orderBy(desc(leadflowJobs.updatedAt), desc(leadflowJobs.id)).limit(1);
+  const job = jobs[0];
+  if (!job?.customerPhone) return null;
+
+  return ensureCustomerPortalAccount(db, {
+    customerName: job.customerName,
+    customerPhone: job.customerPhone,
+    customerEmail: job.customerEmail,
+  });
 }
 
 export async function createCustomerPortalHandoff(db: DbClient, input: { customerName: string; customerPhone: string; customerEmail?: string | null }) {

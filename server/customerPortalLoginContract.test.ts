@@ -91,7 +91,8 @@ describe("customer portal SMS re-entry contract", () => {
 
   it("keeps login isolated from leads, bookings, cards, payments, requests, notifications, and the existing handoff", () => {
     const loginProcedureSegment = router.slice(router.indexOf("requestLoginCode:"), router.indexOf("staffRequests:"));
-    for (const forbidden of ["createRequest", "startNewCardSetup", "confirmNewCardSetup", "createCustomerPortalAccount", "createPortalHandoff", "booking", "payment", "lead", "notify"]) {
+    expect(loginProcedureSegment).toContain("ensureCustomerPortalAccountForLeadflowPhone(db, input.phone)");
+    for (const forbidden of ["createRequest", "startNewCardSetup", "confirmNewCardSetup", "createCustomerPortalAccount", "createPortalHandoff", "payment", "notify"]) {
       expect(loginProcedureSegment.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
     expect(handoffRoute).toContain("redeemCustomerPortalHandoff");

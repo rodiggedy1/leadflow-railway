@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { bookings, cleanerJobs, customerPortalAccounts, customerPortalServiceRequests, stripeCustomers } from "../drizzle/schema";
+import { bookings, cleanerJobs, customerPortalAccounts, customerPortalServiceRequests, leadflowJobs, stripeCustomers } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
 import { calculateCustomerPortalEstimate } from "../shared/customerPortalPricing";
-import { createCustomerPortalRequestNumber } from "./customerPortalService";
+import { createCustomerPortalRequestNumber, ensureCustomerPortalAccountForLeadflowPhone } from "./customerPortalService";
 import { getCustomerPortalSavedCard } from "./customerPortalPaymentService";
 import { getStripeClient } from "./stripeClient";
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
@@ -33,6 +33,7 @@ export const customerPortalRouter = router({
     if (!db) throw new Error("Customer portal is unavailable.");
     ctx.res.set("Cache-Control", "no-store");
     ctx.res.set("Referrer-Policy", "no-referrer");
+    await ensureCustomerPortalAccountForLeadflowPhone(db, input.phone);
     const result = await requestCustomerPortalLoginCode(db, {
       phone: input.phone,
     }, {
@@ -58,18 +59,34 @@ export const customerPortalRouter = router({
   }),
   me: publicProcedure.query(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);
-    if (!session) return { account: null, cleanings: [], requests: [] };
+    if (!session) return { account: null, cleanings: [], leadflowJobs: [], requests: [] };
     const db = await getDb();
     if (!db) throw new Error("Customer portal is unavailable.");
     const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
     const account = accounts[0];
-    if (!account || account.customerPhone !== session.customerPhone) return { account: null, cleanings: [], requests: [] };
-    const [cleanings, requests, savedCard] = await Promise.all([
+    if (!account || account.customerPhone !== session.customerPhone) return { account: null, cleanings: [], leadflowJobs: [], requests: [] };
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    const [cleanings, portalLeadflowJobs, requests, savedCard] = await Promise.all([
       db.select().from(bookings).where(eq(bookings.customerPhone, account.customerPhone)).orderBy(desc(bookings.createdAt)).limit(100),
+      phoneDigits ? db.select({
+        id: leadflowJobs.id,
+        jobDate: leadflowJobs.jobDate,
+        serviceDateTime: leadflowJobs.serviceDateTime,
+        serviceName: leadflowJobs.serviceName,
+        bedrooms: leadflowJobs.bedrooms,
+        bathrooms: leadflowJobs.bathrooms,
+        extras: leadflowJobs.extras,
+        frequency: leadflowJobs.frequency,
+        bookingStatus: leadflowJobs.bookingStatus,
+        teamName: leadflowJobs.teamName,
+        jobAddress: leadflowJobs.jobAddress,
+        jobTotalCents: leadflowJobs.jobTotalCents,
+        hasStripeCard: leadflowJobs.hasStripeCard,
+      }).from(leadflowJobs).where(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`).orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id)).limit(100) : Promise.resolve([]),
       db.select().from(customerPortalServiceRequests).where(eq(customerPortalServiceRequests.accountId, account.id)).orderBy(desc(customerPortalServiceRequests.createdAt)).limit(100),
       getCustomerPortalSavedCard(db, account.customerPhone),
     ]);
-    return { account: { name: account.customerName, phone: account.customerPhone, email: account.customerEmail }, cleanings, requests, savedCard: savedCard ? { brand: savedCard.brand, last4: savedCard.last4 } : null };
+    return { account: { name: account.customerName, phone: account.customerPhone, email: account.customerEmail }, cleanings, leadflowJobs: portalLeadflowJobs, requests, savedCard: savedCard ? { brand: savedCard.brand, last4: savedCard.last4 } : null };
   }),
   todayJobStatus: publicProcedure.query(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);
