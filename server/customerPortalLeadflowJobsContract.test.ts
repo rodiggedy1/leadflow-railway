@@ -36,9 +36,12 @@ describe("customer portal isolated LeadFlow jobs", () => {
 
   it("renders approved portal page data while retaining the SMS gate and truthful Messages state", async () => {
     const portal = await readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8");
-    expect(portal).toContain("portal.data.leadflowJobs.map(job");
+    expect(portal).toContain("orderedLeadflowJobs.map(job");
     expect(portal).toContain("const activeLeadflowJobs");
     expect(portal).toContain("const nextLeadflowJob");
+    expect(portal).toContain("const orderedLeadflowJobs");
+    expect(portal).toContain("right.jobDate.localeCompare(left.jobDate)");
+    expect(portal).toContain("orderedLeadflowJobs.map(job");
     expect(portal).toContain("portal.data.leadflowJobs.find(job => Boolean(job.jobAddress))");
     expect(portal).toContain("UPCOMING SERVICE");
     expect(portal).toContain("Secure SMS sign-in");

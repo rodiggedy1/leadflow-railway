@@ -1602,3 +1602,5 @@
 - [x] Payroll Summary: implement a preview-only accessible team-row detail drawer using existing teamPay.getTeamDetail data, with new-period and legacy layouts, reconciled totals, and independent CSV behavior
 - [x] Fix portal Home summary: select today and next visit from all active customer-owned booking sources using the Eastern business date
 - [x] Restore same-day View booking focus, customer-safe booking details, and signed-in customer note editing without changing all-bookings visibility
+- [x] Refine the same-day note editor layout and sort all My Bookings cards newest-date first
+- [x] Release the portal note-editor and reverse-date booking-order refinement to production
