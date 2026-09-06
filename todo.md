@@ -1633,3 +1633,4 @@
 - [x] Restore the established customer signature capture flow using isolated LeadFlow job ownership
 - [x] Show the completed customer sign-off state after photos in every Booking detail panel
 - [x] Restore the separate completion-confirmation workflow after isolated customer sign-off
+- [x] Add the missing Drizzle boolean import required by isolated sign-off schema initialization
