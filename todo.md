@@ -1634,3 +1634,6 @@
 - [x] Show the completed customer sign-off state after photos in every Booking detail panel
 - [x] Restore the separate completion-confirmation workflow after isolated customer sign-off
 - [x] Add the missing Drizzle boolean import required by isolated sign-off schema initialization
+- [x] Reuse the current system cleaner earnings calculation in the isolated portal without payment or payroll writes
+- [x] Display verified current and previous pay-week date ranges in the Cleaner Portal earnings view
+- [x] Validate the exact production server startup import path before releasing isolated Cleaner Portal earnings

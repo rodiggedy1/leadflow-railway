@@ -1,8 +1,10 @@
 import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerProfiles, leadflowJobs, schedulingTeams, teamWorkSchedule } from "../drizzle/schema";
+import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs, schedulingTeams, teamWorkSchedule } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { calculateEffectivePayroll } from "./payrollCalculator";
+import { getPayWeekStart } from "./teamPayRouter";
 
 const ACTIVE_LEADFLOW_FILTER = and(ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"));
 
@@ -35,6 +37,36 @@ function extrasForPortal(value: string | null) {
   }
 }
 
+function formatIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+/** Cleaner profiles store 0.45 as 45%; the established calculator receives 45. */
+export function payrollPercentFromCleanerProfile(value: string | null) {
+  const parsed = Number.parseFloat(value ?? "0");
+  if (!Number.isFinite(parsed)) return 0;
+  return parsed > 0 && parsed <= 1 ? parsed * 100 : parsed;
+}
+
+/** Uses Team Pay's established ET Sunday-to-Saturday pay-week boundary. */
+export function cleanerPortalPayWeeks(now = new Date()) {
+  const currentStartDate = getPayWeekStart(now);
+  const currentStart = formatIsoDate(currentStartDate);
+  const currentEnd = formatIsoDate(addDays(currentStartDate, 6));
+  const previousStart = formatIsoDate(addDays(currentStartDate, -7));
+  const previousEnd = formatIsoDate(addDays(currentStartDate, -1));
+  return { currentStart, currentEnd, previousStart, previousEnd };
+}
+
 async function cleanerTeam(cleanerId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -45,8 +77,11 @@ async function cleanerTeam(cleanerId: number) {
 }
 
 function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | null, jobIndex = 1, totalJobsToday = 0) {
-  const parsedPercent = Number.parseFloat(payPercent ?? "0");
-  const basePay = Number.isFinite(parsedPercent) ? (job.jobTotalCents * parsedPercent) / 100 : 0;
+  const payroll = calculateEffectivePayroll({
+    jobDate: job.jobDate,
+    jobRevenue: job.jobTotalCents / 100,
+    payPercent: payrollPercentFromCleanerProfile(payPercent),
+  });
   return {
     portalJobKey: `leadflow:${job.id}`,
     customerName: job.customerName,
@@ -62,7 +97,7 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
     jobStatus: "assigned",
     jobIndex,
     totalJobsToday,
-    basePay,
+    basePay: payroll.finalPay,
     customerNotes: job.customerNotes ?? null,
     staffNotes: null,
   };
@@ -89,6 +124,52 @@ export const cleanerPortalReadOnlyRouter = router({
   myJobsRange: cleanerProcedure.input(z.object({ from: z.string(), to: z.string() })).query(async ({ ctx, input }) => {
     const { cleaner, jobs } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, input.from, input.to);
     return jobs.map((job) => ({ id: `leadflow:${job.id}`, customerName: job.customerName, jobDate: job.jobDate, bookingStatus: job.bookingStatus, finalPay: portalJob(job, cleaner.payPercent).basePay, basePay: portalJob(job, cleaner.payPercent).basePay }));
+  }),
+  getMyEarnings: cleanerProcedure.query(async ({ ctx }) => {
+    const { db, cleaner, teamId } = await cleanerTeam(ctx.cleaner.cleanerId);
+    const payWeeks = cleanerPortalPayWeeks();
+    const rows = await db
+      .select({ job: leadflowJobs, progress: cleanerPortalJobProgress })
+      .from(leadflowJobs)
+      .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
+      .where(and(
+        eq(leadflowJobs.teamId, teamId),
+        gte(leadflowJobs.jobDate, payWeeks.previousStart),
+        lte(leadflowJobs.jobDate, payWeeks.currentEnd),
+        ACTIVE_LEADFLOW_FILTER,
+      ))
+      .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
+
+    const projectJob = ({ job, progress }: (typeof rows)[number]) => {
+      const payroll = calculateEffectivePayroll({
+        jobDate: job.jobDate,
+        jobRevenue: job.jobTotalCents / 100,
+        payPercent: payrollPercentFromCleanerProfile(cleaner.payPercent),
+      });
+      return {
+        id: `leadflow:${job.id}`,
+        customerName: job.customerName,
+        jobDate: job.jobDate,
+        status: progress?.jobStatus ?? "assigned",
+        finalPay: payroll.finalPay,
+      };
+    };
+
+    const summarize = (start: string, end: string) => {
+      const jobs = rows.filter(({ job }) => job.jobDate >= start && job.jobDate <= end).map(projectJob);
+      return {
+        start,
+        end,
+        totalPay: Math.round(jobs.reduce((total, job) => total + job.finalPay, 0) * 100) / 100,
+        completedJobs: jobs.filter(job => job.status === "completed").length,
+        jobs,
+      };
+    };
+
+    return {
+      current: summarize(payWeeks.currentStart, payWeeks.currentEnd),
+      previous: summarize(payWeeks.previousStart, payWeeks.previousEnd),
+    };
   }),
   getMyTeamSchedule: cleanerProcedure.query(async ({ ctx }) => {
     const { db, teamId } = await cleanerTeam(ctx.cleaner.cleanerId);

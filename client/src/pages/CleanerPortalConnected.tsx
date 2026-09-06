@@ -43,6 +43,22 @@ type WeekJob = {
   basePay: number | null;
 };
 
+type EarningsJob = {
+  id: string;
+  customerName: string;
+  jobDate: string;
+  status: string;
+  finalPay: number;
+};
+
+type PayWeekSummary = {
+  start: string;
+  end: string;
+  totalPay: number;
+  completedJobs: number;
+  jobs: EarningsJob[];
+};
+
 type NavPage = "today" | "jobs" | "schedule" | "earnings" | "contact" | "profile";
 type EtaChoice = 10 | 20 | 30 | 45 | 60 | 75 | 90 | 120;
 
@@ -58,11 +74,9 @@ function etDate(offsetDays = 0) {
   return `${year}-${month}-${day}`;
 }
 
-function mondayEtDate() {
-  const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const mondayOffset = (etNow.getDay() + 6) % 7;
-  etNow.setDate(etNow.getDate() - mondayOffset);
-  return `${etNow.getFullYear()}-${String(etNow.getMonth() + 1).padStart(2, "0")}-${String(etNow.getDate()).padStart(2, "0")}`;
+function formatPayWeekDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 }
 
 function ordinal(index: number) {
@@ -324,13 +338,12 @@ function CleanerPortalConnected() {
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const todayDate = useMemo(() => etDate(), []);
-  const weekStart = useMemo(() => mondayEtDate(), []);
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: 1, throwOnError: false });
   const todayQuery = trpc.cleanerPortalReadOnly.getMyJobsToday.useQuery(undefined, { enabled: !!meQuery.data, retry: 1, throwOnError: false });
   const weekQuery = trpc.cleanerPortalReadOnly.getMyJobsWeek.useQuery(undefined, { enabled: !!meQuery.data && page === "jobs", staleTime: 60_000, throwOnError: false });
   const portalDataQuery = trpc.cleaner.portalData.useQuery(undefined, { enabled: !!meQuery.data, staleTime: 300_000, throwOnError: false });
   const teamScheduleQuery = trpc.cleanerPortalReadOnly.getMyTeamSchedule.useQuery(undefined, { enabled: !!meQuery.data && page === "schedule", staleTime: 300_000, throwOnError: false });
-  const payQuery = trpc.cleanerPortalReadOnly.myJobsRange.useQuery({ from: weekStart, to: todayDate }, { enabled: !!meQuery.data && page === "earnings", staleTime: 60_000, throwOnError: false });
+  const earningsQuery = trpc.cleanerPortalReadOnly.getMyEarnings.useQuery(undefined, { enabled: !!meQuery.data && page === "earnings", staleTime: 60_000, throwOnError: false });
   const logoutMutation = trpc.cleaner.logout.useMutation({ throwOnError: false, onSuccess: () => window.location.replace("/cleaner") });
   const languageMutation = trpc.cleaner.updateLanguage.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
 
@@ -338,10 +351,9 @@ function CleanerPortalConnected() {
   const activeJobs = jobs.filter(job => !jobIsComplete(job));
   const nextJob = activeJobs[0] ?? jobs[0] ?? null;
   const weekJobs = (weekQuery.data ?? []) as WeekJob[];
-  const payJobs = (payQuery.data ?? []) as Array<{ id: number; customerName?: string | null; jobDate?: string | null; finalPay?: string | null; basePay?: string | null; bookingStatus?: string | null }>;
-  const paidJobs = payJobs.filter(job => job.bookingStatus === "completed");
-  const completedPay = paidJobs.reduce((sum, job) => sum + Number(job.finalPay ?? job.basePay ?? 0), 0);
-  const pendingPay = jobs.filter(job => !jobIsComplete(job)).reduce((sum, job) => sum + (job.basePay ?? 0), 0);
+  const currentPayWeek = earningsQuery.data?.current as PayWeekSummary | undefined;
+  const previousPayWeek = earningsQuery.data?.previous as PayWeekSummary | undefined;
+  const completedPayJobs = [...(currentPayWeek?.jobs ?? []), ...(previousPayWeek?.jobs ?? [])].filter(job => job.status === "completed").sort((left, right) => right.jobDate.localeCompare(left.jobDate));
   const initial = meQuery.data?.name?.trim().slice(0, 1).toUpperCase() || "C";
   const firstName = meQuery.data?.name?.split(" ")[0] || "there";
   const callClient = () => toast.info("Client calling will be enabled after portal visibility is confirmed.");
@@ -367,7 +379,20 @@ function CleanerPortalConnected() {
         </section>}
         {page === "jobs" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">My work</span><h1>My jobs</h1><p>Your current workweek, using your existing assigned job list.</p></div></div><div className="cp-panel cp-job-list">{weekQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading assigned jobs…</div> : weekQuery.isError ? <div className="cp-empty">Your assigned jobs could not be loaded.</div> : weekJobs.length === 0 ? <div className="cp-empty">No upcoming jobs this week.</div> : weekJobs.map(job => <div className="cp-week-job" key={job.portalJobKey}><div className="cp-week-job__date"><b>{job.dateLabel === "today" ? "Today" : job.jobDate}</b><small>{job.time}</small></div><div><StatusPill job={job} /><h3>{job.customerName} · {serviceLabel(job)}</h3><p><MapPin size={14} />{job.address || "Address pending"}</p></div>{job.dateLabel === "today" && <button className="cp-btn cp-btn--primary cp-btn--small" onClick={() => { const todayJob = jobs.find(item => item.portalJobKey === job.portalJobKey); if (todayJob) setSelectedJob(todayJob); }}>Open</button>}</div>)}</div></section>}
         {page === "schedule" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Schedule</span><h1>Your availability</h1><p>Set the workdays that dispatch should use for your team schedule.</p></div><button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Set availability</button></div><div className="cp-panel cp-schedule-card"><CalendarDays size={25} /><h2>{teamScheduleQuery.data?.teamName ? `${teamScheduleQuery.data.teamName} schedule` : "Weekly availability"}</h2><p>Your existing weekly schedule and next-day availability check-in stay in one place.</p>{teamScheduleQuery.data?.schedule && <div className="cp-schedule-days">{WEEK_DAYS.map(day => <span key={day} className={teamScheduleQuery.data?.schedule?.[day.toLowerCase() as "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun"] === 1 ? "is-working" : ""}>{day}</span>)}</div>}<button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Update availability</button></div></section>}
-        {page === "earnings" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Earnings</span><h1>Your earnings</h1><p>Amounts shown here come from the existing job and payroll records.</p></div></div><div className="cp-money-grid"><article><span>Completed this week</span><strong>{formatMoney(completedPay)}</strong><small>{paidJobs.length} completed job{paidJobs.length === 1 ? "" : "s"}</small></article><article><span>Scheduled today</span><strong>{formatMoney(pendingPay)}</strong><small>{activeJobs.length} active job{activeJobs.length === 1 ? "" : "s"}</small></article><article><span>Current streak</span><strong>{portalDataQuery.data?.streakInfo.currentStreak ?? 0}</strong><small>Completed-job streak</small></article></div><div className="cp-panel"><h2>Recent work</h2>{payQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading earnings…</div> : paidJobs.length === 0 ? <div className="cp-empty">No completed jobs in this week’s current range.</div> : paidJobs.slice().reverse().map(job => <div className="cp-earn-row" key={job.id}><div><b>{job.customerName || "Customer"}</b><span>{job.jobDate}</span></div><strong>{formatMoney(job.finalPay ?? job.basePay)}</strong></div>)}</div></section>}
+        {page === "earnings" && <section>
+          <div className="cp-page-head"><div><span className="cp-eyebrow">Earnings</span><h1>Your earnings</h1><p>Calculated with the current Team Pay formula. Pay weeks run Sunday through Saturday.</p></div></div>
+          {earningsQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading earnings…</div> : earningsQuery.isError ? <div className="cp-empty">Your earnings could not be loaded. Please try again.</div> : <>
+            <div className="cp-money-grid">
+              <article><span>Current pay week</span><strong>{formatMoney(currentPayWeek?.totalPay)}</strong><small>{currentPayWeek ? `${formatPayWeekDate(currentPayWeek.start)} – ${formatPayWeekDate(currentPayWeek.end)}` : ""}</small></article>
+              <article><span>Previous pay week</span><strong>{formatMoney(previousPayWeek?.totalPay)}</strong><small>{previousPayWeek ? `${formatPayWeekDate(previousPayWeek.start)} – ${formatPayWeekDate(previousPayWeek.end)}` : ""}</small></article>
+              <article><span>Current streak</span><strong>{portalDataQuery.data?.streakInfo.currentStreak ?? 0}</strong><small>Completed-job streak</small></article>
+            </div>
+            <div className="cp-panel">
+              <div className="cp-panel-title"><div><span className="cp-eyebrow">Completed work</span><h2>Completed jobs</h2></div>{currentPayWeek && <span className="cp-muted">{formatPayWeekDate(currentPayWeek.start)} – {formatPayWeekDate(currentPayWeek.end)}</span>}</div>
+              {completedPayJobs.length === 0 ? <div className="cp-empty">No completed jobs in the current or previous pay week.</div> : completedPayJobs.map(job => <div className="cp-earn-row" key={job.id}><div><b>{job.customerName || "Customer"}</b><span>{job.jobDate}</span></div><strong>{formatMoney(job.finalPay)}</strong></div>)}
+            </div>
+          </>}
+        </section>}
         {page === "contact" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Contact</span><h1>Client contact</h1><p>For a current job, use the existing masked Call client flow.</p></div></div><div className="cp-panel cp-contact-panel"><Phone size={26} /><h2>Call a current client</h2><p>Open a job to call its client through the existing protected phone proxy. There is no separate cleaner message inbox to duplicate here.</p>{nextJob && <button className="cp-btn cp-btn--primary" onClick={() => callClient(nextJob)}>Call {nextJob.customerName}</button>}</div></section>}
         {page === "profile" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Profile</span><h1>Cleaner profile</h1><p>Your authenticated portal account.</p></div></div><div className="cp-profile-grid"><section className="cp-panel"><h2>Contact</h2><dl><div><dt>Name</dt><dd>{meQuery.data.name}</dd></div><div><dt>Phone</dt><dd>{meQuery.data.phone || "Not available"}</dd></div></dl></section><section className="cp-panel"><h2>Portal language</h2><p className="cp-muted">Use your saved language preference.</p><div className="cp-language-buttons">{(["en", "es", "pt"] as const).map(language => <button key={language} className={meQuery.data?.language === language ? "is-selected" : ""} onClick={() => languageMutation.mutate({ language })}>{language === "en" ? "English" : language === "es" ? "Español" : "Português"}</button>)}</div></section><section className="cp-panel"><h2>Session</h2><button className="cp-btn cp-btn--subtle" onClick={() => logoutMutation.mutate()} disabled={logoutMutation.isPending}><LogOut size={16} />Log out</button></section></div></section>}
       </main>

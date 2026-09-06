@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { cleanerPortalPayWeeks, payrollPercentFromCleanerProfile } from "./cleanerPortalReadOnlyRouter";
+import { calculateEffectivePayroll } from "./payrollCalculator";
 
 const root = path.resolve(import.meta.dirname, "..");
 const page = fs.readFileSync(path.join(root, "client/src/pages/CleanerPortalConnected.tsx"), "utf8");
@@ -14,7 +16,7 @@ const managedPostconditions = JSON.parse(fs.readFileSync(path.join(root, "server
 
 describe("isolated ETA Cleaner Portal contract", () => {
   it("keeps every working job list read on the frozen read-only source", () => {
-    for (const procedure of ["getMyJobsToday", "getMyJobsWeek", "getMyTeamSchedule", "myJobsRange"]) {
+    for (const procedure of ["getMyJobsToday", "getMyJobsWeek", "getMyTeamSchedule", "getMyEarnings"]) {
       expect(page).toContain(`trpc.cleanerPortalReadOnly.${procedure}`);
     }
     for (const legacyProcedure of ["getMyJobsToday", "getMyJobsWeek", "getMyTeamSchedule", "myJobsRange", "getChecklistForLanguage", "getNotesForLanguage", "getProxyNumber", "toggleChecklistItem", "updateJobStatus", "uploadPhoto", "saveSignature", "saveNotHome", "markComplete", "submitWeeklySchedule"]) {
@@ -23,13 +25,40 @@ describe("isolated ETA Cleaner Portal contract", () => {
   });
 
   it("freezes the verified imported-job list without a progress-table dependency", () => {
-    expect(listRouter).toContain("eq(leadflowJobs.teamId, teamId)");
-    expect(listRouter).toContain("ACTIVE_LEADFLOW_FILTER");
+    const ownedJobListHelper = listRouter.slice(listRouter.indexOf("async function listOwnedImportedJobs"), listRouter.indexOf("export const cleanerPortalReadOnlyRouter"));
+    const frozenJobListProcedures = listRouter.slice(listRouter.indexOf("getMyJobsToday:"), listRouter.indexOf("getMyEarnings:"));
+    expect(ownedJobListHelper).toContain("eq(leadflowJobs.teamId, teamId)");
+    expect(ownedJobListHelper).toContain("ACTIVE_LEADFLOW_FILTER");
     expect(listRouter).toContain("ne(leadflowJobs.bookingStatus, \"cancelled\")");
     expect(listRouter).toContain("ne(leadflowJobs.bookingStatus, \"rescheduled\")");
+    expect(frozenJobListProcedures).toContain("listOwnedImportedJobs");
     for (const forbidden of ["cleanerJobs", "cleaner_jobs", "bookingAssignments", "cleanerPortalJobProgress", "storagePut", "sendSms"]) {
-      expect(listRouter).not.toContain(forbidden);
+      expect(ownedJobListHelper).not.toContain(forbidden);
+      expect(frozenJobListProcedures).not.toContain(forbidden);
     }
+  });
+
+  it("uses the established effective-payroll calculator and actual ET Sunday-to-Saturday pay weeks for isolated earnings", () => {
+    expect(listRouter).toContain("calculateEffectivePayroll");
+    expect(listRouter).toContain("getPayWeekStart");
+    expect(listRouter).toContain("getMyEarnings");
+    expect(listRouter).not.toContain("cleanerJobs");
+    expect(listRouter).not.toContain("cleaner_jobs");
+    expect(page).toContain("trpc.cleanerPortalReadOnly.getMyEarnings.useQuery");
+    expect(page).toContain("Current pay week");
+    expect(page).toContain("Previous pay week");
+    expect(page).toContain("formatPayWeekDate(currentPayWeek.start)");
+    expect(page).toContain("formatPayWeekDate(previousPayWeek.start)");
+
+    expect(cleanerPortalPayWeeks(new Date("2026-09-06T16:00:00.000Z"))).toEqual({
+      currentStart: "2026-09-06",
+      currentEnd: "2026-09-12",
+      previousStart: "2026-08-30",
+      previousEnd: "2026-09-05",
+    });
+    expect(payrollPercentFromCleanerProfile("0.6")).toBe(60);
+    expect(payrollPercentFromCleanerProfile("55")).toBe(55);
+    expect(calculateEffectivePayroll({ jobDate: "2026-09-06", jobRevenue: 100, payPercent: payrollPercentFromCleanerProfile("0.6") }).finalPay).toBe(52.2);
   });
 
   it("makes a data-load failure visible rather than rendering it as an empty job list", () => {
