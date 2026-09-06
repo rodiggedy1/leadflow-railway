@@ -37,6 +37,7 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
       eq(leadflowJobs.teamId, cleaner.teamId),
       ne(leadflowJobs.bookingStatus, "cancelled"),
       ne(leadflowJobs.bookingStatus, "rescheduled"),
+      ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
     ))
     .limit(1);
   const job = jobRows[0];

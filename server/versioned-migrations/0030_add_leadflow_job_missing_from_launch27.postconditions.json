@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "table": "leadflow_jobs",
+  "columns": [
+    { "name": "missingFromLaunch27At", "columnType": "datetime(3)", "nullable": true }
+  ],
+  "indexes": []
+}

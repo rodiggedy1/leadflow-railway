@@ -215,6 +215,14 @@
       "sha256": "6ce834caeea329d4c3de0c197a9cfbe58b05065f0d5dec806a033f50fef90503",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0029_create_cleaner_portal_job_signoffs.postconditions.json"
+    },
+    {
+      "id": "0030_add_leadflow_job_missing_from_launch27",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0030_add_leadflow_job_missing_from_launch27.sql",
+      "sha256": "d457f42d2b371cd28903a194aeb590191100c151c58423e97e3dd4842b5efcc9",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0030_add_leadflow_job_missing_from_launch27.postconditions.json"
     }
   ]
 }

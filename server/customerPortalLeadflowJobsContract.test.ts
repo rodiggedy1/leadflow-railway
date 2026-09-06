@@ -58,8 +58,9 @@ describe("customer portal isolated LeadFlow jobs", () => {
     expect(updateNote).toContain("getCustomerPortalSessionFromRequest(ctx.req)");
     expect(updateNote).toContain("account.customerPhone !== session.customerPhone");
     expect(updateNote).toContain("RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}");
+    expect(updateNote).toContain('ne(leadflowJobs.bookingStatus, "missing_from_launch27")');
     expect(updateNote).toContain("db.update(leadflowJobs).set({ customerNotes: input.note || null })");
-    expect(updateNote).not.toMatch(/cleanerJobs|launch27|sendSms|stripe|payment|db\.(insert|delete)/i);
+    expect(updateNote).not.toMatch(/cleanerJobs|launch27BookingId|importLaunch27JobsForDate|sendSms|stripe|payment|db\.(insert|delete)/i);
     expect(portal).toContain("setFocusedBookingId(todayBooking.focusTargetId)");
     expect(portal).toContain("portal-cleaning-${cleaning.id}");
     expect(portal).toContain("portal-leadflow-job-${job.id}");

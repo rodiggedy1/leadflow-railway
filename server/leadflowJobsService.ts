@@ -15,6 +15,7 @@ export type LeadflowJobImportDay = {
   created: number;
   updated: number;
   alreadyPresent: number;
+  sourceMissing: number;
   error: string | null;
 };
 
@@ -52,6 +53,16 @@ export function getConsecutiveBusinessDates(startDate: string, days = LEADFLOW_J
 export function isActiveLaunch27Booking(booking: Launch27Booking): boolean {
   const status = booking.bookingStatus.trim().toLowerCase();
   return booking.completed !== true && status !== "completed" && status !== "cancelled" && status !== "rescheduled";
+}
+
+export function shouldMarkImportedLaunch27JobMissing(
+  job: Pick<LeadflowJob, "launch27BookingId" | "bookingStatus">,
+  returnedBookingIds: ReadonlySet<number>,
+): boolean {
+  const status = job.bookingStatus.trim().toLowerCase();
+  return job.launch27BookingId !== null
+    && !returnedBookingIds.has(job.launch27BookingId)
+    && !["cancelled", "canceled", "rescheduled", "missing_from_launch27"].includes(status);
 }
 
 export function getRecurringInterval(value: string | null): "weekly" | "biweekly" | "triweekly" | "monthly" | null {
@@ -116,26 +127,30 @@ export function launch27BookingToLeadflowJob(booking: Launch27Booking, jobDate: 
     hasStripeCard: booking.hasStripeCard ? 1 : 0,
     paymentBrand: booking.paymentBrand || null,
     paymentLast4: booking.paymentLast4 || null,
+    missingFromLaunch27At: null,
   };
 }
 
 /**
  * Imports one selected business date into the isolated table only.
- * It deliberately has no stale-row cleanup or delete behavior.
+ * A manual-date caller can preserve, rather than delete, imported rows that are
+ * absent from a successful full Launch27 response.
  */
-export async function importLaunch27JobsForDate(date: string): Promise<LeadflowJobImportDay> {
+export async function importLaunch27JobsForDate(date: string, options: { markMissing?: boolean } = {}): Promise<LeadflowJobImportDay> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const response = await getCompletedBookingsForDate(date, { includeAll: true });
   if (response.error) {
-    return { date, fetched: 0, active: 0, created: 0, updated: 0, alreadyPresent: 0, error: response.error };
+    return { date, fetched: 0, active: 0, created: 0, updated: 0, alreadyPresent: 0, sourceMissing: 0, error: response.error };
   }
 
   const activeBookings = response.bookings.filter(isActiveLaunch27Booking);
+  const returnedBookingIds = new Set(response.bookings.map((booking) => booking.id));
   const seenBookingIds = new Set<number>();
   let created = 0;
   let updated = 0;
   let alreadyPresent = 0;
+  let sourceMissing = 0;
 
   for (const booking of activeBookings) {
     if (seenBookingIds.has(booking.id)) continue;
@@ -143,7 +158,7 @@ export async function importLaunch27JobsForDate(date: string): Promise<LeadflowJ
     const existing = await db.select({ id: leadflowJobs.id, bookingStatus: leadflowJobs.bookingStatus }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
     const values = launch27BookingToLeadflowJob(booking, date);
     if (existing.length > 0) {
-      if (existing[0].bookingStatus.toLowerCase() === "cancelled") {
+      if (["cancelled", "canceled", "rescheduled"].includes(existing[0].bookingStatus.trim().toLowerCase())) {
         alreadyPresent++;
         continue;
       }
@@ -159,13 +174,24 @@ export async function importLaunch27JobsForDate(date: string): Promise<LeadflowJ
       alreadyPresent++;
     }
   }
-  return { date, fetched: response.fetched, active: seenBookingIds.size, created, updated, alreadyPresent, error: null };
+
+  if (options.markMissing) {
+    const importedForDate = await db.select({ id: leadflowJobs.id, launch27BookingId: leadflowJobs.launch27BookingId, bookingStatus: leadflowJobs.bookingStatus })
+      .from(leadflowJobs)
+      .where(and(eq(leadflowJobs.origin, LEADFLOW_JOB_ORIGIN_LAUNCH27), eq(leadflowJobs.jobDate, date)));
+    for (const job of importedForDate) {
+      if (!shouldMarkImportedLaunch27JobMissing(job, returnedBookingIds)) continue;
+      await db.update(leadflowJobs).set({ bookingStatus: "missing_from_launch27", missingFromLaunch27At: new Date() }).where(eq(leadflowJobs.id, job.id));
+      sourceMissing++;
+    }
+  }
+  return { date, fetched: response.fetched, active: seenBookingIds.size, created, updated, alreadyPresent, sourceMissing, error: null };
 }
 
 export async function importNextThirtyDaysOfLaunch27Jobs(now = new Date()): Promise<{
   startDate: string;
   days: LeadflowJobImportDay[];
-  totals: { fetched: number; active: number; created: number; updated: number; alreadyPresent: number; errors: number };
+  totals: { fetched: number; active: number; created: number; updated: number; alreadyPresent: number; sourceMissing: number; errors: number };
 }> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -184,7 +210,7 @@ export async function importNextThirtyDaysOfLaunch27Jobs(now = new Date()): Prom
   const days: LeadflowJobImportDay[] = [];
 
   for (const date of dates) {
-    days.push(await importLaunch27JobsForDate(date));
+    days.push(await importLaunch27JobsForDate(date, { markMissing: false }));
   }
 
   return {
@@ -196,6 +222,7 @@ export async function importNextThirtyDaysOfLaunch27Jobs(now = new Date()): Prom
       created: days.reduce((total, day) => total + day.created, 0),
       updated: days.reduce((total, day) => total + day.updated, 0),
       alreadyPresent: days.reduce((total, day) => total + day.alreadyPresent, 0),
+      sourceMissing: days.reduce((total, day) => total + day.sourceMissing, 0),
       errors: days.filter((day) => day.error !== null).length,
     },
   };

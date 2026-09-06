@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { bookings, cleanerJobs, cleanerPortalJobProgress, customerPortalAccounts, customerPortalServiceRequests, leadflowJobs, stripeCustomers } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
@@ -92,7 +92,7 @@ export const customerPortalRouter = router({
         customerNotes: leadflowJobs.customerNotes,
         jobTotalCents: leadflowJobs.jobTotalCents,
         hasStripeCard: leadflowJobs.hasStripeCard,
-      }).from(leadflowJobs).where(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`).orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id)).limit(100) : Promise.resolve([]),
+      }).from(leadflowJobs).where(and(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`, ne(leadflowJobs.bookingStatus, "missing_from_launch27"))).orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id)).limit(100) : Promise.resolve([]),
       db.select().from(customerPortalServiceRequests).where(eq(customerPortalServiceRequests.accountId, account.id)).orderBy(desc(customerPortalServiceRequests.createdAt)).limit(100),
       getCustomerPortalSavedCard(db, account.customerPhone),
     ]);
@@ -139,6 +139,7 @@ export const customerPortalRouter = router({
     const jobRows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(and(
       eq(leadflowJobs.id, input.leadflowJobId),
       eq(leadflowJobs.jobDate, getCustomerPortalBusinessDate()),
+      ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
       sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
     )).limit(1);
     const job = jobRows[0];
@@ -166,6 +167,7 @@ export const customerPortalRouter = router({
     if (!phoneDigits) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
     const rows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(and(
       eq(leadflowJobs.id, input.id),
+      ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
       sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
     )).limit(1);
     if (!rows[0]) throw new Error("BOOKING_NOT_FOUND");

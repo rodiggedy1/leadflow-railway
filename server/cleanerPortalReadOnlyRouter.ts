@@ -6,7 +6,7 @@ import { getDb } from "./db";
 import { calculateEffectivePayroll } from "./payrollCalculator";
 import { getPayWeekStart } from "./teamPayRouter";
 
-const ACTIVE_LEADFLOW_FILTER = and(ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"));
+const ACTIVE_LEADFLOW_FILTER = and(ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"), ne(leadflowJobs.bookingStatus, "missing_from_launch27"));
 
 function etDate(offsetDays = 0) {
   const raw = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + offsetDays * 86_400_000));

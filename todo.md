@@ -1642,3 +1642,9 @@
 - [ ] Verify each displayed Cleaner Portal pay-week amount against source revenue, stored cleaner rate, and the authoritative payroll calculator
 - [x] Restore the existing team-owned weekly availability read and save behavior in the Cleaner Portal
 - [x] Add a staff dropdown Team availability page that reads the existing team schedule and next-day availability records
+- [x] Replace Bookings-page Requests and Requested revenue with active Bookings and Revenue, excluding cancelled bookings from totals and team-assignment counts
+- [ ] Verify the September 7 active Booking, team-assignment, card, and revenue metrics against production source records before release
+- [x] Design a no-delete one-day sync rule for imported bookings no longer returned by Launch27, including staff-visible status and audit data
+- [x] Mark imported bookings absent after a successful manual date sync as no longer in Launch27, exclude them from active work, and show a red Booking-list treatment
+- [x] Perform a final release-blocking audit of the manual Launch27 source-missing implementation before any production push
+- [ ] Push the validated source-missing Launch27 safeguard to production

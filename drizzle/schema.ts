@@ -1252,6 +1252,8 @@ export const leadflowJobs = mysqlTable("leadflow_jobs", {
   hasStripeCard: tinyint("hasStripeCard").default(0).notNull(),
   paymentBrand: varchar("paymentBrand", { length: 50 }),
   paymentLast4: varchar("paymentLast4", { length: 4 }),
+  /** Set only after a successful manual day sync confirms this imported booking is absent from Launch27. */
+  missingFromLaunch27At: datetime("missingFromLaunch27At", { mode: "date", fsp: 3 }),
   /** Atomic end-of-day recurrence claim; null until this job has created or skipped its next occurrence. */
   nextOccurrenceCreatedAt: datetime("nextOccurrenceCreatedAt", { mode: "date", fsp: 3 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

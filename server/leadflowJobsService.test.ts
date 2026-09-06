@@ -4,6 +4,7 @@ import {
   isActiveLaunch27Booking,
   launch27BookingToLeadflowJob,
   nextRecurringBusinessDate,
+  shouldMarkImportedLaunch27JobMissing,
 } from "./leadflowJobsService";
 
 const booking = (overrides: Partial<Parameters<typeof isActiveLaunch27Booking>[0]> = {}) => ({
@@ -76,7 +77,18 @@ describe("isolated LeadFlow jobs import", () => {
       hasStripeCard: 1,
       paymentBrand: "Visa",
       paymentLast4: "4242",
+      missingFromLaunch27At: null,
     });
+  });
+
+  it("marks only an absent nonterminal imported Launch27 ID as source-missing", () => {
+    const returned = new Set([1002]);
+    expect(shouldMarkImportedLaunch27JobMissing({ launch27BookingId: 1001, bookingStatus: "assigned" }, returned)).toBe(true);
+    expect(shouldMarkImportedLaunch27JobMissing({ launch27BookingId: 1002, bookingStatus: "completed" }, returned)).toBe(false);
+    expect(shouldMarkImportedLaunch27JobMissing({ launch27BookingId: 1003, bookingStatus: "cancelled" }, returned)).toBe(false);
+    expect(shouldMarkImportedLaunch27JobMissing({ launch27BookingId: 1004, bookingStatus: "canceled" }, returned)).toBe(false);
+    expect(shouldMarkImportedLaunch27JobMissing({ launch27BookingId: 1005, bookingStatus: "rescheduled" }, returned)).toBe(false);
+    expect(shouldMarkImportedLaunch27JobMissing({ launch27BookingId: null, bookingStatus: "assigned" }, returned)).toBe(false);
   });
 
   it("uses the displayed recurring interval and never creates a next date for one-time work", () => {

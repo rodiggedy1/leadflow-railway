@@ -17,7 +17,7 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(service).toContain("runEndOfDayLeadflowJobRecurrence");
     expect(service).toContain("refreshImportedLaunch27JobDetails");
     expect(service).toContain("importLaunch27JobsForDate");
-    expect(service).toContain('existing[0].bookingStatus.toLowerCase() === "cancelled"');
+    expect(service).toContain('["cancelled", "canceled", "rescheduled"].includes(existing[0].bookingStatus.trim().toLowerCase())');
     expect(service).toContain("isSameLeadflowJobIdentity");
     expect(service).not.toContain("cleanerJobs");
     expect(service).not.toContain(".delete(");

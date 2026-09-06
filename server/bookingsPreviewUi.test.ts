@@ -29,7 +29,7 @@ describe("bookings UI preview contract", () => {
   });
 
   it("uses the standard LeadFlow navigation while preserving the workspace and detail panel around native data", () => {
-    for (const marker of ["Bookings", "Select booking date", "Booking metrics", "Native LeadFlow bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "REQUESTED REVENUE", "Search customer, address, or request number", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING PREFERENCE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
+    for (const marker of ["Bookings", "Select booking date", "Booking metrics", "LeadFlow bookings list", "BOOKINGS", "TEAMS ASSIGNED", "CARDS ON FILE", "REVENUE", "Search customer, address, or request number", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING PREFERENCE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
       expect(pageSource).toContain(marker);
     }
     expect(headerSource).toContain("Fast Leads");
@@ -46,6 +46,17 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain("useState");
   });
 
+  it("calculates Booking summary metrics only from active selected-date bookings so cancellation updates all totals together", () => {
+    expect(pageSource).toContain('const ACTIVE_BOOKING_SOURCES: WorkspaceRow["source"][] = ["booking", "funnel", "leadflow"]');
+    expect(pageSource).toContain('const isCancelledBookingStatus = (status: string) => ["cancelled", "canceled"].includes(status.trim().toLowerCase())');
+    expect(pageSource).toContain('const activeBookingRows = useMemo(() => rows.filter(isActiveBookingRow), [rows]);');
+    expect(pageSource).toContain('const metricRows = view === "bookings" ? activeBookingRows : rows;');
+    expect(pageSource).toContain('const revenueCents = metricRows.reduce');
+    expect(pageSource).toContain('const assigned = metricRows.filter');
+    expect(pageSource).toContain('const cards = metricRows.filter');
+    expect(pageSource).not.toContain('REQUESTED REVENUE');
+  });
+
   it("aligns the workspace and detail panel beneath the standard LeadFlow header responsively", () => {
     expect(pageStyles).toContain("grid-template-columns:minmax(720px,1fr) 410px");
     expect(pageStyles).toContain("top:var(--admin-header-height,0px)");
@@ -60,23 +71,22 @@ describe("bookings UI preview contract", () => {
     expect(pageStyles).toContain("grid-template-columns:repeat(4,1fr)");
   });
 
-  it("removes sample records and disables every unimplemented operational write", () => {
-    expect(pageSource).toContain("OPERATIONS · NATIVE REQUESTS");
-    expect(pageSource).toContain("New Book with AI requests appear here immediately for review.");
+  it("removes sample records, retains the manual-booking safeguard, and reflects the current Booking detail behavior", () => {
+    expect(pageSource).toContain("OPERATIONS · BOOKINGS");
+    expect(pageSource).toContain("Native requests and isolated Launch27 imports appear here for review.");
     expect(pageSource).toContain("Phone-captured booking leads appear here while customers finish the flow.");
     expect(pageSource).not.toContain("Demo Customer A");
     expect(pageSource).not.toContain("SEED_BOOKINGS");
     expect(pageSource).toContain('disabled title="Manual booking creation is not connected in this release"');
-    expect(pageSource).toContain("Assignment is not connected in this release");
-    expect(pageSource).toContain("Card collection is not connected in this release");
-    expect(pageSource).not.toContain("useMutation");
+    expect(pageSource).toContain("No team assigned");
+    expect(pageSource).toContain("const cancelActiveRecord");
     for (const prototypeIdentity of ["Rohan Gilkes", "Maya Thompson", "Derek Collins", "Nia Robinson", "Jordan Lee", "302) 981-6191"]) {
       expect(pageSource).not.toContain(prototypeIdentity);
     }
   });
 
-  it("reads native bookings and funnel leads but contains no booking/customer/payment/messaging writes", () => {
-    for (const prohibited of ["axios", "useMutation", "sendSms", "processPayment", "storagePut", "localStorage", "sessionStorage"]) {
+  it("uses approved tRPC mutations without direct client transport, storage, payment, or messaging writes", () => {
+    for (const prohibited of ["axios", "sendSms", "processPayment", "storagePut", "localStorage", "sessionStorage"]) {
       expect(pageSource).not.toContain(prohibited);
     }
     expect(pageSource).not.toMatch(/\bfetch\(/);
@@ -90,11 +100,11 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain("Reservation started / Payment incomplete");
     expect(pageSource).toContain("status: lead.stage");
     expect(pageSource).not.toContain('stage: "lead" as const');
-    expect(pageSource).toContain('if (view === "bookings") {');
-    expect(pageSource).toContain('[...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows]');
+    expect(pageSource).toContain('if (view === "bookings") return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows];');
+    expect(pageSource).toContain('const scheduledRows = [...funnelRows.filter((row) => row.status !== "lead" && !isCancelledBookingStatus(row.status)), ...bookingRows, ...importedRows]');
     expect(pageSource).toContain('.filter((row) => row.requestedLocalDate === date)');
-    expect(pageSource).toContain('[bookings, date, funnelLeads, view]');
-    expect(pageSource).toContain('return funnelRows.filter((row) => row.status === "lead")');
+    expect(pageSource).toContain('[bookings, date, funnelLeads, leadflowJobsQuery.data, portalRequests, status, view]');
+    expect(pageSource).toContain("return inProgressFunnelRows;");
     expect(pageSource).toContain("Details in progress");
     expect(pageSource).toContain("Email not entered yet");
     expect(pageSource).not.toContain("mutationToken");
@@ -135,14 +145,14 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain("detailDismissedRef.current = key === null");
     expect(pageSource).toContain("if (!rows.length) return setRawActiveKey(null)");
     expect(pageSource).toContain("if (!detailDismissedRef.current) setActiveKey(rows[0].key)");
-    expect(pageSource).toContain("onClick={() => setActiveKey(row.key)}");
+    expect(pageSource).toContain("<BookingListRow key={row.key} row={row} selected={activeKey === row.key} onSelect={() => setActiveKey(row.key)} />");
     expect(pageSource).toContain('onClick={() => setActiveKey(null)} aria-label="Close booking detail panel"');
     expect(pageSource).not.toContain("if (activeKey === null || !rows.some");
   });
 
   it("refreshes funnel list and open detail instantly after committed updates and once after reconnect", () => {
     expect(pageSource).toContain('import { useOpsStream } from "@/hooks/useOpsStream"');
-    expect(pageSource).toContain("onBookingFunnelUpdate: refreshFunnelQueries");
+    expect(pageSource).toContain("onBookingFunnelUpdate: refreshBookingAndFunnelQueries");
     expect(pageSource).toContain("void funnelListQuery.refetch()");
     expect(pageSource).toContain("if (selectedFunnelId !== null) void funnelDetailQuery.refetch()");
     expect(pageSource).toContain("const hasConnectedRef = useRef(false)");
