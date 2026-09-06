@@ -191,6 +191,14 @@
       "sha256": "56eee2982e0f0798768a2e5187d61f52276878819ff442a2b79cb8d4e15d9191",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0026_add_leadflow_job_controls.postconditions.json"
+    },
+    {
+      "id": "0027_create_cleaner_portal_job_progress",
+      "mode": "create-table",
+      "sqlFile": "0027_create_cleaner_portal_job_progress.sql",
+      "sha256": "e0c1241f6684fd0894b496875e9de672c72c764444cebfeb19aff0f93aa67df1",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0027_create_cleaner_portal_job_progress.postconditions.json"
     }
   ]
 }

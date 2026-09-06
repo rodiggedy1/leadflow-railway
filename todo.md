@@ -1617,3 +1617,4 @@
 - [x] Restore ETA, arrival, and start through a separate isolated progress path without modifying the working Cleaner Portal job list queries
 - [x] Overlay isolated ETA progress in the Customer Portal without replacing its existing same-day status query
 - [x] Validate that a progress-path failure cannot affect the Cleaner Portal job list or Customer Portal page
+- [x] Diagnose and repair the production ETA-unavailable state without altering the working Cleaner Portal job-list query
