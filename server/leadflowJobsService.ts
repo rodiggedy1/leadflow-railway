@@ -140,9 +140,13 @@ export async function importLaunch27JobsForDate(date: string): Promise<LeadflowJ
   for (const booking of activeBookings) {
     if (seenBookingIds.has(booking.id)) continue;
     seenBookingIds.add(booking.id);
-    const existing = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
+    const existing = await db.select({ id: leadflowJobs.id, bookingStatus: leadflowJobs.bookingStatus }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
     const values = launch27BookingToLeadflowJob(booking, date);
     if (existing.length > 0) {
+      if (existing[0].bookingStatus.toLowerCase() === "cancelled") {
+        alreadyPresent++;
+        continue;
+      }
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));
       updated++;
       continue;

@@ -44,6 +44,20 @@ export const leadflowJobsRouter = router({
 
   refreshImportedDetails: adminAgentProcedure.mutation(async () => refreshImportedLaunch27JobDetails()),
 
+  cancel: adminAgentProcedure.input(z.object({ jobId: z.number().int().positive() })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const existing = await db.select({ id: leadflowJobs.id, bookingStatus: leadflowJobs.bookingStatus }).from(leadflowJobs).where(eq(leadflowJobs.id, input.jobId)).limit(1);
+    const job = existing[0];
+    if (!job) throw new Error("LeadFlow job not found.");
+    if (job.bookingStatus.toLowerCase() === "cancelled") return { id: job.id, bookingStatus: "cancelled" };
+    await db.update(leadflowJobs).set({
+      bookingStatus: "cancelled",
+      nextOccurrenceCreatedAt: new Date(),
+    }).where(eq(leadflowJobs.id, job.id));
+    return { id: job.id, bookingStatus: "cancelled" };
+  }),
+
   update: adminAgentProcedure.input(updateInput).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");

@@ -17,6 +17,7 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(service).toContain("runEndOfDayLeadflowJobRecurrence");
     expect(service).toContain("refreshImportedLaunch27JobDetails");
     expect(service).toContain("importLaunch27JobsForDate");
+    expect(service).toContain('existing[0].bookingStatus.toLowerCase() === "cancelled"');
     expect(service).toContain("isSameLeadflowJobIdentity");
     expect(service).not.toContain("cleanerJobs");
     expect(service).not.toContain(".delete(");
@@ -24,6 +25,8 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(router).toContain("A matching LeadFlow job already exists on that date.");
     expect(router).toContain("importStatus");
     expect(router).toContain("syncDate");
+    expect(router).toContain("cancel:");
+    expect(router).toContain('bookingStatus: "cancelled"');
   });
 
   it("keeps the manual import fixed to 30 individual dates", () => {
@@ -70,5 +73,7 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(workspace).toContain("Refresh team & card details");
     expect(workspace).toContain("Initial import completed");
     expect(workspace).toContain("syncLeadflowJobsDate");
+    expect(workspace).toContain("cancelLeadflowJob");
+    expect(workspace).toContain("Cancel selected job");
   });
 });
