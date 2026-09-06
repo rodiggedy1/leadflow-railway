@@ -54,6 +54,7 @@ describe("isolated LeadFlow jobs contract", () => {
       postconditionsFile: "0026_add_leadflow_job_controls.postconditions.json",
     });
     expect(controlsSql).toMatch(/^ALTER TABLE `leadflow_jobs` ADD COLUMN IF NOT EXISTS/m);
+    expect(controlsSql.split(/^\s*-->\s*statement-breakpoint\s*$/m).filter(Boolean)).toHaveLength(4);
     expect(controlsSql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/i);
   });
 

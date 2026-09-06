@@ -188,7 +188,7 @@
       "id": "0026_add_leadflow_job_controls",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0026_add_leadflow_job_controls.sql",
-      "sha256": "ff5f6a844a55fb3303ba7e95d806b5aaaada3c22cf22e02fd3c51822310b6711",
+      "sha256": "56eee2982e0f0798768a2e5187d61f52276878819ff442a2b79cb8d4e15d9191",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0026_add_leadflow_job_controls.postconditions.json"
     }
