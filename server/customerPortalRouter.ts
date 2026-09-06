@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { bookings, cleanerJobs, customerPortalAccounts, customerPortalServiceRequests, leadflowJobs, stripeCustomers } from "../drizzle/schema";
+import { bookings, cleanerJobs, cleanerPortalJobProgress, customerPortalAccounts, customerPortalServiceRequests, leadflowJobs, stripeCustomers } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
@@ -125,6 +125,31 @@ export const customerPortalRouter = router({
       sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phoneDigits}`,
     )).orderBy(asc(cleanerJobs.serviceDateTime), desc(cleanerJobs.updatedAt)).limit(20);
     return { job: rows.find(isCustomerPortalLiveJob) ?? null };
+  }),
+  todayIsolatedProgress: publicProcedure.input(z.object({ leadflowJobId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+    const session = await getCustomerPortalSessionFromRequest(ctx.req);
+    if (!session) return { progress: null };
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
+    const account = accounts[0];
+    if (!account || account.customerPhone !== session.customerPhone) return { progress: null };
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    if (!phoneDigits) return { progress: null };
+    const jobRows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(and(
+      eq(leadflowJobs.id, input.leadflowJobId),
+      eq(leadflowJobs.jobDate, getCustomerPortalBusinessDate()),
+      sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
+    )).limit(1);
+    const job = jobRows[0];
+    if (!job) return { progress: null };
+    try {
+      const rows = await db.select({ jobStatus: cleanerPortalJobProgress.jobStatus, etaTimestamp: cleanerPortalJobProgress.etaTimestamp, etaTimeStr: cleanerPortalJobProgress.etaTimeStr }).from(cleanerPortalJobProgress).where(eq(cleanerPortalJobProgress.leadflowJobId, job.id)).limit(1);
+      return { progress: rows[0] ?? null };
+    } catch (error) {
+      console.error("[CustomerPortal] isolated same-day progress is unavailable", error);
+      return { progress: null };
+    }
   }),
   updateLeadflowJobCustomerNote: publicProcedure.input(z.object({
     id: z.number().int().positive(),

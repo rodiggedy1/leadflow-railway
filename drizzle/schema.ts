@@ -1266,6 +1266,29 @@ export type LeadflowJob = typeof leadflowJobs.$inferSelect;
 export type InsertLeadflowJob = typeof leadflowJobs.$inferInsert;
 
 /**
+ * Deliberate Cleaner Portal progress for LeadFlow-owned imported jobs. This
+ * stays isolated from the legacy cleaner_jobs storage and is never required
+ * for the portal job-list query to succeed.
+ */
+export const cleanerPortalJobProgress = mysqlTable("cleaner_portal_job_progress", {
+  id: int("id").autoincrement().primaryKey(),
+  leadflowJobId: int("leadflowJobId").notNull(),
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  teamId: int("teamId").notNull(),
+  jobStatus: varchar("jobStatus", { length: 32 }).notNull().default("assigned"),
+  etaTimestamp: bigint("etaTimestamp", { mode: "number" }),
+  etaTimeStr: varchar("etaTimeStr", { length: 32 }),
+  arrivedAt: datetime("arrivedAt", { mode: "date", fsp: 3 }),
+  startedAt: datetime("startedAt", { mode: "date", fsp: 3 }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_cleaner_portal_job_progress_job").on(t.leadflowJobId),
+  index("idx_cleaner_portal_job_progress_team").on(t.teamId),
+]);
+export type CleanerPortalJobProgress = typeof cleanerPortalJobProgress.$inferSelect;
+
+/**
  * jobPhotos — completion photos uploaded by cleaners for a specific job.
  */
 export const jobPhotos = mysqlTable("job_photos", {

@@ -168,21 +168,33 @@ function SignaturePad({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement | 
   return <canvas className="cp-signature" ref={canvasRef} width={1000} height={260} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drawing.current = false; lastPoint.current = null; }} onPointerLeave={() => { drawing.current = false; lastPoint.current = null; }} />;
 }
 
-function JobDrawer({ job, onClose }: { job: PortalJob; onClose: () => void }) {
-  return (
+function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () => void; onProgress: (progress: { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }) => void }) {
+  const [etaOpen, setEtaOpen] = useState(false);
+  const [arrivalConfirm, setArrivalConfirm] = useState(false);
+  const [selectedEta, setSelectedEta] = useState<EtaChoice>(30);
+  const progressQuery = trpc.cleanerPortalProgress.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
+  const setEtaMutation = trpc.cleanerPortalProgress.setEta.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setEtaOpen(false); result.customerNotified ? toast.success("ETA recorded and client notified.") : toast.warning(result.notificationError ? "ETA recorded, but the client message could not be sent." : "ETA recorded. No customer phone is on this booking."); }, onError: error => toast.error(error.message || "The ETA could not be recorded.") });
+  const arrivedMutation = trpc.cleanerPortalProgress.markArrived.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); setArrivalConfirm(false); result.customerNotified ? toast.success("Arrival recorded and client notified.") : toast.warning(result.notificationError ? "Arrival recorded, but the client message could not be sent." : "Arrival recorded. No customer phone is on this booking."); }, onError: error => toast.error(error.message || "Arrival could not be recorded.") });
+  const startMutation = trpc.cleanerPortalProgress.startJob.useMutation({ throwOnError: false, onSuccess: result => { onProgress(result); toast.success("Job started."); }, onError: error => toast.error(error.message || "The job could not be started.") });
+  const actionUnavailable = progressQuery.isLoading || progressQuery.isError;
+  const actionPending = setEtaMutation.isPending || arrivedMutation.isPending || startMutation.isPending;
+  const progress = progressQuery.data;
+  const displayedJob = progress ? { ...job, jobStatus: progress.jobStatus } : job;
+  return <>
     <div className="cp-drawer-backdrop" onClick={onClose}>
-      <aside className="cp-drawer" onClick={event => event.stopPropagation()} aria-label={`Details for ${job.customerName}`}>
-        <header className="cp-drawer__header"><div><span className="cp-eyebrow">{ordinal(job.jobIndex)} job · Today</span><h2>{job.customerName}</h2><p>{serviceLabel(job)} · {job.time}</p></div><button className="cp-icon-button" onClick={onClose} aria-label="Close job details"><X size={20} /></button></header>
-        <section className="cp-detail-block cp-detail-block--address"><MapPin size={20} /><div><span>Service address</span><strong>{job.address || "Address pending"}</strong></div></section>
+      <aside className="cp-drawer" onClick={event => event.stopPropagation()} aria-label={`Details for ${displayedJob.customerName}`}>
+        <header className="cp-drawer__header"><div><span className="cp-eyebrow">{ordinal(displayedJob.jobIndex)} job · Today</span><h2>{displayedJob.customerName}</h2><p>{serviceLabel(displayedJob)} · {displayedJob.time}</p></div><button className="cp-icon-button" onClick={onClose} aria-label="Close job details"><X size={20} /></button></header>
+        <section className="cp-detail-block cp-detail-block--address"><MapPin size={20} /><div><span>Service address</span><strong>{displayedJob.address || "Address pending"}</strong></div></section>
         <section className="cp-action-grid">
           <button className="cp-btn cp-btn--subtle" disabled><Phone size={16} />Call client</button>
-          <button className="cp-btn cp-btn--subtle" onClick={() => openDirections(job.address)}><Navigation size={16} />Directions</button>
-          <button className="cp-btn cp-btn--dark" disabled><Clock3 size={16} />Set ETA</button>
-          <button className="cp-btn cp-btn--arrived" disabled><CheckCircle2 size={16} />I’ve arrived</button>
-          <button className="cp-btn cp-btn--primary cp-action-grid__wide" disabled><CheckCircle2 size={16} />Start job</button>
+          <button className="cp-btn cp-btn--subtle" onClick={() => openDirections(displayedJob.address)}><Navigation size={16} />Directions</button>
+          <button className="cp-btn cp-btn--dark" disabled={actionUnavailable || actionPending} onClick={() => setEtaOpen(true)}><Clock3 size={16} />Set ETA</button>
+          <button className="cp-btn cp-btn--arrived" disabled={actionUnavailable || actionPending} onClick={() => setArrivalConfirm(true)}><CheckCircle2 size={16} />I’ve arrived</button>
+          <button className="cp-btn cp-btn--primary cp-action-grid__wide" disabled={actionUnavailable || actionPending} onClick={() => startMutation.mutate({ portalJobKey: displayedJob.portalJobKey })}><CheckCircle2 size={16} />Start job</button>
         </section>
-        <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags"><span>{job.bathrooms} bathroom{job.bathrooms === 1 ? "" : "s"}</span>{job.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
-        {job.customerNotes && <section className="cp-detail-block"><h3>Visit notes</h3><p><b>Customer:</b> {job.customerNotes}</p></section>}
+        {progressQuery.isError && <section className="cp-detail-block"><p className="cp-muted">ETA, arrival, and start are temporarily unavailable. Your job list is still available.</p></section>}
+        <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags"><span>{displayedJob.bathrooms} bathroom{displayedJob.bathrooms === 1 ? "" : "s"}</span>{displayedJob.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
+        {displayedJob.customerNotes && <section className="cp-detail-block"><h3>Visit notes</h3><p><b>Customer:</b> {displayedJob.customerNotes}</p></section>}
         <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Cleaning checklist</h3><p>Checklist actions will be enabled after portal visibility is confirmed.</p></div></div><p className="cp-muted">No checklist has been added to this job.</p></section>
         <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Photo actions will be enabled after portal visibility is confirmed.</p></div><button className="cp-btn cp-btn--subtle cp-btn--small" disabled><Camera size={15} />Add before photo</button></div>
           <div className="cp-photo-grid"><div className="cp-photo-tile" aria-disabled><ImagePlus size={20} /><span>Before</span></div><div className="cp-photo-tile cp-photo-tile--after" aria-disabled><ImagePlus size={20} /><span>After</span></div></div>
@@ -190,7 +202,9 @@ function JobDrawer({ job, onClose }: { job: PortalJob; onClose: () => void }) {
         <section className="cp-detail-block cp-signoff"><span className="cp-eyebrow">Customer sign-off</span><h3>How did everything look?</h3><p>Customer sign-off will be enabled after portal visibility is confirmed.</p><div className="cp-feedback-options"><button disabled>Looks great</button><button disabled>Needs touch-up</button><button disabled>Report issue</button></div><textarea disabled placeholder="Optional note from the customer" /><button className="cp-btn cp-btn--primary cp-btn--wide" disabled><CheckCircle2 size={16} />Save customer sign-off</button></section>
       </aside>
     </div>
-  );
+    {etaOpen && <div className="cp-modal-backdrop" onClick={() => setEtaOpen(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Arrival update</span><h3>Set arrival ETA</h3><p>The client will receive the selected arrival time.</p><div className="cp-eta-options">{ETA_CHOICES.map(minutes => <button key={minutes} onClick={() => setSelectedEta(minutes)} className={selectedEta === minutes ? "is-selected" : ""}>{formatEta(minutes)}</button>)}</div><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setEtaOpen(false)}>Cancel</button><button className="cp-btn cp-btn--primary" onClick={() => setEtaMutation.mutate({ portalJobKey: displayedJob.portalJobKey, minutes: selectedEta })} disabled={setEtaMutation.isPending}>Send ETA</button></div></div></div>}
+    {arrivalConfirm && <div className="cp-modal-backdrop" onClick={() => setArrivalConfirm(false)}><div className="cp-modal" onClick={event => event.stopPropagation()}><span className="cp-eyebrow">Confirm arrival</span><h3>Tell the client you’ve arrived?</h3><p>This will record your arrival and message the client.</p><div className="cp-modal__actions"><button className="cp-btn cp-btn--subtle" onClick={() => setArrivalConfirm(false)}>Cancel</button><button className="cp-btn cp-btn--arrived" onClick={() => arrivedMutation.mutate({ portalJobKey: displayedJob.portalJobKey })} disabled={arrivedMutation.isPending}>Mark arrived</button></div></div></div>}
+  </>;
 }
 
 function AvailabilityDialog({ open, schedule, onClose }: { open: boolean; schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null; onClose: () => void }) {
@@ -218,6 +232,7 @@ function CleanerPortalLogin() {
 function CleanerPortalConnected() {
   const [page, setPage] = useState<NavPage>("today");
   const [selectedJob, setSelectedJob] = useState<PortalJob | null>(null);
+  const [progressByJobKey, setProgressByJobKey] = useState<Record<string, { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }>>({});
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const todayDate = useMemo(() => etDate(), []);
@@ -231,7 +246,7 @@ function CleanerPortalConnected() {
   const logoutMutation = trpc.cleaner.logout.useMutation({ throwOnError: false, onSuccess: () => window.location.replace("/cleaner") });
   const languageMutation = trpc.cleaner.updateLanguage.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
 
-  const jobs = (todayQuery.data ?? []) as PortalJob[];
+  const jobs = ((todayQuery.data ?? []) as PortalJob[]).map(job => ({ ...job, ...progressByJobKey[job.portalJobKey] }));
   const activeJobs = jobs.filter(job => !jobIsComplete(job));
   const nextJob = activeJobs[0] ?? jobs[0] ?? null;
   const weekJobs = (weekQuery.data ?? []) as WeekJob[];
@@ -270,7 +285,7 @@ function CleanerPortalConnected() {
       </main>
     </div>
     <AvailabilityDialog open={availabilityOpen} schedule={teamScheduleQuery.data?.schedule} onClose={() => setAvailabilityOpen(false)} />
-    {selectedJob && <JobDrawer job={selectedJob} onClose={() => setSelectedJob(null)} />}
+    {selectedJob && <JobDrawer job={{ ...selectedJob, ...progressByJobKey[selectedJob.portalJobKey] }} onClose={() => setSelectedJob(null)} onProgress={progress => setProgressByJobKey(current => ({ ...current, [selectedJob.portalJobKey]: progress }))} />}
   </div>;
 }
 
