@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobPhotos, leadflowJobs } from "../drizzle/schema";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
@@ -15,6 +15,16 @@ const updateInput = z.object({
   jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   frequency: z.enum(["One time", "Weekly", "Bi-weekly", "Tri-weekly", "Monthly"]).optional(),
 }).refine((value) => value.jobDate !== undefined || value.frequency !== undefined, "Choose a date or frequency to update.");
+const bookingPhotoReferenceInput = z.object({
+  bookingKey: z.string().regex(/^(leadflow|booking|funnel|portal):\d+$/, "Invalid booking reference."),
+});
+
+function parseBookingPhotoReference(bookingKey: string) {
+  const [source, idValue] = bookingKey.split(":");
+  const sourceId = Number.parseInt(idValue, 10);
+  if (!source || !Number.isSafeInteger(sourceId) || sourceId < 1) throw new Error("Invalid booking reference.");
+  return { source, sourceId };
+}
 
 export const leadflowJobsRouter = router({
   list: adminAgentProcedure.input(listInput).query(async ({ input }) => {
@@ -27,6 +37,28 @@ export const leadflowJobsRouter = router({
       .where(eq(leadflowJobs.jobDate, input.date))
       .orderBy(asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
     return rows.filter((row) => !search || `${row.customerName} ${row.customerPhone ?? ""} ${row.customerEmail ?? ""} ${row.jobAddress ?? ""} ${row.launch27BookingId ?? ""}`.toLowerCase().includes(search));
+  }),
+
+  staffPhotos: adminAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
+    // The Booking detail has one source-agnostic gallery. Existing isolated uploads
+    // are keyed to LeadFlow jobs; other booking sources correctly return no photos
+    // until their cleaner portal upload path is introduced.
+    if (source !== "leadflow") return [];
+    return db
+      .select({
+        id: cleanerPortalJobPhotos.id,
+        photoUrl: cleanerPortalJobPhotos.photoUrl,
+        thumbnailUrl: cleanerPortalJobPhotos.thumbnailUrl,
+        filename: cleanerPortalJobPhotos.filename,
+        photoType: cleanerPortalJobPhotos.photoType,
+        createdAt: cleanerPortalJobPhotos.createdAt,
+      })
+      .from(cleanerPortalJobPhotos)
+      .where(eq(cleanerPortalJobPhotos.leadflowJobId, sourceId))
+      .orderBy(asc(cleanerPortalJobPhotos.createdAt), asc(cleanerPortalJobPhotos.id));
   }),
 
   importNextThirtyDays: adminAgentProcedure.mutation(async () => importNextThirtyDaysOfLaunch27Jobs()),

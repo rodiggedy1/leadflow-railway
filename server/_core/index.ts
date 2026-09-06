@@ -1000,6 +1000,9 @@ async function startServer() {
   app.get("/api/media-proxy", async (req, res) => {
     const url = req.query.url as string;
     if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
+    const download = req.query.download === "1";
+    const requestedFilename = typeof req.query.filename === "string" ? req.query.filename : "";
+    const safeFilename = requestedFilename.replace(/[\\/:*?"<>|\r\n]/g, "_").trim() || "cleaner-photo";
     // Proxy our own R2 bucket and Vapi's recording CDN
     const r2PublicUrl = (process.env.R2_PUBLIC_URL ?? "").replace(/\/+$/, "");
     const isAllowed =
@@ -1011,6 +1014,7 @@ async function startServer() {
       return res.status(403).json({ error: "Forbidden domain" });
     }
     try {
+      if (download) res.attachment(safeFilename);
       // For private R2 buckets (r2.cloudflarestorage.com), stream directly via S3 SDK
       if (url.includes("r2.cloudflarestorage.com")) {
         const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");

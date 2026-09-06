@@ -1626,3 +1626,7 @@
 - [x] Render each newly uploaded photo once after the saved-photo query refreshes
 - [x] Make Before and After picker cards visibly respond to selection and keep the selected group clear
 - [x] Group saved photos by before/after with compact responsive previews and no photo limit
+- [x] Add the isolated Before and After photo gallery to the existing Booking detail panel
+- [x] Provide per-photo download from the staff Booking detail gallery without changing Cleaner Portal uploads
+- [ ] Normalize isolated photo references so every booking source in the Bookings workspace has one Before and After gallery
+- [x] Normalize isolated photo references so every booking source in the Bookings workspace has one Before and After gallery
