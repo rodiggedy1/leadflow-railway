@@ -228,7 +228,7 @@
       "id": "0031_add_customer_portal_reusable_magic_link",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0031_add_customer_portal_reusable_magic_link.sql",
-      "sha256": "8b471e2afca73fc91b8d39582b36cd7552ae53fe3198d534006afd5024cdbb3b",
+      "sha256": "7f4905ba49d6c70c4eaedd4c2b2c7a483bbf6610551837cb5ed550cff0873ef7",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0031_add_customer_portal_reusable_magic_link.postconditions.json"
     }

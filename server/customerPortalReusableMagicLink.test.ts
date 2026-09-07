@@ -122,7 +122,8 @@ describe("customer reusable My Home magic link", () => {
       expect(migration).toContain("ADD COLUMN IF NOT EXISTS `reusableToken` varchar(64)");
       expect(migration).not.toMatch(/\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/i);
     }
+    expect(managedMigration).toContain("--> statement-breakpoint");
     expect(manifest).toContain('"id": "0031_add_customer_portal_reusable_magic_link"');
-    expect(manifest).toContain('"sha256": "8b471e2afca73fc91b8d39582b36cd7552ae53fe3198d534006afd5024cdbb3b"');
+    expect(manifest).toContain('"sha256": "7f4905ba49d6c70c4eaedd4c2b2c7a483bbf6610551837cb5ed550cff0873ef7"');
   });
 });
