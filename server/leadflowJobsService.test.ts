@@ -30,7 +30,7 @@ const booking = (overrides: Partial<Parameters<typeof isActiveLaunch27Booking>[0
   bathrooms: 1,
   extras: ["clean_inside_oven"],
   customerNotes: "Front desk will let you in",
-  staffNotes: "",
+  staffNotes: "Use the rear service entrance",
   requestedTeam: null,
   hasStripeCard: false,
   stripeCustomerId: null,
@@ -77,6 +77,8 @@ describe("isolated LeadFlow jobs import", () => {
       hasStripeCard: 1,
       paymentBrand: "Visa",
       paymentLast4: "4242",
+      customerNotes: "Front desk will let you in",
+      staffNotes: "Use the rear service entrance",
       missingFromLaunch27At: null,
     });
   });

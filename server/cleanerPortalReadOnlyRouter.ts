@@ -99,7 +99,7 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
     totalJobsToday,
     basePay: payroll.finalPay,
     customerNotes: job.customerNotes ?? null,
-    staffNotes: null,
+    staffNotes: job.staffNotes ?? null,
   };
 }
 

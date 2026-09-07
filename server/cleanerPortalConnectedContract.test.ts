@@ -106,6 +106,13 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(page).not.toContain("completedJobId");
   });
 
+  it("returns synchronized customer and staff notes to cleaners while preserving their separate labels in the job drawer", () => {
+    expect(listRouter).toContain("customerNotes: job.customerNotes ?? null");
+    expect(listRouter).toContain("staffNotes: job.staffNotes ?? null");
+    expect(page).toContain("<b>Customer:</b>");
+    expect(page).toContain("<b>Staff:</b>");
+  });
+
   it("re-checks team-owned imported jobs and preserves prior progress timestamps on every write", () => {
     expect(progressRouter).toContain("parseLeadflowJobId");
     expect(progressRouter).toContain("eq(leadflowJobs.teamId, cleaner.teamId)");
