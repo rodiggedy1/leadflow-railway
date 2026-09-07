@@ -1665,5 +1665,7 @@
 - [x] Repair the rejected customer magic-link migration by separating its additive statements with the managed runner delimiter
 - [x] Push the validated customer magic-link managed-migration repair to production
 - [x] Add a staff-only Copy Customer My Home Link action beside the existing job-card Magic Link action without sending an SMS
-- [ ] Push the staff-only Copy Customer My Home Link action to production
+- [x] Push the staff-only Copy Customer My Home Link action to production
+- [x] Add the existing staff-only Copy Customer My Home Link action to the Booking detail panel without sending SMS or creating another link type
+- [ ] Push the Booking detail Customer My Home link action to production
 - [x] Remove the unapproved Cleaner Portal Contact client UI prototype from the customer magic-link release scope
