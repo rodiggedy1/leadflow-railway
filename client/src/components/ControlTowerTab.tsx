@@ -391,6 +391,28 @@ export default function ControlTowerTab() {
     });
   };
 
+  const getCustomerMagicLinkMutation = trpc.customerPortal.staffMagicLink.useMutation({
+    onSuccess: ({ url }) => {
+      navigator.clipboard.writeText(url).then(() => {
+        toast.success("Customer My Home link copied!");
+      }).catch(() => {
+        toast.info(`Customer My Home link: ${url}`, { duration: 10000 });
+      });
+    },
+    onError: (err) => toast.error(err.message || "Failed to generate customer portal link"),
+  });
+
+  const copyCustomerMagicLink = (job: Job) => {
+    if (!job.customerName || !job.customerPhone) {
+      toast.error("This job needs a customer name and phone number.");
+      return;
+    }
+    getCustomerMagicLinkMutation.mutate({
+      customerName: job.customerName,
+      customerPhone: job.customerPhone,
+    });
+  };
+
   // Fetch call records for the selected job (includes recording URLs once available)
   // Uses selectedId (state) instead of selectedJob (useMemo below) to avoid hoisting issues
   const { data: jobCalls = [], refetch: refetchJobCalls } = trpc.fieldMgmt.getJobCalls.useQuery(
@@ -890,6 +912,16 @@ export default function ControlTowerTab() {
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     Copy Magic Link
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl border-sky-300 text-sky-700 hover:bg-sky-50"
+                    onClick={() => copyCustomerMagicLink(selectedJob)}
+                    disabled={getCustomerMagicLinkMutation.isPending || !selectedJob.customerName || !selectedJob.customerPhone}
+                    title={selectedJob.customerName && selectedJob.customerPhone ? "Copy this customer's one-year My Home link" : "Customer name and phone number are required"}
+                  >
+                    {getCustomerMagicLinkMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
+                    Copy Customer My Home Link
                   </Button>
                   <Button
                     variant="outline"

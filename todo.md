@@ -1661,7 +1661,9 @@
 - [x] Append the reusable customer My Home link to active On the way and Arrived texts, while sending the status text without a link if link generation fails
 - [x] Generate one reusable one-year customer portal link per customer and reuse that same link in every eligible active status text
 - [x] Push the validated customer-only one-year reusable My Home link to production without changing Cleaner Portal magic links
-- [ ] Add a staff-only Customer My Home test link at the existing Booking job-card magic-link location so it can be tested without a status SMS
+- [x] Add a staff-only Customer My Home test link at the existing Booking job-card magic-link location so it can be tested without a status SMS
 - [x] Repair the rejected customer magic-link migration by separating its additive statements with the managed runner delimiter
-- [ ] Push the validated customer magic-link managed-migration repair to production
+- [x] Push the validated customer magic-link managed-migration repair to production
+- [x] Add a staff-only Copy Customer My Home Link action beside the existing job-card Magic Link action without sending an SMS
+- [ ] Push the staff-only Copy Customer My Home Link action to production
 - [x] Remove the unapproved Cleaner Portal Contact client UI prototype from the customer magic-link release scope

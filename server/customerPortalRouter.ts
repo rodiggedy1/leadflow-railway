@@ -5,7 +5,7 @@ import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
 import { calculateCustomerPortalEstimate } from "../shared/customerPortalPricing";
-import { createCustomerPortalRequestNumber, ensureCustomerPortalAccountForLeadflowPhone } from "./customerPortalService";
+import { createCustomerPortalRequestNumber, ensureCustomerPortalAccountForLeadflowPhone, getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 import { getCustomerPortalSavedCard } from "./customerPortalPaymentService";
 import { getStripeClient } from "./stripeClient";
 import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
@@ -64,6 +64,16 @@ export const customerPortalRouter = router({
     if (!rows[0]) throw new Error("Service request not found.");
     await db.update(customerPortalServiceRequests).set({ status: "cancelled", updatedAt: new Date() }).where(eq(customerPortalServiceRequests.id, input.id));
     return { id: input.id, status: "cancelled" as const };
+  }),
+  staffMagicLink: adminAgentProcedure.input(z.object({
+    customerName: z.string().trim().min(1).max(250),
+    customerPhone: z.string().trim().min(1).max(40),
+    customerEmail: z.string().trim().max(320).nullable().optional(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const url = await getOrCreateCustomerPortalMagicLink(db, input);
+    return { url };
   }),
   me: publicProcedure.query(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);
