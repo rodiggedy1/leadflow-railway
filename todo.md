@@ -1681,4 +1681,38 @@
 - [x] Refresh the open Cleaner Portal Contact client thread so customer portal replies appear without closing and reopening it
 - [x] Push the customer and cleaner reply SMS wording plus Cleaner Portal thread-refresh update to production
 - [x] Update only the six Cleaner Portal quick-message drafts, rename Entry instructions, and replace the sixth prompt with Add a service
-- [ ] Push the text-only Cleaner Portal quick-message update with customer first-name insertion to production
+- [x] Push the text-only Cleaner Portal quick-message update with customer first-name insertion to production
+- [ ] Trace the complete old portal review flow and report a verified restoration approach before making review changes
+- [x] Create an isolated visual preview of the legacy-style Customer Portal review experience with placeholder data and no production actions
+- [ ] Correct the review preview so Google review content appears only after a five-star rating and locate any legacy review screenshots
+- [ ] Rebuild the isolated review preview into separate legacy-faithful rating, feedback, drafting, draft-selection, and editing screens using the new My Home design
+- [x] Rebuild the review preview as a close structural match to the supplied legacy screenshots, changing only the Maids in Black color palette
+- [x] Reproduce the old review component’s exact visible text, layout, state flow, and interactions in the preview, changing only colors
+- [ ] Confirm whether the old public review page is still safely testable with an existing tracker link, without submitting a rating or review
+- [x] Rebuild the isolated review preview to match the supplied completed-service reference: hero, appointment/status card, review card, note field, $50 tip panel, and submission treatment, while retaining the approved five-star-only review path
+- [x] Remove the visible hero square artifact and blend the cleaner image smoothly into the right edge of the isolated review preview
+- [x] Remove the unwanted Log out control and its white-box artifact from the isolated review-preview hero
+- [x] Restore the thinner centered completed-service layout and remove every remaining source-image box or Log out artifact from the isolated hero
+- [x] Match only the appointment and completed-status card columns, spacing, type scale, divider, completion panel, and action rows to the supplied reference
+- [x] Use the supplied MIB logo and make the lower review card mobile-friendly with the exact team and $50 offer above the stars treatment
+- [x] Replace the dark review card with a cohesive light treatment and rebalance the appointment/status block into one unified middle card
+- [x] Refine the isolated appointment/status card so its right-side completion and action rows remain balanced and unwrapped at the narrow preview width
+- [ ] Replace the cramped two-column appointment/status block with a complete, clean responsive service-summary card composition
+- [x] Restore the original two-column appointment/status card and current page width, removing only the stacked action-row redesign
+- [x] Rebuild the unchanged-width preview to the latest supplied visual reference, including icon tiles, two-column card spacing, light review hierarchy, tip offer, and disabled submit treatment
+- [x] Restore the previously preferred wider overall preview proportion without changing the current card elements or review behavior
+- [x] Remove only the Photos taken and View booking details rows after the completed panel in the isolated review preview
+- [x] Trace the legacy review workflow and identify the supported Thumbtack review-handoff link before any production integration
+- [x] Reuse the legacy five-star review workflow in the approved Customer Portal design and replace its Google handoff with the supplied Thumbtack review URL
+- [x] Implement the approved LeadFlow-owned review workflow: 1–3-star Command Chat visibility only, 4-star thank-you, 5-star drafts and Thumbtack handoff, plus the existing one-year My Home completion deep link; exclude cleaner_jobs, automatic rating SMS, and pay changes
+- [x] Replace the manual Job complete notification path with one automatic completion SMS that uses the existing one-year My Home link with view=review; never send both messages
+- [ ] Investigate why a completed LeadFlow job did not receive the immediate automatic Review-link SMS, confirming the exact completion path and delivery result before any retry or correction
+- [x] Compare the deployed LeadFlow completion and Review-link implementation against the prior working completion-review treatment line by line before changing code
+- [x] Restore only the legacy customer-service sender override for the automatic completion Review-link SMS; do not alter trigger, content, storage, or retry behavior
+- [x] Complete the prior-versus-current completion SMS comparison and confirm every material delivery-path difference before deploying any correction for Glitter Pants
+- [x] Replace the LeadFlow completion Review-link SMS path with the exact previous working treatment, allowing only LeadFlow storage, Customer Portal Review destination, and Thumbtack substitutions
+- [x] Replace the current Customer Portal review-draft prompt and AI call treatment with the exact prior working version, allowing only LeadFlow job source and Thumbtack destination substitutions
+- [x] Restore the exact prior completion-review SMS wording while retaining the approved My Home Review link destination
+- [x] Fix the production Customer Portal review hero image at mobile width without changing desktop composition
+- [x] Reduce the production Customer Portal service-summary card height so the review rating section appears sooner without changing its content
+- [x] Make final job completion update the Customer Portal status with the same completed state pattern used by existing On the way and Arrived updates

@@ -134,29 +134,69 @@ export const customerPortalReviewRouter = router({
     const { db, job } = await getCustomerReviewJob(ctx, input.leadflowJobId);
     if (job.customerRating !== 5) throw new TRPCError({ code: "FORBIDDEN", message: "Review drafts are available after a five-star rating." });
 
-    const selectedHighlights = input.chips.join(", ") || "the customer's written note";
-    const service = job.serviceName ?? "home cleaning";
-    const team = job.teamName ?? "the cleaning team";
-    const customerNote = input.freeText ? `\nCustomer's own words: "${input.freeText}"` : "";
-    const response = await invokeLLM({
+    // Preserve the prior review-draft prompt and treatment exactly. The only
+    // source adaptation is LeadFlow job data; the final review destination is
+    // handled separately by recordThumbtackAction.
+    const teamName = job.teamName ?? "the team";
+    const bedroomStr = job.bedrooms ? `${job.bedrooms} bedroom${job.bedrooms > 1 ? "s" : ""}` : null;
+    const bathroomStr = job.bathrooms ? `${job.bathrooms} bathroom${job.bathrooms > 1 ? "s" : ""}` : null;
+    const sizeStr = [bedroomStr, bathroomStr].filter(Boolean).join(", ");
+    const serviceStr = job.serviceName ?? "cleaning service";
+    const chipsStr = input.chips.length > 0 ? input.chips.join(", ") : "great service";
+    const extraContext = input.freeText ? `\nCustomer's own words: "${input.freeText}"` : "";
+
+    const systemPrompt = `You are a review-writing assistant for Maids in Black, a premium home cleaning company in Washington DC.
+Your job is to write authentic, heartfelt Google reviews on behalf of satisfied customers.
+Each review should:
+- Sound natural and human, not like marketing copy
+- Be 2-4 sentences (50-100 words)
+- Mention specific details about the job when available
+- Vary in tone and structure (one enthusiastic, one matter-of-fact, one warm/personal)
+- NOT use the word "impeccable", "pristine", "meticulous", or other overused cleaning clichés
+- NOT start with "I" — vary the opening
+- End on a positive note that encourages others to book`;
+
+    const userPrompt = `Write 3 different Google review drafts for this cleaning job:
+- Team: ${teamName}
+- Service: ${serviceStr}${sizeStr ? ` (${sizeStr})` : ""}
+- What the customer highlighted: ${chipsStr}${extraContext}
+
+Return a JSON object with this exact structure:
+{
+  "drafts": ["draft1 text here", "draft2 text here", "draft3 text here"]
+}`;
+
+    let response;
+    try {
+      response = await invokeLLM({
       messages: [
-        { role: "system", content: "You help a customer turn only their own selected positive feedback into an editable Thumbtack review draft for Maids in Black. Return exactly three short, natural options. Use only the stated team, service, selected highlights, and customer note. Do not invent service details, outcomes, names, or facts. Do not make claims that are not explicitly supported by the input. Each option must be 35–80 words, vary in tone, and be ready for the customer to edit before sharing." },
-        { role: "user", content: `Write three editable Thumbtack review drafts.\nTeam: ${team}\nService: ${service}\nCustomer-selected highlights: ${selectedHighlights}${customerNote}` },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
       ],
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "customer_review_drafts",
+          name: "review_drafts",
           strict: true,
           schema: {
             type: "object",
-            properties: { drafts: { type: "array", items: { type: "string" } } },
+            properties: {
+              drafts: {
+                type: "array",
+                items: { type: "string" },
+                description: "Array of exactly 3 review draft strings",
+              },
+            },
             required: ["drafts"],
             additionalProperties: false,
           },
         },
       },
-    });
+      });
+    } catch (error) {
+      console.error("[CustomerPortalReview] generateDrafts failed:", error);
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "We could not prepare three review options. Please try again." });
+    }
     const raw = response.choices?.[0]?.message?.content;
     const parsed = typeof raw === "string" ? JSON.parse(raw) as { drafts?: unknown } : null;
     const drafts = Array.isArray(parsed?.drafts) ? parsed.drafts.filter((draft): draft is string => typeof draft === "string" && draft.trim().length > 0).slice(0, 3) : [];
@@ -171,7 +211,7 @@ export const customerPortalReviewRouter = router({
       reviewCopied: 0,
       reviewThumbtackOpenedAt: null,
     }).where(eq(leadflowJobs.id, job.id));
-    return { drafts };
+    return { drafts, thumbtackReviewUrl: THUMBTACK_REVIEW_URL };
   }),
 
   chooseDraft: publicProcedure.input(z.object({ leadflowJobId: z.number().int().positive(), draftIndex: z.number().int().min(1).max(3) })).mutation(async ({ ctx, input }) => {

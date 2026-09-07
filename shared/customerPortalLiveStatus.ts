@@ -11,7 +11,7 @@ export type CustomerPortalTodayJob = {
   etaTimeStr: string | null;
 };
 
-const INACTIVE_BOOKING_STATUSES = new Set(["cancelled", "canceled", "rescheduled", "completed"]);
+const INACTIVE_BOOKING_STATUSES = new Set(["cancelled", "canceled", "rescheduled"]);
 
 export function getCustomerPortalBusinessDate(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -26,7 +26,7 @@ export function getCustomerPortalBusinessDate(now = new Date()): string {
 
 export function isCustomerPortalLiveJob(job: Pick<CustomerPortalTodayJob, "jobStatus" | "bookingStatus">): boolean {
   const bookingStatus = job.bookingStatus?.toLowerCase() ?? "";
-  return job.jobStatus !== "completed" && !INACTIVE_BOOKING_STATUSES.has(bookingStatus);
+  return !INACTIVE_BOOKING_STATUSES.has(bookingStatus);
 }
 
 function formatEta(job: CustomerPortalTodayJob): string | null {
@@ -64,6 +64,8 @@ export function getCustomerPortalLiveStatusView(job: CustomerPortalTodayJob): {
       return { title: "Your team is finishing up", detail: "Your service will be complete shortly.", progressIndex: 2, isRunningLate: false };
     case "issue_at_property":
       return { title: "We’re checking in on today’s service", detail: "We’ll keep you updated here.", progressIndex: 2, isRunningLate: false };
+    case "completed":
+      return { title: "Your cleaning is complete", detail: "Your home is clean and complete.", progressIndex: 3, isRunningLate: false };
     default:
       return { title: "Your cleaning is scheduled", detail: "We’ll keep you updated here.", progressIndex: 0, isRunningLate: false };
   }

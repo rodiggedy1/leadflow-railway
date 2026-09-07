@@ -27,10 +27,12 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(router).toContain("https://www.thumbtack.com/reviews/services/382987965776199683/write-customer-review");
   });
 
-  it("uses editable customer-supported draft text and does not add fake review fallbacks", () => {
+  it("uses the exact prior review-draft prompt and structured-generation treatment without fake fallbacks", () => {
     const router = read("server/customerPortalReviewRouter.ts");
-    expect(router).toContain("Use only the stated team, service, selected highlights, and customer note.");
-    expect(router).toContain("Do not invent service details, outcomes, names, or facts.");
+    expect(router).toContain("You are a review-writing assistant for Maids in Black, a premium home cleaning company in Washington DC.");
+    expect(router).toContain("Write 3 different Google review drafts for this cleaning job:");
+    expect(router).toContain("Vary in tone and structure (one enthusiastic, one matter-of-fact, one warm/personal)");
+    expect(router).toContain('name: "review_drafts"');
     expect(router).not.toContain("Fallback drafts");
   });
 
@@ -44,7 +46,8 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(signoff).not.toContain("leadflowBookingMessages");
     expect(signoff).toContain("view=review");
     expect(signoff).toContain("getOrCreateCustomerPortalMagicLink");
-    expect(signoff).toContain("Hi ${firstName(job.customerName)} — your cleaning is complete.");
+    expect(signoff).toContain("Hi ${firstName(job.customerName)}! ✨ ${teamDisplay} just finished your clean — your home is sparkling!");
+    expect(signoff).toContain("Leave a 5-star Thumbtack review and we'll add a $50 tip to ${teamDisplay}:");
     expect(cleanerUi).not.toContain('label: "Job complete"');
     expect(handoff).toContain('requestedView === "review" ? "/my-home?view=review"');
   });

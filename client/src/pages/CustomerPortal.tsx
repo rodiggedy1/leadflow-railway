@@ -181,7 +181,7 @@ export default function CustomerPortal() {
   ], [activeCleanings, activeLeadflowJobs]);
   const todayBooking = useMemo(() => [...allCustomerBookings].filter(booking => booking.jobDate === businessDate).sort(compareCustomerPortalBookings)[0] ?? null, [allCustomerBookings, businessDate]);
   const todayLeadflowBooking = useMemo(() => todayBooking?.leadflowJobId === null || !todayBooking ? null : portal.data?.leadflowJobs.find(job => job.id === todayBooking.leadflowJobId) ?? null, [portal.data?.leadflowJobs, todayBooking]);
-  const todayIsolatedProgress = trpc.customerPortal.todayIsolatedProgress.useQuery({ leadflowJobId: todayLeadflowBooking?.id ?? 1 }, { enabled: Boolean(todayLeadflowBooking), retry: 0, throwOnError: false, refetchInterval: query => query.state.data?.progress ? 60_000 : false });
+  const todayIsolatedProgress = trpc.customerPortal.todayIsolatedProgress.useQuery({ leadflowJobId: todayLeadflowBooking?.id ?? 1 }, { enabled: Boolean(todayLeadflowBooking), retry: 0, throwOnError: false, refetchInterval: 60_000 });
   const liveTodayStatus = todayJobStatus.data?.job ?? null;
   const todayBookingWithLiveStatus = useMemo(() => {
     const isolatedProgress = todayIsolatedProgress.data?.progress;

@@ -60,6 +60,7 @@ async function sendLeadflowCompletionReviewSms(leadflowJobId: number): Promise<v
     customerName: leadflowJobs.customerName,
     customerPhone: leadflowJobs.customerPhone,
     customerEmail: leadflowJobs.customerEmail,
+    teamName: leadflowJobs.teamName,
   }).from(leadflowJobs).where(eq(leadflowJobs.id, leadflowJobId)).limit(1);
   const job = jobRows[0];
   if (!job) return;
@@ -73,7 +74,10 @@ async function sendLeadflowCompletionReviewSms(leadflowJobId: number): Promise<v
     customerPhone: job.customerPhone,
     customerEmail: job.customerEmail,
   }));
-  const body = `Hi ${firstName(job.customerName)} — your cleaning is complete. Thanks so much. Please review the work in your portal, and let us know if there is anything else you need.`;
+  const teamDisplay = job.teamName ?? "your team";
+  const body =
+    `Hi ${firstName(job.customerName)}! ✨ ${teamDisplay} just finished your clean — your home is sparkling!\n\n` +
+    `Leave a 5-star Thumbtack review and we'll add a $50 tip to ${teamDisplay}:`;
   const result = await sendSms({
     to: job.customerPhone,
     content: `${body}\n\nOpen My Home: ${portalLink}`,
