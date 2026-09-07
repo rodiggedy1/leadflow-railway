@@ -38,7 +38,10 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     const signoff = read("server/cleanerPortalSignoffRouter.ts");
     const cleanerUi = read("client/src/pages/CleanerPortalConnected.tsx");
     const handoff = read("server/customerPortalHandoffRoute.ts");
-    expect(signoff).toContain("reviewCompletionSmsClaimedAt");
+    expect(signoff).toContain("sendLeadflowCompletionReviewSms(job.id).catch");
+    expect(signoff).toContain("fromNumberId: ENV.openPhoneCsNumberId");
+    expect(signoff).not.toContain("reviewCompletionSmsClaimedAt");
+    expect(signoff).not.toContain("leadflowBookingMessages");
     expect(signoff).toContain("view=review");
     expect(signoff).toContain("getOrCreateCustomerPortalMagicLink");
     expect(signoff).toContain("Hi ${firstName(job.customerName)} — your cleaning is complete.");

@@ -32,6 +32,10 @@ describe("isolated Cleaner Portal customer sign-off", () => {
     expect(router).toContain("completeAfterSignoff");
     expect(router).toContain("Customer sign-off or not-home confirmation is required before completing this job.");
     expect(router).toContain('jobStatus: "completed"');
+    expect(router).toContain("fromNumberId: ENV.openPhoneCsNumberId");
+    expect(router).toContain("sendLeadflowCompletionReviewSms(job.id).catch");
+    expect(router).not.toContain("reviewCompletionSmsClaimedAt");
+    expect(router).not.toContain("leadflowBookingMessages");
     expect(portal).toContain("Mark job complete");
     expect(portal).toContain("Mark this job complete?");
   });
