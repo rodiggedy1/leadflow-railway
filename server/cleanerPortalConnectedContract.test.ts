@@ -25,15 +25,17 @@ describe("isolated ETA Cleaner Portal contract", () => {
     }
   });
 
-  it("freezes the verified imported-job list without a progress-table dependency", () => {
+  it("reads every verified imported job from LeadFlow and overlays only its persisted Cleaner Portal progress on refresh", () => {
     const ownedJobListHelper = listRouter.slice(listRouter.indexOf("async function listOwnedImportedJobs"), listRouter.indexOf("export const cleanerPortalReadOnlyRouter"));
     const frozenJobListProcedures = listRouter.slice(listRouter.indexOf("getMyJobsToday:"), listRouter.indexOf("getMyEarnings:"));
     expect(ownedJobListHelper).toContain("eq(leadflowJobs.teamId, teamId)");
     expect(ownedJobListHelper).toContain("ACTIVE_LEADFLOW_FILTER");
+    expect(ownedJobListHelper).toContain(".leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))");
     expect(listRouter).toContain("ne(leadflowJobs.bookingStatus, \"cancelled\")");
     expect(listRouter).toContain("ne(leadflowJobs.bookingStatus, \"rescheduled\")");
     expect(frozenJobListProcedures).toContain("listOwnedImportedJobs");
-    for (const forbidden of ["cleanerJobs", "cleaner_jobs", "bookingAssignments", "cleanerPortalJobProgress", "storagePut", "sendSms"]) {
+    expect(listRouter).toContain('jobStatus: progress?.jobStatus ?? "assigned"');
+    for (const forbidden of ["cleanerJobs", "cleaner_jobs", "bookingAssignments", "storagePut", "sendSms"]) {
       expect(ownedJobListHelper).not.toContain(forbidden);
       expect(frozenJobListProcedures).not.toContain(forbidden);
     }

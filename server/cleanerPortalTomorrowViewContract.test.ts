@@ -11,7 +11,7 @@ describe("visible Cleaner Portal Tomorrow view", () => {
     const tomorrowProcedure = router.slice(router.indexOf("  getMyJobsTomorrow:"), router.indexOf("  getMyJobsWeek:"));
     expect(tomorrowProcedure).toContain("const tomorrow = etDate(1)");
     expect(tomorrowProcedure).toContain("listOwnedImportedJobs(ctx.cleaner.cleanerId, tomorrow, tomorrow)");
-    expect(tomorrowProcedure).toContain("portalJob(job, cleaner.payPercent, index + 1, jobs.length)");
+    expect(tomorrowProcedure).toContain("portalJob(job, cleaner.payPercent, progress, index + 1, jobs.length)");
     expect(tomorrowProcedure).not.toMatch(/cleanerJobs|cleaner_jobs|db\.(insert|update|delete)/);
   });
 

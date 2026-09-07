@@ -1717,3 +1717,5 @@
 - [x] Reduce the production Customer Portal service-summary card height so the review rating section appears sooner without changing its content
 - [x] Make final job completion update the Customer Portal status with the same completed state pattern used by existing On the way and Arrived updates
 - [x] Give completed Cleaner Portal job cards a distinct completed color treatment and a visible Completed banner without changing job actions or data behavior
+- [x] Trace and fix the Cleaner Portal completion persistence regression so a completed job remains completed after refresh
+- [ ] Verify cleaner_portal_job_progress has no delete, sync-reset, or unintended overwrite path before deploying the completion persistence fix

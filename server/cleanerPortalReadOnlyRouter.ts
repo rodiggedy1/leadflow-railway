@@ -76,7 +76,7 @@ async function cleanerTeam(cleanerId: number) {
   return { db, cleaner, teamId: cleaner.launch27TeamId };
 }
 
-function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | null, jobIndex = 1, totalJobsToday = 0) {
+function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | null, progress?: typeof cleanerPortalJobProgress.$inferSelect | null, jobIndex = 1, totalJobsToday = 0) {
   const payroll = calculateEffectivePayroll({
     jobDate: job.jobDate,
     jobRevenue: job.jobTotalCents / 100,
@@ -94,7 +94,7 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
     extras: extrasForPortal(job.extras),
     checklistItems: [] as Array<{ text: string; checked: boolean }>,
     bookingStatus: job.bookingStatus,
-    jobStatus: "assigned",
+    jobStatus: progress?.jobStatus ?? "assigned",
     jobIndex,
     totalJobsToday,
     basePay: payroll.finalPay,
@@ -105,7 +105,12 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
 
 async function listOwnedImportedJobs(cleanerId: number, startDate: string, endDate: string) {
   const { db, cleaner, teamId } = await cleanerTeam(cleanerId);
-  const jobs = await db.select().from(leadflowJobs).where(and(eq(leadflowJobs.teamId, teamId), gte(leadflowJobs.jobDate, startDate), lte(leadflowJobs.jobDate, endDate), ACTIVE_LEADFLOW_FILTER)).orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
+  const jobs = await db
+    .select({ job: leadflowJobs, progress: cleanerPortalJobProgress })
+    .from(leadflowJobs)
+    .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
+    .where(and(eq(leadflowJobs.teamId, teamId), gte(leadflowJobs.jobDate, startDate), lte(leadflowJobs.jobDate, endDate), ACTIVE_LEADFLOW_FILTER))
+    .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
   return { cleaner, jobs };
 }
 
@@ -113,22 +118,22 @@ export const cleanerPortalReadOnlyRouter = router({
   getMyJobsToday: cleanerProcedure.query(async ({ ctx }) => {
     const today = etDate();
     const { cleaner, jobs } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, today, today);
-    return jobs.map((job, index) => portalJob(job, cleaner.payPercent, index + 1, jobs.length));
+    return jobs.map(({ job, progress }, index) => portalJob(job, cleaner.payPercent, progress, index + 1, jobs.length));
   }),
   getMyJobsTomorrow: cleanerProcedure.query(async ({ ctx }) => {
     const tomorrow = etDate(1);
     const { cleaner, jobs } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, tomorrow, tomorrow);
-    return jobs.map((job, index) => portalJob(job, cleaner.payPercent, index + 1, jobs.length));
+    return jobs.map(({ job, progress }, index) => portalJob(job, cleaner.payPercent, progress, index + 1, jobs.length));
   }),
   getMyJobsWeek: cleanerProcedure.query(async ({ ctx }) => {
     const today = etDate();
     const tomorrow = etDate(1);
     const { cleaner, jobs } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, today, etDate(7));
-    return jobs.map((job, index) => ({ ...portalJob(job, cleaner.payPercent, index + 1), dateLabel: job.jobDate === today ? "today" : job.jobDate === tomorrow ? "tomorrow" : "week" }));
+    return jobs.map(({ job, progress }, index) => ({ ...portalJob(job, cleaner.payPercent, progress, index + 1), dateLabel: job.jobDate === today ? "today" : job.jobDate === tomorrow ? "tomorrow" : "week" }));
   }),
   myJobsRange: cleanerProcedure.input(z.object({ from: z.string(), to: z.string() })).query(async ({ ctx, input }) => {
     const { cleaner, jobs } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, input.from, input.to);
-    return jobs.map((job) => ({ id: `leadflow:${job.id}`, customerName: job.customerName, jobDate: job.jobDate, bookingStatus: job.bookingStatus, finalPay: portalJob(job, cleaner.payPercent).basePay, basePay: portalJob(job, cleaner.payPercent).basePay }));
+    return jobs.map(({ job, progress }) => ({ id: `leadflow:${job.id}`, customerName: job.customerName, jobDate: job.jobDate, bookingStatus: job.bookingStatus, finalPay: portalJob(job, cleaner.payPercent, progress).basePay, basePay: portalJob(job, cleaner.payPercent, progress).basePay }));
   }),
   getMyEarnings: cleanerProcedure.query(async ({ ctx }) => {
     const { db, cleaner, teamId } = await cleanerTeam(ctx.cleaner.cleanerId);
