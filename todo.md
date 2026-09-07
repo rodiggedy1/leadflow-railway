@@ -1719,5 +1719,7 @@
 - [x] Give completed Cleaner Portal job cards a distinct completed color treatment and a visible Completed banner without changing job actions or data behavior
 - [x] Trace and fix the Cleaner Portal completion persistence regression so a completed job remains completed after refresh
 - [ ] Verify cleaner_portal_job_progress has no delete, sync-reset, or unintended overwrite path before deploying the completion persistence fix
-- [ ] Verify whether booking synchronization imports customer and service notes, where they persist, and which portal surfaces display them
+- [x] Verify whether booking synchronization imports customer and service notes, where they persist, and which portal surfaces display them
 - [x] Persist Launch27 staff notes alongside customer notes in LeadFlow jobs and display both note types in the Cleaner Portal without exposing staff notes in the Customer Portal
+- [x] Trace and correct the Sep 8 Booking sync count-versus-rendered-list mismatch that omits Jennifer Goldsmith while reporting 15 active jobs
+- [x] Reconcile every active Launch27 booking to an active persisted LeadFlow row, including prior terminal rows and duplicate-insert races, so sync counts equal Bookings rows

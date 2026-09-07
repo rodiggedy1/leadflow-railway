@@ -151,6 +151,7 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
   let created = 0;
   let updated = 0;
   let alreadyPresent = 0;
+  let reconciled = 0;
   let sourceMissing = 0;
 
   for (const booking of activeBookings) {
@@ -159,20 +160,22 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
     const existing = await db.select({ id: leadflowJobs.id, bookingStatus: leadflowJobs.bookingStatus }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
     const values = launch27BookingToLeadflowJob(booking, date);
     if (existing.length > 0) {
-      if (["cancelled", "canceled", "rescheduled"].includes(existing[0].bookingStatus.trim().toLowerCase())) {
-        alreadyPresent++;
-        continue;
-      }
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));
       updated++;
+      reconciled++;
       continue;
     }
     try {
       await db.insert(leadflowJobs).values(values);
       created++;
+      reconciled++;
     } catch (error) {
       if (!isDuplicateEntry(error)) throw error;
-      alreadyPresent++;
+      const raced = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
+      if (raced.length === 0) throw error;
+      await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, raced[0].id));
+      updated++;
+      reconciled++;
     }
   }
 
@@ -186,7 +189,7 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
       sourceMissing++;
     }
   }
-  return { date, fetched: response.fetched, active: seenBookingIds.size, created, updated, alreadyPresent, sourceMissing, error: null };
+  return { date, fetched: response.fetched, active: reconciled, created, updated, alreadyPresent, sourceMissing, error: null };
 }
 
 export async function importNextThirtyDaysOfLaunch27Jobs(now = new Date()): Promise<{
