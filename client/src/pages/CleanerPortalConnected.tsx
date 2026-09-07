@@ -145,10 +145,18 @@ function StatusPill({ job }: { job: PortalJob | WeekJob }) {
 
 type BookingMessage = { id: number; senderRole: string; body: string; notificationStatus: string; createdAt: Date | string };
 
-const QUICK_MESSAGES = ["We're on our way.", "Running late", "We've arrived.", "Job complete", "Access issue", "Custom message"] as const;
+const QUICK_MESSAGES = [
+  { label: "We're on our way", draft: (firstName: string) => `Hi ${firstName} — your Maids in Black cleaning team is on the way and looking forward to seeing you soon. If there’s anything we should know before we arrive, please reply here.` },
+  { label: "Running late", draft: (firstName: string) => `Hi ${firstName} — we’re sorry, your cleaning team is running a little behind. We appreciate your patience and will keep you updated.` },
+  { label: "We've arrived", draft: (firstName: string) => `Hi ${firstName} — your Maids in Black cleaning team has arrived and is ready to begin. Please let us know if there’s anything you’d like us to prioritize today.` },
+  { label: "Job complete", draft: (firstName: string) => `Hi ${firstName} — your cleaning is complete. Thanks so much. Please review the work in your portal, and let us know if there is anything else you need.` },
+  { label: "Entry instructions", draft: (firstName: string) => `Hi ${firstName} — your cleaning team is at your home but needs help accessing it. Could you please confirm the entry instructions or let us know the best next step? Thank you.` },
+  { label: "Add a service", draft: (firstName: string) => `Hi ${firstName} — while we’re here, would you like us to clean the inside of the fridge or oven, or add any other service today? Reply here and we’ll let you know what we can accommodate.` },
+] as const;
 
 function ContactClientPanel({ job, onClose, onCall }: { job: PortalJob; onClose: () => void; onCall: () => void }) {
   const [draft, setDraft] = useState("");
+  const customerFirstName = job.customerName.trim().split(/\s+/)[0] || "there";
   const threadQuery = trpc.cleanerPortalMessages.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false, refetchInterval: 3_000 });
   const sendMessage = trpc.cleanerPortalMessages.send.useMutation({
     throwOnError: false,
@@ -160,12 +168,12 @@ function ContactClientPanel({ job, onClose, onCall }: { job: PortalJob; onClose:
     onError: error => toast.error(error.message || "Message could not be sent."),
   });
   const messages = (threadQuery.data ?? []) as BookingMessage[];
-  const chooseQuickMessage = (value: string) => setDraft(value === "Custom message" ? "" : value);
+  const chooseQuickMessage = (message: (typeof QUICK_MESSAGES)[number]) => setDraft(message.draft(customerFirstName));
   return <div className="cp-contact-backdrop" onClick={onClose}>
     <aside className="cp-contact-drawer" onClick={event => event.stopPropagation()} aria-label={`Message ${job.customerName}`}>
       <header><div><span className="cp-eyebrow">Contact client</span><h2>Message {job.customerName}</h2><p>{serviceLabel(job)} · {job.time}</p></div><button className="cp-icon-button" type="button" onClick={onClose} aria-label="Close message panel"><X size={20} /></button></header>
       <section className="cp-contact-summary"><MapPin size={18} /><div><b>{job.customerName}</b><span>{job.address || "Address pending"}</span></div></section>
-      <section className="cp-contact-quick"><div className="cp-contact-section-title"><h3>Quick messages</h3><small>Choose one to edit</small></div><div>{QUICK_MESSAGES.map(message => <button type="button" key={message} onClick={() => chooseQuickMessage(message)}><MessageCircle size={16} />{message}</button>)}</div></section>
+      <section className="cp-contact-quick"><div className="cp-contact-section-title"><h3>Quick messages</h3><small>Choose one to edit</small></div><div>{QUICK_MESSAGES.map(message => <button type="button" key={message.label} onClick={() => chooseQuickMessage(message)}><MessageCircle size={16} />{message.label}</button>)}</div></section>
       <section className="cp-contact-thread"><div className="cp-contact-section-title"><h3>Conversation</h3><small>Saved with this booking</small></div>{threadQuery.isLoading ? <p className="cp-muted">Loading messages…</p> : threadQuery.isError ? <p className="cp-muted">Messages could not be loaded.</p> : messages.length ? <div className="cp-contact-bubbles">{messages.map(message => <article className={message.senderRole === "customer" ? "is-customer" : "is-team"} key={message.id}><p>{message.body}</p><small>{message.senderRole === "customer" ? job.customerName : "Your team"}</small></article>)}</div> : <p className="cp-muted">No messages on this booking yet.</p>}</section>
       <form className="cp-contact-compose" onSubmit={event => { event.preventDefault(); if (draft.trim()) sendMessage.mutate({ portalJobKey: job.portalJobKey, body: draft.trim() }); }}><label htmlFor={`contact-message-${job.portalJobKey}`}>Message {job.customerName}</label><textarea id={`contact-message-${job.portalJobKey}`} value={draft} onChange={event => setDraft(event.target.value)} maxLength={1_000} placeholder="Type a message…" /><p>{job.customerName.split(" ")[0] || "The client"} will receive a Maids in Black text with this message and can reply in My Home.</p><button className="cp-btn cp-btn--primary cp-btn--wide" type="submit" disabled={!draft.trim() || sendMessage.isPending}>{sendMessage.isPending ? "Sending…" : "Send message"}</button></form>
       <button className="cp-btn cp-btn--subtle cp-btn--wide cp-contact-call" type="button" onClick={onCall}><Phone size={16} />Call client</button>

@@ -64,6 +64,18 @@ describe("isolated LeadFlow booking messages", () => {
     expect(customerUi).not.toContain("Messages are not available in this portal yet.");
   });
 
+  it("prefills the six approved editable customer-support quick messages", () => {
+    const cleanerUi = read("client/src/pages/CleanerPortalConnected.tsx");
+    expect(cleanerUi).toContain('label: "Entry instructions"');
+    expect(cleanerUi).toContain('label: "Add a service"');
+    expect(cleanerUi).toContain("your Maids in Black cleaning team is on the way and looking forward to seeing you soon");
+    expect(cleanerUi).toContain("your cleaning team is running a little behind");
+    expect(cleanerUi).toContain("your Maids in Black cleaning team has arrived and is ready to begin");
+    expect(cleanerUi).toContain("your cleaning is complete. Thanks so much");
+    expect(cleanerUi).toContain("needs help accessing it");
+    expect(cleanerUi).toContain("clean the inside of the fridge or oven");
+  });
+
   it("allows staff to review the same LeadFlow booking thread in Booking details", () => {
     const bookingRouter = read("server/leadflowJobsRouter.ts");
     const bookingUi = read("client/src/components/NativeBookingsWorkspace.tsx");

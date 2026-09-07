@@ -1679,4 +1679,6 @@
 - [x] Preserve the working customer-send treatment while reusing it for customer-reply SMS to the assigned cleaner
 - [x] Fix Cleaner Portal booking threads so saved cleaner and customer messages are visible immediately in the same panel
 - [x] Refresh the open Cleaner Portal Contact client thread so customer portal replies appear without closing and reopening it
-- [ ] Push the customer and cleaner reply SMS wording plus Cleaner Portal thread-refresh update to production
+- [x] Push the customer and cleaner reply SMS wording plus Cleaner Portal thread-refresh update to production
+- [x] Update only the six Cleaner Portal quick-message drafts, rename Entry instructions, and replace the sixth prompt with Add a service
+- [ ] Push the text-only Cleaner Portal quick-message update with customer first-name insertion to production
