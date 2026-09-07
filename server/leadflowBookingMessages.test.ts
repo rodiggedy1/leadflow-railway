@@ -28,17 +28,23 @@ describe("isolated LeadFlow booking messages", () => {
     expect(router).toContain('senderRole: "cleaner"');
     expect(router).toContain("getOrCreateCustomerPortalMagicLink");
     expect(router).toContain("view=messages");
-    expect(router).toContain("Maids in Black: Your cleaning team:");
-    expect(router).toContain("Reply in My Home:");
+    expect(router).toContain("Your Maids in Black cleaning team sent you a direct message:");
+    expect(router).toContain("Reply in your portal:");
     expect(router).toContain('notificationStatus: "failed"');
   });
 
-  it("keeps customer replies inside an authenticated matching LeadFlow booking thread", () => {
+  it("keeps customer replies inside an authenticated matching LeadFlow booking thread and notifies the assigned cleaner", () => {
     const router = read("server/customerPortalRouter.ts");
     expect(router).toContain("replyToMessageThread");
     expect(router).toContain("getCustomerPortalSessionFromRequest");
     expect(router).toContain('senderRole: "customer"');
     expect(router).toContain("customerPortalAccountId: account.id");
+    expect(router).toContain("getOrCreateCleanerMagicLink");
+    expect(router).toContain("cleanerProfiles.launch27TeamId");
+    expect(router).toContain("job.customerName");
+    expect(router).toContain("sent you a response:");
+    expect(router).toContain("Reply in your portal:");
+    expect(router).toContain("to: cleaner.phone");
   });
 
   it("opens only the known Messages view after a valid customer portal handoff", () => {
@@ -52,6 +58,7 @@ describe("isolated LeadFlow booking messages", () => {
     expect(cleanerUi).toContain("function ContactClientPanel");
     expect(cleanerUi).toContain("Contact client");
     expect(cleanerUi).toContain("trpc.cleanerPortalMessages.send.useMutation");
+    expect(cleanerUi).toContain("refetchInterval: 3_000");
     expect(customerUi).toContain("trpc.customerPortal.messages.useQuery");
     expect(customerUi).toContain("replyToMessageThread");
     expect(customerUi).not.toContain("Messages are not available in this portal yet.");

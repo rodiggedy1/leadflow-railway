@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
-import { bookings, cleanerJobs, cleanerPortalJobProgress, customerPortalAccounts, customerPortalServiceRequests, leadflowBookingMessages, leadflowJobs, stripeCustomers } from "../drizzle/schema";
-import { getDb } from "./db";
+import { bookings, cleanerJobs, cleanerPortalJobProgress, cleanerProfiles, customerPortalAccounts, customerPortalServiceRequests, leadflowBookingMessages, leadflowJobs, stripeCustomers } from "../drizzle/schema";
+import { getDb, getOrCreateCleanerMagicLink } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
 import { calculateCustomerPortalEstimate } from "../shared/customerPortalPricing";
@@ -113,15 +113,40 @@ export const customerPortalRouter = router({
     if (!account || account.customerPhone !== session.customerPhone) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
     const phoneDigits = extractUSDigits(account.customerPhone);
     if (!phoneDigits) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
-    const jobs = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(and(
+    const jobs = await db.select({ id: leadflowJobs.id, customerName: leadflowJobs.customerName, teamId: leadflowJobs.teamId }).from(leadflowJobs).where(and(
       eq(leadflowJobs.id, input.leadflowJobId),
       ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"), ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
       sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
     )).limit(1);
-    if (!jobs[0]) throw new Error("BOOKING_NOT_FOUND");
+    const job = jobs[0];
+    if (!job) throw new Error("BOOKING_NOT_FOUND");
     const now = new Date();
-    const result = await db.insert(leadflowBookingMessages).values({ leadflowJobId: input.leadflowJobId, senderRole: "customer", body: input.body, customerPortalAccountId: account.id, notificationStatus: "not_applicable", createdAt: now });
-    return { id: Number(result[0].insertId), leadflowJobId: input.leadflowJobId, senderRole: "customer" as const, body: input.body, createdAt: now };
+    const cleanerRows = job.teamId === null ? [] : await db.select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone }).from(cleanerProfiles).where(and(eq(cleanerProfiles.launch27TeamId, job.teamId), eq(cleanerProfiles.isActive, 1))).limit(1);
+    const cleaner = cleanerRows[0] ?? null;
+    const result = await db.insert(leadflowBookingMessages).values({ leadflowJobId: job.id, senderRole: "customer", body: input.body, customerPortalAccountId: account.id, cleanerProfileId: cleaner?.id ?? null, notificationStatus: "pending", createdAt: now });
+    const messageId = Number(result[0].insertId);
+    let cleanerPortalLink: string | null = null;
+    let notificationError: string | null = null;
+    if (!cleaner?.phone) {
+      notificationError = "The assigned cleaner has no cellphone number.";
+    } else {
+      try {
+        cleanerPortalLink = await getOrCreateCleanerMagicLink(cleaner.id);
+      } catch (error) {
+        console.error("[CustomerPortalMessages] Cleaner portal link generation failed; sending the response without a link.", error);
+      }
+      const content = cleanerPortalLink
+        ? `${job.customerName} sent you a response: ${input.body}\n\nReply in your portal: ${cleanerPortalLink}`
+        : `${job.customerName} sent you a response: ${input.body}`;
+      const sms = await sendSms({ to: cleaner.phone, content });
+      if (sms.success) {
+        await db.update(leadflowBookingMessages).set({ notificationStatus: "sent", notificationMessageId: sms.messageId ?? null, notificationError: null, notificationSentAt: new Date() }).where(eq(leadflowBookingMessages.id, messageId));
+        return { id: messageId, leadflowJobId: job.id, senderRole: "customer" as const, body: input.body, createdAt: now, notificationSent: true };
+      }
+      notificationError = sms.error ?? "The cleaner notification could not be sent.";
+    }
+    await db.update(leadflowBookingMessages).set({ notificationStatus: "failed", notificationError }).where(eq(leadflowBookingMessages.id, messageId));
+    return { id: messageId, leadflowJobId: job.id, senderRole: "customer" as const, body: input.body, createdAt: now, notificationSent: false, notificationError };
   }),
   me: publicProcedure.query(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);

@@ -58,8 +58,8 @@ export const cleanerPortalMessagesRouter = router({
       console.error("[CleanerPortalMessages] Customer portal link generation failed; sending the message without a link.", error);
     }
     const smsContent = portalLink
-      ? `Maids in Black: Your cleaning team: “${input.body}”\n\nReply in My Home: ${portalLink}`
-      : `Maids in Black: Your cleaning team: “${input.body}”`;
+      ? `Your Maids in Black cleaning team sent you a direct message: ${input.body}\n\nReply in your portal: ${portalLink}`
+      : `Your Maids in Black cleaning team sent you a direct message: ${input.body}`;
     const sms = await sendSms({ to: job.customerPhone, content: smsContent });
     await db.update(leadflowBookingMessages).set(sms.success
       ? { notificationStatus: "sent", notificationMessageId: sms.messageId ?? null, notificationError: null, notificationSentAt: new Date() }

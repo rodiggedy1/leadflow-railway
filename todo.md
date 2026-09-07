@@ -1673,4 +1673,10 @@
 - [x] Send customer notification SMS containing the actual cleaner message and the existing Customer My Home link
 - [x] Replace active-job Cleaner Portal Call client actions with a Contact client message panel and expose the shared thread in Customer Portal Messages
 - [x] Remove the unapproved Cleaner Portal Contact client UI prototype from the customer magic-link release scope
-- [ ] Push the cleaner-to-customer LeadFlow booking-message workflow to production
+- [x] Push the cleaner-to-customer LeadFlow booking-message workflow to production
+- [x] Update cleaner message customer SMS to the approved direct-message wording and portal-link label
+- [x] Notify the assigned cleaner by cellphone SMS when the customer replies in My Home, using the approved wording and existing cleaner portal link
+- [x] Preserve the working customer-send treatment while reusing it for customer-reply SMS to the assigned cleaner
+- [x] Fix Cleaner Portal booking threads so saved cleaner and customer messages are visible immediately in the same panel
+- [x] Refresh the open Cleaner Portal Contact client thread so customer portal replies appear without closing and reopening it
+- [ ] Push the customer and cleaner reply SMS wording plus Cleaner Portal thread-refresh update to production

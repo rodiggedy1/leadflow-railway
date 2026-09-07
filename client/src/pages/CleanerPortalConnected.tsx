@@ -149,7 +149,7 @@ const QUICK_MESSAGES = ["We're on our way.", "Running late", "We've arrived.", "
 
 function ContactClientPanel({ job, onClose, onCall }: { job: PortalJob; onClose: () => void; onCall: () => void }) {
   const [draft, setDraft] = useState("");
-  const threadQuery = trpc.cleanerPortalMessages.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
+  const threadQuery = trpc.cleanerPortalMessages.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false, refetchInterval: 3_000 });
   const sendMessage = trpc.cleanerPortalMessages.send.useMutation({
     throwOnError: false,
     onSuccess: async (result) => {
