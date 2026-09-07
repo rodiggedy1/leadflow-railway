@@ -35,6 +35,7 @@ import { cleanerPortalAvailabilityRouter } from "./cleanerPortalAvailabilityRout
 import { cleanerPortalMessagesRouter } from "./cleanerPortalMessagesRouter";
 import { teamAvailabilityRouter } from "./teamAvailabilityRouter";
 import { trackerRouter } from "./trackerRouter";
+import { customerPortalReviewRouter } from "./customerPortalReviewRouter";
 import { settingsRouter } from "./settingsRouter";
 import { smsCampaignRouter } from "./sms/smsCampaignRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
@@ -127,6 +128,7 @@ export const appRouter = router({
   bookingPayments: bookingPaymentRouter,
   bookingPaymentAdmin: bookingPaymentAdminRouter,
   customerPortal: customerPortalRouter,
+  customerPortalReview: customerPortalReviewRouter,
   leadflowJobs: leadflowJobsRouter,
   cleanerPortalReadOnly: cleanerPortalReadOnlyRouter,
   cleanerPortalProgress: cleanerPortalProgressRouter,

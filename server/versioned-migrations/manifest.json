@@ -239,6 +239,14 @@
       "sha256": "03a0a194e959eac1a868b13fa9ab750dbed9100a5e5fd6a21e2da626030856a5",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0032_create_leadflow_booking_messages.postconditions.json"
+    },
+    {
+      "id": "0033_add_leadflow_job_review_fields",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0033_add_leadflow_job_review_fields.sql",
+      "sha256": "f234dcd0be83f9b6835ba215bbdb2ae620097057b068dd82a6b3f8ad8f397203",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0033_add_leadflow_job_review_fields.postconditions.json"
     }
   ]
 }

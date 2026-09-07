@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "table": "leadflow_jobs",
+  "columns": [
+    { "name": "customerRating", "columnType": "int", "nullable": true },
+    { "name": "reviewChipsSelected", "columnType": "text", "nullable": true },
+    { "name": "reviewFreeText", "columnType": "text", "nullable": true },
+    { "name": "reviewDrafts", "columnType": "text", "nullable": true },
+    { "name": "reviewDraftPicked", "columnType": "int", "nullable": true },
+    { "name": "reviewDraftText", "columnType": "text", "nullable": true },
+    { "name": "reviewCopied", "columnType": "tinyint", "nullable": false },
+    { "name": "reviewThumbtackOpenedAt", "columnType": "datetime(3)", "nullable": true },
+    { "name": "reviewCompletionSmsClaimedAt", "columnType": "datetime(3)", "nullable": true },
+    { "name": "reviewCompletionSmsSentAt", "columnType": "datetime(3)", "nullable": true }
+  ],
+  "indexes": []
+}

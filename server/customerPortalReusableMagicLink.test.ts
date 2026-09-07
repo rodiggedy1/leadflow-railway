@@ -110,7 +110,7 @@ describe("customer reusable My Home magic link", () => {
   it("uses the existing session-issuing handoff route and provides the existing portal login fallback when that link is no longer valid", () => {
     expect(route).toContain('app.get("/customer-portal/handoff", createCustomerPortalHandoffHandler())');
     expect(route).toContain("signCustomerPortalSession");
-    expect(route).toContain('req.query.view === "messages" ? "/my-home?view=messages" : "/my-home"');
+    expect(route).toContain('requestedView === "messages" ? "/my-home?view=messages" : requestedView === "review" ? "/my-home?view=review" : "/my-home"');
     expect(route).toContain("return res.redirect(303, destination)");
     expect(route).toContain("secure: true");
   });

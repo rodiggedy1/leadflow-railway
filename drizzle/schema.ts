@@ -1252,6 +1252,17 @@ export const leadflowJobs = mysqlTable("leadflow_jobs", {
   hasStripeCard: tinyint("hasStripeCard").default(0).notNull(),
   paymentBrand: varchar("paymentBrand", { length: 50 }),
   paymentLast4: varchar("paymentLast4", { length: 4 }),
+  /** Customer review data for this LeadFlow-owned job; never reads legacy cleaner_jobs. */
+  customerRating: int("customerRating"),
+  reviewChipsSelected: text("reviewChipsSelected"),
+  reviewFreeText: text("reviewFreeText"),
+  reviewDrafts: text("reviewDrafts"),
+  reviewDraftPicked: int("reviewDraftPicked"),
+  reviewDraftText: text("reviewDraftText"),
+  reviewCopied: tinyint("reviewCopied").default(0).notNull(),
+  reviewThumbtackOpenedAt: datetime("reviewThumbtackOpenedAt", { mode: "date", fsp: 3 }),
+  reviewCompletionSmsClaimedAt: datetime("reviewCompletionSmsClaimedAt", { mode: "date", fsp: 3 }),
+  reviewCompletionSmsSentAt: datetime("reviewCompletionSmsSentAt", { mode: "date", fsp: 3 }),
   /** Set only after a successful manual day sync confirms this imported booking is absent from Launch27. */
   missingFromLaunch27At: datetime("missingFromLaunch27At", { mode: "date", fsp: 3 }),
   /** Atomic end-of-day recurrence claim; null until this job has created or skipped its next occurrence. */

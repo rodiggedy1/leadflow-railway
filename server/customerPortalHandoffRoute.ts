@@ -23,7 +23,8 @@ export function createCustomerPortalHandoffHandler(dependencies: PortalHandoffDe
     res.set("Cache-Control", "no-store");
     res.set("Referrer-Policy", "no-referrer");
     const code = typeof req.query.access === "string" ? req.query.access : "";
-    const destination = req.query.view === "messages" ? "/my-home?view=messages" : "/my-home";
+    const requestedView = typeof req.query.view === "string" ? req.query.view : "";
+    const destination = requestedView === "messages" ? "/my-home?view=messages" : requestedView === "review" ? "/my-home?view=review" : "/my-home";
     if (!HANDOFF_CODE_PATTERN.test(code)) return res.redirect(303, destination);
 
     try {

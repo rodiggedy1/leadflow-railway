@@ -1,13 +1,23 @@
-import { and, eq, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { storagePut } from "./storage";
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
+import { sendSms } from "./openphone";
 
 const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
 const responseSchema = z.enum(["great", "touchup", "issue"]);
+
+function firstName(value: string) {
+  return value.trim().split(/\s+/)[0] || "there";
+}
+
+function reviewPortalUrl(portalUrl: string) {
+  return `${portalUrl}${portalUrl.includes("?") ? "&" : "?"}view=review`;
+}
 
 function parseLeadflowJobId(portalJobKey: string) {
   const value = Number.parseInt(portalJobKey.slice("leadflow:".length), 10);
@@ -22,7 +32,7 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
   const cleaner = cleanerRows[0];
   if (!cleaner?.teamId) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
   const leadflowJobId = parseLeadflowJobId(portalJobKey);
-  const jobRows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(and(
+  const jobRows = await db.select({ id: leadflowJobs.id, customerName: leadflowJobs.customerName, customerPhone: leadflowJobs.customerPhone, customerEmail: leadflowJobs.customerEmail, reviewCompletionSmsClaimedAt: leadflowJobs.reviewCompletionSmsClaimedAt }).from(leadflowJobs).where(and(
     eq(leadflowJobs.id, leadflowJobId),
     eq(leadflowJobs.teamId, cleaner.teamId),
     ne(leadflowJobs.bookingStatus, "cancelled"),
@@ -142,6 +152,29 @@ export const cleanerPortalSignoffRouter = router({
       startedAt: progress.startedAt,
       updatedAt: progress.updatedAt,
     } });
-    return { jobStatus: progress.jobStatus, etaTimestamp: progress.etaTimestamp, etaTimeStr: progress.etaTimeStr, completedAt: now };
+    let customerNotified = false;
+    let notificationError: string | null = null;
+    if (!job.reviewCompletionSmsClaimedAt && job.customerPhone) {
+      const claimed = await db.update(leadflowJobs).set({ reviewCompletionSmsClaimedAt: now }).where(and(eq(leadflowJobs.id, job.id), isNull(leadflowJobs.reviewCompletionSmsClaimedAt)));
+      if (Number((claimed as { affectedRows?: number }).affectedRows ?? 0) !== 1) return { jobStatus: progress.jobStatus, etaTimestamp: progress.etaTimestamp, etaTimeStr: progress.etaTimeStr, completedAt: now, customerNotified, notificationError };
+      const body = `Hi ${firstName(job.customerName)} — your cleaning is complete. Thanks so much. Please review the work in your portal, and let us know if there is anything else you need.`;
+      const inserted = await db.insert(leadflowBookingMessages).values({ leadflowJobId: job.id, senderRole: "cleaner", body, cleanerProfileId: cleaner.id, notificationStatus: "pending", createdAt: now });
+      const messageId = Number(inserted[0].insertId);
+      let portalLink: string | null = null;
+      try {
+        portalLink = reviewPortalUrl(await getOrCreateCustomerPortalMagicLink(db, { customerName: job.customerName, customerPhone: job.customerPhone, customerEmail: job.customerEmail }));
+      } catch (error) {
+        console.error("[CleanerPortalSignoff] Customer review link generation failed; sending completion text without a link.", error);
+      }
+      const sms = await sendSms({ to: job.customerPhone, content: portalLink ? `${body}\n\nOpen My Home: ${portalLink}` : body });
+      customerNotified = sms.success;
+      notificationError = sms.success ? null : (sms.error ?? "The customer completion message could not be sent.");
+      await db.update(leadflowBookingMessages).set(sms.success
+        ? { notificationStatus: "sent", notificationMessageId: sms.messageId ?? null, notificationError: null, notificationSentAt: new Date() }
+        : { notificationStatus: "failed", notificationError },
+      ).where(eq(leadflowBookingMessages.id, messageId));
+      if (sms.success) await db.update(leadflowJobs).set({ reviewCompletionSmsSentAt: now }).where(eq(leadflowJobs.id, job.id));
+    }
+    return { jobStatus: progress.jobStatus, etaTimestamp: progress.etaTimestamp, etaTimeStr: progress.etaTimeStr, completedAt: now, customerNotified, notificationError };
   }),
 });

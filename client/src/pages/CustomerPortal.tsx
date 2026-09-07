@@ -9,6 +9,7 @@ import { calculateCustomerPortalEstimate } from "@shared/customerPortalPricing";
 import { CustomerPortalAppointmentCalendar } from "@/components/CustomerPortalAppointmentCalendar";
 import { customerPortalAppointmentWindows, formatCustomerPortalDate, formatCustomerPortalDateKey, formatCustomerPortalTime, type CustomerPortalAppointmentWindow } from "@/lib/customerPortalAppointment";
 import BookNow from "./BookNow";
+import CustomerPortalReview from "./CustomerPortalReview";
 import "./customer-portal.css";
 import "./customer-portal-request-upgrades.css";
 import "./customer-portal-direct-ui.css";
@@ -25,7 +26,7 @@ import { getCustomerPortalBusinessDate, type CustomerPortalTodayJob } from "@sha
 
 const FEATURED_SERVICE_IDS = ["furniture-assembly", "moving-help", "lawn-yard-care", "junk-removal", "pressure-washing"] as const;
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
-type PortalPage = "home" | "bookings" | "services" | "payments" | "messages" | "account";
+type PortalPage = "home" | "bookings" | "services" | "payments" | "messages" | "account" | "review";
 type PortalHomeBooking = CustomerPortalTodayJob & { focusTargetId: string; leadflowJobId: number | null };
 type PortalBookingMessage = { id: number; leadflowJobId: number; senderRole: string; body: string; notificationStatus: string; createdAt: Date | string; jobDate: string; serviceName: string | null; jobAddress: string | null };
 const SERVICE_ICONS: Record<string, typeof Wrench> = {
@@ -154,7 +155,10 @@ function PortalLoginGate({ onAuthenticated }: { onAuthenticated: () => void }) {
 export default function CustomerPortal() {
   const [selectedService, setSelectedService] = useState<CustomerPortalService | null>(null);
   const [showCleaningRebook, setShowCleaningRebook] = useState(false);
-  const [activePage, setActivePage] = useState<PortalPage>(() => new URLSearchParams(window.location.search).get("view") === "messages" ? "messages" : "home");
+  const [activePage, setActivePage] = useState<PortalPage>(() => {
+    const view = new URLSearchParams(window.location.search).get("view");
+    return view === "messages" || view === "review" ? view : "home";
+  });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [newCardSetup, setNewCardSetup] = useState<{ clientSecret: string; setupIntentId: string } | null>(null);
   const [focusedBookingId, setFocusedBookingId] = useState<string | null>(null);
@@ -209,6 +213,7 @@ export default function CustomerPortal() {
 
   if (portal.isLoading) return <main className="mib-portal-gate">Loading your home portal…</main>;
   if (!portal.data?.account) return <PortalLoginGate onAuthenticated={() => { void portal.refetch(); }} />;
+  if (activePage === "review") return <CustomerPortalReview />;
 
   const totalRecords = portal.data.cleanings.length + portal.data.leadflowJobs.length + portal.data.requests.length;
   const activeRecordCount = activeCleanings.length + activeLeadflowJobs.length + portal.data.requests.filter(request => isActivePortalBookingStatus(request.status)).length;

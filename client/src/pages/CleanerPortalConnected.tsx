@@ -149,7 +149,6 @@ const QUICK_MESSAGES = [
   { label: "We're on our way", draft: (firstName: string) => `Hi ${firstName} — your Maids in Black cleaning team is on the way and looking forward to seeing you soon. If there’s anything we should know before we arrive, please reply here.` },
   { label: "Running late", draft: (firstName: string) => `Hi ${firstName} — we’re sorry, your cleaning team is running a little behind. We appreciate your patience and will keep you updated.` },
   { label: "We've arrived", draft: (firstName: string) => `Hi ${firstName} — your Maids in Black cleaning team has arrived and is ready to begin. Please let us know if there’s anything you’d like us to prioritize today.` },
-  { label: "Job complete", draft: (firstName: string) => `Hi ${firstName} — your cleaning is complete. Thanks so much. Please review the work in your portal, and let us know if there is anything else you need.` },
   { label: "Entry instructions", draft: (firstName: string) => `Hi ${firstName} — your cleaning team is at your home but needs help accessing it. Could you please confirm the entry instructions or let us know the best next step? Thank you.` },
   { label: "Add a service", draft: (firstName: string) => `Hi ${firstName} — while we’re here, would you like us to clean the inside of the fridge or oven, or add any other service today? Reply here and we’ll let you know what we can accommodate.` },
 ] as const;

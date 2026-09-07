@@ -1,0 +1,58 @@
+.mib-review-page { min-height: 100vh; background: #f8f7f5; color: #080f20; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.mib-review-shell { width: min(100%, 720px); min-height: 100vh; margin: 0 auto; padding: 18px 22px 56px; }
+.mib-review-hero { position: relative; height: 282px; overflow: hidden; }
+.mib-review-hero-copy { position: relative; z-index: 2; width: 350px; padding: 0 6px; }
+.mib-review-hero-copy img { width: 64px; height: 64px; margin-bottom: 25px; object-fit: contain; }
+.mib-review-hero h1 { max-width: 345px; margin: 0; font-size: 46px; font-weight: 900; letter-spacing: -.065em; line-height: 1; }
+.mib-review-hero p { margin: 14px 0 0; font-size: 18px; font-weight: 540; letter-spacing: -.025em; }
+.mib-review-photo { position: absolute; top: 0; right: -20px; width: 430px; height: 282px; opacity: .76; pointer-events: none; }
+.mib-review-photo::after { position: absolute; inset: 0; background: linear-gradient(90deg, #f8f7f5 0%, transparent 23%, transparent 47%, rgba(248,247,245,.36) 70%, #f8f7f5 100%); content: ""; }
+.mib-review-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center; mix-blend-mode: multiply; }
+.mib-review-summary { display: grid; grid-template-columns: minmax(0, 1.16fr) minmax(225px, .84fr); gap: 27px; margin-top: 4px; padding: 28px 30px; border: 1px solid #eef0f2; border-radius: 26px; background: rgba(255,254,253,.98); box-shadow: 0 22px 38px rgba(15,23,42,.10); }
+.mib-review-details { position: relative; display: grid; gap: 21px; padding: 1px 25px 1px 0; }
+.mib-review-details::after { position: absolute; top: 6px; right: 0; bottom: 6px; width: 1px; background: #e6e8eb; content: ""; }
+.mib-review-detail { display: grid; grid-template-columns: 45px minmax(0, 1fr); align-items: center; gap: 13px; }
+.mib-review-tile { display: grid; width: 45px; height: 45px; place-items: center; border-radius: 14px; background: #fff1ea; color: #080f20; font-size: 26px; font-weight: 800; }
+.mib-review-tile svg { width: 26px; height: 26px; stroke-width: 2.25; }
+.mib-review-detail small { display: block; margin-bottom: 4px; color: #737681; font-size: 10px; font-weight: 800; letter-spacing: .10em; text-transform: uppercase; }
+.mib-review-detail strong { display: block; color: #080f20; font-size: 18px; font-weight: 850; letter-spacing: -.045em; line-height: 1.15; }
+.mib-review-detail span:last-child { display: block; margin-top: 5px; color: #646875; font-size: 15px; font-weight: 520; letter-spacing: -.025em; line-height: 1.2; }
+.mib-review-complete { display: grid; grid-template-columns: 47px minmax(0, 1fr); align-self: start; gap: 14px; padding: 21px 17px; border-radius: 17px; background: linear-gradient(135deg, #e7f9f1, #effaf6); }
+.mib-review-complete > span { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; background: #067754; color: white; box-shadow: 0 0 0 8px rgba(6,119,84,.08); }
+.mib-review-complete svg { width: 29px; height: 29px; stroke-width: 4; }
+.mib-review-complete strong { display: block; margin: 0 0 4px; color: #056a4b; font-size: 19px; font-weight: 850; letter-spacing: -.035em; }
+.mib-review-complete p { margin: 0; color: #397966; font-size: 15px; font-weight: 540; line-height: 1.35; }
+.mib-review-card, .mib-review-flow, .mib-review-empty { margin-top: 27px; border: 1px solid #eef0f2; border-radius: 26px; background: #fffefd; box-shadow: 0 22px 38px rgba(15,23,42,.10); }
+.mib-review-card { padding: 30px 30px 32px; }
+.mib-review-card > small { display: block; margin-bottom: 8px; color: #737681; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.mib-review-card h2, .mib-review-flow h2 { margin: 0; color: #080f20; font-size: 27px; font-weight: 850; letter-spacing: -.055em; line-height: 1.14; }
+.mib-review-card > p, .mib-review-flow > p { margin: 10px 0 23px; color: #737681; font-size: 15px; font-weight: 520; line-height: 1.35; }
+.mib-review-tip { display: inline-flex; align-items: center; justify-content: center; max-width: 100%; margin: 0 0 24px; padding: 9px 15px; border: 1px solid #c5eadb; border-radius: 999px; background: linear-gradient(90deg, #e6f8f0, #f0faf6); color: #056a4b; font-size: 14px; font-weight: 850; letter-spacing: .005em; }
+.mib-review-stars { display: flex; justify-content: center; gap: 21px; }
+.mib-review-stars button { width: 58px; height: 67px; padding: 0; border: 0; background: transparent; color: #ded8d5; cursor: pointer; font-size: 64px; line-height: 1; transition: color .15s ease, transform .15s ease; }
+.mib-review-stars button:hover, .mib-review-stars button.selected { color: #d9ab38; transform: translateY(-2px) scale(1.04); }
+.mib-review-stars button:disabled { cursor: wait; }
+.mib-review-card > em { display: block; margin-top: 18px; color: #858991; font-size: 15px; font-style: normal; font-weight: 600; text-align: center; }
+.mib-review-submit { width: 100%; margin-top: 24px; padding: 15px 18px; border: 0; border-radius: 14px; background: #e4e5e7; color: #a0a3a8; font-size: 16px; font-weight: 800; }
+.mib-review-flow { max-width: 650px; margin: 44px auto 0; padding: 38px 30px; text-align: center; }
+.mib-review-flow-icon { margin: 0 0 15px; font-size: 39px; }
+.mib-review-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.mib-review-chips button { padding: 10px 15px; border: 1px solid #d9dddf; border-radius: 999px; background: white; color: #4f5660; cursor: pointer; font-size: 14px; font-weight: 700; }
+.mib-review-chips button.selected { border-color: #77bda5; background: #e8f8f1; color: #056a4b; }
+.mib-review-flow textarea { width: 100%; min-height: 111px; margin-top: 20px; padding: 17px 20px; resize: vertical; border: 1px solid #dfe1e4; border-radius: 16px; outline: none; background: #fdfdfd; color: #080f20; font: inherit; line-height: 1.4; }
+.mib-review-primary { width: 100%; margin-top: 20px; padding: 16px; border: 0; border-radius: 16px; background: linear-gradient(105deg, #067754, #15936b); color: white; cursor: pointer; font-size: 17px; font-weight: 850; box-shadow: 0 12px 24px rgba(6,119,84,.18); }
+.mib-review-primary:disabled { cursor: not-allowed; opacity: .44; box-shadow: none; }
+.mib-review-link { margin-top: 17px; padding: 0; border: 0; border-bottom: 1px solid #d3d5d9; background: transparent; color: #7a7d85; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }
+.mib-review-spinner { display: grid; width: 64px; height: 64px; place-items: center; margin: 0 auto 21px; border: 3px solid #cce9dc; border-top-color: #067754; border-radius: 50%; color: #067754; font-size: 25px; animation: mib-review-spin .9s linear infinite; }
+.mib-review-drafts { display: grid; gap: 14px; text-align: left; }
+.mib-review-drafts button { width: 100%; padding: 20px; border: 1px solid #dce0e2; border-radius: 17px; background: white; color: #080f20; cursor: pointer; text-align: left; }
+.mib-review-drafts b { color: #067754; font-size: 14px; font-weight: 900; }
+.mib-review-drafts span { display: block; margin-top: 8px; color: #59606a; font-size: 15px; font-weight: 540; line-height: 1.52; }
+.mib-review-error { display: block; margin-top: 16px; color: #b42318; font-size: 13px; line-height: 1.4; }
+.mib-review-empty, .mib-review-loading { max-width: 620px; margin: 72px auto; padding: 40px 30px; color: #080f20; text-align: center; }
+.mib-review-empty svg { width: 36px; height: 36px; margin-bottom: 14px; color: #067754; }
+.mib-review-empty h1 { margin: 0; font-size: 26px; letter-spacing: -.04em; }
+.mib-review-empty p { color: #737681; line-height: 1.5; }
+.mib-review-empty a, .mib-review-empty button { display: inline-block; margin-top: 12px; padding: 12px 16px; border: 0; border-radius: 12px; background: #067754; color: white; font: inherit; font-weight: 750; text-decoration: none; }
+@keyframes mib-review-spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) { .mib-review-shell { width: 100%; padding: 14px 15px 42px; } .mib-review-hero { height: 279px; } .mib-review-hero-copy { width: 70%; padding: 3px; } .mib-review-hero-copy img { width: 49px; height: 49px; margin-bottom: 29px; } .mib-review-hero h1 { font-size: clamp(34px, 9vw, 47px); } .mib-review-hero p { margin-top: 10px; font-size: 16px; } .mib-review-photo { top: -7px; right: -55px; width: 360px; height: 290px; opacity: .66; } .mib-review-summary { grid-template-columns: 1fr; gap: 0; padding: 0; border-radius: 22px; } .mib-review-details { gap: 19px; padding: 22px 19px; border-bottom: 1px solid #e6e8eb; } .mib-review-details::after { display: none; } .mib-review-complete { margin: 20px 19px; } .mib-review-card { margin-top: 20px; padding: 27px 19px 29px; border-radius: 22px; } .mib-review-card h2, .mib-review-flow h2 { font-size: 24px; } .mib-review-tip { width: 100%; margin-bottom: 22px; padding: 9px 7px; white-space: nowrap; font-size: 11px; } .mib-review-stars { gap: 8px; } .mib-review-stars button { width: 54px; height: 61px; font-size: 57px; } .mib-review-flow { margin-top: 30px; padding: 31px 19px; border-radius: 22px; } }
