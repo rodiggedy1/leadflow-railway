@@ -1716,3 +1716,4 @@
 - [x] Fix the production Customer Portal review hero image at mobile width without changing desktop composition
 - [x] Reduce the production Customer Portal service-summary card height so the review rating section appears sooner without changing its content
 - [x] Make final job completion update the Customer Portal status with the same completed state pattern used by existing On the way and Arrived updates
+- [x] Give completed Cleaner Portal job cards a distinct completed color treatment and a visible Completed banner without changing job actions or data behavior

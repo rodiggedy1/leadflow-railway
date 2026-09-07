@@ -35,4 +35,15 @@ describe("visible Cleaner Portal Tomorrow view", () => {
     expect(page).toContain("!isTomorrow && onOpen");
     expect(page).toContain("!viewingTomorrow && nextJob");
   });
+
+  it("gives completed cards a visible banner and distinct color treatment without changing their available actions", () => {
+    const page = read("client/src/pages/CleanerPortalConnected.tsx");
+    const styles = read("client/src/pages/cleaner-portal-connected.css");
+    expect(page).toContain('complete && <div className="cp-job-card__complete-banner"');
+    expect(page).toContain("<span>Completed</span>");
+    expect(page).toContain('complete ? "Completed" : statusLabel(job.jobStatus)');
+    expect(styles).toContain(".cp-job-card--complete{position:relative;overflow:hidden;opacity:1");
+    expect(styles).toContain(".cp-job-card__complete-banner");
+    expect(page).toContain('onOpen}>{complete ? "View job" : "Open job"}');
+  });
 });

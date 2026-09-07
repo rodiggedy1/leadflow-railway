@@ -140,7 +140,7 @@ function JobSequenceBadge({ job }: { job: PortalJob | WeekJob }) {
 
 function StatusPill({ job }: { job: PortalJob | WeekJob }) {
   const complete = jobIsComplete(job);
-  return <span className={`cp-status cp-status--${complete ? "complete" : "active"}`}>{complete ? "Complete" : statusLabel(job.jobStatus)}</span>;
+  return <span className={`cp-status cp-status--${complete ? "complete" : "active"}`}>{complete ? "Completed" : statusLabel(job.jobStatus)}</span>;
 }
 
 type BookingMessage = { id: number; senderRole: string; body: string; notificationStatus: string; createdAt: Date | string };
@@ -185,6 +185,7 @@ function JobCard({ job, onOpen, onContact, tomorrowLabel }: { job: PortalJob; on
   const isTomorrow = Boolean(tomorrowLabel);
   return (
     <article className={`cp-job-card ${complete ? "cp-job-card--complete" : ""}${isTomorrow ? " cp-job-card--tomorrow" : ""}`}>
+      {complete && <div className="cp-job-card__complete-banner"><CheckCircle2 size={15} aria-hidden="true" /><span>Completed</span></div>}
       {tomorrowLabel && <span className="cp-job-card__tomorrow-label"><CalendarDays size={13} />Tomorrow · {tomorrowLabel}</span>}
       <div className="cp-job-card__head">
         <div className="cp-timebox"><b>{parseTime(job.time).replace(" ", "\n")}</b></div>
