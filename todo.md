@@ -1652,4 +1652,13 @@
 - [x] Refine the live Cleaner Portal V2 Tomorrow tab and cards with explicit weekday-and-date treatment, without changing job data or actions
 - [x] Push the Cleaner Portal Tomorrow tab and card-label refinement to production
 - [x] Correct the visible white Cleaner Portal Today page with a Today and Tomorrow switcher and clear weekday-and-date Tomorrow labels on every card
-- [ ] Push the corrected Today and Tomorrow switcher on the exact Cleaner Portal screen to production
+- [x] Push the corrected Today and Tomorrow switcher on the exact Cleaner Portal screen to production
+- [x] Create an isolated UI-only review of a Cleaner Portal Contact client panel, with no real messaging, customer data, or production changes
+- [x] Add a non-sending Contact client panel directly to the exact Cleaner Portal page at /portal-v2 for visual review
+- [x] Add a long-lasting customer portal magic link modeled on the established cleaner magic-link flow, without changing portal UI or messaging behavior
+- [x] Scope superseded — do not alter Cleaner Portal magic links; only Customer My Home receives the one-year reusable link
+- [x] Add a customer-only reusable one-year My Home magic link using the established cleaner-link pattern, without modifying Cleaner Portal link code
+- [x] Append the reusable customer My Home link to active On the way and Arrived texts, while sending the status text without a link if link generation fails
+- [x] Generate one reusable one-year customer portal link per customer and reuse that same link in every eligible active status text
+- [ ] Push the validated customer-only one-year reusable My Home link to production without changing Cleaner Portal magic links
+- [x] Remove the unapproved Cleaner Portal Contact client UI prototype from the customer magic-link release scope

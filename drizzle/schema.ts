@@ -4553,6 +4553,10 @@ export const customerPortalHandoffTokens = mysqlTable("customer_portal_handoff_t
   tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
   expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
   usedAt: datetime("usedAt", { mode: "date", fsp: 3 }),
+  /** Reusable customer My Home token; 0 keeps the original single-use handoff behavior. */
+  reusable: tinyint("reusable").notNull().default(0),
+  /** Raw token retained only for safely reusing the established one-year customer portal link. */
+  reusableToken: varchar("reusableToken", { length: 64 }),
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
 }, (t) => [uniqueIndex("uq_customer_portal_handoff_hash").on(t.tokenHash), index("idx_customer_portal_handoff_account").on(t.accountId), index("idx_customer_portal_handoff_expiry").on(t.expiresAt)]);
 

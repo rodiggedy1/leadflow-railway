@@ -5,6 +5,7 @@ import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs } from "../driz
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { sendSms } from "./openphone";
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 
 const ETA_CHOICES = [10, 20, 30, 45, 60, 75, 90, 120] as const;
 const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
@@ -34,6 +35,7 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
     id: leadflowJobs.id,
     customerName: leadflowJobs.customerName,
     customerPhone: leadflowJobs.customerPhone,
+    customerEmail: leadflowJobs.customerEmail,
     jobAddress: leadflowJobs.jobAddress,
   }).from(leadflowJobs).where(and(
     eq(leadflowJobs.id, leadflowJobId),
@@ -87,9 +89,20 @@ async function saveProgress(input: {
   return record;
 }
 
-async function notifyClient(phone: string | null, content: string) {
-  if (!phone) return { customerNotified: false, notificationError: null as string | null };
-  const result = await sendSms({ to: phone, content });
+async function notifyClient(input: { db: NonNullable<Awaited<ReturnType<typeof getDb>>>; customerName: string; customerPhone: string | null; customerEmail: string | null; content: string }) {
+  if (!input.customerPhone) return { customerNotified: false, notificationError: null as string | null };
+  let portalLink: string | null = null;
+  try {
+    portalLink = await getOrCreateCustomerPortalMagicLink(input.db, {
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      customerEmail: input.customerEmail,
+    });
+  } catch (error) {
+    console.error("[CleanerPortalProgress] Customer portal link generation failed; sending status text without a link.", error);
+  }
+  const content = portalLink ? `${input.content}\n\nOpen My Home: ${portalLink}` : input.content;
+  const result = await sendSms({ to: input.customerPhone, content });
   return { customerNotified: result.success, notificationError: result.success ? null : (result.error ?? "The customer message could not be sent.") };
 }
 
@@ -100,17 +113,17 @@ export const cleanerPortalProgressRouter = router({
     return rows[0] ?? null;
   }),
   setEta: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema, minutes: z.union(ETA_CHOICES.map(value => z.literal(value)) as [z.ZodLiteral<10>, z.ZodLiteral<20>, z.ZodLiteral<30>, z.ZodLiteral<45>, z.ZodLiteral<60>, z.ZodLiteral<75>, z.ZodLiteral<90>, z.ZodLiteral<120>]) })).mutation(async ({ ctx, input }) => {
-    const { cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+    const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
     const etaTimestamp = Date.now() + input.minutes * 60_000;
     const etaTimeStr = formatEtaTime(etaTimestamp);
     const progress = await saveProgress({ cleanerId: cleaner.id, teamId: cleaner.teamId!, leadflowJobId: job.id, jobStatus: "on_the_way", etaTimestamp, etaTimeStr });
-    const notification = await notifyClient(job.customerPhone, `Hi ${firstName(job.customerName)}! Your Maids in Black team is on the way and will arrive at ${job.jobAddress ?? "your address"} around ${etaTimeStr}.`);
+    const notification = await notifyClient({ db, customerName: job.customerName, customerPhone: job.customerPhone, customerEmail: job.customerEmail, content: `Hi ${firstName(job.customerName)}! Your Maids in Black team is on the way and will arrive at ${job.jobAddress ?? "your address"} around ${etaTimeStr}.` });
     return { ...progress, ...notification };
   }),
   markArrived: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {
-    const { cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+    const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
     const progress = await saveProgress({ cleanerId: cleaner.id, teamId: cleaner.teamId!, leadflowJobId: job.id, jobStatus: "arrived", arrivedAt: new Date() });
-    const notification = await notifyClient(job.customerPhone, `Hi ${firstName(job.customerName)}! Your Maids in Black team has arrived for your cleaning at ${job.jobAddress ?? "your address"}.`);
+    const notification = await notifyClient({ db, customerName: job.customerName, customerPhone: job.customerPhone, customerEmail: job.customerEmail, content: `Hi ${firstName(job.customerName)}! Your Maids in Black team has arrived for your cleaning at ${job.jobAddress ?? "your address"}.` });
     return { ...progress, ...notification };
   }),
   startJob: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {

@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "table": "customer_portal_handoff_tokens",
+  "columns": [
+    { "name": "reusable", "columnType": "tinyint", "nullable": false },
+    { "name": "reusableToken", "columnType": "varchar(64)", "nullable": true }
+  ],
+  "indexes": []
+}

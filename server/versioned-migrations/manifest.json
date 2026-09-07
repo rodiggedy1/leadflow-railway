@@ -223,6 +223,14 @@
       "sha256": "d457f42d2b371cd28903a194aeb590191100c151c58423e97e3dd4842b5efcc9",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0030_add_leadflow_job_missing_from_launch27.postconditions.json"
+    },
+    {
+      "id": "0031_add_customer_portal_reusable_magic_link",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0031_add_customer_portal_reusable_magic_link.sql",
+      "sha256": "8b471e2afca73fc91b8d39582b36cd7552ae53fe3198d534006afd5024cdbb3b",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0031_add_customer_portal_reusable_magic_link.postconditions.json"
     }
   ]
 }
