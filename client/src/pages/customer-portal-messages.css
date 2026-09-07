@@ -1,0 +1,15 @@
+.mib-portal-message-threads { display: grid; gap: 18px; }
+.mib-portal-message-thread { overflow: hidden; background: #fff; border: 1px solid #e8e1d8; border-radius: 18px; box-shadow: 0 8px 24px rgb(49 37 25 / 5%); }
+.mib-portal-message-thread > header { padding: 22px 23px 18px; border-bottom: 1px solid #eee8e1; }
+.mib-portal-message-thread header small { color: #c75942; font-size: 11px; font-weight: 800; letter-spacing: .11em; }
+.mib-portal-message-thread header h2 { margin: 7px 0 4px; color: #2e231c; font-family: Georgia, serif; font-size: 24px; }
+.mib-portal-message-thread header p { margin: 0; color: #776c63; font-size: 13px; }
+.mib-portal-message-bubbles { display: grid; gap: 10px; padding: 20px 23px; background: #fdfbf8; }
+.mib-portal-message-bubbles > div { width: fit-content; max-width: min(88%, 560px); padding: 11px 13px; color: #42342c; background: #eeecea; border-radius: 14px 14px 14px 4px; }
+.mib-portal-message-bubbles > div.is-customer { justify-self: end; color: #21453b; background: #e2f3ed; border-radius: 14px 14px 4px 14px; }
+.mib-portal-message-bubbles p { margin: 0 0 5px; line-height: 1.45; }
+.mib-portal-message-bubbles small { color: #7c736d; font-size: 11px; }
+.mib-portal-message-thread form { display: grid; gap: 9px; padding: 20px 23px 23px; }
+.mib-portal-message-thread form label { color: #443229; font-size: 13px; font-weight: 800; }
+.mib-portal-message-thread form textarea { min-height: 82px; padding: 12px; font: inherit; resize: vertical; border: 1px solid #dcd5cc; border-radius: 11px; }
+.mib-portal-message-thread form button { justify-self: start; }

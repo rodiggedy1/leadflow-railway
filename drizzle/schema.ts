@@ -1335,6 +1335,28 @@ export const cleanerPortalJobSignoffs = mysqlTable("cleaner_portal_job_signoffs"
 export type CleanerPortalJobSignoff = typeof cleanerPortalJobSignoffs.$inferSelect;
 
 /**
+ * Booking-specific messages for LeadFlow jobs. This deliberately stays
+ * separate from legacy job_sms_replies, which is keyed to cleaner_jobs.
+ */
+export const leadflowBookingMessages = mysqlTable("leadflow_booking_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  leadflowJobId: int("leadflowJobId").notNull(),
+  senderRole: varchar("senderRole", { length: 16 }).notNull(),
+  body: text("body").notNull(),
+  cleanerProfileId: int("cleanerProfileId"),
+  customerPortalAccountId: int("customerPortalAccountId"),
+  notificationStatus: varchar("notificationStatus", { length: 24 }).notNull().default("not_applicable"),
+  notificationMessageId: varchar("notificationMessageId", { length: 255 }),
+  notificationError: text("notificationError"),
+  notificationSentAt: datetime("notificationSentAt", { mode: "date", fsp: 3 }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  index("idx_leadflow_booking_messages_job_created").on(t.leadflowJobId, t.createdAt),
+  index("idx_leadflow_booking_messages_account_created").on(t.customerPortalAccountId, t.createdAt),
+]);
+export type LeadflowBookingMessage = typeof leadflowBookingMessages.$inferSelect;
+
+/**
  * jobPhotos — completion photos uploaded by cleaners for a specific job.
  */
 export const jobPhotos = mysqlTable("job_photos", {

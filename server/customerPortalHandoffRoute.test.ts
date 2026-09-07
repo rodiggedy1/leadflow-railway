@@ -62,4 +62,19 @@ describe("customer portal server handoff", () => {
     expect(malformedResponse.redirect).toHaveBeenCalledWith(303, "/my-home");
     expect(redeem).toHaveBeenCalledTimes(1);
   });
+
+  it("opens the existing My Home Messages view only after a valid handoff and preserves the same destination for an expired-link login fallback", async () => {
+    const validHandler = createCustomerPortalHandoffHandler({ getDb: vi.fn().mockResolvedValue({} as any), redeem: vi.fn().mockResolvedValue({ id: 42, customerName: "Jamie Lee", customerPhone: "+13025550199" }) as any, sign: vi.fn().mockResolvedValue("signed-portal-session") });
+    const expiredHandler = createCustomerPortalHandoffHandler({ getDb: vi.fn().mockResolvedValue({} as any), redeem: vi.fn().mockResolvedValue(null) as any, sign: vi.fn() });
+    const validResponse = responseCapture();
+    const expiredResponse = responseCapture();
+
+    await validHandler({ query: { access: validCode, view: "messages" } } as unknown as Request, validResponse);
+    await expiredHandler({ query: { access: validCode, view: "messages" } } as unknown as Request, expiredResponse);
+
+    expect(validResponse.cookie).toHaveBeenCalled();
+    expect(validResponse.redirect).toHaveBeenCalledWith(303, "/my-home?view=messages");
+    expect(expiredResponse.cookie).not.toHaveBeenCalled();
+    expect(expiredResponse.redirect).toHaveBeenCalledWith(303, "/my-home?view=messages");
+  });
 });

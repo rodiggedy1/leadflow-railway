@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import "./cleaner-portal-connected.css";
+import "./cleaner-portal-messages.css";
 import "./cleaner-portal-earnings.css";
 import "./cleaner-portal-login.css";
 
@@ -142,7 +143,37 @@ function StatusPill({ job }: { job: PortalJob | WeekJob }) {
   return <span className={`cp-status cp-status--${complete ? "complete" : "active"}`}>{complete ? "Complete" : statusLabel(job.jobStatus)}</span>;
 }
 
-function JobCard({ job, onOpen, onCall, tomorrowLabel }: { job: PortalJob; onOpen?: () => void; onCall?: () => void; tomorrowLabel?: string }) {
+type BookingMessage = { id: number; senderRole: string; body: string; notificationStatus: string; createdAt: Date | string };
+
+const QUICK_MESSAGES = ["We're on our way.", "Running late", "We've arrived.", "Job complete", "Access issue", "Custom message"] as const;
+
+function ContactClientPanel({ job, onClose, onCall }: { job: PortalJob; onClose: () => void; onCall: () => void }) {
+  const [draft, setDraft] = useState("");
+  const threadQuery = trpc.cleanerPortalMessages.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false });
+  const sendMessage = trpc.cleanerPortalMessages.send.useMutation({
+    throwOnError: false,
+    onSuccess: async (result) => {
+      setDraft("");
+      await threadQuery.refetch();
+      result.notificationSent ? toast.success("Message saved and customer notified.") : toast.warning(result.notificationError || "Message saved, but the customer notification could not be sent.");
+    },
+    onError: error => toast.error(error.message || "Message could not be sent."),
+  });
+  const messages = (threadQuery.data ?? []) as BookingMessage[];
+  const chooseQuickMessage = (value: string) => setDraft(value === "Custom message" ? "" : value);
+  return <div className="cp-contact-backdrop" onClick={onClose}>
+    <aside className="cp-contact-drawer" onClick={event => event.stopPropagation()} aria-label={`Message ${job.customerName}`}>
+      <header><div><span className="cp-eyebrow">Contact client</span><h2>Message {job.customerName}</h2><p>{serviceLabel(job)} · {job.time}</p></div><button className="cp-icon-button" type="button" onClick={onClose} aria-label="Close message panel"><X size={20} /></button></header>
+      <section className="cp-contact-summary"><MapPin size={18} /><div><b>{job.customerName}</b><span>{job.address || "Address pending"}</span></div></section>
+      <section className="cp-contact-quick"><div className="cp-contact-section-title"><h3>Quick messages</h3><small>Choose one to edit</small></div><div>{QUICK_MESSAGES.map(message => <button type="button" key={message} onClick={() => chooseQuickMessage(message)}><MessageCircle size={16} />{message}</button>)}</div></section>
+      <section className="cp-contact-thread"><div className="cp-contact-section-title"><h3>Conversation</h3><small>Saved with this booking</small></div>{threadQuery.isLoading ? <p className="cp-muted">Loading messages…</p> : threadQuery.isError ? <p className="cp-muted">Messages could not be loaded.</p> : messages.length ? <div className="cp-contact-bubbles">{messages.map(message => <article className={message.senderRole === "customer" ? "is-customer" : "is-team"} key={message.id}><p>{message.body}</p><small>{message.senderRole === "customer" ? job.customerName : "Your team"}</small></article>)}</div> : <p className="cp-muted">No messages on this booking yet.</p>}</section>
+      <form className="cp-contact-compose" onSubmit={event => { event.preventDefault(); if (draft.trim()) sendMessage.mutate({ portalJobKey: job.portalJobKey, body: draft.trim() }); }}><label htmlFor={`contact-message-${job.portalJobKey}`}>Message {job.customerName}</label><textarea id={`contact-message-${job.portalJobKey}`} value={draft} onChange={event => setDraft(event.target.value)} maxLength={1_000} placeholder="Type a message…" /><p>{job.customerName.split(" ")[0] || "The client"} will receive a Maids in Black text with this message and can reply in My Home.</p><button className="cp-btn cp-btn--primary cp-btn--wide" type="submit" disabled={!draft.trim() || sendMessage.isPending}>{sendMessage.isPending ? "Sending…" : "Send message"}</button></form>
+      <button className="cp-btn cp-btn--subtle cp-btn--wide cp-contact-call" type="button" onClick={onCall}><Phone size={16} />Call client</button>
+    </aside>
+  </div>;
+}
+
+function JobCard({ job, onOpen, onContact, tomorrowLabel }: { job: PortalJob; onOpen?: () => void; onContact?: () => void; tomorrowLabel?: string }) {
   const complete = jobIsComplete(job);
   const isTomorrow = Boolean(tomorrowLabel);
   return (
@@ -163,7 +194,7 @@ function JobCard({ job, onOpen, onCall, tomorrowLabel }: { job: PortalJob; onOpe
         </div>
       </div>
       <div className="cp-job-card__actions">
-        {!isTomorrow && !complete && <button className="cp-btn cp-btn--subtle" onClick={onCall}><Phone size={15} />Call client</button>}
+        {!isTomorrow && !complete && <button className="cp-btn cp-btn--subtle" onClick={onContact}><MessageCircle size={15} />Contact client</button>}
         <button className="cp-btn cp-btn--subtle" onClick={() => openDirections(job.address)}><Navigation size={15} />Directions</button>
         {!isTomorrow && onOpen && <button className="cp-btn cp-btn--primary" onClick={onOpen}>{complete ? "View job" : "Open job"}<ChevronRight size={15} /></button>}
       </div>
@@ -198,7 +229,7 @@ function SignaturePad({ canvasRef, onDraw }: { canvasRef: RefObject<HTMLCanvasEl
   return <canvas className="cp-signature" ref={canvasRef} width={1000} height={260} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drawing.current = false; lastPoint.current = null; }} onPointerLeave={() => { drawing.current = false; lastPoint.current = null; }} />;
 }
 
-function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () => void; onProgress: (progress: { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }) => void }) {
+function JobDrawer({ job, onClose, onProgress, onContact }: { job: PortalJob; onClose: () => void; onProgress: (progress: { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }) => void; onContact: () => void }) {
   const [etaOpen, setEtaOpen] = useState(false);
   const [arrivalConfirm, setArrivalConfirm] = useState(false);
   const [selectedEta, setSelectedEta] = useState<EtaChoice>(30);
@@ -293,7 +324,7 @@ function JobDrawer({ job, onClose, onProgress }: { job: PortalJob; onClose: () =
         <header className="cp-drawer__header"><div><span className="cp-eyebrow">{ordinal(displayedJob.jobIndex)} job · Today</span><h2>{displayedJob.customerName}</h2><p>{serviceLabel(displayedJob)} · {displayedJob.time}</p></div><button className="cp-icon-button" onClick={onClose} aria-label="Close job details"><X size={20} /></button></header>
         <section className="cp-detail-block cp-detail-block--address"><MapPin size={20} /><div><span>Service address</span><strong>{displayedJob.address || "Address pending"}</strong></div></section>
         <section className="cp-action-grid">
-          <button className="cp-btn cp-btn--subtle" disabled><Phone size={16} />Call client</button>
+          <button className="cp-btn cp-btn--subtle" onClick={onContact}><MessageCircle size={16} />Contact client</button>
           <button className="cp-btn cp-btn--subtle" onClick={() => openDirections(displayedJob.address)}><Navigation size={16} />Directions</button>
           <button className="cp-btn cp-btn--dark" disabled={actionUnavailable || actionPending} onClick={() => setEtaOpen(true)}><Clock3 size={16} />Set ETA</button>
           <button className="cp-btn cp-btn--arrived" disabled={actionUnavailable || actionPending} onClick={() => setArrivalConfirm(true)}><CheckCircle2 size={16} />I’ve arrived</button>
@@ -350,6 +381,7 @@ function CleanerPortalConnected() {
   const [page, setPage] = useState<NavPage>("today");
   const [routeDay, setRouteDay] = useState<"today" | "tomorrow">("today");
   const [selectedJob, setSelectedJob] = useState<PortalJob | null>(null);
+  const [contactJob, setContactJob] = useState<PortalJob | null>(null);
   const [selectedPayWeek, setSelectedPayWeek] = useState<PayWeekKey>("current");
   const [progressByJobKey, setProgressByJobKey] = useState<Record<string, { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }>>({});
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
@@ -404,7 +436,7 @@ function CleanerPortalConnected() {
         {page === "today" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">{displayedDayLabel} · {displayedDateLabel}</span><h1>{viewingTomorrow ? "Tomorrow’s work." : `Good day, ${firstName}.`}</h1><p>{routeLoading ? "Loading tomorrow’s assigned jobs…" : activeJobs.length ? `You have ${activeJobs.length} active job${activeJobs.length === 1 ? "" : "s"} ${viewingTomorrow ? "tomorrow" : "today"}.` : jobs.length ? `${displayedDayLabel}’s jobs are complete.` : `No jobs assigned for ${viewingTomorrow ? "tomorrow" : "today"}.`}</p></div><div className="cp-head-actions"><button className="cp-btn cp-btn--subtle" onClick={() => setAvailabilityOpen(true)}><CalendarDays size={16} />Set availability</button></div></div>
           <div className="cp-day-switcher" role="tablist" aria-label="Job day"><button type="button" role="tab" aria-selected={!viewingTomorrow} className={!viewingTomorrow ? "is-active" : ""} onClick={() => setRouteDay("today")}>Today</button><button type="button" role="tab" aria-selected={viewingTomorrow} className={viewingTomorrow ? "is-active" : ""} onClick={() => setRouteDay("tomorrow")}>Tomorrow <span>· {formatPortalDayAndDate(tomorrowDate, true)}</span></button></div>
           {!viewingTomorrow && nextJob && <div className="cp-hero"><div><span className="cp-live">{jobIsComplete(nextJob) ? "DAY COMPLETE" : "NEXT JOB"}</span><h2>{jobIsComplete(nextJob) ? "Great work today." : `${ordinal(nextJob.jobIndex)} job is ready`}</h2><p>{nextJob.customerName} · {serviceLabel(nextJob)} · {nextJob.address}</p><div className="cp-hero-actions"><button className="cp-btn cp-btn--primary" onClick={() => setSelectedJob(nextJob)}>{jobIsComplete(nextJob) ? "Review job" : `View ${ordinal(nextJob.jobIndex).toLowerCase()} job`}<ChevronRight size={16} /></button><button className="cp-btn cp-btn--subtle" onClick={() => openDirections(nextJob.address)}><Navigation size={16} />Directions</button></div></div><div className="cp-hero-side"><span>Assigned jobs</span><strong>{jobs.length}</strong><small>{activeJobs.length} active today</small></div></div>}
-          {routeLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading tomorrow’s assigned jobs…</div> : routeError ? <div className="cp-empty">Tomorrow’s assigned jobs could not be loaded. <button className="cp-text-action" onClick={() => tomorrowQuery.refetch()}>Try again</button></div> : <div className="cp-layout"><section className="cp-panel"><div className="cp-panel-title"><div><span className="cp-eyebrow">{displayedDayLabel}’s route</span><h2>Assigned jobs</h2></div><button className="cp-text-action" onClick={() => setPage("jobs")}>View all <ChevronRight size={15} /></button></div>{jobs.length === 0 ? <div className="cp-empty">No active jobs are assigned for {viewingTomorrow ? "tomorrow" : "today"}.</div> : jobs.map(job => <JobCard key={job.portalJobKey} job={job} tomorrowLabel={viewingTomorrow ? formatPortalDayAndDate(job.jobDate) : undefined} onOpen={() => setSelectedJob(job)} onCall={callClient} />)}</section><aside className="cp-side-stack"><section className="cp-panel"><span className="cp-eyebrow">Route</span><h3>{displayedDayLabel}’s drive</h3><div className="cp-route-list">{jobs.map(job => <div key={job.portalJobKey}><span className="cp-route-dot" /><p><b>{job.customerName}</b><small>{job.address || "Address pending"}</small></p><time>{job.time}</time></div>)}</div></section><section className="cp-panel"><span className="cp-eyebrow">Shift status</span><h3>{portalDataQuery.data?.tomorrowAvailability.submitted ? "Availability saved" : "Set tomorrow’s availability"}</h3><p className="cp-muted">Keep dispatch up to date with your current weekly schedule.</p><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={() => setAvailabilityOpen(true)}>Set availability</button></section></aside></div>}
+          {routeLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading tomorrow’s assigned jobs…</div> : routeError ? <div className="cp-empty">Tomorrow’s assigned jobs could not be loaded. <button className="cp-text-action" onClick={() => tomorrowQuery.refetch()}>Try again</button></div> : <div className="cp-layout"><section className="cp-panel"><div className="cp-panel-title"><div><span className="cp-eyebrow">{displayedDayLabel}’s route</span><h2>Assigned jobs</h2></div><button className="cp-text-action" onClick={() => setPage("jobs")}>View all <ChevronRight size={15} /></button></div>{jobs.length === 0 ? <div className="cp-empty">No active jobs are assigned for {viewingTomorrow ? "tomorrow" : "today"}.</div> : jobs.map(job => <JobCard key={job.portalJobKey} job={job} tomorrowLabel={viewingTomorrow ? formatPortalDayAndDate(job.jobDate) : undefined} onOpen={() => setSelectedJob(job)} onContact={() => setContactJob(job)} />)}</section><aside className="cp-side-stack"><section className="cp-panel"><span className="cp-eyebrow">Route</span><h3>{displayedDayLabel}’s drive</h3><div className="cp-route-list">{jobs.map(job => <div key={job.portalJobKey}><span className="cp-route-dot" /><p><b>{job.customerName}</b><small>{job.address || "Address pending"}</small></p><time>{job.time}</time></div>)}</div></section><section className="cp-panel"><span className="cp-eyebrow">Shift status</span><h3>{portalDataQuery.data?.tomorrowAvailability.submitted ? "Availability saved" : "Set tomorrow’s availability"}</h3><p className="cp-muted">Keep dispatch up to date with your current weekly schedule.</p><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={() => setAvailabilityOpen(true)}>Set availability</button></section></aside></div>}
         </section>}
         {page === "jobs" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">My work</span><h1>My jobs</h1><p>Your current workweek, using your existing assigned job list.</p></div></div><div className="cp-panel cp-job-list">{weekQuery.isLoading ? <div className="cp-loading-inline"><Loader2 className="cp-spin" />Loading assigned jobs…</div> : weekQuery.isError ? <div className="cp-empty">Your assigned jobs could not be loaded.</div> : weekJobs.length === 0 ? <div className="cp-empty">No upcoming jobs this week.</div> : weekJobs.map(job => <div className="cp-week-job" key={job.portalJobKey}><div className="cp-week-job__date"><b>{job.dateLabel === "today" ? "Today" : job.jobDate}</b><small>{job.time}</small></div><div><StatusPill job={job} /><h3>{job.customerName} · {serviceLabel(job)}</h3><p><MapPin size={14} />{job.address || "Address pending"}</p></div>{job.dateLabel === "today" && <button className="cp-btn cp-btn--primary cp-btn--small" onClick={() => { const todayJob = jobs.find(item => item.portalJobKey === job.portalJobKey); if (todayJob) setSelectedJob(todayJob); }}>Open</button>}</div>)}</div></section>}
         {page === "schedule" && <section><div className="cp-page-head"><div><span className="cp-eyebrow">Schedule</span><h1>Your availability</h1><p>Set the workdays that dispatch should use for your team schedule.</p></div><button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Set availability</button></div><div className="cp-panel cp-schedule-card"><CalendarDays size={25} /><h2>{teamScheduleQuery.data?.teamName ? `${teamScheduleQuery.data.teamName} schedule` : "Weekly availability"}</h2><p>Your existing weekly schedule and next-day availability check-in stay in one place.</p>{teamScheduleQuery.data?.schedule && <div className="cp-schedule-days">{WEEK_DAYS.map(day => <span key={day} className={teamScheduleQuery.data?.schedule?.[day.toLowerCase() as "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun"] === 1 ? "is-working" : ""}>{day}</span>)}</div>}<button className="cp-btn cp-btn--primary" onClick={() => setAvailabilityOpen(true)}>Update availability</button></div></section>}
@@ -427,7 +459,8 @@ function CleanerPortalConnected() {
       </main>
     </div>
     <AvailabilityDialog open={availabilityOpen} schedule={teamScheduleQuery.data?.schedule} onClose={() => setAvailabilityOpen(false)} onSave={values => availabilityMutation.mutate(values)} saving={availabilityMutation.isPending} />
-    {selectedJob && <JobDrawer job={{ ...selectedJob, ...progressByJobKey[selectedJob.portalJobKey] }} onClose={() => setSelectedJob(null)} onProgress={progress => setProgressByJobKey(current => ({ ...current, [selectedJob.portalJobKey]: progress }))} />}
+    {selectedJob && <JobDrawer job={{ ...selectedJob, ...progressByJobKey[selectedJob.portalJobKey] }} onClose={() => setSelectedJob(null)} onProgress={progress => setProgressByJobKey(current => ({ ...current, [selectedJob.portalJobKey]: progress }))} onContact={() => setContactJob(selectedJob)} />}
+    {contactJob && <ContactClientPanel job={{ ...contactJob, ...progressByJobKey[contactJob.portalJobKey] }} onClose={() => setContactJob(null)} onCall={callClient} />}
   </div>;
 }
 

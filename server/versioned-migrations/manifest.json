@@ -231,6 +231,14 @@
       "sha256": "7f4905ba49d6c70c4eaedd4c2b2c7a483bbf6610551837cb5ed550cff0873ef7",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0031_add_customer_portal_reusable_magic_link.postconditions.json"
+    },
+    {
+      "id": "0032_create_leadflow_booking_messages",
+      "mode": "create-table",
+      "sqlFile": "0032_create_leadflow_booking_messages.sql",
+      "sha256": "03a0a194e959eac1a868b13fa9ab750dbed9100a5e5fd6a21e2da626030856a5",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0032_create_leadflow_booking_messages.postconditions.json"
     }
   ]
 }

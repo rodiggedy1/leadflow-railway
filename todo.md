@@ -1667,5 +1667,10 @@
 - [x] Add a staff-only Copy Customer My Home Link action beside the existing job-card Magic Link action without sending an SMS
 - [x] Push the staff-only Copy Customer My Home Link action to production
 - [x] Add the existing staff-only Copy Customer My Home Link action to the Booking detail panel without sending SMS or creating another link type
-- [ ] Push the Booking detail Customer My Home link action to production
+- [x] Push the Booking detail Customer My Home link action to production
+- [x] Scope superseded — Option A adds the approved Cleaner Portal Contact client action while continuing to use the existing Customer My Home link
+- [x] Add an isolated LeadFlow booking-message thread for active assigned jobs, with cleaner, customer, and staff access
+- [x] Send customer notification SMS containing the actual cleaner message and the existing Customer My Home link
+- [x] Replace active-job Cleaner Portal Call client actions with a Contact client message panel and expose the shared thread in Customer Portal Messages
 - [x] Remove the unapproved Cleaner Portal Contact client UI prototype from the customer magic-link release scope
+- [ ] Push the cleaner-to-customer LeadFlow booking-message workflow to production

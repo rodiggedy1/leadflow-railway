@@ -32,6 +32,7 @@ import { cleanerPortalProgressRouter } from "./cleanerPortalProgressRouter";
 import { cleanerPortalPhotoRouter } from "./cleanerPortalPhotoRouter";
 import { cleanerPortalSignoffRouter } from "./cleanerPortalSignoffRouter";
 import { cleanerPortalAvailabilityRouter } from "./cleanerPortalAvailabilityRouter";
+import { cleanerPortalMessagesRouter } from "./cleanerPortalMessagesRouter";
 import { teamAvailabilityRouter } from "./teamAvailabilityRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
@@ -132,6 +133,7 @@ export const appRouter = router({
   cleanerPortalPhotos: cleanerPortalPhotoRouter,
   cleanerPortalSignoff: cleanerPortalSignoffRouter,
   cleanerPortalAvailability: cleanerPortalAvailabilityRouter,
+  cleanerPortalMessages: cleanerPortalMessagesRouter,
   teamAvailability: teamAvailabilityRouter,
   responseTemplates: responseTemplatesRouter,
 

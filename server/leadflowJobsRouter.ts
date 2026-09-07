@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
@@ -74,6 +74,21 @@ export const leadflowJobsRouter = router({
       signedOffAt: cleanerPortalJobSignoffs.signedOffAt,
     }).from(cleanerPortalJobSignoffs).where(eq(cleanerPortalJobSignoffs.leadflowJobId, sourceId)).limit(1);
     return rows[0] ?? null;
+  }),
+
+  staffMessages: adminAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
+    if (source !== "leadflow") return [];
+    return db.select({
+      id: leadflowBookingMessages.id,
+      senderRole: leadflowBookingMessages.senderRole,
+      body: leadflowBookingMessages.body,
+      notificationStatus: leadflowBookingMessages.notificationStatus,
+      notificationError: leadflowBookingMessages.notificationError,
+      createdAt: leadflowBookingMessages.createdAt,
+    }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, sourceId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
   }),
 
   importNextThirtyDays: adminAgentProcedure.mutation(async () => importNextThirtyDaysOfLaunch27Jobs()),

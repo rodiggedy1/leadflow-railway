@@ -23,13 +23,14 @@ export function createCustomerPortalHandoffHandler(dependencies: PortalHandoffDe
     res.set("Cache-Control", "no-store");
     res.set("Referrer-Policy", "no-referrer");
     const code = typeof req.query.access === "string" ? req.query.access : "";
-    if (!HANDOFF_CODE_PATTERN.test(code)) return res.redirect(303, "/my-home");
+    const destination = req.query.view === "messages" ? "/my-home?view=messages" : "/my-home";
+    if (!HANDOFF_CODE_PATTERN.test(code)) return res.redirect(303, destination);
 
     try {
       const db = await dependencies.getDb();
-      if (!db) return res.redirect(303, "/my-home");
+      if (!db) return res.redirect(303, destination);
       const account = await dependencies.redeem(db, code);
-      if (!account) return res.redirect(303, "/my-home");
+      if (!account) return res.redirect(303, destination);
 
       const token = await dependencies.sign({
         accountId: account.id,
@@ -43,10 +44,10 @@ export function createCustomerPortalHandoffHandler(dependencies: PortalHandoffDe
         path: "/",
         maxAge: ONE_YEAR_MS,
       });
-      return res.redirect(303, "/my-home");
+      return res.redirect(303, destination);
     } catch (error) {
       console.error("[CustomerPortalHandoff] Redemption failed:", error);
-      return res.redirect(303, "/my-home");
+      return res.redirect(303, destination);
     }
   };
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
-import { bookings, cleanerJobs, cleanerPortalJobProgress, customerPortalAccounts, customerPortalServiceRequests, leadflowJobs, stripeCustomers } from "../drizzle/schema";
+import { bookings, cleanerJobs, cleanerPortalJobProgress, customerPortalAccounts, customerPortalServiceRequests, leadflowBookingMessages, leadflowJobs, stripeCustomers } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
@@ -74,6 +74,54 @@ export const customerPortalRouter = router({
     if (!db) throw new Error("Customer portal is unavailable.");
     const url = await getOrCreateCustomerPortalMagicLink(db, input);
     return { url };
+  }),
+  messages: publicProcedure.query(async ({ ctx }) => {
+    const session = await getCustomerPortalSessionFromRequest(ctx.req);
+    if (!session) return [];
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
+    const account = accounts[0];
+    if (!account || account.customerPhone !== session.customerPhone) return [];
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    if (!phoneDigits) return [];
+    return db.select({
+      id: leadflowBookingMessages.id,
+      leadflowJobId: leadflowBookingMessages.leadflowJobId,
+      senderRole: leadflowBookingMessages.senderRole,
+      body: leadflowBookingMessages.body,
+      notificationStatus: leadflowBookingMessages.notificationStatus,
+      createdAt: leadflowBookingMessages.createdAt,
+      jobDate: leadflowJobs.jobDate,
+      serviceName: leadflowJobs.serviceName,
+      jobAddress: leadflowJobs.jobAddress,
+    }).from(leadflowBookingMessages).innerJoin(leadflowJobs, eq(leadflowBookingMessages.leadflowJobId, leadflowJobs.id)).where(and(
+      ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+      sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
+    )).orderBy(asc(leadflowJobs.jobDate), asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
+  }),
+  replyToMessageThread: publicProcedure.input(z.object({
+    leadflowJobId: z.number().int().positive(),
+    body: z.string().trim().min(1).max(1_000),
+  })).mutation(async ({ ctx, input }) => {
+    const session = await getCustomerPortalSessionFromRequest(ctx.req);
+    if (!session) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
+    const account = accounts[0];
+    if (!account || account.customerPhone !== session.customerPhone) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    if (!phoneDigits) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const jobs = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(and(
+      eq(leadflowJobs.id, input.leadflowJobId),
+      ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"), ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+      sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
+    )).limit(1);
+    if (!jobs[0]) throw new Error("BOOKING_NOT_FOUND");
+    const now = new Date();
+    const result = await db.insert(leadflowBookingMessages).values({ leadflowJobId: input.leadflowJobId, senderRole: "customer", body: input.body, customerPortalAccountId: account.id, notificationStatus: "not_applicable", createdAt: now });
+    return { id: Number(result[0].insertId), leadflowJobId: input.leadflowJobId, senderRole: "customer" as const, body: input.body, createdAt: now };
   }),
   me: publicProcedure.query(async ({ ctx }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);
