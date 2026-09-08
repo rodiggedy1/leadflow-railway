@@ -16,7 +16,7 @@ describe("MIB fixed-design live-data contract", () => {
   });
 
   it("uses only approved read-only dashboard and agent queries", () => {
-    for (const required of ["trpc.mibDashboard.getBookingWindow.useQuery", "trpc.mibDashboard.getPublicBookingMetrics.useQuery", "trpc.mibDashboard.getRecentActivity.useQuery", "trpc.leads.stats.useQuery", "trpc.agents.me.useQuery", "trpc.agents.getStatuses.useQuery", "aggregateSummary", "businessDateForMibDashboard", "todayDateStr", "newRevenueDetail", "New Revenue", "cardsNotOnFile", "cards not on file"]) {
+    for (const required of ["trpc.mibDashboard.getBookingWindow.useQuery", "trpc.mibDashboard.getPublicBookingMetrics.useQuery", "trpc.metrics.getOverview.useQuery", "trpc.performance.stats.useQuery", "trpc.mibDashboard.getRecentActivity.useQuery", "trpc.leads.stats.useQuery", "trpc.agents.me.useQuery", "trpc.agents.getStatuses.useQuery", "aggregateSummary", "businessDateForMibDashboard", "todayDateStr", "newRevenueDetail", "New Revenue", "cardsNotOnFile", "cards not on file", "Lead Volume", "5-Star Jobs"]) {
       expect(previewSource).toContain(required);
     }
     for (const prohibited of ["useMutation", "fetch(", "localStorage", "sessionStorage", "cleanerJobs", "cleaner_jobs"]) {
@@ -32,7 +32,7 @@ describe("MIB fixed-design live-data contract", () => {
   });
 
   it("preserves the exact approved dashboard slots in every live-data state", () => {
-    for (const marker of ["Good morning", "Last 30 days", "Operations Pulse", "Total Bookings", "Revenue", "New Customers", "Average Rating", "Bookings overview", "Bookings by service", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "mib-preview-metric__microchart", "mib-preview-pulse", "mib-preview-chart", "mib-preview-service", "mib-home-preview__operating-grid"]) {
+    for (const marker of ["Good morning", "Last 30 days", "Operations Pulse", "Total Bookings", "Revenue", "Lead Volume", "5-Star Jobs", "Bookings overview", "Bookings by service", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "mib-preview-metric__microchart", "mib-preview-pulse", "mib-preview-chart", "mib-preview-service", "mib-home-preview__operating-grid"]) {
       expect(previewSource).toContain(marker);
     }
     expect(previewSource).toContain("Array.from({ length: 7 }");

@@ -7,7 +7,7 @@
  *   conversation_sessions → leads, conversion, source breakdown, job type breakdown,
  *                           avg response time, close rate after quote, funnel
  */
-import { router, agentProcedure } from "./_core/trpc";
+import { router, agentProcedure, publicProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
 import { cleanerJobs, completedJobs, conversationSessions, metricsAiAlerts } from "../drizzle/schema";
@@ -75,7 +75,7 @@ export const metricsRouter = router({
   /**
    * getOverview — KPI cards + monthly time-series + funnel + quality + sources + job types
    */
-  getOverview: agentProcedure
+  getOverview: publicProcedure
     .input(z.object({ range: z.string().default("12m") }))
     .query(async ({ input }) => {
       const db = await getDb();

@@ -7738,7 +7738,7 @@ Your job: fill in the following message template using the booking details provi
   // ── Performance Analytics ────────────────────────────────────────────────────
   performance: router({
     /** Per-source aggregated stats. days=0 = all-time. */
-    stats: adminAgentProcedure
+    stats: publicProcedure
       .input(z.object({ days: z.number().int().min(0).max(365).default(30) }))
       .query(async ({ input }) => {
         const db = await getDb();

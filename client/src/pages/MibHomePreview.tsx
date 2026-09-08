@@ -64,6 +64,10 @@ function formatCurrency(cents: number) {
   return cents ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100) : "$0";
 }
 
+function formatDollars(dollars: number) {
+  return dollars ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(dollars) : "$0";
+}
+
 function formatTime(value: string | null) {
   if (!value) return "Time pending";
   const [hours, minutes] = value.split(":").map(Number);
@@ -169,6 +173,8 @@ export default function MibHomePreview() {
   const publicMetricsInput = useMemo(() => ({ ...bookingWindowInput, serviceStartDate: currentWindowStart }), [bookingWindowInput, currentWindowStart]);
   const bookingQuery = trpc.mibDashboard.getBookingWindow.useQuery(bookingWindowInput, { staleTime: 10_000, refetchInterval: 30_000 });
   const publicMetricsQuery = trpc.mibDashboard.getPublicBookingMetrics.useQuery(publicMetricsInput, { staleTime: 10_000, refetchInterval: 30_000 });
+  const metricsOverviewQuery = trpc.metrics.getOverview.useQuery({ range: "30d" }, { staleTime: 5 * 60_000, refetchInterval: 60_000 });
+  const performanceStatsQuery = trpc.performance.stats.useQuery({ days: 30 }, { staleTime: 2 * 60_000, refetchInterval: 60_000 });
   const activityQuery = trpc.mibDashboard.getRecentActivity.useQuery({ limit: 5 }, { staleTime: 30_000, refetchInterval: 60_000 });
   const currentAgentQuery = trpc.agents.me.useQuery(undefined, { staleTime: 30_000 });
   const agentStatusesQuery = trpc.agents.getStatuses.useQuery(undefined, { staleTime: 30_000, refetchInterval: 60_000 });
@@ -177,6 +183,15 @@ export default function MibHomePreview() {
   const isUnavailable = Boolean(publicMetricsQuery.error);
   const allRows = bookingQuery.data?.bookings ?? [];
   const dailyMetrics = publicMetricsQuery.data?.days ?? [];
+  const metricsKpis = metricsOverviewQuery.data?.kpis;
+  const metricsMonthly = metricsOverviewQuery.data?.monthly ?? [];
+  const fiveStarJobs = metricsOverviewQuery.data?.quality.find((item) => item.label === "5-star jobs")?.value ?? 0;
+  const performanceSummary = useMemo(() => (performanceStatsQuery.data ?? []).reduce((summary, row) => ({
+    bookings: summary.bookings + row.bookings,
+    bookedRevenue: summary.bookedRevenue + row.bookedRevenue,
+  }), { bookings: 0, bookedRevenue: 0 }), [performanceStatsQuery.data]);
+  const metricsLoading = metricsOverviewQuery.isLoading || performanceStatsQuery.isLoading;
+  const metricsUnavailable = Boolean(metricsOverviewQuery.error || performanceStatsQuery.error);
   const currentWindowRows = useMemo(() => allRows.filter((row) => row.requestedLocalDate && row.requestedLocalDate >= currentWindowStart), [allRows, currentWindowStart]);
   const previousWindowRows = useMemo(() => allRows.filter((row) => row.requestedLocalDate && row.requestedLocalDate < currentWindowStart), [allRows, currentWindowStart]);
   const todayRows = useMemo(() => bookingsForMibDashboardDate(allRows, today), [allRows, today]);
@@ -188,9 +203,11 @@ export default function MibHomePreview() {
   const dailyBookings = useMemo(() => dailyMetrics.filter((row) => row.date >= currentWindowStart).map((row) => row.totalBookings), [currentWindowStart, dailyMetrics]);
   const overviewBars = chartSlots(dailyBookings);
   const overviewMaximum = Math.max(...overviewBars, 1);
+  const metricsOverviewBars = chartSlots(metricsMonthly.map((item) => item.booked));
+  const metricsOverviewMaximum = Math.max(...metricsOverviewBars, 1);
   const serviceSlots = useMemo(() => {
-    if (isLoading || isUnavailable) return Array.from({ length: 5 }, (_, index) => ({ name: index === 0 ? isLoading ? "Loading" : "Unavailable" : "", share: "—", tone: serviceTones[index] }));
-    const entries = publicMetricsQuery.data?.services.map((service) => [service.name, service.bookings] as const) ?? [];
+    if (metricsLoading || metricsUnavailable) return Array.from({ length: 5 }, (_, index) => ({ name: index === 0 ? metricsLoading ? "Loading" : "Unavailable" : "", share: "—", tone: serviceTones[index] }));
+    const entries = metricsOverviewQuery.data?.serviceTypeBreakdown.map((service) => [service.name, service.value] as const) ?? [];
     const primary = entries.slice(0, 4);
     const remaining = entries.slice(4).reduce((sum, [, count]) => sum + count, 0);
     if (remaining) primary.push(["Other", remaining]);
@@ -198,9 +215,9 @@ export default function MibHomePreview() {
       const row = primary[index];
       return { name: row?.[0] ?? "", share: row && currentMetrics.totalBookings ? `${Math.round((row[1] / currentMetrics.totalBookings) * 100)}%` : "—", tone: serviceTones[index] };
     });
-  }, [currentMetrics.totalBookings, isLoading, isUnavailable, publicMetricsQuery.data?.services]);
+  }, [metricsLoading, metricsUnavailable, metricsOverviewQuery.data?.serviceTypeBreakdown]);
   const donutStyle = useMemo(() => {
-    if (isLoading || isUnavailable || !currentMetrics.totalBookings) return { background: "#eeeae4" };
+    if (metricsLoading || metricsUnavailable || !metricsKpis?.totalBooked) return { background: "#eeeae4" };
     let cursor = 0;
     const segments = serviceSlots.filter((slot) => slot.share !== "—").map((slot) => {
       const next = cursor + Number.parseInt(slot.share, 10);
@@ -210,7 +227,7 @@ export default function MibHomePreview() {
     });
     if (cursor < 100) segments.push(`#eeeae4 ${cursor}% 100%`);
     return { background: `conic-gradient(${segments.join(", ")})` };
-  }, [currentMetrics.totalBookings, isLoading, isUnavailable, serviceSlots]);
+  }, [metricsKpis?.totalBooked, metricsLoading, metricsUnavailable, serviceSlots]);
   const scheduleSlots = useMemo(() => {
     const rows = [...todayRows].sort((a, b) => (a.requestedLocalTime ?? "99:99").localeCompare(b.requestedLocalTime ?? "99:99")).slice(0, 4);
     return Array.from({ length: 4 }, (_, index) => rows[index] ?? null);
@@ -255,18 +272,18 @@ export default function MibHomePreview() {
           </section>
 
           <section className="mib-home-preview__metrics" aria-label="Live booking metrics">
-            <PreviewMetric icon={CalendarDays} label="Total Bookings" value={metricUnavailable ?? String(todayMetrics.totalBookings)} comparisonValue={isLoading || isUnavailable ? "—" : bookingsComparison.value} comparisonLabel={isLoading ? "Loading" : isUnavailable ? "Unavailable" : bookingsComparison.label} tone="coral" series={isLoading || isUnavailable ? [] : [yesterdayMetrics.totalBookings, todayMetrics.totalBookings]} />
-            <PreviewMetric icon={CircleDollarSign} label="Revenue" value={metricUnavailable ?? formatCurrency(todayMetrics.revenueCents)} comparisonValue={isLoading || isUnavailable ? "—" : revenueComparison.value} comparisonLabel={isLoading ? "Loading" : isUnavailable ? "Unavailable" : revenueComparison.label} tone="green" series={isLoading || isUnavailable ? [] : [yesterdayMetrics.revenueCents, todayMetrics.revenueCents]} />
-            <PreviewMetric icon={Users} label="New Customers" value="—" comparisonValue="—" comparisonLabel="Unavailable" tone="violet" series={[]} />
-            <PreviewMetric icon={Star} label="Average Rating" value="—" comparisonValue="—" comparisonLabel="Unavailable" tone="gold" series={[]} />
+            <PreviewMetric icon={CalendarDays} label="Total Bookings" value={metricsLoading ? "—" : metricsUnavailable ? "—" : String(performanceSummary.bookings)} comparisonValue="—" comparisonLabel={metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : "Last 30 days"} tone="coral" series={metricsLoading || metricsUnavailable ? [] : metricsMonthly.map((item) => item.booked)} />
+            <PreviewMetric icon={CircleDollarSign} label="Revenue" value={metricsLoading ? "—" : metricsUnavailable ? "—" : formatDollars(performanceSummary.bookedRevenue)} comparisonValue="—" comparisonLabel={metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : "Last 30 days"} tone="green" series={metricsLoading || metricsUnavailable ? [] : metricsMonthly.map((item) => item.revenue * 100)} />
+            <PreviewMetric icon={Users} label="Lead Volume" value={metricsLoading ? "—" : metricsUnavailable ? "—" : String(metricsKpis?.totalLeads ?? 0)} comparisonValue="—" comparisonLabel={metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : "Last 30 days"} tone="violet" series={metricsLoading || metricsUnavailable ? [] : metricsMonthly.map((item) => item.leads)} />
+            <PreviewMetric icon={Star} label="5-Star Jobs" value={metricsLoading ? "—" : metricsUnavailable ? "—" : `${fiveStarJobs}%`} comparisonValue="—" comparisonLabel={metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : "Last 30 days"} tone="gold" series={metricsLoading || metricsUnavailable ? [] : metricsMonthly.map((item) => item.jobs)} />
           </section>
 
           <section className="mib-home-preview__overview">
             <article className="mib-preview-panel mib-preview-chart">
-              <header><div><h2>Bookings overview</h2><p><strong>{isLoading ? "—" : isUnavailable ? "—" : currentMetrics.totalBookings}</strong><b>↗ {isLoading || isUnavailable ? "—" : headlineComparison.value}</b><span>{isLoading ? "Loading" : isUnavailable ? "Unavailable" : "Total bookings"}</span></p></div><div className="mib-preview-chart__tabs"><b>Bookings</b><span>Revenue</span><span>Customers</span><button type="button" disabled>Last 30 days <ChevronDown /></button></div></header>
-              <div className="mib-preview-bars" aria-label="Bookings overview">{overviewBars.map((count, index) => <i key={index} style={{ height: `${isLoading || isUnavailable ? 38 : count ? Math.max(16, (count / overviewMaximum) * 100) : 7}%`, opacity: isLoading || isUnavailable ? 0.22 : undefined }} />)}</div>
+              <header><div><h2>Bookings overview</h2><p><strong>{metricsLoading || metricsUnavailable ? "—" : performanceSummary.bookings}</strong><b>↗ —</b><span>{metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : "Total bookings"}</span></p></div><div className="mib-preview-chart__tabs"><b>Bookings</b><span>Revenue</span><span>Customers</span><button type="button" disabled>Last 30 days <ChevronDown /></button></div></header>
+              <div className="mib-preview-bars" aria-label="Bookings overview">{metricsOverviewBars.map((count, index) => <i key={index} style={{ height: `${metricsLoading || metricsUnavailable ? 38 : count ? Math.max(16, (count / metricsOverviewMaximum) * 100) : 7}%`, opacity: metricsLoading || metricsUnavailable ? 0.22 : undefined }} />)}</div>
             </article>
-            <article className="mib-preview-panel mib-preview-service"><header><h2>Bookings by service</h2><ViewAll /></header><div><div className="mib-preview-donut" style={donutStyle}><strong>{isLoading || isUnavailable ? "—" : currentMetrics.totalBookings}</strong><small>Bookings</small></div><ul>{serviceSlots.map((slot, index) => <li key={`${slot.name}-${index}`}><i className={slot.tone} />{slot.name}<b>{slot.share}</b></li>)}</ul></div></article>
+            <article className="mib-preview-panel mib-preview-service"><header><h2>Bookings by service</h2><ViewAll /></header><div><div className="mib-preview-donut" style={donutStyle}><strong>{metricsLoading || metricsUnavailable ? "—" : metricsKpis?.totalBooked ?? 0}</strong><small>Bookings</small></div><ul>{serviceSlots.map((slot, index) => <li key={`${slot.name}-${index}`}><i className={slot.tone} />{slot.name}<b>{slot.share}</b></li>)}</ul></div></article>
           </section>
 
           <section className="mib-home-preview__operating-grid">
