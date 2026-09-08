@@ -217,6 +217,7 @@ export default function MibHomePreview() {
   const greetingName = currentAgentQuery.data?.name?.split(" ")[0];
   const metricUnavailable = isLoading ? "Loading" : isUnavailable ? "—" : null;
   const newBookingDetail = commandBookingStatsQuery.isLoading ? "Loading new bookings" : commandBookingStatsQuery.error ? "New booking data unavailable" : `${commandBookingStatsQuery.data?.bookedCount ?? 0} booking${commandBookingStatsQuery.data?.bookedCount === 1 ? "" : "s"} today`;
+  const newRevenueDetail = commandBookingStatsQuery.isLoading ? "Loading new revenue" : commandBookingStatsQuery.error ? "New revenue data unavailable" : `${formatCurrency((commandBookingStatsQuery.data?.bookedRevenue ?? 0) * 100)} booked today`;
   const cardsNotOnFile = Math.max(todayMetrics.totalBookings - todayMetrics.cardsOnFile, 0);
 
   return (
@@ -241,7 +242,7 @@ export default function MibHomePreview() {
 
           <section className="mib-preview-pulse" aria-label="Operations Pulse">
             <div className="mib-preview-pulse__title"><span><i />LIVE</span><strong>Operations Pulse</strong></div>
-            {[{ icon: CalendarDays, title: "New booking", detail: newBookingDetail, tone: "coral" }, { icon: CircleDollarSign, title: "Revenue", detail: isLoading || isUnavailable ? "—" : `${formatCurrency(todayMetrics.revenueCents)} first-cleaning total`, tone: "violet" }, { icon: Users, title: "Team update", detail: isLoading || isUnavailable ? "—" : `${todayMetrics.assignedBookings} bookings assigned`, tone: "gold" }, { icon: ClipboardList, title: "Command", detail: isLoading || isUnavailable ? "—" : `${cardsNotOnFile} cards not on file`, tone: "green" }].map(({ icon: Icon, title, detail, tone }) => <article key={title} className={tone}><span><Icon /></span><div><strong>{title}</strong><p>{detail}</p><small>Live</small></div></article>)}
+            {[{ icon: CalendarDays, title: "New booking", detail: newBookingDetail, tone: "coral" }, { icon: CircleDollarSign, title: "New Revenue", detail: newRevenueDetail, tone: "violet" }, { icon: Users, title: "Team update", detail: isLoading || isUnavailable ? "—" : `${todayMetrics.assignedBookings} bookings assigned`, tone: "gold" }, { icon: ClipboardList, title: "Command", detail: isLoading || isUnavailable ? "—" : `${cardsNotOnFile} cards not on file`, tone: "green" }].map(({ icon: Icon, title, detail, tone }) => <article key={title} className={tone}><span><Icon /></span><div><strong>{title}</strong><p>{detail}</p><small>Live</small></div></article>)}
             <div className="mib-preview-pulse__actions"><button type="button" disabled aria-label="Previous pulse item"><ChevronLeft /></button><button type="button" disabled aria-label="Next pulse item"><ChevronRight /></button><button type="button" disabled>View all <ChevronRight /></button></div>
           </section>
 
