@@ -17,16 +17,16 @@ type MibSidebarItem = "Dashboard" | "Bookings";
 
 const sidebarItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/admin2" },
-  { label: "Bookings", icon: CalendarDays, href: "/admin/bookings" },
-  { label: "Campaigns", icon: ClipboardCheck, href: "https://quote.maidinblack.com/admin/sms-campaigns" },
-  { label: "Team pay", icon: BadgeDollarSign, href: "https://quote.maidinblack.com/admin/team-pay" },
-  { label: "Schedule", icon: CalendarDays, href: "https://quote.maidinblack.com/admin/field-management" },
-  { label: "Hiring", icon: ClipboardCheck, href: "https://quote.maidinblack.com/admin/hiring" },
   { label: "Messages", icon: MessageCircle, href: "https://quote.maidinblack.com/admin/cs-inbox-2" },
+  { label: "Bookings", icon: CalendarDays, href: "/admin/bookings" },
+  { label: "Schedule", icon: CalendarDays, href: "https://quote.maidinblack.com/admin/field-management" },
   { label: "Payments", icon: WalletCards, href: "https://quote.maidinblack.com/admin/payments" },
+  { label: "Invoices", icon: FileText, href: "https://quote.maidinblack.com/admin/invoices" },
   { label: "Callbacks", icon: PhoneCall, href: "https://quote.maidinblack.com/admin/leads?tab=callbacks" },
   { label: "Performance", icon: LineChart, href: "https://quote.maidinblack.com/admin/performance" },
-  { label: "Invoices", icon: FileText, href: "https://quote.maidinblack.com/admin/invoices" },
+  { label: "Campaigns", icon: ClipboardCheck, href: "https://quote.maidinblack.com/admin/sms-campaigns" },
+  { label: "Team pay", icon: BadgeDollarSign, href: "https://quote.maidinblack.com/admin/team-pay" },
+  { label: "Hiring", icon: ClipboardCheck, href: "https://quote.maidinblack.com/admin/hiring" },
   { label: "Settings", icon: Settings, href: "https://quote.maidinblack.com/admin/settings" },
 ] as const;
 
