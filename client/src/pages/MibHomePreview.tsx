@@ -74,13 +74,6 @@ function formatTime(value: string | null) {
   return `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${hours >= 12 ? "PM" : "AM"}`;
 }
 
-function formatScheduleTime(value: string | null) {
-  if (!value) return "Time pending";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Time pending";
-  return date.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
-}
-
 function dayGreeting() {
   const hour = new Date().getHours();
   return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -179,7 +172,8 @@ export default function MibHomePreview() {
   const bookingWindowInput = useMemo(() => ({ startDate: previousWindowStart, endDate: today }), [previousWindowStart, today]);
   const publicMetricsInput = useMemo(() => ({ ...bookingWindowInput, serviceStartDate: currentWindowStart }), [bookingWindowInput, currentWindowStart]);
   const bookingQuery = trpc.mibDashboard.getBookingWindow.useQuery(bookingWindowInput, { staleTime: 10_000, refetchInterval: 30_000 });
-  const fieldScheduleQuery = trpc.mibDashboard.getFieldSchedule.useQuery({ date: today }, { staleTime: 30_000, refetchInterval: 30_000 });
+  const dashboardBookingListQuery = trpc.bookings.list.useQuery({ date: today, limit: 200 }, { staleTime: 10_000, refetchInterval: 30_000 });
+  const dashboardFunnelListQuery = trpc.bookingFunnel.list.useQuery({ limit: 200 }, { staleTime: 10_000, refetchInterval: 30_000 });
   const publicMetricsQuery = trpc.mibDashboard.getPublicBookingMetrics.useQuery(publicMetricsInput, { staleTime: 10_000, refetchInterval: 30_000 });
   const metricsOverviewQuery = trpc.metrics.getOverview.useQuery({ range: "30d" }, { staleTime: 5 * 60_000, refetchInterval: 60_000 });
   const performanceStatsQuery = trpc.performance.stats.useQuery({ days: 30 }, { staleTime: 2 * 60_000, refetchInterval: 60_000 });
@@ -237,8 +231,31 @@ export default function MibHomePreview() {
     if (cursor < 100) segments.push(`#eeeae4 ${cursor}% 100%`);
     return { background: `conic-gradient(${segments.join(", ")})` };
   }, [metricsLoading, metricsUnavailable, serviceSlots, serviceTotal]);
-  const scheduleSlots = Array.from({ length: 4 }, (_, index) => fieldScheduleQuery.data?.jobs[index] ?? null);
-  const teamSlots = Array.from({ length: 4 }, (_, index) => fieldScheduleQuery.data?.teams[index] ?? null);
+  const bookingPageScheduleRows = useMemo(() => {
+    const nativeRows = (dashboardBookingListQuery.data ?? []).map((booking) => ({
+      key: `booking:${booking.id}`,
+      customerName: booking.customerName,
+      requestedLocalDate: booking.requestedLocalDate,
+      requestedLocalTime: booking.requestedLocalTime,
+      serviceName: booking.serviceName,
+      assignmentStatus: booking.assignmentStatus,
+    }));
+    const funnelRows = (dashboardFunnelListQuery.data ?? [])
+      .filter((lead) => !lead.bookingId && lead.stage !== "lead")
+      .map((lead) => ({
+        key: `funnel:${lead.id}`,
+        customerName: lead.customerName,
+        requestedLocalDate: lead.requestedLocalDate,
+        requestedLocalTime: lead.requestedLocalTime,
+        serviceName: lead.serviceName,
+        assignmentStatus: "unassigned" as const,
+      }));
+    return [...funnelRows, ...nativeRows]
+      .filter((row) => row.requestedLocalDate === today)
+      .sort((left, right) => (left.requestedLocalTime ?? "99:99").localeCompare(right.requestedLocalTime ?? "99:99"));
+  }, [dashboardBookingListQuery.data, dashboardFunnelListQuery.data, today]);
+  const scheduleSlots = Array.from({ length: 4 }, (_, index) => bookingPageScheduleRows[index] ?? null);
+  const teamSlots = Array.from({ length: 4 }, (_, index) => bookingPageScheduleRows.filter((row) => row.assignmentStatus === "assigned")[index] ?? null);
   const displayedAgents = agentStatusesQuery.data?.slice(0, 7) ?? [];
   const onlineAgents = (agentStatusesQuery.data ?? []).filter((agent) => presenceForHeader(agent) === "online");
   const agentSlots = Array.from({ length: 7 }, (_, index) => displayedAgents[index] ?? null);
@@ -294,8 +311,8 @@ export default function MibHomePreview() {
           </section>
 
           <section className="mib-home-preview__operating-grid">
-            <article className="mib-preview-panel"><header><h2>Today’s schedule</h2><ViewAll /></header><ul className="mib-preview-list">{scheduleSlots.map((row, index) => <li key={row?.id ?? `schedule-slot-${index}`}><strong>{row ? formatScheduleTime(row.serviceDateTime) : "—"}</strong><i className={row?.isAssigned ? "live" : ""} /><span>{row ? row.customerName : index === 0 ? fieldScheduleQuery.isLoading ? "Loading schedule" : fieldScheduleQuery.error ? "Schedule unavailable" : "No bookings scheduled" : ""}<small>{row?.serviceType ?? ""}</small></span><em>{row ? row.assignedTeamName ?? "Unassigned" : ""}</em><ChevronRight /></li>)}</ul></article>
-            <article className="mib-preview-panel"><header><h2>Active teams</h2><ViewAll /></header><ul className="mib-preview-list mib-preview-list--teams">{teamSlots.map((team, index) => <li key={team?.name ?? `team-slot-${index}`}><b>{team ? initialsFor(team.name) : "—"}</b><span>{team ? team.name : index === 0 ? fieldScheduleQuery.isLoading ? "Loading active teams" : fieldScheduleQuery.error ? "Active teams unavailable" : "No teams assigned" : ""}<small>{team ? `${team.jobCount} assigned booking${team.jobCount === 1 ? "" : "s"}` : ""}</small></span><i style={{ width: team ? "100%" : "0%" }} /><ChevronRight /></li>)}</ul></article>
+            <article className="mib-preview-panel"><header><h2>Today’s schedule</h2><ViewAll /></header><ul className="mib-preview-list">{scheduleSlots.map((row, index) => <li key={row?.key ?? `schedule-slot-${index}`}><strong>{row ? formatTime(row.requestedLocalTime) : "—"}</strong><i className={row?.assignmentStatus === "assigned" ? "live" : ""} /><span>{row ? row.customerName : index === 0 ? dashboardBookingListQuery.isLoading || dashboardFunnelListQuery.isLoading ? "Loading schedule" : dashboardBookingListQuery.error || dashboardFunnelListQuery.error ? "Schedule unavailable" : "No bookings scheduled" : ""}<small>{row?.serviceName ?? ""}</small></span><em>{row ? row.assignmentStatus === "assigned" ? "Assigned" : "Unassigned" : ""}</em><ChevronRight /></li>)}</ul></article>
+            <article className="mib-preview-panel"><header><h2>Active teams</h2><ViewAll /></header><ul className="mib-preview-list mib-preview-list--teams">{teamSlots.map((row, index) => <li key={row?.key ?? `team-slot-${index}`}><b>{row ? index + 1 : "—"}</b><span>{row ? row.customerName : index === 0 ? dashboardBookingListQuery.isLoading || dashboardFunnelListQuery.isLoading ? "Loading assigned bookings" : dashboardBookingListQuery.error || dashboardFunnelListQuery.error ? "Assigned bookings unavailable" : "No bookings assigned" : ""}<small>{row ? `${row.serviceName ?? "Service"} · Assigned` : ""}</small></span><i style={{ width: row ? "100%" : "0%" }} /><ChevronRight /></li>)}</ul></article>
             <article className="mib-preview-panel"><header><h2>Recent activity</h2><ViewAll /></header><ul className="mib-preview-list mib-preview-list--activity">{activitySlots.map((item, index) => <li key={item?.id ?? `activity-slot-${index}`}><b><ClipboardList /></b><span>{item ? item.title : index === 0 ? activityQuery.isLoading ? "Loading activity" : activityQuery.error ? "Activity unavailable" : "No recent activity" : ""}<small>{item?.body || item?.eventType || ""}</small></span><em>{item ? relativeTime(item.createdAt) : ""}</em></li>)}</ul></article>
           </section>
 

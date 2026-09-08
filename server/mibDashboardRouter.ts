@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
+import { and, asc, desc, gte, lte } from "drizzle-orm";
 import { z } from "zod";
-import { activityLog, bookingFunnelRecords, bookings, cleanerJobs, scheduleAssignments, schedulingTeams } from "../drizzle/schema";
+import { activityLog, bookingFunnelRecords, bookings } from "../drizzle/schema";
 import { aggregateMibDashboardBookings, mergeMibDashboardBookings } from "../shared/mibDashboard";
 import { publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
@@ -113,69 +113,6 @@ export const mibDashboardRouter = router({
       ]);
 
       return { bookings: mergeMibDashboardBookings(nativeRows, funnelRows) };
-    }),
-
-  /**
-   * Minimal projection of Field Management's established same-day schedule.
-   * It reads only persisted jobs, assignments, and active teams and deliberately
-   * excludes Field Management's geocoding, history, confirmation, and AI work.
-   */
-  getFieldSchedule: publicProcedure
-    .input(z.object({ date: localDate }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Schedule service unavailable.");
-
-      const jobs = await db
-        .select({
-          id: cleanerJobs.id,
-          customerName: cleanerJobs.customerName,
-          serviceDateTime: cleanerJobs.serviceDateTime,
-          serviceType: cleanerJobs.serviceType,
-          teamName: cleanerJobs.teamName,
-        })
-        .from(cleanerJobs)
-        .where(and(
-          eq(cleanerJobs.jobDate, input.date),
-          ne(cleanerJobs.bookingStatus, "cancelled"),
-          ne(cleanerJobs.bookingStatus, "rescheduled"),
-        ))
-        .orderBy(asc(cleanerJobs.serviceDateTime));
-
-      const jobIds = jobs.map((job) => job.id);
-      const assignments = jobIds.length
-        ? await db
-            .select({ cleanerJobId: scheduleAssignments.cleanerJobId, teamName: scheduleAssignments.teamName, isManual: scheduleAssignments.isManual })
-            .from(scheduleAssignments)
-            .where(and(eq(scheduleAssignments.jobDate, input.date), inArray(scheduleAssignments.cleanerJobId, jobIds)))
-        : [];
-      const activeTeams = await db
-        .select({ id: schedulingTeams.id, name: schedulingTeams.name })
-        .from(schedulingTeams)
-        .where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
-
-      const assignmentByJobId = new Map(assignments.map((assignment) => [assignment.cleanerJobId, assignment]));
-      const activeTeamNames = new Set(activeTeams.map((team) => team.name));
-      const rows = jobs.map((job) => {
-        const assignment = assignmentByJobId.get(job.id);
-        const assignedTeamName = assignment?.isManual === 2 ? null : assignment?.teamName ?? job.teamName ?? null;
-        return {
-          ...job,
-          assignedTeamName,
-          isAssigned: Boolean(assignedTeamName),
-        };
-      });
-      const jobCountByTeam = new Map<string, number>();
-      for (const row of rows) {
-        if (row.assignedTeamName && activeTeamNames.has(row.assignedTeamName)) {
-          jobCountByTeam.set(row.assignedTeamName, (jobCountByTeam.get(row.assignedTeamName) ?? 0) + 1);
-        }
-      }
-      const teams = [...jobCountByTeam.entries()]
-        .sort(([, leftCount], [, rightCount]) => rightCount - leftCount)
-        .map(([name, jobCount]) => ({ name, jobCount }));
-
-      return { jobs: rows, teams };
     }),
 
   getRecentActivity: publicProcedure
