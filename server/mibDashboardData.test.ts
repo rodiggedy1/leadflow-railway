@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregateMibDashboardBookings,
   bookingMetricSummary,
   bookingsForMibDashboardDate,
   mergeMibDashboardBookings,
@@ -26,6 +27,14 @@ describe("MIB dashboard booking data", () => {
   it("summarizes only the selected date without dropping either booking source", () => {
     const rows = bookingsForMibDashboardDate(mergeMibDashboardBookings(native, funnel), "2026-09-08");
     expect(bookingMetricSummary(rows)).toEqual({ totalBookings: 2, revenueCents: 55000, assignedBookings: 1, cardsOnFile: 2 });
+  });
+
+  it("returns aggregate-only totals for every date in the requested dashboard range", () => {
+    const days = aggregateMibDashboardBookings(mergeMibDashboardBookings(native, funnel), "2026-09-07", "2026-09-08");
+    expect(days).toEqual([
+      { date: "2026-09-07", totalBookings: 0, revenueCents: 0, assignedBookings: 0, cardsOnFile: 0 },
+      { date: "2026-09-08", totalBookings: 2, revenueCents: 55000, assignedBookings: 1, cardsOnFile: 2 },
+    ]);
   });
 
   it("uses calendar date arithmetic and honest no-baseline comparisons", () => {

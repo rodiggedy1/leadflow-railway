@@ -6,7 +6,14 @@ const source = readFileSync(new URL("./mibDashboardRouter.ts", import.meta.url),
 describe("MIB dashboard router contract", () => {
   it("protects every dashboard read with the existing admin-agent boundary", () => {
     expect(source.match(/adminAgentProcedure\s*\.input/g)).toHaveLength(2);
-    expect(source).not.toContain("publicProcedure");
+    expect(source).toContain("getPublicBookingMetrics: publicProcedure");
+  });
+
+  it("exposes only aggregate counts and totals through the same public model as Command Chat metrics", () => {
+    expect(source).toContain("days: aggregateMibDashboardBookings");
+    expect(source).toContain("services:");
+    expect(source).not.toContain("customerPhone: bookings.customerPhone");
+    expect(source).not.toContain("address: bookings.address");
   });
 
   it("uses the same native and unconverted non-lead funnel booking treatment as the Bookings workspace", () => {

@@ -90,6 +90,35 @@ export function bookingMetricSummary(rows: MibDashboardBookingRow[]) {
   };
 }
 
+export type MibDashboardAggregate = {
+  date: string;
+  totalBookings: number;
+  revenueCents: number;
+  assignedBookings: number;
+  cardsOnFile: number;
+};
+
+export function aggregateMibDashboardBookings(
+  rows: MibDashboardBookingRow[],
+  startDate: string,
+  endDate: string,
+): MibDashboardAggregate[] {
+  const rowsByDate = new Map<string, MibDashboardBookingRow[]>();
+  for (const row of rows) {
+    if (!row.requestedLocalDate) continue;
+    const current = rowsByDate.get(row.requestedLocalDate) ?? [];
+    current.push(row);
+    rowsByDate.set(row.requestedLocalDate, current);
+  }
+
+  const aggregate: MibDashboardAggregate[] = [];
+  for (let date = startDate; date <= endDate; date = shiftMibDashboardDate(date, 1)) {
+    const summary = bookingMetricSummary(rowsByDate.get(date) ?? []);
+    aggregate.push({ date, ...summary });
+  }
+  return aggregate;
+}
+
 export function shiftMibDashboardDate(date: string, days: number) {
   const value = new Date(`${date}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);

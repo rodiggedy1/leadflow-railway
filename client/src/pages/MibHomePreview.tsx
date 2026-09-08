@@ -19,6 +19,7 @@ import {
   bookingMetricSummary,
   bookingsForMibDashboardDate,
   businessDateForMibDashboard,
+  type MibDashboardAggregate,
   percentChange,
   shiftMibDashboardDate,
 } from "@shared/mibDashboard";
@@ -77,6 +78,15 @@ function dayGreeting() {
 function comparison(current: number, previous: number, label: string) {
   const change = percentChange(current, previous);
   return { value: change === null ? "—" : `${change >= 0 ? "+" : ""}${change}%`, label };
+}
+
+function aggregateSummary(rows: MibDashboardAggregate[]) {
+  return rows.reduce((summary, row) => ({
+    totalBookings: summary.totalBookings + row.totalBookings,
+    revenueCents: summary.revenueCents + row.revenueCents,
+    assignedBookings: summary.assignedBookings + row.assignedBookings,
+    cardsOnFile: summary.cardsOnFile + row.cardsOnFile,
+  }), { totalBookings: 0, revenueCents: 0, assignedBookings: 0, cardsOnFile: 0 });
 }
 
 function slotSeries(values: number[]) {
@@ -156,33 +166,31 @@ export default function MibHomePreview() {
   const currentWindowStart = useMemo(() => shiftMibDashboardDate(today, -29), [today]);
   const previousWindowStart = useMemo(() => shiftMibDashboardDate(today, -59), [today]);
   const bookingWindowInput = useMemo(() => ({ startDate: previousWindowStart, endDate: today }), [previousWindowStart, today]);
+  const publicMetricsInput = useMemo(() => ({ ...bookingWindowInput, serviceStartDate: currentWindowStart }), [bookingWindowInput, currentWindowStart]);
   const bookingQuery = trpc.mibDashboard.getBookingWindow.useQuery(bookingWindowInput, { staleTime: 10_000, refetchInterval: 30_000 });
+  const publicMetricsQuery = trpc.mibDashboard.getPublicBookingMetrics.useQuery(publicMetricsInput, { staleTime: 10_000, refetchInterval: 30_000 });
   const activityQuery = trpc.mibDashboard.getRecentActivity.useQuery({ limit: 5 }, { staleTime: 30_000, refetchInterval: 60_000 });
   const currentAgentQuery = trpc.agents.me.useQuery(undefined, { staleTime: 30_000 });
   const agentStatusesQuery = trpc.agents.getStatuses.useQuery(undefined, { staleTime: 30_000, refetchInterval: 60_000 });
   const commandBookingStatsQuery = trpc.leads.stats.useQuery({ dateFrom: todayDateStr, dateTo: todayDateStr }, { refetchInterval: 60_000 });
-  const isLoading = bookingQuery.isLoading;
-  const isUnavailable = Boolean(bookingQuery.error);
+  const isLoading = publicMetricsQuery.isLoading;
+  const isUnavailable = Boolean(publicMetricsQuery.error);
   const allRows = bookingQuery.data?.bookings ?? [];
+  const dailyMetrics = publicMetricsQuery.data?.days ?? [];
   const currentWindowRows = useMemo(() => allRows.filter((row) => row.requestedLocalDate && row.requestedLocalDate >= currentWindowStart), [allRows, currentWindowStart]);
   const previousWindowRows = useMemo(() => allRows.filter((row) => row.requestedLocalDate && row.requestedLocalDate < currentWindowStart), [allRows, currentWindowStart]);
   const todayRows = useMemo(() => bookingsForMibDashboardDate(allRows, today), [allRows, today]);
   const yesterdayRows = useMemo(() => bookingsForMibDashboardDate(allRows, shiftMibDashboardDate(today, -1)), [allRows, today]);
-  const todayMetrics = useMemo(() => bookingMetricSummary(todayRows), [todayRows]);
-  const yesterdayMetrics = useMemo(() => bookingMetricSummary(yesterdayRows), [yesterdayRows]);
-  const currentMetrics = useMemo(() => bookingMetricSummary(currentWindowRows), [currentWindowRows]);
-  const previousMetrics = useMemo(() => bookingMetricSummary(previousWindowRows), [previousWindowRows]);
-  const dailyBookings = useMemo(() => Array.from({ length: 30 }, (_, index) => bookingMetricSummary(bookingsForMibDashboardDate(allRows, shiftMibDashboardDate(currentWindowStart, index))).totalBookings), [allRows, currentWindowStart]);
+  const todayMetrics = useMemo(() => dailyMetrics.find((row) => row.date === today) ?? aggregateSummary([]), [dailyMetrics, today]);
+  const yesterdayMetrics = useMemo(() => dailyMetrics.find((row) => row.date === shiftMibDashboardDate(today, -1)) ?? aggregateSummary([]), [dailyMetrics, today]);
+  const currentMetrics = useMemo(() => aggregateSummary(dailyMetrics.filter((row) => row.date >= currentWindowStart)), [currentWindowStart, dailyMetrics]);
+  const previousMetrics = useMemo(() => aggregateSummary(dailyMetrics.filter((row) => row.date < currentWindowStart)), [currentWindowStart, dailyMetrics]);
+  const dailyBookings = useMemo(() => dailyMetrics.filter((row) => row.date >= currentWindowStart).map((row) => row.totalBookings), [currentWindowStart, dailyMetrics]);
   const overviewBars = chartSlots(dailyBookings);
   const overviewMaximum = Math.max(...overviewBars, 1);
   const serviceSlots = useMemo(() => {
     if (isLoading || isUnavailable) return Array.from({ length: 5 }, (_, index) => ({ name: index === 0 ? isLoading ? "Loading" : "Unavailable" : "", share: "—", tone: serviceTones[index] }));
-    const counts = new Map<string, number>();
-    currentWindowRows.forEach((row) => {
-      const service = row.serviceName?.trim() || "Service not specified";
-      counts.set(service, (counts.get(service) ?? 0) + 1);
-    });
-    const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const entries = publicMetricsQuery.data?.services.map((service) => [service.name, service.bookings] as const) ?? [];
     const primary = entries.slice(0, 4);
     const remaining = entries.slice(4).reduce((sum, [, count]) => sum + count, 0);
     if (remaining) primary.push(["Other", remaining]);
@@ -190,7 +198,7 @@ export default function MibHomePreview() {
       const row = primary[index];
       return { name: row?.[0] ?? "", share: row && currentMetrics.totalBookings ? `${Math.round((row[1] / currentMetrics.totalBookings) * 100)}%` : "—", tone: serviceTones[index] };
     });
-  }, [currentMetrics.totalBookings, currentWindowRows, isLoading, isUnavailable]);
+  }, [currentMetrics.totalBookings, isLoading, isUnavailable, publicMetricsQuery.data?.services]);
   const donutStyle = useMemo(() => {
     if (isLoading || isUnavailable || !currentMetrics.totalBookings) return { background: "#eeeae4" };
     let cursor = 0;
