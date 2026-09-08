@@ -193,9 +193,10 @@ function GlobalOpsChat() {
   // on public pages (e.g. the quote form at /) to prevent notification sounds
   // from leaking onto those pages.
   const isBookingsWorkspace = location === "/admin/bookings";
-  const isHomepagePreview = location === "/admin/home-preview" || location === "/admin2";
+  const isMibDashboard = location === "/admin2";
+  const isHomepagePreview = location === "/admin/home-preview" || isMibDashboard;
   const isEligible =
-    (location.startsWith("/admin") && !isBookingsWorkspace && !isHomepagePreview) ||
+    (location.startsWith("/admin") && !isBookingsWorkspace && (!isHomepagePreview || isMibDashboard)) ||
     location.startsWith("/agent") ||
     location.startsWith("/call-assist");
 
@@ -223,7 +224,7 @@ function GlobalOpsChat() {
 
   // Only render OpsChat if we are on (or have visited) an eligible route.
   // This prevents the sound hooks from being active on the public quote form.
-  const shouldRenderOpsChat = hasBeenMounted && !isBookingsWorkspace && !isHomepagePreview;
+  const shouldRenderOpsChat = hasBeenMounted && !isBookingsWorkspace && (!isHomepagePreview || isMibDashboard);
 
   return (
     <>

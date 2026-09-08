@@ -59,6 +59,7 @@ import { bookingsRouter } from "./bookingsRouter";
 import { bookingFunnelRouter } from "./bookingFunnelRouter";
 import { bookingPaymentRouter } from "./bookingPaymentRouter";
 import { bookingPaymentAdminRouter } from "./bookingPaymentAdminRouter";
+import { mibDashboardRouter } from "./mibDashboardRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 import { computeSessionSummary } from './sessionSummary';
 import { responseTemplatesRouter } from './responseTemplatesRouter';
@@ -117,6 +118,7 @@ export const appRouter = router({
   bookingFunnel: bookingFunnelRouter,
   bookingPayments: bookingPaymentRouter,
   bookingPaymentAdmin: bookingPaymentAdminRouter,
+  mibDashboard: mibDashboardRouter,
   responseTemplates: responseTemplatesRouter,
 
   auth: router({
