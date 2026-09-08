@@ -9,15 +9,14 @@ describe("MIB dashboard router contract", () => {
     expect(source).not.toContain("publicProcedure");
   });
 
-  it("uses the user-designated LeadFlow jobs table for dashboard booking data", () => {
-    expect(source).toContain("leadflowJobs");
-    expect(source).toContain("mapLeadflowJobsForMibDashboard(jobRows, firstJobDateByPhone)");
-    expect(source).toContain("leadflowJobs.customerRating");
-    expect(source).toContain("leadflowJobs.hasStripeCard");
+  it("uses the same native and unconverted non-lead funnel booking treatment as the Bookings workspace", () => {
+    expect(source).toContain("mergeMibDashboardBookings(nativeRows, funnelRows)");
+    expect(source).toContain("bookingFunnelRecords.bookingId");
+    expect(source).toContain("bookingFunnelRecords.stage");
   });
 
   it("stays read-only and does not adopt legacy cleaner-job storage", () => {
-    for (const prohibited of [".insert(", ".update(", ".delete(", "cleanerJobs", "cleaner_jobs", "from(bookings)", "bookingFunnelRecords"]) {
+    for (const prohibited of [".insert(", ".update(", ".delete(", "cleanerJobs", "cleaner_jobs"]) {
       expect(source).not.toContain(prohibited);
     }
   });

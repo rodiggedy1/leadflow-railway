@@ -1223,57 +1223,6 @@ export type CleanerJob = typeof cleanerJobs.$inferSelect;
 export type InsertCleanerJob = typeof cleanerJobs.$inferInsert;
 
 /**
- * LeadFlow-owned operational jobs. This is intentionally separate from the
- * legacy Launch27-synced cleaner_jobs table and its cleanup behavior.
- */
-export const leadflowJobs = mysqlTable("leadflow_jobs", {
-  id: int("id").autoincrement().primaryKey(),
-  origin: varchar("origin", { length: 32 }).notNull(),
-  launch27BookingId: int("launch27BookingId"),
-  bookingSeriesId: int("bookingSeriesId"),
-  jobDate: varchar("jobDate", { length: 10 }).notNull(),
-  serviceDateTime: varchar("serviceDateTime", { length: 50 }),
-  customerName: varchar("customerName", { length: 255 }).notNull(),
-  customerPhone: varchar("customerPhone", { length: 30 }),
-  customerEmail: varchar("customerEmail", { length: 320 }),
-  jobAddress: varchar("jobAddress", { length: 500 }),
-  serviceName: varchar("serviceName", { length: 500 }),
-  bedrooms: int("bedrooms"),
-  bathrooms: int("bathrooms"),
-  extras: text("extras"),
-  frequency: varchar("frequency", { length: 100 }),
-  bookingStatus: varchar("bookingStatus", { length: 50 }).notNull(),
-  teamName: varchar("teamName", { length: 255 }),
-  teamId: int("teamId"),
-  customerNotes: text("customerNotes"),
-  jobTotalCents: int("jobTotalCents").default(0).notNull(),
-  hasStripeCard: tinyint("hasStripeCard").default(0).notNull(),
-  paymentBrand: varchar("paymentBrand", { length: 50 }),
-  paymentLast4: varchar("paymentLast4", { length: 4 }),
-  customerRating: int("customerRating"),
-  reviewChipsSelected: text("reviewChipsSelected"),
-  reviewFreeText: text("reviewFreeText"),
-  reviewDrafts: text("reviewDrafts"),
-  reviewDraftPicked: int("reviewDraftPicked"),
-  reviewDraftText: text("reviewDraftText"),
-  reviewCopied: tinyint("reviewCopied").default(0).notNull(),
-  reviewThumbtackOpenedAt: datetime("reviewThumbtackOpenedAt", { mode: "date", fsp: 3 }),
-  reviewCompletionSmsClaimedAt: datetime("reviewCompletionSmsClaimedAt", { mode: "date", fsp: 3 }),
-  reviewCompletionSmsSentAt: datetime("reviewCompletionSmsSentAt", { mode: "date", fsp: 3 }),
-  missingFromLaunch27At: datetime("missingFromLaunch27At", { mode: "date", fsp: 3 }),
-  nextOccurrenceCreatedAt: datetime("nextOccurrenceCreatedAt", { mode: "date", fsp: 3 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (t) => [
-  index("idx_leadflow_jobs_job_date").on(t.jobDate),
-  index("idx_leadflow_jobs_status_date").on(t.bookingStatus, t.jobDate),
-  uniqueIndex("uq_leadflow_jobs_launch27_booking").on(t.launch27BookingId),
-  uniqueIndex("uq_leadflow_jobs_series_date").on(t.bookingSeriesId, t.jobDate),
-]);
-export type LeadflowJob = typeof leadflowJobs.$inferSelect;
-export type InsertLeadflowJob = typeof leadflowJobs.$inferInsert;
-
-/**
  * jobPhotos — completion photos uploaded by cleaners for a specific job.
  */
 export const jobPhotos = mysqlTable("job_photos", {

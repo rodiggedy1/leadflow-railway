@@ -1,15 +1,16 @@
-import { and, asc, desc, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, gte, lte } from "drizzle-orm";
 import { z } from "zod";
-import { activityLog, leadflowJobs } from "../drizzle/schema";
-import { mapLeadflowJobsForMibDashboard } from "../shared/mibDashboard";
+import { activityLog, bookingFunnelRecords, bookings } from "../drizzle/schema";
+import { mergeMibDashboardBookings } from "../shared/mibDashboard";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 
 const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD date");
 
 /**
- * Read-only data contract for the MIB operations dashboard. It uses the
- * LeadFlow-owned jobs table selected by the user and performs no mutations.
+ * Read-only data contract for the MIB operations dashboard. It mirrors the
+ * Bookings workspace's native-plus-unconverted-funnel composition and does
+ * not read legacy cleaner job data or mutate application state.
  */
 export const mibDashboardRouter = router({
   getBookingWindow: adminAgentProcedure
@@ -21,37 +22,40 @@ export const mibDashboardRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Booking service unavailable.");
 
-      const activeJobs = sql`LOWER(${leadflowJobs.bookingStatus}) NOT IN ('cancelled', 'canceled')`;
-      const normalizedPhone = sql<string>`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10)`;
-      const [jobRows, customerHistoryRows] = await Promise.all([
+      const [nativeRows, funnelRows] = await Promise.all([
         db
           .select({
-            id: leadflowJobs.id,
-            customerName: leadflowJobs.customerName,
-            customerPhone: leadflowJobs.customerPhone,
-            jobDate: leadflowJobs.jobDate,
-            serviceDateTime: leadflowJobs.serviceDateTime,
-            serviceName: leadflowJobs.serviceName,
-            bookingStatus: leadflowJobs.bookingStatus,
-            teamName: leadflowJobs.teamName,
-            jobTotalCents: leadflowJobs.jobTotalCents,
-            hasStripeCard: leadflowJobs.hasStripeCard,
-            customerRating: leadflowJobs.customerRating,
+            id: bookings.id,
+            customerName: bookings.customerName,
+            requestedLocalDate: bookings.requestedLocalDate,
+            requestedLocalTime: bookings.requestedLocalTime,
+            serviceName: bookings.serviceName,
+            assignmentStatus: bookings.assignmentStatus,
+            paymentStatus: bookings.paymentStatus,
+            firstCleaningTotalCents: bookings.firstCleaningTotalCents,
+            status: bookings.status,
           })
-          .from(leadflowJobs)
-          .where(and(gte(leadflowJobs.jobDate, input.startDate), lte(leadflowJobs.jobDate, input.endDate), activeJobs))
-          .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime)),
+          .from(bookings)
+          .where(and(gte(bookings.requestedLocalDate, input.startDate), lte(bookings.requestedLocalDate, input.endDate)))
+          .orderBy(asc(bookings.requestedLocalDate), asc(bookings.requestedLocalTime)),
         db
           .select({
-            phone: normalizedPhone,
-            firstJobDate: sql<string>`MIN(${leadflowJobs.jobDate})`,
+            id: bookingFunnelRecords.id,
+            bookingId: bookingFunnelRecords.bookingId,
+            customerName: bookingFunnelRecords.customerName,
+            requestedLocalDate: bookingFunnelRecords.requestedLocalDate,
+            requestedLocalTime: bookingFunnelRecords.requestedLocalTime,
+            serviceName: bookingFunnelRecords.serviceName,
+            paymentLast4: bookingFunnelRecords.paymentLast4,
+            firstCleaningTotalCents: bookingFunnelRecords.firstCleaningTotalCents,
+            stage: bookingFunnelRecords.stage,
           })
-          .from(leadflowJobs)
-          .where(and(isNotNull(leadflowJobs.customerPhone), activeJobs))
-          .groupBy(normalizedPhone),
+          .from(bookingFunnelRecords)
+          .where(and(gte(bookingFunnelRecords.requestedLocalDate, input.startDate), lte(bookingFunnelRecords.requestedLocalDate, input.endDate)))
+          .orderBy(asc(bookingFunnelRecords.requestedLocalDate), asc(bookingFunnelRecords.requestedLocalTime)),
       ]);
-      const firstJobDateByPhone = Object.fromEntries(customerHistoryRows.filter((row) => Boolean(row.phone)).map((row) => [row.phone, row.firstJobDate]));
-      return { bookings: mapLeadflowJobsForMibDashboard(jobRows, firstJobDateByPhone) };
+
+      return { bookings: mergeMibDashboardBookings(nativeRows, funnelRows) };
     }),
 
   getRecentActivity: adminAgentProcedure

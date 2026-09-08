@@ -2,27 +2,30 @@ import { describe, expect, it } from "vitest";
 import {
   bookingMetricSummary,
   bookingsForMibDashboardDate,
-  mapLeadflowJobsForMibDashboard,
+  mergeMibDashboardBookings,
   percentChange,
   shiftMibDashboardDate,
 } from "../shared/mibDashboard";
 
-describe("MIB dashboard jobs data", () => {
-  const jobs = [
-    { id: 1, customerName: "New Customer", customerPhone: "+1 (202) 555-0101", jobDate: "2026-09-08", serviceDateTime: "2026-09-08T09:00:00", serviceName: "Standard Cleaning", bookingStatus: "assigned", teamName: "Team Maya", jobTotalCents: 22000, hasStripeCard: 1, customerRating: 5 },
-    { id: 2, customerName: "Returning Customer", customerPhone: "+12025550102", jobDate: "2026-09-08", serviceDateTime: "2026-09-08T11:00:00", serviceName: "Deep Cleaning", bookingStatus: "assigned", teamName: null, jobTotalCents: 33000, hasStripeCard: 0, customerRating: null },
+describe("MIB dashboard booking data", () => {
+  const native = [{
+    id: 1, customerName: "Native Customer", requestedLocalDate: "2026-09-08", requestedLocalTime: "09:00", serviceName: "Standard Cleaning", assignmentStatus: "assigned", paymentStatus: "card_on_file", firstCleaningTotalCents: 22000, status: "confirmed",
+  }];
+  const funnel = [
+    { id: 2, bookingId: null, customerName: "Funnel Booking", requestedLocalDate: "2026-09-08", requestedLocalTime: "11:00", serviceName: "Deep Cleaning", paymentLast4: "4242", firstCleaningTotalCents: 33000, stage: "booked" },
+    { id: 3, bookingId: null, customerName: "In-progress Lead", requestedLocalDate: "2026-09-08", requestedLocalTime: null, serviceName: null, paymentLast4: null, firstCleaningTotalCents: null, stage: "lead" },
+    { id: 4, bookingId: 1, customerName: "Converted Funnel", requestedLocalDate: "2026-09-08", requestedLocalTime: "12:00", serviceName: "Standard Cleaning", paymentLast4: "4242", firstCleaningTotalCents: 22000, stage: "booked" },
   ];
 
-  it("normalizes only LeadFlow-owned jobs into dashboard rows", () => {
-    const rows = mapLeadflowJobsForMibDashboard(jobs, { "2025550101": "2026-09-08", "2025550102": "2026-07-01" });
-    expect(rows.map((row) => row.key)).toEqual(["job:1", "job:2"]);
-    expect(rows[0]).toMatchObject({ assignmentStatus: "assigned", paymentStatus: "card_on_file", isNewCustomer: true });
-    expect(rows[1]).toMatchObject({ assignmentStatus: "unassigned", paymentStatus: "not_started", isNewCustomer: false });
+  it("uses the same native-plus-unconverted-nonlead funnel treatment as Bookings", () => {
+    const rows = mergeMibDashboardBookings(native, funnel);
+    expect(rows.map((row) => row.key)).toEqual(["funnel:2", "booking:1"]);
+    expect(rows[0]).toMatchObject({ assignmentStatus: "unassigned", paymentStatus: "card_on_file" });
   });
 
-  it("summarizes the selected jobs date with real payment, customer, and rating fields", () => {
-    const rows = bookingsForMibDashboardDate(mapLeadflowJobsForMibDashboard(jobs, { "2025550101": "2026-09-08", "2025550102": "2026-07-01" }), "2026-09-08");
-    expect(bookingMetricSummary(rows)).toEqual({ totalBookings: 2, revenueCents: 55000, assignedBookings: 1, cardsOnFile: 1, newCustomers: 1, averageRating: 5 });
+  it("summarizes only the selected date without dropping either booking source", () => {
+    const rows = bookingsForMibDashboardDate(mergeMibDashboardBookings(native, funnel), "2026-09-08");
+    expect(bookingMetricSummary(rows)).toEqual({ totalBookings: 2, revenueCents: 55000, assignedBookings: 1, cardsOnFile: 2 });
   });
 
   it("uses calendar date arithmetic and honest no-baseline comparisons", () => {

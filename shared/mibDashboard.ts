@@ -1,9 +1,8 @@
 export type MibDashboardBookingRow = {
   key: string;
-  source: "job";
+  source: "booking" | "funnel";
   id: number;
   customerName: string;
-  customerPhone: string | null;
   requestedLocalDate: string | null;
   requestedLocalTime: string | null;
   serviceName: string | null;
@@ -11,56 +10,71 @@ export type MibDashboardBookingRow = {
   paymentStatus: string;
   firstCleaningTotalCents: number | null;
   status: string;
-  customerRating: number | null;
-  isNewCustomer: boolean;
 };
 
-type LeadflowJobInput = {
+type NativeBookingInput = {
   id: number;
   customerName: string;
-  customerPhone: string | null;
-  jobDate: string;
-  serviceDateTime: string | null;
+  requestedLocalDate: string | null;
+  requestedLocalTime: string | null;
   serviceName: string | null;
-  bookingStatus: string;
-  teamName: string | null;
-  jobTotalCents: number;
-  hasStripeCard: number;
-  customerRating: number | null;
+  assignmentStatus: string;
+  paymentStatus: string;
+  firstCleaningTotalCents: number | null;
+  status: string;
 };
 
-function phoneKey(phone: string | null) {
-  const digits = (phone ?? "").replace(/\D/g, "").slice(-10);
-  return digits.length === 10 ? digits : null;
-}
+type FunnelBookingInput = {
+  id: number;
+  bookingId: number | null;
+  customerName: string;
+  requestedLocalDate: string | null;
+  requestedLocalTime: string | null;
+  serviceName: string | null;
+  paymentLast4: string | null;
+  firstCleaningTotalCents: number | null;
+  stage: string;
+};
 
 /**
- * Normalizes the LeadFlow-owned jobs table into the fixed dashboard contract.
- * All output is read-only and is derived only from jobs-table fields.
+ * Mirrors the existing Bookings workspace: native rows plus funnel rows that
+ * have not created a native booking yet, with funnel leads excluded from the
+ * booking view. The function is pure so its treatment is regression-tested.
  */
-export function mapLeadflowJobsForMibDashboard(
-  jobs: LeadflowJobInput[],
-  firstJobDateByPhone: Record<string, string>,
+export function mergeMibDashboardBookings(
+  bookings: NativeBookingInput[],
+  funnelRecords: FunnelBookingInput[],
 ): MibDashboardBookingRow[] {
-  return jobs.map((job) => {
-    const customerKey = phoneKey(job.customerPhone);
-    return {
-      key: `job:${job.id}`,
-      source: "job",
-      id: job.id,
-      customerName: job.customerName,
-      customerPhone: job.customerPhone,
-      requestedLocalDate: job.jobDate,
-      requestedLocalTime: job.serviceDateTime ? job.serviceDateTime.slice(11, 16) : null,
-      serviceName: job.serviceName,
-      assignmentStatus: job.teamName?.trim() ? "assigned" : "unassigned",
-      paymentStatus: job.hasStripeCard ? "card_on_file" : "not_started",
-      firstCleaningTotalCents: job.jobTotalCents,
-      status: job.bookingStatus,
-      customerRating: job.customerRating,
-      isNewCustomer: Boolean(customerKey && firstJobDateByPhone[customerKey] === job.jobDate),
-    };
-  });
+  const nativeRows: MibDashboardBookingRow[] = bookings.map((booking) => ({
+    key: `booking:${booking.id}`,
+    source: "booking",
+    id: booking.id,
+    customerName: booking.customerName,
+    requestedLocalDate: booking.requestedLocalDate,
+    requestedLocalTime: booking.requestedLocalTime,
+    serviceName: booking.serviceName,
+    assignmentStatus: booking.assignmentStatus,
+    paymentStatus: booking.paymentStatus,
+    firstCleaningTotalCents: booking.firstCleaningTotalCents,
+    status: booking.status,
+  }));
+  const funnelRows: MibDashboardBookingRow[] = funnelRecords
+    .filter((record) => !record.bookingId && record.stage !== "lead")
+    .map((record) => ({
+      key: `funnel:${record.id}`,
+      source: "funnel",
+      id: record.id,
+      customerName: record.customerName,
+      requestedLocalDate: record.requestedLocalDate,
+      requestedLocalTime: record.requestedLocalTime,
+      serviceName: record.serviceName,
+      assignmentStatus: "unassigned",
+      paymentStatus: record.paymentLast4 ? "card_on_file" : "not_started",
+      firstCleaningTotalCents: record.firstCleaningTotalCents,
+      status: record.stage,
+    }));
+
+  return [...funnelRows, ...nativeRows];
 }
 
 export function bookingsForMibDashboardDate(rows: MibDashboardBookingRow[], date: string) {
@@ -68,14 +82,11 @@ export function bookingsForMibDashboardDate(rows: MibDashboardBookingRow[], date
 }
 
 export function bookingMetricSummary(rows: MibDashboardBookingRow[]) {
-  const ratedRows = rows.filter((row) => row.customerRating !== null);
   return {
     totalBookings: rows.length,
     revenueCents: rows.reduce((sum, row) => sum + (row.firstCleaningTotalCents ?? 0), 0),
     assignedBookings: rows.filter((row) => row.assignmentStatus === "assigned").length,
     cardsOnFile: rows.filter((row) => row.paymentStatus === "card_on_file").length,
-    newCustomers: rows.filter((row) => row.isNewCustomer).length,
-    averageRating: ratedRows.length ? ratedRows.reduce((sum, row) => sum + (row.customerRating ?? 0), 0) / ratedRows.length : null,
   };
 }
 
