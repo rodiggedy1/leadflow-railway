@@ -213,6 +213,8 @@ export default function MibHomePreview() {
   const activitySlots = Array.from({ length: 5 }, (_, index) => activityQuery.data?.items[index] ?? null);
   const bookingsComparison = comparison(todayMetrics.totalBookings, yesterdayMetrics.totalBookings, "vs. yesterday");
   const revenueComparison = comparison(todayMetrics.revenueCents, yesterdayMetrics.revenueCents, "vs. yesterday");
+  const customersComparison = comparison(todayMetrics.newCustomers, yesterdayMetrics.newCustomers, "vs. yesterday");
+  const ratingComparison = comparison(todayMetrics.averageRating ?? 0, yesterdayMetrics.averageRating ?? 0, "vs. yesterday");
   const headlineComparison = comparison(currentMetrics.totalBookings, previousMetrics.totalBookings, "vs. previous 30 days");
   const greetingName = currentAgentQuery.data?.name?.split(" ")[0];
   const metricUnavailable = isLoading ? "Loading" : isUnavailable ? "—" : null;
@@ -249,8 +251,8 @@ export default function MibHomePreview() {
           <section className="mib-home-preview__metrics" aria-label="Live booking metrics">
             <PreviewMetric icon={CalendarDays} label="Total Bookings" value={metricUnavailable ?? String(todayMetrics.totalBookings)} comparisonValue={isLoading || isUnavailable ? "—" : bookingsComparison.value} comparisonLabel={isLoading ? "Loading" : isUnavailable ? "Unavailable" : bookingsComparison.label} tone="coral" series={isLoading || isUnavailable ? [] : [yesterdayMetrics.totalBookings, todayMetrics.totalBookings]} />
             <PreviewMetric icon={CircleDollarSign} label="Revenue" value={metricUnavailable ?? formatCurrency(todayMetrics.revenueCents)} comparisonValue={isLoading || isUnavailable ? "—" : revenueComparison.value} comparisonLabel={isLoading ? "Loading" : isUnavailable ? "Unavailable" : revenueComparison.label} tone="green" series={isLoading || isUnavailable ? [] : [yesterdayMetrics.revenueCents, todayMetrics.revenueCents]} />
-            <PreviewMetric icon={Users} label="New Customers" value="—" comparisonValue="—" comparisonLabel="Unavailable" tone="violet" series={[]} />
-            <PreviewMetric icon={Star} label="Average Rating" value="—" comparisonValue="—" comparisonLabel="Unavailable" tone="gold" series={[]} />
+            <PreviewMetric icon={Users} label="New Customers" value={metricUnavailable ?? String(todayMetrics.newCustomers)} comparisonValue={isLoading || isUnavailable ? "—" : customersComparison.value} comparisonLabel={isLoading ? "Loading" : isUnavailable ? "Unavailable" : customersComparison.label} tone="violet" series={isLoading || isUnavailable ? [] : [yesterdayMetrics.newCustomers, todayMetrics.newCustomers]} />
+            <PreviewMetric icon={Star} label="Average Rating" value={metricUnavailable ?? (todayMetrics.averageRating === null ? "—" : todayMetrics.averageRating.toFixed(1))} comparisonValue={isLoading || isUnavailable || todayMetrics.averageRating === null || yesterdayMetrics.averageRating === null ? "—" : ratingComparison.value} comparisonLabel={isLoading ? "Loading" : isUnavailable || todayMetrics.averageRating === null ? "Unavailable" : ratingComparison.label} tone="gold" series={isLoading || isUnavailable || todayMetrics.averageRating === null ? [] : [yesterdayMetrics.averageRating ?? 0, todayMetrics.averageRating]} />
           </section>
 
           <section className="mib-home-preview__overview">
