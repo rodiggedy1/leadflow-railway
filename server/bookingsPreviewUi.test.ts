@@ -43,7 +43,7 @@ describe("bookings UI preview contract", () => {
 
   it("starts the workspace and detail panel at the viewport top without a shared header", () => {
     expect(pageStyles).toContain("grid-template-columns:minmax(720px,1fr) 410px");
-    expect(pageStyles).toContain(".bookings-reference-frame{--mib-line:rgba(78,66,52,.075);--mib-shell-bg:#fbfaf8;display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh");
+    expect(pageStyles).toContain(".bookings-reference-frame{--mib-line:rgba(73,62,51,.09);--mib-shell-bg:#f8f6f1;display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh");
     expect(pageStyles).toContain(".bookings-detail-panel{position:sticky;top:0;height:100vh");
     expect(pageStyles).not.toContain("var(--admin-header-height");
     expect(pageStyles).not.toContain("grid-template-columns:82px");
