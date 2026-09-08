@@ -55,6 +55,15 @@ const actionCards = [
 const presenceTones = ["owner", "violet", "coral", "gold", "green", "peach"] as const;
 const serviceTones = ["coral", "peach", "green", "violet", "gray"] as const;
 const serviceColors = { coral: "#f66242", peach: "#ffc3b5", green: "#53c7a4", violet: "#9e83f5", gray: "#a4a8b2" } as const;
+const overviewRanges = [
+  { value: "7d", label: "Last 7 days", days: 7 },
+  { value: "30d", label: "Last 30 days", days: 30 },
+  { value: "90d", label: "Last 90 days", days: 90 },
+  { value: "12m", label: "Last 12 months", days: 365 },
+] as const;
+const overviewTabs = ["Bookings", "Revenue", "Customers"] as const;
+type OverviewRange = (typeof overviewRanges)[number]["value"];
+type OverviewTab = (typeof overviewTabs)[number];
 
 function initialsFor(name: string | null | undefined) {
   return (name ?? "").split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "—";
@@ -183,6 +192,8 @@ function ViewAll() {
 export default function MibHomePreview() {
   const { open: openCommandChat } = useOpsChatWindow();
   const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
+  const [overviewTab, setOverviewTab] = useState<OverviewTab>("Bookings");
+  const [overviewRange, setOverviewRange] = useState<OverviewRange>("30d");
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       const nextDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -195,9 +206,10 @@ export default function MibHomePreview() {
   const previousWindowStart = useMemo(() => shiftMibDashboardDate(today, -59), [today]);
   const bookingWindowInput = useMemo(() => ({ startDate: previousWindowStart, endDate: today }), [previousWindowStart, today]);
   const publicMetricsInput = useMemo(() => ({ ...bookingWindowInput, serviceStartDate: currentWindowStart }), [bookingWindowInput, currentWindowStart]);
+  const overviewRangeOption = overviewRanges.find((option) => option.value === overviewRange) ?? overviewRanges[1];
   const publicMetricsQuery = trpc.mibDashboard.getPublicBookingMetrics.useQuery(publicMetricsInput, { staleTime: 10_000, refetchInterval: 30_000 });
-  const metricsOverviewQuery = trpc.metrics.getOverview.useQuery({ range: "30d" }, { staleTime: 5 * 60_000, refetchInterval: 60_000 });
-  const performanceStatsQuery = trpc.performance.stats.useQuery({ days: 30 }, { staleTime: 2 * 60_000, refetchInterval: 60_000 });
+  const metricsOverviewQuery = trpc.metrics.getOverview.useQuery({ range: overviewRange }, { staleTime: 5 * 60_000, refetchInterval: 60_000 });
+  const performanceStatsQuery = trpc.performance.stats.useQuery({ days: overviewRangeOption.days }, { staleTime: 2 * 60_000, refetchInterval: 60_000 });
   const qualityScheduleQuery = trpc.quality.getJobsForDate.useQuery({ date: today }, { staleTime: 10_000, refetchInterval: 30_000 });
   const activityQuery = trpc.mibDashboard.getRecentActivity.useQuery({ limit: 5 }, { staleTime: 30_000, refetchInterval: 60_000 });
   const currentAgentQuery = trpc.agents.me.useQuery(undefined, { staleTime: 30_000 });
@@ -222,8 +234,19 @@ export default function MibHomePreview() {
   const dailyBookings = useMemo(() => dailyMetrics.filter((row) => row.date >= currentWindowStart).map((row) => row.totalBookings), [currentWindowStart, dailyMetrics]);
   const overviewBars = chartSlots(dailyBookings);
   const overviewMaximum = Math.max(...overviewBars, 1);
-  const metricsOverviewBars = chartSlots(metricsMonthly.map((item) => item.booked));
+  const overviewValues = useMemo(() => {
+    if (overviewTab === "Revenue") return metricsMonthly.map((item) => item.revenue);
+    if (overviewTab === "Customers") return metricsMonthly.map((item) => item.leads);
+    return metricsMonthly.map((item) => item.booked);
+  }, [metricsMonthly, overviewTab]);
+  const metricsOverviewBars = chartSlots(overviewValues);
   const metricsOverviewMaximum = Math.max(...metricsOverviewBars, 1);
+  const overviewValue = overviewTab === "Revenue"
+    ? formatDollars(metricsKpis?.totalRevenue ?? 0)
+    : overviewTab === "Customers"
+      ? String(metricsKpis?.totalLeads ?? 0)
+      : String(metricsKpis?.totalBooked ?? 0);
+  const overviewSummaryLabel = overviewTab === "Customers" ? "Lead volume" : overviewTab === "Revenue" ? "Revenue" : "Total bookings";
   const serviceTotal = useMemo(() => (metricsOverviewQuery.data?.serviceTypeBreakdown ?? []).reduce((total, service) => total + service.value, 0), [metricsOverviewQuery.data?.serviceTypeBreakdown]);
   const serviceSlots = useMemo(() => {
     if (metricsLoading || metricsUnavailable) return Array.from({ length: 5 }, (_, index) => ({ name: index === 0 ? metricsLoading ? "Loading" : "Unavailable" : "", share: "—", tone: serviceTones[index] }));
@@ -309,7 +332,7 @@ export default function MibHomePreview() {
 
           <section className="mib-home-preview__overview">
             <article className="mib-preview-panel mib-preview-chart">
-              <header><div><h2>Bookings overview</h2><p><strong>{metricsLoading || metricsUnavailable ? "—" : performanceSummary.bookings}</strong><b>↗ —</b><span>{metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : "Total bookings"}</span></p></div><div className="mib-preview-chart__tabs"><b>Bookings</b><span>Revenue</span><span>Customers</span><button type="button" disabled>Last 30 days <ChevronDown /></button></div></header>
+              <header><div><h2>Bookings overview</h2><p><strong>{metricsLoading || metricsUnavailable ? "—" : overviewValue}</strong><b>↗ —</b><span>{metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : overviewSummaryLabel}</span></p></div><div className="mib-preview-chart__tabs" role="tablist" aria-label="Bookings overview metric">{overviewTabs.map((tab) => <button key={tab} type="button" className={overviewTab === tab ? "is-active" : ""} role="tab" aria-selected={overviewTab === tab} onClick={() => setOverviewTab(tab)}>{tab}</button>)}<label className="mib-preview-chart__range"><select value={overviewRange} onChange={(event) => setOverviewRange(event.target.value as OverviewRange)} aria-label="Bookings overview period">{overviewRanges.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown /></label></div></header>
               <div className="mib-preview-bars" aria-label="Bookings overview">{metricsOverviewBars.map((count, index) => <i key={index} style={{ height: `${metricsLoading || metricsUnavailable ? 38 : count ? Math.max(16, (count / metricsOverviewMaximum) * 100) : 7}%`, opacity: metricsLoading || metricsUnavailable ? 0.22 : undefined }} />)}</div>
             </article>
             <article className="mib-preview-panel mib-preview-service"><header><h2>Bookings by service</h2><ViewAll /></header><div><div className="mib-preview-donut" style={donutStyle}><strong>{metricsLoading || metricsUnavailable ? "—" : serviceTotal}</strong><small>Bookings</small></div><ul>{serviceSlots.map((slot, index) => <li key={`${slot.name}-${index}`}><i className={slot.tone} />{slot.name}<b>{slot.share}</b></li>)}</ul></div></article>
