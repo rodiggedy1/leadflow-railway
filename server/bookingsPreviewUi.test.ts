@@ -18,6 +18,8 @@ describe("bookings UI preview contract", () => {
     expect(pageWrapperSource).toContain("bookings-leadflow-shell");
     expect(pageWrapperSource).not.toContain("useAgentPermissions");
     expect(pageWrapperSource).toContain("<NativeBookingsWorkspace />");
+    expect(pageWrapperSource).toContain('import MibSidebar from "@/components/MibSidebar";');
+    expect(pageWrapperSource).toContain('<MibSidebar activeItem="Bookings" />');
     expect(guardSource).toContain('"bookings":          "/admin/bookings"');
     expect(agentDashboardSource).toContain('"bookings":          "/admin/bookings"');
     expect(sharedConstSource).toContain('{ id: "bookings",          label: "Bookings",      group: "Operations" }');
@@ -41,14 +43,12 @@ describe("bookings UI preview contract", () => {
 
   it("starts the workspace and detail panel at the viewport top without a shared header", () => {
     expect(pageStyles).toContain("grid-template-columns:minmax(720px,1fr) 410px");
-    expect(pageStyles).toContain(".bookings-reference-frame{display:grid;grid-template-columns:204px minmax(0,1fr);min-height:100vh");
-    expect(pageStyles).toContain(".bookings-reference-sidebar{position:sticky;top:0;height:100vh");
+    expect(pageStyles).toContain(".bookings-reference-frame{--mib-line:rgba(78,66,52,.075);--mib-shell-bg:#fbfaf8;display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh");
     expect(pageStyles).toContain(".bookings-detail-panel{position:sticky;top:0;height:100vh");
     expect(pageStyles).not.toContain("var(--admin-header-height");
     expect(pageStyles).not.toContain("grid-template-columns:82px");
     expect(pageStyles).not.toContain(".bookings-ops-nav");
-    expect(pageWrapperSource).toContain("bookings-reference-sidebar");
-    expect(pageWrapperSource).toContain("presentation-only");
+    expect(pageWrapperSource).toContain("MibSidebar");
     expect(pageStyles).toContain("padding:36px 38px 60px");
     expect(pageStyles).toContain("grid-template-columns:1.6fr 1.25fr 1fr .78fr .42fr 20px");
     expect(pageStyles).toContain("@media(max-width:1120px)");
@@ -137,7 +137,7 @@ describe("bookings UI preview contract", () => {
 
   it("keeps the existing MIB Chat suppression unchanged during the navigation-only redesign", () => {
     expect(appSource).toContain('const isBookingsWorkspace = location === "/admin/bookings";');
-    expect(appSource).toContain("(location.startsWith(\"/admin\") && !isBookingsWorkspace)");
-    expect(appSource).toContain("hasBeenMounted && !isBookingsWorkspace");
+    expect(appSource).toContain("(location.startsWith(\"/admin\") && !isBookingsWorkspace && !isHomepagePreview)");
+    expect(appSource).toContain("hasBeenMounted && !isBookingsWorkspace && !isHomepagePreview");
   });
 });

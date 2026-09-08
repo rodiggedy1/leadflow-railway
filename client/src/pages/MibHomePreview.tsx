@@ -1,4 +1,5 @@
 import AdminPageGuard from "@/components/AdminPageGuard";
+import MibSidebar from "@/components/MibSidebar";
 import {
   Bell,
   CalendarDays,
@@ -7,34 +8,11 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
-  Headphones,
-  LayoutDashboard,
-  LineChart,
-  Megaphone,
-  MessageCircle,
   Search,
-  Settings,
   Star,
   Users,
-  UserRound,
-  WalletCards,
 } from "lucide-react";
 import "./mib-home-preview.css";
-
-const sidebarItems = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true },
-  { label: "Bookings", icon: CalendarDays },
-  { label: "Customers", icon: UserRound },
-  { label: "Teams", icon: Users },
-  { label: "Schedule", icon: CalendarDays },
-  { label: "Leads", icon: Megaphone },
-  { label: "Messages", icon: MessageCircle },
-  { label: "Payments", icon: WalletCards },
-  { label: "Reviews", icon: Star },
-  { label: "Marketing", icon: Megaphone },
-  { label: "Reports", icon: LineChart },
-  { label: "Settings", icon: Settings },
-];
 
 const scheduleRows = [
   ["8:30 AM", "Audrey Schaffer", "Standard Cleaning · 232 9th St SE", "In progress"],
@@ -127,11 +105,7 @@ export default function MibHomePreview() {
   return (
     <AdminPageGuard pageId="command-center">
       <main className="mib-home-preview" aria-label="MIB operations homepage visual preview">
-        <aside className="mib-home-preview__sidebar" aria-label="MIB navigation preview">
-          <div className="mib-home-preview__brand"><img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/MIB_logo_final_138df3e8.png" alt="Maids in Black" /></div>
-          <nav>{sidebarItems.map(({ label, icon: Icon, active }) => <span key={label} className={active ? "active" : ""} data-presentation-only="true"><Icon /><b>{label}</b></span>)}</nav>
-          <div className="mib-home-preview__help"><Headphones /><strong>Need help?</strong><p>We’re here for you.</p><button type="button" disabled>Contact support</button></div>
-        </aside>
+        <MibSidebar activeItem="Dashboard" />
 
         <section className="mib-home-preview__workspace">
           <header className="mib-home-preview__topbar">

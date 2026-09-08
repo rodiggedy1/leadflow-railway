@@ -111,6 +111,7 @@ function Router() {
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
+        <Route path={"/admin2"} component={MibHomePreview} />
         <Route path={"/admin/home-preview"} component={MibHomePreview} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
@@ -192,7 +193,7 @@ function GlobalOpsChat() {
   // on public pages (e.g. the quote form at /) to prevent notification sounds
   // from leaking onto those pages.
   const isBookingsWorkspace = location === "/admin/bookings";
-  const isHomepagePreview = location === "/admin/home-preview";
+  const isHomepagePreview = location === "/admin/home-preview" || location === "/admin2";
   const isEligible =
     (location.startsWith("/admin") && !isBookingsWorkspace && !isHomepagePreview) ||
     location.startsWith("/agent") ||

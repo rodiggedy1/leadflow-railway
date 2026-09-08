@@ -4,18 +4,21 @@ import { describe, expect, it } from "vitest";
 const appSource = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
 const previewSource = readFileSync(new URL("../client/src/pages/MibHomePreview.tsx", import.meta.url), "utf8");
 const previewStyles = readFileSync(new URL("../client/src/pages/mib-home-preview.css", import.meta.url), "utf8");
+const sidebarSource = readFileSync(new URL("../client/src/components/MibSidebar.tsx", import.meta.url), "utf8");
 
 describe("MIB homepage visual-preview contract", () => {
-  it("registers an isolated homepage review route without repointing the current admin home", () => {
+  it("registers the approved homepage at /admin2 without repointing the current admin home", () => {
     expect(appSource).toContain('const MibHomePreview = lazy(() => import("./pages/MibHomePreview"));');
+    expect(appSource).toContain('<Route path={"/admin2"} component={MibHomePreview} />');
     expect(appSource).toContain('<Route path={"/admin/home-preview"} component={MibHomePreview} />');
     expect(appSource).toContain('window.location.replace("/admin/command-center")');
   });
 
   it("keeps the review page presentation-only and does not load operational data", () => {
     expect(previewSource).toContain('<AdminPageGuard pageId="command-center">');
-    expect(previewSource).toContain('data-presentation-only="true"');
+    expect(previewSource).toContain('<MibSidebar activeItem="Dashboard" />');
     expect(previewSource).toContain('data-static-reference="true"');
+    expect(sidebarSource).toContain('data-presentation-only="true"');
     expect(previewSource).toContain("Good morning, Rohan.");
     for (const prohibited of ["trpc", "useQuery", "useMutation", "fetch(", "onClick=", "localStorage", "sessionStorage"]) {
       expect(previewSource).not.toContain(prohibited);
@@ -23,7 +26,7 @@ describe("MIB homepage visual-preview contract", () => {
   });
 
   it("uses the MIB dashboard composition and excludes the live global chat overlay", () => {
-    for (const marker of ["mib-home-preview__sidebar", "Last 30 days", "Total Bookings", "Average Rating", "Bookings overview", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "Send download link", "mib-home-preview__promos", "vPmUAKhVtzTzruHW.png", "KtPTcczUntFsdOzR.png", "QqBhMBjofpziFnzR.png"]) {
+    for (const marker of ["MibSidebar activeItem=\"Dashboard\"", "Last 30 days", "Total Bookings", "Average Rating", "Bookings overview", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "Send download link", "mib-home-preview__promos", "vPmUAKhVtzTzruHW.png", "KtPTcczUntFsdOzR.png", "QqBhMBjofpziFnzR.png"]) {
       expect(previewSource).toContain(marker);
     }
     expect(previewSource).toContain("preserveAspectRatio=\"none\"");
@@ -44,7 +47,9 @@ describe("MIB homepage visual-preview contract", () => {
     expect(previewStyles).toContain("@media(max-width:840px)");
     expect(previewStyles).toContain("@media(min-width:841px)");
     expect(previewStyles).toContain("position:absolute;top:16px;right:40px;left:42%");
-    expect(appSource).toContain('const isHomepagePreview = location === "/admin/home-preview";');
+    expect(sidebarSource).toContain('{ label: "Dashboard", icon: LayoutDashboard, href: "/admin2" }');
+    expect(sidebarSource).toContain('{ label: "Bookings", icon: CalendarDays, href: "/admin/bookings" }');
+    expect(appSource).toContain('const isHomepagePreview = location === "/admin/home-preview" || location === "/admin2";');
     expect(appSource).toContain("!isHomepagePreview");
   });
 });
