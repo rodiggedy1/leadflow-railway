@@ -11,13 +11,14 @@
   --mib-line: #e7e8ea;
   --mib-list-line: #e9e6e2;
   --mib-coral: #ff684c;
+  --mib-shell-bg: #fbfaf8;
   --booking-card-radius: 14px;
   --booking-card-surface: rgba(255, 255, 255, .88);
   --booking-card-shadow: 0 9px 24px rgba(38, 31, 24, .035);
   min-height: 100vh;
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr);
-  background: radial-gradient(circle at 22% 18%, rgba(255, 226, 215, .34), transparent 28%), #faf9f7;
+  background: var(--mib-shell-bg);
   color: var(--mib-ink);
   font-family: Montserrat, Arial, sans-serif;
 }
@@ -29,7 +30,7 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid #eee9e4;
-  background: rgba(255, 255, 255, .75);
+  background: var(--mib-shell-bg);
   padding: 25px 15px 18px;
   backdrop-filter: blur(16px);
 }
@@ -120,6 +121,7 @@
 
 .mib-home-preview__workspace {
   min-width: 0;
+  background: var(--mib-shell-bg);
   padding: 0 42px 56px;
 }
 
@@ -231,6 +233,10 @@
 }
 
 .mib-home-preview__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
   padding: 34px 5px 24px;
 }
 
@@ -240,17 +246,6 @@
   font-size: 11px;
   font-weight: 850;
   letter-spacing: .14em;
-}
-
-.mib-home-preview__heading p em {
-  margin-left: 9px;
-  border-radius: 99px;
-  background: #fff0eb;
-  padding: 4px 7px;
-  color: #de563a;
-  font-size: 8px;
-  font-style: normal;
-  letter-spacing: .08em;
 }
 
 .mib-home-preview__heading h1 {
@@ -265,6 +260,47 @@
   color: var(--mib-muted);
   font-size: 14px;
   line-height: 1.45;
+}
+
+.mib-home-preview__range {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding: 2px 0 0;
+}
+
+.mib-home-preview__range > button,
+.mib-home-preview__range span button,
+.mib-preview-chart__tabs button {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #ebe7e2;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .9);
+  padding: 0 13px;
+  color: #33353a;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mib-home-preview__range > button svg,
+.mib-home-preview__range span button svg,
+.mib-preview-chart__tabs button svg {
+  width: 15px;
+}
+
+.mib-home-preview__range span {
+  display: flex;
+  gap: 8px;
+}
+
+.mib-home-preview__range span button {
+  width: 42px;
+  justify-content: center;
+  padding: 0;
 }
 
 .mib-home-preview__metrics {
@@ -390,10 +426,18 @@
 }
 
 .mib-preview-panel header p {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  column-gap: 8px;
   margin: 3px 0 0;
   color: #85888f;
   font-size: 10px;
 }
+
+.mib-preview-panel header p strong { color: #202228; font-family: Georgia, serif; font-size: 28px; line-height: .9; }
+.mib-preview-panel header p b { color: #168d61; font-size: 11px; }
+.mib-preview-panel header p span { grid-column: 2; color: #85888f; font-size: 9px; }
 
 .mib-preview-panel header > span {
   display: flex;
@@ -414,9 +458,8 @@
 }
 
 .mib-preview-chart__tabs {
-  position: absolute;
-  top: 17px;
-  right: 18px;
+  position: static;
+  align-items: center;
   display: flex;
   gap: 17px;
   color: #85888f;
@@ -437,6 +480,12 @@
   height: 2px;
   border-radius: 3px;
   background: var(--mib-coral);
+}
+
+.mib-preview-chart__tabs button {
+  height: 34px;
+  margin-left: 3px;
+  font-size: 9px;
 }
 
 .mib-preview-bars {
@@ -518,6 +567,12 @@
   align-items: center;
   gap: 8px;
   color: #5c6068;
+  font-size: 10px;
+}
+
+.mib-preview-service li b {
+  margin-left: auto;
+  color: #3a3d44;
   font-size: 10px;
 }
 
@@ -673,7 +728,7 @@
 }
 
 .mib-home-preview__promos .growth > svg { color: #1e9e72; }
-.mib-home-preview__promos .care > svg { color: #bf8200; }
+.mib-home-preview__promos .mobile > svg { color: #bf8200; }
 
 .mib-home-preview__promos h2 {
   margin: 0;
@@ -746,9 +801,10 @@
   .mib-home-preview__topbar > label { width: 100%; }
   .mib-home-preview__topbar > div { width: 100%; overflow: auto; }
   .mib-home-preview__topbar button:first-child { min-width: 132px; }
-  .mib-home-preview__heading { padding: 28px 2px 20px; }
+  .mib-home-preview__heading { align-items: flex-start; flex-direction: column; padding: 28px 2px 20px; }
   .mib-home-preview__heading h1 { font-size: 34px; }
   .mib-home-preview__heading span { font-size: 12px; }
+  .mib-home-preview__range { width: 100%; justify-content: space-between; }
   .mib-home-preview__metrics,
   .mib-home-preview__operating-grid,
   .mib-home-preview__promos { grid-template-columns: 1fr; }
