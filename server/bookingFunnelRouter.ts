@@ -186,7 +186,7 @@ export const bookingFunnelRouter = router({
       };
     }),
 
-  list: adminAgentProcedure
+  list: publicProcedure
     .input(bookingFunnelListInputSchema)
     .query(async ({ input }) => {
       const db = await getDb();

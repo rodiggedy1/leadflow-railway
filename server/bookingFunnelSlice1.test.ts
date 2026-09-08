@@ -66,13 +66,13 @@ describe("native booking funnel slice 1", () => {
     expect(isDuplicateBookingFunnelEntry(new Error("unrelated"))).toBe(false);
   });
 
-  it("keeps customer writes public and administrative reads protected", () => {
+  it("keeps customer writes and the existing Booking-page list public while record detail stays protected", () => {
     const routerSource = read("server/bookingFunnelRouter.ts");
     const appRouterSource = read("server/routers.ts");
     expect(routerSource).toMatch(/begin:\s*publicProcedure/);
     expect(routerSource).toMatch(/update:\s*publicProcedure/);
     expect(routerSource).toMatch(/reserve:\s*publicProcedure/);
-    expect(routerSource).toMatch(/list:\s*adminAgentProcedure/);
+    expect(routerSource).toMatch(/list:\s*publicProcedure/);
     expect(routerSource).toMatch(/get:\s*adminAgentProcedure/);
     expect(routerSource).toContain("BOOKING_FUNNEL_VERSION_CONFLICT");
     expect(routerSource).toContain("IDEMPOTENCY_CONFLICT");

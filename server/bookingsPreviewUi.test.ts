@@ -138,6 +138,6 @@ describe("bookings UI preview contract", () => {
   it("keeps the existing MIB Chat suppression unchanged during the navigation-only redesign", () => {
     expect(appSource).toContain('const isBookingsWorkspace = location === "/admin/bookings";');
     expect(appSource).toContain("(location.startsWith(\"/admin\") && !isBookingsWorkspace && !isHomepagePreview)");
-    expect(appSource).toContain("hasBeenMounted && !isBookingsWorkspace && !isHomepagePreview");
+    expect(appSource).toContain("hasBeenMounted && !isBookingsWorkspace && (!isHomepagePreview || isMibDashboard)");
   });
 });

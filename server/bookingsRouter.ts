@@ -196,7 +196,7 @@ export const bookingsRouter = router({
       }
     }),
 
-  list: adminAgentProcedure
+  list: publicProcedure
     .input(bookingListInputSchema.optional())
     .query(async ({ input }) => {
       const db = await getDb();
