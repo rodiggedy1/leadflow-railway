@@ -18,7 +18,6 @@ describe("MIB homepage visual-preview contract", () => {
     expect(previewSource).toContain('<AdminPageGuard pageId="command-center">');
     expect(previewSource).toContain('<MibSidebar activeItem="Dashboard" />');
     expect(previewSource).toContain('data-static-reference="true"');
-    expect(sidebarSource).toContain('data-presentation-only="true"');
     expect(previewSource).toContain("Good morning, Rohan.");
     for (const prohibited of ["trpc", "useQuery", "useMutation", "fetch(", "onClick=", "localStorage", "sessionStorage"]) {
       expect(previewSource).not.toContain(prohibited);
@@ -49,6 +48,18 @@ describe("MIB homepage visual-preview contract", () => {
     expect(previewStyles).toContain("position:absolute;top:16px;right:40px;left:42%");
     expect(sidebarSource).toContain('{ label: "Dashboard", icon: LayoutDashboard, href: "/admin2" }');
     expect(sidebarSource).toContain('{ label: "Bookings", icon: CalendarDays, href: "/admin/bookings" }');
+    for (const href of [
+      "https://quote.maidinblack.com/admin/sms-campaigns",
+      "https://quote.maidinblack.com/admin/team-pay",
+      "https://quote.maidinblack.com/admin/field-management",
+      "https://quote.maidinblack.com/admin/hiring",
+      "https://quote.maidinblack.com/admin/cs-inbox-2",
+      "https://quote.maidinblack.com/admin/payments",
+      "https://quote.maidinblack.com/admin/leads?tab=callbacks",
+      "https://quote.maidinblack.com/admin/performance",
+      "https://quote.maidinblack.com/admin/invoices",
+      "https://quote.maidinblack.com/admin/settings",
+    ]) expect(sidebarSource).toContain(href);
     expect(appSource).toContain('const isHomepagePreview = location === "/admin/home-preview" || location === "/admin2";');
     expect(appSource).toContain("!isHomepagePreview");
   });
