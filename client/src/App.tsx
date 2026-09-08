@@ -66,6 +66,7 @@ const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
+const MibHomePreview = lazy(() => import("./pages/MibHomePreview"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 
 /**
@@ -110,6 +111,7 @@ function Router() {
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
+        <Route path={"/admin/home-preview"} component={MibHomePreview} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
@@ -190,8 +192,9 @@ function GlobalOpsChat() {
   // on public pages (e.g. the quote form at /) to prevent notification sounds
   // from leaking onto those pages.
   const isBookingsWorkspace = location === "/admin/bookings";
+  const isHomepagePreview = location === "/admin/home-preview";
   const isEligible =
-    (location.startsWith("/admin") && !isBookingsWorkspace) ||
+    (location.startsWith("/admin") && !isBookingsWorkspace && !isHomepagePreview) ||
     location.startsWith("/agent") ||
     location.startsWith("/call-assist");
 
@@ -219,7 +222,7 @@ function GlobalOpsChat() {
 
   // Only render OpsChat if we are on (or have visited) an eligible route.
   // This prevents the sound hooks from being active on the public quote form.
-  const shouldRenderOpsChat = hasBeenMounted && !isBookingsWorkspace;
+  const shouldRenderOpsChat = hasBeenMounted && !isBookingsWorkspace && !isHomepagePreview;
 
   return (
     <>
