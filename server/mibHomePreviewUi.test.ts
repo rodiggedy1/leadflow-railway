@@ -23,7 +23,7 @@ describe("MIB homepage visual-preview contract", () => {
   });
 
   it("uses the MIB dashboard composition and excludes the live global chat overlay", () => {
-    for (const marker of ["mib-home-preview__sidebar", "Last 30 days", "Total Bookings", "Average Rating", "Bookings overview", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "Send download link", "mib-home-preview__promos"]) {
+    for (const marker of ["mib-home-preview__sidebar", "Last 30 days", "Total Bookings", "Average Rating", "Bookings overview", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "Send download link", "mib-home-preview__promos", "vPmUAKhVtzTzruHW.png", "KtPTcczUntFsdOzR.png", "QqBhMBjofpziFnzR.png"]) {
       expect(previewSource).toContain(marker);
     }
     expect(previewSource).toContain("preserveAspectRatio=\"none\"");
@@ -35,6 +35,8 @@ describe("MIB homepage visual-preview contract", () => {
     expect(previewStyles).toContain("background: var(--booking-card-surface)");
     expect(previewStyles).toContain("--mib-shell-bg: #fbfaf8");
     expect(previewStyles).toContain("background: var(--mib-shell-bg)");
+    expect(previewStyles).toContain("grid-template-columns: minmax(96px, .8fr) minmax(0, 1.25fr)");
+    expect(previewStyles).toContain("object-fit: cover");
     expect(previewStyles).toContain("@media (max-width: 840px)");
     expect(appSource).toContain('const isHomepagePreview = location === "/admin/home-preview";');
     expect(appSource).toContain("!isHomepagePreview");
