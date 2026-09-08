@@ -14,7 +14,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   bookingMetricSummary,
   bookingsForMibDashboardDate,
@@ -144,6 +144,14 @@ function ViewAll() {
 
 export default function MibHomePreview() {
   const { open: openCommandChat } = useOpsChatWindow();
+  const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const nextDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      setTodayDateStr((currentDate) => currentDate === nextDate ? currentDate : nextDate);
+    }, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
   const today = useMemo(() => businessDateForMibDashboard(), []);
   const currentWindowStart = useMemo(() => shiftMibDashboardDate(today, -29), [today]);
   const previousWindowStart = useMemo(() => shiftMibDashboardDate(today, -59), [today]);
@@ -152,6 +160,7 @@ export default function MibHomePreview() {
   const activityQuery = trpc.mibDashboard.getRecentActivity.useQuery({ limit: 5 }, { staleTime: 30_000, refetchInterval: 60_000 });
   const currentAgentQuery = trpc.agents.me.useQuery(undefined, { staleTime: 30_000 });
   const agentStatusesQuery = trpc.agents.getStatuses.useQuery(undefined, { staleTime: 30_000, refetchInterval: 60_000 });
+  const commandBookingStatsQuery = trpc.leads.stats.useQuery({ dateFrom: todayDateStr, dateTo: todayDateStr }, { refetchInterval: 60_000 });
   const isLoading = bookingQuery.isLoading;
   const isUnavailable = Boolean(bookingQuery.error);
   const allRows = bookingQuery.data?.bookings ?? [];
@@ -207,6 +216,8 @@ export default function MibHomePreview() {
   const headlineComparison = comparison(currentMetrics.totalBookings, previousMetrics.totalBookings, "vs. previous 30 days");
   const greetingName = currentAgentQuery.data?.name?.split(" ")[0];
   const metricUnavailable = isLoading ? "Loading" : isUnavailable ? "—" : null;
+  const newBookingDetail = commandBookingStatsQuery.isLoading ? "Loading new bookings" : commandBookingStatsQuery.error ? "New booking data unavailable" : `${commandBookingStatsQuery.data?.bookedCount ?? 0} booking${commandBookingStatsQuery.data?.bookedCount === 1 ? "" : "s"} today`;
+  const cardsNotOnFile = Math.max(todayMetrics.totalBookings - todayMetrics.cardsOnFile, 0);
 
   return (
     <AdminPageGuard pageId="command-center">
@@ -230,7 +241,7 @@ export default function MibHomePreview() {
 
           <section className="mib-preview-pulse" aria-label="Operations Pulse">
             <div className="mib-preview-pulse__title"><span><i />LIVE</span><strong>Operations Pulse</strong></div>
-            {[{ icon: CalendarDays, title: "New booking", detail: isLoading ? "Loading booking operations" : isUnavailable ? "Booking data unavailable" : `${todayMetrics.totalBookings} bookings today`, tone: "coral" }, { icon: CircleDollarSign, title: "Revenue", detail: isLoading || isUnavailable ? "—" : `${formatCurrency(todayMetrics.revenueCents)} first-cleaning total`, tone: "violet" }, { icon: Users, title: "Team update", detail: isLoading || isUnavailable ? "—" : `${todayMetrics.assignedBookings} bookings assigned`, tone: "gold" }, { icon: ClipboardList, title: "Command", detail: isLoading || isUnavailable ? "—" : `${todayMetrics.cardsOnFile} cards on file`, tone: "green" }].map(({ icon: Icon, title, detail, tone }) => <article key={title} className={tone}><span><Icon /></span><div><strong>{title}</strong><p>{detail}</p><small>Live</small></div></article>)}
+            {[{ icon: CalendarDays, title: "New booking", detail: newBookingDetail, tone: "coral" }, { icon: CircleDollarSign, title: "Revenue", detail: isLoading || isUnavailable ? "—" : `${formatCurrency(todayMetrics.revenueCents)} first-cleaning total`, tone: "violet" }, { icon: Users, title: "Team update", detail: isLoading || isUnavailable ? "—" : `${todayMetrics.assignedBookings} bookings assigned`, tone: "gold" }, { icon: ClipboardList, title: "Command", detail: isLoading || isUnavailable ? "—" : `${cardsNotOnFile} cards not on file`, tone: "green" }].map(({ icon: Icon, title, detail, tone }) => <article key={title} className={tone}><span><Icon /></span><div><strong>{title}</strong><p>{detail}</p><small>Live</small></div></article>)}
             <div className="mib-preview-pulse__actions"><button type="button" disabled aria-label="Previous pulse item"><ChevronLeft /></button><button type="button" disabled aria-label="Next pulse item"><ChevronRight /></button><button type="button" disabled>View all <ChevronRight /></button></div>
           </section>
 
