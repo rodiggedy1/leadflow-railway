@@ -5,7 +5,7 @@ const source = readFileSync(new URL("./mibDashboardRouter.ts", import.meta.url),
 
 describe("MIB dashboard router contract", () => {
   it("uses the user-approved public access model for every existing dashboard read", () => {
-    expect(source.match(/publicProcedure\s*\.input/g)).toHaveLength(3);
+    expect(source.match(/publicProcedure\s*\.input/g)).toHaveLength(4);
     expect(source).not.toContain("adminAgentProcedure");
     expect(source).toContain("getPublicBookingMetrics: publicProcedure");
   });
@@ -23,9 +23,15 @@ describe("MIB dashboard router contract", () => {
     expect(source).toContain("bookingFunnelRecords.stage");
   });
 
-  it("stays read-only and does not adopt legacy cleaner-job storage", () => {
-    for (const prohibited of [".insert(", ".update(", ".delete(", "cleanerJobs", "cleaner_jobs"]) {
+  it("uses a minimal read-only Field Management schedule projection without its side effects", () => {
+    for (const prohibited of [".insert(", ".update(", ".delete(", "geocodeWithCache", "invokeLLM", "confirmationCalls", "completedJobs"]) {
       expect(source).not.toContain(prohibited);
     }
+    expect(source).toContain("getFieldSchedule: publicProcedure");
+    expect(source).toContain("eq(cleanerJobs.jobDate, input.date)");
+    expect(source).toContain('ne(cleanerJobs.bookingStatus, "cancelled")');
+    expect(source).toContain('ne(cleanerJobs.bookingStatus, "rescheduled")');
+    expect(source).toContain("scheduleAssignments");
+    expect(source).toContain("schedulingTeams");
   });
 });
