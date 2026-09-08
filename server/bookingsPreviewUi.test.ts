@@ -5,33 +5,28 @@ const pageSource = readFileSync(new URL("../client/src/components/NativeBookings
 const pageWrapperSource = readFileSync(new URL("../client/src/pages/NativeBookings.tsx", import.meta.url), "utf8");
 const pageStyles = readFileSync(new URL("../client/src/pages/bookings-preview.css", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
-const headerSource = readFileSync(new URL("../client/src/components/AdminHeader.tsx", import.meta.url), "utf8");
 const guardSource = readFileSync(new URL("../client/src/components/AdminPageGuard.tsx", import.meta.url), "utf8");
 const agentDashboardSource = readFileSync(new URL("../client/src/pages/AgentDashboard.tsx", import.meta.url), "utf8");
 const sharedConstSource = readFileSync(new URL("../shared/const.ts", import.meta.url), "utf8");
 
 describe("bookings UI preview contract", () => {
-  it("wires a guarded lazy admin route and consistent external route entry", () => {
+  it("wires a guarded lazy admin route without the shared Fast Leads header", () => {
     expect(appSource).toContain('const NativeBookings = lazy(() => import("./pages/NativeBookings"));');
     expect(appSource).toContain('<Route path={"/admin/bookings"} component={NativeBookings} />');
     expect(pageWrapperSource).toContain('<AdminPageGuard pageId="bookings">');
-    expect(pageWrapperSource).toContain('<AdminHeader activeTab="bookings" pagePermissions={pagePermissions} isAdmin={isAdmin} />');
+    expect(pageWrapperSource).not.toContain("AdminHeader");
     expect(pageWrapperSource).toContain("bookings-leadflow-shell");
-    expect(pageWrapperSource).toContain("useAgentPermissions()");
+    expect(pageWrapperSource).not.toContain("useAgentPermissions");
     expect(pageWrapperSource).toContain("<NativeBookingsWorkspace />");
-    expect(headerSource).toContain('| "bookings";');
-    expect(headerSource).toContain('label: "Bookings",      href: "/admin/bookings"');
     expect(guardSource).toContain('"bookings":          "/admin/bookings"');
     expect(agentDashboardSource).toContain('"bookings":          "/admin/bookings"');
     expect(sharedConstSource).toContain('{ id: "bookings",          label: "Bookings",      group: "Operations" }');
   });
 
-  it("uses the standard LeadFlow navigation while preserving the workspace and detail panel around native data", () => {
+  it("preserves the workspace and detail panel around native data", () => {
     for (const marker of ["Bookings", "Select booking date", "Booking metrics", "Native LeadFlow bookings list", "TEAMS ASSIGNED", "CARDS ON FILE", "REQUESTED REVENUE", "Search customer, address, or request number", "Confirmed", "Needs attention", "Completed", "SERVICE & EXTRAS", "RECURRING PREFERENCE", "ASSIGNED TEAM", "PAYMENT", "NOTES & SPECIAL REQUESTS"]) {
       expect(pageSource).toContain(marker);
     }
-    expect(headerSource).toContain("Fast Leads");
-    expect(headerSource).toContain('activeTab={activeTab}');
     expect(pageSource).not.toContain("bookings-ops-nav");
     expect(pageSource).not.toContain("Bookings workspace navigation");
     expect(pageSource).not.toContain("Rohan");
@@ -44,11 +39,12 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain("useState");
   });
 
-  it("aligns the workspace and detail panel beneath the standard LeadFlow header responsively", () => {
+  it("starts the workspace and detail panel at the viewport top without a shared header", () => {
     expect(pageStyles).toContain("grid-template-columns:minmax(720px,1fr) 410px");
-    expect(pageStyles).toContain("top:var(--admin-header-height,0px)");
-    expect(pageStyles).toContain("height:calc(100vh - var(--admin-header-height,0px))");
-    expect(pageStyles).toContain(".bookings-leadflow-shell>header>div:last-child>*{flex-shrink:0}");
+    expect(pageStyles).toContain(".bookings-reference-frame{display:grid;grid-template-columns:204px minmax(0,1fr);min-height:100vh");
+    expect(pageStyles).toContain(".bookings-reference-sidebar{position:sticky;top:0;height:100vh");
+    expect(pageStyles).toContain(".bookings-detail-panel{position:sticky;top:0;height:100vh");
+    expect(pageStyles).not.toContain("var(--admin-header-height");
     expect(pageStyles).not.toContain("grid-template-columns:82px");
     expect(pageStyles).not.toContain(".bookings-ops-nav");
     expect(pageWrapperSource).toContain("bookings-reference-sidebar");
