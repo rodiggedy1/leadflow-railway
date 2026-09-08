@@ -205,6 +205,7 @@ export default function MibHomePreview() {
   const overviewMaximum = Math.max(...overviewBars, 1);
   const metricsOverviewBars = chartSlots(metricsMonthly.map((item) => item.booked));
   const metricsOverviewMaximum = Math.max(...metricsOverviewBars, 1);
+  const serviceTotal = useMemo(() => (metricsOverviewQuery.data?.serviceTypeBreakdown ?? []).reduce((total, service) => total + service.value, 0), [metricsOverviewQuery.data?.serviceTypeBreakdown]);
   const serviceSlots = useMemo(() => {
     if (metricsLoading || metricsUnavailable) return Array.from({ length: 5 }, (_, index) => ({ name: index === 0 ? metricsLoading ? "Loading" : "Unavailable" : "", share: "—", tone: serviceTones[index] }));
     const entries = metricsOverviewQuery.data?.serviceTypeBreakdown.map((service) => [service.name, service.value] as const) ?? [];
@@ -213,11 +214,11 @@ export default function MibHomePreview() {
     if (remaining) primary.push(["Other", remaining]);
     return Array.from({ length: 5 }, (_, index) => {
       const row = primary[index];
-      return { name: row?.[0] ?? "", share: row && currentMetrics.totalBookings ? `${Math.round((row[1] / currentMetrics.totalBookings) * 100)}%` : "—", tone: serviceTones[index] };
+      return { name: row?.[0] ?? "", share: row && serviceTotal ? `${Math.round((row[1] / serviceTotal) * 100)}%` : "—", tone: serviceTones[index] };
     });
-  }, [metricsLoading, metricsUnavailable, metricsOverviewQuery.data?.serviceTypeBreakdown]);
+  }, [metricsLoading, metricsUnavailable, metricsOverviewQuery.data?.serviceTypeBreakdown, serviceTotal]);
   const donutStyle = useMemo(() => {
-    if (metricsLoading || metricsUnavailable || !metricsKpis?.totalBooked) return { background: "#eeeae4" };
+    if (metricsLoading || metricsUnavailable || !serviceTotal) return { background: "#eeeae4" };
     let cursor = 0;
     const segments = serviceSlots.filter((slot) => slot.share !== "—").map((slot) => {
       const next = cursor + Number.parseInt(slot.share, 10);
@@ -227,7 +228,7 @@ export default function MibHomePreview() {
     });
     if (cursor < 100) segments.push(`#eeeae4 ${cursor}% 100%`);
     return { background: `conic-gradient(${segments.join(", ")})` };
-  }, [metricsKpis?.totalBooked, metricsLoading, metricsUnavailable, serviceSlots]);
+  }, [metricsLoading, metricsUnavailable, serviceSlots, serviceTotal]);
   const scheduleSlots = useMemo(() => {
     const rows = [...todayRows].sort((a, b) => (a.requestedLocalTime ?? "99:99").localeCompare(b.requestedLocalTime ?? "99:99")).slice(0, 4);
     return Array.from({ length: 4 }, (_, index) => rows[index] ?? null);
@@ -283,7 +284,7 @@ export default function MibHomePreview() {
               <header><div><h2>Bookings overview</h2><p><strong>{metricsLoading || metricsUnavailable ? "—" : performanceSummary.bookings}</strong><b>↗ —</b><span>{metricsLoading ? "Loading" : metricsUnavailable ? "Unavailable" : "Total bookings"}</span></p></div><div className="mib-preview-chart__tabs"><b>Bookings</b><span>Revenue</span><span>Customers</span><button type="button" disabled>Last 30 days <ChevronDown /></button></div></header>
               <div className="mib-preview-bars" aria-label="Bookings overview">{metricsOverviewBars.map((count, index) => <i key={index} style={{ height: `${metricsLoading || metricsUnavailable ? 38 : count ? Math.max(16, (count / metricsOverviewMaximum) * 100) : 7}%`, opacity: metricsLoading || metricsUnavailable ? 0.22 : undefined }} />)}</div>
             </article>
-            <article className="mib-preview-panel mib-preview-service"><header><h2>Bookings by service</h2><ViewAll /></header><div><div className="mib-preview-donut" style={donutStyle}><strong>{metricsLoading || metricsUnavailable ? "—" : metricsKpis?.totalBooked ?? 0}</strong><small>Bookings</small></div><ul>{serviceSlots.map((slot, index) => <li key={`${slot.name}-${index}`}><i className={slot.tone} />{slot.name}<b>{slot.share}</b></li>)}</ul></div></article>
+            <article className="mib-preview-panel mib-preview-service"><header><h2>Bookings by service</h2><ViewAll /></header><div><div className="mib-preview-donut" style={donutStyle}><strong>{metricsLoading || metricsUnavailable ? "—" : serviceTotal}</strong><small>Bookings</small></div><ul>{serviceSlots.map((slot, index) => <li key={`${slot.name}-${index}`}><i className={slot.tone} />{slot.name}<b>{slot.share}</b></li>)}</ul></div></article>
           </section>
 
           <section className="mib-home-preview__operating-grid">
