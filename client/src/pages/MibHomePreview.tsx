@@ -233,6 +233,7 @@ export default function MibHomePreview() {
     const rows = [...todayRows].sort((a, b) => (a.requestedLocalTime ?? "99:99").localeCompare(b.requestedLocalTime ?? "99:99")).slice(0, 4);
     return Array.from({ length: 4 }, (_, index) => rows[index] ?? null);
   }, [todayRows]);
+  const assignedBookingSlots = useMemo(() => Array.from({ length: 4 }, (_, index) => todayRows.filter((row) => row.assignmentStatus === "assigned")[index] ?? null), [todayRows]);
   const displayedAgents = agentStatusesQuery.data?.slice(0, 7) ?? [];
   const onlineAgents = (agentStatusesQuery.data ?? []).filter((agent) => presenceForHeader(agent) === "online");
   const agentSlots = Array.from({ length: 7 }, (_, index) => displayedAgents[index] ?? null);
@@ -289,7 +290,7 @@ export default function MibHomePreview() {
 
           <section className="mib-home-preview__operating-grid">
             <article className="mib-preview-panel"><header><h2>Today’s schedule</h2><ViewAll /></header><ul className="mib-preview-list">{scheduleSlots.map((row, index) => <li key={row?.key ?? `schedule-slot-${index}`}><strong>{row ? formatTime(row.requestedLocalTime) : "—"}</strong><i className={row?.assignmentStatus === "assigned" ? "live" : ""} /><span>{row ? row.customerName : index === 0 ? isLoading ? "Loading schedule" : isUnavailable ? "Schedule unavailable" : "No bookings scheduled" : ""}<small>{row?.serviceName ?? ""}</small></span><em>{row ? row.assignmentStatus === "assigned" ? "Assigned" : "Unassigned" : ""}</em><ChevronRight /></li>)}</ul></article>
-            <article className="mib-preview-panel"><header><h2>Active teams</h2><ViewAll /></header><ul className="mib-preview-list mib-preview-list--teams">{Array.from({ length: 4 }, (_, index) => <li key={`team-slot-${index}`}><b>—</b><span>{index === 0 ? "Team status unavailable" : ""}<small>{index === 0 ? "No approved active-team data source is connected." : ""}</small></span><i style={{ width: "0%" }} /><ChevronRight /></li>)}</ul></article>
+            <article className="mib-preview-panel"><header><h2>Active teams</h2><ViewAll /></header><ul className="mib-preview-list mib-preview-list--teams">{assignedBookingSlots.map((row, index) => <li key={row?.key ?? `team-slot-${index}`}><b>{row ? index + 1 : "—"}</b><span>{row ? row.customerName : index === 0 ? bookingQuery.isLoading ? "Loading assigned bookings" : bookingQuery.error ? "Assigned bookings unavailable" : "No bookings assigned" : ""}<small>{row ? `${row.serviceName ?? "Service"} · Assigned` : ""}</small></span><i style={{ width: row ? "100%" : "0%" }} /><ChevronRight /></li>)}</ul></article>
             <article className="mib-preview-panel"><header><h2>Recent activity</h2><ViewAll /></header><ul className="mib-preview-list mib-preview-list--activity">{activitySlots.map((item, index) => <li key={item?.id ?? `activity-slot-${index}`}><b><ClipboardList /></b><span>{item ? item.title : index === 0 ? activityQuery.isLoading ? "Loading activity" : activityQuery.error ? "Activity unavailable" : "No recent activity" : ""}<small>{item?.body || item?.eventType || ""}</small></span><em>{item ? relativeTime(item.createdAt) : ""}</em></li>)}</ul></article>
           </section>
 

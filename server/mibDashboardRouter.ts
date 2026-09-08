@@ -2,7 +2,7 @@ import { and, asc, desc, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { activityLog, bookingFunnelRecords, bookings } from "../drizzle/schema";
 import { aggregateMibDashboardBookings, mergeMibDashboardBookings } from "../shared/mibDashboard";
-import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 
 const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD date");
@@ -70,7 +70,7 @@ export const mibDashboardRouter = router({
           .map(([name, bookings]) => ({ name, bookings })),
       };
     }),
-  getBookingWindow: adminAgentProcedure
+  getBookingWindow: publicProcedure
     .input(z.object({ startDate: localDate, endDate: localDate }))
     .query(async ({ input }) => {
       if (input.startDate > input.endDate) {
@@ -115,7 +115,7 @@ export const mibDashboardRouter = router({
       return { bookings: mergeMibDashboardBookings(nativeRows, funnelRows) };
     }),
 
-  getRecentActivity: adminAgentProcedure
+  getRecentActivity: publicProcedure
     .input(z.object({ limit: z.number().int().min(1).max(20).default(5) }).optional())
     .query(async ({ input }) => {
       const db = await getDb();

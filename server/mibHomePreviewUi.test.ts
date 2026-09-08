@@ -16,7 +16,7 @@ describe("MIB fixed-design live-data contract", () => {
   });
 
   it("uses only approved read-only dashboard and agent queries", () => {
-    for (const required of ["trpc.mibDashboard.getBookingWindow.useQuery", "trpc.mibDashboard.getPublicBookingMetrics.useQuery", "trpc.metrics.getOverview.useQuery", "trpc.performance.stats.useQuery", "trpc.mibDashboard.getRecentActivity.useQuery", "trpc.leads.stats.useQuery", "trpc.agents.me.useQuery", "trpc.agents.getStatuses.useQuery", "aggregateSummary", "serviceTotal", "businessDateForMibDashboard", "todayDateStr", "newRevenueDetail", "New Revenue", "cardsNotOnFile", "cards not on file", "Lead Volume", "5-Star Jobs"]) {
+    for (const required of ["trpc.mibDashboard.getBookingWindow.useQuery", "trpc.mibDashboard.getPublicBookingMetrics.useQuery", "trpc.metrics.getOverview.useQuery", "trpc.performance.stats.useQuery", "trpc.mibDashboard.getRecentActivity.useQuery", "trpc.leads.stats.useQuery", "trpc.agents.me.useQuery", "trpc.agents.getStatuses.useQuery", "aggregateSummary", "serviceTotal", "assignedBookings", "businessDateForMibDashboard", "todayDateStr", "newRevenueDetail", "New Revenue", "cardsNotOnFile", "cards not on file", "Lead Volume", "5-Star Jobs"]) {
       expect(previewSource).toContain(required);
     }
     for (const prohibited of ["useMutation", "fetch(", "localStorage", "sessionStorage", "cleanerJobs", "cleaner_jobs"]) {
