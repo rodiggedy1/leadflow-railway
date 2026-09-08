@@ -28,10 +28,12 @@ describe("MIB homepage visual-preview contract", () => {
     }
     expect(previewSource).toContain("preserveAspectRatio=\"none\"");
     expect(previewSource).toContain("Live after approval");
-    expect(previewStyles).toContain("grid-template-columns:208px minmax(0,1fr)");
-    expect(previewStyles).toContain("border-radius:18px");
-    expect(previewStyles).toContain("box-shadow:0 14px 35px");
-    expect(previewStyles).toContain("@media(max-width:840px)");
+    expect(previewStyles).toContain("grid-template-columns: 208px minmax(0, 1fr)");
+    expect(previewStyles).toContain("--booking-card-radius: 14px");
+    expect(previewStyles).toContain("--booking-card-shadow: 0 9px 24px rgba(38, 31, 24, .035)");
+    expect(previewStyles).toContain("border: 1px solid var(--mib-line)");
+    expect(previewStyles).toContain("background: var(--booking-card-surface)");
+    expect(previewStyles).toContain("@media (max-width: 840px)");
     expect(appSource).toContain('const isHomepagePreview = location === "/admin/home-preview";');
     expect(appSource).toContain("!isHomepagePreview");
   });
