@@ -6,7 +6,7 @@ const previewSource = readFileSync(new URL("../client/src/pages/MibHomePreview.t
 const previewStyles = readFileSync(new URL("../client/src/pages/mib-home-preview.css", import.meta.url), "utf8");
 const sidebarSource = readFileSync(new URL("../client/src/components/MibSidebar.tsx", import.meta.url), "utf8");
 
-describe("MIB operations dashboard contract", () => {
+describe("MIB homepage visual-preview contract", () => {
   it("registers the approved homepage at /admin2 without repointing the current admin home", () => {
     expect(appSource).toContain('const MibHomePreview = lazy(() => import("./pages/MibHomePreview"));');
     expect(appSource).toContain('<Route path={"/admin2"} component={MibHomePreview} />');
@@ -14,33 +14,32 @@ describe("MIB operations dashboard contract", () => {
     expect(appSource).toContain('window.location.replace("/admin/command-center")');
   });
 
-  it("uses only approved read-only contracts and keeps the visual dashboard guard and sidebar", () => {
+  it("keeps the review page presentation-only and does not load operational data", () => {
     expect(previewSource).toContain('<AdminPageGuard pageId="command-center">');
     expect(previewSource).toContain('<MibSidebar activeItem="Dashboard" />');
-    for (const required of ["trpc.agents.me.useQuery", "trpc.agents.getStatuses.useQuery", "trpc.mibDashboard.getBookingWindow.useQuery", "trpc.mibDashboard.getRecentActivity.useQuery", "bookingMetricSummary", "businessDateForMibDashboard"]) {
-      expect(previewSource).toContain(required);
-    }
-    expect(previewSource).toContain('aria-label="Select dashboard date"');
-    for (const prohibited of ["useMutation", "fetch(", "localStorage", "sessionStorage", "data-static-reference"]) {
+    expect(previewSource).toContain('data-static-reference="true"');
+    expect(previewSource).toContain("Good morning, Rohan.");
+    for (const prohibited of ["trpc", "useQuery", "useMutation", "fetch(", "onClick=", "localStorage", "sessionStorage"]) {
       expect(previewSource).not.toContain(prohibited);
     }
   });
 
-  it("preserves the approved MIB composition and routes Command entry into the established chat overlay", () => {
-    for (const marker of ["MibSidebar activeItem=\"Dashboard\"", "Total Bookings", "Teams Assigned", "Cards on File", "Bookings overview", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "Send download link", "mib-home-preview__promos", "vPmUAKhVtzTzruHW.png", "KtPTcczUntFsdOzR.png", "QqBhMBjofpziFnzR.png"]) {
+  it("uses the MIB dashboard composition and excludes the live global chat overlay", () => {
+    for (const marker of ["MibSidebar activeItem=\"Dashboard\"", "Last 30 days", "Total Bookings", "Average Rating", "Bookings overview", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "Send download link", "mib-home-preview__promos", "vPmUAKhVtzTzruHW.png", "KtPTcczUntFsdOzR.png", "QqBhMBjofpziFnzR.png"]) {
       expect(previewSource).toContain(marker);
     }
-    expect(previewSource).toContain("useOpsChatWindow");
-    expect(previewSource).toContain("openCommandChat");
+    expect(previewSource).toContain("const metricMicroBars = {");
     expect(previewSource).toContain('className="mib-preview-metric__microchart"');
     expect(previewSource).toContain('className="mib-preview-pulse"');
     expect(previewSource).toContain("Operations Pulse");
     expect(previewSource).toContain('className="mib-command-header mib-command-header--dark-variant"');
     expect(previewSource).toContain("mib-command-header--dark-variant");
     expect(previewSource).toContain("Message the team…");
-    expect(previewSource).toContain("profilePhotoUrl");
-    expect(previewSource).toContain("no prior-day activity");
+    expect(previewSource).toContain("const commandPresence = [");
+    expect(previewSource).toContain("maUqForRGuyxRSnl.png");
+    expect(previewSource).toContain("alt={`${name} portrait preview`}");
     expect(previewStyles).toContain(".mib-command-header__member>b img{display:block;width:100%;height:100%;object-fit:cover");
+    expect(previewSource).toContain("vs. last Monday");
     expect(previewStyles).toContain("grid-template-columns:208px minmax(0,1fr)");
     expect(previewStyles).toContain("--booking-card-radius:16px");
     expect(previewStyles).toContain("--booking-card-shadow:0 12px 34px rgba(57,47,37,.055),0 2px 6px rgba(57,47,37,.035)");
@@ -98,7 +97,7 @@ describe("MIB operations dashboard contract", () => {
       "https://quote.maidinblack.com/admin/invoices",
       "https://quote.maidinblack.com/admin/settings",
     ]) expect(sidebarSource).toContain(href);
-    expect(appSource).toContain('const isMibDashboard = location === "/admin2";');
-    expect(appSource).toContain("(!isHomepagePreview || isMibDashboard)");
+    expect(appSource).toContain('const isHomepagePreview = location === "/admin/home-preview" || location === "/admin2";');
+    expect(appSource).toContain("!isHomepagePreview");
   });
 });
