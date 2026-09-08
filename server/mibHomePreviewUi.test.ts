@@ -26,7 +26,11 @@ describe("MIB homepage visual-preview contract", () => {
     for (const marker of ["mib-home-preview__sidebar", "Good morning, Rohan.", "Bookings overview", "Today’s schedule", "Active teams", "Recent activity", "mib-home-preview__promos"]) {
       expect(previewSource).toContain(marker);
     }
+    expect(previewSource).toContain("preserveAspectRatio=\"none\"");
+    expect(previewSource).toContain("Live after approval");
     expect(previewStyles).toContain("grid-template-columns:208px minmax(0,1fr)");
+    expect(previewStyles).toContain("border-radius:18px");
+    expect(previewStyles).toContain("box-shadow:0 14px 35px");
     expect(previewStyles).toContain("@media(max-width:840px)");
     expect(appSource).toContain('const isHomepagePreview = location === "/admin/home-preview";');
     expect(appSource).toContain("!isHomepagePreview");
