@@ -1537,7 +1537,7 @@ export const qualityRouter = router({
   // ── Cleaner Job Management ──────────────────────────────────────────────────
 
   /** Get jobs for a specific date (default: today) with cleaner assignments */
-  getJobsForDate: agentProcedure
+  getJobsForDate: publicProcedure
     .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
