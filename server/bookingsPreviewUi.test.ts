@@ -51,6 +51,8 @@ describe("bookings UI preview contract", () => {
     expect(pageStyles).toContain(".bookings-leadflow-shell>header>div:last-child>*{flex-shrink:0}");
     expect(pageStyles).not.toContain("grid-template-columns:82px");
     expect(pageStyles).not.toContain(".bookings-ops-nav");
+    expect(pageWrapperSource).toContain("bookings-reference-sidebar");
+    expect(pageWrapperSource).toContain("presentation-only");
     expect(pageStyles).toContain("padding:36px 38px 60px");
     expect(pageStyles).toContain("grid-template-columns:1.6fr 1.25fr 1fr .78fr .42fr 20px");
     expect(pageStyles).toContain("@media(max-width:1120px)");
@@ -66,7 +68,7 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).not.toContain("SEED_BOOKINGS");
     expect(pageSource).toContain('disabled title="Manual booking creation is not connected in this release"');
     expect(pageSource).toContain("Assignment is not connected in this release");
-    expect(pageSource).toContain("Card collection is not connected in this release");
+    expect(pageSource).toContain("Card collection is not connected for this in-progress lead.");
     expect(pageSource).not.toContain("useMutation");
     for (const prototypeIdentity of ["Rohan Gilkes", "Maya Thompson", "Derek Collins", "Nia Robinson", "Jordan Lee", "302) 981-6191"]) {
       expect(pageSource).not.toContain(prototypeIdentity);
@@ -87,7 +89,7 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).toContain("Reservation started / Payment incomplete");
     expect(pageSource).toContain("status: lead.stage");
     expect(pageSource).not.toContain('stage: "lead" as const');
-    expect(pageSource).toContain('if (view === "bookings") {');
+    expect(pageSource).toContain('if (view === "bookings") return');
     expect(pageSource).toContain('[...funnelRows.filter((row) => row.status !== "lead"), ...bookingRows]');
     expect(pageSource).toContain('.filter((row) => row.requestedLocalDate === date)');
     expect(pageSource).toContain('[bookings, date, funnelLeads, view]');
