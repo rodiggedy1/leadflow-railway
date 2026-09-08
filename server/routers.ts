@@ -7393,7 +7393,7 @@ Return JSON with exactly these fields:
       }),
 
     /**
-     * agents.getStatuses — return id + name + awayStatus + profilePhotoUrl for all active agents.
+     * agents.getStatuses — return active agent identity and existing presence fields.
      * Used by OpsChat sidebar to render coloured status dots.
      */
     getStatuses: publicProcedure.query(async () => {
@@ -7405,6 +7405,7 @@ Return JSON with exactly these fields:
           name: agents.name,
           awayStatus: agents.awayStatus,
           awaySetAt: agents.awaySetAt,
+          lastSeenAt: agents.lastSeenAt,
           profilePhotoUrl: agents.profilePhotoUrl,
         })
         .from(agents)

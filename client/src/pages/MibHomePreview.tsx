@@ -1,5 +1,6 @@
 import AdminPageGuard from "@/components/AdminPageGuard";
 import MibSidebar from "@/components/MibSidebar";
+import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { trpc } from "@/lib/trpc";
 import {
   Bell,
@@ -104,6 +105,15 @@ function relativeTime(value: Date | string | null) {
   return `${Math.floor(elapsed / 86_400_000)} days ago`;
 }
 
+function presenceForHeader(agent: { awayStatus: string | null; lastSeenAt: Date | string | null }) {
+  if (agent.awayStatus) return "away" as const;
+  if (!agent.lastSeenAt) return "offline" as const;
+  const minutesSinceSeen = Math.floor((Date.now() - new Date(agent.lastSeenAt).getTime()) / 60_000);
+  if (minutesSinceSeen <= 2) return "online" as const;
+  if (minutesSinceSeen <= 15) return "away" as const;
+  return "offline" as const;
+}
+
 function PreviewMetric({ icon: Icon, label, value, comparisonValue, comparisonLabel, tone, series }: {
   icon: typeof CalendarDays;
   label: string;
@@ -133,6 +143,7 @@ function ViewAll() {
 }
 
 export default function MibHomePreview() {
+  const { open: openCommandChat } = useOpsChatWindow();
   const today = useMemo(() => businessDateForMibDashboard(), []);
   const currentWindowStart = useMemo(() => shiftMibDashboardDate(today, -29), [today]);
   const previousWindowStart = useMemo(() => shiftMibDashboardDate(today, -59), [today]);
@@ -187,9 +198,9 @@ export default function MibHomePreview() {
     const rows = [...todayRows].sort((a, b) => (a.requestedLocalTime ?? "99:99").localeCompare(b.requestedLocalTime ?? "99:99")).slice(0, 4);
     return Array.from({ length: 4 }, (_, index) => rows[index] ?? null);
   }, [todayRows]);
-  const displayedAgents = agentStatusesQuery.data?.slice(0, 6) ?? [];
-  const availableAgents = (agentStatusesQuery.data ?? []).filter((agent) => !agent.awayStatus).length;
-  const agentSlots = Array.from({ length: 6 }, (_, index) => displayedAgents[index] ?? null);
+  const displayedAgents = agentStatusesQuery.data?.slice(0, 7) ?? [];
+  const onlineAgents = (agentStatusesQuery.data ?? []).filter((agent) => presenceForHeader(agent) === "online");
+  const agentSlots = Array.from({ length: 7 }, (_, index) => displayedAgents[index] ?? null);
   const activitySlots = Array.from({ length: 5 }, (_, index) => activityQuery.data?.items[index] ?? null);
   const bookingsComparison = comparison(todayMetrics.totalBookings, yesterdayMetrics.totalBookings, "vs. yesterday");
   const revenueComparison = comparison(todayMetrics.revenueCents, yesterdayMetrics.revenueCents, "vs. yesterday");
@@ -203,12 +214,12 @@ export default function MibHomePreview() {
         <MibSidebar activeItem="Dashboard" />
         <section className="mib-home-preview__workspace">
           <header className="mib-command-header mib-command-header--dark-variant" aria-label="Command header">
-            <div className="mib-command-header__identity"><span><MessageCircle /></span><div><strong>Command</strong><small><i />{agentStatusesQuery.isLoading ? "Checking availability" : `${availableAgents} online`}</small></div></div>
+            <div className="mib-command-header__identity"><span><MessageCircle /></span><div><strong>Command</strong><small><i />{agentStatusesQuery.isLoading ? "Checking availability" : `${onlineAgents.length} online`}</small></div></div>
             <div className="mib-command-header__presence" aria-label="Command team availability">
-              {agentSlots.map((agent, index) => <div key={agent?.id ?? `agent-slot-${index}`} className={`mib-command-header__member ${presenceTones[index]}`}><b>{agent?.profilePhotoUrl ? <img src={agent.profilePhotoUrl} alt={agent.name} /> : initialsFor(agent?.name)}</b><small>{agent ? (agent.id === currentAgentQuery.data?.id ? "You" : agent.name.split(" ")[0]) : agentStatusesQuery.isLoading && index === 0 ? "Loading" : ""}</small>{agent?.id === currentAgentQuery.data?.id && <i />}</div>)}
-              <span className="mib-command-header__more">+{Math.max((agentStatusesQuery.data?.length ?? 0) - 6, 0)}</span>
+              {agentSlots.map((agent, index) => <div key={agent?.id ?? `agent-slot-${index}`} className={`mib-command-header__member ${presenceTones[index % presenceTones.length]} ${agent ? `is-${presenceForHeader(agent)}` : ""}`}><b>{agent?.profilePhotoUrl ? <img src={agent.profilePhotoUrl} alt={agent.name} /> : initialsFor(agent?.name)}</b><small>{agent ? agent.name.split(" ")[0] : agentStatusesQuery.isLoading && index === 0 ? "Loading" : ""}</small>{agent && <i />}</div>)}
+              <span className="mib-command-header__more">+{Math.max((agentStatusesQuery.data?.length ?? 0) - 7, 0)}</span>
             </div>
-            <label className="mib-command-header__compose"><input aria-label="Command Chat message field" readOnly value="Message the team…" /><button type="button" disabled aria-label="Command Chat unavailable"><ChevronRight /></button></label>
+            <button type="button" className="mib-command-header__compose" onClick={openCommandChat} aria-label="Open Command Chat"><span>Message the team…</span><i><ChevronRight /></i></button>
             <div className="mib-command-header__actions"><button type="button" disabled aria-label="Notifications"><Bell /><i /></button><button type="button" disabled aria-label="Current signed-in agent"><span>{initialsFor(currentAgentQuery.data?.name)}</span><b>{currentAgentQuery.data?.name ?? "Loading agent"}<small>{currentAgentQuery.data?.isAdmin ? "Admin" : "Agent"}</small></b><ChevronDown /></button></div>
           </header>
 

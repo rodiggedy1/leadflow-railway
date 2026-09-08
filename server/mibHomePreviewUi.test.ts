@@ -19,16 +19,23 @@ describe("MIB fixed-design live-data contract", () => {
     for (const required of ["trpc.mibDashboard.getBookingWindow.useQuery", "trpc.mibDashboard.getRecentActivity.useQuery", "trpc.agents.me.useQuery", "trpc.agents.getStatuses.useQuery", "bookingMetricSummary", "businessDateForMibDashboard"]) {
       expect(previewSource).toContain(required);
     }
-    for (const prohibited of ["useMutation", "fetch(", "onClick=", "localStorage", "sessionStorage", "cleanerJobs", "cleaner_jobs"]) {
+    for (const prohibited of ["useMutation", "fetch(", "localStorage", "sessionStorage", "cleanerJobs", "cleaner_jobs"]) {
       expect(previewSource).not.toContain(prohibited);
     }
+    expect(previewSource).toContain("useOpsChatWindow");
+    expect(previewSource).toContain("onClick={openCommandChat}");
+    expect(previewSource).toContain("presenceForHeader");
+    expect(previewSource).toContain("Array.from({ length: 7 }");
+    expect(appSource).toContain("const isMibDashboard = location === \"/admin2\";");
+    expect(appSource).toContain("const shouldMountOpsChat = isEligible || isMibDashboard;");
+    expect(appSource).toContain("isEligible && !isMibDashboard && state !== \"open\"");
   });
 
   it("preserves the exact approved dashboard slots in every live-data state", () => {
     for (const marker of ["Good morning", "Last 30 days", "Operations Pulse", "Total Bookings", "Revenue", "New Customers", "Average Rating", "Bookings overview", "Bookings by service", "Today’s schedule", "Active teams", "Recent activity", "Get the mobile app", "mib-preview-metric__microchart", "mib-preview-pulse", "mib-preview-chart", "mib-preview-service", "mib-home-preview__operating-grid"]) {
       expect(previewSource).toContain(marker);
     }
-    expect(previewSource).toContain("Array.from({ length: 6 }");
+    expect(previewSource).toContain("Array.from({ length: 7 }");
     expect(previewSource).toContain("Array.from({ length: 5 }");
     expect(previewSource).toContain("Array.from({ length: 4 }");
     expect(previewSource).toContain("Array.from({ length: 24 }");

@@ -28,9 +28,9 @@ describe("agents.setAwayStatus", () => {
   it("throws when no agent session cookie is present", async () => {
     const caller = appRouter.createCaller(createAnonContext());
     // Use a valid enum value so Zod validation passes and the auth check runs.
-    // The valid values are: "priority" | "new" | "active" | "resolved" | "teams"
+    // The valid values are: "away_sec" | "lunch" | "back15" | "eod".
     await expect(
-      caller.agents.setAwayStatus({ status: "priority" })
+      caller.agents.setAwayStatus({ status: "away_sec" })
     ).rejects.toThrow(/Agent not authenticated/i);
   });
 
@@ -57,7 +57,7 @@ describe("agents.getStatuses", () => {
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it("each row has id, name, awayStatus, and profilePhotoUrl fields", async () => {
+  it("each row has the established identity and presence fields", async () => {
     const caller = appRouter.createCaller(createAnonContext());
     const result = await caller.agents.getStatuses();
     for (const row of result) {
@@ -65,6 +65,7 @@ describe("agents.getStatuses", () => {
       expect(row).toHaveProperty("name");
       expect(row).toHaveProperty("awayStatus");
       expect(row).toHaveProperty("profilePhotoUrl");
+      expect(row).toHaveProperty("lastSeenAt");
     }
   });
 });
