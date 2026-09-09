@@ -5,24 +5,27 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("customer portal saved-card rebook", () => {
-  it("automatically completes the existing authorized saved-card association before showing portal rebook confirmation", async () => {
+  it("shows the saved card and change-card choice, then uses the existing footer as the one saved-card reservation action", async () => {
     const [checkout, bookingPage, paymentRouter] = await Promise.all([
       readFile(path.resolve(root, "client/src/components/BookingPaymentCheckout.tsx"), "utf8"),
       readFile(path.resolve(root, "client/src/pages/BookNow.tsx"), "utf8"),
       readFile(path.resolve(root, "server/bookingPaymentRouter.ts"), "utf8"),
     ]);
 
-    expect(checkout).toContain("autoUseSavedCard?: boolean");
-    expect(checkout).toContain("const savedCardAutoReservationStarted = useRef(false);");
-    expect(checkout).toContain("if (!autoUseSavedCard || !savedCard || paymentChoice !== \"saved\" || savedCardAutoReservationStarted.current) return;");
-    expect(checkout).toContain("void reserveWithSavedCard();");
-    expect(checkout).toContain("Finalizing your appointment…");
-    expect(checkout).toContain('autoUseSavedCard ? "Saved payment method" : "Secure card on file"');
-    expect(checkout).toContain("Your saved card is securely on file and will reserve this appointment.");
-    expect(checkout).toContain('checkoutError && <button type="button" onClick={() => void reserveWithSavedCard()}');
-    expect(bookingPage).toContain("autoUseSavedCard={Boolean(portalRebook?.savedCard)}");
+    expect(checkout).toContain("footerReservesSavedCard?: boolean");
+    expect(checkout).toContain("selectedPaymentChoice?: \"saved\" | \"new\"");
+    expect(checkout).toContain("onPaymentChoiceChange?: (choice: \"saved\" | \"new\") => void");
+    expect(checkout).toContain("Use {savedCard.brand ? `${savedCard.brand} ` : \"card \"}ending in {savedCard.last4}");
+    expect(checkout).toContain("Add a new card");
+    expect(checkout).toContain("Complete your reservation below.");
+    expect(checkout).toContain("footerReservesSavedCard ?");
+    expect(bookingPage).toContain("const reuseSavedCardMutation = trpc.bookingPayments.reuseSavedCard.useMutation();");
+    expect(bookingPage).toContain("const [savedCardChoice, setSavedCardChoice] = useState<\"saved\" | \"new\">(portalRebook?.savedCard ? \"saved\" : \"new\");");
+    expect(bookingPage).toContain("footerReservesSavedCard={Boolean(portalRebook?.savedCard)}");
+    expect(bookingPage).toContain("selectedPaymentChoice={savedCardChoice}");
+    expect(bookingPage).toContain("void completePortalSavedCardReservation()");
     expect(bookingPage).toContain("if (portalRebook) { setDone(true); return; }");
-    expect(bookingPage).toContain("Finalizing your appointment.");
+    expect(bookingPage).toContain("Use your card on file.");
     expect(paymentRouter).toContain("function affectedRows(result: unknown): number {");
     expect(paymentRouter.indexOf("function affectedRows(result: unknown): number {")).toBeLessThan(paymentRouter.indexOf("reuseSavedCard: publicProcedure"));
     expect(paymentRouter).toContain('if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "The payment method changed. Please try again." });');
