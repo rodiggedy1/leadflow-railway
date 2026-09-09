@@ -1,0 +1,81 @@
+.mib-lawncare-request-panel {
+  width: min(640px, 100%);
+  box-shadow: -22px 0 56px rgba(25, 20, 16, 0.24);
+}
+
+.mib-lawncare-request-panel .mib-booking-panel__close {
+  font-size: 29px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.mib-lawncare-back-icon {
+  transform: rotate(180deg);
+}
+
+.mib-lawncare-request-workspace {
+  padding: 22px 24px 28px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-form-fields {
+  gap: 16px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-form-fields label > span,
+.mib-lawncare-request-workspace .mib-portal-appointment-field-head > span {
+  font-size: 14px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-form-fields input,
+.mib-lawncare-request-workspace .mib-portal-form-fields select,
+.mib-lawncare-request-workspace .mib-portal-form-fields textarea {
+  border-color: #e4dfd5;
+  border-radius: 11px;
+  padding: 12px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-time-window-grid button {
+  min-height: 74px;
+  border-color: #e4dfd5;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-time-window-grid strong {
+  font-size: 14px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-time-window-grid span {
+  font-size: 11px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-payment-choice {
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-payment-choice button {
+  border-radius: 15px;
+  padding: 15px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-payment-choice strong {
+  font-size: 15px;
+}
+
+.mib-lawncare-request-workspace .mib-portal-payment-choice small {
+  font-size: 12px;
+}
+
+.mib-lawncare-request-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  background: #fff;
+}
+
+@media (max-width: 520px) {
+  .mib-lawncare-request-workspace {
+    padding: 20px 18px 25px;
+  }
+}

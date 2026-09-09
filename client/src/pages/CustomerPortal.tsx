@@ -13,6 +13,7 @@ import CustomerPortalReview from "./CustomerPortalReview";
 import CustomerPortalHome from "./CustomerPortalHome";
 import "./customer-portal.css";
 import "./customer-portal-request-upgrades.css";
+import "./customer-portal-lawn-care-booking-panel.css";
 import "./customer-portal-direct-ui.css";
 import "./customer-portal-sidebar-pages.css";
 import "./customer-portal-home-images.css";
@@ -84,13 +85,13 @@ function compareCustomerPortalBookings(left: CustomerPortalTodayJob, right: Cust
   return left.jobDate.localeCompare(right.jobDate) || (left.serviceDateTime ?? "").localeCompare(right.serviceDateTime ?? "");
 }
 
-function PortalNewCardForm({ clientSecret, setupIntentId, customerName, onSaved }: { clientSecret: string; setupIntentId: string; customerName: string; onSaved: (card: { brand: string; last4: string }) => void }) {
+function PortalNewCardForm({ clientSecret, setupIntentId, customerName, onSaved, formId, hideSubmit = false }: { clientSecret: string; setupIntentId: string; customerName: string; onSaved: (card: { brand: string; last4: string }) => void; formId?: string; hideSubmit?: boolean }) {
   const confirmNewCardSetup = trpc.customerPortal.confirmNewCardSetup.useMutation();
   const { stripeReady, name, setName, cardError, loading, handleSubmit } = useStripeCardSetup({ clientSecret, prefillName: customerName, onSetupSucceeded: async paymentMethodId => {
     const card = await confirmNewCardSetup.mutateAsync({ setupIntentId, paymentMethodId });
     onSaved(card);
   } });
-  return <form className="mib-portal-new-card-form" onSubmit={handleSubmit}><label><span>Name on card</span><input required value={name} onChange={event => setName(event.target.value)} autoComplete="cc-name" /></label><label><span>Card details</span><div className="mib-portal-card-element"><CardElement options={CARD_ELEMENT_OPTIONS} /></div></label>{cardError && <p className="mib-portal-error">{cardError}</p>}<button className="mib-portal-primary" type="submit" disabled={!stripeReady || loading || confirmNewCardSetup.isPending}>{loading || confirmNewCardSetup.isPending ? "Saving secure card…" : "Save new card"}<ArrowRight /></button></form>;
+  return <form id={formId} className="mib-portal-new-card-form" onSubmit={handleSubmit}><label><span>Name on card</span><input required value={name} onChange={event => setName(event.target.value)} autoComplete="cc-name" /></label><label><span>Card details</span><div className="mib-portal-card-element"><CardElement options={CARD_ELEMENT_OPTIONS} /></div></label>{cardError && <p className="mib-portal-error">{cardError}</p>}{!hideSubmit && <button className="mib-portal-primary" type="submit" disabled={!stripeReady || loading || confirmNewCardSetup.isPending}>{loading || confirmNewCardSetup.isPending ? "Saving secure card…" : "Save new card"}<ArrowRight /></button>}</form>;
 }
 
 function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onClose }: { service: CustomerPortalService; homeAddress: string; savedCard: { brand: string | null; last4: string } | null; customerName: string; onClose: () => void }) {
@@ -109,13 +110,17 @@ function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onC
   const selectedAddress = useDifferentAddress || !homeAddress ? address.trim() : homeAddress;
   const canSubmit = service.fields.every(field => selections[field.label]?.trim()) && selectedAddress.length >= 5 && Boolean(date) && Boolean(timeWindow) && Boolean(activeCard);
   const estimate = calculateCustomerPortalEstimate(service.id, selections);
+  const isLawnCare = service.id === "lawn-yard-care";
+  const lawnCareCardFormId = "mib-lawn-care-card-form";
+  const sendRequest = () => {
+    if (!date || !timeWindow || !canSubmit || paymentChoice !== "saved") return;
+    createRequest.mutate({ serviceId: service.id, selections, address: selectedAddress, requestedLocalDate: formatCustomerPortalDateKey(date), requestedLocalTime: formatCustomerPortalTime(timeWindow), notes: notes || undefined });
+  };
 
-  return <div className="mib-portal-modal" role="dialog" aria-modal="true" aria-labelledby="mib-service-title">
-    <div className="mib-portal-modal-card">
-      <button className="mib-portal-close" type="button" onClick={onClose} aria-label="Close request form">×</button>
-      <small>MAIDS IN BLACK · HOME SERVICES</small>
-      <h2 id="mib-service-title">Book {service.name}</h2>
-      <p>{service.detail}.</p>
+  return <div className={isLawnCare ? "mib-portal-rebook-overlay" : "mib-portal-modal"} role="dialog" aria-modal="true" aria-labelledby="mib-service-title">
+    <div className={isLawnCare ? "mib-booking-panel mib-portal-rebook-panel mib-lawncare-request-panel" : "mib-portal-modal-card"}>
+      {isLawnCare ? <><header className="mib-booking-panel__header"><div className="mib-booking-panel__agent"><span className="mib-booking-panel__avatar">M<i /></span><div><strong>Maids in Black</strong><span>Book lawn &amp; yard care</span></div></div><button type="button" onClick={onClose} aria-label="Close lawn care request" className="mib-booking-panel__close">×</button></header><section className="mib-booking-panel__intro"><button type="button" onClick={onClose} className="mib-booking-panel__back"><ArrowRight className="mib-lawncare-back-icon" />Back to My Home</button><span>BOOK LAWN &amp; YARD CARE · STEP 1 OF 1</span><h1 id="mib-service-title">Take care of your yard.</h1><p>Tell us what you need, choose your preferred time, and select the card you want to use. You won&apos;t be charged today.</p><div className="mib-booking-panel__progress"><i style={{ width: "100%" }} /></div></section></> : <><button className="mib-portal-close" type="button" onClick={onClose} aria-label="Close request form">×</button><small>MAIDS IN BLACK · HOME SERVICES</small><h2 id="mib-service-title">Book {service.name}</h2><p>{service.detail}.</p></>}
+      <section className={isLawnCare ? "mib-lawncare-request-workspace" : undefined}>
       <div className="mib-portal-form-fields">
         {service.fields.map(field => <label key={field.label}><span>{field.label}</span>{field.options ? <select value={selections[field.label] ?? ""} onChange={event => setSelections(current => ({ ...current, [field.label]: event.target.value }))}><option value="">Choose one</option>{field.options.map(option => <option key={option}>{option}</option>)}</select> : <textarea placeholder={field.placeholder} value={selections[field.label] ?? ""} onChange={event => setSelections(current => ({ ...current, [field.label]: event.target.value }))} />}</label>)}
         {homeAddress && !useDifferentAddress ? <div className="mib-portal-address-choice"><span>Service address</span><strong>{homeAddress}</strong><button type="button" onClick={() => setUseDifferentAddress(true)}>Use a different address</button></div> : <label><span>Service address</span><input value={address} onChange={event => setAddress(event.target.value)} placeholder="Street address" autoComplete="street-address" />{homeAddress && <button className="mib-portal-inline-text-action" type="button" onClick={() => { setAddress(homeAddress); setUseDifferentAddress(false); }}>Use my home-cleaning address</button>}</label>}
@@ -129,10 +134,11 @@ function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onC
         {estimate.lineItems.length > 1 && <div className="mt-2 grid gap-1 border-t border-[#e1ddd6] pt-2">{estimate.lineItems.slice(1).map(item => <span className="flex justify-between gap-3 text-[11px] font-semibold text-[#746f69]" key={item.label}>{item.label}<b className="text-[#202020]">+{formatCurrency(item.cents)}</b></span>)}</div>}
       </div>
       {!newCardSetup && <div className="mib-portal-payment-choice" role="radiogroup" aria-label="Payment method"><button type="button" role="radio" aria-checked={paymentChoice === "saved"} disabled={!activeCard} onClick={() => setPaymentChoice("saved")} className={paymentChoice === "saved" ? "selected" : ""}><CreditCard /><span><strong>{activeCard ? `Use ${activeCard.brand ? `${activeCard.brand} ` : "card "}ending in ${activeCard.last4}` : "No saved card available"}</strong><small>{activeCard ? "Selected by default · no charge today" : "Add a new card to continue"}</small></span></button><button type="button" role="radio" aria-checked={paymentChoice === "new"} onClick={() => { setPaymentChoice("new"); setNewCardSetup(null); }} className={paymentChoice === "new" ? "selected" : ""}><CreditCard /><span><strong>Add a new card</strong><small>Use a different payment method for this request</small></span></button></div>}
-      {paymentChoice === "new" && !newCardSetup && <button type="button" className="mib-portal-secondary-action" disabled={startNewCardSetup.isPending} onClick={() => { void startNewCardSetup.mutateAsync().then(setNewCardSetup); }}>{startNewCardSetup.isPending ? "Preparing secure card entry…" : "Continue to secure card entry"}<ArrowRight /></button>}
-      {newCardSetup && <Elements stripe={stripePromise} options={{ clientSecret: newCardSetup.clientSecret, appearance: { theme: "stripe" } }}><PortalNewCardForm clientSecret={newCardSetup.clientSecret} setupIntentId={newCardSetup.setupIntentId} customerName={customerName} onSaved={card => { setActiveCard(card); setPaymentChoice("saved"); setNewCardSetup(null); void utils.customerPortal.me.invalidate(); }} /></Elements>}
+      {!isLawnCare && paymentChoice === "new" && !newCardSetup && <button type="button" className="mib-portal-secondary-action" disabled={startNewCardSetup.isPending} onClick={() => { void startNewCardSetup.mutateAsync().then(setNewCardSetup); }}>{startNewCardSetup.isPending ? "Preparing secure card entry…" : "Continue to secure card entry"}<ArrowRight /></button>}
+      {newCardSetup && <Elements stripe={stripePromise} options={{ clientSecret: newCardSetup.clientSecret, appearance: { theme: "stripe" } }}><PortalNewCardForm clientSecret={newCardSetup.clientSecret} setupIntentId={newCardSetup.setupIntentId} customerName={customerName} formId={isLawnCare ? lawnCareCardFormId : undefined} hideSubmit={isLawnCare} onSaved={card => { setActiveCard(card); setPaymentChoice("saved"); setNewCardSetup(null); void utils.customerPortal.me.invalidate(); }} /></Elements>}
       {createRequest.error && <p className="mib-portal-error">{createRequest.error.message}</p>}
-      {!newCardSetup && <button type="button" className="mib-portal-primary" disabled={!canSubmit || paymentChoice !== "saved" || createRequest.isPending} onClick={() => { if (!date || !timeWindow) return; createRequest.mutate({ serviceId: service.id, selections, address: selectedAddress, requestedLocalDate: formatCustomerPortalDateKey(date), requestedLocalTime: formatCustomerPortalTime(timeWindow), notes: notes || undefined }); }}>{createRequest.isPending ? "Sending request…" : "Send service request"}<ArrowRight /></button>}
+      </section>
+      {isLawnCare ? <footer className="book-now-step-actions mib-lawncare-request-actions"><button type="button" className="book-now-back-button" onClick={onClose}>Back</button>{newCardSetup ? <><button type="button" className="book-now-back-button" onClick={() => { setNewCardSetup(null); setPaymentChoice("saved"); }}>Use saved card</button><button form={lawnCareCardFormId} type="submit" className="book-now-next-button">Save new card<ArrowRight /></button></> : paymentChoice === "new" ? <button type="button" className="book-now-next-button" disabled={startNewCardSetup.isPending} onClick={() => { void startNewCardSetup.mutateAsync().then(setNewCardSetup); }}>{startNewCardSetup.isPending ? "Preparing secure card entry…" : "Continue to secure card entry"}<ArrowRight /></button> : <button type="button" className="book-now-next-button" disabled={!canSubmit || createRequest.isPending} onClick={sendRequest}>{createRequest.isPending ? "Sending lawn-care request…" : "Send lawn-care request"}<ArrowRight /></button>}</footer> : !newCardSetup && <button type="button" className="mib-portal-primary" disabled={!canSubmit || paymentChoice !== "saved" || createRequest.isPending} onClick={sendRequest}>{createRequest.isPending ? "Sending request…" : "Send service request"}<ArrowRight /></button>}
     </div>
   </div>;
 }
