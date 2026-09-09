@@ -42,4 +42,28 @@ describe("customer portal Home presentation integration", () => {
     expect(source.indexOf("const goToPage")).toBeLessThan(source.indexOf('if (activePage === "home")'));
     expect(source.indexOf("const openService")).toBeLessThan(source.indexOf('if (activePage === "home")'));
   });
+
+  it("lets a customer start a booking-linked message using the existing guarded reply mutation", async () => {
+    const home = await readFile(path.resolve(root, "client/src/pages/CustomerPortalHome.tsx"), "utf8");
+    const source = await readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8");
+    expect(home).toContain("onMessageTeam");
+    expect(home).toContain("onClick={onMessageTeam}");
+    expect(source).toContain("const messageEligibleLeadflowJobs");
+    expect(source).toContain('job.jobDate === businessDate');
+    expect(source).not.toContain('job.jobDate >= businessDate && job.bookingStatus.toLowerCase() !== "missing_from_launch27"');
+    expect(source).toContain('job.bookingStatus.toLowerCase() !== "missing_from_launch27"');
+    expect(source).toContain("const startMessageForNextBooking");
+    expect(source).toContain("messageEligibleLeadflowJobs.length === 1");
+    expect(source).toContain("Which booking is this about?");
+    expect(source).toContain("onMessageTeam={startMessageForNextBooking}");
+    expect(source).toContain("canMessageTeamToday={messageEligibleLeadflowJobs.length > 0}");
+    expect(home).toContain("canMessageTeamToday");
+    expect(home).toContain("disabled={!canMessageTeamToday}");
+    expect(source).toContain("const messageThreadsForDisplay");
+    expect(source).toContain("const shouldFocusComposer");
+    expect(source).toContain("Message your cleaning team");
+    expect(source).toContain("Your message is on its way to the team.");
+    expect(source).toContain("We’ll notify your team when they are assigned.");
+    expect(source).toContain('sendPortalReply.mutate({ leadflowJobId: thread.leadflowJobId, body }');
+  });
 });

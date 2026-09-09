@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { CustomerPortalService } from "@shared/customerPortalServices";
 import "./customer-portal-live-home.css";
+import "./customer-portal-message-availability.css";
 
 type CustomerHomePage = "home" | "bookings" | "services" | "payments" | "messages" | "account";
 
@@ -48,6 +49,8 @@ type CustomerPortalHomeProps = {
   activePage: CustomerHomePage;
   todayStatus: ReactNode;
   onGoToPage: (page: CustomerHomePage) => void;
+  onMessageTeam: () => void;
+  canMessageTeamToday: boolean;
   onBookHomeCleaning: () => void;
   onOpenService: (serviceId: string) => void;
 };
@@ -84,7 +87,7 @@ function ServiceCard({ service, onOpenService }: { service: HomeServiceCard; onO
   return <button className="mib-customer-home__service-card" type="button" onClick={() => onOpenService(service.id)}><img src={service.image} alt={service.alt} /><span><b>{service.title}</b><small>{service.price}</small></span><ChevronRight /></button>;
 }
 
-export default function CustomerPortalHome({ customerName, homeAddress, nextBooking, nextBookingDate, nextBookingDetails, bookingStatusLabel, activePage, todayStatus, onGoToPage, onBookHomeCleaning, onOpenService }: CustomerPortalHomeProps) {
+export default function CustomerPortalHome({ customerName, homeAddress, nextBooking, nextBookingDate, nextBookingDetails, bookingStatusLabel, activePage, todayStatus, onGoToPage, onMessageTeam, canMessageTeamToday, onBookHomeCleaning, onOpenService }: CustomerPortalHomeProps) {
   const firstName = customerName.split(" ")[0] || "there";
   const nextService = nextBooking?.serviceType || "Home cleaning";
   const bookingTime = nextBooking?.serviceDateTime || "Time will be confirmed";
@@ -140,7 +143,7 @@ export default function CustomerPortalHome({ customerName, homeAddress, nextBook
           </section>
 
           <aside className="mib-customer-home__right-rail">
-            <article className="mib-customer-home__team-card"><h2>Your cleaning team</h2><div className="mib-customer-home__team-summary"><img src={TEAM_IMAGE} alt="Maids in Black cleaning professionals in black work shirts" /><div><strong>{teamName}</strong><small>{teamDetail}</small></div></div><button type="button" onClick={() => onGoToPage("messages")}><MessageCircle /> Message your team</button></article>
+            <article className="mib-customer-home__team-card"><h2>Your cleaning team</h2><div className="mib-customer-home__team-summary"><img src={TEAM_IMAGE} alt="Maids in Black cleaning professionals in black work shirts" /><div><strong>{teamName}</strong><small>{teamDetail}</small></div></div><button type="button" onClick={onMessageTeam} disabled={!canMessageTeamToday} title={canMessageTeamToday ? undefined : "Messaging is available on the day of your service"}><MessageCircle /> Message your team</button></article>
             <article className="mib-customer-home__quick-card"><h2>Quick actions</h2><ul><li><span className="coral"><CalendarDays /></span><button type="button" onClick={onBookHomeCleaning}>Book a new cleaning</button><ChevronRight /></li><li><span className="blue"><RefreshCw /></span><PassiveAction>Manage recurring plan</PassiveAction><ChevronRight /></li><li><span className="green"><House /></span><PassiveAction>Update my home details</PassiveAction><ChevronRight /></li><li><span className="mint"><CreditCard /></span><button type="button" onClick={() => onGoToPage("payments")}>Payment methods</button><ChevronRight /></li></ul></article>
             <article className="mib-customer-home__recurring-card"><img src={RECURRING_IMAGE} alt="Warm kitchen with pendant lights and plants" /><div><h2>Keep your home<br />consistently clean.</h2><p>Save time, get priority scheduling, and enjoy discounted rates.</p><PassiveAction>Manage recurring plan <ChevronRight /></PassiveAction></div></article>
           </aside>

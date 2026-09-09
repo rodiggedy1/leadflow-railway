@@ -13,3 +13,14 @@
 .mib-portal-message-thread form label { color: #443229; font-size: 13px; font-weight: 800; }
 .mib-portal-message-thread form textarea { min-height: 82px; padding: 12px; font: inherit; resize: vertical; border: 1px solid #dcd5cc; border-radius: 11px; }
 .mib-portal-message-thread form button { justify-self: start; }
+.mib-portal-message-notice { margin: 0; color: #2f6a56; font-size: 12px; font-weight: 700; }
+.mib-portal-message-booking-picker { display: grid; gap: 9px; padding: 24px; background: #fff; border: 1px solid #e8e1d8; border-radius: 18px; box-shadow: 0 8px 24px rgb(49 37 25 / 5%); }
+.mib-portal-message-booking-picker > small { color: #c75942; font-size: 11px; font-weight: 800; letter-spacing: .11em; }
+.mib-portal-message-booking-picker > h2 { margin: 0; color: #2e231c; font-family: Georgia, serif; font-size: 25px; }
+.mib-portal-message-booking-picker > p { margin: 0 0 8px; color: #776c63; font-size: 14px; }
+.mib-portal-message-booking-picker > div { display: grid; gap: 8px; }
+.mib-portal-message-booking-picker > div > button { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 15px; color: #2e231c; text-align: left; background: #fdfbf8; border: 1px solid #e8e1d8; border-radius: 12px; }
+.mib-portal-message-booking-picker button span { display: grid; gap: 3px; }
+.mib-portal-message-booking-picker button strong { font-size: 14px; }
+.mib-portal-message-booking-picker button small { color: #776c63; font-size: 12px; }
+.mib-portal-message-booking-picker button svg { flex: 0 0 auto; width: 17px; height: 17px; color: #c75942; }

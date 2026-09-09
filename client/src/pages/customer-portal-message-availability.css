@@ -1,0 +1,4 @@
+.mib-customer-home__team-card > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
