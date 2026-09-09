@@ -339,13 +339,44 @@ export const customerPortalRouter = router({
     const savedCard = await getCustomerPortalSavedCard(db, account.customerPhone);
     if (!savedCard) throw new Error("Choose a saved card or add a new card before sending this request.");
     const now = new Date();
+    const publicRequestNumber = createCustomerPortalRequestNumber();
+    const customerRequest = input.notes?.trim() || service.fields.map(field => `${field.label}: ${input.selections[field.label]}`).join(" · ");
     await db.insert(customerPortalServiceRequests).values({
-      publicRequestNumber: createCustomerPortalRequestNumber(), accountId: account.id, serviceId: service.id, serviceName: service.name, status: "requested",
+      publicRequestNumber, accountId: account.id, serviceId: service.id, serviceName: service.name, status: "requested",
       customerName: account.customerName, customerPhone: account.customerPhone, customerEmail: account.customerEmail,
-      customerRequest: input.notes?.trim() || service.fields.map(field => `${field.label}: ${input.selections[field.label]}`).join(" · "),
+      customerRequest,
       scopeSelections: input.selections, address: input.address, requestedLocalDate: input.requestedLocalDate, requestedLocalTime: input.requestedLocalTime,
       estimatedTotalCents: estimate.estimatedCents, estimateRequiresReview: estimate.requiresReview ? 1 : 0, paymentBrand: savedCard.brand, paymentLast4: savedCard.last4, stripePaymentMethodId: savedCard.stripePaymentMethodId, createdAt: now, updatedAt: now,
     });
+    const officeMessage = [
+      "Customer portal service request",
+      `${account.customerName} · ${account.customerPhone}`,
+      `Service: ${service.name}`,
+      `Preferred appointment: ${input.requestedLocalDate} · ${input.requestedLocalTime}`,
+      `Address: ${input.address}`,
+      `Request: ${customerRequest}`,
+      `Portal request: ${publicRequestNumber}`,
+    ].join("\n");
+    try {
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        cleanerJobId: null,
+        authorName: "Customer Portal",
+        authorRole: "system",
+        body: officeMessage,
+        quickAction: "customer_portal_service_request",
+        metadata: JSON.stringify({ publicRequestNumber, serviceId: service.id, customerName: account.customerName, customerPhone: account.customerPhone, requestedLocalDate: input.requestedLocalDate }),
+      });
+      broadcastOpsUpdate("new_message", { channel: "command" });
+    } catch (error) {
+      console.error("[CustomerPortalRequests] Command Chat office notice failed:", error);
+    }
+    try {
+      const officeSms = await sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage });
+      if (!officeSms.success) console.error("[CustomerPortalRequests] Customer Service office SMS failed:", officeSms.error);
+    } catch (error) {
+      console.error("[CustomerPortalRequests] Customer Service office SMS failed:", error);
+    }
     return { ok: true };
   }),
 });
