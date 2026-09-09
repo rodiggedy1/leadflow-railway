@@ -24,7 +24,10 @@ type State = "verifying" | "confirming" | "success" | "error";
 
 export default function CleanerAuthCallback() {
   // Read token from URL once — never re-read
-  const token = new URLSearchParams(window.location.search).get("token") ?? "";
+  const callbackParams = new URLSearchParams(window.location.search);
+  const token = callbackParams.get("token") ?? "";
+  const requestedJob = callbackParams.get("job") ?? "";
+  const messageJobQuery = /^leadflow:\d+$/.test(requestedJob) ? `?job=${encodeURIComponent(requestedJob)}` : "";
   const [state, setState] = useState<State>(token ? "verifying" : "error");
   const [errorMsg, setErrorMsg] = useState<string>(
     token ? "" : "No login token found in URL. Please use the link from your SMS."
@@ -71,14 +74,14 @@ export default function CleanerAuthCallback() {
       // hasRedirected ref ensures this fires at most once even if the effect re-runs.
       if (!hasRedirected.current) {
         hasRedirected.current = true;
-        window.location.replace("/portal-v2");
+        window.location.replace(`/portal-v2${messageJobQuery}`);
       }
     } else if (meQuery.isError || (!meQuery.isLoading && !meQuery.data)) {
       // Session not found even after verification — something went wrong
       setErrorMsg("Session could not be confirmed. Please try the link again or contact your manager.");
       setState("error");
     }
-  }, [state, meQuery.data, meQuery.isLoading, meQuery.isError]);
+  }, [state, meQuery.data, meQuery.isLoading, meQuery.isError, messageJobQuery]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">

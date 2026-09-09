@@ -161,7 +161,8 @@ export const customerPortalRouter = router({
       notificationError = "The assigned cleaner has no cellphone number.";
     } else {
       try {
-        cleanerPortalLink = await getOrCreateCleanerMagicLink(cleaner.id);
+        const cleanerMagicLink = await getOrCreateCleanerMagicLink(cleaner.id);
+        cleanerPortalLink = `${cleanerMagicLink}&job=${encodeURIComponent(`leadflow:${job.id}`)}`;
       } catch (error) {
         console.error("[CustomerPortalMessages] Cleaner portal link generation failed; sending the response without a link.", error);
       }

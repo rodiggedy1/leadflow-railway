@@ -144,6 +144,7 @@ function StatusPill({ job }: { job: PortalJob | WeekJob }) {
 }
 
 type BookingMessage = { id: number; senderRole: string; body: string; notificationStatus: string; createdAt: Date | string };
+type ContactJob = Pick<PortalJob, "portalJobKey" | "customerName" | "address" | "time" | "extras">;
 
 const QUICK_MESSAGES = [
   { label: "We're on our way", draft: (firstName: string) => `Hi ${firstName} — your Maids in Black cleaning team is on the way and looking forward to seeing you soon. If there’s anything we should know before we arrive, please reply here.` },
@@ -153,7 +154,7 @@ const QUICK_MESSAGES = [
   { label: "Add a service", draft: (firstName: string) => `Hi ${firstName} — while we’re here, would you like us to clean the inside of the fridge or oven, or add any other service today? Reply here and we’ll let you know what we can accommodate.` },
 ] as const;
 
-function ContactClientPanel({ job, onClose, onCall }: { job: PortalJob; onClose: () => void; onCall: () => void }) {
+function ContactClientPanel({ job, onClose, onCall }: { job: ContactJob; onClose: () => void; onCall: () => void }) {
   const [draft, setDraft] = useState("");
   const customerFirstName = job.customerName.trim().split(/\s+/)[0] || "there";
   const threadQuery = trpc.cleanerPortalMessages.getForJob.useQuery({ portalJobKey: job.portalJobKey }, { retry: 0, throwOnError: false, refetchInterval: 3_000 });
@@ -166,7 +167,7 @@ function ContactClientPanel({ job, onClose, onCall }: { job: PortalJob; onClose:
     },
     onError: error => toast.error(error.message || "Message could not be sent."),
   });
-  const messages = (threadQuery.data ?? []) as BookingMessage[];
+  const messages = (threadQuery.data?.messages ?? []) as BookingMessage[];
   const chooseQuickMessage = (message: (typeof QUICK_MESSAGES)[number]) => setDraft(message.draft(customerFirstName));
   return <div className="cp-contact-backdrop" onClick={onClose}>
     <aside className="cp-contact-drawer" onClick={event => event.stopPropagation()} aria-label={`Message ${job.customerName}`}>
@@ -389,7 +390,7 @@ function CleanerPortalConnected() {
   const [page, setPage] = useState<NavPage>("today");
   const [routeDay, setRouteDay] = useState<"today" | "tomorrow">("today");
   const [selectedJob, setSelectedJob] = useState<PortalJob | null>(null);
-  const [contactJob, setContactJob] = useState<PortalJob | null>(null);
+  const [contactJob, setContactJob] = useState<ContactJob | null>(null);
   const [selectedPayWeek, setSelectedPayWeek] = useState<PayWeekKey>("current");
   const [progressByJobKey, setProgressByJobKey] = useState<Record<string, { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }>>({});
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
@@ -398,6 +399,15 @@ function CleanerPortalConnected() {
   const todayDate = useMemo(() => etDate(), []);
   const tomorrowDate = useMemo(() => etDate(1), []);
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: 1, throwOnError: false });
+  const linkedMessageJobKey = useMemo(() => {
+    const value = new URLSearchParams(window.location.search).get("job") ?? "";
+    return /^leadflow:\d+$/.test(value) ? value : null;
+  }, []);
+  const linkedMessageQuery = trpc.cleanerPortalMessages.getForJob.useQuery(
+    { portalJobKey: linkedMessageJobKey ?? "leadflow:1" },
+    { enabled: Boolean(meQuery.data && linkedMessageJobKey), retry: 0, throwOnError: false },
+  );
+  const [handledLinkedMessage, setHandledLinkedMessage] = useState(false);
   const todayQuery = trpc.cleanerPortalReadOnly.getMyJobsToday.useQuery(undefined, { enabled: !!meQuery.data, retry: 1, throwOnError: false });
   const tomorrowQuery = trpc.cleanerPortalReadOnly.getMyJobsTomorrow.useQuery(undefined, { enabled: !!meQuery.data && page === "today" && routeDay === "tomorrow", retry: 1, throwOnError: false });
   const weekQuery = trpc.cleanerPortalReadOnly.getMyJobsWeek.useQuery(undefined, { enabled: !!meQuery.data && page === "jobs", staleTime: 60_000, throwOnError: false });
@@ -425,6 +435,21 @@ function CleanerPortalConnected() {
   const initial = meQuery.data?.name?.trim().slice(0, 1).toUpperCase() || "C";
   const firstName = meQuery.data?.name?.split(" ")[0] || "there";
   const callClient = () => toast.info("Client calling will be enabled after portal visibility is confirmed.");
+
+  useEffect(() => {
+    if (!linkedMessageJobKey || handledLinkedMessage || linkedMessageQuery.isLoading) return;
+    if (linkedMessageQuery.data?.job) {
+      setPage("today");
+      setRouteDay("today");
+      setContactJob(linkedMessageQuery.data.job);
+      setHandledLinkedMessage(true);
+      return;
+    }
+    if (linkedMessageQuery.isError) {
+      setHandledLinkedMessage(true);
+      toast.error("This customer conversation is no longer available in your portal.");
+    }
+  }, [handledLinkedMessage, linkedMessageJobKey, linkedMessageQuery.data, linkedMessageQuery.isError, linkedMessageQuery.isLoading]);
 
   if (meQuery.isLoading || (meQuery.data && todayQuery.isLoading)) return <div className="cp-loading"><Loader2 className="cp-spin" size={30} />Loading your workday…</div>;
   if (meQuery.isError) return <div className="cp-loading"><div><p>We could not reach your Cleaner Portal right now.</p><button className="cp-btn cp-btn--subtle" onClick={() => window.location.reload()}>Try again</button></div></div>;
