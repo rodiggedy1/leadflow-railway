@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
-import { bookings, cleanerJobs, cleanerPortalJobProgress, cleanerProfiles, customerPortalAccounts, customerPortalServiceRequests, leadflowBookingMessages, leadflowJobs, stripeCustomers } from "../drizzle/schema";
+import { bookings, cleanerJobs, cleanerPortalJobProgress, cleanerProfiles, customerPortalAccounts, customerPortalServiceRequests, leadflowBookingMessages, leadflowJobs, opsChatMessages, stripeCustomers } from "../drizzle/schema";
 import { getDb, getOrCreateCleanerMagicLink } from "./db";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { CUSTOMER_PORTAL_SERVICES, getCustomerPortalService, validateCustomerPortalSelections } from "../shared/customerPortalServices";
@@ -16,6 +16,9 @@ import { requestCustomerPortalLoginCode, verifyCustomerPortalLoginCode } from ".
 import { sendSms } from "./openphone";
 import { extractUSDigits } from "./utils/phone";
 import { getCustomerPortalBusinessDate, isCustomerPortalLiveJob } from "../shared/customerPortalLiveStatus";
+import { broadcastOpsUpdate } from "./sseBroadcast";
+
+const CS_OFFICE_SMS_NUMBER = "+12028885362";
 
 const requestSchema = z.object({
   serviceId: z.string().trim().min(1).max(64),
@@ -113,7 +116,7 @@ export const customerPortalRouter = router({
     if (!account || account.customerPhone !== session.customerPhone) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
     const phoneDigits = extractUSDigits(account.customerPhone);
     if (!phoneDigits) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
-    const jobs = await db.select({ id: leadflowJobs.id, customerName: leadflowJobs.customerName, teamId: leadflowJobs.teamId }).from(leadflowJobs).where(and(
+    const jobs = await db.select({ id: leadflowJobs.id, customerName: leadflowJobs.customerName, teamId: leadflowJobs.teamId, jobDate: leadflowJobs.jobDate, serviceName: leadflowJobs.serviceName, jobAddress: leadflowJobs.jobAddress }).from(leadflowJobs).where(and(
       eq(leadflowJobs.id, input.leadflowJobId),
       ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"), ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
       sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`,
@@ -125,6 +128,33 @@ export const customerPortalRouter = router({
     const cleaner = cleanerRows[0] ?? null;
     const result = await db.insert(leadflowBookingMessages).values({ leadflowJobId: job.id, senderRole: "customer", body: input.body, customerPortalAccountId: account.id, cleanerProfileId: cleaner?.id ?? null, notificationStatus: "pending", createdAt: now });
     const messageId = Number(result[0].insertId);
+    const officeMessage = [
+      "Customer portal message",
+      `${job.customerName} · ${account.customerPhone}`,
+      `Booking: ${job.serviceName || "Home cleaning"} · ${job.jobDate}`,
+      job.jobAddress ? `Address: ${job.jobAddress}` : null,
+      `Message: ${input.body}`,
+    ].filter((line): line is string => Boolean(line)).join("\n");
+    try {
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        cleanerJobId: null,
+        authorName: "Customer Portal",
+        authorRole: "system",
+        body: officeMessage,
+        quickAction: "customer_portal_message",
+        metadata: JSON.stringify({ leadflowJobId: job.id, customerName: job.customerName, customerPhone: account.customerPhone, jobDate: job.jobDate }),
+      });
+      broadcastOpsUpdate("new_message", { channel: "command" });
+    } catch (error) {
+      console.error("[CustomerPortalMessages] Command Chat office notice failed:", error);
+    }
+    try {
+      const officeSms = await sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage });
+      if (!officeSms.success) console.error("[CustomerPortalMessages] Customer Service office SMS failed:", officeSms.error);
+    } catch (error) {
+      console.error("[CustomerPortalMessages] Customer Service office SMS failed:", error);
+    }
     let cleanerPortalLink: string | null = null;
     let notificationError: string | null = null;
     if (!cleaner?.phone) {
