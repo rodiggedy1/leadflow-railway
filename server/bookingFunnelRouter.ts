@@ -16,7 +16,8 @@ import { invokeLLM } from "./_core/llm";
 import { getDb } from "./db";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
-import { sendWidgetLeadCreatedNotifications } from "./bookingLeadCreatedNotifications";
+import { sendCustomerPortalLeadCreatedCommandChatCard, sendWidgetLeadCreatedNotifications } from "./bookingLeadCreatedNotifications";
+import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import {
   BookingFunnelInputError,
   createBookingFunnelMutationToken,
@@ -151,6 +152,12 @@ export const bookingFunnelRouter = router({
         if (error instanceof BookingFunnelInputError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
         throw error;
       }
+      if (input.portalLeadCard) {
+        const portalSession = await getCustomerPortalSessionFromRequest(ctx.req);
+        if (!portalSession || portalSession.customerPhone !== normalized.customerPhone) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Open your portal to create this booking lead." });
+        }
+      }
       const publicFunnelNumber = createBookingFunnelNumber();
       const now = new Date();
       let row: { publicFunnelNumber: string; idempotencyKey: string; commandHash: string; stage: string; version: number } | undefined;
@@ -185,6 +192,11 @@ export const bookingFunnelRouter = router({
       if (created && normalized.source === "widget-popup") {
         void sendWidgetLeadCreatedNotifications(row.publicFunnelNumber).catch((error) =>
           console.error("[BookingFunnelRouter] Widget lead-created notifications failed:", error)
+        );
+      }
+      if (created && input.portalLeadCard) {
+        void sendCustomerPortalLeadCreatedCommandChatCard(row.publicFunnelNumber).catch((error) =>
+          console.error("[BookingFunnelRouter] Customer portal lead-created Command Chat card failed:", error)
         );
       }
       return {

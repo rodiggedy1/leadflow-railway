@@ -9,6 +9,7 @@ export type BookingFunnelSource = z.infer<typeof bookingFunnelSourceSchema>;
 export const beginBookingFunnelInputSchema = z.object({
   idempotencyKey: z.string().uuid(),
   source: bookingFunnelSourceSchema,
+  portalLeadCard: z.literal(true).optional(),
   customerName: z.string().trim().min(2).max(255),
   customerPhone: z.string().trim().min(10).max(30),
 });

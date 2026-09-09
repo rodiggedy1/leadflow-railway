@@ -128,3 +128,43 @@ export async function sendWidgetLeadCreatedNotifications(publicFunnelNumber: str
     console.error("[WidgetLeadCreatedNotifications] Owner SMS delivery failed:", error);
   }
 }
+
+/** Creates an office-visible Command Chat card when a signed My Home rebooking lead is first captured. */
+export async function sendCustomerPortalLeadCreatedCommandChatCard(publicFunnelNumber: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.error("[CustomerPortalLeadCreated] Database unavailable");
+    return;
+  }
+
+  const [lead] = await db.select().from(bookingFunnelRecords)
+    .where(eq(bookingFunnelRecords.publicFunnelNumber, publicFunnelNumber)).limit(1);
+  if (!lead || lead.source !== "book-page") return;
+
+  const createdAt = new Date();
+  try {
+    await db.insert(opsChatMessages).values({
+      channel: "command",
+      authorName: "Customer Portal Lead",
+      authorRole: "office",
+      body: `New customer portal booking lead: ${lead.customerName} · ${lead.customerPhone}`,
+      quickAction: "new_lead",
+      metadata: JSON.stringify({
+        leadName: lead.customerName,
+        leadPhone: lead.customerPhone,
+        source: "customer_portal",
+        arrivedAt: createdAt.getTime(),
+        funnelRecordId: lead.id,
+        publicFunnelNumber: lead.publicFunnelNumber,
+      }),
+      cardStatus: "active",
+      activeDedupKey: `customer_portal_lead:${lead.id}`,
+      lastActivityAt: createdAt.getTime(),
+    });
+    broadcastOpsUpdate("new_message", { channel: "command" });
+  } catch (error) {
+    if (!isDuplicateEntry(error)) {
+      console.error("[CustomerPortalLeadCreated] Could not create Command Chat lead card:", error);
+    }
+  }
+}

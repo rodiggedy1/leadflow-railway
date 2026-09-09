@@ -105,7 +105,8 @@ describe("native booking funnel slice 1", () => {
     expect(streamSource).toContain("onBookingFunnelUpdate?: () => void");
     expect(streamSource).toContain('case "booking_funnel_update"');
     expect(routerSource).toContain('if (created) broadcastOpsUpdate("booking_funnel_update")');
-    expect(routerSource.match(/broadcastOpsUpdate\("booking_funnel_update"\)/g)).toHaveLength(3);
+    expect(routerSource.match(/broadcastOpsUpdate\("booking_funnel_update"\)/g)).toHaveLength(4);
+    expect(routerSource).toContain('if (created && input.portalLeadCard)');
     expect(routerSource.indexOf('if (affectedRows(result) !== 1')).toBeLessThan(routerSource.indexOf('broadcastOpsUpdate("booking_funnel_update")', routerSource.indexOf('update: publicProcedure')));
     expect(routerSource.indexOf('existing.stage === "payment_incomplete" || existing.stage === "booked"')).toBeLessThan(routerSource.lastIndexOf('broadcastOpsUpdate("booking_funnel_update")'));
   });

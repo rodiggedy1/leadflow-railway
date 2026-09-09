@@ -74,6 +74,12 @@ function insertId(result: unknown, label: string): number {
   return value;
 }
 
+function affectedRows(result: unknown): number {
+  const direct = result as { affectedRows?: number };
+  const nested = (result as Array<{ affectedRows?: number }> | undefined)?.[0];
+  return Number(direct?.affectedRows ?? nested?.affectedRows ?? 0);
+}
+
 async function ensureBookingPaymentTarget(record: typeof bookingFunnelRecords.$inferSelect) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
