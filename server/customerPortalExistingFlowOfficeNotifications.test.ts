@@ -5,11 +5,12 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("customer portal existing-flow office notifications", () => {
-  it("keeps the established new-cleaning completion dispatcher and adds office notices only after an existing service request is saved", async () => {
-    const [portalRouter, bookingPaymentRouter, bookingDispatcher] = await Promise.all([
+  it("keeps the established new-cleaning completion dispatcher and routes every completed portal service booking through it", async () => {
+    const [portalRouter, bookingPaymentRouter, bookingDispatcher, serviceCompletion] = await Promise.all([
       readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8"),
       readFile(path.resolve(root, "server/bookingPaymentRouter.ts"), "utf8"),
       readFile(path.resolve(root, "server/bookingCompletionNotifications.ts"), "utf8"),
+      readFile(path.resolve(root, "server/customerPortalServiceBookingCompletion.ts"), "utf8"),
     ]);
 
     expect(bookingPaymentRouter).toContain("void sendBookingCompletionNotifications(target.bookingId).catch");
@@ -19,12 +20,11 @@ describe("customer portal existing-flow office notifications", () => {
     expect(bookingDispatcher).toContain("const CS_SUPPORT_NUMBER = \"+12028885362\"");
 
     const requestSegment = portalRouter.slice(portalRouter.indexOf("createRequest:"));
-    expect(requestSegment).toContain("await db.insert(customerPortalServiceRequests).values");
-    expect(requestSegment.indexOf("await db.insert(customerPortalServiceRequests).values")).toBeLessThan(requestSegment.indexOf('quickAction: "customer_portal_service_request"'));
-    expect(requestSegment).toContain('channel: "command"');
-    expect(requestSegment).toContain('broadcastOpsUpdate("new_message", { channel: "command" })');
-    expect(requestSegment).toContain("sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage })");
-    expect(requestSegment).toContain('return { ok: true }');
-    expect(requestSegment).not.toContain("paymentIntents.create");
+    expect(requestSegment).toContain("return completeCustomerPortalServiceBooking");
+    expect(serviceCompletion).toContain("await tx.insert(customerPortalServiceRequests).values");
+    expect(serviceCompletion).toContain("await tx.insert(bookings).values");
+    expect(serviceCompletion).toContain("await tx.insert(bookingPaymentProfiles).values");
+    expect(serviceCompletion).toContain("void sendBookingCompletionNotifications(bookingId)");
+    expect(serviceCompletion).not.toContain("paymentIntents.create");
   });
 });

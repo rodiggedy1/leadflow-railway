@@ -4488,7 +4488,8 @@ export type InsertBookingFunnelRecord = typeof bookingFunnelRecords.$inferInsert
 export const bookingPaymentProfiles = mysqlTable("booking_payment_profiles", {
   id: int("id").autoincrement().primaryKey(),
   bookingId: int("bookingId").notNull(),
-  funnelRecordId: int("funnelRecordId").notNull(),
+  funnelRecordId: int("funnelRecordId"),
+  serviceRequestId: int("serviceRequestId"),
   paymentStatus: varchar("paymentStatus", { length: 32 }).notNull().default("not_started"),
   version: int("version").notNull().default(1),
   stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
@@ -4512,6 +4513,7 @@ export const bookingPaymentProfiles = mysqlTable("booking_payment_profiles", {
 }, (t) => [
   uniqueIndex("uq_booking_payment_profile_booking").on(t.bookingId),
   uniqueIndex("uq_booking_payment_profile_funnel").on(t.funnelRecordId),
+  uniqueIndex("uq_booking_payment_profile_service_request").on(t.serviceRequestId),
   uniqueIndex("uq_booking_payment_profile_setup_intent").on(t.stripeSetupIntentId),
   index("idx_booking_payment_profile_status").on(t.paymentStatus),
 ]);
@@ -4617,6 +4619,7 @@ export const customerPortalLoginRateLimits = mysqlTable("customer_portal_login_r
 export const customerPortalServiceRequests = mysqlTable("customer_portal_service_requests", {
   id: int("id").autoincrement().primaryKey(),
   publicRequestNumber: varchar("publicRequestNumber", { length: 40 }).notNull(),
+  bookingId: int("bookingId"),
   accountId: int("accountId").notNull(),
   serviceId: varchar("serviceId", { length: 64 }).notNull(),
   serviceName: varchar("serviceName", { length: 120 }).notNull(),
@@ -4638,4 +4641,4 @@ export const customerPortalServiceRequests = mysqlTable("customer_portal_service
   paymentChargedAt: bigint("paymentChargedAt", { mode: "number" }),
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
   updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
-}, (t) => [uniqueIndex("uq_customer_portal_service_request_number").on(t.publicRequestNumber), index("idx_customer_portal_service_request_account").on(t.accountId, t.createdAt), index("idx_customer_portal_service_request_schedule").on(t.requestedLocalDate, t.status)]);
+}, (t) => [uniqueIndex("uq_customer_portal_service_request_number").on(t.publicRequestNumber), uniqueIndex("uq_customer_portal_service_request_booking").on(t.bookingId), index("idx_customer_portal_service_request_account").on(t.accountId, t.createdAt), index("idx_customer_portal_service_request_schedule").on(t.requestedLocalDate, t.status)]);
