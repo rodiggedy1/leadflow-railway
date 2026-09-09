@@ -169,7 +169,7 @@ export default function CustomerPortal() {
   const todayJobStatus = trpc.customerPortal.todayJobStatus.useQuery(undefined, { enabled: Boolean(portal.data?.account), refetchInterval: query => query.state.data?.job ? 60_000 : false });
   const updateLeadflowJobCustomerNote = trpc.customerPortal.updateLeadflowJobCustomerNote.useMutation({ onSuccess: () => { void utils.customerPortal.me.invalidate(); } });
   const startNewCardSetup = trpc.customerPortal.startNewCardSetup.useMutation();
-  const messageThreadsQuery = trpc.customerPortal.messages.useQuery(undefined, { enabled: Boolean(portal.data?.account) && activePage === "messages", retry: 1, throwOnError: false });
+  const messageThreadsQuery = trpc.customerPortal.messages.useQuery(undefined, { enabled: Boolean(portal.data?.account) && activePage === "messages", retry: 1, throwOnError: false, refetchOnMount: "always", refetchOnWindowFocus: "always", refetchInterval: 10_000 });
   const sendPortalReply = trpc.customerPortal.replyToMessageThread.useMutation({ onSuccess: () => { void messageThreadsQuery.refetch(); } });
   const [messageDrafts, setMessageDrafts] = useState<Record<number, string>>({});
   const [messageBookingToStart, setMessageBookingToStart] = useState<number | null>(null);
@@ -207,7 +207,13 @@ export default function CustomerPortal() {
       existing.messages.push(message);
       grouped.set(message.leadflowJobId, existing);
     }
-    return Array.from(grouped.values());
+    return Array.from(grouped.values()).sort((left, right) => {
+      const leftLatest = left.messages[left.messages.length - 1];
+      const rightLatest = right.messages[right.messages.length - 1];
+      const leftTime = leftLatest ? new Date(leftLatest.createdAt).getTime() : 0;
+      const rightTime = rightLatest ? new Date(rightLatest.createdAt).getTime() : 0;
+      return rightTime - leftTime || right.jobDate.localeCompare(left.jobDate);
+    });
   }, [messageThreadsQuery.data]);
   const messageThreadsForDisplay = useMemo(() => {
     const selectedJobId = messageBookingToStart;

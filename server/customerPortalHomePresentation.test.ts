@@ -66,4 +66,16 @@ describe("customer portal Home presentation integration", () => {
     expect(source).toContain("We’ll notify your team when they are assigned.");
     expect(source).toContain('sendPortalReply.mutate({ leadflowJobId: thread.leadflowJobId, body }');
   });
+
+  it("refreshes active customer Messages without a manual browser reload and promotes the most recently active booking conversation", async () => {
+    const source = await readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8");
+    expect(source).toContain('refetchOnMount: "always"');
+    expect(source).toContain('refetchOnWindowFocus: "always"');
+    expect(source).toContain("refetchInterval: 10_000");
+    expect(source).toContain("const leftLatest = left.messages[left.messages.length - 1]");
+    expect(source).toContain("const rightLatest = right.messages[right.messages.length - 1]");
+    expect(source).toContain("return rightTime - leftTime || right.jobDate.localeCompare(left.jobDate)");
+    expect(source).toContain("const messageThreadsForDisplay");
+    expect(source).toContain("return [selectedThread, ...messageThreads.filter(thread => thread.leadflowJobId !== selectedJobId)]");
+  });
 });
