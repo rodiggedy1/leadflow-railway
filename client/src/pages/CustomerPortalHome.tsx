@@ -19,6 +19,7 @@ import {
 import type { CustomerPortalService } from "@shared/customerPortalServices";
 import { formatCustomerPortalServiceTime } from "@/lib/customerPortalTime";
 import "./customer-portal-live-home.css";
+import "./customer-portal-summary-row.css";
 import "./customer-portal-message-availability.css";
 
 type CustomerHomePage = "home" | "bookings" | "services" | "payments" | "messages" | "account";
@@ -46,6 +47,8 @@ type CustomerPortalHomeProps = {
   nextBooking: HomeBooking | null;
   nextBookingDate: string | null;
   nextBookingDetails: string | null;
+  totalBookingCount: number;
+  paymentMethodLabel: string;
   bookingStatusLabel: string;
   activePage: CustomerHomePage;
   todayStatus: ReactNode;
@@ -88,26 +91,13 @@ function ServiceCard({ service, onOpenService }: { service: HomeServiceCard; onO
   return <button className="mib-customer-home__service-card" type="button" onClick={() => onOpenService(service.id)}><img src={service.image} alt={service.alt} /><span><b>{service.title}</b><small>{service.price}</small></span><ChevronRight /></button>;
 }
 
-export default function CustomerPortalHome({ customerName, homeAddress, nextBooking, nextBookingDate, nextBookingDetails, bookingStatusLabel, activePage, todayStatus, onGoToPage, onMessageTeam, canMessageTeamToday, onBookHomeCleaning, onOpenService }: CustomerPortalHomeProps) {
+export default function CustomerPortalHome({ customerName, homeAddress, nextBooking, nextBookingDate, nextBookingDetails, totalBookingCount, paymentMethodLabel, bookingStatusLabel, activePage, todayStatus, onGoToPage, onMessageTeam, canMessageTeamToday, onBookHomeCleaning, onOpenService }: CustomerPortalHomeProps) {
   const firstName = customerName.split(" ")[0] || "there";
   const nextService = nextBooking?.serviceType || "Home cleaning";
   const bookingTime = formatCustomerPortalServiceTime(nextBooking?.serviceDateTime);
   const statusDetail = nextBooking ? "Your booking details are saved." : "Book when you’re ready.";
   const teamName = nextBooking?.teamName || "Not yet assigned";
   const teamDetail = nextBooking?.teamName ? "Your team is assigned to this visit" : "Your team will be confirmed soon";
-  const lifecycle = nextBooking ? [
-    { label: bookingStatusLabel, detail: "Your appointment is scheduled", icon: CalendarDays, active: true },
-    { label: "Day before", detail: "We’ll send a reminder", icon: MessageCircle },
-    { label: "Team on the way", detail: "Get an ETA", icon: House },
-    { label: "Cleaning in progress", detail: "We’ll keep you updated", icon: Home },
-    { label: "All done", detail: "View photos & review", icon: Sparkles },
-  ] : [
-    { label: "Book a visit", detail: "Choose a time that works", icon: CalendarDays, active: true },
-    { label: "Day before", detail: "We’ll send a reminder", icon: MessageCircle },
-    { label: "Team on the way", detail: "Get an ETA", icon: House },
-    { label: "Cleaning in progress", detail: "We’ll keep you updated", icon: Home },
-    { label: "All done", detail: "View photos & review", icon: Sparkles },
-  ];
 
   return <div className="mib-customer-home-shell" id="mib-home">
     <div className="mib-customer-home-layout">
@@ -139,7 +129,12 @@ export default function CustomerPortalHome({ customerName, homeAddress, nextBook
               <div className="mib-customer-home__room-image"><img src={HERO_IMAGE} alt="Sunlit living room with cream sofa, greenery, and a round wood coffee table" /><span><Check /><b>{bookingStatusLabel}</b><small>{statusDetail}</small></span></div>
             </article>
             {todayStatus && <section className="mib-customer-home__live-status">{todayStatus}</section>}
-            <article className="mib-customer-home__timeline-card"><header><h2>What happens next?</h2><span>View all steps <ChevronRight /></span></header><div className="mib-customer-home__timeline">{lifecycle.map(({ label, detail, icon: Icon, active }) => <div className={active ? "is-active" : ""} key={label}><span><Icon /></span><strong>{label}</strong><small>{detail}</small></div>)}</div></article>
+            <section className="mib-customer-home__summary-row" aria-label="My home summary">
+              <article><span className="is-coral"><CalendarDays /></span><div><p>Total bookings</p><strong>{totalBookingCount}</strong><button type="button" onClick={() => onGoToPage("bookings")}>View all bookings <ChevronRight /></button></div></article>
+              <article><span className="is-amber"><Sparkles /></span><div><p>Next visit</p><strong>{nextBookingDate || "Not scheduled"}</strong><button type="button" onClick={() => onGoToPage("bookings")}>{nextBooking ? nextService : "Book when you’re ready"} <ChevronRight /></button></div></article>
+              <article><span className="is-blue"><CreditCard /></span><div><p>Payment method</p><strong>{paymentMethodLabel}</strong><button type="button" onClick={() => onGoToPage("payments")}>Manage payment <ChevronRight /></button></div></article>
+              <article><span className="is-mint"><MessageCircle /></span><div><p>Messages</p><strong>{canMessageTeamToday ? "Your team is available" : "Stay in the loop"}</strong><button type="button" onClick={() => onGoToPage("messages")}>View messages <ChevronRight /></button></div></article>
+            </section>
             <section className="mib-customer-home__additional-services" aria-labelledby="mib-additional-services-heading"><header><div><h2 id="mib-additional-services-heading">Additional services</h2><p>Make your home even more comfortable.</p></div><button type="button" onClick={() => onGoToPage("services")}>View all services <ChevronRight /></button></header><div className="mib-customer-home__additional-list">{additionalServices.map(service => <article className="mib-customer-home__additional-service" key={service.title}><img src={service.image} alt={service.alt} /><div><h3>{service.title}</h3><small>{service.price}</small><PassiveAction>Add to booking</PassiveAction></div></article>)}</div></section>
           </section>
 
