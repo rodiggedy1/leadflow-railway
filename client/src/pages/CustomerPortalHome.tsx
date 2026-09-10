@@ -17,6 +17,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { CustomerPortalService } from "@shared/customerPortalServices";
+import { formatCustomerPortalServiceTime } from "@/lib/customerPortalTime";
 import "./customer-portal-live-home.css";
 import "./customer-portal-message-availability.css";
 
@@ -90,7 +91,7 @@ function ServiceCard({ service, onOpenService }: { service: HomeServiceCard; onO
 export default function CustomerPortalHome({ customerName, homeAddress, nextBooking, nextBookingDate, nextBookingDetails, bookingStatusLabel, activePage, todayStatus, onGoToPage, onMessageTeam, canMessageTeamToday, onBookHomeCleaning, onOpenService }: CustomerPortalHomeProps) {
   const firstName = customerName.split(" ")[0] || "there";
   const nextService = nextBooking?.serviceType || "Home cleaning";
-  const bookingTime = nextBooking?.serviceDateTime || "Time will be confirmed";
+  const bookingTime = formatCustomerPortalServiceTime(nextBooking?.serviceDateTime);
   const statusDetail = nextBooking ? "Your booking details are saved." : "Book when you’re ready.";
   const teamName = nextBooking?.teamName || "Not yet assigned";
   const teamDetail = nextBooking?.teamName ? "Your team is assigned to this visit" : "Your team will be confirmed soon";
