@@ -22,7 +22,7 @@ describe("customer portal Home presentation integration", () => {
     const source = await readFile(path.resolve(root, "client/src/pages/CustomerPortalHome.tsx"), "utf8");
     const topServicesSource = source.slice(source.indexOf("const topServices"), source.indexOf("const additionalServices"));
     expect(topServicesSource).toContain('{ id: "pressure-washing", title: "Pressure Washing", price: "From $99"');
-    expect(topServicesSource).toContain('image: "/manus-storage/pressure-washing-home-card_10ad2d6a.png"');
+    expect(topServicesSource).toContain('image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/kItDwOUigEGJKBKu.png"');
     expect(topServicesSource).not.toContain("Home Organization");
   });
 
