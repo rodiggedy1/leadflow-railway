@@ -8,6 +8,7 @@ const router = fs.readFileSync(path.join(root, "server/customerPortalRouter.ts")
 const home = fs.readFileSync(path.join(root, "client/src/pages/CustomerPortalHome.tsx"), "utf8");
 const portal = fs.readFileSync(path.join(root, "client/src/pages/CustomerPortal.tsx"), "utf8");
 const requestUi = fs.readFileSync(path.join(root, "client/src/components/CustomerPortalScheduleRequest.tsx"), "utf8");
+const requestStyles = fs.readFileSync(path.join(root, "client/src/components/customer-portal-schedule-request.css"), "utf8");
 
 describe("Customer Portal schedule requests", () => {
   it("warns for reschedule requests inside the 24-hour window or on the same business day", () => {
@@ -25,6 +26,9 @@ describe("Customer Portal schedule requests", () => {
     expect(requestUi).toContain("CustomerPortalAppointmentCalendar");
     expect(requestUi).toContain('className="mib-portal-modal"');
     expect(requestUi).not.toContain("mib-booking-panel");
+    expect(requestStyles).toContain("grid-auto-rows:32px");
+    expect(requestStyles).toContain("background:#e8603c!important");
+    expect(requestStyles).toContain("color:#fff!important");
     expect(requestUi).toContain("formatCustomerPortalLateRescheduleFee()}");
     expect(requestUi).toContain("late reschedule warning");
     expect(requestUi).not.toContain("Cancel service");
