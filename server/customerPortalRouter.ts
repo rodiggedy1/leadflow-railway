@@ -339,7 +339,8 @@ export const customerPortalRouter = router({
     const isPictureHangingBooking = service.id === "picture-hanging";
     const isMinorHomeRepairsBooking = service.id === "minor-home-repairs";
     const isHandymanBooking = service.id === "handyman";
-    const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking;
+    const isPlumbingBooking = service.id === "plumbing";
+    const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking;
     const validationError = validateCustomerPortalSelections(service, input.selections);
     if (validationError) throw new Error(validationError);
     const estimate = calculateCustomerPortalEstimate(service.id, input.selections);

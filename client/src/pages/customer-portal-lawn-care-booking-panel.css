@@ -28,6 +28,11 @@
   box-shadow: -22px 0 56px rgba(25, 20, 16, 0.24);
 }
 
+.mib-plumbing-request-panel {
+  width: min(640px, 100%);
+  box-shadow: -22px 0 56px rgba(25, 20, 16, 0.24);
+}
+
 .mib-lawncare-request-panel .mib-booking-panel__close {
   font-size: 29px;
   font-weight: 300;
