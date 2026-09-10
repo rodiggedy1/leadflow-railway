@@ -17,6 +17,7 @@ import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { registerStripeWebhookRoute } from "../stripeWebhookRoute";
 import { registerSseTestRoutes } from "../sseTest";
 import { registerOpsStreamRoute } from "../opsStream";
+import { registerCleanerPortalStreamRoute } from "../cleanerPortalStream";
 import { registerCsElevateStreamRoute } from "../csElevateStream";
 import { registerCsReplyStreamRoute } from "../csReplyStream";
 import { registerCsDraftEnrichRoute } from "../csDraftEnrichment";
@@ -1645,6 +1646,8 @@ async function startServer() {
   registerSseTestRoutes(app);
   // Production SSE stream for OpsChat real-time updates
   registerOpsStreamRoute(app);
+  // Cleaner-only SSE stream for generic assigned-job refresh hints
+  registerCleanerPortalStreamRoute(app);
   // Streaming SSE endpoint for CS Inbox world-class elevate rewrite
   registerCsElevateStreamRoute(app);
   // Streaming SSE endpoint for CS Inbox auto-draft (fills compose box live)

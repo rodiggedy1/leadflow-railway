@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   CalendarDays, Camera, Check, CheckCircle2, ChevronRight,
   Clock3, FileText, ImagePlus, Loader2, LogOut, MapPin,
@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useCleanerPortalUpdates } from "@/hooks/useCleanerPortalUpdates";
 import "./cleaner-portal-connected.css";
 import "./cleaner-portal-messages.css";
 import "./cleaner-portal-earnings.css";
@@ -395,6 +396,8 @@ function CleanerPortalConnected() {
   const [progressByJobKey, setProgressByJobKey] = useState<Record<string, { jobStatus: string; etaTimestamp: number | null; etaTimeStr: string | null }>>({});
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const refreshInFlightRef = useRef(false);
+  const refreshQueuedRef = useRef(false);
   const utils = trpc.useUtils();
   const todayDate = useMemo(() => etDate(), []);
   const tomorrowDate = useMemo(() => etDate(1), []);
@@ -417,6 +420,30 @@ function CleanerPortalConnected() {
   const logoutMutation = trpc.cleaner.logout.useMutation({ throwOnError: false, onSuccess: () => window.location.replace("/cleaner") });
   const languageMutation = trpc.cleaner.updateLanguage.useMutation({ throwOnError: false, onError: error => toast.error(error.message) });
   const availabilityMutation = trpc.cleanerPortalAvailability.submitWeeklySchedule.useMutation({ throwOnError: false, onSuccess: async () => { await Promise.all([utils.cleanerPortalReadOnly.getMyTeamSchedule.invalidate(), utils.cleaner.portalData.invalidate()]); toast.success("Availability saved."); setAvailabilityOpen(false); }, onError: error => toast.error(error.message || "Availability could not be saved.") });
+
+  const refreshVisibleJobQueries = useCallback(async () => {
+    if (!meQuery.data) return;
+    if (refreshInFlightRef.current) {
+      refreshQueuedRef.current = true;
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+    try {
+      do {
+        refreshQueuedRef.current = false;
+        const refetches: Array<Promise<unknown>> = [todayQuery.refetch()];
+        if (page === "today" && routeDay === "tomorrow") refetches.push(tomorrowQuery.refetch());
+        if (page === "jobs") refetches.push(weekQuery.refetch());
+        if (page === "earnings") refetches.push(earningsQuery.refetch());
+        await Promise.all(refetches);
+      } while (refreshQueuedRef.current);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [earningsQuery, meQuery.data, page, routeDay, todayQuery, tomorrowQuery, weekQuery]);
+
+  useCleanerPortalUpdates({ onJobsChanged: () => { void refreshVisibleJobQueries(); } }, { enabled: Boolean(meQuery.data) });
 
   const jobs = (((routeDay === "tomorrow" ? tomorrowQuery.data : todayQuery.data) ?? []) as PortalJob[]).map(job => ({ ...job, ...progressByJobKey[job.portalJobKey] }));
   const activeJobs = jobs.filter(job => !jobIsComplete(job));

@@ -4,6 +4,7 @@ import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, leadflowBookingMessag
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
+import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 
 const listInput = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -91,11 +92,17 @@ export const leadflowJobsRouter = router({
     }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, sourceId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
   }),
 
-  importNextThirtyDays: adminAgentProcedure.mutation(async () => importNextThirtyDaysOfLaunch27Jobs()),
+  importNextThirtyDays: adminAgentProcedure.mutation(async () => {
+    const result = await importNextThirtyDaysOfLaunch27Jobs();
+    if (result.totals.created + result.totals.updated > 0) broadcastCleanerPortalJobsChanged();
+    return result;
+  }),
 
-  syncDate: adminAgentProcedure.input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).mutation(async ({ input }) => (
-    importLaunch27JobsForDate(input.date, { markMissing: true })
-  )),
+  syncDate: adminAgentProcedure.input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).mutation(async ({ input }) => {
+    const result = await importLaunch27JobsForDate(input.date, { markMissing: true });
+    if (result.created + result.updated + result.sourceMissing > 0) broadcastCleanerPortalJobsChanged();
+    return result;
+  }),
 
   importStatus: adminAgentProcedure.query(async () => {
     const db = await getDb();
@@ -104,7 +111,11 @@ export const leadflowJobsRouter = router({
     return { completed: existing.length > 0 };
   }),
 
-  refreshImportedDetails: adminAgentProcedure.mutation(async () => refreshImportedLaunch27JobDetails()),
+  refreshImportedDetails: adminAgentProcedure.mutation(async () => {
+    const result = await refreshImportedLaunch27JobDetails();
+    if (result.refreshed > 0) broadcastCleanerPortalJobsChanged();
+    return result;
+  }),
 
   cancel: adminAgentProcedure.input(z.object({ jobId: z.number().int().positive() })).mutation(async ({ input }) => {
     const db = await getDb();
@@ -117,6 +128,7 @@ export const leadflowJobsRouter = router({
       bookingStatus: "cancelled",
       nextOccurrenceCreatedAt: new Date(),
     }).where(eq(leadflowJobs.id, job.id));
+    broadcastCleanerPortalJobsChanged();
     return { id: job.id, bookingStatus: "cancelled" };
   }),
 
@@ -137,6 +149,7 @@ export const leadflowJobsRouter = router({
       ...(input.jobDate ? { jobDate, serviceDateTime: moveServiceDateTimeToBusinessDate(job.serviceDateTime, jobDate) } : {}),
       ...(input.frequency ? { frequency: input.frequency } : {}),
     }).where(eq(leadflowJobs.id, job.id));
+    broadcastCleanerPortalJobsChanged();
     return { id: job.id, jobDate, frequency: input.frequency ?? job.frequency };
   }),
 });
