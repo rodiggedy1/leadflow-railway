@@ -20,11 +20,11 @@ describe("customer portal furniture-assembly completion", () => {
     expect(serviceCatalog).toContain('"Planned service time"');
     expect(serviceCatalog).toContain('"Additional purchase or haul"');
     expect(portal).toContain('const isFurnitureAssembly = service.id === "furniture-assembly";');
-    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman || isPlumbing || isElectricalLighting || isInteriorPainting || isMovingHelp || isJunkRemoval;");
+    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman || isPlumbing || isElectricalLighting || isInteriorPainting || isMovingHelp || isJunkRemoval || isPressureWashing;");
     expect(portal).toContain('"mib-furniture-assembly-card-form"');
     expect(portal).toContain("Get it assembled, without the hassle.");
     expect(portal).toContain("Choose a payment method for Furniture assembly");
-    expect(portal).toContain("!isLawnCare && !isFurnitureAssembly && !isPictureHanging && !isMinorHomeRepairs && !isHandyman && !isPlumbing && !isElectricalLighting && !isInteriorPainting && !isMovingHelp && !isJunkRemoval && paymentChoice === \"new\"");
+    expect(portal).toContain("!isLawnCare && !isFurnitureAssembly && !isPictureHanging && !isMinorHomeRepairs && !isHandyman && !isPlumbing && !isElectricalLighting && !isInteriorPainting && !isMovingHelp && !isJunkRemoval && !isPressureWashing && paymentChoice === \"new\"");
     expect(portal).toContain("Your {service.name.toLowerCase()} is booked.");
     expect(portal).toContain("createRequest.mutate({ serviceId: service.id");
     expect(panelStyles).toContain(".mib-furniture-assembly-request-panel");
@@ -35,7 +35,7 @@ describe("customer portal furniture-assembly completion", () => {
     const router = await readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8");
 
     expect(router).toContain('const isFurnitureAssemblyBooking = service.id === "furniture-assembly";');
-    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking || isElectricalLightingBooking || isInteriorPaintingBooking || isMovingHelpBooking || isJunkRemovalBooking;");
+    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking || isElectricalLightingBooking || isInteriorPaintingBooking || isMovingHelpBooking || isJunkRemovalBooking || isPressureWashingBooking;");
     expect(router).toContain('quickAction: isCompletedPortalServiceBooking ? "announce_booking" : "customer_portal_service_request"');
     expect(router).toContain("publicRequestNumber, serviceId: service.id");
     expect(router).toContain('const customerSms = await sendSms({ to: account.customerPhone');
