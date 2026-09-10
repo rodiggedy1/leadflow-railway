@@ -16,6 +16,7 @@ import { requestCustomerPortalLoginCode, verifyCustomerPortalLoginCode } from ".
 import { sendSms } from "./openphone";
 import { extractUSDigits } from "./utils/phone";
 import { getCustomerPortalBusinessDate, isCustomerPortalLiveJob } from "../shared/customerPortalLiveStatus";
+import { CUSTOMER_PORTAL_LATE_RESCHEDULE_FEE_CENTS, formatCustomerPortalLateRescheduleFee, isCustomerPortalRescheduleWithin24Hours } from "../shared/customerPortalScheduleRequest";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const CS_OFFICE_SMS_NUMBER = "+12028885362";
@@ -28,6 +29,18 @@ const requestSchema = z.object({
   requestedLocalTime: z.string().trim().min(2).max(80),
   notes: z.string().trim().max(2_000).optional(),
 });
+
+const scheduleRequestSchema = z.object({
+  bookingSource: z.enum(["booking", "leadflow"]),
+  bookingId: z.number().int().positive(),
+  preferredLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  preferredLocalTime: z.string().trim().min(2).max(80),
+  notes: z.string().trim().max(2_000).optional(),
+});
+
+function isActiveCustomerPortalBookingStatus(status: string) {
+  return !["completed", "cancelled", "canceled", "rescheduled", "missing_from_launch27"].includes(status.toLowerCase());
+}
 
 export const customerPortalRouter = router({
   services: publicProcedure.query(() => CUSTOMER_PORTAL_SERVICES),
@@ -322,6 +335,87 @@ export const customerPortalRouter = router({
     if (paymentMethod.type !== "card" || !paymentMethod.card || paymentMethod.customer !== customer.stripeCustomerId) throw new Error("Stripe card does not belong to your portal.");
     await db.update(stripeCustomers).set({ stripePaymentMethodId: paymentMethod.id, cardBrand: paymentMethod.card.brand, cardLast4: paymentMethod.card.last4, cardExpMonth: paymentMethod.card.exp_month, cardExpYear: paymentMethod.card.exp_year, cardSavedAt: Date.now() }).where(eq(stripeCustomers.id, customer.id));
     return { brand: paymentMethod.card.brand, last4: paymentMethod.card.last4 };
+  }),
+  requestScheduleChange: publicProcedure.input(scheduleRequestSchema).mutation(async ({ ctx, input }) => {
+    const session = await getCustomerPortalSessionFromRequest(ctx.req);
+    if (!session) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
+    const account = accounts[0];
+    if (!account || account.customerPhone !== session.customerPhone) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    if (!phoneDigits) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const booking = input.bookingSource === "booking"
+      ? (await db.select({ id: bookings.id, status: bookings.status, serviceName: bookings.serviceName, jobDate: bookings.requestedLocalDate, serviceTime: bookings.requestedLocalTime, scheduledAt: bookings.requestedStartAt, address: bookings.address, publicNumber: bookings.publicBookingNumber }).from(bookings).where(and(eq(bookings.id, input.bookingId), sql`RIGHT(REGEXP_REPLACE(${bookings.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`)).limit(1))[0]
+      : (await db.select({ id: leadflowJobs.id, status: leadflowJobs.bookingStatus, serviceName: leadflowJobs.serviceName, jobDate: leadflowJobs.jobDate, serviceTime: leadflowJobs.serviceDateTime, scheduledAt: leadflowJobs.serviceDateTime, address: leadflowJobs.jobAddress, publicNumber: leadflowJobs.launch27BookingId }).from(leadflowJobs).where(and(eq(leadflowJobs.id, input.bookingId), sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`)).limit(1))[0];
+    if (!booking || !isActiveCustomerPortalBookingStatus(booking.status)) throw new Error("BOOKING_NOT_FOUND");
+    const lateReschedule = isCustomerPortalRescheduleWithin24Hours({ scheduledAt: booking.scheduledAt, scheduledDate: booking.jobDate });
+    const publicRequestNumber = createCustomerPortalRequestNumber();
+    const requestLabel = "Reschedule request";
+    const preferredSchedule = `${input.preferredLocalDate} · ${input.preferredLocalTime}`;
+    const originalSchedule = `${booking.jobDate}${booking.serviceTime ? ` · ${booking.serviceTime}` : ""}`;
+    const customerRequest = [
+      requestLabel,
+      `Current appointment: ${booking.serviceName || "Home cleaning"} · ${originalSchedule}`,
+      preferredSchedule ? `Requested appointment: ${preferredSchedule}` : null,
+      input.notes ? `Customer note: ${input.notes}` : null,
+      lateReschedule ? `${formatCustomerPortalLateRescheduleFee()} late reschedule warning shown to customer; not charged.` : null,
+    ].filter((line): line is string => Boolean(line)).join("\n");
+    const now = new Date();
+    await db.insert(customerPortalServiceRequests).values({
+      publicRequestNumber,
+      accountId: account.id,
+      serviceId: "customer-portal-reschedule",
+      serviceName: requestLabel,
+      status: "requested",
+      customerName: account.customerName,
+      customerPhone: account.customerPhone,
+      customerEmail: account.customerEmail,
+      customerRequest,
+      scopeSelections: { bookingSource: input.bookingSource, bookingId: booking.id, bookingReference: booking.publicNumber, requestType: "reschedule", originalSchedule, preferredSchedule, lateReschedule, lateRescheduleFeeCents: lateReschedule ? CUSTOMER_PORTAL_LATE_RESCHEDULE_FEE_CENTS : 0 },
+      address: booking.address || "Address not available",
+      requestedLocalDate: input.preferredLocalDate,
+      requestedLocalTime: input.preferredLocalTime,
+      estimatedTotalCents: 0,
+      estimateRequiresReview: 1,
+      paymentBrand: null,
+      paymentLast4: null,
+      stripePaymentMethodId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const officeMessage = [
+      "Customer portal reschedule request",
+      `${account.customerName} · ${account.customerPhone}`,
+      `Booking: ${booking.serviceName || "Home cleaning"} · ${originalSchedule}`,
+      preferredSchedule ? `Requested change: ${preferredSchedule}` : null,
+      booking.address ? `Address: ${booking.address}` : null,
+      input.notes ? `Note: ${input.notes}` : null,
+      lateReschedule ? `Fee warning: ${formatCustomerPortalLateRescheduleFee()} late reschedule fee may apply. Not charged.` : null,
+      `Portal request: ${publicRequestNumber}`,
+    ].filter((line): line is string => Boolean(line)).join("\n");
+    try {
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        cleanerJobId: null,
+        authorName: "Customer Portal",
+        authorRole: "system",
+        body: officeMessage,
+        quickAction: "customer_portal_reschedule_request",
+        metadata: JSON.stringify({ publicRequestNumber, bookingSource: input.bookingSource, bookingId: booking.id, requestType: "reschedule", lateReschedule }),
+      });
+      broadcastOpsUpdate("new_message", { channel: "command" });
+    } catch (error) {
+      console.error("[CustomerPortalScheduleRequest] Command Chat office notice failed:", error);
+    }
+    try {
+      const officeSms = await sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage });
+      if (!officeSms.success) console.error("[CustomerPortalScheduleRequest] Customer Service office SMS failed:", officeSms.error);
+    } catch (error) {
+      console.error("[CustomerPortalScheduleRequest] Customer Service office SMS failed:", error);
+    }
+    return { ok: true, publicRequestNumber, lateReschedule };
   }),
   createRequest: publicProcedure.input(requestSchema).mutation(async ({ ctx, input }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);

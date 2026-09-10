@@ -54,6 +54,7 @@ type CustomerPortalHomeProps = {
   todayStatus: ReactNode;
   onGoToPage: (page: CustomerHomePage) => void;
   onMessageTeam: () => void;
+  onRequestScheduleChange: () => void;
   canMessageTeamToday: boolean;
   onBookHomeCleaning: () => void;
   onOpenService: (serviceId: string) => void;
@@ -91,7 +92,7 @@ function ServiceCard({ service, onOpenService }: { service: HomeServiceCard; onO
   return <button className="mib-customer-home__service-card" type="button" onClick={() => onOpenService(service.id)}><img src={service.image} alt={service.alt} /><span><b>{service.title}</b><small>{service.price}</small></span><ChevronRight /></button>;
 }
 
-export default function CustomerPortalHome({ customerName, homeAddress, nextBooking, nextBookingDate, nextBookingDetails, totalBookingCount, paymentMethodLabel, bookingStatusLabel, activePage, todayStatus, onGoToPage, onMessageTeam, canMessageTeamToday, onBookHomeCleaning, onOpenService }: CustomerPortalHomeProps) {
+export default function CustomerPortalHome({ customerName, homeAddress, nextBooking, nextBookingDate, nextBookingDetails, totalBookingCount, paymentMethodLabel, bookingStatusLabel, activePage, todayStatus, onGoToPage, onMessageTeam, onRequestScheduleChange, canMessageTeamToday, onBookHomeCleaning, onOpenService }: CustomerPortalHomeProps) {
   const firstName = customerName.split(" ")[0] || "there";
   const nextService = nextBooking?.serviceType || "Home cleaning";
   const bookingTime = formatCustomerPortalServiceTime(nextBooking?.serviceDateTime);
@@ -125,7 +126,7 @@ export default function CustomerPortalHome({ customerName, homeAddress, nextBook
         <div className="mib-customer-home__grid">
           <section className="mib-customer-home__main-column">
             <article className="mib-customer-home__next-cleaning">
-              <div className="mib-customer-home__next-copy"><p>Next cleaning</p><h2>{nextBookingDate || "No upcoming cleaning"}</h2><strong>{bookingTime}</strong><div className="mib-customer-home__service-details"><span><MapPin /><b>{homeAddress || "Address saved with booking"}</b><small>{homeAddress ? "Your saved service address" : "Add an address when you book"}</small></span><span><Sparkles /><b>{nextService}</b><small>{nextBookingDetails || "Your service details will appear here."}</small></span></div><div className="mib-customer-home__hero-actions"><button className="is-primary" type="button" onClick={() => onGoToPage("bookings")}>View details <ChevronRight /></button><PassiveAction><CalendarDays /> Reschedule</PassiveAction><PassiveAction><Plus /> Add extras</PassiveAction></div></div>
+              <div className="mib-customer-home__next-copy"><p>Next cleaning</p><h2>{nextBookingDate || "No upcoming cleaning"}</h2><strong>{bookingTime}</strong><div className="mib-customer-home__service-details"><span><MapPin /><b>{homeAddress || "Address saved with booking"}</b><small>{homeAddress ? "Your saved service address" : "Add an address when you book"}</small></span><span><Sparkles /><b>{nextService}</b><small>{nextBookingDetails || "Your service details will appear here."}</small></span></div><div className="mib-customer-home__hero-actions"><button className="is-primary" type="button" onClick={() => onGoToPage("bookings")}>View details <ChevronRight /></button><button type="button" onClick={onRequestScheduleChange} disabled={!nextBooking} title={nextBooking ? "Request a reschedule or cancellation" : "No upcoming appointment to change"}><CalendarDays /> Reschedule</button><PassiveAction><Plus /> Add extras</PassiveAction></div></div>
               <div className="mib-customer-home__room-image"><img src={HERO_IMAGE} alt="Sunlit living room with cream sofa, greenery, and a round wood coffee table" /><span><Check /><b>{bookingStatusLabel}</b><small>{statusDetail}</small></span></div>
             </article>
             {todayStatus && <section className="mib-customer-home__live-status">{todayStatus}</section>}
