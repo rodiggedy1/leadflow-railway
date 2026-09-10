@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 
-describe("customer portal picture-hanging completion", () => {
-  it("applies the approved panel, saved/new-card, and success treatment only to picture hanging alongside released services", async () => {
+describe("customer portal Handyman visit completion", () => {
+  it("applies the approved panel, saved/new-card, success, and Bookings-visible treatment only to Handyman visit", async () => {
     const [portal, serviceCatalog, pricing, panelStyles, bookNow] = await Promise.all([
       readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
       readFile(path.resolve(root, "shared/customerPortalServices.ts"), "utf8"),
@@ -14,35 +14,35 @@ describe("customer portal picture-hanging completion", () => {
       readFile(path.resolve(root, "client/src/pages/BookNow.tsx"), "utf8"),
     ]);
 
-    expect(serviceCatalog).toContain('{ id: "picture-hanging", name: "Picture hanging", startingPrice: 99');
-    expect(serviceCatalog).toContain('"Small item count"');
-    expect(serviceCatalog).toContain('"Large or heavy item count"');
-    expect(serviceCatalog).toContain('"Shelves to install"');
-    expect(serviceCatalog).toContain('"Ladder height"');
+    expect(serviceCatalog).toContain('{ id: "handyman", name: "Handyman visit", startingPrice: 129');
+    expect(serviceCatalog).toContain('"What needs help?"');
+    expect(serviceCatalog).toContain('"How many tasks?"');
+    expect(serviceCatalog).toContain('"Parts or hardware"');
     expect(serviceCatalog).toContain('"Planned service time"');
-    expect(pricing).toContain('"picture-hanging": rule(9_900, "Up to two small standard-height items"');
-    expect(portal).toContain('const isPictureHanging = service.id === "picture-hanging";');
+    expect(pricing).toContain('handyman: rule(12_900, "Two-hour handyman visit"');
+    expect(portal).toContain('const isHandyman = service.id === "handyman";');
     expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman;");
-    expect(portal).toContain('"mib-picture-hanging-card-form"');
-    expect(portal).toContain("Put every picture in its place.");
-    expect(portal).toContain("Choose a payment method for Picture hanging");
+    expect(portal).toContain('"mib-handyman-card-form"');
+    expect(portal).toContain("Get your home to-do list handled.");
+    expect(portal).toContain("Choose a payment method for Handyman visit");
     expect(portal).toContain("!isLawnCare && !isFurnitureAssembly && !isPictureHanging && !isMinorHomeRepairs && !isHandyman && paymentChoice === \"new\"");
     expect(portal).toContain("Your {service.name.toLowerCase()} is booked.");
     expect(portal).toContain("createRequest.mutate({ serviceId: service.id");
-    expect(panelStyles).toContain(".mib-picture-hanging-request-panel");
-    expect(bookNow).not.toContain("picture-hanging");
+    expect(panelStyles).toContain(".mib-handyman-request-panel");
+    expect(bookNow).not.toContain("handyman");
   });
 
-  it("uses the existing completed-service notification channels for picture hanging without adding a new request path", async () => {
+  it("uses the completed-service request path, including the existing Bookings refresh, without creating a new booking model", async () => {
     const router = await readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8");
 
-    expect(router).toContain('const isPictureHangingBooking = service.id === "picture-hanging";');
+    expect(router).toContain('const isHandymanBooking = service.id === "handyman";');
     expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking;");
     expect(router).toContain('if (isCompletedPortalServiceBooking) broadcastOpsUpdate("booking_funnel_update");');
     expect(router).toContain('quickAction: isCompletedPortalServiceBooking ? "announce_booking" : "customer_portal_service_request"');
     expect(router).toContain("publicRequestNumber, serviceId: service.id");
     expect(router).toContain('const customerSms = await sendSms({ to: account.customerPhone');
     expect(router).toContain('const officeSms = await sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage });');
+    expect(router).toContain("await db.insert(customerPortalServiceRequests).values");
     expect(router).not.toContain("paymentIntents.create");
   });
 });
