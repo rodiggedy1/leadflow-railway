@@ -20,11 +20,11 @@ describe("customer portal existing-flow office notifications", () => {
 
     const requestSegment = portalRouter.slice(portalRouter.indexOf("createRequest:"));
     expect(requestSegment).toContain("await db.insert(customerPortalServiceRequests).values");
-    expect(requestSegment.indexOf("await db.insert(customerPortalServiceRequests).values")).toBeLessThan(requestSegment.indexOf('quickAction: "customer_portal_service_request"'));
+    expect(requestSegment.indexOf("await db.insert(customerPortalServiceRequests).values")).toBeLessThan(requestSegment.indexOf('quickAction: isLawnCareBooking ? "announce_booking" : "customer_portal_service_request"'));
     expect(requestSegment).toContain('channel: "command"');
     expect(requestSegment).toContain('broadcastOpsUpdate("new_message", { channel: "command" })');
     expect(requestSegment).toContain("sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage })");
-    expect(requestSegment).toContain('return { ok: true }');
+    expect(requestSegment).toContain("return { ok: true, publicRequestNumber }");
     expect(requestSegment).not.toContain("paymentIntents.create");
   });
 });

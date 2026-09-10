@@ -96,7 +96,7 @@ function PortalNewCardForm({ clientSecret, setupIntentId, customerName, onSaved,
 
 function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onClose }: { service: CustomerPortalService; homeAddress: string; savedCard: { brand: string | null; last4: string } | null; customerName: string; onClose: () => void }) {
   const utils = trpc.useUtils();
-  const createRequest = trpc.customerPortal.createRequest.useMutation({ onSuccess: () => { void utils.customerPortal.me.invalidate(); onClose(); } });
+  const createRequest = trpc.customerPortal.createRequest.useMutation({ onSuccess: () => { void utils.customerPortal.me.invalidate(); if (service.id === "lawn-yard-care") { setLawnCareComplete(true); return; } onClose(); } });
   const startNewCardSetup = trpc.customerPortal.startNewCardSetup.useMutation();
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [useDifferentAddress, setUseDifferentAddress] = useState(false);
@@ -107,6 +107,7 @@ function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onC
   const [paymentChoice, setPaymentChoice] = useState<"saved" | "new">(savedCard ? "saved" : "new");
   const [activeCard, setActiveCard] = useState(savedCard);
   const [newCardSetup, setNewCardSetup] = useState<{ clientSecret: string; setupIntentId: string } | null>(null);
+  const [lawnCareComplete, setLawnCareComplete] = useState(false);
   const selectedAddress = useDifferentAddress || !homeAddress ? address.trim() : homeAddress;
   const canSubmit = service.fields.every(field => selections[field.label]?.trim()) && selectedAddress.length >= 5 && Boolean(date) && Boolean(timeWindow) && Boolean(activeCard);
   const estimate = calculateCustomerPortalEstimate(service.id, selections);
@@ -116,6 +117,11 @@ function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onC
     if (!date || !timeWindow || !canSubmit || paymentChoice !== "saved") return;
     createRequest.mutate({ serviceId: service.id, selections, address: selectedAddress, requestedLocalDate: formatCustomerPortalDateKey(date), requestedLocalTime: formatCustomerPortalTime(timeWindow), notes: notes || undefined });
   };
+
+  if (isLawnCare && lawnCareComplete && date && timeWindow) {
+    const firstName = customerName.trim().split(/\s+/)[0] || "there";
+    return <div className="mib-portal-rebook-overlay" role="dialog" aria-modal="true" aria-labelledby="mib-lawn-care-booking-confirmed"><main className="mib-booking-panel mib-portal-rebook-panel mib-lawncare-request-panel mib-lawncare-confirmation-panel"><header className="mib-booking-panel__header"><div className="mib-booking-panel__agent"><span className="mib-booking-panel__avatar">M<i /></span><div><strong>Maids in Black</strong><span>Lawn &amp; yard care</span></div></div><button type="button" onClick={onClose} aria-label="Close lawn care booking confirmation" className="mib-booking-panel__close">×</button></header><section className="mib-lawncare-booking-confirmation"><span className="mib-lawncare-booking-check"><CheckCircle2 /></span><small>BOOKING CONFIRMED</small><h1 id="mib-lawn-care-booking-confirmed">You&apos;re booked, {firstName}.</h1><p>Your lawn &amp; yard care is booked. We&apos;ll text you the appointment details shortly.</p><div className="mib-lawncare-booking-details"><div><CalendarDays /><span><small>WHEN</small><strong>{formatCustomerPortalDate(date)} · {formatCustomerPortalTime(timeWindow)}</strong></span></div><div><MapPin /><span><small>WHERE</small><strong>{selectedAddress}</strong></span></div></div><div className="mib-lawncare-booking-expect"><article><span>📩</span><strong>Helpful reminders</strong><p>We&apos;ll text you before your service.</p></article><article><span>💳</span><strong>Pay after service</strong><p>Your card won&apos;t be charged today.</p></article></div><button type="button" className="book-now-next-button" onClick={onClose}>Return to My Home<ArrowRight /></button></section></main></div>;
+  }
 
   return <div className={isLawnCare ? "mib-portal-rebook-overlay" : "mib-portal-modal"} role="dialog" aria-modal="true" aria-labelledby="mib-service-title">
     <div className={isLawnCare ? "mib-booking-panel mib-portal-rebook-panel mib-lawncare-request-panel" : "mib-portal-modal-card"}>

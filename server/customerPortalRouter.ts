@@ -333,6 +333,7 @@ export const customerPortalRouter = router({
     if (!account || account.customerPhone !== session.customerPhone) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
     const service = getCustomerPortalService(input.serviceId);
     if (!service) throw new Error("Choose a supported service.");
+    const isLawnCareBooking = service.id === "lawn-yard-care";
     const validationError = validateCustomerPortalSelections(service, input.selections);
     if (validationError) throw new Error(validationError);
     const estimate = calculateCustomerPortalEstimate(service.id, input.selections);
@@ -341,6 +342,7 @@ export const customerPortalRouter = router({
     const now = new Date();
     const publicRequestNumber = createCustomerPortalRequestNumber();
     const customerRequest = input.notes?.trim() || service.fields.map(field => `${field.label}: ${input.selections[field.label]}`).join(" · ");
+    const amount = `$${(estimate.estimatedCents / 100).toFixed(0)}`;
     await db.insert(customerPortalServiceRequests).values({
       publicRequestNumber, accountId: account.id, serviceId: service.id, serviceName: service.name, status: "requested",
       customerName: account.customerName, customerPhone: account.customerPhone, customerEmail: account.customerEmail,
@@ -349,7 +351,7 @@ export const customerPortalRouter = router({
       estimatedTotalCents: estimate.estimatedCents, estimateRequiresReview: estimate.requiresReview ? 1 : 0, paymentBrand: savedCard.brand, paymentLast4: savedCard.last4, stripePaymentMethodId: savedCard.stripePaymentMethodId, createdAt: now, updatedAt: now,
     });
     const officeMessage = [
-      "Customer portal service request",
+      isLawnCareBooking ? "New lawn & yard care booking" : "Customer portal service request",
       `${account.customerName} · ${account.customerPhone}`,
       `Service: ${service.name}`,
       `Preferred appointment: ${input.requestedLocalDate} · ${input.requestedLocalTime}`,
@@ -361,15 +363,24 @@ export const customerPortalRouter = router({
       await db.insert(opsChatMessages).values({
         channel: "command",
         cleanerJobId: null,
-        authorName: "Customer Portal",
+        authorName: isLawnCareBooking ? "🎉 New Booking" : "Customer Portal",
         authorRole: "system",
-        body: officeMessage,
-        quickAction: "customer_portal_service_request",
-        metadata: JSON.stringify({ publicRequestNumber, serviceId: service.id, customerName: account.customerName, customerPhone: account.customerPhone, requestedLocalDate: input.requestedLocalDate }),
+        body: isLawnCareBooking ? `🎉 New booking! ${account.customerName} — ${amount} · ${service.name} · ${input.requestedLocalDate} ${input.requestedLocalTime}` : officeMessage,
+        quickAction: isLawnCareBooking ? "announce_booking" : "customer_portal_service_request",
+        metadata: JSON.stringify(isLawnCareBooking ? { personName: account.customerName, amount, note: `${service.name} · ${input.requestedLocalDate} ${input.requestedLocalTime}`, publicRequestNumber, serviceId: service.id } : { publicRequestNumber, serviceId: service.id, customerName: account.customerName, customerPhone: account.customerPhone, requestedLocalDate: input.requestedLocalDate }),
       });
       broadcastOpsUpdate("new_message", { channel: "command" });
     } catch (error) {
       console.error("[CustomerPortalRequests] Command Chat office notice failed:", error);
+    }
+    if (isLawnCareBooking) {
+      try {
+        const firstName = account.customerName.trim().split(/\s+/)[0] || "there";
+        const customerSms = await sendSms({ to: account.customerPhone, content: `Hi ${firstName} — your ${service.name} is booked with Maids in Black!\n\nPreferred appointment: ${input.requestedLocalDate} · ${input.requestedLocalTime}\nEstimated total: ${amount}\n\nYour card is securely on file and will not be charged today. We’ll confirm your appointment details shortly.\n\n— Maids in Black` });
+        if (!customerSms.success) console.error("[CustomerPortalRequests] Lawn-care customer SMS failed:", customerSms.error);
+      } catch (error) {
+        console.error("[CustomerPortalRequests] Lawn-care customer SMS failed:", error);
+      }
     }
     try {
       const officeSms = await sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage });
@@ -377,6 +388,6 @@ export const customerPortalRouter = router({
     } catch (error) {
       console.error("[CustomerPortalRequests] Customer Service office SMS failed:", error);
     }
-    return { ok: true };
+    return { ok: true, publicRequestNumber };
   }),
 });
