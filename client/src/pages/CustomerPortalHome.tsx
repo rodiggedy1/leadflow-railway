@@ -65,7 +65,7 @@ const topServices: HomeServiceCard[] = [
   { id: "handyman", title: "Handyman", price: "From $89", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/LkpGUwXNnJiNSpWf.png", alt: "Handyman hammer and pliers" },
   { id: "moving-help", title: "Moving Help", price: "From $129", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/RftyEUKUmLVDpozD.png", alt: "Moving boxes and houseplant" },
   { id: "junk-removal", title: "Junk Removal", price: "From $99", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/QFLPAXxQrOkLCWKm.png", alt: "Junk removal truck, furniture, boxes, and bags" },
-  { id: "pressure-washing", title: "Pressure Washing", price: "From $99", image: "/manus-storage/mib-review-pressure-fallback_d93b1038.jpg", alt: "Pressure washing patio or walkway" },
+  { id: "pressure-washing", title: "Pressure Washing", price: "From $99", image: "/manus-storage/pressure-washing-home-card_10ad2d6a.png", alt: "Pressure washing patio or walkway" },
 ];
 
 const additionalServices: HomeServiceCard[] = [
