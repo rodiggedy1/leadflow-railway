@@ -354,6 +354,7 @@ export const customerPortalRouter = router({
       scopeSelections: input.selections, address: input.address, requestedLocalDate: input.requestedLocalDate, requestedLocalTime: input.requestedLocalTime,
       estimatedTotalCents: estimate.estimatedCents, estimateRequiresReview: estimate.requiresReview ? 1 : 0, paymentBrand: savedCard.brand, paymentLast4: savedCard.last4, stripePaymentMethodId: savedCard.stripePaymentMethodId, createdAt: now, updatedAt: now,
     });
+    if (isCompletedPortalServiceBooking) broadcastOpsUpdate("booking_funnel_update");
     const officeMessage = [
       isCompletedPortalServiceBooking ? `New ${service.name} booking` : "Customer portal service request",
       `${account.customerName} · ${account.customerPhone}`,

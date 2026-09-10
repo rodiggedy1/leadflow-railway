@@ -38,6 +38,7 @@ describe("customer portal picture-hanging completion", () => {
 
     expect(router).toContain('const isPictureHangingBooking = service.id === "picture-hanging";');
     expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking;");
+    expect(router).toContain('if (isCompletedPortalServiceBooking) broadcastOpsUpdate("booking_funnel_update");');
     expect(router).toContain('quickAction: isCompletedPortalServiceBooking ? "announce_booking" : "customer_portal_service_request"');
     expect(router).toContain("publicRequestNumber, serviceId: service.id");
     expect(router).toContain('const customerSms = await sendSms({ to: account.customerPhone');
