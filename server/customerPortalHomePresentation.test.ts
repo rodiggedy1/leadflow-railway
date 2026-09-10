@@ -18,6 +18,14 @@ describe("customer portal Home presentation integration", () => {
     expect(source).not.toContain("<strong>Today</strong>");
   });
 
+  it("replaces Home organizing with the active Pressure washing service in the top service row", async () => {
+    const source = await readFile(path.resolve(root, "client/src/pages/CustomerPortalHome.tsx"), "utf8");
+    const topServicesSource = source.slice(source.indexOf("const topServices"), source.indexOf("const additionalServices"));
+    expect(topServicesSource).toContain('{ id: "pressure-washing", title: "Pressure Washing", price: "From $99"');
+    expect(topServicesSource).toContain('image: "/manus-storage/mib-review-pressure-fallback_d93b1038.jpg"');
+    expect(topServicesSource).not.toContain("Home Organization");
+  });
+
   it("keeps the compact same-day strip presentation-only while retaining the existing note-save callback", async () => {
     const source = await readFile(path.resolve(root, "client/src/components/PortalCompactTodayStatus.tsx"), "utf8");
     expect(source).not.toContain("trpc.");
