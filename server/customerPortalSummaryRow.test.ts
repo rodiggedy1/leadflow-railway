@@ -16,6 +16,8 @@ describe("Customer Portal home summary row", () => {
     expect(home).toContain("Next visit");
     expect(home).toContain("Payment method");
     expect(home).toContain("Messages");
+    expect(home).toContain("Team chat");
+    expect(home).not.toContain("Your team is available");
     expect(home).not.toContain("mib-customer-home__timeline");
     expect(styles).toContain("grid-template-columns:repeat(4,minmax(0,1fr))");
     expect(styles).toContain("@media(max-width:720px)");
