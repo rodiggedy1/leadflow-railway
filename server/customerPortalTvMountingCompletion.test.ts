@@ -12,7 +12,7 @@ describe("customer portal TV-mounting completion", () => {
     ]);
 
     expect(portal).toContain('const isTvMounting = service.id === "tv-mounting";');
-    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting;");
+    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly;");
     expect(portal).toContain("Mount your TV with confidence.");
     expect(portal).toContain("Your {service.name.toLowerCase()} is booked.");
     expect(portal).toContain("mib-tv-mounting-request-panel");
@@ -23,7 +23,7 @@ describe("customer portal TV-mounting completion", () => {
     const router = await readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8");
 
     expect(router).toContain('const isTvMountingBooking = service.id === "tv-mounting";');
-    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking;");
+    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking;");
     expect(router).toContain('quickAction: isCompletedPortalServiceBooking ? "announce_booking" : "customer_portal_service_request"');
     expect(router).toContain('const customerSms = await sendSms({ to: account.customerPhone');
   });
