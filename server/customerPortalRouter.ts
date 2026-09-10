@@ -337,7 +337,8 @@ export const customerPortalRouter = router({
     const isTvMountingBooking = service.id === "tv-mounting";
     const isFurnitureAssemblyBooking = service.id === "furniture-assembly";
     const isPictureHangingBooking = service.id === "picture-hanging";
-    const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking;
+    const isMinorHomeRepairsBooking = service.id === "minor-home-repairs";
+    const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking;
     const validationError = validateCustomerPortalSelections(service, input.selections);
     if (validationError) throw new Error(validationError);
     const estimate = calculateCustomerPortalEstimate(service.id, input.selections);
