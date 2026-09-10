@@ -22,11 +22,11 @@ describe("customer portal picture-hanging completion", () => {
     expect(serviceCatalog).toContain('"Planned service time"');
     expect(pricing).toContain('"picture-hanging": rule(9_900, "Up to two small standard-height items"');
     expect(portal).toContain('const isPictureHanging = service.id === "picture-hanging";');
-    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman || isPlumbing || isElectricalLighting || isInteriorPainting;");
+    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman || isPlumbing || isElectricalLighting || isInteriorPainting || isMovingHelp;");
     expect(portal).toContain('"mib-picture-hanging-card-form"');
     expect(portal).toContain("Put every picture in its place.");
     expect(portal).toContain("Choose a payment method for Picture hanging");
-    expect(portal).toContain("!isLawnCare && !isFurnitureAssembly && !isPictureHanging && !isMinorHomeRepairs && !isHandyman && !isPlumbing && !isElectricalLighting && !isInteriorPainting && paymentChoice === \"new\"");
+    expect(portal).toContain("!isLawnCare && !isFurnitureAssembly && !isPictureHanging && !isMinorHomeRepairs && !isHandyman && !isPlumbing && !isElectricalLighting && !isInteriorPainting && !isMovingHelp && paymentChoice === \"new\"");
     expect(portal).toContain("Your {service.name.toLowerCase()} is booked.");
     expect(portal).toContain("createRequest.mutate({ serviceId: service.id");
     expect(panelStyles).toContain(".mib-picture-hanging-request-panel");
@@ -37,7 +37,7 @@ describe("customer portal picture-hanging completion", () => {
     const router = await readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8");
 
     expect(router).toContain('const isPictureHangingBooking = service.id === "picture-hanging";');
-    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking || isElectricalLightingBooking || isInteriorPaintingBooking;");
+    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking || isElectricalLightingBooking || isInteriorPaintingBooking || isMovingHelpBooking;");
     expect(router).toContain('if (isCompletedPortalServiceBooking) broadcastOpsUpdate("booking_funnel_update");');
     expect(router).toContain('quickAction: isCompletedPortalServiceBooking ? "announce_booking" : "customer_portal_service_request"');
     expect(router).toContain("publicRequestNumber, serviceId: service.id");

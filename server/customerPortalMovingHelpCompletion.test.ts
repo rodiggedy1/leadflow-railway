@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 
-describe("customer portal Electrical & lighting completion", () => {
-  it("applies the approved panel, saved/new-card, success, and Bookings-visible treatment only to Electrical & lighting", async () => {
+describe("customer portal Moving help completion", () => {
+  it("applies the approved panel, saved/new-card, success, and Bookings-visible treatment only to Moving help", async () => {
     const [portal, serviceCatalog, pricing, panelStyles, bookNow] = await Promise.all([
       readFile(path.resolve(root, "client/src/pages/CustomerPortal.tsx"), "utf8"),
       readFile(path.resolve(root, "shared/customerPortalServices.ts"), "utf8"),
@@ -14,30 +14,30 @@ describe("customer portal Electrical & lighting completion", () => {
       readFile(path.resolve(root, "client/src/pages/BookNow.tsx"), "utf8"),
     ]);
 
-    expect(serviceCatalog).toContain('{ id: "electrical-lighting", name: "Electrical & lighting", startingPrice: 149');
-    expect(serviceCatalog).toContain('"Light fixtures"');
-    expect(serviceCatalog).toContain('"Dimmers or switches"');
-    expect(serviceCatalog).toContain('"Ceiling fans"');
-    expect(serviceCatalog).toContain('"Ladder height"');
-    expect(serviceCatalog).toContain('"Wiring access"');
-    expect(serviceCatalog).toContain('"Planned service time"');
-    expect(pricing).toContain('"electrical-lighting": rule(14_900, "One existing-access fixture or switch"');
-    expect(portal).toContain('const isElectricalLighting = service.id === "electrical-lighting";');
+    expect(serviceCatalog).toContain('{ id: "moving-help", name: "Moving help", startingPrice: 238');
+    expect(serviceCatalog).toContain('"Help needed"');
+    expect(serviceCatalog).toContain('"Helpers"');
+    expect(serviceCatalog).toContain('"Duration"');
+    expect(serviceCatalog).toContain('"Certificate of insurance"');
+    expect(serviceCatalog).toContain('"Boxes or materials"');
+    expect(serviceCatalog).toContain('"Building access"');
+    expect(pricing).toContain('"moving-help": rule(23_800, "One helper for two hours · no truck"');
+    expect(portal).toContain('const isMovingHelp = service.id === "moving-help";');
     expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman || isPlumbing || isElectricalLighting || isInteriorPainting || isMovingHelp;");
-    expect(portal).toContain('"mib-electrical-lighting-card-form"');
-    expect(portal).toContain("Brighten every room with confidence.");
-    expect(portal).toContain("Choose a payment method for Electrical & lighting");
+    expect(portal).toContain('"mib-moving-help-card-form"');
+    expect(portal).toContain("Make your move easier.");
+    expect(portal).toContain("Choose a payment method for Moving help");
     expect(portal).toContain("!isLawnCare && !isFurnitureAssembly && !isPictureHanging && !isMinorHomeRepairs && !isHandyman && !isPlumbing && !isElectricalLighting && !isInteriorPainting && !isMovingHelp && paymentChoice === \"new\"");
     expect(portal).toContain("Your {service.name.toLowerCase()} is booked.");
     expect(portal).toContain("createRequest.mutate({ serviceId: service.id");
-    expect(panelStyles).toContain(".mib-electrical-lighting-request-panel");
-    expect(bookNow).not.toContain("electrical-lighting");
+    expect(panelStyles).toContain(".mib-moving-help-request-panel");
+    expect(bookNow).not.toContain("moving-help");
   });
 
   it("uses the completed-service request path, including the existing Bookings refresh, without creating a new booking model", async () => {
     const router = await readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8");
 
-    expect(router).toContain('const isElectricalLightingBooking = service.id === "electrical-lighting";');
+    expect(router).toContain('const isMovingHelpBooking = service.id === "moving-help";');
     expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking || isElectricalLightingBooking || isInteriorPaintingBooking || isMovingHelpBooking;");
     expect(router).toContain('if (isCompletedPortalServiceBooking) broadcastOpsUpdate("booking_funnel_update");');
     expect(router).toContain('quickAction: isCompletedPortalServiceBooking ? "announce_booking" : "customer_portal_service_request"');

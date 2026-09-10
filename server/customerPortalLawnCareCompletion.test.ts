@@ -12,7 +12,7 @@ describe("customer portal lawn-care completion", () => {
     ]);
 
     expect(portal).toContain('const isLawnCare = service.id === "lawn-yard-care";');
-    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman || isPlumbing || isElectricalLighting || isInteriorPainting;");
+    expect(portal).toContain("const usesBookingPanelTreatment = isLawnCare || isTvMounting || isFurnitureAssembly || isPictureHanging || isMinorHomeRepairs || isHandyman || isPlumbing || isElectricalLighting || isInteriorPainting || isMovingHelp;");
     expect(portal).toContain("setServiceBookingComplete(true)");
     expect(portal).toContain("Your {service.name.toLowerCase()} is booked.");
     expect(portal).toContain("createRequest.mutate({ serviceId: service.id");
@@ -23,7 +23,7 @@ describe("customer portal lawn-care completion", () => {
     const router = await readFile(path.resolve(root, "server/customerPortalRouter.ts"), "utf8");
 
     expect(router).toContain('const isLawnCareBooking = service.id === "lawn-yard-care";');
-    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking || isElectricalLightingBooking || isInteriorPaintingBooking;");
+    expect(router).toContain("const isCompletedPortalServiceBooking = isLawnCareBooking || isTvMountingBooking || isFurnitureAssemblyBooking || isPictureHangingBooking || isMinorHomeRepairsBooking || isHandymanBooking || isPlumbingBooking || isElectricalLightingBooking || isInteriorPaintingBooking || isMovingHelpBooking;");
     expect(router).toContain('quickAction: isCompletedPortalServiceBooking ? "announce_booking" : "customer_portal_service_request"');
     expect(router).toContain('authorName: isCompletedPortalServiceBooking ? "🎉 New Booking" : "Customer Portal"');
     expect(router).toContain('const customerSms = await sendSms({ to: account.customerPhone');
