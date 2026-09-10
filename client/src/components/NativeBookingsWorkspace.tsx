@@ -152,12 +152,7 @@ function BookingListRow({ row, selected, onSelect }: { row: WorkspaceRow; select
 
 export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeEnabled: boolean }) {
   const [view, setView] = useState<"bookings" | "leads">("bookings");
-  const [activeKey, setRawActiveKey] = useState<string | null>(null);
-  const detailDismissedRef = useRef(false);
-  const setActiveKey = (key: string | null) => {
-    detailDismissedRef.current = key === null;
-    setRawActiveKey(key);
-  };
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const [date, setDate] = useState(businessDate);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("All");
@@ -266,12 +261,6 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
     if (view === "bookings") return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows];
     return inProgressFunnelRows;
   }, [bookings, date, funnelLeads, leadflowJobsQuery.data, portalRequests, status, view]);
-
-  useEffect(() => {
-    if (!rows.length) return setRawActiveKey(null);
-    if (activeKey !== null && rows.some((row) => row.key === activeKey)) return;
-    if (!detailDismissedRef.current) setActiveKey(rows[0].key);
-  }, [activeKey, rows]);
 
   const active = useMemo<WorkspaceRow | null>(() => {
     if (selectedBookingId !== null && detailQuery.data) {

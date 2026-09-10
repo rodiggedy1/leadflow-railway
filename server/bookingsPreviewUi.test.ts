@@ -137,15 +137,14 @@ describe("bookings UI preview contract", () => {
     expect(pageStyles).not.toMatch(/font-size:[6-8]px/);
   });
 
-  it("keeps an explicit right-detail close dismissed until another row is selected", () => {
-    expect(pageSource).toContain("const [activeKey, setRawActiveKey] = useState<string | null>(null)");
-    expect(pageSource).toContain("const detailDismissedRef = useRef(false)");
-    expect(pageSource).toContain("detailDismissedRef.current = key === null");
-    expect(pageSource).toContain("if (!rows.length) return setRawActiveKey(null)");
-    expect(pageSource).toContain("if (!detailDismissedRef.current) setActiveKey(rows[0].key)");
+  it("keeps the right detail closed on entry and opens it only after a user selects a row", () => {
+    expect(pageSource).toContain("const [activeKey, setActiveKey] = useState<string | null>(null)");
+    expect(pageSource).not.toContain("setRawActiveKey");
+    expect(pageSource).not.toContain("detailDismissedRef");
+    expect(pageSource).not.toContain("setActiveKey(rows[0].key)");
     expect(pageSource).toContain("<BookingListRow key={row.key} row={row} selected={activeKey === row.key} onSelect={() => setActiveKey(row.key)} />");
     expect(pageSource).toContain('onClick={() => setActiveKey(null)} aria-label="Close booking detail panel"');
-    expect(pageSource).not.toContain("if (activeKey === null || !rows.some");
+    expect(pageSource).toContain("{active && <aside className=\"bookings-detail-panel\"");
   });
 
   it("refreshes funnel list and open detail instantly after committed updates and once after reconnect", () => {
