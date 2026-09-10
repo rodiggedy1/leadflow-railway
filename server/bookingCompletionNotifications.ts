@@ -30,10 +30,6 @@ function displayAmount(totalCents: number): string {
   return `$${(totalCents / 100).toFixed(2)}`;
 }
 
-function isCleaningService(serviceId: string): boolean {
-  return ["standard", "deep", "moveout"].includes(serviceId);
-}
-
 /**
  * Sends the four user-requested booking notifications after Stripe card setup is
  * verified. A unique booking/channel row is claimed before delivery; no retry,
@@ -54,12 +50,11 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
   const name = booking.customerName;
   const first = firstName(name);
   const schedule = `${booking.requestedLocalDate} at ${booking.requestedLocalTime}`;
-  const serviceTerm = isCleaningService(booking.serviceId) ? "cleaning" : "service";
   const purchaserText = [
     `Hi ${first} — you're booked with Maids in Black!`,
     `Your ${booking.serviceName} is scheduled for ${booking.requestedLocalDate} during the ${booking.requestedLocalTime} arrival window.`,
     `Total: ${amount}`,
-    `Your card is securely on file and will not be charged until after your ${serviceTerm} is complete. We'll text you closer to your appointment with updates from your ${serviceTerm} team.`,
+    "Your card is securely on file and will not be charged until after your cleaning is complete. We'll text you closer to your appointment with updates from your cleaning team.",
     "Need to make a change or have a question? Just reply to this message.",
     "— Maids in Black",
   ].join("\n\n");

@@ -14,7 +14,6 @@ import CustomerPortalHome from "./CustomerPortalHome";
 import "./customer-portal.css";
 import "./customer-portal-request-upgrades.css";
 import "./customer-portal-lawn-care-booking-panel.css";
-import "./customer-portal-service-booking-success.css";
 import "./customer-portal-direct-ui.css";
 import "./customer-portal-sidebar-pages.css";
 import "./customer-portal-home-images.css";
@@ -95,24 +94,9 @@ function PortalNewCardForm({ clientSecret, setupIntentId, customerName, onSaved,
   return <form id={formId} className="mib-portal-new-card-form" onSubmit={handleSubmit}><label><span>Name on card</span><input required value={name} onChange={event => setName(event.target.value)} autoComplete="cc-name" /></label><label><span>Card details</span><div className="mib-portal-card-element"><CardElement options={CARD_ELEMENT_OPTIONS} /></div></label>{cardError && <p className="mib-portal-error">{cardError}</p>}{!hideSubmit && <button className="mib-portal-primary" type="submit" disabled={!stripeReady || loading || confirmNewCardSetup.isPending}>{loading || confirmNewCardSetup.isPending ? "Saving secure card…" : "Save new card"}<ArrowRight /></button>}</form>;
 }
 
-type PortalServiceBookingSuccess = {
-  publicBookingNumber: string;
-  serviceName: string;
-  estimatedTotalCents: number;
-  estimateRequiresReview: boolean;
-  requestedLocalDate: string;
-  requestedLocalTime: string;
-  paymentBrand: string | null;
-  paymentLast4: string;
-};
-
-function PortalServiceBookingSuccessPage({ booking, onClose }: { booking: PortalServiceBookingSuccess; onClose: () => void }) {
-  return <section className="mib-portal-service-booking-success" aria-live="polite"><span>BOOKING CONFIRMED</span><CheckCircle2 aria-hidden="true" /><h2>Your {booking.serviceName.toLowerCase()} is booked.</h2><p>We&apos;ll text you closer to your appointment with updates from your service team.</p><div><strong>{formatLocalDate(booking.requestedLocalDate)} · {booking.requestedLocalTime}</strong><small>{booking.publicBookingNumber}</small></div><div><strong>{formatCurrency(booking.estimatedTotalCents)}</strong><small>{booking.estimateRequiresReview ? "Estimate on file · final details confirmed by Maids in Black" : "Service total on file"}</small></div><div><strong>{booking.paymentBrand ? `${booking.paymentBrand} ending in ${booking.paymentLast4}` : "Card on file"}</strong><small>No charge today. Your payment method is securely on file.</small></div><button type="button" className="mib-portal-primary" onClick={onClose}>Back to My Home <ArrowRight /></button></section>;
-}
-
 function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onClose }: { service: CustomerPortalService; homeAddress: string; savedCard: { brand: string | null; last4: string } | null; customerName: string; onClose: () => void }) {
   const utils = trpc.useUtils();
-  const createRequest = trpc.customerPortal.createRequest.useMutation();
+  const createRequest = trpc.customerPortal.createRequest.useMutation({ onSuccess: () => { void utils.customerPortal.me.invalidate(); onClose(); } });
   const startNewCardSetup = trpc.customerPortal.startNewCardSetup.useMutation();
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [useDifferentAddress, setUseDifferentAddress] = useState(false);
@@ -123,7 +107,6 @@ function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onC
   const [paymentChoice, setPaymentChoice] = useState<"saved" | "new">(savedCard ? "saved" : "new");
   const [activeCard, setActiveCard] = useState(savedCard);
   const [newCardSetup, setNewCardSetup] = useState<{ clientSecret: string; setupIntentId: string } | null>(null);
-  const [completedBooking, setCompletedBooking] = useState<PortalServiceBookingSuccess | null>(null);
   const selectedAddress = useDifferentAddress || !homeAddress ? address.trim() : homeAddress;
   const canSubmit = service.fields.every(field => selections[field.label]?.trim()) && selectedAddress.length >= 5 && Boolean(date) && Boolean(timeWindow) && Boolean(activeCard);
   const estimate = calculateCustomerPortalEstimate(service.id, selections);
@@ -131,10 +114,8 @@ function ServiceRequestForm({ service, homeAddress, savedCard, customerName, onC
   const lawnCareCardFormId = "mib-lawn-care-card-form";
   const sendRequest = () => {
     if (!date || !timeWindow || !canSubmit || paymentChoice !== "saved") return;
-    createRequest.mutate({ serviceId: service.id, selections, address: selectedAddress, requestedLocalDate: formatCustomerPortalDateKey(date), requestedLocalTime: formatCustomerPortalTime(timeWindow), notes: notes || undefined }, { onSuccess: booking => { setCompletedBooking(booking); void utils.customerPortal.me.invalidate(); } });
+    createRequest.mutate({ serviceId: service.id, selections, address: selectedAddress, requestedLocalDate: formatCustomerPortalDateKey(date), requestedLocalTime: formatCustomerPortalTime(timeWindow), notes: notes || undefined });
   };
-
-  if (completedBooking) return <div className={isLawnCare ? "mib-portal-rebook-overlay" : "mib-portal-modal"} role="dialog" aria-modal="true" aria-labelledby="mib-service-booking-success-title"><div className={isLawnCare ? "mib-booking-panel mib-portal-rebook-panel mib-lawncare-request-panel" : "mib-portal-modal-card"}>{isLawnCare ? <header className="mib-booking-panel__header"><div className="mib-booking-panel__agent"><span className="mib-booking-panel__avatar">M<i /></span><div><strong>Maids in Black</strong><span>Booking confirmed</span></div></div><button type="button" onClick={onClose} aria-label="Close booking confirmation" className="mib-booking-panel__close">×</button></header> : <button className="mib-portal-close" type="button" onClick={onClose} aria-label="Close booking confirmation">×</button>}<PortalServiceBookingSuccessPage booking={completedBooking} onClose={onClose} /></div></div>;
 
   return <div className={isLawnCare ? "mib-portal-rebook-overlay" : "mib-portal-modal"} role="dialog" aria-modal="true" aria-labelledby="mib-service-title">
     <div className={isLawnCare ? "mib-booking-panel mib-portal-rebook-panel mib-lawncare-request-panel" : "mib-portal-modal-card"}>
