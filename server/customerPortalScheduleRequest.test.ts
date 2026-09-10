@@ -23,6 +23,8 @@ describe("Customer Portal schedule requests", () => {
     expect(home).toContain("onRequestScheduleChange");
     expect(portal).toContain("<CustomerPortalScheduleRequest booking={scheduleRequestBooking}");
     expect(requestUi).toContain("CustomerPortalAppointmentCalendar");
+    expect(requestUi).toContain('className="mib-portal-modal"');
+    expect(requestUi).not.toContain("mib-booking-panel");
     expect(requestUi).toContain("formatCustomerPortalLateRescheduleFee()}");
     expect(requestUi).toContain("late reschedule warning");
     expect(requestUi).not.toContain("Cancel service");
