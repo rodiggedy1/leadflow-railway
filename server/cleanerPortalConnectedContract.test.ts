@@ -11,8 +11,11 @@ const listRouter = fs.readFileSync(path.join(root, "server/cleanerPortalReadOnly
 const progressRouter = fs.readFileSync(path.join(root, "server/cleanerPortalProgressRouter.ts"), "utf8");
 const migration = fs.readFileSync(path.join(root, "drizzle/0098_cleaner_portal_job_progress.sql"), "utf8");
 const managedMigration = fs.readFileSync(path.join(root, "server/versioned-migrations/0027_create_cleaner_portal_job_progress.sql"), "utf8");
+const arrivalSmsMigration = fs.readFileSync(path.join(root, "drizzle/0103_add_cleaner_portal_arrival_sms_guard.sql"), "utf8");
+const managedArrivalSmsMigration = fs.readFileSync(path.join(root, "server/versioned-migrations/0034_add_cleaner_portal_arrival_sms_guard.sql"), "utf8");
 const managedManifest = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/manifest.json"), "utf8")) as { migrations: Array<{ id: string; mode?: string; sqlFile: string; postconditionsFile: string; sha256: string }> };
 const managedPostconditions = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/0027_create_cleaner_portal_job_progress.postconditions.json"), "utf8")) as { columns: Array<{ name: string; default?: string }> };
+const managedArrivalSmsPostconditions = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/0034_add_cleaner_portal_arrival_sms_guard.postconditions.json"), "utf8")) as { columns: Array<{ name: string; columnType: string; nullable: boolean }> };
 
 describe("isolated ETA Cleaner Portal contract", () => {
   it("keeps every working job list read on the frozen read-only source", () => {
@@ -127,6 +130,22 @@ describe("isolated ETA Cleaner Portal contract", () => {
     }
   });
 
+  it("claims the customer arrival SMS once per imported job before sending, including under concurrent repeat requests", () => {
+    expect(progressRouter).toContain("isNull(cleanerPortalJobProgress.arrivalSmsClaimedAt)");
+    expect(progressRouter).toContain("return claimed === 1");
+    expect(progressRouter).toContain("notificationAlreadySent: true");
+    expect(progressRouter).toContain("arrivalSmsSentAt: input.success ? new Date() : null");
+    expect(progressRouter).toContain("arrivalSmsMessageId: input.messageId");
+    expect(page).toContain("Arrival already recorded; the client was not messaged again.");
+  });
+
+  it("suppresses only repeated Cleaner Portal ETA texts while retaining one customer update for each genuinely changed ETA", () => {
+    expect(progressRouter).toContain("ne(cleanerPortalJobProgress.etaSmsClaimedMinutes, input.minutes)");
+    expect(progressRouter).toContain("return claimed === 1");
+    expect(progressRouter).toContain("etaSmsSentMinutes: input.success ? input.minutes : null");
+    expect(page).toContain("This ETA was already recorded; the client was not messaged again.");
+  });
+
   it("uses one additive isolated progress migration with no data-changing statement", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS `cleaner_portal_job_progress`");
     expect(migration).toContain("UNIQUE KEY `uq_cleaner_portal_job_progress_job` (`leadflowJobId`)");
@@ -142,5 +161,26 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(entry?.sha256).toBe(createHash("sha256").update(managedMigration).digest("hex"));
     expect(managedPostconditions.columns.find(column => column.name === "createdAt")?.default).toBe("current_timestamp(3)");
     expect(managedPostconditions.columns.find(column => column.name === "updatedAt")?.default).toBe("current_timestamp(3)");
+  });
+
+  it("adds only the durable arrival-SMS delivery fields through matching additive migrations", () => {
+    for (const field of ["arrivalSmsClaimedAt", "arrivalSmsSentAt", "arrivalSmsMessageId", "arrivalSmsError", "etaSmsClaimedMinutes", "etaSmsSentMinutes", "etaSmsMessageId", "etaSmsError"]) {
+      expect(arrivalSmsMigration).toContain(`ADD COLUMN IF NOT EXISTS \`${field}\``);
+      expect(managedArrivalSmsMigration).toContain(`ADD COLUMN IF NOT EXISTS \`${field}\``);
+    }
+    expect(arrivalSmsMigration).not.toMatch(/^\s*(DELETE|UPDATE|INSERT|DROP|TRUNCATE)\b/im);
+    const entry = managedManifest.migrations.find(migrationEntry => migrationEntry.id === "0034_add_cleaner_portal_arrival_sms_guard");
+    expect(entry).toMatchObject({ mode: "additive-columns-existing-table", sqlFile: "0034_add_cleaner_portal_arrival_sms_guard.sql", postconditionsFile: "0034_add_cleaner_portal_arrival_sms_guard.postconditions.json" });
+    expect(entry?.sha256).toBe(createHash("sha256").update(managedArrivalSmsMigration).digest("hex"));
+    expect(managedArrivalSmsPostconditions.columns).toEqual([
+      { name: "arrivalSmsClaimedAt", columnType: "datetime(3)", nullable: true },
+      { name: "arrivalSmsSentAt", columnType: "datetime(3)", nullable: true },
+      { name: "arrivalSmsMessageId", columnType: "varchar(128)", nullable: true },
+      { name: "arrivalSmsError", columnType: "text", nullable: true },
+      { name: "etaSmsClaimedMinutes", columnType: "int", nullable: true },
+      { name: "etaSmsSentMinutes", columnType: "int", nullable: true },
+      { name: "etaSmsMessageId", columnType: "varchar(128)", nullable: true },
+      { name: "etaSmsError", columnType: "text", nullable: true },
+    ]);
   });
 });

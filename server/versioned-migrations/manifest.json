@@ -247,6 +247,14 @@
       "sha256": "f234dcd0be83f9b6835ba215bbdb2ae620097057b068dd82a6b3f8ad8f397203",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0033_add_leadflow_job_review_fields.postconditions.json"
+    },
+    {
+      "id": "0034_add_cleaner_portal_arrival_sms_guard",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0034_add_cleaner_portal_arrival_sms_guard.sql",
+      "sha256": "fc90fde91327f2441909b0669bbcee5e0acd0ced47f3cd8285b50af3a5b1f8e2",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0034_add_cleaner_portal_arrival_sms_guard.postconditions.json"
     }
   ]
 }

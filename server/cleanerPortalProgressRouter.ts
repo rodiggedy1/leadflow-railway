@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
@@ -90,7 +90,7 @@ async function saveProgress(input: {
 }
 
 async function notifyClient(input: { db: NonNullable<Awaited<ReturnType<typeof getDb>>>; customerName: string; customerPhone: string | null; customerEmail: string | null; content: string }) {
-  if (!input.customerPhone) return { customerNotified: false, notificationError: null as string | null };
+  if (!input.customerPhone) return { customerNotified: false, notificationError: null as string | null, notificationMessageId: null as string | null };
   let portalLink: string | null = null;
   try {
     portalLink = await getOrCreateCustomerPortalMagicLink(input.db, {
@@ -103,7 +103,71 @@ async function notifyClient(input: { db: NonNullable<Awaited<ReturnType<typeof g
   }
   const content = portalLink ? `${input.content}\n\nOpen My Home: ${portalLink}` : input.content;
   const result = await sendSms({ to: input.customerPhone, content });
-  return { customerNotified: result.success, notificationError: result.success ? null : (result.error ?? "The customer message could not be sent.") };
+  return {
+    customerNotified: result.success,
+    notificationError: result.success ? null : (result.error ?? "The customer message could not be sent."),
+    notificationMessageId: result.messageId ?? null,
+  };
+}
+
+async function claimArrivalSms(input: { db: NonNullable<Awaited<ReturnType<typeof getDb>>>; leadflowJobId: number }) {
+  const claimResult = await input.db.update(cleanerPortalJobProgress).set({
+    arrivalSmsClaimedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(and(
+    eq(cleanerPortalJobProgress.leadflowJobId, input.leadflowJobId),
+    isNull(cleanerPortalJobProgress.arrivalSmsClaimedAt),
+  ));
+  const claimHeader = (claimResult as any)?.[0];
+  const claimed = claimHeader?.affectedRows ?? claimHeader?.rowsAffected ?? (claimResult as any)?.affectedRows ?? (claimResult as any)?.rowsAffected ?? 0;
+  return claimed === 1;
+}
+
+async function recordArrivalSmsResult(input: {
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  leadflowJobId: number;
+  success: boolean;
+  messageId: string | null;
+  error: string | null;
+}) {
+  await input.db.update(cleanerPortalJobProgress).set({
+    arrivalSmsSentAt: input.success ? new Date() : null,
+    arrivalSmsMessageId: input.messageId,
+    arrivalSmsError: input.error,
+    updatedAt: new Date(),
+  }).where(eq(cleanerPortalJobProgress.leadflowJobId, input.leadflowJobId));
+}
+
+async function claimEtaSms(input: { db: NonNullable<Awaited<ReturnType<typeof getDb>>>; leadflowJobId: number; minutes: number }) {
+  const claimResult = await input.db.update(cleanerPortalJobProgress).set({
+    etaSmsClaimedMinutes: input.minutes,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(cleanerPortalJobProgress.leadflowJobId, input.leadflowJobId),
+    or(
+      isNull(cleanerPortalJobProgress.etaSmsClaimedMinutes),
+      ne(cleanerPortalJobProgress.etaSmsClaimedMinutes, input.minutes),
+    ),
+  ));
+  const claimHeader = (claimResult as any)?.[0];
+  const claimed = claimHeader?.affectedRows ?? claimHeader?.rowsAffected ?? (claimResult as any)?.affectedRows ?? (claimResult as any)?.rowsAffected ?? 0;
+  return claimed === 1;
+}
+
+async function recordEtaSmsResult(input: {
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  leadflowJobId: number;
+  minutes: number;
+  success: boolean;
+  messageId: string | null;
+  error: string | null;
+}) {
+  await input.db.update(cleanerPortalJobProgress).set({
+    etaSmsSentMinutes: input.success ? input.minutes : null,
+    etaSmsMessageId: input.messageId,
+    etaSmsError: input.error,
+    updatedAt: new Date(),
+  }).where(eq(cleanerPortalJobProgress.leadflowJobId, input.leadflowJobId));
 }
 
 export const cleanerPortalProgressRouter = router({
@@ -117,14 +181,35 @@ export const cleanerPortalProgressRouter = router({
     const etaTimestamp = Date.now() + input.minutes * 60_000;
     const etaTimeStr = formatEtaTime(etaTimestamp);
     const progress = await saveProgress({ cleanerId: cleaner.id, teamId: cleaner.teamId!, leadflowJobId: job.id, jobStatus: "on_the_way", etaTimestamp, etaTimeStr });
+    if (!job.customerPhone) return { ...progress, customerNotified: false, notificationError: null as string | null, notificationAlreadySent: false };
+    const claimed = await claimEtaSms({ db, leadflowJobId: job.id, minutes: input.minutes });
+    if (!claimed) return { ...progress, customerNotified: false, notificationError: null as string | null, notificationAlreadySent: true };
     const notification = await notifyClient({ db, customerName: job.customerName, customerPhone: job.customerPhone, customerEmail: job.customerEmail, content: `Hi ${firstName(job.customerName)}! Your Maids in Black team is on the way and will arrive at ${job.jobAddress ?? "your address"} around ${etaTimeStr}.` });
-    return { ...progress, ...notification };
+    await recordEtaSmsResult({
+      db,
+      leadflowJobId: job.id,
+      minutes: input.minutes,
+      success: notification.customerNotified,
+      messageId: notification.notificationMessageId,
+      error: notification.notificationError,
+    });
+    return { ...progress, customerNotified: notification.customerNotified, notificationError: notification.notificationError, notificationAlreadySent: false };
   }),
   markArrived: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {
     const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
     const progress = await saveProgress({ cleanerId: cleaner.id, teamId: cleaner.teamId!, leadflowJobId: job.id, jobStatus: "arrived", arrivedAt: new Date() });
+    if (!job.customerPhone) return { ...progress, customerNotified: false, notificationError: null as string | null, notificationAlreadySent: false };
+    const claimed = await claimArrivalSms({ db, leadflowJobId: job.id });
+    if (!claimed) return { ...progress, customerNotified: false, notificationError: null as string | null, notificationAlreadySent: true };
     const notification = await notifyClient({ db, customerName: job.customerName, customerPhone: job.customerPhone, customerEmail: job.customerEmail, content: `Hi ${firstName(job.customerName)}! Your Maids in Black team has arrived for your cleaning at ${job.jobAddress ?? "your address"}.` });
-    return { ...progress, ...notification };
+    await recordArrivalSmsResult({
+      db,
+      leadflowJobId: job.id,
+      success: notification.customerNotified,
+      messageId: notification.notificationMessageId,
+      error: notification.notificationError,
+    });
+    return { ...progress, customerNotified: notification.customerNotified, notificationError: notification.notificationError, notificationAlreadySent: false };
   }),
   startJob: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {
     const { cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);

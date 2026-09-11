@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "table": "cleaner_portal_job_progress",
+  "columns": [
+    { "name": "arrivalSmsClaimedAt", "columnType": "datetime(3)", "nullable": true },
+    { "name": "arrivalSmsSentAt", "columnType": "datetime(3)", "nullable": true },
+    { "name": "arrivalSmsMessageId", "columnType": "varchar(128)", "nullable": true },
+    { "name": "arrivalSmsError", "columnType": "text", "nullable": true },
+    { "name": "etaSmsClaimedMinutes", "columnType": "int", "nullable": true },
+    { "name": "etaSmsSentMinutes", "columnType": "int", "nullable": true },
+    { "name": "etaSmsMessageId", "columnType": "varchar(128)", "nullable": true },
+    { "name": "etaSmsError", "columnType": "text", "nullable": true }
+  ],
+  "indexes": []
+}
