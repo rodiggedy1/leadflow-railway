@@ -835,7 +835,7 @@ function RequirementsStep({
       <p className="text-sm text-gray-400 mb-8">Please answer all questions honestly</p>
 
       <YesNoField
-        question="Do you have professional cleaning experience?"
+        question="Do you have relevant professional service experience?"
         value={data.hasCleaning}
         onChange={v => { onChange({ hasCleaning: v }); setShowError(false); }}
       />
@@ -863,11 +863,11 @@ function RequirementsStep({
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Tell us about your professional cleaning experience
+          Tell us about your relevant experience
         </label>
         <textarea
           rows={4}
-          placeholder="Describe your experience, types of properties cleaned, years of experience..."
+          placeholder="Describe the services you provide, the work you have completed, any relevant tools or certifications, and your years of experience..."
           value={data.experience}
           onChange={e => onChange({ experience: e.target.value })}
           className="w-full rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 p-3 outline-none resize-none transition-all focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
@@ -1400,185 +1400,64 @@ function VideoStep({
 }
 
 function ThankYouStep({ candidateId }: { candidateId: number | null }) {
-  // In preview mode (?step=done with no real candidateId), use a placeholder so the page renders fully
+  // In preview mode (?step=done with no real candidateId), use a placeholder so the page renders fully.
   const isPreview = !candidateId && new URLSearchParams(window.location.search).get("step") === "done";
   const interviewUrl = candidateId ? `/interview/${candidateId}` : (isPreview ? "#" : null);
 
-  const questions = [
-    "Tell us about your cleaning experience",
-    "What does a great clean mean to you?",
-    "How do you handle client requests?",
-    "What days are you available?",
-    "When can you start?",
-  ];
-
-  const whyReasons = [
-    "Highest intent moment — you just applied",
-    "Zero friction — no waiting around",
-    "Can move you to the front faster",
-    "Feels like the next step, not extra work",
-  ];
-
-  const hiringSteps = [
-    { icon: <CheckCircle2 size={18} />, label: "Application submitted", sub: "Completed", done: true },
-    { icon: <Camera size={18} />, label: "Supplies photo", sub: "Do this now", done: false, cta: true },
-    { icon: <PhoneCall size={18} />, label: "AI interview", sub: "Comes next", done: false },
-    { icon: <Phone size={18} />, label: "Real interview", sub: "Comes next", done: false },
+  const nextSteps = [
+    {
+      number: "01",
+      title: "Check your text messages",
+      detail: "We sent a secure link to your AI interview and a link to track your application.",
+    },
+    {
+      number: "02",
+      title: "Complete the quick interview",
+      detail: "It takes about five minutes and can be completed from your phone whenever you are ready.",
+    },
+    {
+      number: "03",
+      title: "Hear from our hiring team",
+      detail: "We will review your experience and service qualifications, then contact you about next steps.",
+    },
   ];
 
   return (
-    <div className="min-h-screen w-full" style={{ backgroundColor: "#f4f6f9" }}>
-      <div className="max-w-6xl mx-auto px-4 py-10 md:py-16">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-
-          {/* ── Left column ── */}
-          <div className="flex flex-col gap-6">
-
-            {/* Header card */}
-            <div className="bg-white rounded-2xl p-8 md:p-10" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              {/* Badge + step */}
-              <div className="flex items-center gap-3 mb-6">
-                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full" style={{ backgroundColor: "#dcfce7", color: "#16a34a", border: "1px solid #bbf7d0" }}>
-                  <CheckCircle2 size={13} /> Application received
-                </span>
-                <span className="text-sm text-gray-400">Step 2 of 4</span>
-              </div>
-
-              {/* Headline */}
-              <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight mb-3">You're in! One last thing.</h1>
-              <h2 className="text-2xl md:text-3xl font-extrabold leading-tight mb-4" style={{ color: "#94a3b8" }}>Send us a photo of your<br />cleaning supplies.</h2>
-              <p className="text-gray-500 text-base mb-6 max-w-lg">Before your interview, we need to see your supplies. It takes 30 seconds and helps us fast-track your application.</p>
-
-              {/* Wistia video — inline under headline */}
-              <div className="rounded-2xl overflow-hidden mb-8" style={{ border: "1px solid #e5e7eb" }}>
-                {/* Replace WISTIA_VIDEO_ID with your real Wistia video ID */}
-                <div className="relative w-full" style={{ paddingBottom: "56.25%", backgroundColor: "#f1f5f9" }}>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: "#e2e8f0" }}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                        <path d="M8 5.14v14l11-7-11-7z" fill="#94a3b8" />
-                      </svg>
-                    </div>
-                    <p className="text-sm text-gray-400 font-medium">Video placeholder</p>
-                    <p className="text-xs text-gray-300">Replace with Wistia embed</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Supplies upload CTA */}
-              <div className="rounded-2xl p-5 mb-6" style={{ backgroundColor: "#fffbeb", border: "1.5px solid #fde68a" }}>
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#fef3c7" }}>
-                    <Camera size={20} style={{ color: "#d97706" }} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-900 text-sm mb-1">📸 Upload a photo of your cleaning supplies</p>
-                    <p className="text-xs text-gray-500 mb-3">Mop, vacuum, cleaning products — whatever you use. A quick phone photo is fine.</p>
-                    <div className="flex flex-wrap gap-2">
-                      <a
-                        href={interviewUrl || "#"}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm transition-opacity hover:opacity-90"
-                        style={{ backgroundColor: "#d97706" }}
-                      >
-                        <Camera size={14} /> Upload photo now
-                      </a>
-                      <button
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100"
-                        style={{ border: "1.5px solid #e5e7eb", backgroundColor: "#fff" }}
-                        onClick={() => toast.success("Text us your supplies photo anytime — we'll link it to your application.")}
-                      >
-                        Text it instead
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats row */}
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { stat: "30 seconds", sub: "Super quick" },
-                  { stat: "Any phone", sub: "Just snap a pic" },
-                  { stat: "Reviewed today", sub: "Faster decisions" },
-                ].map(({ stat, sub }) => (
-                  <div key={stat} className="rounded-xl p-4" style={{ border: "1px solid #e5e7eb", backgroundColor: "#fafafa" }}>
-                    <p className="font-bold text-gray-900 text-sm">{stat}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
-                  </div>
-                ))}
-              </div>
+    <div className="min-h-screen w-full bg-[#f4f6f9]">
+      <div className="mx-auto flex min-h-screen max-w-4xl items-center px-4 py-10 sm:px-6 md:py-16">
+        <div className="w-full rounded-3xl bg-white p-7 shadow-[0_12px_48px_rgba(15,23,42,0.08)] sm:p-10 md:p-14" style={{ border: "1px solid #e5e7eb" }}>
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundColor: "#dcfce7", color: GREEN }}>
+              <CheckCircle2 size={29} />
             </div>
-
-            {/* Hiring path card */}
-            <div className="bg-white rounded-2xl p-6 md:p-8" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">What happens next</p>
-                  <p className="font-bold text-gray-900 text-lg">Your hiring path</p>
-                </div>
-                <span className="text-xs font-semibold px-3 py-1.5 rounded-full" style={{ backgroundColor: "#eff6ff", color: "#3b82f6" }}>Waiting to start</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {hiringSteps.map((s, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl p-4 flex flex-col gap-2"
-                    style={{
-                      border: s.done ? `1.5px solid #bbf7d0` : s.cta ? `1.5px solid #e2e8f0` : `1px solid #e5e7eb`,
-                      backgroundColor: s.done ? "#f0fdf4" : "#fafafa",
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span style={{ color: s.done ? "#16a34a" : "#94a3b8" }}>{s.icon}</span>
-                      {i < hiringSteps.length - 1 && <ChevronRight size={14} style={{ color: "#cbd5e1" }} />}
-                    </div>
-                    <p className="text-sm font-semibold text-gray-800 leading-tight">{s.label}</p>
-                    <p className="text-xs" style={{ color: s.done ? "#16a34a" : s.cta ? "#3b82f6" : "#94a3b8" }}>{s.sub}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold" style={{ backgroundColor: "#dcfce7", color: GREEN, border: "1px solid #bbf7d0" }}>
+              <CheckCircle2 size={13} /> Application received
+            </span>
+            <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">Thank you for applying.</h1>
+            <p className="mx-auto mt-3 max-w-xl text-base leading-relaxed text-gray-500">We have received your application and service qualifications. Your next step is a short AI interview so we can learn more about your experience and availability.</p>
+            <a
+              href={interviewUrl || "#"}
+              className="mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: GREEN, boxShadow: "0 6px 20px rgba(22,163,74,0.28)" }}
+            >
+              Start your AI interview <ChevronRight size={17} />
+            </a>
+            <p className="mt-3 text-xs text-gray-400">We also sent the secure interview link by text message.</p>
           </div>
 
-          {/* ── Right column ── */}
-          <div className="flex flex-col gap-6">
-
-            {/* Why do this now */}
-            <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <div className="flex items-start gap-3 mb-5">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#f1f5f9" }}>
-                  <Sparkles size={17} style={{ color: "#64748b" }} />
-                </div>
-                <div>
-                  <p className="font-bold text-gray-900 text-sm">Why do this now?</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Best time to complete it is right after applying.</p>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                {whyReasons.map((r) => (
-                  <div key={r} className="flex items-start gap-2.5 py-2.5" style={{ borderTop: "1px solid #f1f5f9" }}>
-                    <span style={{ color: "#94a3b8", marginTop: 1 }}>★</span>
-                    <span className="text-sm text-gray-700">{r}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="mx-auto mt-10 max-w-3xl border-t pt-8" style={{ borderColor: "#eef0f3" }}>
+            <div className="mb-5 text-center">
+              <p className="text-xs font-bold uppercase tracking-[0.16em]" style={{ color: GREEN }}>What happens next</p>
+              <h2 className="mt-2 text-xl font-bold text-gray-900">A simple three-step process</h2>
             </div>
-
-            {/* Interview preview */}
-            <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <div className="flex items-center justify-between mb-1">
-                <p className="font-bold text-gray-900 text-sm">Interview preview</p>
-                <span className="text-xs text-gray-400">~2 min</span>
-              </div>
-              <p className="text-xs text-gray-400 mb-4">Simple, mobile-friendly, and short.</p>
-              <div className="flex flex-col gap-2">
-                {questions.map((q, i) => (
-                  <div key={i} className="rounded-xl p-3.5" style={{ border: "1px solid #e5e7eb", backgroundColor: "#fafafa" }}>
-                    <p className="text-xs font-semibold text-gray-400 mb-1">QUESTION {i + 1}</p>
-                    <p className="text-sm text-gray-800 font-medium">{q}</p>
-                  </div>
-                ))}
-              </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {nextSteps.map((step) => (
+                <div key={step.number} className="rounded-2xl p-5 text-left" style={{ backgroundColor: "#f8fafc", border: "1px solid #edf0f2" }}>
+                  <span className="text-xs font-extrabold tracking-[0.14em]" style={{ color: GREEN }}>{step.number}</span>
+                  <h3 className="mt-3 text-sm font-bold text-gray-900">{step.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-gray-500">{step.detail}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>

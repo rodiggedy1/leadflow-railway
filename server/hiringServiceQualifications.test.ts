@@ -31,4 +31,20 @@ describe("all-services hiring application", () => {
     expect(router).toContain("specialties: input.specialties.length > 0 ? JSON.stringify(input.specialties) : null");
     expect(router).toContain("Specialties: ${input.specialties.length ? input.specialties.join(\", \") : \"None selected\"}");
   });
+
+  it("uses service-neutral Requirements copy and a generic post-submission next-steps page", async () => {
+    const source = await readFile(applyPagePath, "utf8");
+
+    expect(source).toContain("Do you have relevant professional service experience?");
+    expect(source).toContain("Tell us about your relevant experience");
+    expect(source).toContain("Describe the services you provide");
+    expect(source).not.toContain("Do you have professional cleaning experience?");
+    expect(source).not.toContain("Tell us about your professional cleaning experience");
+    expect(source).toContain("Thank you for applying.");
+    expect(source).toContain("What happens next");
+    expect(source).toContain("Start your AI interview");
+    expect(source).toContain("We also sent the secure interview link by text message.");
+    expect(source).not.toContain("Send us a photo of your");
+    expect(source).not.toContain("Upload a photo of your cleaning supplies");
+  });
 });
