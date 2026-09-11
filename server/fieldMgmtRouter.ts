@@ -33,24 +33,19 @@ import {
   placeNoCheckinEscalationCallWithReason,
   placeEtaCall,
 } from "./fieldMgmtEngine";
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 
 // ── Test override phone ───────────────────────────────────────────────────────
 const TEST_PHONE = "+13029816191";
 
-// Re-export ensureTrackerToken for use in this file (it's not exported from engine)
-// We'll inline the token logic here since the engine doesn't export it.
-async function getTrackerUrl(cleanerJobId: number): Promise<string> {
-  const BASE_URL = "https://quote.maidinblack.com";
+async function getCustomerPortalUrl(customerName: string | null, customerPhone: string | null): Promise<string | null> {
+  if (!customerPhone) return null;
   const db = await getDb();
-  if (!db) return BASE_URL;
-  const rows = await db
-    .select({ trackerToken: cleanerJobs.trackerToken })
-    .from(cleanerJobs)
-    .where(eq(cleanerJobs.id, cleanerJobId))
-    .limit(1);
-  const token = rows[0]?.trackerToken;
-  if (!token) return BASE_URL;
-  return `${BASE_URL}/track/${token}`;
+  if (!db) return null;
+  return getOrCreateCustomerPortalMagicLink(db, {
+    customerName: customerName ?? "Customer",
+    customerPhone,
+  });
 }
 
 function firstName(fullName: string | null | undefined): string {
@@ -436,7 +431,7 @@ async function buildAndSendTestStep(
   const clientFirst = firstName(job.customerName);
   const loginEmail = cleanerEmail ?? "your login email";
   const address = job.jobAddress ?? "your address";
-  const trackingLink = await getTrackerUrl(job.id);
+  const portalLink = await getCustomerPortalUrl(job.customerName, job.customerPhone);
 
   let serviceTime: Date | null = null;
   let timeStr = "your scheduled time";
@@ -466,8 +461,7 @@ async function buildAndSendTestStep(
       msg = [
         `Hey ${clientFirst} — you're all set for your home cleaning today at ${timeStr} 😊`,
         ``,
-        `You can follow your cleaning here: ${trackingLink}`,
-        ``,
+        ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
         `We'll update this in real time if anything changes, including arrival timing.`,
       ].join("\n");
       break;
@@ -477,8 +471,7 @@ async function buildAndSendTestStep(
       msg = [
         `Hi ${clientFirst}! Your Maids in Black team is on the way and will arrive at ${address} around ${etaStr}. 🚗`,
         ``,
-        `Track their arrival in real time here: ${trackingLink}`,
-        ``,
+        ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
         `The best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.`,
         `Feel free to point anything out — they're happy to fix it on the spot.`,
         ``,
@@ -492,8 +485,7 @@ async function buildAndSendTestStep(
       msg = [
         `Hey ${clientFirst} — quick heads up, the team is running about ${delayStr} behind.`,
         ``,
-        `You can follow their updated arrival here: ${trackingLink}`,
-        ``,
+        ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
         `Really appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏`,
       ].join("\n");
       break;

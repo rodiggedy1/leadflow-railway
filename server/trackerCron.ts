@@ -1,24 +1,18 @@
 /**
- * trackerCron — sends job tracker SMS links to customers at 8 AM on their job day.
+ * trackerCron — sends customer portal SMS links at 8 AM on the job day.
  *
  * For each cleanerJob today that:
  *   - has a customerPhone
- *   - has NOT already had a tracker SMS sent (trackerSmsSentAt IS NULL)
- *
- * Generates a unique trackerToken, stores it, then texts the customer a link to
- * https://quote.maidinblack.com/track/{token}
+ *   - has NOT already had its day-of portal SMS sent (legacy trackerSmsSentAt
+ *     remains the existing durable send marker to avoid duplicate messages)
  */
 
 import { getDb } from "./db";
 import { cleanerJobs } from "../drizzle/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
-
-function generateToken(): string {
-  return randomBytes(24).toString("base64url");
-}
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 
 function getTodayET(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -34,9 +28,7 @@ export async function sendTrackerLinksForToday(dateOverride?: string): Promise<{
   if (!db) return { sent: 0, skipped: 0, errors: ["DB unavailable"], date: "" };
 
   const targetDate = dateOverride ?? getTodayET();
-  const baseUrl = "https://quote.maidinblack.com";
-
-  // Find all jobs for today that haven't had a tracker SMS sent yet
+  // Find all jobs for today that have not had the established day-of portal SMS.
   const jobs = await db
     .select()
     .from(cleanerJobs)
@@ -67,19 +59,12 @@ export async function sendTrackerLinksForToday(dateOverride?: string): Promise<{
       continue;
     }
 
-    // Generate token if not already set
-    let token = job.trackerToken;
-    if (!token) {
-      token = generateToken();
-      await db
-        .update(cleanerJobs)
-        .set({ trackerToken: token })
-        .where(eq(cleanerJobs.id, job.id));
-    }
-
-    const trackerUrl = `${baseUrl}/track/${token}`;
+    const portalUrl = await getOrCreateCustomerPortalMagicLink(db, {
+      customerName: job.customerName ?? "Customer",
+      customerPhone: job.customerPhone,
+    });
     const firstName = job.customerName?.split(" ")[0] ?? "there";
-    const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Track your clean in real time: ${trackerUrl} 🧹`;
+    const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Open My Home: ${portalUrl}`;
 
     const result = await sendSms({ to: job.customerPhone, content: message, fromNumberId: ENV.openPhoneCsNumberId }).catch(
       (err: unknown) => ({ success: false, error: String(err) })

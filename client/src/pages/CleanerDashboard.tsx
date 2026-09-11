@@ -859,7 +859,7 @@ function SendTrackerLinkButton({ job }: { job: JobRow }) {
     onSuccess: () => {
       setSent(true);
       setResending(false);
-      toast.success("Tracker link sent", { description: `Sent to ${job.customerPhone ?? "customer"}` });
+      toast.success("Portal link sent", { description: `Sent to ${job.customerPhone ?? "customer"}` });
     },
     onError: (err) => {
       setResending(false);
@@ -889,7 +889,7 @@ function SendTrackerLinkButton({ job }: { job: JobRow }) {
         onClick={() => getLink.mutate({ cleanerJobId: job.id })}
       >
         {getLink.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
-        {getLink.isPending ? "Getting..." : "Copy Tracker Link"}
+        {getLink.isPending ? "Getting..." : "Copy Portal Link"}
       </Button>
     );
   }
@@ -899,7 +899,7 @@ function SendTrackerLinkButton({ job }: { job: JobRow }) {
       <div className="flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1.5 text-xs text-emerald-600">
           <CheckCircle2 className="w-3 h-3" />
-          Tracker Sent
+          Portal Link Sent
         </span>
         <button
           className="text-xs text-sky-500 hover:text-sky-700 underline underline-offset-2 transition-colors"
@@ -927,7 +927,7 @@ function SendTrackerLinkButton({ job }: { job: JobRow }) {
         onClick={() => send.mutate({ cleanerJobId: job.id })}
       >
         {send.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
-        {send.isPending ? "Sending..." : "Send Tracker Link"}
+        {send.isPending ? "Sending..." : "Send Portal Link"}
       </Button>
       <Button
         variant="outline"

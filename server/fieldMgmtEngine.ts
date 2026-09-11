@@ -35,6 +35,7 @@ import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { invokeLLM } from "./_core/llm";
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 // isWithinBusinessHours is imported for reference; we define a stricter 8am–5pm variant
 import { isWithinBusinessHours as _isWithinBusinessHours } from "./vapiLeadNotification";
 
@@ -430,35 +431,23 @@ function firstName(fullName: string | null | undefined): string {
 }
 
 /**
- * Ensure the job has a trackerToken, generating and saving one if missing.
- * Returns the tracking URL (always a real /track/:token URL, never a fallback).
- * This guarantees the link is valid even when called before the 8 AM tracker cron runs.
+ * Returns the existing customer-wide portal handoff link for an SMS recipient.
+ * It never creates or reads the retired single-job tracker token.
  */
-async function ensureTrackerToken(cleanerJobId: number): Promise<string> {
-  const BASE_URL = "https://quote.maidinblack.com";
+async function getCustomerPortalLink(cleanerJobId: number): Promise<string | null> {
   const db = await getDb();
-  if (!db) return BASE_URL;
+  if (!db) return null;
 
-  const rows = await db
-    .select({ trackerToken: cleanerJobs.trackerToken })
+  const [job] = await db
+    .select({ customerName: cleanerJobs.customerName, customerPhone: cleanerJobs.customerPhone })
     .from(cleanerJobs)
     .where(eq(cleanerJobs.id, cleanerJobId))
     .limit(1);
-
-  let token = rows[0]?.trackerToken ?? null;
-
-  if (!token) {
-    // Generate a new token and persist it immediately
-    const { randomBytes } = await import("crypto");
-    token = randomBytes(24).toString("base64url");
-    await db
-      .update(cleanerJobs)
-      .set({ trackerToken: token })
-      .where(eq(cleanerJobs.id, cleanerJobId));
-    console.log(`[FieldMgmt] Generated trackerToken for job ${cleanerJobId}: ${token}`);
-  }
-
-  return `${BASE_URL}/track/${token}`;
+  if (!job?.customerPhone) return null;
+  return getOrCreateCustomerPortalMagicLink(db, {
+    customerName: job.customerName ?? "Customer",
+    customerPhone: job.customerPhone,
+  });
 }
 
 // ── Step 1: Pre-Job Reminder (T-2hrs) ────────────────────────────────────────
@@ -599,14 +588,12 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<{ sen
     if (serviceTime) etaStr = formatTimeET(serviceTime);
   }
 
-  // Always generate token if missing — guarantees a real /track/:token URL
-  const trackingLink = await ensureTrackerToken(cleanerJobId);
+  const portalLink = await getCustomerPortalLink(cleanerJobId);
 
   const msg = [
     `Hi ${clientFirstName}! Your Maids in Black team is on the way and will arrive at ${address} around ${etaStr}. 🚗`,
     ``,
-    `Track their arrival in real time here: ${trackingLink}`,
-    ``,
+    ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
     `The best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.`,
     `Feel free to point anything out — they're happy to fix it on the spot.`,
     ``,
@@ -673,13 +660,12 @@ export async function sendClientEtaUpdateSms(cleanerJobId: number): Promise<void
     if (serviceTime) etaStr = formatTimeET(serviceTime);
   }
 
-  const trackingLink = await ensureTrackerToken(cleanerJobId);
+  const portalLink = await getCustomerPortalLink(cleanerJobId);
 
   const msg = [
     `Hi ${clientFirstName}! Quick update — your Maids in Black team is still on the way and now expects to arrive around ${etaStr}. 🚗`,
     ``,
-    `Track their live location here: ${trackingLink}`,
-    ``,
+    ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
     `Sorry for the delay — we appreciate your patience!`,
   ].join("\n");
 
@@ -1269,7 +1255,6 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
       customerPhone: cleanerJobs.customerPhone,
       jobAddress: cleanerJobs.jobAddress,
       serviceDateTime: cleanerJobs.serviceDateTime,
-      trackerToken: cleanerJobs.trackerToken,
     })
     .from(cleanerJobs)
     .where(eq(cleanerJobs.id, cleanerJobId))
@@ -1296,14 +1281,12 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
 
   const clientFirstName = firstName(job.customerName);
   const timeStr = formatTimeET(serviceTime);
-  // Always generate token if missing — guarantees a real /track/:token URL
-  const trackingLink = await ensureTrackerToken(cleanerJobId);
+  const portalLink = await getCustomerPortalLink(cleanerJobId);
 
   const msg = [
     `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} with a 2 hour arrival window to allow for traffic, weather, parking, and surprises at previous projects. 😊`,
     ``,
-    `You can follow your cleaning here: ${trackingLink}`,
-    ``,
+    ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
     `We'll update this in real time if anything changes, including arrival timing.`,
   ].join("\n");
 
@@ -1354,7 +1337,6 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
       customerPhone: cleanerJobs.customerPhone,
       jobAddress: cleanerJobs.jobAddress,
       serviceDateTime: cleanerJobs.serviceDateTime,
-      trackerToken: cleanerJobs.trackerToken,
     })
     .from(cleanerJobs)
     .where(
@@ -1395,13 +1377,12 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
 
     const clientFirstName = firstName(job.customerName);
     const timeStr = formatTimeET(serviceTime);
-    const trackingLink = await ensureTrackerToken(job.id);
+    const portalLink = await getCustomerPortalLink(job.id);
 
     const msg = [
       `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} with a 2 hour arrival window to allow for traffic, weather, parking, and surprises at previous projects. 😊`,
       ``,
-      `You can follow your cleaning here: ${trackingLink}`,
-      ``,
+      ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
       `We'll update this in real time if anything changes, including arrival timing.`,
     ].join("\n");
 
@@ -1495,7 +1476,6 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
       id: cleanerJobs.id,
       customerName: cleanerJobs.customerName,
       customerPhone: cleanerJobs.customerPhone,
-      trackerToken: cleanerJobs.trackerToken,
       delayMinutes: cleanerJobs.delayMinutes,
     })
     .from(cleanerJobs)
@@ -1512,14 +1492,12 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
 
   const clientFirstName = firstName(job.customerName);
   const delayStr = job.delayMinutes ? `${job.delayMinutes} minutes` : "a bit";
-  // Always generate token if missing — guarantees a real /track/:token URL
-  const trackingLink = await ensureTrackerToken(cleanerJobId);
+  const portalLink = await getCustomerPortalLink(cleanerJobId);
 
   const msg = [
     `Hey ${clientFirstName} — quick heads up, the team is running about ${delayStr} behind.`,
     ``,
-    `You can follow their updated arrival here: ${trackingLink}`,
-    ``,
+    ...(portalLink ? [`Open My Home: ${portalLink}`, ``] : []),
     `Really appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏`,
   ].join("\n");
 

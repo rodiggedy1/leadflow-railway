@@ -2,7 +2,7 @@
  * trackerReviewSms.ts
  *
  * Sends a review incentive SMS to the customer when their job is marked completed.
- * The message re-sends the tracker link and includes the "$50 tip" incentive.
+ * The message opens the established customer portal and includes the "$50 tip" incentive.
  *
  * Called fire-and-forget from cleanerRouter.markComplete.
  */
@@ -12,18 +12,12 @@ import { cleanerJobs } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
-import { randomBytes } from "crypto";
-
-const BASE_URL = "https://quote.maidinblack.com";
-
-function generateToken(): string {
-  return randomBytes(24).toString("base64url");
-}
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 
 /**
  * Send the post-completion review SMS to the customer.
- * - Generates a tracker token if one doesn't exist.
- * - Sends the tracker link with a "$50 tip" incentive message.
+ * - Opens the existing customer portal with a reusable handoff link.
+ * - Never creates or sends a retired single-job tracker token.
  * - Only sends once (checks if already sent via trackerSmsSentAt — but we allow
  *   a second send on completion, so we use a separate flag check).
  */
@@ -37,7 +31,6 @@ export async function sendCompletionReviewSms(cleanerJobId: number): Promise<voi
       customerPhone: cleanerJobs.customerPhone,
       customerName: cleanerJobs.customerName,
       teamName: cleanerJobs.teamName,
-      trackerToken: cleanerJobs.trackerToken,
     })
     .from(cleanerJobs)
     .where(eq(cleanerJobs.id, cleanerJobId))
@@ -50,24 +43,17 @@ export async function sendCompletionReviewSms(cleanerJobId: number): Promise<voi
     return;
   }
 
-  // Ensure tracker token exists
-  let token = job.trackerToken;
-  if (!token) {
-    token = generateToken();
-    await db
-      .update(cleanerJobs)
-      .set({ trackerToken: token })
-      .where(eq(cleanerJobs.id, job.id));
-  }
-
-  const trackerUrl = `${BASE_URL}/track/${token}`;
+  const portalUrl = await getOrCreateCustomerPortalMagicLink(db, {
+    customerName: job.customerName ?? "Customer",
+    customerPhone: job.customerPhone,
+  });
   const firstName = job.customerName?.split(" ")[0] ?? "there";
   const teamDisplay = job.teamName ?? "your team";
 
   const message =
     `Hi ${firstName}! ✨ ${teamDisplay} just finished your clean — your home is sparkling!\n\n` +
     `Leave a 5-star Google review and we'll add a $50 tip to ${teamDisplay}:\n` +
-    `${trackerUrl}`;
+    `Open My Home: ${portalUrl}`;
 
   const result = await sendSms({ to: job.customerPhone, content: message, fromNumberId: ENV.openPhoneCsNumberId });
 

@@ -269,13 +269,13 @@ const WORKFLOW_CLIENTS: WorkflowStep[] = [
       {
         role: "client-sms",
         content:
-          "Hey {{client_name}} — you're all set for your home cleaning today at {{time}} \ud83d\ude0a\n\nYou can follow your cleaning here: {{tracking_link}}\n\nWe'll update this in real time if anything changes, including arrival timing.",
-        note: "Sent to the CLIENT at T-2hrs. If T-2hrs falls before 7:30 AM ET, held until 7:30 AM ET. {{tracking_link}} is the live job tracker URL.",
+          "Hey {{client_name}} — you're all set for your home cleaning today at {{time}} 😊\n\nOpen My Home: {{portal_link}}\n\nWe'll update this in real time if anything changes, including arrival timing.",
+        note: "Sent to the CLIENT at T-2hrs. If T-2hrs falls before 7:30 AM ET, held until 7:30 AM ET. {{portal_link}} opens the customer portal.",
       },
     ],
     notes: [
       "Never sends before 7:30 AM ET, even if the job starts at 8 AM or earlier.",
-      "Tracking link is unique per job and shows live cleaner status.",
+      "The customer portal link opens the customer’s existing My Home experience.",
     ],
   },
   {
@@ -290,8 +290,8 @@ const WORKFLOW_CLIENTS: WorkflowStep[] = [
       {
         role: "client-sms",
         content:
-          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. \ud83d\ude97\n\nTrack their arrival in real time here: {{tracking_link}}\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
-        note: "Sent to the CLIENT. {{client_name}}, {{address}}, {{eta}}, and {{tracking_link}} are pulled from the job record.",
+          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. 🚗\n\nOpen My Home: {{portal_link}}\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
+        note: "Sent to the CLIENT. {{client_name}}, {{address}}, {{eta}}, and {{portal_link}} are pulled from the established customer portal flow.",
       },
     ],
     notes: [
@@ -311,8 +311,8 @@ const WORKFLOW_CLIENTS: WorkflowStep[] = [
       {
         role: "client-sms",
         content:
-          "Hey {{client_name}} — quick heads up, the team is running about {{delay}} behind.\n\nYou can follow their updated arrival here: {{tracking_link}}\n\nReally appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. \ud83d\ude4f",
-        note: "{{delay}} is the number of minutes late (e.g. \"30 minutes\"). {{tracking_link}} is the live tracker URL. Fires once per job.",
+          "Hey {{client_name}} — quick heads up, the team is running about {{delay}} behind.\n\nOpen My Home: {{portal_link}}\n\nReally appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏",
+        note: "{{delay}} is the number of minutes late (e.g. \"30 minutes\"). {{portal_link}} opens the customer portal. Fires once per job.",
       },
     ],
     notes: [

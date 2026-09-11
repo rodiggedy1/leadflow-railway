@@ -20,18 +20,13 @@ import { getDb } from "./db";
 import { cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { eq, and, isNull, isNotNull, desc, gte, lte } from "drizzle-orm";
 import { jobSmsReplies } from "../drizzle/schema";
-import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 
 const OWNER_ALERT_NUMBER = "+13029816191"; // Owner's personal number for low-rating alerts
 const GOOGLE_REVIEW_URL = "https://tinyurl.com/26rjz5jn";
-
-/** Generate a URL-safe random token */
-function generateToken(): string {
-  return randomBytes(24).toString("base64url");
-}
 
 /** Get today's date in ET as YYYY-MM-DD */
 function getTodayET(): string {
@@ -399,9 +394,8 @@ Return a JSON object with this exact structure:
     }),
 
   /**
-   * Protected (admin): generate tracker tokens for all of today's jobs that
-   * don't have one yet, then send the tracker link SMS to each customer.
-   * Called by the 8 AM cron and available as a manual trigger from the admin.
+   * Protected (admin): send the established customer portal handoff link for
+   * today's jobs. The legacy tracker send marker is retained only for dedupe.
    */
   sendTodayLinks: agentProcedure
     .input(z.object({ date: z.string().optional() }))
@@ -409,7 +403,6 @@ Return a JSON object with this exact structure:
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
       const targetDate = input.date ?? getTodayET();
-      const baseUrl = "https://quote.maidinblack.com";
 
       const jobs = await db
         .select()
@@ -430,14 +423,12 @@ Return a JSON object with this exact structure:
           skipped++;
           continue;
         }
-        let token = job.trackerToken;
-        if (!token) {
-          token = generateToken();
-          await db.update(cleanerJobs).set({ trackerToken: token }).where(eq(cleanerJobs.id, job.id));
-        }
-        const trackerUrl = `${baseUrl}/track/${token}`;
+        const portalUrl = await getOrCreateCustomerPortalMagicLink(db, {
+          customerName: job.customerName ?? "Customer",
+          customerPhone: job.customerPhone,
+        });
         const firstName = job.customerName?.split(" ")[0] ?? "there";
-        const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Track your clean in real time here: ${trackerUrl}`;
+        const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Open My Home: ${portalUrl}`;
         const result = await sendSms({ to: job.customerPhone, content: message }).catch(
           (err: unknown) => ({ success: false, error: String(err) })
         );
@@ -600,37 +591,12 @@ Return a JSON object with this exact structure:
       return { rows: rowsWithReplies, teamStats };
     }),
 
-  /**
-   * Admin: get (or generate) the tracker link for a single job without sending SMS.
-   * Used by the "Copy Tracker Link" button on admin job cards.
-   */
+  /** Admin: get the established customer portal handoff link without sending SMS. */
   getTrackerLink: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
-      const baseUrl = "https://quote.maidinblack.com";
-      const jobs = await db
-        .select()
-        .from(cleanerJobs)
-        .where(eq(cleanerJobs.id, input.cleanerJobId))
-        .limit(1);
-      const job = jobs[0];
-      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
-      let token = job.trackerToken;
-      if (!token) {
-        token = generateToken();
-        await db.update(cleanerJobs).set({ trackerToken: token }).where(eq(cleanerJobs.id, job.id));
-      }
-      return { trackerUrl: `${baseUrl}/track/${token}` };
-    }),
-
-  sendSingleLink: agentProcedure
-    .input(z.object({ cleanerJobId: z.number() }))
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new Error("DB unavailable");
-      const baseUrl = "https://quote.maidinblack.com";
       const jobs = await db
         .select()
         .from(cleanerJobs)
@@ -639,14 +605,32 @@ Return a JSON object with this exact structure:
       const job = jobs[0];
       if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       if (!job.customerPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "No customer phone on file" });
-      let token = job.trackerToken;
-      if (!token) {
-        token = generateToken();
-        await db.update(cleanerJobs).set({ trackerToken: token }).where(eq(cleanerJobs.id, job.id));
-      }
-      const trackerUrl = `${baseUrl}/track/${token}`;
+      const portalUrl = await getOrCreateCustomerPortalMagicLink(db, {
+        customerName: job.customerName ?? "Customer",
+        customerPhone: job.customerPhone,
+      });
+      return { trackerUrl: portalUrl };
+    }),
+
+  sendSingleLink: agentProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const jobs = await db
+        .select()
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.id, input.cleanerJobId))
+        .limit(1);
+      const job = jobs[0];
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      if (!job.customerPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "No customer phone on file" });
+      const portalUrl = await getOrCreateCustomerPortalMagicLink(db, {
+        customerName: job.customerName ?? "Customer",
+        customerPhone: job.customerPhone,
+      });
       const firstName = job.customerName?.split(" ")[0] ?? "there";
-      const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Track your clean in real time here: ${trackerUrl}`;
+      const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Open My Home: ${portalUrl}`;
       const result = await sendSms({ to: job.customerPhone, content: message }).catch(
         (err: unknown) => ({ success: false, error: String(err) })
       );
@@ -654,6 +638,6 @@ Return a JSON object with this exact structure:
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: (result as { error?: string }).error ?? "SMS failed" });
       }
       await db.update(cleanerJobs).set({ trackerSmsSentAt: new Date() }).where(eq(cleanerJobs.id, job.id));
-      return { success: true, trackerUrl };
+      return { success: true, trackerUrl: portalUrl };
     }),
 });

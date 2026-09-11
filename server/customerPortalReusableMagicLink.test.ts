@@ -7,6 +7,11 @@ import { getOrCreateCustomerPortalMagicLink, redeemCustomerPortalHandoff } from 
 const root = path.resolve(import.meta.dirname, "..");
 const service = readFileSync(path.join(root, "server/customerPortalService.ts"), "utf8");
 const progress = readFileSync(path.join(root, "server/cleanerPortalProgressRouter.ts"), "utf8");
+const fieldMgmt = readFileSync(path.join(root, "server/fieldMgmtEngine.ts"), "utf8");
+const fieldMgmtTestTools = readFileSync(path.join(root, "server/fieldMgmtRouter.ts"), "utf8");
+const dailyPortalSms = readFileSync(path.join(root, "server/trackerCron.ts"), "utf8");
+const completionReviewSms = readFileSync(path.join(root, "server/trackerReviewSms.ts"), "utf8");
+const trackerAdminRouter = readFileSync(path.join(root, "server/trackerRouter.ts"), "utf8");
 const route = readFileSync(path.join(root, "server/customerPortalHandoffRoute.ts"), "utf8");
 const schema = readFileSync(path.join(root, "drizzle/schema.ts"), "utf8");
 const drizzleMigration = readFileSync(path.join(root, "drizzle/0100_add_customer_portal_reusable_magic_link.sql"), "utf8");
@@ -105,6 +110,23 @@ describe("customer reusable My Home magic link", () => {
     expect(progress).toContain("jobStatus: \"on_the_way\"");
     expect(progress).toContain("jobStatus: \"arrived\"");
     expect(progress).not.toContain("cleanerMagicLinkTokens");
+  });
+
+  it("sends the existing customer portal handoff link from every remaining customer SMS sender and never creates a single-job tracker URL", () => {
+    for (const sender of [fieldMgmt, fieldMgmtTestTools, dailyPortalSms, completionReviewSms]) {
+      expect(sender).toContain('getOrCreateCustomerPortalMagicLink');
+      expect(sender).toContain('Open My Home: ${portal');
+      expect(sender).not.toContain('/track/');
+      expect(sender).not.toContain('ensureTrackerToken');
+    }
+    const dailySend = trackerAdminRouter.slice(trackerAdminRouter.indexOf('sendTodayLinks: agentProcedure'), trackerAdminRouter.indexOf('getReviewAnalytics: protectedProcedure'));
+    const manualSend = trackerAdminRouter.slice(trackerAdminRouter.indexOf('sendSingleLink: agentProcedure'));
+    for (const sender of [dailySend, manualSend]) {
+      expect(sender).toContain('getOrCreateCustomerPortalMagicLink');
+      expect(sender).toContain('Open My Home: ${portalUrl}');
+      expect(sender).not.toContain('/track/');
+      expect(sender).not.toContain('generateToken');
+    }
   });
 
   it("uses the existing session-issuing handoff route and provides the existing portal login fallback when that link is no longer valid", () => {

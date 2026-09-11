@@ -93,60 +93,42 @@ describe("Review Chips", () => {
 function buildCompletionReviewMessage(params: {
   firstName: string;
   teamDisplay: string;
-  trackerUrl: string;
+  portalUrl: string;
 }): string {
-  const { firstName, teamDisplay, trackerUrl } = params;
+  const { firstName, teamDisplay, portalUrl } = params;
   return (
     `Hi ${firstName}! ✨ ${teamDisplay} just finished your clean — your home is sparkling!\n\n` +
     `Leave a 5-star Google review and we'll add a $50 tip to ${teamDisplay}:\n` +
-    `${trackerUrl}`
+    `Open My Home: ${portalUrl}`
   );
 }
 
 describe("Completion Review SMS", () => {
+  const portalUrl = "https://quote.maidinblack.com/customer-portal/handoff?access=abc123";
+
   it("includes the customer first name", () => {
-    const msg = buildCompletionReviewMessage({
-      firstName: "Sarah",
-      teamDisplay: "Team Solange",
-      trackerUrl: "https://quote.maidinblack.com/track/abc123",
-    });
+    const msg = buildCompletionReviewMessage({ firstName: "Sarah", teamDisplay: "Team Solange", portalUrl });
     expect(msg).toContain("Sarah");
   });
 
   it("includes the team name", () => {
-    const msg = buildCompletionReviewMessage({
-      firstName: "Sarah",
-      teamDisplay: "Team Solange",
-      trackerUrl: "https://quote.maidinblack.com/track/abc123",
-    });
+    const msg = buildCompletionReviewMessage({ firstName: "Sarah", teamDisplay: "Team Solange", portalUrl });
     expect(msg).toContain("Team Solange");
   });
 
-  it("includes the tracker URL", () => {
-    const url = "https://quote.maidinblack.com/track/abc123";
-    const msg = buildCompletionReviewMessage({
-      firstName: "Sarah",
-      teamDisplay: "Team Solange",
-      trackerUrl: url,
-    });
-    expect(msg).toContain(url);
+  it("includes the customer portal handoff URL and never an obsolete tracker URL", () => {
+    const msg = buildCompletionReviewMessage({ firstName: "Sarah", teamDisplay: "Team Solange", portalUrl });
+    expect(msg).toContain(portalUrl);
+    expect(msg).not.toContain("/track/");
   });
 
   it("mentions the $50 tip incentive", () => {
-    const msg = buildCompletionReviewMessage({
-      firstName: "Sarah",
-      teamDisplay: "Team Solange",
-      trackerUrl: "https://quote.maidinblack.com/track/abc123",
-    });
+    const msg = buildCompletionReviewMessage({ firstName: "Sarah", teamDisplay: "Team Solange", portalUrl });
     expect(msg).toContain("$50 tip");
   });
 
   it("mentions 5-star review", () => {
-    const msg = buildCompletionReviewMessage({
-      firstName: "Sarah",
-      teamDisplay: "Team Solange",
-      trackerUrl: "https://quote.maidinblack.com/track/abc123",
-    });
+    const msg = buildCompletionReviewMessage({ firstName: "Sarah", teamDisplay: "Team Solange", portalUrl });
     expect(msg).toContain("5-star");
   });
 });
