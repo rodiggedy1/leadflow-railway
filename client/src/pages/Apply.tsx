@@ -52,7 +52,7 @@ const STEPS: { id: Step; label: string; icon: React.ReactNode }[] = [
   { id: "welcome", label: "Welcome", icon: <Home size={16} /> },
   { id: "basic-info", label: "Basic Info", icon: <User size={16} /> },
   { id: "requirements", label: "Requirements", icon: <CheckSquare size={16} /> },
-  { id: "specialties", label: "Specialties", icon: <Grid size={16} /> },
+  { id: "specialties", label: "Service qualifications", icon: <Grid size={16} /> },
   { id: "bio", label: "Photo", icon: <Camera size={16} /> },
   { id: "video", label: "Video", icon: <Video size={16} /> },
   { id: "done", label: "address", icon: <MapPin size={16} /> },
@@ -60,18 +60,44 @@ const STEPS: { id: Step; label: string; icon: React.ReactNode }[] = [
 
 const STEP_ORDER: Step[] = ["welcome", "basic-info", "requirements", "specialties", "bio", "video", "done"];
 
-const SPECIALTIES = [
-  "Pro Residential Cleaning",
-  "Commercial Cleaning",
-  "Hotel Cleaning",
-  "Move in/Move Out",
-  "Office Cleaning",
-  "Post Construction",
-  "Window Cleaning",
-  "Airbnb Cleaning",
-  "Eco-Friendly Cleaning",
-  "Medical Facility Cleaning",
-];
+const SERVICE_QUALIFICATION_GROUPS = [
+  {
+    title: "Cleaning teams",
+    icon: "✨",
+    summary: "Recurring, deep, and move-in / move-out cleaning",
+    services: ["Home cleaning"],
+  },
+  {
+    title: "Mounting & assembly",
+    icon: "🛠️",
+    summary: "TV mounting, furniture assembly, picture hanging",
+    services: ["TV mounting", "Furniture assembly", "Picture hanging"],
+  },
+  {
+    title: "Handyman & repairs",
+    icon: "🔧",
+    summary: "Repairs, plumbing, and electrical work",
+    services: ["Minor home repairs", "Handyman visit", "Plumbing help", "Electrical & lighting"],
+  },
+  {
+    title: "Painting",
+    icon: "🎨",
+    summary: "Interior painting and touch-ups",
+    services: ["Interior painting"],
+  },
+  {
+    title: "Outdoor services",
+    icon: "🌿",
+    summary: "Lawn & yard care, pressure washing",
+    services: ["Lawn & yard care", "Pressure washing"],
+  },
+  {
+    title: "Moving & removal",
+    icon: "📦",
+    summary: "Moving help and junk removal",
+    services: ["Moving help", "Junk removal"],
+  },
+] as const;
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DC","DE","FL","GA","HI","ID","IL","IN",
@@ -441,6 +467,39 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
                 <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>{s.label}</span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Service-team hiring overview — a single unified application follows */}
+        <div style={{ borderBottom: `1px solid ${DARK_BORDER}` }}>
+          <div className="mx-auto px-6 lg:px-10 py-16" style={{ maxWidth: "1200px" }}>
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-8">
+              <div className="max-w-2xl">
+                <p className="text-xs font-bold tracking-[0.18em] uppercase mb-3" style={{ color: BRAND_GREEN }}>Now hiring across home services</p>
+                <h2 className="text-3xl lg:text-4xl font-black text-white mb-3" style={{ letterSpacing: "-0.02em" }}>There&rsquo;s more than one way to build your career here.</h2>
+                <p className="text-base leading-relaxed" style={{ color: "rgba(255,255,255,0.48)" }}>Choose the work you do best. One application lets you tell us every service you&rsquo;re qualified to provide.</p>
+              </div>
+              <button
+                onClick={onNext}
+                className="inline-flex w-fit items-center gap-2 rounded-xl px-5 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                style={{ backgroundColor: BRAND_GREEN, height: 46, boxShadow: "0 5px 18px rgba(22,163,74,0.32)" }}
+              >
+                Apply for a service team <ChevronRight size={17} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {SERVICE_QUALIFICATION_GROUPS.map(team => (
+                <div key={team.title} className="rounded-2xl p-5" style={{ backgroundColor: "#0d1829", border: `1px solid ${DARK_BORDER}` }}>
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg" style={{ backgroundColor: "rgba(22,163,74,0.12)" }}>{team.icon}</span>
+                    <div>
+                      <h3 className="text-sm font-bold text-white mb-1">{team.title}</h3>
+                      <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>{team.summary}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -837,17 +896,28 @@ function SpecialtiesStep({
   onChange: (patch: Partial<FormData>) => void;
   onNext: () => void;
 }) {
+  const [showError, setShowError] = useState(false);
+
   const toggle = (s: string) => {
     const next = data.specialties.includes(s)
       ? data.specialties.filter(x => x !== s)
       : [...data.specialties, s];
     onChange({ specialties: next });
+    setShowError(false);
+  };
+
+  const handleContinue = () => {
+    if (data.specialties.length === 0) {
+      setShowError(true);
+      return;
+    }
+    onNext();
   };
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-2xl font-bold text-gray-900 mb-1">Specialties</h2>
-      <p className="text-sm text-gray-400 mb-2">Select all that apply</p>
+      <h2 className="text-2xl font-bold text-gray-900 mb-1">What services can you confidently provide?</h2>
+      <p className="text-sm text-gray-400 mb-2">Select every service you are qualified and ready to perform.</p>
 
       {/* Selection counter */}
       <div className="flex items-center gap-2 mb-6">
@@ -863,33 +933,45 @@ function SpecialtiesStep({
             {i + 1}
           </div>
         ))}
-        <span className="text-sm text-gray-400">{data.specialties.length}/3+ selected</span>
+        <span className="text-sm text-gray-400">{data.specialties.length} service{data.specialties.length === 1 ? "" : "s"} selected</span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-        {SPECIALTIES.map(s => {
-          const selected = data.specialties.includes(s);
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => toggle(s)}
-              className="h-14 rounded-xl border text-sm font-medium text-left px-4 transition-all"
-              style={
-                selected
-                  ? { borderColor: GREEN, backgroundColor: GREEN_LIGHT, color: GREEN, fontWeight: 600 }
-                  : { borderColor: "#e5e7eb", backgroundColor: "#fff", color: "#111827" }
-              }
-            >
-              {s}
-            </button>
-          );
-        })}
+      <div className="space-y-6 mb-5">
+        {SERVICE_QUALIFICATION_GROUPS.map(group => (
+          <section key={group.title}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">{group.icon}</span>
+              <h3 className="text-sm font-bold text-gray-900">{group.title}</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {group.services.map(service => {
+                const selected = data.specialties.includes(service);
+                return (
+                  <button
+                    key={service}
+                    type="button"
+                    onClick={() => toggle(service)}
+                    className="min-h-14 rounded-xl border text-sm font-medium text-left px-4 py-3 transition-all"
+                    style={
+                      selected
+                        ? { borderColor: GREEN, backgroundColor: GREEN_LIGHT, color: GREEN, fontWeight: 700, boxShadow: "0 0 0 3px rgba(22,163,74,0.1)" }
+                        : { borderColor: "#e5e7eb", backgroundColor: "#fff", color: "#111827" }
+                    }
+                  >
+                    {selected ? "✓ " : ""}{service}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
+
+      {showError && <p className="mb-5 text-sm font-medium text-red-600">Select at least one service qualification to continue.</p>}
 
       <div className="flex justify-end">
         <button
-          onClick={onNext}
+          onClick={handleContinue}
           className="w-full sm:w-auto flex items-center justify-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
@@ -1721,4 +1803,3 @@ export default function Apply() {
     </div>
   );
 }
-
