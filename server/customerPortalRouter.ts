@@ -17,6 +17,7 @@ import { sendSms } from "./openphone";
 import { extractUSDigits } from "./utils/phone";
 import { getCustomerPortalBusinessDate, isCustomerPortalLiveJob } from "../shared/customerPortalLiveStatus";
 import { CUSTOMER_PORTAL_LATE_RESCHEDULE_FEE_CENTS, formatCustomerPortalLateRescheduleFee, isCustomerPortalRescheduleWithin24Hours } from "../shared/customerPortalScheduleRequest";
+import { formatCustomerPortalExtrasEstimate, resolveCustomerPortalExtrasRequest } from "../shared/customerPortalExtrasRequest";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const CS_OFFICE_SMS_NUMBER = "+12028885362";
@@ -35,6 +36,13 @@ const scheduleRequestSchema = z.object({
   bookingId: z.number().int().positive(),
   preferredLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   preferredLocalTime: z.string().trim().min(2).max(80),
+  notes: z.string().trim().max(2_000).optional(),
+});
+
+const extrasRequestSchema = z.object({
+  bookingSource: z.enum(["booking", "leadflow"]),
+  bookingId: z.number().int().positive(),
+  extras: z.array(z.object({ extraId: z.string().trim().min(1).max(80), quantity: z.number().int().min(1).max(100).optional() })).min(1).max(9),
   notes: z.string().trim().max(2_000).optional(),
 });
 
@@ -416,6 +424,87 @@ export const customerPortalRouter = router({
       console.error("[CustomerPortalScheduleRequest] Customer Service office SMS failed:", error);
     }
     return { ok: true, publicRequestNumber, lateReschedule };
+  }),
+  requestBookingExtras: publicProcedure.input(extrasRequestSchema).mutation(async ({ ctx, input }) => {
+    const session = await getCustomerPortalSessionFromRequest(ctx.req);
+    if (!session) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const db = await getDb();
+    if (!db) throw new Error("Customer portal is unavailable.");
+    const accounts = await db.select().from(customerPortalAccounts).where(eq(customerPortalAccounts.id, session.accountId)).limit(1);
+    const account = accounts[0];
+    if (!account || account.customerPhone !== session.customerPhone) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const phoneDigits = extractUSDigits(account.customerPhone);
+    if (!phoneDigits) throw new Error("CUSTOMER_PORTAL_UNAUTHENTICATED");
+    const booking = input.bookingSource === "booking"
+      ? (await db.select({ id: bookings.id, status: bookings.status, serviceName: bookings.serviceName, jobDate: bookings.requestedLocalDate, serviceTime: bookings.requestedLocalTime, address: bookings.address, publicNumber: bookings.publicBookingNumber }).from(bookings).where(and(eq(bookings.id, input.bookingId), sql`RIGHT(REGEXP_REPLACE(${bookings.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`)).limit(1))[0]
+      : (await db.select({ id: leadflowJobs.id, status: leadflowJobs.bookingStatus, serviceName: leadflowJobs.serviceName, jobDate: leadflowJobs.jobDate, serviceTime: leadflowJobs.serviceDateTime, address: leadflowJobs.jobAddress, publicNumber: leadflowJobs.launch27BookingId }).from(leadflowJobs).where(and(eq(leadflowJobs.id, input.bookingId), sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phoneDigits}`)).limit(1))[0];
+    if (!booking || !isActiveCustomerPortalBookingStatus(booking.status)) throw new Error("BOOKING_NOT_FOUND");
+    const extras = resolveCustomerPortalExtrasRequest(input.extras);
+    const publicRequestNumber = createCustomerPortalRequestNumber();
+    const requestLabel = "Add extras request";
+    const originalSchedule = `${booking.jobDate}${booking.serviceTime ? ` · ${booking.serviceTime}` : ""}`;
+    const extrasSummary = extras.extras.map((extra) => `${extra.label}${extra.quantityUnit ? ` × ${extra.quantity}` : ""} (+${formatCustomerPortalExtrasEstimate(extra.lineTotalCents)})`).join(", ");
+    const customerRequest = [
+      requestLabel,
+      `Current appointment: ${booking.serviceName || "Home cleaning"} · ${originalSchedule}`,
+      `Requested extras: ${extrasSummary}`,
+      `Request estimate: ${formatCustomerPortalExtrasEstimate(extras.totalCents)}. No charge was made through this request.`,
+      input.notes ? `Customer note: ${input.notes}` : null,
+    ].filter((line): line is string => Boolean(line)).join("\n");
+    const now = new Date();
+    await db.insert(customerPortalServiceRequests).values({
+      publicRequestNumber,
+      accountId: account.id,
+      serviceId: "customer-portal-add-extras",
+      serviceName: requestLabel,
+      status: "requested",
+      customerName: account.customerName,
+      customerPhone: account.customerPhone,
+      customerEmail: account.customerEmail,
+      customerRequest,
+      scopeSelections: { bookingSource: input.bookingSource, bookingId: booking.id, bookingReference: booking.publicNumber, requestType: "add_extras", originalSchedule, extras: extras.extras, requestEstimateCents: extras.totalCents },
+      address: booking.address || "Address not available",
+      requestedLocalDate: booking.jobDate,
+      requestedLocalTime: booking.serviceTime || "Time to be confirmed",
+      estimatedTotalCents: extras.totalCents,
+      estimateRequiresReview: 1,
+      paymentBrand: null,
+      paymentLast4: null,
+      stripePaymentMethodId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const officeMessage = [
+      "Customer portal add extras request",
+      `${account.customerName} · ${account.customerPhone}`,
+      `Booking: ${booking.serviceName || "Home cleaning"} · ${originalSchedule}`,
+      `Requested extras: ${extrasSummary}`,
+      `Request estimate: ${formatCustomerPortalExtrasEstimate(extras.totalCents)} — not charged.`,
+      booking.address ? `Address: ${booking.address}` : null,
+      input.notes ? `Note: ${input.notes}` : null,
+      `Portal request: ${publicRequestNumber}`,
+    ].filter((line): line is string => Boolean(line)).join("\n");
+    try {
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        cleanerJobId: null,
+        authorName: "Customer Portal",
+        authorRole: "system",
+        body: officeMessage,
+        quickAction: "customer_portal_add_extras_request",
+        metadata: JSON.stringify({ publicRequestNumber, bookingSource: input.bookingSource, bookingId: booking.id, requestType: "add_extras", extras: extras.extras, requestEstimateCents: extras.totalCents }),
+      });
+      broadcastOpsUpdate("new_message", { channel: "command" });
+    } catch (error) {
+      console.error("[CustomerPortalExtrasRequest] Command Chat office notice failed:", error);
+    }
+    try {
+      const officeSms = await sendSms({ to: CS_OFFICE_SMS_NUMBER, content: officeMessage });
+      if (!officeSms.success) console.error("[CustomerPortalExtrasRequest] Customer Service office SMS failed:", officeSms.error);
+    } catch (error) {
+      console.error("[CustomerPortalExtrasRequest] Customer Service office SMS failed:", error);
+    }
+    return { ok: true, publicRequestNumber, requestEstimateCents: extras.totalCents };
   }),
   createRequest: publicProcedure.input(requestSchema).mutation(async ({ ctx, input }) => {
     const session = await getCustomerPortalSessionFromRequest(ctx.req);
