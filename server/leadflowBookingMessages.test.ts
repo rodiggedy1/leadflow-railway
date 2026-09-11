@@ -27,7 +27,7 @@ describe("isolated LeadFlow booking messages", () => {
     const router = read("server/cleanerPortalMessagesRouter.ts");
     expect(router).toContain('senderRole: "cleaner"');
     expect(router).toContain("getOrCreateCustomerPortalMagicLink");
-    expect(router).toContain("view=messages");
+    expect(router).toContain("view=messages&message=${messageId}");
     expect(router).toContain("Your Maids in Black cleaning team sent you a direct message:");
     expect(router).toContain("Reply in your portal:");
     expect(router).toContain('notificationStatus: "failed"');
@@ -47,9 +47,12 @@ describe("isolated LeadFlow booking messages", () => {
     expect(router).toContain("to: cleaner.phone");
   });
 
-  it("opens only the known Messages view after a valid customer portal handoff", () => {
+  it("opens Messages only for an explicit customer-message SMS link after a valid handoff", () => {
     const handoff = read("server/customerPortalHandoffRoute.ts");
-    expect(handoff).toContain('requestedView === "messages" ? "/my-home?view=messages" : requestedView === "review" ? "/my-home?view=review" : "/my-home"');
+    const customerUi = read("client/src/pages/CustomerPortal.tsx");
+    expect(handoff).toContain('requestedView === "messages" && /^\\d+$/.test(requestedMessageId)');
+    expect(handoff).toContain('`/my-home?view=messages&message=${requestedMessageId}`');
+    expect(customerUi).toContain('view === "messages" && Boolean(messageId) && /^\\d+$/.test(messageId)');
   });
 
   it("adds the Contact client panel only to active Cleaner Portal jobs and makes Customer Portal Messages real", () => {

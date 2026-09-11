@@ -42,8 +42,8 @@ function portalExtras(value: string | null) {
   }
 }
 
-function messagePortalUrl(portalUrl: string) {
-  return `${portalUrl}${portalUrl.includes("?") ? "&" : "?"}view=messages`;
+function messagePortalUrl(portalUrl: string, messageId: number) {
+  return `${portalUrl}${portalUrl.includes("?") ? "&" : "?"}view=messages&message=${messageId}`;
 }
 
 async function ownedActiveLeadflowJob(cleanerId: number, portalJobKey: string) {
@@ -79,7 +79,7 @@ export const cleanerPortalMessagesRouter = router({
     const messageId = Number(inserted[0].insertId);
     let portalLink: string | null = null;
     try {
-      portalLink = messagePortalUrl(await getOrCreateCustomerPortalMagicLink(db, { customerName: job.customerName, customerPhone: job.customerPhone, customerEmail: job.customerEmail }));
+      portalLink = messagePortalUrl(await getOrCreateCustomerPortalMagicLink(db, { customerName: job.customerName, customerPhone: job.customerPhone, customerEmail: job.customerEmail }), messageId);
     } catch (error) {
       console.error("[CleanerPortalMessages] Customer portal link generation failed; sending the message without a link.", error);
     }

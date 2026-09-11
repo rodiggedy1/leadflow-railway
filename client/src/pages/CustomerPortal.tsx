@@ -186,8 +186,11 @@ export default function CustomerPortal() {
   const [selectedService, setSelectedService] = useState<CustomerPortalService | null>(null);
   const [showCleaningRebook, setShowCleaningRebook] = useState(false);
   const [activePage, setActivePage] = useState<PortalPage>(() => {
-    const view = new URLSearchParams(window.location.search).get("view");
-    return view === "messages" || view === "review" ? view : "home";
+    const search = new URLSearchParams(window.location.search);
+    const view = search.get("view");
+    const messageId = search.get("message");
+    const isMessageDeepLink = view === "messages" && Boolean(messageId) && /^\d+$/.test(messageId);
+    return isMessageDeepLink || view === "review" ? view : "home";
   });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [newCardSetup, setNewCardSetup] = useState<{ clientSecret: string; setupIntentId: string } | null>(null);
