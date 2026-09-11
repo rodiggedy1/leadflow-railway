@@ -19,6 +19,7 @@ import {
 import type { CustomerPortalService } from "@shared/customerPortalServices";
 import { formatCustomerPortalServiceTime } from "@/lib/customerPortalTime";
 import "./customer-portal-live-home.css";
+import "./customer-portal-next-cleaning-spacing.css";
 import "./customer-portal-summary-row.css";
 import "./customer-portal-message-availability.css";
 
@@ -113,7 +114,7 @@ export default function CustomerPortalHome({ customerName, homeAddress, nextBook
           <button className={activePage === "messages" ? "active" : ""} type="button" onClick={() => onGoToPage("messages")}><MessageCircle /><span>Messages</span></button>
           <button className={activePage === "account" ? "active" : ""} type="button" onClick={() => onGoToPage("account")}><UserRound /><span>Account</span></button>
         </nav>
-        <div className="mib-customer-home-help"><Headphones /><span><b>Need help?</b><small>We’re here for you.</small></span><span className="mib-customer-home-help-link">Contact us</span></div>
+        <div className="mib-customer-home-help"><Headphones /><span><b>Need help?</b><small>We’re here for you.</small></span><a className="mib-customer-home-help-link" href="sms:+12028885362">Text us</a></div>
       </aside>
 
       <main className="mib-customer-home" aria-label="My home">
