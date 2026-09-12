@@ -25,12 +25,12 @@ import "./applicant-portal-review.css";
 type Tone = "complete" | "active" | "waiting";
 
 const serviceTeams = [
-  { title: "Home cleaning", detail: "Recurring, deep, and move-in / move-out", image: "/manus-storage/standard-cleaning_dad36f8b.png" },
-  { title: "Mounting & assembly", detail: "TV mounting, furniture, and picture hanging", image: "/manus-storage/deep-cleaning_72d92227.png" },
-  { title: "Handyman & repairs", detail: "Minor home repairs and skilled service help", image: "/manus-storage/move-out_7a83e32a.png" },
-  { title: "Painting & trades", detail: "Interior painting, plumbing, and electrical", image: "/manus-storage/standard-cleaning_dad36f8b.png" },
-  { title: "Outdoor services", detail: "Lawn care and pressure washing", image: "/manus-storage/office-cleaning_047409d8.png" },
-  { title: "Moving & removal", detail: "Moving help and junk removal", image: "/manus-storage/add-ons_4103cd87.png" },
+  { title: "Home cleaning", detail: "Recurring, deep, and move-in / move-out", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OMZeVeJTuXKHcklg.png" },
+  { title: "Mounting & assembly", detail: "TV mounting, furniture, and picture hanging", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/YbrwIIinneIBHZgg.png" },
+  { title: "Handyman & repairs", detail: "Minor home repairs and skilled service help", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/oYjQJpyKIbXSpYen.png" },
+  { title: "Painting & trades", detail: "Interior painting, plumbing, and electrical", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OMZeVeJTuXKHcklg.png" },
+  { title: "Outdoor services", detail: "Lawn care and pressure washing", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ZxpoieFGtNqtUWPJ.png" },
+  { title: "Moving & removal", detail: "Moving help and junk removal", image: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/hbdXlmHSoMTgpjne.png" },
 ];
 
 const nextSteps = [

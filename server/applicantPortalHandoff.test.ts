@@ -61,17 +61,14 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("applicant-portal-thank-you_02640bfe.png");
   });
 
-  it("uses the exact already-working review-page URLs for all six service cards", () => {
-    expect(portal).toContain("/manus-storage/standard-cleaning_dad36f8b.png");
-    expect(portal).toContain("/manus-storage/deep-cleaning_72d92227.png");
-    expect(portal).toContain("/manus-storage/move-out_7a83e32a.png");
-    expect(portal).toContain("/manus-storage/office-cleaning_047409d8.png");
-    expect(portal).toContain("/manus-storage/add-ons_4103cd87.png");
-    expect(portal).not.toContain("_82e308c3.png");
-    expect(portal).not.toContain("_02ea71e7.png");
-    expect(portal).not.toContain("_1911ed15.png");
-    expect(portal).not.toContain("_c1c1d50c.png");
-    expect(portal).not.toContain("_16b23535.png");
+  it("uses direct CDN URLs for the exact approved service image files instead of the unconfigured production storage proxy", () => {
+    const serviceCards = portal.slice(portal.indexOf("const serviceTeams = ["), portal.indexOf("];", portal.indexOf("const serviceTeams = [")));
+    expect(serviceCards).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OMZeVeJTuXKHcklg.png");
+    expect(serviceCards).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/YbrwIIinneIBHZgg.png");
+    expect(serviceCards).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/oYjQJpyKIbXSpYen.png");
+    expect(serviceCards).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ZxpoieFGtNqtUWPJ.png");
+    expect(serviceCards).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/hbdXlmHSoMTgpjne.png");
+    expect(serviceCards).not.toContain("/manus-storage/");
   });
 
   it("registers only the additive applicant-token table in matching migration contracts", () => {
