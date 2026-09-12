@@ -62,6 +62,7 @@
 .review-mobile-brand { display: none; }
 .review-applicant { align-items: center; display: flex; gap: 9px; }
 .review-avatar { align-items: center; background: #23372e; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 5px rgba(20,28,23,.12); color: #fff; display: flex; font-size: 10px; font-weight: 800; height: 31px; justify-content: center; width: 31px; }
+.review-avatar__image { border-radius: inherit; height: 100%; object-fit: cover; width: 100%; }
 .review-applicant span { display: grid; line-height: 1.1; }
 .review-applicant strong { font-size: 12px; }
 .review-applicant small { color: var(--review-muted); font-size: 9px; margin-top: 3px; }

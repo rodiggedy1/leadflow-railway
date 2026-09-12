@@ -10,6 +10,7 @@ const auth = fs.readFileSync(path.join(root, "server/_core/applicantPortalAuth.t
 const hiring = fs.readFileSync(path.join(root, "server/hiringRouter.ts"), "utf8");
 const apply = fs.readFileSync(path.join(root, "client/src/pages/Apply.tsx"), "utf8");
 const portal = fs.readFileSync(path.join(root, "client/src/pages/ApplicantPortal.tsx"), "utf8");
+const portalRouter = fs.readFileSync(path.join(root, "server/applicantPortalRouter.ts"), "utf8");
 const migration = fs.readFileSync(path.join(root, "drizzle/0104_create_applicant_portal_handoff_tokens.sql"), "utf8");
 const managedMigration = fs.readFileSync(path.join(root, "server/versioned-migrations/0035_create_applicant_portal_handoff_tokens.sql"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/manifest.json"), "utf8")) as { migrations: Array<{ id: string; sqlFile: string; sha256: string; postconditionsFile: string }> };
@@ -43,6 +44,8 @@ describe("applicant portal magic-link handoff", () => {
   });
 
   it("preserves the approved static portal composition around the live applicant state", () => {
+    expect(portalRouter).toContain("bioPhotoUrl: candidates.bioPhotoUrl");
+    expect(portalRouter).toContain("bioPhotoUrl: candidate.bioPhotoUrl ?? null");
     expect(portal).toContain("Service teams you can grow with");
     expect(portal).toContain("One applicant portal, with opportunities across the home services our customers rely on.");
     expect(portal).toContain("Home cleaning");
@@ -59,6 +62,9 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("Built for people who take pride in great service.");
     expect(portal).toContain("Still have questions?");
     expect(portal).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BAPRHRuxYbGmIuLh.png");
+    expect(portal).toContain('applicant.bioPhotoUrl ? <img className="review-avatar__image"');
+    expect(portal).toContain('alt={`${applicant.firstName} ${applicant.lastName}`}');
+    expect(portal).toContain(': `${applicant.firstName[0] ?? ""}${applicant.lastName[0] ?? ""}`.toUpperCase()');
   });
 
   it("uses direct CDN URLs for the exact approved service image files instead of the unconfigured production storage proxy", () => {

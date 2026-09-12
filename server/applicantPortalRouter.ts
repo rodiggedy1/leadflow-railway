@@ -14,6 +14,7 @@ export const applicantPortalRouter = router({
       id: candidates.id,
       firstName: candidates.firstName,
       lastName: candidates.lastName,
+      bioPhotoUrl: candidates.bioPhotoUrl,
       city: candidates.city,
       state: candidates.state,
       stage: candidates.stage,
@@ -26,6 +27,7 @@ export const applicantPortalRouter = router({
     return {
       firstName: candidate.firstName,
       lastName: candidate.lastName,
+      bioPhotoUrl: candidate.bioPhotoUrl ?? null,
       city: candidate.city ?? null,
       state: candidate.state ?? null,
       stage: candidate.stage,

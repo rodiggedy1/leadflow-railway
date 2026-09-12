@@ -118,7 +118,7 @@ export default function ApplicantPortal() {
       </aside>
 
       <main className="review-main" id="dashboard">
-        <header className="review-topbar"><span className="review-mobile-brand">MIB</span><div className="review-applicant"><div className="review-avatar">{`${applicant.firstName[0] ?? ""}${applicant.lastName[0] ?? ""}`.toUpperCase()}</div><span><strong>{applicant.firstName} {applicant.lastName}</strong><small>Applicant portal</small></span><ChevronDown size={16} /></div></header>
+        <header className="review-topbar"><span className="review-mobile-brand">MIB</span><div className="review-applicant"><div className="review-avatar">{applicant.bioPhotoUrl ? <img className="review-avatar__image" src={applicant.bioPhotoUrl} alt={`${applicant.firstName} ${applicant.lastName}`} /> : `${applicant.firstName[0] ?? ""}${applicant.lastName[0] ?? ""}`.toUpperCase()}</div><span><strong>{applicant.firstName} {applicant.lastName}</strong><small>Applicant portal</small></span><ChevronDown size={16} /></div></header>
 
         <section className="review-hero-card" aria-labelledby="applicant-portal-title">
           <div className="review-welcome-card__heading"><div><span className="review-eyebrow">APPLICANT HOME</span><h1 id="applicant-portal-title">Welcome, {applicant.firstName}.</h1><p>Here is where you are in the hiring process.</p></div><span className="review-sample-pill">Secure applicant access</span></div>
