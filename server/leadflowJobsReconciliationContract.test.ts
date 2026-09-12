@@ -20,4 +20,9 @@ describe("per-date Launch27 active-row reconciliation", () => {
     expect(service).toContain("let reconciled = 0;");
     expect(service).toContain("active: reconciled");
   });
+
+  it("updates the amount only within the existing isolated Bookings refresh", () => {
+    expect(service).toContain("jobTotalCents: launch27BookingTotalCents(source)");
+    expect(service).toContain("eq(leadflowJobs.id, job.id)");
+  });
 });

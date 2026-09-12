@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getConsecutiveBusinessDates,
   isActiveLaunch27Booking,
+  launch27BookingTotalCents,
   launch27BookingToLeadflowJob,
   nextRecurringBusinessDate,
   shouldMarkImportedLaunch27JobMissing,
@@ -81,6 +82,11 @@ describe("isolated LeadFlow jobs import", () => {
       staffNotes: "Use the rear service entrance",
       missingFromLaunch27At: null,
     });
+  });
+
+  it("uses the exact current Launch27 booking total, in cents, for the matching Bookings row", () => {
+    expect(launch27BookingTotalCents(booking({ totalRevenue: 725 }))).toBe(72500);
+    expect(launch27BookingToLeadflowJob(booking({ totalRevenue: 725 }), "2026-09-13").jobTotalCents).toBe(72500);
   });
 
   it("marks only an absent nonterminal imported Launch27 ID as source-missing", () => {

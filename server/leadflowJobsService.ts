@@ -8,6 +8,11 @@ export const LEADFLOW_JOB_IMPORT_DAYS = 30;
 export const LEADFLOW_JOB_ORIGIN_LAUNCH27 = "launch27_import";
 export const LEADFLOW_JOB_ORIGIN_RECURRENCE = "leadflow_recurrence";
 
+/** Converts Launch27's current booking total into the cents persisted for the matching Bookings row. */
+export function launch27BookingTotalCents(booking: Pick<Launch27Booking, "totalRevenue">): number {
+  return Math.round(booking.totalRevenue * 100);
+}
+
 export type LeadflowJobImportDay = {
   date: string;
   fetched: number;
@@ -124,7 +129,7 @@ export function launch27BookingToLeadflowJob(booking: Launch27Booking, jobDate: 
     teamId: firstTeam?.id ?? null,
     customerNotes: booking.customerNotes || null,
     staffNotes: booking.staffNotes || null,
-    jobTotalCents: Math.round(booking.totalRevenue * 100),
+    jobTotalCents: launch27BookingTotalCents(booking),
     hasStripeCard: booking.hasStripeCard ? 1 : 0,
     paymentBrand: booking.paymentBrand || null,
     paymentLast4: booking.paymentLast4 || null,
@@ -260,6 +265,7 @@ export async function refreshImportedLaunch27JobDetails(): Promise<{ checked: nu
       await db.update(leadflowJobs).set({
         teamName: source.teams.map((team) => team.title).filter(Boolean).join(", ") || null,
         teamId: firstTeam?.id ?? null,
+        jobTotalCents: launch27BookingTotalCents(source),
         hasStripeCard: source.hasStripeCard ? 1 : 0,
         paymentBrand: source.paymentBrand || null,
         paymentLast4: source.paymentLast4 || null,
