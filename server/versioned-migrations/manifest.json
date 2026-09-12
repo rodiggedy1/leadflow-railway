@@ -255,6 +255,14 @@
       "sha256": "fc90fde91327f2441909b0669bbcee5e0acd0ced47f3cd8285b50af3a5b1f8e2",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0034_add_cleaner_portal_arrival_sms_guard.postconditions.json"
+    },
+    {
+      "id": "0035_create_applicant_portal_handoff_tokens",
+      "mode": "create-table",
+      "sqlFile": "0035_create_applicant_portal_handoff_tokens.sql",
+      "sha256": "c954199757bc3c770a4c92f9bbdbd0fec74975e10a21eba9b652e1c825985474",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0035_create_applicant_portal_handoff_tokens.postconditions.json"
     }
   ]
 }

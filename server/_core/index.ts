@@ -36,6 +36,7 @@ import { backfillTeamGeocodesOnStartup } from "../schedulingUtils";
 import { startGlanceWorker, backfillGlanceQueue, clearBackfillCooldown } from "../gmailGlanceWorker";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { registerCustomerPortalHandoffRoute } from "../customerPortalHandoffRoute";
+import { registerApplicantPortalHandoffRoutes } from "../applicantPortalHandoffRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -1642,6 +1643,8 @@ async function startServer() {
   registerWidgetEmbedRoute(app);
   // One-time customer portal code redemption must happen before the portal app renders.
   registerCustomerPortalHandoffRoute(app);
+  // Applicant magic-link redemption and legacy hiring-status redirects must happen before the SPA renders.
+  registerApplicantPortalHandoffRoutes(app);
   // SSE proof-of-concept test routes
   registerSseTestRoutes(app);
   // Production SSE stream for OpsChat real-time updates

@@ -11,6 +11,7 @@ import { invokeLLM } from "./_core/llm";
 import { publicProcedure, agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { sendSms } from "./openphone";
+import { getOrCreateApplicantPortalMagicLink } from "./applicantPortalService";
 
 export const hiringRouter = router({
     /**
@@ -62,11 +63,11 @@ export const hiringRouter = router({
         });
         const candidateId = (result as any).insertId;
 
-        // ── Generate status page token and save it ────────────────────────────
+        // ── Preserve the existing legacy status token for backward-compatible redirects ─
         const { randomBytes } = await import("crypto");
         const statusToken = randomBytes(24).toString("base64url");
         await db.update(candidates).set({ statusToken }).where(eq(candidates.id, candidateId));
-        const statusLink = `https://quote.maidinblack.com/hiring-status/${statusToken}`;
+        const applicantPortalLink = await getOrCreateApplicantPortalMagicLink(db, candidateId);
 
         // ── AI scoring (non-blocking — runs after response is sent) ──────────
         setImmediate(async () => {
@@ -135,8 +136,7 @@ export const hiringRouter = router({
             const { conversationSessions } = await import("../drizzle/schema");
             const e164Phone = normalizePhoneLegacy(input.phone);
             const firstName = input.firstName || "there";
-            const interviewLink = `https://quote.maidinblack.com/interview/${candidateId}`;
-            const smsText = `Hey ${firstName} — got your application 👋\n\nNext step is a quick 5-min interview:\n${interviewLink}`;
+            const smsText = `Hey ${firstName} — got your application 👋\n\nOpen your applicant portal to complete your next step:\n${applicantPortalLink}`;
 
             // Create session BEFORE sending SMS so replies are routable
             const [sessionInsert] = await db.insert(conversationSessions).values({
@@ -156,11 +156,6 @@ export const hiringRouter = router({
               console.log(`[Hiring SMS] Interview link sent to ${e164Phone}, candidate ${candidateId}, session ${sessionId}`);
             }
 
-            // Send status page link as second SMS
-            const statusSmsText = `Hey ${firstName} — you can track your application progress anytime here:\n${statusLink}`;
-            await sendSms({ to: e164Phone, content: statusSmsText });
-            console.log(`[Hiring SMS] Status page link sent to ${e164Phone}, candidate ${candidateId}`);
-
             // Schedule 2-hour nudge
             const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
             setTimeout(async () => {
@@ -170,7 +165,7 @@ export const hiringRouter = router({
                 const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
                 const NUDGE_ALLOWED_STAGES = ["Application Submitted", "AI Interview"];
                 if (!candidate || !NUDGE_ALLOWED_STAGES.includes(candidate.stage ?? "")) return;
-                const nudge1 = `Hey ${firstName} — Jade from Maids in Black here! Your interview link is still waiting 👇\n${interviewLink}\nTakes 5 min and helps us move you forward faster.`;
+                const nudge1 = `Hey ${firstName} — Jade from Maids in Black here! Your applicant portal is still waiting 👇\n${applicantPortalLink}\nComplete your next step to stay in the running.`;
                 await sendSms({ to: e164Phone, content: nudge1 });
                 await db.update(conversationSessions)
                   .set({ stage: "INTERVIEW_NUDGE_1" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge1, ts: Date.now() }]) })
@@ -189,7 +184,7 @@ export const hiringRouter = router({
                 const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
                 const NUDGE_ALLOWED_STAGES2 = ["Application Submitted", "AI Interview"];
                 if (!candidate || !NUDGE_ALLOWED_STAGES2.includes(candidate.stage ?? "")) return;
-                const nudge2 = `Good morning ${firstName} — Jade from Maids in Black here 👋 We're still reviewing applications today — your interview spot is open:\n${interviewLink}\nThis is the last reminder — complete it to stay in the running!`;
+                const nudge2 = `Good morning ${firstName} — Jade from Maids in Black here 👋 We're still reviewing applications today. Your applicant portal is ready:\n${applicantPortalLink}\nThis is the last reminder — complete your next step to stay in the running!`;
                 await sendSms({ to: e164Phone, content: nudge2 });
                 await db.update(conversationSessions)
                   .set({ stage: "INTERVIEW_NUDGE_2" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge2, ts: Date.now() }]) })
@@ -234,7 +229,7 @@ export const hiringRouter = router({
           }
         });
 
-        return { success: true, id: candidateId };
+        return { success: true, id: candidateId, applicantPortalLink };
       }),
 
     /**

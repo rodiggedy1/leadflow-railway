@@ -405,7 +405,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
               backgroundImage: "radial-gradient(ellipse at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 70%)",
             }}
           >
-            <h2 className="text-2xl font-extrabold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>Join the area's top cleaning team.</h2>
+            <h2 className="text-2xl font-extrabold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>Join the area's top home services team.</h2>
             <p className="text-sm mb-5 leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
               Takes about 4 minutes.
             </p>
@@ -1399,16 +1399,16 @@ function VideoStep({
   );
 }
 
-function ThankYouStep({ candidateId }: { candidateId: number | null }) {
-  // In preview mode (?step=done with no real candidateId), use a placeholder so the page renders fully.
-  const isPreview = !candidateId && new URLSearchParams(window.location.search).get("step") === "done";
-  const interviewUrl = candidateId ? `/interview/${candidateId}` : (isPreview ? "#" : null);
+function ThankYouStep({ applicantPortalLink }: { applicantPortalLink: string | null }) {
+  // In preview mode (?step=done with no real applicantPortalLink), use a placeholder so the page renders fully.
+  const isPreview = !applicantPortalLink && new URLSearchParams(window.location.search).get("step") === "done";
+  const applicantPortalUrl = applicantPortalLink || (isPreview ? "#" : null);
 
   const nextSteps = [
     {
       number: "01",
       title: "Check your text messages",
-      detail: "We sent a secure link to your AI interview and a link to track your application.",
+      detail: "We sent a secure link to your applicant portal, where you can complete your next step and follow your application.",
     },
     {
       number: "02",
@@ -1436,13 +1436,13 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
             <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">Thank you for applying.</h1>
             <p className="mx-auto mt-3 max-w-xl text-base leading-relaxed text-gray-500">We have received your application and service qualifications. Your next step is a short AI interview so we can learn more about your experience and availability.</p>
             <a
-              href={interviewUrl || "#"}
+              href={applicantPortalUrl || "#"}
               className="mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold text-white transition-opacity hover:opacity-90"
               style={{ backgroundColor: GREEN, boxShadow: "0 6px 20px rgba(22,163,74,0.28)" }}
             >
-              Start your AI interview <ChevronRight size={17} />
+              Open your applicant portal <ChevronRight size={17} />
             </a>
-            <p className="mt-3 text-xs text-gray-400">We also sent the secure interview link by text message.</p>
+            <p className="mt-3 text-xs text-gray-400">We also sent your secure applicant portal link by text message.</p>
           </div>
 
           <div className="mx-auto mt-10 max-w-3xl border-t pt-8" style={{ borderColor: "#eef0f3" }}>
@@ -1472,10 +1472,10 @@ export default function Apply() {
   const initialStep: Step = new URLSearchParams(window.location.search).get("step") as Step || "welcome";
   const [step, setStep] = useState<Step>(initialStep);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [newCandidateId, setNewCandidateId] = useState<number | null>(null);
+  const [applicantPortalLink, setApplicantPortalLink] = useState<string | null>(null);
 
   const submitMutation = trpc.hiring.submitApplication.useMutation({
-    onSuccess: (data) => { setNewCandidateId(data?.id ?? null); setStep("done"); },
+    onSuccess: (data) => { setApplicantPortalLink(data?.applicantPortalLink ?? null); setStep("done"); },
     onError: (err) => setSubmitError(err.message || "Something went wrong. Please try again."),
   });
 
@@ -1676,7 +1676,7 @@ export default function Apply() {
             <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{submitError}</div>
           )}
           {step === "video" && <VideoStep onSubmit={handleSubmit} onSkip={() => handleSubmit(undefined)} isSubmitting={submitMutation.isPending} />}
-          {step === "done" && <ThankYouStep candidateId={newCandidateId} />}
+          {step === "done" && <ThankYouStep applicantPortalLink={applicantPortalLink} />}
         </div>
       </main>
     </div>

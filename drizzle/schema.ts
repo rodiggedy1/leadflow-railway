@@ -2229,6 +2229,22 @@ export const candidates = mysqlTable("candidates", {
 export type Candidate = typeof candidates.$inferSelect;
 export type InsertCandidate = typeof candidates.$inferInsert;
 
+/** Passwordless reusable magic links for the candidate-owned applicant portal. */
+export const applicantPortalHandoffTokens = mysqlTable("applicant_portal_handoff_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  candidateId: int("candidateId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  usedAt: datetime("usedAt", { mode: "date", fsp: 3 }),
+  reusable: tinyint("reusable").notNull().default(0),
+  reusableToken: varchar("reusableToken", { length: 64 }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_applicant_portal_handoff_hash").on(t.tokenHash),
+  index("idx_applicant_portal_handoff_candidate").on(t.candidateId),
+  index("idx_applicant_portal_handoff_expiry").on(t.expiresAt),
+]);
+
 // Interview video chunks — persisted so finalize survives server restarts
 export const interviewChunks = mysqlTable("interview_chunks", {
   id: int("id").autoincrement().primaryKey(),
