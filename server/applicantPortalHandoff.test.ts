@@ -68,6 +68,12 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("setOpenFaqIndex(isOpen ? null : index)");
     expect(styles).toContain(".review-faq-question { font-size: 13px; min-height: 44px;");
     expect(styles).toContain(".review-faq-answer { font-size: 12px; line-height: 1.55; }");
+    expect(portal).toContain('aria-controls="applicant-mobile-navigation"');
+    expect(portal).toContain("setMobileNavOpen(false)");
+    expect(portal).toContain("Service teams</a>");
+    expect(portal).toContain("FAQs</a>");
+    expect(styles).toContain(".review-mobile-menu a { align-items: center;");
+    expect(styles).toContain("min-height: 44px;");
     expect(portal).toContain("Built for people who take pride in great service.");
     expect(portal).toContain("Still have questions?");
     expect(portal).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BAPRHRuxYbGmIuLh.png");

@@ -59,6 +59,7 @@
 
 .review-main { flex: 1; max-width: 1500px; min-width: 0; padding: 26px 34px 50px; }
 .review-topbar { align-items: center; display: flex; height: 36px; justify-content: flex-end; margin-bottom: 20px; }
+.review-mobile-navigation, .review-mobile-menu-button, .review-mobile-menu { display: none; }
 .review-mobile-brand { display: none; }
 .review-applicant { align-items: center; display: flex; gap: 9px; }
 .review-avatar { align-items: center; background: #23372e; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 5px rgba(20,28,23,.12); color: #fff; display: flex; font-size: 10px; font-weight: 800; height: 31px; justify-content: center; width: 31px; }
@@ -168,7 +169,14 @@
 @media (max-width: 920px) {
   .review-sidebar { display: none; }
   .review-main { padding: 20px 18px 38px; }
+  .review-mobile-navigation { align-items: center; display: flex; position: relative; }
   .review-mobile-brand { display: block; font-family: Georgia, "Times New Roman", serif; font-size: 18px; font-weight: 800; }
+  .review-mobile-menu-button { align-items: center; background: #fff; border: 1px solid var(--review-border); border-radius: 9px; color: #27332d; cursor: pointer; display: inline-flex; font-size: 11px; font-weight: 750; gap: 5px; margin-left: 9px; min-height: 38px; padding: 0 10px; }
+  .review-mobile-menu-button[aria-expanded="true"] svg:last-child { transform: rotate(180deg); }
+  .review-mobile-menu { background: #fff; border: 1px solid var(--review-border); border-radius: 14px; box-shadow: 0 12px 30px rgba(25, 40, 31, .14); display: grid; left: 0; min-width: 210px; padding: 6px; position: absolute; top: calc(100% + 9px); z-index: 20; }
+  .review-mobile-menu a { align-items: center; border-radius: 9px; color: #39443f; display: flex; font-size: 13px; font-weight: 650; gap: 10px; min-height: 44px; padding: 0 10px; text-decoration: none; }
+  .review-mobile-menu a.is-active, .review-mobile-menu a:hover { background: #eef4f0; color: #17211d; }
+  .review-mobile-menu a:focus-visible, .review-mobile-menu-button:focus-visible { outline: 2px solid var(--review-green); outline-offset: 2px; }
   .review-topbar { justify-content: space-between; }
   .review-content-grid { grid-template-columns: 1fr; margin-top: 18px; }
   .review-right-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -180,6 +188,7 @@
   .review-notice { font-size: 9px; top: 8px; white-space: nowrap; }
   .review-main { padding: 16px 13px 32px; }
   .review-topbar { margin-top: 24px; }
+  .review-mobile-menu { min-width: 196px; }
   .review-hero-card { padding: 18px 17px 15px; }
   .review-welcome-card__heading { display: block; }
   .review-sample-pill { display: inline-flex; margin-top: 12px; }

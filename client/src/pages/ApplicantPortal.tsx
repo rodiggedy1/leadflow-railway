@@ -13,6 +13,7 @@ import {
   House,
   Loader2,
   Mail,
+  Menu,
   MessageCircle,
   ShieldCheck,
   Sparkles,
@@ -96,6 +97,7 @@ function nextStep(stage: string, hasCompletedInterview: boolean, interviewPath: 
 export default function ApplicantPortal() {
   const portal = trpc.applicantPortal.me.useQuery(undefined, { retry: false });
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   if (portal.isLoading) {
     return <div className="applicant-portal-loading"><Loader2 size={28} className="animate-spin" /> Loading your applicant portal…</div>;
@@ -132,7 +134,14 @@ export default function ApplicantPortal() {
       </aside>
 
       <main className="review-main" id="dashboard">
-        <header className="review-topbar"><span className="review-mobile-brand">MIB</span><div className="review-applicant"><div className="review-avatar">{applicant.bioPhotoUrl ? <img className="review-avatar__image" src={applicant.bioPhotoUrl} alt={`${applicant.firstName} ${applicant.lastName}`} /> : `${applicant.firstName[0] ?? ""}${applicant.lastName[0] ?? ""}`.toUpperCase()}</div><span><strong>{applicant.firstName} {applicant.lastName}</strong><small>Applicant portal</small></span><ChevronDown size={16} /></div></header>
+        <header className="review-topbar">
+          <div className="review-mobile-navigation">
+            <span className="review-mobile-brand">MIB</span>
+            <button className="review-mobile-menu-button" type="button" aria-expanded={mobileNavOpen} aria-controls="applicant-mobile-navigation" onClick={() => setMobileNavOpen(!mobileNavOpen)}><Menu size={17} /><span>Menu</span><ChevronDown size={15} /></button>
+            {mobileNavOpen && <nav className="review-mobile-menu" id="applicant-mobile-navigation" aria-label="Applicant portal navigation"><a className="is-active" href="#dashboard" onClick={() => setMobileNavOpen(false)}><House size={17} /> Home</a><a href="#application" onClick={() => setMobileNavOpen(false)}><FileText size={17} /> Application</a><a href="#teams" onClick={() => setMobileNavOpen(false)}><BriefcaseBusiness size={17} /> Service teams</a><a href="#path" onClick={() => setMobileNavOpen(false)}><GraduationCap size={17} /> Training</a><a href="#faqs" onClick={() => setMobileNavOpen(false)}><CircleHelp size={17} /> FAQs</a><a href="#support" onClick={() => setMobileNavOpen(false)}><MessageCircle size={17} /> Support</a></nav>}
+          </div>
+          <div className="review-applicant"><div className="review-avatar">{applicant.bioPhotoUrl ? <img className="review-avatar__image" src={applicant.bioPhotoUrl} alt={`${applicant.firstName} ${applicant.lastName}`} /> : `${applicant.firstName[0] ?? ""}${applicant.lastName[0] ?? ""}`.toUpperCase()}</div><span><strong>{applicant.firstName} {applicant.lastName}</strong><small>Applicant portal</small></span><ChevronDown size={16} /></div>
+        </header>
 
         <section className="review-hero-card" aria-labelledby="applicant-portal-title">
           <div className="review-welcome-card__heading"><div><span className="review-eyebrow">APPLICANT HOME</span><h1 id="applicant-portal-title">Welcome, {applicant.firstName}.</h1><p>Here is where you are in the hiring process.</p></div><span className="review-sample-pill">Secure applicant access</span></div>
