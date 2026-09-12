@@ -11,6 +11,7 @@ const hiring = fs.readFileSync(path.join(root, "server/hiringRouter.ts"), "utf8"
 const apply = fs.readFileSync(path.join(root, "client/src/pages/Apply.tsx"), "utf8");
 const portal = fs.readFileSync(path.join(root, "client/src/pages/ApplicantPortal.tsx"), "utf8");
 const portalRouter = fs.readFileSync(path.join(root, "server/applicantPortalRouter.ts"), "utf8");
+const styles = fs.readFileSync(path.join(root, "client/src/pages/applicant-portal-review.css"), "utf8");
 const migration = fs.readFileSync(path.join(root, "drizzle/0104_create_applicant_portal_handoff_tokens.sql"), "utf8");
 const managedMigration = fs.readFileSync(path.join(root, "server/versioned-migrations/0035_create_applicant_portal_handoff_tokens.sql"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/manifest.json"), "utf8")) as { migrations: Array<{ id: string; sqlFile: string; sha256: string; postconditionsFile: string }> };
@@ -65,6 +66,8 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("What should I expect during the interview?");
     expect(portal).toContain("aria-expanded={isOpen}");
     expect(portal).toContain("setOpenFaqIndex(isOpen ? null : index)");
+    expect(styles).toContain(".review-faq-question { font-size: 13px; min-height: 44px;");
+    expect(styles).toContain(".review-faq-answer { font-size: 12px; line-height: 1.55; }");
     expect(portal).toContain("Built for people who take pride in great service.");
     expect(portal).toContain("Still have questions?");
     expect(portal).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BAPRHRuxYbGmIuLh.png");

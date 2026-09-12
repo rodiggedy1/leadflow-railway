@@ -204,6 +204,8 @@
   .review-path__item { min-height: 110px; }
   .review-right-rail { grid-template-columns: 1fr; }
   .review-support-card, .review-brand-card { grid-column: auto; }
+  .review-faq-question { font-size: 13px; min-height: 44px; padding: 12px 13px; }
+  .review-faq-answer { font-size: 12px; line-height: 1.55; }
 }
 
 .applicant-portal-loading { align-items: center; background: #f6f8f6; color: #23332a; display: flex; font-family: Inter, ui-sans-serif, system-ui, sans-serif; gap: 12px; justify-content: center; min-height: 100vh; padding: 24px; text-align: center; }
