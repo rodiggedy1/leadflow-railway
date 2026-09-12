@@ -58,7 +58,7 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("How long does the hiring process take?");
     expect(portal).toContain("Built for people who take pride in great service.");
     expect(portal).toContain("Still have questions?");
-    expect(portal).toContain("applicant-portal-thank-you_02640bfe.png");
+    expect(portal).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BAPRHRuxYbGmIuLh.png");
   });
 
   it("uses direct CDN URLs for the exact approved service image files instead of the unconfigured production storage proxy", () => {
