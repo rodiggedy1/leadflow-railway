@@ -42,6 +42,25 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("Complete your short interview");
   });
 
+  it("preserves the approved static portal composition around the live applicant state", () => {
+    expect(portal).toContain("Service teams you can grow with");
+    expect(portal).toContain("One applicant portal, with opportunities across the home services our customers rely on.");
+    expect(portal).toContain("Home cleaning");
+    expect(portal).toContain("Mounting & assembly");
+    expect(portal).toContain("Handyman & repairs");
+    expect(portal).toContain("Painting & trades");
+    expect(portal).toContain("Outdoor services");
+    expect(portal).toContain("Moving & removal");
+    expect(portal).toContain("A transparent path forward");
+    expect(portal).toContain("Offer & onboarding");
+    expect(portal).toContain("Start planning");
+    expect(portal).toContain("Frequently asked questions");
+    expect(portal).toContain("How long does the hiring process take?");
+    expect(portal).toContain("Built for people who take pride in great service.");
+    expect(portal).toContain("Still have questions?");
+    expect(portal).toContain("applicant-portal-thank-you_02640bfe.png");
+  });
+
   it("registers only the additive applicant-token table in matching migration contracts", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS `applicant_portal_handoff_tokens`");
     expect(migration).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/im);
