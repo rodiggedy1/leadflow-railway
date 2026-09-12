@@ -19,6 +19,7 @@ import {
   UserRound,
   Wrench,
 } from "lucide-react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import "./applicant-portal-review.css";
 
@@ -41,10 +42,22 @@ const nextSteps = [
 ];
 
 const faqs = [
-  "How long does the hiring process take?",
-  "Can I apply for more than one service team?",
-  "What should I expect during the interview?",
-  "How will I hear about next steps?",
+  {
+    question: "How long does the hiring process take?",
+    answer: "The hiring process typically takes 3–4 days. Your portal will show where you are in the process and any next action needed from you.",
+  },
+  {
+    question: "Can I apply for more than one service team?",
+    answer: "Yes. You can select every service you are qualified and ready to provide. We use those selections to understand where your experience may be the best fit.",
+  },
+  {
+    question: "What should I expect during the interview?",
+    answer: "The first interview is a short conversation about your experience, availability, and the types of home services you enjoy providing. If you move forward, the hiring team may schedule a brief follow-up call.",
+  },
+  {
+    question: "How will I hear about next steps?",
+    answer: "Your applicant portal will show your current status and next action. You will receive a text whenever there is an update in your portal.",
+  },
 ];
 
 function StaticButton({ children, dark = false }: { children: React.ReactNode; dark?: boolean }) {
@@ -82,6 +95,7 @@ function nextStep(stage: string, hasCompletedInterview: boolean, interviewPath: 
 
 export default function ApplicantPortal() {
   const portal = trpc.applicantPortal.me.useQuery(undefined, { retry: false });
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   if (portal.isLoading) {
     return <div className="applicant-portal-loading"><Loader2 size={28} className="animate-spin" /> Loading your applicant portal…</div>;
@@ -140,7 +154,12 @@ export default function ApplicantPortal() {
 
             <section className="review-card review-faqs" id="faqs" aria-labelledby="review-faq-title">
               <div className="review-section-header"><div><span className="review-eyebrow">COMMON QUESTIONS</span><h2 id="review-faq-title">Frequently asked questions</h2></div><a href="#support">All FAQs <ChevronRight size={16} /></a></div>
-              <div className="review-faq-list">{faqs.map((faq) => <button type="button" key={faq} aria-disabled="true"><span>{faq}</span><ChevronDown size={17} /></button>)}</div>
+              <div className="review-faq-list">{faqs.map((faq, index) => {
+                const isOpen = openFaqIndex === index;
+                const questionId = `applicant-faq-question-${index}`;
+                const answerId = `applicant-faq-answer-${index}`;
+                return <div className="review-faq-item" key={faq.question}><button id={questionId} className="review-faq-question" type="button" aria-expanded={isOpen} aria-controls={answerId} onClick={() => setOpenFaqIndex(isOpen ? null : index)}><span>{faq.question}</span><ChevronDown size={17} /></button>{isOpen && <div className="review-faq-answer" id={answerId} role="region" aria-labelledby={questionId}><p>{faq.answer}</p></div>}</div>;
+              })}</div>
             </section>
           </div>
 

@@ -59,6 +59,12 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("Start planning");
     expect(portal).toContain("Frequently asked questions");
     expect(portal).toContain("How long does the hiring process take?");
+    expect(portal).toContain("The hiring process typically takes 3–4 days.");
+    expect(portal).toContain("You will receive a text whenever there is an update in your portal.");
+    expect(portal).toContain("Can I apply for more than one service team?");
+    expect(portal).toContain("What should I expect during the interview?");
+    expect(portal).toContain("aria-expanded={isOpen}");
+    expect(portal).toContain("setOpenFaqIndex(isOpen ? null : index)");
     expect(portal).toContain("Built for people who take pride in great service.");
     expect(portal).toContain("Still have questions?");
     expect(portal).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/BAPRHRuxYbGmIuLh.png");
