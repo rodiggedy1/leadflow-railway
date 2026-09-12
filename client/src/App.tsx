@@ -40,7 +40,7 @@ const CleanerAuthCallback = lazy(() => import("./pages/CleanerAuthCallback"));
 const LiveCallAssist = lazy(() => import("./pages/LiveCallAssist"));
 const ReviewTracker = lazy(() => import("./pages/ReviewTracker"));
 const SseTest = lazy(() => import("./pages/SseTest"));
-const HiringPipeline = lazy(() => import("./pages/HiringPipeline"));
+const HiringAdminLive = lazy(() => import("./pages/HiringAdminLive"));
 const Apply = lazy(() => import("./pages/Apply"));
 const ApplicantPortal = lazy(() => import("./pages/ApplicantPortal"));
 const AIInterview = lazy(() => import("./pages/AIInterview"));
@@ -140,7 +140,7 @@ function Router() {
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
         <Route path={"/call-assist"} component={LiveCallAssist} />
         <Route path={"/sse-test"} component={SseTest} />
-        <Route path={"/admin/hiring"} component={HiringPipeline} />
+        <Route path={"/admin/hiring"} component={HiringAdminLive} />
         <Route path={"/apply"} component={Apply} />
         <Route path={"/applicant-portal"} component={ApplicantPortal} />
         <Route path={"/interview/:candidateId"} component={AIInterview} />
