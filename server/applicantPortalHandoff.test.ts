@@ -61,17 +61,17 @@ describe("applicant portal magic-link handoff", () => {
     expect(portal).toContain("applicant-portal-thank-you_02640bfe.png");
   });
 
-  it("uses the verified uploaded asset URLs for all six service cards", () => {
-    expect(portal).toContain("/manus-storage/standard-cleaning_82e308c3.png");
-    expect(portal).toContain("/manus-storage/deep-cleaning_02ea71e7.png");
-    expect(portal).toContain("/manus-storage/move-out_1911ed15.png");
-    expect(portal).toContain("/manus-storage/office-cleaning_c1c1d50c.png");
-    expect(portal).toContain("/manus-storage/add-ons_16b23535.png");
-    expect(portal).not.toContain("_dad36f8b.png");
-    expect(portal).not.toContain("_72d92227.png");
-    expect(portal).not.toContain("_7a83e32a.png");
-    expect(portal).not.toContain("_047409d8.png");
-    expect(portal).not.toContain("_4103d87.png");
+  it("uses the exact already-working review-page URLs for all six service cards", () => {
+    expect(portal).toContain("/manus-storage/standard-cleaning_dad36f8b.png");
+    expect(portal).toContain("/manus-storage/deep-cleaning_72d92227.png");
+    expect(portal).toContain("/manus-storage/move-out_7a83e32a.png");
+    expect(portal).toContain("/manus-storage/office-cleaning_047409d8.png");
+    expect(portal).toContain("/manus-storage/add-ons_4103cd87.png");
+    expect(portal).not.toContain("_82e308c3.png");
+    expect(portal).not.toContain("_02ea71e7.png");
+    expect(portal).not.toContain("_1911ed15.png");
+    expect(portal).not.toContain("_c1c1d50c.png");
+    expect(portal).not.toContain("_16b23535.png");
   });
 
   it("registers only the additive applicant-token table in matching migration contracts", () => {
