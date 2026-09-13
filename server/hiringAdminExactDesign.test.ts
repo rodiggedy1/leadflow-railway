@@ -38,4 +38,11 @@ describe("exact-design Hiring admin release", () => {
     expect(page).toContain("<VideoInterviewCard videoUrl={selectedApplicant.videoUrl} />");
     expect(page).toContain("<InterviewRecordingCard videoUrl={selectedApplicant.interviewVideoUrl} candidateId={selectedApplicant.id} />");
   });
+
+  it("shows a compact card indicator only when an existing application or interview video is available", () => {
+    expect(page).toContain("const videoCount = Number(Boolean(applicant.videoUrl)) + Number(Boolean(applicant.interviewVideoUrl));");
+    expect(page).toContain("videoCount > 0");
+    expect(page).toContain("hiring-review-applicant-video-indicator");
+    expect(styles).toContain(".hiring-review-applicant-video-indicator");
+  });
 });
