@@ -1,5 +1,5 @@
 import { and, eq, isNull, lte } from "drizzle-orm";
-import { leadflowJobs, type LeadflowJob } from "../drizzle/schema";
+import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs, type LeadflowJob } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCompletedBookingsForDate, type Launch27Booking } from "./launch27";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
@@ -142,7 +142,7 @@ export function launch27BookingToLeadflowJob(booking: Launch27Booking, jobDate: 
  * A manual-date caller can preserve, rather than delete, imported rows that are
  * absent from a successful full Launch27 response.
  */
-export async function importLaunch27JobsForDate(date: string, options: { markMissing?: boolean } = {}): Promise<LeadflowJobImportDay> {
+export async function importLaunch27JobsForDate(date: string, options: { markMissing?: boolean; mergeExistingDuplicates?: boolean } = {}): Promise<LeadflowJobImportDay> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const response = await getCompletedBookingsForDate(date, { includeAll: true });
@@ -158,14 +158,35 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
   let alreadyPresent = 0;
   let reconciled = 0;
   let sourceMissing = 0;
+  const recurringPlaceholders = await db.select().from(leadflowJobs).where(and(
+    eq(leadflowJobs.origin, LEADFLOW_JOB_ORIGIN_RECURRENCE),
+    isNull(leadflowJobs.launch27BookingId),
+    eq(leadflowJobs.jobDate, date),
+  ));
+  const consumedPlaceholderIds = new Set<number>();
 
   for (const booking of activeBookings) {
     if (seenBookingIds.has(booking.id)) continue;
     seenBookingIds.add(booking.id);
-    const existing = await db.select({ id: leadflowJobs.id, bookingStatus: leadflowJobs.bookingStatus }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
+    const existing = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
     const values = launch27BookingToLeadflowJob(booking, date);
+    const placeholder = findUniqueRecurringPlaceholder(
+      recurringPlaceholders.filter((candidate) => !consumedPlaceholderIds.has(candidate.id)),
+      values,
+    );
     if (existing.length > 0) {
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));
+      if (placeholder && options.mergeExistingDuplicates) {
+        consumedPlaceholderIds.add(placeholder.id);
+        await mergeRecurringPlaceholderIntoImportedJob(db, placeholder.id, existing[0].id);
+      }
+      updated++;
+      reconciled++;
+      continue;
+    }
+    if (placeholder) {
+      consumedPlaceholderIds.add(placeholder.id);
+      await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, placeholder.id));
       updated++;
       reconciled++;
       continue;
@@ -179,6 +200,10 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
       const raced = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
       if (raced.length === 0) throw error;
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, raced[0].id));
+      if (placeholder && options.mergeExistingDuplicates) {
+        consumedPlaceholderIds.add(placeholder.id);
+        await mergeRecurringPlaceholderIntoImportedJob(db, placeholder.id, raced[0].id);
+      }
       updated++;
       reconciled++;
     }
@@ -276,11 +301,73 @@ export async function refreshImportedLaunch27JobDetails(): Promise<{ checked: nu
   return { checked: imported.length, refreshed, dateErrors };
 }
 
-export function isSameLeadflowJobIdentity(current: LeadflowJob, candidate: LeadflowJob): boolean {
+type LeadflowJobIdentity = Pick<LeadflowJob, "jobDate" | "customerPhone" | "customerEmail" | "jobAddress" | "serviceName">;
+
+export function isSameLeadflowJobIdentity(current: LeadflowJobIdentity, candidate: LeadflowJobIdentity): boolean {
   return candidate.customerPhone === current.customerPhone
     && candidate.customerEmail === current.customerEmail
     && candidate.jobAddress === current.jobAddress
     && candidate.serviceName === current.serviceName;
+}
+
+export function findUniqueRecurringPlaceholder(
+  placeholders: readonly LeadflowJob[],
+  launch27Visit: LeadflowJobIdentity,
+): LeadflowJob | null {
+  const matches = placeholders.filter((candidate) => (
+    candidate.origin === LEADFLOW_JOB_ORIGIN_RECURRENCE
+    && candidate.launch27BookingId === null
+    && candidate.jobDate === launch27Visit.jobDate
+    && isSameLeadflowJobIdentity(candidate, launch27Visit)
+  ));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function mergeRecurringPlaceholderIntoImportedJob(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  placeholderId: number,
+  importedJobId: number,
+): Promise<"merged" | "skipped_progress_conflict" | "skipped_signoff_conflict"> {
+  const [placeholderProgress] = await db.select({ id: cleanerPortalJobProgress.id })
+    .from(cleanerPortalJobProgress)
+    .where(eq(cleanerPortalJobProgress.leadflowJobId, placeholderId))
+    .limit(1);
+  const [importedProgress] = await db.select({ id: cleanerPortalJobProgress.id })
+    .from(cleanerPortalJobProgress)
+    .where(eq(cleanerPortalJobProgress.leadflowJobId, importedJobId))
+    .limit(1);
+  if (placeholderProgress && importedProgress) return "skipped_progress_conflict";
+
+  const [placeholderSignoff] = await db.select({ id: cleanerPortalJobSignoffs.id })
+    .from(cleanerPortalJobSignoffs)
+    .where(eq(cleanerPortalJobSignoffs.leadflowJobId, placeholderId))
+    .limit(1);
+  const [importedSignoff] = await db.select({ id: cleanerPortalJobSignoffs.id })
+    .from(cleanerPortalJobSignoffs)
+    .where(eq(cleanerPortalJobSignoffs.leadflowJobId, importedJobId))
+    .limit(1);
+  if (placeholderSignoff && importedSignoff) return "skipped_signoff_conflict";
+
+  await db.transaction(async (tx) => {
+    if (placeholderProgress) {
+      await tx.update(cleanerPortalJobProgress)
+        .set({ leadflowJobId: importedJobId })
+        .where(eq(cleanerPortalJobProgress.id, placeholderProgress.id));
+    }
+    if (placeholderSignoff) {
+      await tx.update(cleanerPortalJobSignoffs)
+        .set({ leadflowJobId: importedJobId })
+        .where(eq(cleanerPortalJobSignoffs.id, placeholderSignoff.id));
+    }
+    await tx.update(cleanerPortalJobPhotos)
+      .set({ leadflowJobId: importedJobId })
+      .where(eq(cleanerPortalJobPhotos.leadflowJobId, placeholderId));
+    await tx.update(leadflowBookingMessages)
+      .set({ leadflowJobId: importedJobId })
+      .where(eq(leadflowBookingMessages.leadflowJobId, placeholderId));
+    await tx.delete(leadflowJobs).where(eq(leadflowJobs.id, placeholderId));
+  });
+  return "merged";
 }
 
 export async function runEndOfDayLeadflowJobRecurrence(now = new Date()): Promise<{ checked: number; created: number; skipped: number; errors: number }> {

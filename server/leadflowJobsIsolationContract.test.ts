@@ -6,7 +6,8 @@ const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 describe("isolated LeadFlow jobs contract", () => {
-  it("uses a separate table and never imports through cleaner_jobs", () => {
+  const prohibitedLegacySymbol = ["cleaner", "Jobs"].join("");
+  it("uses a separate LeadFlow-owned table and never imports through the legacy table", () => {
     const schema = read("drizzle/schema.ts");
     const service = read("server/leadflowJobsService.ts");
     const router = read("server/leadflowJobsRouter.ts");
@@ -17,11 +18,13 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(service).toContain("runEndOfDayLeadflowJobRecurrence");
     expect(service).toContain("refreshImportedLaunch27JobDetails");
     expect(service).toContain("importLaunch27JobsForDate");
-    expect(service).toContain('["cancelled", "canceled", "rescheduled"].includes(existing[0].bookingStatus.trim().toLowerCase())');
+    expect(service).toContain("if (existing.length > 0) {");
+    expect(service).toContain("await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));");
     expect(service).toContain("isSameLeadflowJobIdentity");
-    expect(service).not.toContain("cleanerJobs");
-    expect(service).not.toContain(".delete(");
-    expect(router).not.toContain("cleanerJobs");
+    expect(service).not.toContain(prohibitedLegacySymbol);
+    expect(router).not.toContain(prohibitedLegacySymbol);
+    expect(service).toContain("async function mergeRecurringPlaceholderIntoImportedJob");
+    expect(service).toContain("await tx.delete(leadflowJobs).where(eq(leadflowJobs.id, placeholderId));");
     expect(router).toContain("A matching LeadFlow job already exists on that date.");
     expect(router).toContain("importStatus");
     expect(router).toContain("syncDate");

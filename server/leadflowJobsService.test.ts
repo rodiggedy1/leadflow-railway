@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getConsecutiveBusinessDates,
+  findUniqueRecurringPlaceholder,
   isActiveLaunch27Booking,
   launch27BookingTotalCents,
   launch27BookingToLeadflowJob,
@@ -105,5 +106,23 @@ describe("isolated LeadFlow jobs import", () => {
     expect(nextRecurringBusinessDate("2026-09-06", "Tri-weekly (10%OFF)")).toBe("2026-09-27");
     expect(nextRecurringBusinessDate("2026-09-06", "Monthly (10%OFF)")).toBe("2026-10-06");
     expect(nextRecurringBusinessDate("2026-09-06", "One time")).toBeNull();
+  });
+
+  it("promotes exactly one same-visit recurrence placeholder even when its team assignment changed", () => {
+    const placeholder = {
+      ...launch27BookingToLeadflowJob(booking({ teams: [{ id: 7, title: "Martha Calderon", share: 55, bgColor: "#000" }] }), "2026-09-13"),
+      id: 91,
+      origin: "leadflow_recurrence" as const,
+      launch27BookingId: null,
+    } as any;
+    const officialVisit = launch27BookingToLeadflowJob(booking({ id: 722, teams: [{ id: 8, title: "Team Alba M", share: 55, bgColor: "#111" }] }), "2026-09-13");
+    expect(findUniqueRecurringPlaceholder([placeholder], officialVisit)?.id).toBe(91);
+  });
+
+  it("does not promote a recurrence placeholder when more than one row has the same visit identity", () => {
+    const first = { ...launch27BookingToLeadflowJob(booking(), "2026-09-13"), id: 91, origin: "leadflow_recurrence" as const, launch27BookingId: null } as any;
+    const second = { ...launch27BookingToLeadflowJob(booking(), "2026-09-13"), id: 92, origin: "leadflow_recurrence" as const, launch27BookingId: null } as any;
+    const officialVisit = launch27BookingToLeadflowJob(booking({ id: 722 }), "2026-09-13");
+    expect(findUniqueRecurringPlaceholder([first, second], officialVisit)).toBeNull();
   });
 });

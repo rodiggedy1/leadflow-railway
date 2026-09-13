@@ -99,7 +99,7 @@ export const leadflowJobsRouter = router({
   }),
 
   syncDate: adminAgentProcedure.input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).mutation(async ({ input }) => {
-    const result = await importLaunch27JobsForDate(input.date, { markMissing: true });
+    const result = await importLaunch27JobsForDate(input.date, { markMissing: true, mergeExistingDuplicates: true });
     if (result.created + result.updated + result.sourceMissing > 0) broadcastCleanerPortalJobsChanged();
     return result;
   }),
