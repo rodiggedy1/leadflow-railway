@@ -46,6 +46,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { sql, isNotNull, count } from "drizzle-orm";
 import { gmailThreadMeta } from "../../drizzle/schema";
 import { runNormalStartup } from "../normalStartup";
+import { markSyntheticRecurrenceRowsNotInLaunch27 } from "../leadflowJobsService";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -977,6 +978,14 @@ async function startServer() {
   // Normal application boot deliberately executes no schema DDL and no data repairs.
   const { checkSmsCampaignSchema } = await import("../sms/schemaCheck");
   await runNormalStartup({ checkSmsCampaignSchema });
+  if (!ENV.isPreviewMode) {
+    try {
+      await markSyntheticRecurrenceRowsNotInLaunch27();
+      console.log("[LeadflowJobs] Synthetic recurrence rows marked Not in Launch27 for manual review.");
+    } catch (err) {
+      console.error("[LeadflowJobs] Failed to mark synthetic recurrence rows for manual review:", err);
+    }
+  }
 
   const app = express();
   const server = createServer(app);

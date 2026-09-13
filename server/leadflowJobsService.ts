@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte } from "drizzle-orm";
+import { and, eq, isNull, lte, ne } from "drizzle-orm";
 import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs, type LeadflowJob } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCompletedBookingsForDate, type Launch27Booking } from "./launch27";
@@ -68,6 +68,22 @@ export function shouldMarkImportedLaunch27JobMissing(
   return job.launch27BookingId !== null
     && !returnedBookingIds.has(job.launch27BookingId)
     && !["cancelled", "canceled", "rescheduled", "missing_from_launch27"].includes(status);
+}
+
+export async function markSyntheticRecurrenceRowsNotInLaunch27(): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(leadflowJobs).set({
+    bookingStatus: "missing_from_launch27",
+    missingFromLaunch27At: new Date(),
+  }).where(and(
+    eq(leadflowJobs.origin, LEADFLOW_JOB_ORIGIN_RECURRENCE),
+    isNull(leadflowJobs.launch27BookingId),
+    ne(leadflowJobs.bookingStatus, "cancelled"),
+    ne(leadflowJobs.bookingStatus, "canceled"),
+    ne(leadflowJobs.bookingStatus, "rescheduled"),
+    ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+  ));
 }
 
 export function getRecurringInterval(value: string | null): "weekly" | "biweekly" | "triweekly" | "monthly" | null {

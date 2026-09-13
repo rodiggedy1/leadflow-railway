@@ -30,7 +30,7 @@ describe("manual Launch27 source-missing safety", () => {
   });
 
   it("limits marking to manual staff date syncs, preserves direct bookings, and restores a returned stable source ID", () => {
-    expect(router).toContain("importLaunch27JobsForDate(input.date, { markMissing: true })");
+    expect(router).toContain("importLaunch27JobsForDate(input.date, { markMissing: true, mergeExistingDuplicates: true })");
     expect(service).toContain("importLaunch27JobsForDate(date, { markMissing: false })");
     expect(service).toContain("missingFromLaunch27At: null");
     expect(schema).toContain('missingFromLaunch27At: datetime("missingFromLaunch27At", { mode: "date", fsp: 3 })');
