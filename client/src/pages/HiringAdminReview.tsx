@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { ConversationDrawer, type Session as LeadSession } from "./AgentDashboard";
+import { InterviewRecordingCard, VideoInterviewCard } from "./HiringPipeline";
 import "./hiring-admin-review.css";
 
 const navItems = [
@@ -157,6 +158,8 @@ type ReviewApplicant = {
   hasBankAccount?: boolean | null;
   isAuthorized?: boolean | null;
   consentBackground?: boolean | null;
+  videoUrl?: string | null;
+  interviewVideoUrl?: string | null;
 };
 
 const LIVE_STAGE_ORDER = [
@@ -231,6 +234,8 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
         hasBankAccount: candidate.hasBankAccount ?? null,
         isAuthorized: candidate.isAuthorized ?? null,
         consentBackground: candidate.consentBackground ?? null,
+        videoUrl: candidate.videoUrl ?? null,
+        interviewVideoUrl: candidate.interviewVideoUrl ?? null,
       };
     });
   }, [candidatesQuery.data, live]);
@@ -373,6 +378,7 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
         <div className="hiring-review-drawer__tabs">{["Overview", "Application", "Notes", "Activity"].map((tab) => <button className={detailTab === tab ? "is-active" : ""} type="button" onClick={live ? () => setDetailTab(tab) : undefined} aria-disabled={!live} key={tab}>{tab}</button>)}</div>
         {detailTab === "Overview" && <>
           <section className="hiring-review-drawer__section"><div className="hiring-review-drawer__section-head"><h3>Services applied for</h3><StaticControl>Edit</StaticControl></div><div className="hiring-review-detail-services">{selectedApplicant.tags.map((title, index) => { const [Icon, , tone] = detailServices[index % detailServices.length]; return <span className={`hiring-review-detail-chip hiring-review-detail-chip--${tone}`} key={title}><Icon size={14} />{title}</span>; })}</div></section>
+          {(selectedApplicant.videoUrl || selectedApplicant.interviewVideoUrl) && <section className="hiring-review-drawer__section"><h3>Candidate videos</h3><div className="mt-3 grid gap-3">{selectedApplicant.videoUrl && <VideoInterviewCard videoUrl={selectedApplicant.videoUrl} />}{selectedApplicant.interviewVideoUrl && <InterviewRecordingCard videoUrl={selectedApplicant.interviewVideoUrl} candidateId={selectedApplicant.id} />}</div></section>}
           <section className="hiring-review-drawer__section"><h3>Basic information</h3><dl className="hiring-review-facts">{(live ? [["Experience", selectedApplicant.experience || "Not provided"], ["Email", selectedApplicant.email || "Not provided"], ["Transportation", "Not provided"], ["Own equipment", "Not provided"], ["Weekends", "Not provided"]] : detailFacts).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></section>
           <section className="hiring-review-drawer__section"><div className="hiring-review-drawer__section-head"><h3>Hiring progress</h3><a href={live ? `/interview/${selectedApplicant.id}` : "#hiring-review"} target={live ? "_blank" : undefined} rel={live ? "noopener noreferrer" : undefined}>View details</a></div><ol className="hiring-review-stepper">{progressForSelected.map(([label, tone]) => <li className={`hiring-review-stepper__item hiring-review-stepper__item--${tone}`} key={label}><span>{tone === "future" ? "" : <CircleCheck size={14} />}</span><p>{label}</p></li>)}</ol></section>
           <section className="hiring-review-drawer__section"><div className="hiring-review-drawer__section-head"><h3>Team notes</h3><StaticControl>Add note</StaticControl></div><article className="hiring-review-note"><span className="hiring-review-avatar hiring-review-avatar--note">—</span><div><header><strong>No saved notes</strong><small>Notes are not connected in this design yet.</small></header><p>No team note is displayed without a saved record.</p></div></article></section>

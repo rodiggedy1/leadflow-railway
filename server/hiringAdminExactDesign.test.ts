@@ -30,4 +30,12 @@ describe("exact-design Hiring admin release", () => {
     }
     expect(page).not.toContain('fetch("/api');
   });
+
+  it("reuses the existing application and AI-interview players in the right-hand detail drawer", () => {
+    expect(page).toContain('import { InterviewRecordingCard, VideoInterviewCard } from "./HiringPipeline";');
+    expect(page).toContain("videoUrl: candidate.videoUrl ?? null");
+    expect(page).toContain("interviewVideoUrl: candidate.interviewVideoUrl ?? null");
+    expect(page).toContain("<VideoInterviewCard videoUrl={selectedApplicant.videoUrl} />");
+    expect(page).toContain("<InterviewRecordingCard videoUrl={selectedApplicant.interviewVideoUrl} candidateId={selectedApplicant.id} />");
+  });
 });

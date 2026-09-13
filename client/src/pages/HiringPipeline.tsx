@@ -535,7 +535,7 @@ function StageCard({
 
 // ── Video Interview Card ─────────────────────────────────────────────────────
 
-function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
+export function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
@@ -647,7 +647,7 @@ function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
 // ── Interview Recording Card ─────────────────────────────────────────────────
 // Distinct from VideoInterviewCard (application form video) — this shows the
 // camera recording captured during the VAPI AI interview session.
-function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; candidateId: number }) {
+export function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; candidateId: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -2285,4 +2285,3 @@ export default function HiringPipeline() {
     </div>
   );
 }
-
