@@ -57,6 +57,18 @@ describe("exact-design Hiring admin release", () => {
     expect(page).not.toContain("applicant.tags.some((tag) => tag.toLowerCase().includes(normalized");
   });
 
+  it("keeps the first Service coverage row compact and filters the existing board by an exact clicked specialty", () => {
+    expect(page).toContain('const [coverageExpanded, setCoverageExpanded] = useState(false);');
+    expect(page).toContain('const [selectedCoverageService, setSelectedCoverageService] = useState<string | null>(null);');
+    expect(page).toContain('coverageServices.slice(0, 6)');
+    expect(page).toContain('Show all services (${coverageServices.length})');
+    expect(page).toContain('setSelectedCoverageService((selected) => selected === title ? null : title)');
+    expect(page).toContain('applicant.tags.some((tag) => selectedCoverageSpecialties.includes(tag))');
+    expect(page).toContain('coverageFilteredApplicants.length');
+    expect(page).toContain('aria-pressed={live ? selectedCoverageService === title : undefined}');
+    expect(styles).toContain('.hiring-review-service.is-selected');
+  });
+
   it("keeps every service chip inside its own equal-width board lane without clipping card content", () => {
     expect(page).toContain("applicant.tags.map((tag) => <span key={tag}>{tag}</span>)");
     expect(page).not.toContain("applicant.tags.slice");

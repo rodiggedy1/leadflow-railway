@@ -318,6 +318,8 @@ function DroppableReviewColumn({
 export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<ReviewTab>("all");
+  const [coverageExpanded, setCoverageExpanded] = useState(false);
+  const [selectedCoverageService, setSelectedCoverageService] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(live ? null : 1);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [detailTab, setDetailTab] = useState("Overview");
@@ -386,7 +388,14 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
   }))), []);
 
   const applicants = live ? effectiveLiveApplicants : staticApplicants;
-  const visibleApplicants = applicants.filter((applicant) => {
+  const selectedCoverageSpecialties = useMemo<readonly string[] | null>(() => {
+    if (!selectedCoverageService) return null;
+    return LIVE_COVERAGE_SERVICES.find(([, title]) => title === selectedCoverageService)?.[2] ?? null;
+  }, [selectedCoverageService]);
+  const coverageFilteredApplicants = selectedCoverageSpecialties
+    ? applicants.filter((applicant) => applicant.tags.some((tag) => selectedCoverageSpecialties.includes(tag)))
+    : applicants;
+  const visibleApplicants = coverageFilteredApplicants.filter((applicant) => {
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || [applicant.name, applicant.location, ...applicant.tags].join(" ").toLowerCase().includes(query);
     const matchesTab = activeTab === "all" || (activeTab === "active" ? applicant.stage === "Active" : applicant.column === activeTab);
@@ -408,6 +417,7 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
     const applicantCount = liveApplicants.filter((applicant) => specialties.some((specialty) => applicant.tags.includes(specialty))).length;
     return [Icon, title, `${applicantCount} applicant${applicantCount === 1 ? "" : "s"}`, "— active", "—", tone] as const;
   }) : services;
+  const visibleCoverageServices = live && !coverageExpanded ? coverageServices.slice(0, 6) : coverageServices;
 
   const reviewColumns: Array<{ title: string; count: string; tone: ReviewColumn }> = [
     { title: "New", count: `${visibleApplicants.filter((applicant) => applicant.column === "new").length} applicants`, tone: "new" },
@@ -535,15 +545,15 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
         </section>
 
         <section className="hiring-review-coverage hiring-review-surface" aria-labelledby="coverage-title">
-          <div className="hiring-review-section-heading"><h2 id="coverage-title">Service coverage</h2><div><span>View by:</span><StaticControl>All locations <ChevronDown size={15} /></StaticControl></div><StaticControl><Settings size={15} /> Manage targets</StaticControl></div>
+          <div className="hiring-review-section-heading"><h2 id="coverage-title">Service coverage</h2><div><span>View by:</span><StaticControl>All locations <ChevronDown size={15} /></StaticControl></div>{live && <StaticControl onClick={() => setCoverageExpanded((expanded) => !expanded)}>{coverageExpanded ? "Show fewer services" : `Show all services (${coverageServices.length})`} <ChevronDown className={coverageExpanded ? "is-expanded" : ""} size={15} /></StaticControl>}<StaticControl><Settings size={15} /> Manage targets</StaticControl></div>
           <div className="hiring-review-services">
-            {coverageServices.map(([Icon, title, applicants, active, status, tone]) => <button type="button" aria-disabled="true" className="hiring-review-service" key={title}><span className={`hiring-review-service__icon hiring-review-service__icon--${tone}`}><Icon size={22} /></span><strong>{title}</strong><small>{applicants}</small><small>{active}</small><em className={`hiring-review-coverage-status hiring-review-coverage-status--${tone}`}><i />{status}</em></button>)}
+            {visibleCoverageServices.map(([Icon, title, applicants, active, status, tone]) => <button type="button" aria-disabled={!live} aria-pressed={live ? selectedCoverageService === title : undefined} className={`hiring-review-service ${selectedCoverageService === title ? "is-selected" : ""}`} key={title} onClick={live ? () => setSelectedCoverageService((selected) => selected === title ? null : title) : undefined}><span className={`hiring-review-service__icon hiring-review-service__icon--${tone}`}><Icon size={22} /></span><strong>{title}</strong><small>{applicants}</small><small>{active}</small><em className={`hiring-review-coverage-status hiring-review-coverage-status--${tone}`}><i />{status}</em></button>)}
           </div>
         </section>
 
         <section className="hiring-review-pipeline hiring-review-surface" aria-labelledby="pipeline-title">
-          <div className="hiring-review-pipeline__toolbar">
-            <div className="hiring-review-tabs">{([['all', 'All'], ['new', 'New'], ['screening', 'Screening'], ['interview', 'Interview'], ['onboarding', 'Onboarding'], ['active', 'Active']] as const).map(([value, label]) => <button className={activeTab === value ? "is-active" : ""} type="button" aria-disabled={!live} onClick={live ? () => setActiveTab(value) : undefined} key={value}>{label} <span>({value === "all" ? applicants.length : value === "active" ? activeApplicantCount : applicants.filter((applicant) => applicant.column === value).length})</span></button>)}</div>
+            <div className="hiring-review-pipeline__toolbar">
+            <div className="hiring-review-tabs">{([['all', 'All'], ['new', 'New'], ['screening', 'Screening'], ['interview', 'Interview'], ['onboarding', 'Onboarding'], ['active', 'Active']] as const).map(([value, label]) => <button className={activeTab === value ? "is-active" : ""} type="button" aria-disabled={!live} onClick={live ? () => setActiveTab(value) : undefined} key={value}>{label} <span>({value === "all" ? coverageFilteredApplicants.length : value === "active" ? coverageFilteredApplicants.filter((applicant) => applicant.stage === "Active").length : coverageFilteredApplicants.filter((applicant) => applicant.column === value).length})</span></button>)}</div>
             <div className="hiring-review-pipeline__filters"><StaticControl>Sort: Newest <ChevronDown size={14} /></StaticControl><StaticControl><Filter size={15} /> Filters</StaticControl></div>
           </div>
           <h2 id="pipeline-title" className="sr-only">Applicant pipeline</h2>
