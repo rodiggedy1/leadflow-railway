@@ -52,6 +52,23 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(handoff).toContain('requestedView === "review" ? "/my-home?view=review"');
   });
 
+  it("uses the historic dark completion-review visual shell while retaining the current portal review procedures", () => {
+    const page = read("client/src/pages/CustomerPortalReview.tsx");
+    expect(page).toContain('const DC_NIGHT_MAP_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/dc-night-map_7cb31538.jpg"');
+    expect(page).toContain('className="min-h-screen bg-[#0a0a0a] text-white font-sans"');
+    expect(page).toContain("Live Tracker");
+    expect(page).toContain("All Done!");
+    expect(page).toContain("Your Appointment");
+    expect(page).toContain("trpc.customerPortalReview.getLatest.useQuery");
+    expect(page).toContain("trpc.customerPortalReview.submitRating.useMutation");
+    expect(page).toContain("trpc.customerPortalReview.generateDrafts.useMutation");
+    expect(page).toContain("trpc.customerPortalReview.chooseDraft.useMutation");
+    expect(page).toContain("trpc.customerPortalReview.recordThumbtackAction.useMutation");
+    expect(page).not.toContain("trpc.tracker.");
+    expect(page).not.toContain('"/track/');
+    expect(page).not.toContain("cleanerJobs");
+  });
+
   it("registers an idempotent additive LeadFlow review-field migration with the exact manifest checksum", () => {
     const migration = read("server/versioned-migrations/0033_add_leadflow_job_review_fields.sql");
     const manifest = JSON.parse(read("server/versioned-migrations/manifest.json")) as { migrations: Array<{ id: string; sha256: string; mode: string }> };
