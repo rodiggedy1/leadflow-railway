@@ -42,6 +42,7 @@ type WorkspaceRow = {
 };
 
 const ACTIVE_BOOKING_SOURCES: WorkspaceRow["source"][] = ["booking", "funnel", "leadflow"];
+const LEADFLOW_JOB_ORIGIN_LAUNCH27 = "launch27_import";
 const isCancelledBookingStatus = (status: string) => ["cancelled", "canceled"].includes(status.trim().toLowerCase());
 const isInactiveBookingStatus = (status: string) => ["cancelled", "canceled", "rescheduled", "missing_from_launch27"].includes(status.trim().toLowerCase());
 const isActiveBookingRow = (row: WorkspaceRow) =>
@@ -246,15 +247,18 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
       paymentBrand: request.paymentBrand, paymentLast4: request.paymentLast4, stripePaymentMethodId: request.stripePaymentMethodId,
       paymentChargedAt: request.paymentChargedAt, firstCleaningTotalCents: request.estimatedTotalCents,
     }));
-    const importedRows = (leadflowJobsQuery.data ?? []).filter((job) => !isCancelledBookingStatus(job.bookingStatus)).map((job) => ({
-      key: `leadflow:job:${job.id}`, source: "leadflow" as const, id: job.id, publicNumber: `L27-${job.launch27BookingId ?? job.id}`,
+    const importedRows = (leadflowJobsQuery.data ?? []).filter((job) => !isCancelledBookingStatus(job.bookingStatus)).map((job) => {
+      const isRealLaunch27Import = job.origin === LEADFLOW_JOB_ORIGIN_LAUNCH27 && job.launch27BookingId !== null;
+      const sourceReviewStatus = !isRealLaunch27Import && job.bookingStatus !== "rescheduled";
+      return {
+      key: `leadflow:job:${job.id}`, source: "leadflow" as const, id: job.id, publicNumber: isRealLaunch27Import ? `L27-${job.launch27BookingId}` : `LF-${job.id}`,
       customerName: job.customerName, customerPhone: job.customerPhone ?? "", customerEmail: job.customerEmail,
-      status: job.bookingStatus, requestedLocalDate: job.jobDate, requestedLocalTime: importedTimeFrom(job.serviceDateTime),
+      status: sourceReviewStatus ? "missing_from_launch27" : job.bookingStatus, requestedLocalDate: job.jobDate, requestedLocalTime: importedTimeFrom(job.serviceDateTime),
       address: job.jobAddress, serviceName: job.serviceName, bedrooms: job.bedrooms, bathrooms: job.bathrooms,
       recurrence: job.frequency, extras: importedExtrasFrom(job.extras), specialRequestNotes: job.customerNotes ? [job.customerNotes] : [],
       assignmentStatus: job.teamName ? "assigned" : "unassigned", assignedTeamName: job.teamName, paymentStatus: job.hasStripeCard ? "card_on_file" : "not_started", paymentBrand: job.paymentBrand,
       paymentLast4: job.paymentLast4, stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: job.jobTotalCents,
-    }));
+    }});
     const scheduledRows = [...funnelRows.filter((row) => row.status !== "lead" && !isCancelledBookingStatus(row.status)), ...bookingRows, ...importedRows]
       .filter((row) => row.requestedLocalDate === date)
       .filter((row) => row.source !== "leadflow" || status === "All" || status === "Confirmed");

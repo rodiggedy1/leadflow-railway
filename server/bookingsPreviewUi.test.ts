@@ -54,6 +54,14 @@ describe("bookings UI preview contract", () => {
     expect(pageSource).not.toContain('REQUESTED REVENUE');
   });
 
+  it("labels a LeadFlow row as a Launch27 import only when it has a real immutable Launch27 identity", () => {
+    expect(pageSource).toContain('const LEADFLOW_JOB_ORIGIN_LAUNCH27 = "launch27_import"');
+    expect(pageSource).toContain('const isRealLaunch27Import = job.origin === LEADFLOW_JOB_ORIGIN_LAUNCH27 && job.launch27BookingId !== null;');
+    expect(pageSource).toContain('publicNumber: isRealLaunch27Import ? `L27-${job.launch27BookingId}` : `LF-${job.id}`');
+    expect(pageSource).toContain('status: sourceReviewStatus ? "missing_from_launch27" : job.bookingStatus');
+    expect(pageSource).toContain('sourceMissing ? <em className="bookings-source-missing-label">No longer in Launch27</em>');
+  });
+
   it("starts the MIB workspace and detail panel at the viewport top without a shared header", () => {
     expect(pageStyles).toContain("grid-template-columns:minmax(720px,1fr) 410px");
     expect(pageStyles).toContain(".bookings-reference-frame{display:grid;grid-template-columns:204px minmax(0,1fr);min-height:100vh");
