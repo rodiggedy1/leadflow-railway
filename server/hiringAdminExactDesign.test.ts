@@ -46,4 +46,15 @@ describe("exact-design Hiring admin release", () => {
     expect(styles).toContain(".hiring-review-applicant-video-indicator");
     expect(page).toContain("<CircleEllipsis size={17} /></div><p><MapPin size={12} />{applicant.location}</p><div className=\"hiring-review-chip-row\">");
   });
+
+  it("keeps every service chip inside its own equal-width board lane without clipping card content", () => {
+    expect(page).toContain("applicant.tags.map((tag) => <span key={tag}>{tag}</span>)");
+    expect(page).not.toContain("applicant.tags.slice");
+    expect(page).not.toContain("+N");
+    for (const rule of [".hiring-review-kanban,.hiring-review-column,.hiring-review-column__cards,.hiring-review-applicant-card,.hiring-review-chip-row{min-width:0}", ".hiring-review-column__cards{width:100%}", ".hiring-review-applicant-card{width:100%;box-sizing:border-box;min-width:0}", "overflow-wrap:anywhere"]) {
+      expect(styles).toContain(rule);
+    }
+    expect(styles).not.toContain(".hiring-review-column{overflow:hidden}");
+    expect(styles).not.toContain(".hiring-review-applicant-card{max-width:100%;overflow:hidden}");
+  });
 });
