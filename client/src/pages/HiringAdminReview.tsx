@@ -30,6 +30,7 @@ import {
   House,
   Leaf,
   MapPin,
+  MessageSquare,
   Megaphone,
   Package,
   Plus,
@@ -444,6 +445,7 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
     if (!applicant || !targetId.startsWith("column:")) return;
     const target = targetId.slice("column:".length) as ReviewColumn;
     if (!REVIEW_COLUMN_ORDER.includes(target)) return;
+    if (Math.abs(REVIEW_COLUMN_ORDER.indexOf(applicant.column) - REVIEW_COLUMN_ORDER.indexOf(target)) !== 1) return;
     requestColumnMove(applicant, target);
   };
 

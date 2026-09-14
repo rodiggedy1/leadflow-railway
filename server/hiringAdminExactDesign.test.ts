@@ -65,8 +65,11 @@ describe("exact-design Hiring admin release", () => {
     }
     expect(page).toContain('const REVIEW_STAGE_FOR_COLUMN: Record<ReviewColumn, string>');
     expect(page).toContain('Math.abs(currentIndex - targetIndex) !== 1');
+    expect(page).toContain('Math.abs(REVIEW_COLUMN_ORDER.indexOf(applicant.column) - REVIEW_COLUMN_ORDER.indexOf(target)) !== 1');
     expect(page).toContain('disabled: !dragEnabled || !isValidTarget');
     expect(page).toContain('delete next[applicant.id]');
+    expect(page).toContain('MessageSquare,');
+    expect(page).toContain('<MessageSquare className="w-5 h-5 text-amber-600" />');
     expect(page).toContain('onDragCancel={() => setActiveApplicant(null)}');
     expect(page).toContain('commitStageChange(applicant, smsPending.stage, smsPending.column, false)');
     expect(page).toContain('commitStageChange(applicant, smsPending.stage, smsPending.column, true)');
