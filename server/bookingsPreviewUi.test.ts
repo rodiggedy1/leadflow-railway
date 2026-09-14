@@ -162,9 +162,12 @@ describe("bookings UI preview contract", () => {
     expect(broadcastSource).toContain('| "booking_funnel_update";');
   });
 
-  it("keeps the existing MIB Chat suppression unchanged during the navigation-only redesign", () => {
+  it("keeps MIB Chat excluded from the Bookings and Hiring workspaces without affecting other eligible routes", () => {
     expect(appSource).toContain('const isBookingsWorkspace = location === "/admin/bookings";');
-    expect(appSource).toContain("(location.startsWith(\"/admin\") && !isBookingsWorkspace)");
-    expect(appSource).toContain("hasBeenMounted && !isBookingsWorkspace");
+    expect(appSource).toContain('const isHiringWorkspace = location === "/admin/hiring";');
+    expect(appSource).toContain('const isChatExcludedWorkspace = isBookingsWorkspace || isHiringWorkspace;');
+    expect(appSource).toContain("(location.startsWith(\"/admin\") && !isChatExcludedWorkspace)");
+    expect(appSource).toContain("hasBeenMounted && !isChatExcludedWorkspace");
+    expect(appSource).toContain('location.startsWith("/agent")');
   });
 });
