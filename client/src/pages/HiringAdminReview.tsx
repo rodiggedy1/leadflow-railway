@@ -80,6 +80,22 @@ const services = [
   [Droplets, "Pressure Washing", "9 applicants", "4 active", "Need people", "danger"],
 ] as const;
 
+const LIVE_COVERAGE_SERVICES = [
+  [Sparkles, "Cleaning", ["Home cleaning", "Cleaning"], "covered"],
+  [Leaf, "Lawn Care", ["Lawn & yard care", "Lawn Care"], "warning"],
+  [Trash2, "Junk Removal", ["Junk removal", "Junk Removal"], "danger"],
+  [Package, "Moving Help", ["Moving help", "Moving Help"], "warning"],
+  [Hammer, "Handyman", ["Handyman visit", "Handyman"], "warning"],
+  [Droplets, "Pressure Washing", ["Pressure washing", "Pressure Washing"], "danger"],
+  [Wrench, "TV Mounting", ["TV mounting"], "warning"],
+  [Package, "Furniture Assembly", ["Furniture assembly"], "warning"],
+  [Hammer, "Picture Hanging", ["Picture hanging"], "warning"],
+  [Wrench, "Home Repairs", ["Minor home repairs"], "warning"],
+  [Wrench, "Plumbing", ["Plumbing help"], "warning"],
+  [Wrench, "Electrical", ["Electrical & lighting"], "warning"],
+  [Sparkles, "Interior Painting", ["Interior painting"], "warning"],
+] as const;
+
 const columns = [
   {
     title: "New",
@@ -388,9 +404,8 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
     [UsersRound, String(activeApplicantCount), "Active providers", "emerald"],
   ] as const : metrics;
 
-  const coverageServices = live ? services.map(([Icon, title, _applicants, _active, _status, tone]) => {
-    const normalized = title.toLowerCase();
-    const applicantCount = liveApplicants.filter((applicant) => applicant.tags.some((tag) => tag.toLowerCase().includes(normalized === "lawn care" ? "lawn" : normalized === "moving help" ? "moving" : normalized === "pressure washing" ? "pressure" : normalized === "junk removal" ? "junk" : normalized))).length;
+  const coverageServices = live ? LIVE_COVERAGE_SERVICES.map(([Icon, title, specialties, tone]) => {
+    const applicantCount = liveApplicants.filter((applicant) => specialties.some((specialty) => applicant.tags.includes(specialty))).length;
     return [Icon, title, `${applicantCount} applicant${applicantCount === 1 ? "" : "s"}`, "— active", "—", tone] as const;
   }) : services;
 

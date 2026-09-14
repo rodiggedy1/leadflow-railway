@@ -48,6 +48,15 @@ describe("exact-design Hiring admin release", () => {
     expect(page).toContain("<div className=\"hiring-review-chip-row\">");
   });
 
+  it("counts every submitted application specialty in its own existing-style Service coverage card", () => {
+    expect(page).toContain("const LIVE_COVERAGE_SERVICES = [");
+    for (const service of ["Home cleaning", "TV mounting", "Furniture assembly", "Picture hanging", "Minor home repairs", "Handyman visit", "Plumbing help", "Electrical & lighting", "Interior painting", "Lawn & yard care", "Pressure washing", "Moving help", "Junk removal"]) {
+      expect(page).toContain(`\"${service}\"`);
+    }
+    expect(page).toContain("specialties.some((specialty) => applicant.tags.includes(specialty))");
+    expect(page).not.toContain("applicant.tags.some((tag) => tag.toLowerCase().includes(normalized");
+  });
+
   it("keeps every service chip inside its own equal-width board lane without clipping card content", () => {
     expect(page).toContain("applicant.tags.map((tag) => <span key={tag}>{tag}</span>)");
     expect(page).not.toContain("applicant.tags.slice");
