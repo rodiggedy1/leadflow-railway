@@ -44,5 +44,6 @@ describe("exact-design Hiring admin release", () => {
     expect(page).toContain("videoCount > 0");
     expect(page).toContain("hiring-review-applicant-video-indicator");
     expect(styles).toContain(".hiring-review-applicant-video-indicator");
+    expect(page).toContain("<CircleEllipsis size={17} /></div><p><MapPin size={12} />{applicant.location}</p><div className=\"hiring-review-chip-row\">");
   });
 });
