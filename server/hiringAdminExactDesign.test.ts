@@ -44,7 +44,8 @@ describe("exact-design Hiring admin release", () => {
     expect(page).toContain("videoCount > 0");
     expect(page).toContain("hiring-review-applicant-video-indicator");
     expect(styles).toContain(".hiring-review-applicant-video-indicator");
-    expect(page).toContain("<CircleEllipsis size={17} /></div><p><MapPin size={12} />{applicant.location}</p><div className=\"hiring-review-chip-row\">");
+    expect(page).toContain("function DraggableApplicantCard");
+    expect(page).toContain("<div className=\"hiring-review-chip-row\">");
   });
 
   it("keeps every service chip inside its own equal-width board lane without clipping card content", () => {
@@ -56,5 +57,23 @@ describe("exact-design Hiring admin release", () => {
     }
     expect(styles).not.toContain(".hiring-review-column{overflow:hidden}");
     expect(styles).not.toContain(".hiring-review-applicant-card{max-width:100%;overflow:hidden}");
+  });
+
+  it("reuses the existing DnD Kit stage workflow with accessible cross-column controls and no new API path", () => {
+    for (const contract of ["DndContext", "DragOverlay", "useDraggable", "useDroppable", "MouseSensor", "TouchSensor", "KeyboardSensor", "closestCorners", "requestColumnMove", "commitStageChange", "hiring-review-card-menu__popover"]) {
+      expect(page).toContain(contract);
+    }
+    expect(page).toContain('const REVIEW_STAGE_FOR_COLUMN: Record<ReviewColumn, string>');
+    expect(page).toContain('Math.abs(currentIndex - targetIndex) !== 1');
+    expect(page).toContain('disabled: !dragEnabled || !isValidTarget');
+    expect(page).toContain('delete next[applicant.id]');
+    expect(page).toContain('onDragCancel={() => setActiveApplicant(null)}');
+    expect(page).toContain('commitStageChange(applicant, smsPending.stage, smsPending.column, false)');
+    expect(page).toContain('commitStageChange(applicant, smsPending.stage, smsPending.column, true)');
+    expect(page).toContain('>Cancel</button>');
+    expect(page).not.toContain('fetch("/api');
+    for (const rule of ["touch-action:pan-y", ".hiring-review-column.is-drop-target", ".hiring-review-drag-overlay", "prefers-reduced-motion"]) {
+      expect(styles).toContain(rule);
+    }
   });
 });

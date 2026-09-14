@@ -1,4 +1,19 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  closestCorners,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Bell,
   BriefcaseBusiness,
@@ -173,6 +188,21 @@ const LIVE_STAGE_ORDER = [
   "Active",
 ] as const;
 
+const REVIEW_COLUMN_ORDER: ReviewColumn[] = ["new", "screening", "interview", "onboarding"];
+const REVIEW_COLUMN_LABELS: Record<ReviewColumn, string> = {
+  new: "New",
+  screening: "Screening",
+  interview: "Interview",
+  onboarding: "Onboarding",
+};
+const REVIEW_STAGE_FOR_COLUMN: Record<ReviewColumn, string> = {
+  new: "Application Submitted",
+  screening: "AI Interview",
+  interview: "Real Interview",
+  onboarding: "Background Check",
+};
+const SMS_STAGES = new Set(["Real Interview", "Background Check", "Paid Test Clean", "Onboarding"]);
+
 function reviewColumnForStage(stage: string): ReviewColumn | null {
   if (stage === "Application Submitted") return "new";
   if (stage === "AI Interview") return "screening";
@@ -195,6 +225,79 @@ function StaticControl({ children, dark = false, onClick, disabled = false }: { 
   return <button type="button" onClick={onClick} disabled={disabled || !onClick} aria-disabled={disabled || !onClick} className={dark ? "hiring-review-control hiring-review-control--dark" : "hiring-review-control"}>{children}</button>;
 }
 
+function DraggableApplicantCard({
+  applicant,
+  tone,
+  selected,
+  dragEnabled,
+  isOverlay = false,
+  onSelect,
+  onMove,
+}: {
+  applicant: ReviewApplicant;
+  tone: ReviewColumn;
+  selected: boolean;
+  dragEnabled: boolean;
+  isOverlay?: boolean;
+  onSelect: () => void;
+  onMove: (target: ReviewColumn) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `applicant:${applicant.id}`,
+    data: { applicant },
+    disabled: !dragEnabled || isOverlay,
+  });
+  const currentIndex = REVIEW_COLUMN_ORDER.indexOf(applicant.column);
+  const moveTargets = [REVIEW_COLUMN_ORDER[currentIndex - 1], REVIEW_COLUMN_ORDER[currentIndex + 1]].filter(Boolean) as ReviewColumn[];
+  const videoCount = Number(Boolean(applicant.videoUrl)) + Number(Boolean(applicant.interviewVideoUrl));
+
+  return <article
+    ref={setNodeRef}
+    {...listeners}
+    {...attributes}
+    onClick={onSelect}
+    className={`hiring-review-applicant-card ${selected ? "is-selected" : ""} ${isDragging ? "is-dragging" : ""} ${isOverlay ? "is-drag-overlay" : ""}`}
+    style={isOverlay ? undefined : { transform: CSS.Translate.toString(transform) }}
+  >
+    <div className="hiring-review-applicant-card__top">
+      <span className={`hiring-review-avatar hiring-review-avatar--${tone}`}>{applicant.initials}</span>
+      <div><strong>{applicant.name}</strong><small>{applicant.applied}</small></div>
+      {dragEnabled && moveTargets.length > 0 ? <div className="hiring-review-card-menu" onPointerDown={(event) => event.stopPropagation()}>
+        <button type="button" className="hiring-review-card-menu__trigger" aria-label={`Move ${applicant.name}`} aria-expanded={menuOpen} onClick={(event) => { event.stopPropagation(); setMenuOpen((open) => !open); }}><CircleEllipsis size={17} /></button>
+        {menuOpen && <div className="hiring-review-card-menu__popover" role="menu" onClick={(event) => event.stopPropagation()}>{moveTargets.map((target) => <button type="button" role="menuitem" key={target} onClick={() => { setMenuOpen(false); onMove(target); }}>Move to {REVIEW_COLUMN_LABELS[target]}</button>)}</div>}
+      </div> : <CircleEllipsis size={17} />}
+    </div>
+    <p><MapPin size={12} />{applicant.location}</p>
+    <div className="hiring-review-chip-row">{applicant.tags.map((tag) => <span key={tag}>{tag}</span>)}{videoCount > 0 && <span className="hiring-review-applicant-video-indicator" aria-label={`${videoCount} candidate video${videoCount === 1 ? "" : "s"}`} title={`${videoCount} candidate video${videoCount === 1 ? "" : "s"} available`}><Video size={12} /><b>{videoCount}</b></span>}</div>
+  </article>;
+}
+
+function DroppableReviewColumn({
+  column,
+  applicants,
+  selectedId,
+  dragEnabled,
+  activeColumn,
+  onSelect,
+  onMove,
+}: {
+  column: { title: string; count: string; tone: ReviewColumn };
+  applicants: ReviewApplicant[];
+  selectedId: number | null;
+  dragEnabled: boolean;
+  activeColumn: ReviewColumn | null;
+  onSelect: (applicant: ReviewApplicant) => void;
+  onMove: (applicant: ReviewApplicant, target: ReviewColumn) => void;
+}) {
+  const isValidTarget = !activeColumn || Math.abs(REVIEW_COLUMN_ORDER.indexOf(activeColumn) - REVIEW_COLUMN_ORDER.indexOf(column.tone)) === 1;
+  const { setNodeRef, isOver } = useDroppable({ id: `column:${column.tone}`, disabled: !dragEnabled || !isValidTarget });
+  return <section ref={setNodeRef} className={`hiring-review-column hiring-review-column--${column.tone} ${isOver && isValidTarget ? "is-drop-target" : ""}`}>
+    <header><span className="hiring-review-column__dot" /><div><h3>{column.title}</h3><small>{column.count}</small></div></header>
+    <div className="hiring-review-column__cards">{applicants.map((applicant) => <DraggableApplicantCard key={applicant.id} applicant={applicant} tone={column.tone} selected={selectedId === applicant.id} dragEnabled={dragEnabled} onSelect={() => onSelect(applicant)} onMove={(target) => onMove(applicant, target)} />)}</div>
+  </section>;
+}
+
 export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<ReviewTab>("all");
@@ -202,11 +305,19 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [detailTab, setDetailTab] = useState("Overview");
   const [drawerSession, setDrawerSession] = useState<LeadSession | null>(null);
-  const [smsPending, setSmsPending] = useState<{ id: number; name: string; stage: string } | null>(null);
+  const [smsPending, setSmsPending] = useState<{ id: number; name: string; stage: string; column: ReviewColumn } | null>(null);
+  const [stageOverrides, setStageOverrides] = useState<Record<number, { column: ReviewColumn; stage: string }>>({});
+  const [activeApplicant, setActiveApplicant] = useState<ReviewApplicant | null>(null);
+  const justDraggedRef = useRef(false);
   const candidatesQuery = trpc.hiring.getCandidates.useQuery(undefined, { enabled: live, staleTime: 0, refetchOnWindowFocus: true });
   const statsQuery = trpc.hiring.getPipelineStats.useQuery(undefined, { enabled: live, staleTime: 30_000, refetchOnWindowFocus: true });
   const updateStageMutation = trpc.hiring.updateStage.useMutation({ onSuccess: () => candidatesQuery.refetch() });
   const trpcUtils = trpc.useUtils();
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
 
   const liveApplicants = useMemo<ReviewApplicant[]>(() => {
     if (!live) return [];
@@ -241,6 +352,11 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
     });
   }, [candidatesQuery.data, live]);
 
+  const effectiveLiveApplicants = useMemo(() => liveApplicants.map((applicant) => {
+    const override = stageOverrides[applicant.id];
+    return override ? { ...applicant, column: override.column, stage: override.stage } : applicant;
+  }), [liveApplicants, stageOverrides]);
+
   const staticApplicants = useMemo<ReviewApplicant[]>(() => columns.flatMap((column, columnIndex) => column.applicants.map(([initials, name, applied, location, tags], applicantIndex) => ({
     id: columnIndex * 10 + applicantIndex + 1,
     initials,
@@ -252,7 +368,7 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
     stage: column.title,
   }))), []);
 
-  const applicants = live ? liveApplicants : staticApplicants;
+  const applicants = live ? effectiveLiveApplicants : staticApplicants;
   const visibleApplicants = applicants.filter((applicant) => {
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || [applicant.name, applicant.location, ...applicant.tags].join(" ").toLowerCase().includes(query);
@@ -284,6 +400,60 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
     { title: "Onboarding", count: `${visibleApplicants.filter((applicant) => applicant.column === "onboarding").length} applicants`, tone: "onboarding" },
   ];
 
+  const commitStageChange = (applicant: ReviewApplicant, targetStage: string, targetColumn: ReviewColumn, sendSmsNotification: boolean) => {
+    setStageOverrides((overrides) => ({ ...overrides, [applicant.id]: { column: targetColumn, stage: targetStage } }));
+    updateStageMutation.mutate({ id: applicant.id, stage: targetStage, sendSmsNotification }, {
+      onError: () => setStageOverrides((overrides) => {
+        const next = { ...overrides };
+        delete next[applicant.id];
+        return next;
+      }),
+      onSuccess: () => candidatesQuery.refetch(),
+    });
+  };
+
+  const requestStageChange = (applicant: ReviewApplicant, targetStage: string, targetColumn: ReviewColumn) => {
+    if (!live || updateStageMutation.isPending || applicant.stage === targetStage) return;
+    if (SMS_STAGES.has(targetStage) && applicant.phone) {
+      setSmsPending({ id: applicant.id, name: applicant.name.split(" ")[0] ?? applicant.name, stage: targetStage, column: targetColumn });
+      return;
+    }
+    commitStageChange(applicant, targetStage, targetColumn, false);
+  };
+
+  const requestColumnMove = (applicant: ReviewApplicant, target: ReviewColumn) => {
+    if (!live || updateStageMutation.isPending || applicant.column === target) return;
+    const currentIndex = REVIEW_COLUMN_ORDER.indexOf(applicant.column);
+    const targetIndex = REVIEW_COLUMN_ORDER.indexOf(target);
+    if (Math.abs(currentIndex - targetIndex) !== 1) return;
+    const targetStage = REVIEW_STAGE_FOR_COLUMN[target];
+    requestStageChange(applicant, targetStage, target);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const applicant = event.active.data.current?.applicant as ReviewApplicant | undefined;
+    setActiveApplicant(applicant ?? null);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveApplicant(null);
+    justDraggedRef.current = true;
+    window.setTimeout(() => { justDraggedRef.current = false; }, 180);
+    const applicant = event.active.data.current?.applicant as ReviewApplicant | undefined;
+    const targetId = String(event.over?.id ?? "");
+    if (!applicant || !targetId.startsWith("column:")) return;
+    const target = targetId.slice("column:".length) as ReviewColumn;
+    if (!REVIEW_COLUMN_ORDER.includes(target)) return;
+    requestColumnMove(applicant, target);
+  };
+
+  const handleCardSelect = (applicant: ReviewApplicant) => {
+    if (!live || justDraggedRef.current) return;
+    setSelectedId(applicant.id);
+    setDrawerOpen(true);
+    setDetailTab("Overview");
+  };
+
   const handleMessage = async () => {
     if (!live || !selectedApplicant?.phone) return;
     const { sessionId } = await trpcUtils.hiring.getSessionByPhone.fetch({ phone: selectedApplicant.phone }).catch(() => ({ sessionId: null }));
@@ -304,13 +474,7 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
     const currentIndex = LIVE_STAGE_ORDER.indexOf(selectedApplicant.stage as (typeof LIVE_STAGE_ORDER)[number]);
     const nextStage = LIVE_STAGE_ORDER[currentIndex + 1];
     if (!nextStage) return;
-    const smsStages = ["Real Interview", "Background Check", "Paid Test Clean", "Onboarding"];
-    if (smsStages.includes(nextStage) && selectedApplicant.phone) {
-      updateStageMutation.mutate({ id: selectedApplicant.id, stage: nextStage, sendSmsNotification: false });
-      setSmsPending({ id: selectedApplicant.id, name: selectedApplicant.name.split(" ")[0] ?? selectedApplicant.name, stage: nextStage });
-      return;
-    }
-    updateStageMutation.mutate({ id: selectedApplicant.id, stage: nextStage, sendSmsNotification: true });
+    requestStageChange(selectedApplicant, nextStage, reviewColumnForStage(nextStage) ?? selectedApplicant.column);
   };
 
   const handleReject = () => {
@@ -366,9 +530,19 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
             <div className="hiring-review-pipeline__filters"><StaticControl>Sort: Newest <ChevronDown size={14} /></StaticControl><StaticControl><Filter size={15} /> Filters</StaticControl></div>
           </div>
           <h2 id="pipeline-title" className="sr-only">Applicant pipeline</h2>
-          <div className="hiring-review-kanban">
-            {reviewColumns.map((column) => <section className={`hiring-review-column hiring-review-column--${column.tone}`} key={column.title}><header><span className="hiring-review-column__dot" /><div><h3>{column.title}</h3><small>{column.count}</small></div></header><div className="hiring-review-column__cards">{visibleApplicants.filter((applicant) => applicant.column === column.tone).map((applicant) => { const videoCount = Number(Boolean(applicant.videoUrl)) + Number(Boolean(applicant.interviewVideoUrl)); return <article onClick={live ? () => { setSelectedId(applicant.id); setDrawerOpen(true); setDetailTab("Overview"); } : undefined} className={`hiring-review-applicant-card ${selectedApplicant?.id === applicant.id && drawerOpen ? "is-selected" : ""}`} key={applicant.id}><div className="hiring-review-applicant-card__top"><span className={`hiring-review-avatar hiring-review-avatar--${column.tone}`}>{applicant.initials}</span><div><strong>{applicant.name}</strong><small>{applicant.applied}</small></div><CircleEllipsis size={17} /></div><p><MapPin size={12} />{applicant.location}</p><div className="hiring-review-chip-row">{applicant.tags.map((tag) => <span key={tag}>{tag}</span>)}{videoCount > 0 && <span className="hiring-review-applicant-video-indicator" aria-label={`${videoCount} candidate video${videoCount === 1 ? "" : "s"}`} title={`${videoCount} candidate video${videoCount === 1 ? "" : "s"} available`}><Video size={12} /><b>{videoCount}</b></span>}</div></article>; })}</div></section>)}
-          </div>
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveApplicant(null)}
+          >
+            <div className="hiring-review-kanban">
+              {reviewColumns.map((column) => <DroppableReviewColumn key={column.title} column={column} applicants={visibleApplicants.filter((applicant) => applicant.column === column.tone)} selectedId={selectedApplicant?.id ?? null} dragEnabled={live} activeColumn={activeApplicant?.column ?? null} onSelect={handleCardSelect} onMove={requestColumnMove} />)}
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {activeApplicant ? <div className="hiring-review-drag-overlay"><DraggableApplicantCard applicant={activeApplicant} tone={activeApplicant.column} selected={false} dragEnabled={false} isOverlay onSelect={() => {}} onMove={() => {}} /></div> : null}
+            </DragOverlay>
+          </DndContext>
         </section>
       </main>
 
@@ -390,7 +564,7 @@ export function HiringAdminWorkspace({ live = false }: { live?: boolean }) {
         <footer className="hiring-review-drawer__actions"><StaticControl dark onClick={live ? handleAdvance : undefined} disabled={updateStageMutation.isPending || selectedApplicant.stage === "Active"}>Advance <span>→</span></StaticControl><div><StaticControl onClick={live ? handleMessage : undefined}>Message</StaticControl><StaticControl onClick={live ? handleReject : undefined} disabled={updateStageMutation.isPending}>Reject</StaticControl><StaticControl><CircleEllipsis size={17} /></StaticControl></div></footer>
       </aside>}
       {drawerSession && <ConversationDrawer session={drawerSession} onClose={() => setDrawerSession(null)} currentAgentId={0} />}
-      {smsPending && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-sm w-full mx-4"><div className="flex items-start gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0"><MessageSquare className="w-5 h-5 text-amber-600" /></div><div><h3 className="text-base font-bold text-slate-900">Send SMS to {smsPending.name}?</h3><p className="text-sm text-slate-500 mt-1">Notify them about moving to <span className="font-semibold text-slate-700">{smsPending.stage}</span>.</p></div></div><div className="flex gap-3"><button onClick={() => { updateStageMutation.mutate({ id: smsPending.id, stage: smsPending.stage, sendSmsNotification: true }); setSmsPending(null); }} className="flex-1 bg-[#E8735A] hover:bg-[#d4614a] text-white font-semibold text-sm rounded-xl py-2.5 transition-colors">Yes, send SMS</button><button onClick={() => setSmsPending(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl py-2.5 transition-colors">Skip</button></div></div></div>}
+      {smsPending && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-sm w-full mx-4"><div className="flex items-start gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0"><MessageSquare className="w-5 h-5 text-amber-600" /></div><div><h3 className="text-base font-bold text-slate-900">Send SMS to {smsPending.name}?</h3><p className="text-sm text-slate-500 mt-1">Notify them about moving to <span className="font-semibold text-slate-700">{smsPending.stage}</span>.</p></div></div><div className="flex gap-3"><button onClick={() => { const applicant = applicants.find((item) => item.id === smsPending.id); if (applicant) commitStageChange(applicant, smsPending.stage, smsPending.column, true); setSmsPending(null); }} className="flex-1 bg-[#E8735A] hover:bg-[#d4614a] text-white font-semibold text-sm rounded-xl py-2.5 transition-colors">Yes, send SMS</button><button onClick={() => { const applicant = applicants.find((item) => item.id === smsPending.id); if (applicant) commitStageChange(applicant, smsPending.stage, smsPending.column, false); setSmsPending(null); }} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl py-2.5 transition-colors">Skip</button><button onClick={() => setSmsPending(null)} className="text-xs font-semibold text-slate-500 hover:text-slate-800">Cancel</button></div></div></div>}
     </div>
   );
 }
