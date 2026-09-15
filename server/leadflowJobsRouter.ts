@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
-import { adminAgentProcedure, router } from "./_core/trpc";
+import { bookingsAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
@@ -28,7 +28,7 @@ function parseBookingPhotoReference(bookingKey: string) {
 }
 
 export const leadflowJobsRouter = router({
-  list: adminAgentProcedure.input(listInput).query(async ({ input }) => {
+  list: bookingsAgentProcedure.input(listInput).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const search = input.query?.toLowerCase();
@@ -40,7 +40,7 @@ export const leadflowJobsRouter = router({
     return rows.filter((row) => !search || `${row.customerName} ${row.customerPhone ?? ""} ${row.customerEmail ?? ""} ${row.jobAddress ?? ""} ${row.launch27BookingId ?? ""}`.toLowerCase().includes(search));
   }),
 
-  staffPhotos: adminAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
+  staffPhotos: bookingsAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
@@ -62,7 +62,7 @@ export const leadflowJobsRouter = router({
       .orderBy(asc(cleanerPortalJobPhotos.createdAt), asc(cleanerPortalJobPhotos.id));
   }),
 
-  staffSignoff: adminAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
+  staffSignoff: bookingsAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
@@ -77,7 +77,7 @@ export const leadflowJobsRouter = router({
     return rows[0] ?? null;
   }),
 
-  staffMessages: adminAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
+  staffMessages: bookingsAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
@@ -92,32 +92,32 @@ export const leadflowJobsRouter = router({
     }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, sourceId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
   }),
 
-  importNextThirtyDays: adminAgentProcedure.mutation(async () => {
+  importNextThirtyDays: bookingsAgentProcedure.mutation(async () => {
     const result = await importNextThirtyDaysOfLaunch27Jobs();
     if (result.totals.created + result.totals.updated > 0) broadcastCleanerPortalJobsChanged();
     return result;
   }),
 
-  syncDate: adminAgentProcedure.input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).mutation(async ({ input }) => {
+  syncDate: bookingsAgentProcedure.input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).mutation(async ({ input }) => {
     const result = await importLaunch27JobsForDate(input.date, { markMissing: true, mergeExistingDuplicates: true });
     if (result.created + result.updated + result.sourceMissing > 0) broadcastCleanerPortalJobsChanged();
     return result;
   }),
 
-  importStatus: adminAgentProcedure.query(async () => {
+  importStatus: bookingsAgentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const existing = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.origin, LEADFLOW_JOB_ORIGIN_LAUNCH27)).limit(1);
     return { completed: existing.length > 0 };
   }),
 
-  refreshImportedDetails: adminAgentProcedure.mutation(async () => {
+  refreshImportedDetails: bookingsAgentProcedure.mutation(async () => {
     const result = await refreshImportedLaunch27JobDetails();
     if (result.refreshed > 0) broadcastCleanerPortalJobsChanged();
     return result;
   }),
 
-  cancel: adminAgentProcedure.input(z.object({ jobId: z.number().int().positive() })).mutation(async ({ input }) => {
+  cancel: bookingsAgentProcedure.input(z.object({ jobId: z.number().int().positive() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const existing = await db.select({ id: leadflowJobs.id, bookingStatus: leadflowJobs.bookingStatus }).from(leadflowJobs).where(eq(leadflowJobs.id, input.jobId)).limit(1);
@@ -132,7 +132,7 @@ export const leadflowJobsRouter = router({
     return { id: job.id, bookingStatus: "cancelled" };
   }),
 
-  update: adminAgentProcedure.input(updateInput).mutation(async ({ input }) => {
+  update: bookingsAgentProcedure.input(updateInput).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const existing = await db.select().from(leadflowJobs).where(eq(leadflowJobs.id, input.jobId)).limit(1);

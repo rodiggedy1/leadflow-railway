@@ -6,8 +6,8 @@ const root = path.resolve(import.meta.dirname, "..");
 const workspace = readFileSync(path.join(root, "client/src/components/NativeBookingsWorkspace.tsx"), "utf8");
 
 describe("Bookings detail customer magic-link action", () => {
-  it("reuses the staff-only customer portal procedure and copies the returned link without sending an SMS", () => {
-    expect(workspace).toContain("trpc.customerPortal.staffMagicLink.useMutation");
+  it("uses the Bookings-page-authorized customer-link procedure and copies the returned link without sending an SMS", () => {
+    expect(workspace).toContain("trpc.bookings.staffMagicLink.useMutation");
     expect(workspace).toContain("Copy Customer My Home Link");
     expect(workspace).toContain("Customer My Home link copied.");
     expect(workspace).toContain("customerName: active.customerName");

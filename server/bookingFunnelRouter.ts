@@ -10,7 +10,7 @@ import {
   reserveBookingFunnelInputSchema,
   updateBookingFunnelInputSchema,
 } from "../shared/bookingFunnel";
-import { adminAgentProcedure, publicProcedure, router } from "./_core/trpc";
+import { bookingsAgentProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import { invokeLLM } from "./_core/llm";
 import { getDb } from "./db";
@@ -278,7 +278,7 @@ export const bookingFunnelRouter = router({
       };
     }),
 
-  list: adminAgentProcedure
+  list: bookingsAgentProcedure
     .input(bookingFunnelListInputSchema)
     .query(async ({ input }) => {
       const db = await getDb();
@@ -292,7 +292,7 @@ export const bookingFunnelRouter = router({
         .map(mapAdminRecord);
     }),
 
-  get: adminAgentProcedure
+  get: bookingsAgentProcedure
     .input(bookingFunnelGetInputSchema)
     .query(async ({ input }) => {
       const db = await getDb();
@@ -301,7 +301,7 @@ export const bookingFunnelRouter = router({
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       return mapAdminRecord(rows[0]);
     }),
-  cancel: adminAgentProcedure
+  cancel: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

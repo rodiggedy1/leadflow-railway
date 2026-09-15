@@ -164,14 +164,14 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
   const funnelListInput = useMemo(() => ({ query: query.trim() || undefined, limit: 200 }), [query]);
   const listQuery = trpc.bookings.list.useQuery(listInput, { staleTime: 10_000 });
   const funnelListQuery = trpc.bookingFunnel.list.useQuery(funnelListInput, { staleTime: 10_000 });
-  const portalRequestsQuery = trpc.customerPortal.staffRequests.useQuery({ limit: 200 }, { staleTime: 10_000 });
+  const portalRequestsQuery = trpc.bookings.staffRequests.useQuery({ limit: 200 }, { staleTime: 10_000 });
   const leadflowJobsQuery = trpc.leadflowJobs.list.useQuery({ date, query: query.trim() || undefined }, { staleTime: 10_000 });
   const leadflowJobsImportStatus = trpc.leadflowJobs.importStatus.useQuery(undefined, { staleTime: 10_000 });
   const importLeadflowJobs = trpc.leadflowJobs.importNextThirtyDays.useMutation();
   const syncLeadflowJobsDate = trpc.leadflowJobs.syncDate.useMutation();
   const refreshLeadflowJobDetails = trpc.leadflowJobs.refreshImportedDetails.useMutation();
   const updateLeadflowJob = trpc.leadflowJobs.update.useMutation();
-  const customerMagicLink = trpc.customerPortal.staffMagicLink.useMutation({
+  const customerMagicLink = trpc.bookings.staffMagicLink.useMutation({
     onSuccess: ({ url }) => {
       if (!navigator.clipboard?.writeText) {
         setImportSummary(`Customer My Home link: ${url}`);
@@ -188,7 +188,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
   const cancelLeadflowJob = trpc.leadflowJobs.cancel.useMutation();
   const cancelBooking = trpc.bookings.cancel.useMutation();
   const cancelFunnel = trpc.bookingFunnel.cancel.useMutation();
-  const cancelPortalRequest = trpc.customerPortal.cancelStaffRequest.useMutation();
+  const cancelPortalRequest = trpc.bookings.cancelStaffRequest.useMutation();
   const selectedBookingId = activeKey?.startsWith("booking:") ? Number(activeKey.slice("booking:".length)) : null;
   const selectedFunnelId = activeKey?.startsWith("funnel:") ? Number(activeKey.slice("funnel:".length)) : null;
   const detailQuery = trpc.bookings.get.useQuery({ id: selectedBookingId ?? 0 }, { enabled: selectedBookingId !== null, staleTime: 10_000 });

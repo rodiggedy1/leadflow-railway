@@ -117,6 +117,54 @@ export const agentProcedure = t.procedure.use(
 );
 
 /**
+ * Requires the same active-agent page permission that AdminPageGuard uses for
+ * an operational page. A page-visible control must not be blocked by a more
+ * restrictive server procedure than the page itself.
+ */
+export function agentPageProcedure(pageId: string) {
+  return t.procedure.use(
+    t.middleware(async opts => {
+      const { ctx, next } = opts;
+      const session = await getAgentFromRequest(ctx.req);
+      if (!session) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Agent login required" });
+      }
+      const { getAgentById } = await import("../db");
+      const agent = await getAgentById(session.agentId);
+      if (!agent || agent.isActive !== 1) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Agent login required" });
+      }
+      let pagePermissions: string[] | null = null;
+      if (agent.pagePermissions !== null && agent.pagePermissions !== undefined) {
+        try {
+          const parsed = JSON.parse(agent.pagePermissions);
+          pagePermissions = Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+        } catch {
+          // Match agents.me and AdminPageGuard: malformed historical data means unrestricted.
+          pagePermissions = null;
+        }
+      }
+      if (agent.isAdmin !== 1 && pagePermissions !== null && !pagePermissions.includes(pageId)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: `${pageId} access required` });
+      }
+      return next({
+        ctx: {
+          ...ctx,
+          agent: {
+            agentId: agent.id,
+            agentName: agent.name,
+            agentEmail: agent.email,
+            isAdmin: agent.isAdmin === 1,
+          },
+        },
+      });
+    }),
+  );
+}
+
+export const bookingsAgentProcedure = agentPageProcedure("bookings");
+
+/**
  * adminAgentProcedure — validates the agent cookie session and requires isAdmin=true.
  * Use this for all admin-only procedures instead of protectedProcedure (which requires Manus OAuth).
  */

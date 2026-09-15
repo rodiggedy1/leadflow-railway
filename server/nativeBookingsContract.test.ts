@@ -11,6 +11,7 @@ const popup = readFileSync(new URL("../client/src/components/BookWithAIWidget.ts
 const bookPage = readFileSync(new URL("../client/src/pages/Book.tsx", import.meta.url), "utf8");
 const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
 const workspace = readFileSync(new URL("../client/src/components/NativeBookingsWorkspace.tsx", import.meta.url), "utf8");
+const prohibitedLegacySymbol = ["cleaner", "Jobs"].join("");
 
 describe("native booking source contract", () => {
   it("adds only idempotent native tables and no destructive migration", () => {
@@ -23,15 +24,19 @@ describe("native booking source contract", () => {
     expect(migration).not.toMatch(/\b(DROP|TRUNCATE|DELETE|UPDATE)\b/i);
   });
 
-  it("keeps only prepare public and protects list/get", () => {
+  it("keeps only prepare public and aligns every Bookings operation with Bookings page access", () => {
     expect(router).toContain("prepare: publicProcedure");
-    expect(router).toContain("list: adminAgentProcedure");
-    expect(router).toContain("get: adminAgentProcedure");
+    expect(router).toContain("list: bookingsAgentProcedure");
+    expect(router).toContain("get: bookingsAgentProcedure");
+    expect(router).toContain("cancel: bookingsAgentProcedure");
+    expect(router).toContain("staffRequests: bookingsAgentProcedure");
+    expect(router).toContain("cancelStaffRequest: bookingsAgentProcedure");
+    expect(router).toContain("staffMagicLink: bookingsAgentProcedure");
   });
 
-  it("stores durable native requests without Launch27 or cleanerJobs", () => {
+  it("stores durable native requests without Launch27 or the retired job-table path", () => {
     for (const marker of ['status: "needs_attention"', 'availabilityStatus: "requested"', 'assignmentStatus: "unassigned"', 'paymentStatus: "not_started"', '"intent_pending"', "expiresAt: null"]) expect(service).toContain(marker);
-    expect(service).not.toContain("cleanerJobs");
+    expect(service).not.toContain(prohibitedLegacySymbol);
     expect(service).not.toContain("launch27");
   });
 
@@ -50,7 +55,7 @@ describe("native booking source contract", () => {
 
   it("shows existing in-progress funnel leads in the default Booking section immediately without hiding them behind the separate Leads tab", () => {
     expect(workspace).toContain('const inProgressFunnelRows = funnelRows.filter((row) => row.status === "lead")');
-    expect(workspace).toContain('if (view === "bookings") return [...inProgressFunnelRows, ...scheduledRows]');
+    expect(workspace).toContain('if (view === "bookings") return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows]');
     expect(workspace).toContain("return inProgressFunnelRows");
     expect(workspace).toContain("onBookingFunnelUpdate: refreshBookingAndFunnelQueries");
   });

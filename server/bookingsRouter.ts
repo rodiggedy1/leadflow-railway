@@ -1,9 +1,9 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { router, publicProcedure, adminAgentProcedure } from "./_core/trpc";
+import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { appSettings, bookingSeries, bookings } from "../drizzle/schema";
+import { appSettings, bookingSeries, bookings, customerPortalServiceRequests } from "../drizzle/schema";
 import {
   BOOKING_WIDGET_DRAFT_SETTING,
   DEFAULT_BOOKING_WIDGET_DRAFT,
@@ -21,6 +21,7 @@ import {
   type PreparedNativeBooking,
 } from "./bookingsService";
 import { ENV } from "./_core/env";
+import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 
 const PREPARE_WINDOW_MS = 10 * 60_000;
 const PREPARE_LIMIT = 20;
@@ -197,7 +198,7 @@ export const bookingsRouter = router({
       }
     }),
 
-  list: adminAgentProcedure
+  list: bookingsAgentProcedure
     .input(bookingListInputSchema.optional())
     .query(async ({ input }) => {
       const db = await getDb();
@@ -216,7 +217,7 @@ export const bookingsRouter = router({
         .map(mapAdminBooking);
     }),
 
-  get: adminAgentProcedure
+  get: bookingsAgentProcedure
     .input(bookingGetInputSchema)
     .query(async ({ input }) => {
       const db = await getDb();
@@ -225,7 +226,7 @@ export const bookingsRouter = router({
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
       return mapAdminBooking(rows[0]);
     }),
-  cancel: adminAgentProcedure
+  cancel: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -234,5 +235,34 @@ export const bookingsRouter = router({
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
       await db.update(bookings).set({ status: "cancelled", updatedAt: new Date() }).where(eq(bookings.id, input.id));
       return { id: input.id, status: "cancelled" as const };
+    }),
+  staffRequests: bookingsAgentProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(200).default(200) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      return db.select().from(customerPortalServiceRequests).orderBy(desc(customerPortalServiceRequests.createdAt)).limit(input.limit);
+    }),
+  cancelStaffRequest: bookingsAgentProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const rows = await db.select({ id: customerPortalServiceRequests.id }).from(customerPortalServiceRequests).where(eq(customerPortalServiceRequests.id, input.id)).limit(1);
+      if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Service request not found." });
+      await db.update(customerPortalServiceRequests).set({ status: "cancelled", updatedAt: new Date() }).where(eq(customerPortalServiceRequests.id, input.id));
+      return { id: input.id, status: "cancelled" as const };
+    }),
+  staffMagicLink: bookingsAgentProcedure
+    .input(z.object({
+      customerName: z.string().trim().min(1).max(250),
+      customerPhone: z.string().trim().min(1).max(40),
+      customerEmail: z.string().trim().max(320).nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const url = await getOrCreateCustomerPortalMagicLink(db, input);
+      return { url };
     }),
 });

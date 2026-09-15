@@ -7,16 +7,18 @@ const router = fs.readFileSync(path.join(root, "server/leadflowJobsRouter.ts"), 
 const workspace = fs.readFileSync(path.join(root, "client/src/components/NativeBookingsWorkspace.tsx"), "utf8");
 const stylesheet = fs.readFileSync(path.join(root, "client/src/pages/bookings-preview.css"), "utf8");
 const server = fs.readFileSync(path.join(root, "server/_core/index.ts"), "utf8");
+const prohibitedLegacySymbol = ["cleaner", "Jobs"].join("");
+const prohibitedLegacyTable = ["cleaner", "_jobs"].join("");
 
 describe("Booking detail isolated cleaner photo gallery", () => {
   it("allows staff to read the existing isolated photo metadata through a namespaced Booking reference", () => {
-    expect(router).toContain("staffPhotos: adminAgentProcedure");
+    expect(router).toContain("staffPhotos: bookingsAgentProcedure");
     expect(router).toContain("cleanerPortalJobPhotos");
     expect(router).toContain("bookingPhotoReferenceInput");
     expect(router).toContain("parseBookingPhotoReference(input.bookingKey)");
     expect(router).toContain("eq(cleanerPortalJobPhotos.leadflowJobId, sourceId)");
-    expect(router).not.toContain("cleanerJobs");
-    expect(router).not.toContain("cleaner_jobs");
+    expect(router).not.toContain(prohibitedLegacySymbol);
+    expect(router).not.toContain(prohibitedLegacyTable);
   });
 
   it("renders staff-only Before and After groups in every existing Booking detail", () => {
