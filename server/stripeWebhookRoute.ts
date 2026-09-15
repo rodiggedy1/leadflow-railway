@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import express from "express";
 import Stripe from "stripe";
 import { and, eq } from "drizzle-orm";
-import { bookingPaymentProfiles, bookings, paymentAuthorizations, stripeWebhookEvents } from "../drizzle/schema";
+import { bookingPaymentProfiles, bookings, paymentAuthorizations, stripeCustomers, stripeWebhookEvents } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
@@ -35,13 +35,39 @@ async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
   if (!bound) return { status: "ignored" as const };
   const now = new Date();
   if (object.object === "setup_intent" && event.type === "setup_intent.succeeded") {
-      await bound.db.transaction(async (tx) => {
-        await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripeSetupIntentId: object.id, updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
-        await tx.update(bookings).set({ status: "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, bound.booking.id));
-      });
-      void sendBookingCompletionNotifications(bound.booking.id).catch((error) =>
-        console.error("[StripeWebhookRoute] Booking completion notifications failed:", error)
-      );
+    const paymentMethodId = typeof object.payment_method === "string" ? object.payment_method : object.payment_method?.id;
+    if (!paymentMethodId) throw new Error("Stripe SetupIntent succeeded without a payment method.");
+    const paymentMethod = await getStripeClient().paymentMethods.retrieve(paymentMethodId);
+    if (paymentMethod.type !== "card" || !paymentMethod.card || paymentMethod.customer !== bound.profile.stripeCustomerId) {
+      throw new Error("Stripe SetupIntent payment method does not match the verified booking payment profile.");
+    }
+    await bound.db.transaction(async (tx) => {
+      await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripeSetupIntentId: object.id, updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
+      await tx.update(bookings).set({ status: "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, bound.booking.id));
+      await tx.insert(stripeCustomers).values({
+        phone: bound.booking.customerPhone,
+        name: bound.booking.customerName,
+        stripeCustomerId: bound.profile.stripeCustomerId,
+        stripePaymentMethodId: paymentMethod.id,
+        cardBrand: paymentMethod.card.brand,
+        cardLast4: paymentMethod.card.last4,
+        cardExpMonth: paymentMethod.card.exp_month,
+        cardExpYear: paymentMethod.card.exp_year,
+        cardSavedAt: Date.now(),
+      }).onDuplicateKeyUpdate({ set: {
+        name: bound.booking.customerName,
+        stripeCustomerId: bound.profile.stripeCustomerId,
+        stripePaymentMethodId: paymentMethod.id,
+        cardBrand: paymentMethod.card.brand,
+        cardLast4: paymentMethod.card.last4,
+        cardExpMonth: paymentMethod.card.exp_month,
+        cardExpYear: paymentMethod.card.exp_year,
+        cardSavedAt: Date.now(),
+      } });
+    });
+    void sendBookingCompletionNotifications(bound.booking.id).catch((error) =>
+      console.error("[StripeWebhookRoute] Booking completion notifications failed:", error)
+    );
   } else if (object.object === "setup_intent" && (event.type === "setup_intent.setup_failed" || event.type === "setup_intent.canceled")) {
     await bound.db.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureCode: object.last_setup_error?.code ?? event.type, failureMessage: object.last_setup_error?.message ?? null, updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
     await bound.db.update(bookings).set({ paymentStatus: "failed", updatedAt: now }).where(eq(bookings.id, bound.booking.id));

@@ -24,6 +24,7 @@ import { getDb } from "./db";
 import { cardAuthTokens, stripeCustomers, paymentAuthorizations } from "../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { ENV } from "./_core/env";
+import { reconcileMissingStripeCustomerCards } from "./stripeCardListReconciliation";
 
 // ── Stripe client (lazy-initialised so missing key throws at call time, not import) ──
 function getStripe(): Stripe {
@@ -562,6 +563,13 @@ export const stripeRouter = router({
     .query(async () => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      try {
+        const repaired = await reconcileMissingStripeCustomerCards(db);
+        if (repaired > 0) console.log(`[StripeCards] Cards on File reconciliation complete: ${repaired} repaired.`);
+      } catch (error) {
+        // Existing card-list results remain available even if a historical repair is retried later.
+        console.error("[StripeCards] Cards on File reconciliation failed:", error);
+      }
       const rows = await db
         .select()
         .from(stripeCustomers)

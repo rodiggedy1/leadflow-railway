@@ -38,4 +38,15 @@ describe("booking Stripe webhook route", () => {
     expect(webhook).not.toContain("paymentIntents.capture");
     expect(webhook).not.toContain("paymentIntents.cancel");
   });
+
+  it("mirrors a verified booking card into the existing Cards on File source", () => {
+    const webhook = read("server/stripeWebhookRoute.ts");
+    expect(webhook).toContain("stripeCustomers");
+    expect(webhook).toContain("paymentMethods.retrieve(paymentMethodId)");
+    expect(webhook).toContain("paymentMethod.customer !== bound.profile.stripeCustomerId");
+    expect(webhook).toContain("await tx.insert(stripeCustomers).values({");
+    expect(webhook).toContain("phone: bound.booking.customerPhone");
+    expect(webhook).toContain("stripePaymentMethodId: paymentMethod.id");
+    expect(webhook).toContain("onDuplicateKeyUpdate({ set:");
+  });
 });
