@@ -1,0 +1,287 @@
+/*
+ * Production MIB Command visual layer.
+ *
+ * This stylesheet is deliberately scoped to .command-chat-production. It only
+ * changes presentation: the live data queries, handlers, buttons, keyboard
+ * actions, media controls, and action components remain inside CommandChat.tsx.
+ */
+.command-chat-production {
+  --mib-bg: #151515;
+  --mib-panel: #1b1b1d;
+  --mib-raised: #222224;
+  --mib-input: #252527;
+  --mib-border: #343438;
+  --mib-muted: #9999a1;
+  --mib-text: #f1f1f3;
+  background: radial-gradient(105% 90% at 50% 0%, #252528 0%, #151515 58%);
+  color: var(--mib-text);
+}
+
+.command-chat-production .command-chat-production-left {
+  background: var(--mib-bg);
+  border-right: 1px solid var(--mib-border);
+}
+
+.command-chat-production .command-chat-production-left-scroll {
+  padding: 0 10px 12px;
+}
+
+.command-chat-production .command-chat-production-left-card {
+  border: 1px solid var(--mib-border) !important;
+  border-radius: 16px !important;
+  background: linear-gradient(180deg, #202023 0%, #1b1b1d 100%) !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22) !important;
+}
+
+.command-chat-production .command-chat-production-left-card h2,
+.command-chat-production .command-chat-production-left-card [style*="Georgia"] {
+  color: var(--mib-text) !important;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+}
+
+.command-chat-production .command-chat-production-left-card [style*="color"] {
+  color: var(--mib-muted) !important;
+}
+
+.command-chat-production .command-chat-production-left-card button,
+.command-chat-production .command-chat-production-left-card label {
+  color: #c6c6cc !important;
+}
+
+.command-chat-production .command-chat-production-left-card input {
+  border-color: #3a3a3e !important;
+  background: #161618 !important;
+  color: #ededf0 !important;
+}
+
+.command-chat-production .command-chat-production-left-card input::placeholder {
+  color: #74747c;
+}
+
+.command-chat-production .command-chat-production-left-card .border-t,
+.command-chat-production .command-chat-production-left-card .border-slate-200 {
+  border-color: #343438 !important;
+}
+
+.command-chat-production .command-chat-production-center {
+  background: var(--mib-bg) !important;
+  padding: 0 2px;
+}
+
+.command-chat-production .command-chat-production-center-card {
+  overflow: hidden;
+  border: 1px solid var(--mib-border);
+  border-radius: 16px !important;
+  background: var(--mib-panel) !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28) !important;
+}
+
+.command-chat-production .command-chat-production-header {
+  min-height: 66px;
+  border-color: var(--mib-border) !important;
+  background: linear-gradient(180deg, #202023 0%, #1b1b1d 100%) !important;
+}
+
+.command-chat-production .command-chat-production-header-row {
+  min-height: 48px;
+}
+
+.command-chat-production .command-chat-production-header .text-slate-900,
+.command-chat-production .command-chat-production-header .text-slate-800 {
+  color: var(--mib-text) !important;
+}
+
+.command-chat-production .command-chat-production-header .text-\[\#8791a8\],
+.command-chat-production .command-chat-production-header .text-slate-400,
+.command-chat-production .command-chat-production-header .text-slate-500 {
+  color: var(--mib-muted) !important;
+}
+
+.command-chat-production .command-chat-production-header [class*="bg-white"] {
+  border-color: #3b3b40 !important;
+  background: #252527 !important;
+  box-shadow: none !important;
+}
+
+.command-chat-production .command-chat-production-header button:hover {
+  border-color: #54545a !important;
+  background: #2c2c2f !important;
+}
+
+.command-chat-production .command-chat-production-header img,
+.command-chat-production .command-chat-production-header [class*="rounded-full"] {
+  border-color: #444449 !important;
+}
+
+.command-chat-production .command-chat-production-toolbar {
+  border-color: var(--mib-border) !important;
+  background: #1b1b1d !important;
+}
+
+.command-chat-production .command-chat-production-toolbar [class*="bg-white"],
+.command-chat-production .command-chat-production-toolbar [class*="bg-amber-50"],
+.command-chat-production .command-chat-production-toolbar [class*="bg-\[\#f5f1ff\]"] {
+  border-color: #3c3c42 !important;
+  background: #252527 !important;
+  color: #d9d9de !important;
+}
+
+.command-chat-production .command-chat-production-toolbar [class*="text-slate"],
+.command-chat-production .command-chat-production-toolbar [class*="text-\["] {
+  color: #b9b9c0 !important;
+}
+
+.command-chat-production .command-chat-production-stream {
+  background:
+    radial-gradient(70% 54% at 50% 0%, rgba(70, 70, 78, 0.17), transparent 72%),
+    #19191b;
+}
+
+.command-chat-production .command-chat-production-stream > div:first-child {
+  color: #9d9da5;
+}
+
+.command-chat-production .command-chat-production-stream .hover\:bg-slate-100:hover {
+  background: #2a2a2d !important;
+}
+
+.command-chat-production .command-chat-production-message {
+  border-radius: 14px;
+}
+
+.command-chat-production .command-chat-production-message.command-chat-production-message-highlight {
+  background: rgba(200, 157, 75, 0.13) !important;
+}
+
+.command-chat-production .command-chat-production-bubble {
+  border: 1px solid #3a3a40;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.command-chat-production .command-chat-production-bubble--incoming {
+  border-color: #3a3a40;
+  background: #252527 !important;
+  color: #ececef !important;
+}
+
+.command-chat-production .command-chat-production-bubble--mine {
+  border-color: #3f7189;
+  background: linear-gradient(135deg, #24516d 0%, #1b4057 100%) !important;
+  color: #f5fbff !important;
+}
+
+.command-chat-production .command-chat-production-bubble--alert {
+  border-color: #46464c;
+  background: #202023 !important;
+  color: #f1f1f3 !important;
+}
+
+.command-chat-production .command-chat-production-message .text-slate-900,
+.command-chat-production .command-chat-production-message .text-slate-800 {
+  color: #eeeeF1 !important;
+}
+
+.command-chat-production .command-chat-production-message .text-slate-700,
+.command-chat-production .command-chat-production-message .text-slate-600,
+.command-chat-production .command-chat-production-message .text-slate-500,
+.command-chat-production .command-chat-production-message .text-slate-400 {
+  color: #aaaab1 !important;
+}
+
+.command-chat-production .command-chat-production-message .bg-slate-100,
+.command-chat-production .command-chat-production-message .bg-slate-50 {
+  border-color: #3a3a40 !important;
+  background: #2a2a2d !important;
+}
+
+.command-chat-production .command-chat-production-message .border-slate-200,
+.command-chat-production .command-chat-production-message .border-slate-100 {
+  border-color: #3a3a40 !important;
+}
+
+.command-chat-production .command-chat-production-composer {
+  border-top: 1px solid var(--mib-border);
+  background: #1b1b1d !important;
+}
+
+.command-chat-production .command-chat-production-composer [class*="bg-white"],
+.command-chat-production .command-chat-production-composer [class*="bg-slate-50"] {
+  background: #252527 !important;
+}
+
+.command-chat-production .command-chat-production-composer [class*="border-slate"] {
+  border-color: #3a3a40 !important;
+}
+
+.command-chat-production .command-chat-production-composer textarea {
+  color: #f1f1f3 !important;
+}
+
+.command-chat-production .command-chat-production-composer textarea::placeholder {
+  color: #85858c !important;
+}
+
+.command-chat-production .command-chat-production-composer .text-slate-700,
+.command-chat-production .command-chat-production-composer .text-slate-600,
+.command-chat-production .command-chat-production-composer .text-slate-500,
+.command-chat-production .command-chat-production-composer .text-slate-400 {
+  color: #b4b4bb !important;
+}
+
+.command-chat-production .command-chat-production-right {
+  border-left: 1px solid var(--mib-border);
+  background: var(--mib-bg);
+}
+
+.command-chat-production .command-chat-production-right > aside {
+  border-color: var(--mib-border) !important;
+  background: #1b1b1d !important;
+}
+
+.command-chat-production .command-chat-production-right > aside > header,
+.command-chat-production .command-chat-production-right > aside > footer {
+  border-color: var(--mib-border) !important;
+  background: #202023 !important;
+}
+
+.command-chat-production .command-chat-production-right article,
+.command-chat-production .command-chat-production-right [class*="bg-white"] {
+  border-color: #3b3b40 !important;
+  background: #252527 !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16) !important;
+}
+
+.command-chat-production .command-chat-production-right [class*="bg-\[\#f7f3fd\]"],
+.command-chat-production .command-chat-production-right [class*="bg-slate-100"] {
+  background: #2a2a2d !important;
+}
+
+.command-chat-production .command-chat-production-right .text-slate-800,
+.command-chat-production .command-chat-production-right .text-slate-700 {
+  color: #f0f0f2 !important;
+}
+
+.command-chat-production .command-chat-production-right .text-slate-600,
+.command-chat-production .command-chat-production-right .text-slate-500,
+.command-chat-production .command-chat-production-right .text-slate-400 {
+  color: #a7a7ae !important;
+}
+
+.command-chat-production .command-chat-production-right [class*="border-\[\#e8e2ef\]"],
+.command-chat-production .command-chat-production-right [class*="border-\[\#eee8f4\]"] {
+  border-color: #3b3b40 !important;
+}
+
+.command-chat-production .command-chat-production-right button:not([class*="bg-\[\#7447f5\]"]) {
+  color: #c8c8ce;
+}
+
+.command-chat-production .command-chat-production-right button:hover {
+  filter: brightness(1.08);
+}
+
+@media (max-width: 1100px) {
+  .command-chat-production .command-chat-production-right {
+    border-left: 0;
+  }
+}

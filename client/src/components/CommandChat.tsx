@@ -56,6 +56,7 @@ import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMe
 import { getCustomerAvatarUrl, getTeamAvatarUrl } from "@/lib/customerAvatar";
 import { IssueEngineOverlay, CreateIssueModal, ActiveIssuesPill } from "@/components/IssueEngineOverlay";
 import { TeamEtaModal } from "@/components/TeamEtaModal";
+import "./command-chat-production.css";
 
 // ── Payment Link Modal ───────────────────────────────────────────────────────
 function _normalizePhone(raw: string) {
@@ -4513,7 +4514,7 @@ const MessageList = memo(function MessageList({
 }: MessageListProps) {
   return (
     <>
-        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-4 chat-scroll-inset" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
+        <div ref={threadScrollRef} className="command-chat-production-stream flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-4 chat-scroll-inset" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
           <div className="flex items-center justify-between mb-4">
             {searchOpen ? (
               <div className="flex items-center gap-1.5 flex-1 min-w-0 animate-in slide-in-from-left-2 duration-200">
@@ -6243,8 +6244,8 @@ const MessageList = memo(function MessageList({
                       key={msg.id}
                       ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
                       className={cn(
-                        "w-full group transition-colors duration-300",
-                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "",
+                        "command-chat-production-message w-full group transition-colors duration-300",
+                        highlightedCmdMsgId === msg.id ? "command-chat-production-message-highlight bg-amber-50 rounded-2xl" : "",
                         isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : "",
                         msg.threadParentId ? "border-l-2 border-violet-300" : ""
                       )}
@@ -6261,7 +6262,7 @@ const MessageList = memo(function MessageList({
                             )}
                           </div>
                         )}
-                        <div className={"rounded-2xl " + (isAlert ? "max-w-[560px] px-4 py-2.5 bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto px-5 py-4 bg-[#0f172a] text-white" : "w-full px-5 py-4 bg-[#f1f5f9] text-slate-900")}>
+                        <div className={"command-chat-production-bubble " + (isAlert ? "command-chat-production-bubble--alert max-w-[560px] px-4 py-2.5 bg-[#0f172a] text-white" : isMine ? "command-chat-production-bubble--mine max-w-[75%] ml-auto px-5 py-4 bg-[#0f172a] text-white" : "command-chat-production-bubble--incoming w-full px-5 py-4 bg-[#f1f5f9] text-slate-900")}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
                             <span className={cn(
@@ -9575,7 +9576,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   };
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden" style={{ ['--workspace-gutter' as string]: '16px' } as React.CSSProperties}>
+    <div ref={containerRef} className="command-chat-production flex flex-1 min-h-0 overflow-hidden" style={{ ['--workspace-gutter' as string]: '16px' } as React.CSSProperties}>
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── My Assigned Leads Modal ────────────────────────────────────────────────────────────────────────────────── */}
@@ -9761,13 +9762,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── LEFT PANEL: Leads & Issues ── */}
       <div
-        className="shrink-0 flex flex-col overflow-hidden transition-[width] duration-200"
+        className="command-chat-production-left shrink-0 flex flex-col overflow-hidden transition-[width] duration-200"
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
         {/* Single scrollable area — header + content all scroll together */}
         {/* Single scrollable area */}
-        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-        <div className="rounded-[28px] overflow-hidden" style={{background:"rgba(255,255,255,.88)",backdropFilter:"blur(18px)",border:"1px solid rgba(255,255,255,.72)",boxShadow:"0 20px 55px rgba(42,48,82,.10)",padding:"18px 14px"}}>
+        <div className="command-chat-production-left-scroll flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+        <div className="command-chat-production-left-card rounded-[28px] overflow-hidden" style={{background:"rgba(255,255,255,.88)",backdropFilter:"blur(18px)",border:"1px solid rgba(255,255,255,.72)",boxShadow:"0 20px 55px rgba(42,48,82,.10)",padding:"18px 14px"}}>
                 <div>
           {/* .eyebrow { font-size:11px; letter-spacing:.14em; color:#8b96ae; font-weight:800 } */}
           <div style={{fontSize:"11px",letterSpacing:".14em",color:"#8b96ae",fontWeight:800}}>✦ LEADS</div>
@@ -10015,13 +10016,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       </div>
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
+      <div className="command-chat-production-center flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
         {/* White card wrapper with grey showing on sides */}
-        <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0" style={{overflow: 'clip'}}>
+        <div className="command-chat-production-center-card bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0" style={{overflow: 'clip'}}>
         {/* Header */}
-        <div className="px-4 pt-2 pb-2 border-b border-slate-200 bg-white shrink-0">
+        <div className="command-chat-production-header px-4 pt-2 pb-2 border-b border-slate-200 bg-white shrink-0">
           {/* Compact single-row header */}
-          <div className="flex items-center justify-between gap-3">
+          <div className="command-chat-production-header-row flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-slate-900 leading-none mr-2 whitespace-nowrap">MIB Command ✦</span>
@@ -10454,7 +10455,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
           {true && (
-            <div className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
+            <div className="command-chat-production-toolbar shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
@@ -10896,7 +10897,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           />
         )}
         {/* Composer — hidden when in issues view */}
-        <div className={cn("relative shrink-0", (centerView === "issues" || centerView === "calls") && "hidden")}>
+        <div className={cn("command-chat-production-composer relative shrink-0", (centerView === "issues" || centerView === "calls") && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
 
@@ -12287,7 +12288,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── RIGHT PANEL: Madison's Moves (global); Operations remains customer-contextual elsewhere ── */}
       <div
-        className="shrink-0 flex flex-col transition-[width] duration-200"
+        className="command-chat-production-right shrink-0 flex flex-col transition-[width] duration-200"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         <MadisonsMovesPanel />
