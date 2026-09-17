@@ -30,7 +30,7 @@ import {
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
   ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone, RotateCcw,
-  DollarSign, Check, User, Calendar, CreditCard, Play, Pause, ChevronUp, Users, Edit3 } from "lucide-react";
+  DollarSign, Check, User, Calendar, CreditCard, Play, Pause, ChevronUp, Users, Edit3, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -4083,71 +4083,59 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   const badgeColor = isOverdue ? "#d92d20" : "#b86600";
   const badgeBg = isOverdue ? "#fff0ef" : "#fff4dc";
   return (
-    <div style={{ padding: "4px 16px" }}>
-      <div style={{ background: "#fff", border: "1px solid #e7e9f0", borderRadius: 20, boxShadow: "0 8px 28px rgba(28,32,55,0.05)", overflow: "hidden" }}>
-        {/* Summary row — always visible, click to expand */}
-        <button
-          style={{ width: "100%", border: 0, background: "transparent", padding: "16px 18px", display: "grid", gridTemplateColumns: "7px 1fr auto 22px", gap: 14, alignItems: "center", textAlign: "left" as const, cursor: "pointer" }}
+    <div className="command-chat-unanswered-shell">
+      <div className="command-chat-unanswered-card">
+        {/* Summary stays one compact command-feed event; its controls retain the existing actions. */}
+        <div
+          role="button"
+          tabIndex={0}
+          className="command-chat-unanswered-summary"
           onClick={() => setIsExpanded(v => !v)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setIsExpanded(v => !v);
+            }
+          }}
         >
-          {/* Left accent bar */}
-          <span style={{ height: 43, borderRadius: 20, background: accentColor, display: "block" }} />
-          {/* Name + badge + preview */}
-          <span style={{ minWidth: 0 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <span style={{ fontSize: 17, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, color: "#18192b" }}>{leadName}</span>
-              <span style={{ fontSize: 11, fontWeight: 800, padding: "5px 9px", borderRadius: 999, color: badgeColor, background: badgeBg, whiteSpace: "nowrap" as const }}>Waiting {fmtAge(ageMs)}</span>
-            </span>
-            {preview && <span style={{ display: "block", marginTop: 5, color: "#737b8e", fontSize: 14, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>"{preview}"</span>}
-          </span>
-          {/* Right: no-reply button + chevron */}
-          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={e => { e.stopPropagation(); handleNoReply(); }}
-              disabled={isSending}
-              style={{ fontSize: 11, fontWeight: 800, color: "#626a79", background: "#f4f5f7", border: "1px solid #dfe2ea", borderRadius: 10, padding: "6px 10px", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1, whiteSpace: "nowrap" as const }}
-            >✓ No reply needed</button>
-            <span style={{ fontSize: 23, color: "#a5acba", transition: "transform .2s", transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block" }}>›</span>
-          </span>
-        </button>
-        {/* Expanded detail */}
-        {isExpanded && (
-          <div style={{ borderTop: "1px solid #eff0f4", padding: 18 }}>
-            <div style={{ display: "inline-block", fontSize: 12, fontWeight: 800, color: "#d92d20", background: "#fff1f0", border: "1px solid #ffd4d0", padding: "7px 10px", borderRadius: 999, marginBottom: 14 }}>
-              🚨 UNANSWERED · {fmtAge(ageMs).toUpperCase()}
+          <span className="command-chat-unanswered-accent" style={{ background: accentColor }} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="command-chat-unanswered-name">{leadName}</span>
+              <span className="command-chat-unanswered-age" style={{ color: badgeColor, background: badgeBg }}>Waiting {fmtAge(ageMs)}</span>
             </div>
-            {/* Full conversation thread */}
-            {sessionId && (
-              <div style={{ marginBottom: 12 }} onClick={e => e.stopPropagation()}>
-                <ConversationThread sessionId={sessionId} />
-              </div>
-            )}
-            {/* Reply composer */}
+            {preview && <p className="command-chat-unanswered-preview">“{preview}”</p>}
+          </div>
+          <div className="command-chat-unanswered-actions">
+            <button
+              onClick={event => { event.stopPropagation(); handleNoReply(); }}
+              disabled={isSending}
+              className="command-chat-unanswered-dismiss"
+            >
+              <Check className="h-3.5 w-3.5" /> No reply needed
+            </button>
+            <ChevronRight className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-90")} />
+          </div>
+        </div>
+        {isExpanded && (
+          <div className="command-chat-unanswered-detail">
+            <p className="command-chat-unanswered-label">Unanswered · {fmtAge(ageMs)}</p>
+            {sessionId && <div className="command-chat-unanswered-thread"><ConversationThread sessionId={sessionId} /></div>}
             <textarea
               value={replyText}
-              onChange={e => setReplyText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              onChange={event => setReplyText(event.target.value)}
+              onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); handleSend(); } }}
               placeholder={`Reply to ${leadName}…`}
-              style={{ width: "100%", minHeight: 80, marginTop: 13, border: "1px solid #dfe2ea", borderRadius: 15, padding: 13, fontFamily: "inherit", fontSize: 14, outline: "none", resize: "vertical" as const, boxSizing: "border-box" as const, color: "#18192b", background: "#fff" }}
-              onClick={e => e.stopPropagation()}
+              className="command-chat-unanswered-composer"
+              onClick={event => event.stopPropagation()}
             />
-            {sendError && (
-              <div style={{ fontSize: 12, color: "#ef4444", marginTop: 6 }}>{sendError}</div>
-            )}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 10 }}>
-              <button
-                onClick={e => { e.stopPropagation(); handleNoReply(); }}
-                disabled={isSending}
-                style={{ border: "1px solid #dfe2ea", background: "#fff", color: "#626a79", borderRadius: 12, padding: "10px 14px", fontWeight: 800, fontSize: 13, cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1 }}
-              >
-                ✓ No reply needed
+            {sendError && <p className="command-chat-unanswered-error">{sendError}</p>}
+            <div className="command-chat-unanswered-detail-actions">
+              <button onClick={event => { event.stopPropagation(); handleNoReply(); }} disabled={isSending} className="command-chat-unanswered-dismiss">
+                <Check className="h-3.5 w-3.5" /> No reply needed
               </button>
-              <button
-                onClick={e => { e.stopPropagation(); handleSend(); }}
-                disabled={isSending || !replyText.trim() || !sessionId}
-                style={{ background: "#6f4cff", color: "#fff", borderRadius: 12, padding: "10px 14px", fontWeight: 800, fontSize: 13, border: "none", cursor: (isSending || !replyText.trim() || !sessionId) ? "not-allowed" : "pointer", opacity: (isSending || !replyText.trim() || !sessionId) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                {isSending ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : null}
+              <button onClick={event => { event.stopPropagation(); handleSend(); }} disabled={isSending || !replyText.trim() || !sessionId} className="command-chat-unanswered-send">
+                {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                 Send reply
               </button>
             </div>
@@ -9497,6 +9485,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [newMsgCount, setNewMsgCount] = useState(0);
   // Right column is always visible — never collapsed
   const rightCollapsed = false;
@@ -10025,14 +10014,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div className="command-chat-production-header-row flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-slate-900 leading-none mr-2 whitespace-nowrap">MIB Command ✦</span>
+                  <span className="command-chat-production-title text-sm font-bold text-slate-900 leading-none mr-2 whitespace-nowrap">MIB Command</span>
                   {/* Stat cards */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onSwitchToLeadOps?.()}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition-colors cursor-pointer shadow-sm"
+                        className="command-chat-production-metric flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition-colors cursor-pointer shadow-sm"
                       >
+                        <Users className="command-chat-production-metric-icon h-3.5 w-3.5" />
                         <span className="font-bold text-[#2c70ff]" style={{fontSize:"13px"}}>{todayStats?.total ?? 0}</span>
                         <span className="text-[11px] font-semibold text-[#8791a8]">Leads</span>
                       </button>
@@ -10069,7 +10059,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
-                          <span className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full cursor-default shadow-sm">
+                          <span className="command-chat-production-metric flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full cursor-default shadow-sm">
+                            <CalendarDays className="command-chat-production-metric-icon h-3.5 w-3.5" />
                             <span className="font-bold text-[#2c70ff]" style={{fontSize:"13px"}}>{todayBookingCount}</span>
                             <span className="text-[11px] font-semibold text-[#8791a8]">Booked</span>
                           </span>
@@ -10094,7 +10085,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {/* Revenue card */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full cursor-default shadow-sm">
+                      <span className="command-chat-production-metric flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full cursor-default shadow-sm">
+                        <DollarSign className="command-chat-production-metric-icon h-3.5 w-3.5" />
                         <span className="font-bold text-emerald-600" style={{fontSize:"13px"}}>${todayRevenue.toLocaleString()}</span>
                         <span className="text-[11px] font-semibold text-[#8791a8]">Today</span>
                       </span>
@@ -10173,6 +10165,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               );
             })()}
+            <div className="command-chat-production-header-actions flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowCallPanel(true)}
+                className="command-chat-production-header-action"
+                title="Open AI Calls"
+                aria-label="Open AI Calls"
+              >
+                <Phone className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setHeaderMenuOpen((open) => !open)}
+                className={cn("command-chat-production-header-action", headerMenuOpen && "command-chat-production-header-action--active")}
+                title="Open command tools"
+                aria-label="Open command tools"
+                aria-expanded={headerMenuOpen}
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -10454,8 +10465,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Conversation thread — relative wrapper for toast overlay */}
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
-          {true && (
-            <div className="command-chat-production-toolbar shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
+          {headerMenuOpen && (
+            <div className="command-chat-production-toolbar absolute inset-x-0 top-0 z-30 shrink-0 flex items-center gap-1.5 px-4 py-2 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
