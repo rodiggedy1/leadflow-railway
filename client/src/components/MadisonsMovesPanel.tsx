@@ -34,11 +34,11 @@ const kindLabel: Record<MoveKind, string> = {
   smart_upsell: "Smart upsell",
 };
 const kindTone: Record<MoveKind, { tint: string; ink: string; icon: React.ReactNode }> = {
-  protect_tomorrow: { tint: "#39241F", ink: "#F19B7E", icon: <AlertTriangle className="h-3.5 w-3.5" /> },
-  save_cancellation: { tint: "#352D1D", ink: "#E8BA64", icon: <Clock3 className="h-3.5 w-3.5" /> },
-  fill_capacity: { tint: "#17332B", ink: "#72CBAE", icon: <ArrowUpRight className="h-3.5 w-3.5" /> },
-  recover_qualified_leads: { tint: "#1A3140", ink: "#89C6E8", icon: <Users className="h-3.5 w-3.5" /> },
-  smart_upsell: { tint: "#36271F", ink: "#E4AD7A", icon: <Sparkles className="h-3.5 w-3.5" /> },
+  protect_tomorrow: { tint: "#fff1ee", ink: "#c2412d", icon: <AlertTriangle className="h-3.5 w-3.5" /> },
+  save_cancellation: { tint: "#fff8e8", ink: "#a16207", icon: <Clock3 className="h-3.5 w-3.5" /> },
+  fill_capacity: { tint: "#eef9f3", ink: "#15803d", icon: <ArrowUpRight className="h-3.5 w-3.5" /> },
+  recover_qualified_leads: { tint: "#f1edff", ink: "#6d47cf", icon: <Users className="h-3.5 w-3.5" /> },
+  smart_upsell: { tint: "#fff4e8", ink: "#b45309", icon: <Sparkles className="h-3.5 w-3.5" /> },
 };
 
 function MoveCard({ move, onReview, onDismiss, onRestore, onReviewItem, reviewItemPending }: { move: Move; onReview: () => void; onDismiss: () => void; onRestore: () => void; onReviewItem: (itemKey: string, resolved: boolean) => void; reviewItemPending: boolean }) {
@@ -102,7 +102,7 @@ export function MadisonsMovesPanel() {
   } : null;
 
   return (
-    <aside className="madisons-moves-production flex h-full min-h-0 flex-col overflow-hidden border-l border-[#e8e2ef] bg-[#fbf9ff]">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-[#e8e2ef] bg-[#fbf9ff]">
       <header className="shrink-0 border-b border-[#e8e2ef] bg-white px-4 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
