@@ -4,6 +4,7 @@ import { z } from "zod";
 import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import "./retiredStatusProcedureBlock";
 import { sendSms } from "./openphone";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 
@@ -24,6 +25,21 @@ function formatEtaTime(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
 }
 
+export function currentEasternDate(now = new Date()) {
+  const raw = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const [month, day, year] = raw.split("/");
+  return `${year}-${month}-${day}`;
+}
+
+export function canUpdatePortalProgress(jobDate: string, now = new Date()) {
+  return jobDate === currentEasternDate(now);
+}
+
 async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Portal progress is temporarily unavailable." });
@@ -37,6 +53,7 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
     customerPhone: leadflowJobs.customerPhone,
     customerEmail: leadflowJobs.customerEmail,
     jobAddress: leadflowJobs.jobAddress,
+    jobDate: leadflowJobs.jobDate,
   }).from(leadflowJobs).where(and(
     eq(leadflowJobs.id, leadflowJobId),
     eq(leadflowJobs.teamId, cleaner.teamId),
@@ -46,6 +63,9 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
   )).limit(1);
   const job = jobRows[0];
   if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "This job is not assigned to your team." });
+  if (!canUpdatePortalProgress(job.jobDate)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Job progress can only be updated on the scheduled service date." });
+  }
   return { db, cleaner, job };
 }
 
