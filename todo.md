@@ -1723,4 +1723,3 @@
 - [x] Persist Launch27 staff notes alongside customer notes in LeadFlow jobs and display both note types in the Cleaner Portal without exposing staff notes in the Customer Portal
 - [x] Trace and correct the Sep 8 Booking sync count-versus-rendered-list mismatch that omits Jennifer Goldsmith while reporting 15 active jobs
 - [x] Reconcile every active Launch27 booking to an active persisted LeadFlow row, including prior terminal rows and duplicate-insert races, so sync counts equal Bookings rows
-- [x] Rebuild live Settings in the approved dark review composition while preserving every existing tab, access guard, query, mutation, dialog, and booking-widget handoff; deploy only to preview after validation.
