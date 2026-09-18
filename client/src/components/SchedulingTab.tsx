@@ -1348,7 +1348,7 @@ function TeamDayConfigButton({
 
 // ── Map renderer ──────────────────────────────────────────────────────────────
 
-function ScheduleMap({
+export function ScheduleMap({
   jobs, teams, selectedJobId, onJobSelect,
 }: {
   jobs: Job[];

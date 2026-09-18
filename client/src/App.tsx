@@ -94,6 +94,7 @@ const InvoicesReview = lazy(() => import("./pages/InvoicesReview"));
 const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const PaymentsReview = lazy(() => import("./pages/PaymentsReview"));
 const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
+const ScheduleCRMExactLive = lazy(() => import("./pages/ScheduleCRMExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -144,6 +145,7 @@ function InvoicesReviewRoute() { return <ReviewWorkspaceFrame><InvoicesReview />
 function AdminInvoicesExactReviewRoute() { return <AdminPageGuard pageId="invoices"><ReviewWorkspaceFrame navActivePath="/review/invoices"><InvoicesExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function PaymentsReviewRoute() { return <ReviewWorkspaceFrame><PaymentsReview /></ReviewWorkspaceFrame>; }
 function AdminPaymentsExactReviewRoute() { return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
+function AdminScheduleCRMExactRoute() { return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><ScheduleCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 
 /**
  * OpsChatRedirect
@@ -192,6 +194,7 @@ function Router() {
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
         <Route path={"/admin/field-management"} component={FieldManagement} />
+        <Route path={"/admin/schedule"} component={AdminScheduleCRMExactRoute} />
         <Route path={"/admin/reactivation"} component={ReactivationEngine} />
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
         <Route path={"/call-assist"} component={LiveCallAssist} />
@@ -365,7 +368,8 @@ function GlobalOpsChat() {
 }
 
 function isReviewDerivedLiveShell(location: string) {
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary";
+  const isScheduleWorkspace = location === "/admin/schedule";
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || isScheduleWorkspace;
 }
 
 function ReviewSafeGlobalOpsChat() {

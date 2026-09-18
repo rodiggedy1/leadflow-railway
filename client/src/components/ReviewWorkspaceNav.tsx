@@ -16,7 +16,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
     label: "CUSTOMER OPERATIONS",
     items: [
       { label: "Customer Profile", href: "/review/customer-profile", liveHref: "/admin/customer-profile", icon: UserRound },
-      { label: "Schedule", href: "/review/schedule-crm", icon: CalendarRange },
+      { label: "Schedule", href: "/review/schedule-crm", liveHref: "/admin/schedule", icon: CalendarRange },
       { label: "Day Board", href: "/review/day-board-crm", icon: PanelsTopLeft },
       { label: "Confirmation Calls", href: "/review/confirmation-calls", liveHref: "/admin/confirmation-calls", icon: PhoneOutgoing },
     ],
