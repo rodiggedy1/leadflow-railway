@@ -102,7 +102,7 @@ export function MadisonsMovesPanel() {
   } : null;
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-[#e8e2ef] bg-[#fbf9ff]">
+    <aside className="mib-moves flex h-full min-h-0 flex-col overflow-hidden border-l">
       <header className="shrink-0 border-b border-[#e8e2ef] bg-white px-4 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
