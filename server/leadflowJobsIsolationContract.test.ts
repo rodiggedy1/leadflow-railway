@@ -95,6 +95,9 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(liveShell).toContain("Refresh team & card details");
     expect(liveShell).toContain("Save date");
     expect(liveShell).toContain("Cleaner &amp; customer");
+    expect(liveShell).toContain("const CUSTOMER_PORTRAITS = [");
+    expect(liveShell).toContain('className="bcr-customer-portrait"');
+    expect(liveShell).toContain("customerPortraitFor(row.customerName)");
     expect(liveShell).not.toContain("bookings-ops-shell");
   });
 
