@@ -1,0 +1,175 @@
+/* Internal group-chat hierarchy: compact author rows and neutral chronological messages, not a one-to-one SMS thread. */
+.ccc-widget-app .ccc-active-chat.ccc-group-chat {
+  height: 56px;
+}
+
+.ccc-widget-app .ccc-group-chat-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.ccc-widget-app .ccc-group-chat-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border: 1px solid #3c5249;
+  border-radius: 7px;
+  background: #1f2b27;
+  color: #8fd8af;
+}
+
+.ccc-widget-app .ccc-group-chat-icon svg {
+  width: 13px;
+}
+
+.ccc-widget-app .ccc-group-chat small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccc-widget-app .ccc-message-stream {
+  gap: 13px;
+  padding: 16px 19px 12px;
+}
+
+.ccc-widget-app .ccc-group-message {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  max-width: 88%;
+}
+
+.ccc-widget-app .ccc-group-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  color: #f3f3f4;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ccc-widget-app .ccc-group-avatar-dispatch {
+  background: #294858;
+  color: #d9effc;
+}
+
+.ccc-widget-app .ccc-group-avatar-team {
+  background: #244238;
+  color: #d9f5e8;
+}
+
+.ccc-widget-app .ccc-group-message .ccc-message-meta {
+  justify-content: flex-start;
+  gap: 5px;
+  margin: 0 0 2px;
+}
+
+.ccc-widget-app .ccc-group-message .ccc-message-meta strong {
+  color: #eeeeef;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ccc-widget-app .ccc-group-message .ccc-message-meta em {
+  color: #8a8a90;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.ccc-widget-app .ccc-group-message .ccc-message-meta em::before {
+  content: "·";
+  margin-right: 5px;
+  color: #5f5f64;
+}
+
+.ccc-widget-app .ccc-group-message .ccc-message-meta time {
+  margin-left: 1px;
+  color: #707076;
+  font-size: 10px;
+}
+
+.ccc-widget-app .ccc-group-message p {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #c9c9ce;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ccc-widget-app .ccc-group-message-dispatch p {
+  color: #c9dde9;
+}
+
+.ccc-widget-app .ccc-group-message-team p {
+  color: #c7e2d5;
+}
+
+.ccc-widget-app .ccc-group-message-right {
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-self: flex-end;
+  max-width: 72%;
+  text-align: right;
+}
+
+.ccc-widget-app .ccc-group-message-right > div {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.ccc-widget-app .ccc-group-message-right .ccc-group-avatar {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.ccc-widget-app .ccc-group-message-right .ccc-message-meta {
+  justify-content: flex-end;
+}
+
+.ccc-widget-app .ccc-group-message-right p {
+  margin-left: auto;
+}
+
+.ccc-widget-app .ccc-message-system {
+  align-self: stretch;
+  max-width: none;
+  margin: -2px 0;
+  padding-left: 32px;
+}
+
+.ccc-widget-app .ccc-message-system span {
+  width: fit-content;
+  padding: 3px 7px;
+  border-left: 1px solid #765f34;
+  color: #a99a75;
+  font-size: 10px;
+}
+
+.ccc-widget-app .ccc-message-system svg {
+  color: #c89f53;
+}
+
+@media (max-width: 720px) {
+  .ccc-widget-app .ccc-group-message {
+    max-width: 100%;
+  }
+
+  .ccc-widget-app .ccc-group-message-right {
+    max-width: 88%;
+  }
+}

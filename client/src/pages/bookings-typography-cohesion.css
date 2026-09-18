@@ -1,0 +1,9 @@
+/* Approved Bookings-only hierarchy correction. Leads CRM's 11px dense-label,
+ * 13px primary-data, and 16px detail-title roles are preserved inside review. */
+.booking-crm-review .bcr-page-intro p { color: #e87458; font-size: 11px !important; font-weight: 600; line-height: 12px !important; letter-spacing: .1em; }
+.booking-crm-review .bcr-metric-row p { font-size: 11px !important; line-height: 14px !important; }
+.booking-crm-review .bcr-booking-list-head { font-size: 11px !important; font-weight: 600; line-height: 16.5px !important; }
+.booking-crm-review .bcr-customer-cell > b, .booking-crm-review .bcr-customer-cell strong, .booking-crm-review .bcr-team-cell strong, .booking-crm-review .bcr-service-cell strong, .booking-crm-review .bcr-payment-ok, .booking-crm-review .bcr-payment-missing, .booking-crm-review .bcr-row-price { font-size: 13px !important; line-height: 19.5px !important; }
+.booking-crm-review .bcr-customer-cell small, .booking-crm-review .bcr-team-cell small, .booking-crm-review .bcr-service-cell small, .booking-crm-review .bcr-service-cell em { font-size: 11px !important; line-height: 16.5px !important; }
+.booking-crm-review .bcr-workspace-detail-header h2 { font-size: 16px !important; font-weight: 500 !important; line-height: 16px !important; letter-spacing: normal !important; }
+.booking-crm-review .bcr-section-title h3, .booking-crm-review .bcr-photo-review-title h3 { font-size: 14px !important; line-height: 18px !important; }

@@ -1,0 +1,2 @@
+/* Left-panel-only cohesion layer: retain the original thread and recommendation surfaces. */
+.ccc-conversation-list{gap:0}.ccc-conversation{margin:0 2px;border-radius:7px;border-bottom:1px solid #29292c}.ccc-conversation:last-child{border-bottom-color:transparent}.ccc-conversation:hover{background:#222224}.ccc-conversation.active{background:#252529;border-color:#4a4a50;box-shadow:inset 2px 0 0 #777780}

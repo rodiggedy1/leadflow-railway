@@ -1,0 +1,4 @@
+.reviews-quality-review .rqd-workspace{grid-template-columns:230px minmax(0,1fr) 290px}
+.reviews-quality-review .rqd-center-column,.reviews-quality-review .rqd-detail-panel{min-width:0}
+@media(max-width:1200px){.reviews-quality-review .rqd-workspace{grid-template-columns:270px minmax(360px,1fr)}}
+@media(max-width:850px){.reviews-quality-review .rqd-workspace{grid-template-columns:1fr}}

@@ -1,0 +1,83 @@
+/* Compact identity and signal layer for the static Email Kanban board. */
+.emails-review:not(.has-detail) .emails-lane {
+  position: relative;
+  border-color: #313136;
+  background: #1c1c1f;
+}
+
+.emails-review:not(.has-detail) .emails-lane::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 12px;
+  left: 12px;
+  height: 2px;
+  border-radius: 0 0 999px 999px;
+  background: #5b9cc6;
+  opacity: .7;
+}
+
+.emails-review:not(.has-detail) .emails-lane:nth-child(2)::before { background: #c89f53; }
+.emails-review:not(.has-detail) .emails-lane:nth-child(3)::before { background: #8aa2b4; }
+.emails-review:not(.has-detail) .emails-lane:nth-child(4)::before { background: #c9616d; }
+
+.emails-review:not(.has-detail) .emails-lane:nth-child(1) > header > b { color: #a7d6ee; }
+.emails-review:not(.has-detail) .emails-lane:nth-child(2) > header > b { color: #edca79; }
+.emails-review:not(.has-detail) .emails-lane:nth-child(3) > header > b { color: #bdcbd5; }
+.emails-review:not(.has-detail) .emails-lane:nth-child(4) > header > b { color: #ef9ca6; }
+
+.emails-review:not(.has-detail) .emails-card {
+  position: relative;
+  overflow: hidden;
+  border-color: #37373c;
+  background: #222225;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.emails-review:not(.has-detail) .emails-card::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 99px 99px 0;
+  background: #5b9cc6;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.emails-review:not(.has-detail) .emails-lane:nth-child(2) .emails-card::before { background: #c89f53; }
+.emails-review:not(.has-detail) .emails-lane:nth-child(3) .emails-card::before { background: #8aa2b4; }
+.emails-review:not(.has-detail) .emails-lane:nth-child(4) .emails-card::before { background: #c9616d; }
+.emails-review:not(.has-detail) .emails-card:hover { border-color: #55555b; background: #28282b; transform: translateY(-1px); }
+.emails-review:not(.has-detail) .emails-card:hover::before { opacity: 1; }
+
+.emails-review:not(.has-detail) .emails-card > div > i,
+.emails-review:not(.has-detail) .emails-card footer i {
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.2);
+  background-position: center;
+  background-size: cover;
+  color: transparent;
+  box-shadow: 0 1px 4px rgba(0,0,0,.22);
+}
+
+.emails-review:not(.has-detail) .emails-lane:nth-child(1) .emails-card:nth-child(1) > div > i { background-image: url("/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png"); }
+.emails-review:not(.has-detail) .emails-lane:nth-child(2) .emails-card:nth-child(1) > div > i { background-image: url("/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png"); }
+.emails-review:not(.has-detail) .emails-lane:nth-child(2) .emails-card:nth-child(2) > div > i { background-image: url("/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png"); }
+.emails-review:not(.has-detail) .emails-lane:nth-child(3) .emails-card:nth-child(1) > div > i { background-image: url("/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png"); }
+.emails-review:not(.has-detail) .emails-lane:nth-child(4) .emails-card:nth-child(1) > div > i { background-image: url("/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png"); }
+.emails-review:not(.has-detail) .emails-card footer i { background-image: url("/manus-storage/leads-crm-owner-grace-miller_7bf6a25c.png"); }
+
+.emails-review:not(.has-detail) .emails-card > div > i { width: 27px; height: 27px; }
+.emails-review:not(.has-detail) .emails-card footer i { width: 17px; height: 17px; border-radius: 50%; }
+.emails-review:not(.has-detail) .emails-card strong { color: #f0f0f2; font-size: 10px; }
+.emails-review:not(.has-detail) .emails-card > b { color: #e1e1e5; }
+.emails-review:not(.has-detail) .emails-card > p { color: #aaaab0; }
+
+.emails-review:not(.has-detail) .emails-card em {
+  border: 1px solid #365469;
+  background: #1d303b;
+  color: #a7d6ee;
+}

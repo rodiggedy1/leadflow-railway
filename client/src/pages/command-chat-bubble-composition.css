@@ -1,0 +1,84 @@
+/* Middle-column-only composition inspired by a high-signal operations group chat. */
+.ccc-widget-app .ccc-service-pulse { display:flex; align-items:center; gap:16px; margin:20px 28px 0; padding:17px 20px; border:1px solid #554721; border-radius:15px; background:linear-gradient(100deg,#252117 0%,#1f1e1a 74%); box-shadow:inset 2px 0 0 #d3ad67; }
+.ccc-widget-app .ccc-service-pulse>svg { flex:0 0 auto; width:24px; height:24px; color:#e9bd57; }
+.ccc-widget-app .ccc-service-pulse>div { min-width:0; flex:1; }
+.ccc-widget-app .ccc-service-pulse strong { display:block; color:#f2d486; font-size:15px; letter-spacing:-.015em; }
+.ccc-widget-app .ccc-service-pulse span { display:block; overflow:hidden; margin-top:4px; color:#c0b28c; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.ccc-widget-app .ccc-pulse-action { display:inline-flex; align-items:center; gap:6px; height:38px; padding:0 14px; border:1px solid #725c28; border-radius:10px; background:#322914; color:#f0ce7d; font-size:11px; font-weight:800; white-space:nowrap; }
+.ccc-widget-app .ccc-pulse-action svg { width:13px; }
+.ccc-widget-app .ccc-pulse-dismiss { display:grid; flex:0 0 auto; place-items:center; width:25px; height:25px; border:0; border-radius:6px; background:transparent; color:#9e9478; }
+.ccc-widget-app .ccc-pulse-dismiss:hover { background:#302b20; color:#e2d4b1; }
+.ccc-widget-app .ccc-pulse-dismiss svg { width:15px; }
+.ccc-widget-app .ccc-chat-heading-actions { display:flex; align-items:center; gap:9px; }
+.ccc-widget-app .ccc-header-utilities { display:flex; align-items:center; gap:4px; }
+.ccc-widget-app .ccc-header-utility { position:relative; display:grid; place-items:center; width:27px; height:27px; padding:0; border:1px solid #39393d; border-radius:8px; background:#222225; color:#aeb0b5; }
+.ccc-widget-app .ccc-header-utility:hover { border-color:#525258; background:#2a2a2d; color:#f1f1f3; }
+.ccc-widget-app .ccc-header-utility svg { width:13px; color:#93b8d2; }
+.ccc-widget-app .ccc-header-utility b { position:absolute; top:-5px; right:-5px; display:inline-grid; place-items:center; min-width:13px; height:13px; padding:0 2px; border:1px solid #454549; border-radius:50%; background:#303033; color:#e4e4e7; font-size:8px; font-variant-numeric:tabular-nums; line-height:1; }
+.ccc-widget-app .ccc-header-utility-attention { border-color:#66542c; background:#282419; }
+.ccc-widget-app .ccc-header-utility-attention svg { color:#e1b75d; }
+.ccc-widget-app .ccc-header-utility-attention b { border-color:#765f34; background:#3c321d; color:#f1ce7e; }
+.ccc-widget-app .ccc-day-divider { display:flex; align-items:center; gap:10px; margin:18px 28px 4px; color:#929299; font-size:10px; font-weight:800; }
+.ccc-widget-app .ccc-day-divider::before,.ccc-widget-app .ccc-day-divider::after { height:1px; flex:1; background:#2d2d30; content:""; }
+.ccc-widget-app .ccc-day-divider span { padding:5px 10px; border:1px solid #333337; border-radius:999px; background:#212124; color:#a7a7ad; }
+.ccc-widget-app .ccc-message-stream { gap:19px; padding:16px 38px 17px; background:radial-gradient(circle at 50% 20%,rgba(39,42,48,.20),transparent 38%); }
+.ccc-widget-app .ccc-group-message { grid-template-columns:40px minmax(0,1fr); gap:10px; max-width:82%; }
+.ccc-widget-app .ccc-group-avatar { display:inline-grid; place-items:center; width:40px; height:40px; overflow:hidden; border:1px solid rgba(255,255,255,.16); border-radius:50%; font-size:10px; box-shadow:0 2px 8px rgba(0,0,0,.25); object-fit:cover; }
+.ccc-widget-app .ccc-group-avatar-dispatch { background:#294858; color:#d9effc; }
+.ccc-widget-app .ccc-group-message .ccc-message-meta { gap:6px; margin:0 0 4px; }
+.ccc-widget-app .ccc-group-message .ccc-message-meta strong { color:#e7e7eb; font-size:12px; }
+.ccc-widget-app .ccc-group-message .ccc-message-meta em { color:#8f8f96; font-size:10px; }
+.ccc-widget-app .ccc-group-message .ccc-message-meta time { color:#7d7d84; font-size:11px; }
+.ccc-widget-app .ccc-group-message p { width:fit-content; max-width:100%; margin:0; padding:12px 15px; border:1px solid #383b40; border-radius:6px 15px 15px 15px; background:#151D24; color:#e1e2e5; font-size:14px; line-height:1.38; box-shadow:0 3px 10px rgba(0,0,0,.16); }
+.ccc-widget-app .ccc-group-message-right { grid-template-columns:minmax(0,1fr) 40px; max-width:79%; }
+.ccc-widget-app .ccc-group-message-right .ccc-message-meta { justify-content:flex-end; }
+.ccc-widget-app .ccc-group-message-right p { border-color:#3f7189; border-radius:13px 5px 13px 13px; background:linear-gradient(135deg,#24516d,#1b4057); color:#f5fbff; }
+.ccc-widget-app .ccc-group-message-team p { border-color:#24584B; background:#16332D; color:#D9F4E9; }
+.ccc-widget-app .ccc-group-avatar-team { border-color:#24584B; background:#16332D; color:#D9F4E9; }
+.ccc-widget-app .ccc-group-avatar-team svg { width:19px; height:19px; }
+.ccc-widget-app .ccc-message-reaction { display:inline-flex; align-items:center; gap:4px; margin-top:6px; padding:4px 7px; border:1px solid #3d3d42; border-radius:999px; background:#242427; color:#c7c7cd; font-size:9px; font-weight:750; }
+.ccc-widget-app .ccc-message-reaction svg { width:10px; color:#e8b95a; }
+.ccc-widget-app .ccc-group-message-right .ccc-message-reaction { margin-left:auto; }
+.ccc-widget-app .ccc-team-message-reactions { display:flex; align-items:center; gap:7px; margin-top:7px; }
+.ccc-widget-app .ccc-team-message-reactions .ccc-message-reaction { margin-top:0; border-color:#24584B; background:#202827; color:#D9F4E9; }
+.ccc-widget-app .ccc-team-message-reactions .ccc-message-reaction svg { color:#ef5263; }
+.ccc-widget-app .ccc-team-reaction-members { display:grid; place-items:center; width:25px; height:23px; border:1px solid #24584B; border-radius:999px; background:#202827; color:#D9F4E9; }
+.ccc-widget-app .ccc-team-reaction-members svg { width:13px; }
+.ccc-widget-app .ccc-message-system { align-self:center; max-width:100%; margin:0; padding:0; }
+.ccc-widget-app .ccc-message-system span { display:flex; align-items:center; gap:6px; width:auto; padding:5px 9px; border:1px solid #504125; border-left:1px solid #504125; border-radius:999px; background:#24221d; color:#c8b27a; font-size:9px; }
+.ccc-widget-app .ccc-message-system svg { width:12px; color:#e8b95a; }
+.ccc-widget-app .ccc-message-system time { margin-left:2px; color:#938866; font-size:9px; }
+.ccc-widget-app .ccc-voice-handoff { width:min(100%,620px); align-self:center; margin:1px 0 0; padding:12px 13px 10px; border:1px solid #4a4a50; border-radius:14px; background:linear-gradient(120deg,#28282b,#202023 67%,#252528); box-shadow:0 12px 25px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.055); }
+.ccc-widget-app .ccc-voice-handoff>header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.ccc-widget-app .ccc-voice-handoff-identity { display:flex; align-items:center; gap:9px; min-width:0; }
+.ccc-widget-app .ccc-voice-handoff-identity>img { width:34px; height:34px; flex:0 0 auto; border:1px solid #66666d; border-radius:50%; object-fit:cover; background:#343438; }
+.ccc-widget-app .ccc-voice-handoff-identity>span { display:grid; gap:3px; min-width:0; }
+.ccc-widget-app .ccc-voice-handoff-identity strong { overflow:hidden; color:#f1f1f3; font-size:12px; line-height:1; text-overflow:ellipsis; white-space:nowrap; }
+.ccc-widget-app .ccc-voice-handoff-identity small { display:flex; align-items:center; gap:4px; color:#adaeb5; font-size:9px; font-weight:720; }
+.ccc-widget-app .ccc-voice-handoff-identity small svg { width:13px; height:13px; padding:2px; border-radius:4px; background:#39393f; color:#eeeeef; }
+.ccc-widget-app .ccc-voice-handoff>header>b { flex:0 0 auto; padding:5px 7px; border-radius:999px; background:#3b301e; color:#e4bb68; font-size:8px; font-weight:850; letter-spacing:.02em; white-space:nowrap; }
+.ccc-widget-app .ccc-voice-handoff-player { display:grid; grid-template-columns:29px minmax(0,1fr) auto; align-items:center; gap:9px; margin-top:12px; }
+.ccc-widget-app .ccc-voice-handoff-player>button { display:grid; place-items:center; width:29px; height:29px; border:0; border-radius:50%; background:#eeeeef; color:#202024; box-shadow:0 2px 7px rgba(0,0,0,.3); }
+.ccc-widget-app .ccc-voice-handoff-player>button:hover { background:#fff; transform:translateY(-1px); }
+.ccc-widget-app .ccc-voice-handoff-player>button svg { width:14px; height:14px; }
+.ccc-widget-app .ccc-voice-handoff-waveform { display:flex; align-items:center; gap:2px; min-width:0; height:41px; overflow:hidden; }
+.ccc-widget-app .ccc-voice-handoff-waveform i { display:block; width:3px; min-height:5px; flex:0 0 auto; border-radius:999px; }
+.ccc-widget-app .ccc-voice-handoff-waveform i.is-blue { background:linear-gradient(180deg,#6d9aed,#6d85d9); }
+.ccc-widget-app .ccc-voice-handoff-waveform i.is-olive { background:linear-gradient(180deg,#8fa077,#798d6c); }
+.ccc-widget-app .ccc-voice-handoff-waveform i.is-amber { background:linear-gradient(180deg,#d0aa60,#bc9247); }
+.ccc-widget-app .ccc-voice-handoff-waveform i.is-silver { background:linear-gradient(180deg,#9b9ba2,#6d6d73); opacity:.72; }
+.ccc-widget-app .ccc-voice-handoff-player>time { color:#d9d9de; font-size:11px; font-weight:820; font-variant-numeric:tabular-nums; }
+.ccc-widget-app .ccc-voice-handoff>footer { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:9px; padding-top:8px; border-top:1px solid #3b3b40; color:#98989f; font-size:8px; font-weight:720; }
+.ccc-widget-app .ccc-voice-handoff>footer span { display:flex; align-items:center; gap:4px; }
+.ccc-widget-app .ccc-voice-handoff>footer svg { width:12px; height:12px; color:#9cadbd; }
+.ccc-widget-app .ccc-voice-handoff>footer time { color:#aaaab1; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.ccc-widget-app .ccc-inline-command-card { margin:2px 0 0; }
+.ccc-widget-app .ccc-quick-actions { min-height:34px; padding:5px 18px; border-top:1px solid #2e2e31; background:#1a1a1c; }
+.ccc-widget-app .ccc-quick-actions button { height:23px; border-color:#35353a; border-radius:999px; background:#222225; font-size:9px; }
+.ccc-widget-app .ccc-composer { padding:0 18px 17px; background:#1a1a1c; }
+.ccc-widget-app .ccc-composer>div { border-color:#3a3f43; border-radius:11px; background:#202327; box-shadow:0 7px 20px rgba(0,0,0,.18); }
+.ccc-widget-app .ccc-composer textarea { height:50px; padding:11px 12px; }
+.ccc-widget-app .ccc-composer-tools { height:35px; border-top-color:#353a3f; }
+.ccc-widget-app .ccc-send { height:27px; padding:0 11px; border-radius:7px; background:#1b9a70; font-size:10px; }
+.ccc-widget-app .ccc-send:hover { background:#24ad80; }
+@media (max-width:720px) { .ccc-widget-app .ccc-service-pulse { align-items:flex-start; margin:12px 12px 0; padding:11px; } .ccc-widget-app .ccc-service-pulse span { white-space:normal; } .ccc-widget-app .ccc-pulse-action { display:none; } .ccc-widget-app .ccc-chat-heading-actions { gap:7px; } .ccc-widget-app .ccc-day-divider { margin:13px 12px 2px; } .ccc-widget-app .ccc-message-stream { padding:10px 13px; } .ccc-widget-app .ccc-group-message { max-width:94%; } .ccc-widget-app .ccc-group-message-right { max-width:90%; } .ccc-widget-app .ccc-voice-handoff { padding:10px; } .ccc-widget-app .ccc-voice-handoff>header>b { font-size:7px; } .ccc-widget-app .ccc-voice-handoff-waveform { gap:1px; } .ccc-widget-app .ccc-voice-handoff-waveform i { width:2px; } .ccc-widget-app .ccc-voice-handoff>footer time { display:none; } .ccc-widget-app .ccc-quick-actions { padding:5px 12px; } .ccc-widget-app .ccc-composer { padding:0 12px 12px; } }

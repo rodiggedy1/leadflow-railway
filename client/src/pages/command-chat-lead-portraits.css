@@ -1,0 +1,17 @@
+/* Original review-owned portrait treatment, scoped to the Workspace Chat lead queue. */
+.ccc-left-panel .ccc-lead-portrait {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: block;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  background: #f2f0ec;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+
+.ccc-left-panel .ccc-conversation.active .ccc-lead-portrait {
+  border-color: rgba(210, 191, 255, 0.35);
+}

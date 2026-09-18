@@ -12,6 +12,8 @@ const OpsChat = lazy(() => import("./pages/OpsChat"));
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "./hooks/useOpsStream";
 import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
+import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";
+import "./pages/review-typography.css";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -70,6 +72,25 @@ const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
+const OperationsDashboardReview = lazy(() => import("./pages/OperationsDashboardReview"));
+const OperationsCRMReview = lazy(() => import("./pages/OperationsCRMReview"));
+const BookingsCRMReview = lazy(() => import("./pages/BookingsCRMReview"));
+const ScheduleCRMReview = lazy(() => import("./pages/ScheduleCRMReview"));
+const DayBoardCRMReview = lazy(() => import("./pages/DayBoardCRMReview"));
+const CommandChatCRMReview = lazy(() => import("./pages/CommandChatCRMReview"));
+const HiringAdminDashboardReview = lazy(() => import("./pages/HiringAdminDashboardReview"));
+const AiCallsReview = lazy(() => import("./pages/AiCallsReview"));
+const AiCallsTranscriptReview = lazy(() => import("./pages/AiCallsTranscriptReview"));
+const EmailsReview = lazy(() => import("./pages/EmailsReview"));
+const SmsReview = lazy(() => import("./pages/SmsReview"));
+const TeamReview = lazy(() => import("./pages/TeamReview"));
+const ConfirmationCallsReview = lazy(() => import("./pages/ConfirmationCallsReview"));
+const SettingsReview = lazy(() => import("./pages/SettingsReview"));
+const PayrollSummaryReview = lazy(() => import("./pages/PayrollSummaryReview"));
+const CustomerProfileReview = lazy(() => import("./pages/CustomerProfileReview"));
+const ReviewsQualityReview = lazy(() => import("./pages/ReviewsQualityReview"));
+const InvoicesReview = lazy(() => import("./pages/InvoicesReview"));
+const PaymentsReview = lazy(() => import("./pages/PaymentsReview"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -89,6 +110,30 @@ function PageLoader() {
     </div>
   );
 }
+
+function ReviewWorkspaceFrame({ children, hideNavigation = false }: { children: React.ReactNode; hideNavigation?: boolean }) {
+  return <div className={`review-nav-host ${hideNavigation ? "review-nav-host-without-nav" : ""}`}>{!hideNavigation && <ReviewWorkspaceNav />}{children}</div>;
+}
+
+function OperationsDashboardReviewRoute() { return <ReviewWorkspaceFrame><OperationsDashboardReview /></ReviewWorkspaceFrame>; }
+function OperationsCRMReviewRoute() { return <ReviewWorkspaceFrame><OperationsCRMReview /></ReviewWorkspaceFrame>; }
+function BookingsCRMReviewRoute() { return <ReviewWorkspaceFrame><BookingsCRMReview /></ReviewWorkspaceFrame>; }
+function ScheduleCRMReviewRoute() { return <ReviewWorkspaceFrame><ScheduleCRMReview /></ReviewWorkspaceFrame>; }
+function DayBoardCRMReviewRoute() { return <ReviewWorkspaceFrame><DayBoardCRMReview /></ReviewWorkspaceFrame>; }
+function CommandChatCRMReviewRoute() { return <ReviewWorkspaceFrame hideNavigation><CommandChatCRMReview /></ReviewWorkspaceFrame>; }
+function HiringAdminDashboardReviewRoute() { return <ReviewWorkspaceFrame><HiringAdminDashboardReview /></ReviewWorkspaceFrame>; }
+function AiCallsReviewRoute() { return <ReviewWorkspaceFrame><AiCallsReview /></ReviewWorkspaceFrame>; }
+function AiCallsTranscriptReviewRoute() { return <ReviewWorkspaceFrame><AiCallsTranscriptReview /></ReviewWorkspaceFrame>; }
+function EmailsReviewRoute() { return <ReviewWorkspaceFrame><EmailsReview /></ReviewWorkspaceFrame>; }
+function SmsReviewRoute() { return <ReviewWorkspaceFrame><SmsReview /></ReviewWorkspaceFrame>; }
+function TeamReviewRoute() { return <ReviewWorkspaceFrame><TeamReview /></ReviewWorkspaceFrame>; }
+function ConfirmationCallsReviewRoute() { return <ReviewWorkspaceFrame><ConfirmationCallsReview /></ReviewWorkspaceFrame>; }
+function SettingsReviewRoute() { return <ReviewWorkspaceFrame><SettingsReview /></ReviewWorkspaceFrame>; }
+function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSummaryReview /></ReviewWorkspaceFrame>; }
+function CustomerProfileReviewRoute() { return <ReviewWorkspaceFrame><CustomerProfileReview /></ReviewWorkspaceFrame>; }
+function ReviewsQualityReviewRoute() { return <ReviewWorkspaceFrame><ReviewsQualityReview /></ReviewWorkspaceFrame>; }
+function InvoicesReviewRoute() { return <ReviewWorkspaceFrame><InvoicesReview /></ReviewWorkspaceFrame>; }
+function PaymentsReviewRoute() { return <ReviewWorkspaceFrame><PaymentsReview /></ReviewWorkspaceFrame>; }
 
 /**
  * OpsChatRedirect
@@ -167,6 +212,29 @@ function Router() {
         <Route path={"/madison-debug"} component={MadisonDebugPanel} />
         <Route path={"/welcome/:firstName"} component={WelcomePage} />
         <Route path={"/icon-picker"} component={IconPicker} />
+        <Route path={"/review/operations-dashboard"} component={OperationsDashboardReviewRoute} />
+        <Route path={"/review/leads-crm"} component={OperationsCRMReviewRoute} />
+        <Route path={"/review/operations-crm"} component={OperationsCRMReviewRoute} />
+        <Route path={"/review/bookings-crm"} component={BookingsCRMReviewRoute} />
+        <Route path={"/review/schedule-crm"} component={ScheduleCRMReviewRoute} />
+        <Route path={"/review/sms"} component={SmsReviewRoute} />
+        <Route path={"/review/cs-inbox2-crm"} component={SmsReviewRoute} />
+        <Route path={"/review/day-board-crm"} component={DayBoardCRMReviewRoute} />
+        <Route path={"/review/command-chat-crm"} component={CommandChatCRMReviewRoute} />
+        <Route path={"/review/hiring-admin"} component={HiringAdminDashboardReviewRoute} />
+        <Route path={"/review/ai-calls"} component={AiCallsReviewRoute} />
+        <Route path={"/review/callbacks"} component={AiCallsReviewRoute} />
+        <Route path={"/review/all-calls"} component={AiCallsReviewRoute} />
+        <Route path={"/review/ai-calls-transcript"} component={AiCallsTranscriptReviewRoute} />
+        <Route path={"/review/emails"} component={EmailsReviewRoute} />
+        <Route path={"/review/team"} component={TeamReviewRoute} />
+        <Route path={"/review/confirmation-calls"} component={ConfirmationCallsReviewRoute} />
+        <Route path={"/review/settings"} component={SettingsReviewRoute} />
+        <Route path={"/review/payroll-summary"} component={PayrollSummaryReviewRoute} />
+        <Route path={"/review/customer-profile"} component={CustomerProfileReviewRoute} />
+        <Route path={"/review/reviews-quality"} component={ReviewsQualityReviewRoute} />
+        <Route path={"/review/invoices"} component={InvoicesReviewRoute} />
+        <Route path={"/review/payments"} component={PaymentsReviewRoute} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
@@ -285,8 +353,30 @@ function GlobalOpsChat() {
   );
 }
 
-function App() {
+function ReviewSafeGlobalOpsChat() {
+  const [location] = useLocation();
+  if (location.startsWith("/review/")) return null;
+  return <GlobalOpsChat />;
+}
+
+function RuntimePollingInstrumentation() {
+  const [location] = useLocation();
+  if (location.startsWith("/review/")) return null;
+  return <PollingInstrumentation />;
+}
+
+function PollingInstrumentation() {
   usePollingInstrumentation();
+  return null;
+}
+
+function RuntimeWatchers() {
+  const [location] = useLocation();
+  if (location.startsWith("/review/")) return null;
+  return <><LeadAssignmentWatcher /><SuperAlertWatcher /></>;
+}
+
+function App() {
   return (
     <ErrorBoundary>
       <OpsChatProvider>
@@ -294,9 +384,9 @@ function App() {
           <TooltipProvider>
             <Toaster />
             <Router />
-            <GlobalOpsChat />
-            <LeadAssignmentWatcher />
-            <SuperAlertWatcher />
+            <ReviewSafeGlobalOpsChat />
+            <RuntimePollingInstrumentation />
+            <RuntimeWatchers />
           </TooltipProvider>
         </ThemeProvider>
       </OpsChatProvider>

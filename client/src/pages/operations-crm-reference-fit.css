@@ -1,0 +1,5 @@
+/* Scoped correction from the supplied Leads CRM table reference. */
+.operations-crm-review .ocr-activity-bars { width: 62px; height: 17px; gap: 2px; transform: none; }
+.operations-crm-review .ocr-activity-bars span { width: 3px; }
+.operations-crm-review .ocr-table th:nth-child(8) { color: #747474; font-weight: 500; }
+.operations-crm-review .ocr-interaction, .operations-crm-review .ocr-interaction svg, .operations-crm-review .ocr-interaction strong, .operations-crm-review .ocr-overflow { color: #f4f4f4; }

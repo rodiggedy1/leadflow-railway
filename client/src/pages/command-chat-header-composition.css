@@ -1,0 +1,28 @@
+/* Header-only composition for the isolated MIB Command review. */
+.ccc-widget-app .ccc-reference-chat-header{border-bottom:1px solid #2b2b2e;background:#1b1b1d;}
+.ccc-widget-app .ccc-reference-chat-top{min-height:88px;padding:12px 20px;}
+.ccc-widget-app .ccc-reference-chat-identity{gap:12px;}
+.ccc-widget-app .ccc-command-glyph{width:48px;height:48px;border-color:#414145;border-radius:12px;background:#232325;color:#ececef;box-shadow:inset 0 1px rgba(255,255,255,.06);}
+.ccc-widget-app .ccc-command-glyph svg{width:25px;height:25px;}
+.ccc-widget-app .ccc-reference-command-info{display:grid;gap:8px;min-width:0;}
+.ccc-widget-app .ccc-reference-chat-identity .ccc-reference-command-info>strong{color:#f0f0f2;font-size:21px;font-weight:780;letter-spacing:-.035em;line-height:1;}
+.ccc-widget-app .ccc-reference-header-metrics{display:flex!important;align-items:center;gap:0;min-width:0;margin:0;overflow:visible;white-space:nowrap;}
+.ccc-widget-app .ccc-reference-header-metrics>span{display:inline-flex;align-items:center;gap:5px;color:#aaaab1;font-size:11px;font-weight:620;line-height:1;}
+.ccc-widget-app .ccc-reference-header-metrics>span+span:before{width:1px;height:18px;margin:0 13px;border-radius:0;background:#3c3c41;content:"";}
+.ccc-widget-app .ccc-reference-header-metrics svg{width:17px;height:17px;color:#bbbcc2;stroke-width:1.8;}
+.ccc-widget-app .ccc-reference-header-metrics b{color:#eeeeef;font-size:13px;font-weight:790;font-variant-numeric:tabular-nums;}
+.ccc-widget-app .ccc-reference-header-metrics .ccc-header-metric-money,.ccc-widget-app .ccc-reference-header-metrics .ccc-header-metric-money b{color:#dfc27d;}
+.ccc-widget-app .ccc-reference-header-metrics .ccc-header-metric-mentions,.ccc-widget-app .ccc-reference-header-metrics .ccc-header-metric-mentions b{color:#e2c684;}
+.ccc-widget-app .ccc-reference-header-metrics .ccc-header-metric-mentions svg{width:17px;height:17px;color:#e2c684;}
+.ccc-widget-app .ccc-reference-chat-actions{gap:9px;}
+.ccc-widget-app .ccc-reference-chat-actions .ccc-presence{margin:0;}
+.ccc-widget-app .ccc-reference-chat-actions .ccc-presence .ccc-presence-portrait,.ccc-widget-app .ccc-reference-chat-actions .ccc-presence span{width:42px;height:42px;margin-left:-8px;border:2px solid #1b1b1d;border-radius:50%;font-size:11px;}
+.ccc-widget-app .ccc-reference-chat-actions .ccc-presence .ccc-presence-portrait{display:block;object-fit:cover;background:#303034;}
+.ccc-widget-app .ccc-reference-chat-actions .ccc-presence .ccc-presence-portrait:first-child{margin-left:0;}
+.ccc-widget-app .ccc-reference-chat-actions .ccc-presence span{background:#303034;color:#c9c9cf;font-weight:800;}
+.ccc-widget-app .ccc-reference-action-divider{width:1px;height:32px;margin:0 8px;background:#343438;}
+.ccc-widget-app .ccc-reference-chat-actions>button{width:42px;height:42px;border-color:#414145;border-radius:10px;background:#232325;color:#dedee2;box-shadow:inset 0 1px rgba(255,255,255,.055);}
+.ccc-widget-app .ccc-reference-chat-actions>button svg{width:20px;height:20px;}
+.ccc-widget-app .ccc-reference-chat-actions>button:hover{border-color:#5b5b61;background:#2b2b2f;color:#fff;}
+@media(max-width:1120px){.ccc-widget-app .ccc-reference-chat-top{min-height:76px;padding:10px 14px;}.ccc-widget-app .ccc-command-glyph{width:38px;height:38px;border-radius:10px;}.ccc-widget-app .ccc-command-glyph svg{width:20px;height:20px;}.ccc-widget-app .ccc-reference-chat-identity{gap:9px;}.ccc-widget-app .ccc-reference-command-info{gap:5px;}.ccc-widget-app .ccc-reference-chat-identity .ccc-reference-command-info>strong{font-size:17px;}.ccc-widget-app .ccc-reference-header-metrics>span{gap:3px;font-size:9px;}.ccc-widget-app .ccc-reference-header-metrics>span+span:before{height:13px;margin:0 7px;}.ccc-widget-app .ccc-reference-header-metrics svg{width:13px;height:13px;}.ccc-widget-app .ccc-reference-header-metrics b{font-size:10px;}.ccc-widget-app .ccc-reference-chat-actions{gap:4px;}.ccc-widget-app .ccc-reference-chat-actions .ccc-presence .ccc-presence-portrait,.ccc-widget-app .ccc-reference-chat-actions .ccc-presence span{width:29px;height:29px;margin-left:-6px;font-size:8px;}.ccc-widget-app .ccc-reference-action-divider{height:25px;margin:0 4px;}.ccc-widget-app .ccc-reference-chat-actions>button{width:31px;height:31px;border-radius:8px;}.ccc-widget-app .ccc-reference-chat-actions>button svg{width:15px;height:15px;}}
+@media(max-width:700px){.ccc-widget-app .ccc-reference-header-metrics>span+span:before{margin:0 4px;}.ccc-widget-app .ccc-reference-header-metrics>span{font-size:8px;}.ccc-widget-app .ccc-reference-header-metrics b{font-size:9px;}.ccc-widget-app .ccc-reference-header-metrics svg{display:none;}}

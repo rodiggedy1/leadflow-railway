@@ -1,0 +1,80 @@
+/* Compact detail header: preserve all controls while returning vertical space to the thread. */
+.email-detail-main > header {
+  padding: 8px 18px 0;
+}
+
+.email-detail-back {
+  margin-bottom: 7px;
+  font-size: 9px;
+}
+
+.email-detail-title-row {
+  gap: 10px;
+}
+
+.email-detail-title-row h1 {
+  font-size: 15px;
+}
+
+.email-detail-badge {
+  padding: 3px 6px;
+  font-size: 7px;
+}
+
+.email-detail-main > header section button {
+  height: 26px;
+  padding: 0 8px;
+}
+
+.email-detail-title-row section button:last-child {
+  width: 26px;
+}
+
+.email-detail-sender {
+  padding: 8px 0;
+}
+
+.email-detail-sender > div {
+  gap: 7px;
+}
+
+.email-detail-sender > div > span {
+  width: 28px;
+  height: 28px;
+  font-size: 9px;
+}
+
+.email-detail-sender p {
+  gap: 2px;
+}
+
+.email-detail-sender b {
+  font-size: 9px;
+}
+
+.email-detail-sender b i,
+.email-detail-sender small,
+.email-detail-sender time {
+  font-size: 8px;
+}
+
+.email-detail-tabs {
+  gap: 18px;
+  padding: 0 18px;
+}
+
+.email-detail-tabs button {
+  height: 31px;
+  font-size: 9px;
+}
+
+@media (max-width: 560px) {
+  .email-detail-main > header {
+    padding: 8px 14px 0;
+  }
+
+  .email-detail-tabs {
+    gap: 12px;
+    padding: 0 14px;
+  }
+}

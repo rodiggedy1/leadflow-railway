@@ -1,0 +1,32 @@
+/* Dense static conversation-inbox treatment for the Workspace Chat left column only. */
+.ccc-widget-app .ccc-left-panel { padding:15px 12px 12px; }
+.ccc-widget-app .ccc-conversations-section { margin-top:13px; padding-top:12px; }
+.ccc-widget-app .ccc-left-panel .ccc-conversation-heading { min-height:22px; align-items:center; padding:0 5px 8px; }
+.ccc-widget-app .ccc-conversation-heading h2 { margin-top:2px; font-size:16px; letter-spacing:-.22px; }
+.ccc-widget-app .ccc-conversation-search { margin:0 2px 9px; }
+.ccc-widget-app .ccc-conversation-filters { display:flex; align-items:center; gap:5px; margin:0 2px 8px; }
+.ccc-widget-app .ccc-conversation-filters button { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:27px; padding:0 9px; border:1px solid transparent; border-radius:7px; background:transparent; color:#89898f; font-size:10px; font-weight:750; }
+.ccc-widget-app .ccc-conversation-filters button:hover { background:#242427; color:#d9d9de; }
+.ccc-widget-app .ccc-conversation-filters button.active { border-color:#414145; background:#29292c; color:#f0f0f2; }
+.ccc-widget-app .ccc-conversation-filters b { display:inline-grid; place-items:center; min-width:16px; height:16px; padding:0 3px; border-radius:50%; background:#34363b; color:#d5d6d9; font-size:8px; font-variant-numeric:tabular-nums; line-height:1; }
+.ccc-widget-app .ccc-conversation-filters button.active b { background:#404044; color:#f1f1f3; }
+.ccc-widget-app .ccc-conversation-filters svg { width:12px; color:#96969d; }
+.ccc-widget-app .ccc-inbox-list { gap:0; border-top:1px solid #2d2d31; }
+.ccc-widget-app .ccc-conversations-section .ccc-conversation { min-height:47px; padding:6px 5px; gap:8px; border:0; border-bottom:1px solid #2b2b2f; border-radius:0; background:transparent; }
+.ccc-widget-app .ccc-conversations-section .ccc-conversation:hover { background:#202023; }
+.ccc-widget-app .ccc-conversations-section .ccc-conversation.active { background:#29292c; box-shadow:inset 2px 0 0 #777780; }
+.ccc-widget-app .ccc-conversations-section .ccc-lead-portrait { width:28px; height:28px; flex:0 0 28px; aspect-ratio:1/1; display:block; overflow:hidden; border-width:1px; border-radius:50%; object-fit:cover; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+.ccc-widget-app .ccc-conversations-section .ccc-inbox-copy strong { color:#e6e6ea; font-size:11px; font-weight:760; }
+.ccc-widget-app .ccc-conversations-section .ccc-inbox-copy small { overflow:hidden; margin-top:3px; color:#89898f; font-size:10px; line-height:1.15; white-space:nowrap; text-overflow:ellipsis; }
+.ccc-widget-app .ccc-conversations-section .ccc-inbox-meta { align-self:stretch; min-width:52px; flex-direction:column; align-items:flex-end; justify-content:space-between; padding:1px 0; }
+.ccc-widget-app .ccc-conversations-section .ccc-inbox-meta time { color:#909096; font-size:9px; white-space:nowrap; }
+.ccc-widget-app .ccc-conversations-section .ccc-inbox-meta i { width:7px; height:7px; border-radius:50%; background:#8b8b92; box-shadow:0 0 0 2px #242426; }
+.ccc-widget-app .ccc-conversations-section .ccc-inbox-meta .ccc-team-presence { background:#40be8a; box-shadow:0 0 0 2px #202925; }
+.ccc-widget-app .ccc-conversations-section .ccc-team-thread-avatar,.ccc-widget-app .ccc-conversations-section .ccc-channel-thread-icon { display:grid; flex:0 0 auto; place-items:center; width:28px; height:28px; border:1px solid #3c4946; border-radius:50%; background:#253630; color:#86dfb4; }
+.ccc-widget-app .ccc-conversations-section .ccc-team-thread-avatar svg { width:14px; }
+.ccc-widget-app .ccc-conversations-section .ccc-channel-thread { min-height:44px; }
+.ccc-widget-app .ccc-conversations-section .ccc-channel-thread-icon { border-color:#39393e; background:#2a2a2d; color:#c8c9cd; font-size:16px; font-weight:600; }
+.ccc-widget-app .ccc-conversations-section .ccc-channel-thread-amber .ccc-channel-thread-icon { border-color:#5c4d2b; background:#332c1e; color:#dfbb69; }
+.ccc-widget-app .ccc-conversations-section .ccc-channel-thread .ccc-inbox-copy strong { font-size:10px; }
+.ccc-widget-app .ccc-conversations-section .ccc-channel-thread .ccc-inbox-copy small { font-size:9px; }
+@media(max-width:900px){.ccc-widget-app .ccc-conversations-section .ccc-conversation { min-height:46px; }}

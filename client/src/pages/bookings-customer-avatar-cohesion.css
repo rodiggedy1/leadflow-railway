@@ -1,0 +1,4 @@
+/* Leads CRM account-owner avatar treatment carried into static Bookings customer identities. */
+.booking-crm-review .bcr-customer-name { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.booking-crm-review .bcr-customer-name > i { width: 23px; height: 23px; display: grid; place-items: center; flex: 0 0 23px; border: 1px solid rgba(255,255,255,.23); border-radius: 50%; color: #fff; font-size: 8px; font-style: normal; font-weight: 700; }
+.booking-crm-review .bcr-customer-name > strong { min-width: 0; }

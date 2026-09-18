@@ -1,0 +1,177 @@
+/* Final Schedule review palette: charcoal-first, with color reserved for operational meaning. */
+.scr-shell {
+  --scr-palette-mint: #34c89b;
+  --scr-palette-amber: #e7b24e;
+  --scr-palette-coral: #dc6b5c;
+  --scr-palette-neutral: #777b82;
+}
+
+/* Controls and navigation stay neutral unless they communicate a real operational state. */
+.scr-head-actions button:nth-child(3) {
+  color: #e1f7ed;
+  border-color: #3a6556;
+  background: #202923;
+}
+
+.scr-head-actions button:nth-child(3) svg {
+  color: var(--scr-palette-mint);
+}
+
+.scr-head-actions button.is-active,
+.scr-filter-bar button.is-active {
+  color: #f3f3f3;
+  border-color: #57575b;
+  background: #29292d;
+}
+
+.scr-head-actions button.is-active svg {
+  color: var(--scr-palette-amber);
+}
+
+.scr-workspace-tabs button.is-active {
+  border-bottom-color: #e7e7e7;
+}
+
+.scr-date-nav > svg,
+.scr-slot-finder > svg,
+.scr-map-panel > header svg {
+  color: var(--scr-palette-amber);
+}
+
+.scr-notice {
+  color: #f0eadc;
+  border-color: #735a34;
+  background: #282118;
+}
+
+/* Analysis is an attention surface; specific schedule risks receive coral, not a broad purple panel. */
+.scr-analysis {
+  border-color: #71552d;
+  background: #211d17;
+}
+
+.scr-analysis header,
+.scr-analysis footer {
+  border-color: #4e402b;
+}
+
+.scr-analysis header svg,
+.scr-analysis > p svg {
+  color: var(--scr-palette-amber);
+}
+
+.scr-analysis > p {
+  color: #c8bc9d;
+}
+
+.scr-analysis > div article {
+  border-color: #3b3327;
+  border-left: 2px solid transparent;
+}
+
+.scr-analysis > div article > svg,
+.scr-analysis > div article:nth-child(2) > svg,
+.scr-analysis footer span {
+  color: var(--scr-palette-coral);
+}
+
+.scr-analysis > div article:nth-child(1),
+.scr-analysis > div article:nth-child(2) {
+  border-left-color: var(--scr-palette-coral);
+}
+
+/* A selected card is clear through neutral elevation; no color is assigned merely for focus. */
+.scr-job-card:hover,
+.scr-job-card.is-selected {
+  border-color: #5b5b60;
+  background: #252527;
+  box-shadow: inset 2px 0 0 #b8b8b8;
+}
+
+.scr-job-card.is-conflict {
+  border-color: #8f5048;
+  background: #2b201e;
+}
+
+.scr-job-card-top time {
+  color: #d2d2d2;
+}
+
+.scr-job-tag.recurring {
+  color: #aeb7c2;
+}
+
+.scr-job-tag.move-inout,
+.scr-request {
+  color: var(--scr-palette-amber);
+}
+
+.scr-conflict {
+  color: var(--scr-palette-coral);
+}
+
+.scr-unassigned {
+  border-color: #7c4942;
+  background: #291e1c;
+}
+
+.scr-unassigned > header {
+  color: var(--scr-palette-coral);
+  border-bottom-color: #593630;
+}
+
+/* Map routes mirror ready, needs-attention, and unavailable teams; the exception marker is coral. */
+.scr-map-grid path:nth-child(1) {
+  stroke: var(--scr-palette-mint);
+}
+
+.scr-map-grid path:nth-child(2) {
+  stroke: var(--scr-palette-amber);
+}
+
+.scr-map-grid path:nth-child(3) {
+  stroke: var(--scr-palette-neutral);
+}
+
+.scr-map-marker {
+  background: var(--scr-palette-mint);
+}
+
+.marker-two {
+  background: var(--scr-palette-amber);
+}
+
+.marker-three {
+  background: var(--scr-palette-coral);
+}
+
+/* Detail and modal actions use the same quiet hierarchy rather than violet calls to action. */
+.scr-overline,
+.scr-client-drawer footer .scr-link-button,
+.scr-modal > article > button {
+  color: #8bd9bd;
+}
+
+.scr-client-drawer h3 svg {
+  color: var(--scr-palette-amber);
+}
+
+.scr-memory li::marker {
+  color: var(--scr-palette-mint);
+}
+
+.scr-client-drawer footer .scr-primary-button {
+  color: #f4fbf8;
+  border-color: #3b8069;
+  background: #277257;
+}
+
+.scr-modal > header > div > svg {
+  color: var(--scr-palette-amber);
+}
+
+.scr-modal-add {
+  color: #dcf8ed;
+  border-color: #3b725f;
+  background: #202d26;
+}

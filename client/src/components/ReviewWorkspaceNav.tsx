@@ -1,0 +1,91 @@
+import { useEffect, useState } from "react";
+import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Command, CreditCard, LayoutDashboard, Mail, MessageSquareMore, PanelsTopLeft, PhoneCall, PhoneOutgoing, Receipt, SlidersHorizontal, Star, UserRound, UserRoundCheck, UsersRound, WalletCards } from "lucide-react";
+import { useLocation } from "wouter";
+import "./review-workspace-nav.css";
+
+type ReviewDestination = {
+  label: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+};
+
+const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
+  { label: "CRM OVERVIEW", items: [{ label: "Dashboard", href: "/review/operations-dashboard", icon: LayoutDashboard }, { label: "Workspace Chat", href: "/review/command-chat-crm", icon: Command }, { label: "Leads CRM", href: "/review/leads-crm", icon: LayoutDashboard }, { label: "Bookings CRM", href: "/review/bookings-crm", icon: CalendarDays }] },
+  {
+    label: "CUSTOMER OPERATIONS",
+    items: [
+      { label: "Customer Profile", href: "/review/customer-profile", icon: UserRound },
+      { label: "Schedule", href: "/review/schedule-crm", icon: CalendarRange },
+      { label: "Day Board", href: "/review/day-board-crm", icon: PanelsTopLeft },
+      { label: "Confirmation Calls", href: "/review/confirmation-calls", icon: PhoneOutgoing },
+    ],
+  },
+  {
+    label: "CUSTOMER COMMUNICATION",
+    items: [
+      { label: "SMS", href: "/review/sms", icon: MessageSquareMore },
+      { label: "Emails", href: "/review/emails", icon: Mail },
+      { label: "AI Calls", href: "/review/ai-calls-transcript", icon: PhoneCall },
+    ],
+  },
+  { label: "FINANCE & BILLING", items: [{ label: "Invoices", href: "/review/invoices", icon: Receipt }, { label: "Payments", href: "/review/payments", icon: CreditCard }] },
+  { label: "TEAM OPERATIONS", items: [{ label: "Team", href: "/review/team", icon: UsersRound }, { label: "Reviews & Quality", href: "/review/reviews-quality", icon: Star }, { label: "Payroll Summary", href: "/review/payroll-summary", icon: WalletCards }, { label: "Hiring Admin", href: "/review/hiring-admin", icon: UserRoundCheck }] },
+];
+
+export default function ReviewWorkspaceNav() {
+  const [location] = useLocation();
+  const defaultOpenRoutes = ["/review/operations-dashboard", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
+  const [expanded, setExpanded] = useState(() => defaultOpenRoutes.includes(location));
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && setExpanded(false);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  return (
+    <aside className={`review-workspace-nav ${expanded ? "is-expanded" : ""}`} aria-label="Review workspaces">
+      <button
+        type="button"
+        className="review-workspace-toggle"
+        aria-label={expanded ? "Collapse review navigation" : "Open review navigation"}
+        aria-expanded={expanded}
+        onClick={() => setExpanded(value => !value)}
+      >
+        <span className="review-workspace-mark"><i /><i /><i /><i /></span>
+        <span className="review-workspace-toggle-copy"><strong>Workspaces</strong><small>Review only</small></span>
+        {expanded ? <ChevronLeft /> : <ChevronRight />}
+      </button>
+      <nav className="review-workspace-scroll">
+        {NAV_GROUPS.map(group => (
+          <section className="review-workspace-group" key={group.label}>
+            <p>{group.label}</p>
+            {group.items.map(item => {
+              const Icon = item.icon;
+              const active = location === item.href;
+              return (
+                <a
+                  href={item.href}
+                  className={active ? "is-active" : ""}
+                  aria-current={active ? "page" : undefined}
+                  key={item.href}
+                  onClick={() => setExpanded(defaultOpenRoutes.includes(item.href))}
+                >
+                  <Icon />
+                  <span>{item.label}</span>
+                </a>
+              );
+            })}
+          </section>
+        ))}
+      </nav>
+      <div className="review-workspace-bottom">
+        <a href="/review/settings" className={location === "/review/settings" ? "is-active" : ""} aria-current={location === "/review/settings" ? "page" : undefined} onClick={() => setExpanded(true)}>
+          <SlidersHorizontal />
+          <span>Settings</span>
+        </a>
+        <div className="review-workspace-footer"><span>Static pages</span><small>18 workspaces</small></div>
+      </div>
+    </aside>
+  );
+}
