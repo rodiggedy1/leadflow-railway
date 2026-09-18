@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 import BookingWidgetConfigPanel from "@/components/BookingWidgetConfigPanel";
 import { PhoneCall as PhoneCallIcon } from "lucide-react";
+import "./settings-command-surface.css";
 
 // ── Known service types that can be silenced ──────────────────────────────────
 const KNOWN_SERVICE_TYPES = [
@@ -1176,23 +1177,22 @@ export default function SettingsPage() {
 
   return (
     <AdminPageGuard pageId="settings">
-    <div className="min-h-screen bg-[#faf9f7]">
+    <div className="settings-command-surface min-h-screen bg-[#faf9f7]">
       <AdminHeader activeTab="settings" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
-      <div className={`${activeTab === "booking-widget" ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8 space-y-6`}>
+      <div className={`settings-command-content ${activeTab === "booking-widget" ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8 space-y-6`}>
         {/* Page header */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#E8735A]/10 flex items-center justify-center">
-            <Settings className="w-5 h-5 text-[#E8735A]" />
-          </div>
+        <section className="settings-command-hero">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Settings</h1>
-            <p className="text-sm text-gray-500">Manage business configuration and SMS conversation flows</p>
+            <span className="settings-command-kicker">Configuration · Live workspace</span>
+            <h1 className="flex items-center gap-3 text-xl font-bold text-gray-900"><Settings className="w-6 h-6 text-[#E8735A]" />Settings</h1>
+            <p className="mt-2 text-sm text-gray-500">Manage business configuration, conversation flows, operating templates, and pay rules in one workspace.</p>
           </div>
-        </div>
+          <p className="settings-command-status">Settings retain their existing permissions and save behavior. Changes apply only through the same live controls already available on this page.</p>
+        </section>
 
         {/* Tab navigation */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto w-full">
+        <div className="settings-command-tabs flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto w-full">
           {tabs.map((tab) => (
             <button
               key={tab.id}
