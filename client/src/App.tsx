@@ -67,7 +67,6 @@ const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalConnected"));
 const SmsCampaigns = lazy(() => import("./pages/SmsCampaigns"));
 const IconPicker = lazy(() => import("./pages/IconPicker"));
 const ReadinessDashboard = lazy(() => import("./pages/ReadinessDashboard"));
-const InvoiceManager = lazy(() => import("./pages/InvoiceManager"));
 const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
@@ -92,6 +91,7 @@ const PayrollSummaryReview = lazy(() => import("./pages/PayrollSummaryReview"));
 const CustomerProfileReview = lazy(() => import("./pages/CustomerProfileReview"));
 const ReviewsQualityReview = lazy(() => import("./pages/ReviewsQualityReview"));
 const InvoicesReview = lazy(() => import("./pages/InvoicesReview"));
+const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const PaymentsReview = lazy(() => import("./pages/PaymentsReview"));
 
 /**
@@ -139,6 +139,7 @@ function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSumm
 function CustomerProfileReviewRoute() { return <ReviewWorkspaceFrame><CustomerProfileReview /></ReviewWorkspaceFrame>; }
 function ReviewsQualityReviewRoute() { return <ReviewWorkspaceFrame><ReviewsQualityReview /></ReviewWorkspaceFrame>; }
 function InvoicesReviewRoute() { return <ReviewWorkspaceFrame><InvoicesReview /></ReviewWorkspaceFrame>; }
+function AdminInvoicesExactReviewRoute() { return <AdminPageGuard pageId="invoices"><ReviewWorkspaceFrame navActivePath="/review/invoices"><InvoicesExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function PaymentsReviewRoute() { return <ReviewWorkspaceFrame><PaymentsReview /></ReviewWorkspaceFrame>; }
 
 /**
@@ -213,7 +214,7 @@ function Router() {
         <Route path={"/admin/payments"} component={AdminPayments} />
         <Route path={"/admin/sms-campaigns"} component={SmsCampaigns} />
         <Route path={"/admin/readiness"} component={ReadinessDashboard} />
-        <Route path={"/admin/invoices"} component={InvoiceManager} />
+        <Route path={"/admin/invoices"} component={AdminInvoicesExactReviewRoute} />
         <Route path={"/admin/madison-focus"} component={MadisonFocus} />
         <Route path={"/admin/madison-debrief"} component={DebriefRedirect} />
         <Route path={"/madison-debug"} component={MadisonDebugPanel} />
@@ -361,7 +362,7 @@ function GlobalOpsChat() {
 }
 
 function isReviewDerivedLiveShell(location: string) {
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile";
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices";
 }
 
 function ReviewSafeGlobalOpsChat() {
