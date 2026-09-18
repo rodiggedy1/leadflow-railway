@@ -17,6 +17,7 @@ describe("Review Workspace live destinations", () => {
     expect(nav).toContain('liveHref: "/admin/payments"');
     expect(nav).toContain('liveHref: "/admin/payroll-summary"');
     expect(nav).toContain('liveHref: "/admin/schedule"');
+    expect(nav).toContain('liveHref: "/admin/ai-calls"');
     expect(nav).toContain('const settingsHref = useLiveDestinations ? "/admin/settings" : "/review/settings";');
     expect(nav).toContain('const href = useLiveDestinations ? item.liveHref ?? item.href : item.href;');
     expect(nav).toContain('href={href}');
@@ -30,6 +31,7 @@ describe("Review Workspace live destinations", () => {
     expect(app).toContain('<Route path={"/admin/payments"} component={AdminPaymentsExactReviewRoute} />');
     expect(app).toContain('<Route path={"/admin/payroll-summary"} component={AdminPayrollSummaryExactReviewRoute} />');
     expect(app).toContain('<Route path={"/admin/schedule"} component={AdminScheduleCRMExactRoute} />');
+    expect(app).toContain('<Route path={"/admin/ai-calls"} component={AdminAiCallsExactReviewRoute} />');
     expect(app).toContain('<Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />');
   });
 });
