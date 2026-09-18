@@ -13,9 +13,6 @@ import {
   HelpCircle,
   Home,
   MapPin,
-  Mic,
-  Phone,
-  PlayCircle,
   Send,
   UserRound,
   Users,
@@ -26,7 +23,6 @@ import {
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { proxyRecordingUrl } from "@/lib/utils";
 import { triggerTestChime, useNewReplyNotifier } from "@/hooks/useNewReplyNotifier";
 import "./operations-crm-review.css";
 import "./day-board-crm-review.css";
@@ -72,8 +68,8 @@ type LiveJob = {
   bookingStatus: string | null;
 };
 
-type DrawerTab = "Timeline" | "Messages" | "Calls";
-type LiveStatus = "not_started" | "on_the_way" | "in_progress" | "running_late" | "finishing_up" | "completed" | "issue";
+type DrawerTab = "Timeline" | "Messages";
+type LiveStatus = "not_started" | "on_the_way" | "arrived" | "in_progress" | "running_late" | "finishing_up" | "completed" | "issue";
 
 const CLIENT_PORTRAITS = [
   "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
@@ -93,6 +89,7 @@ const BOARD_MINUTES = (BOARD_END_HOUR - BOARD_START_HOUR) * 60;
 const statusConfig: Record<LiveStatus, { label: string; color: string; icon: typeof Clock3 }> = {
   not_started: { label: "Not Started", color: "#84909b", icon: Clock3 },
   on_the_way: { label: "On the Way", color: "#4a94f5", icon: Activity },
+  arrived: { label: "Arrived", color: "#39bbb7", icon: CheckCircle2 },
   in_progress: { label: "In Progress", color: "#23bd7e", icon: Zap },
   running_late: { label: "Running Late", color: "#e8a345", icon: AlertTriangle },
   finishing_up: { label: "Finishing Up", color: "#39bbb7", icon: CheckCircle2 },
@@ -252,46 +249,38 @@ function LiveSmsHealthStrip({ jobs }: { jobs: LiveJob[] }) {
   return <footer className="dbr-sms-health"><header><b>SMS Activity</b><span><i style={{ background: "#2ec281" }} />Sent <i style={{ background: "#e06c73" }} />Failed <i style={{ background: "#e1aa43" }} />Pending</span></header><div>{hours.map(hour => <i key={hour} />)}{dots.map(dot => <button key={dot.id} title={dot.label} style={{ left: `${dot.left}%`, background: dot.color }} />)}</div></footer>;
 }
 
-function DetailDrawer({ job, close, unread, markRead, confirmAssignment }: { job: LiveJob; close: () => void; unread: boolean; markRead: (jobId: number) => void; confirmAssignment: (jobId: number) => void }) {
+function DetailDrawer({ job, close, unread, markRead }: { job: LiveJob; close: () => void; unread: boolean; markRead: (jobId: number) => void }) {
   const [tab, setTab] = useState<DrawerTab>("Timeline");
-  const [recipient, setRecipient] = useState<"client" | "cleaner">("client");
   const [draft, setDraft] = useState("");
-  const [openTranscripts, setOpenTranscripts] = useState<Record<number, boolean>>({});
-  const { data: messages, isLoading: messagesLoading, refetch: refetchMessages } = trpc.fieldMgmt.getJobMessages.useQuery({ cleanerJobId: job.id }, { enabled: tab === "Messages", refetchInterval: tab === "Messages" ? 15_000 : false, staleTime: 10_000 });
-  const { data: calls, isLoading: callsLoading } = trpc.fieldMgmt.getJobCalls.useQuery({ cleanerJobId: job.id }, { enabled: tab === "Calls" });
-  const sendSms = trpc.fieldMgmt.sendJobSms.useMutation({ onSuccess: () => { setDraft(""); void refetchMessages(); } });
-  const voiceAlert = trpc.fieldMgmt.voiceAlertCleaner.useMutation({ onSuccess: data => {
-    const number = data.dialedNumber ? data.dialedNumber.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3") : null;
-    toast.success(data.isCsFallback ? `Call placed to CS office${number ? ` — ${number}` : ""} (no cleaner phone on file)` : `Call placed to cleaner${number ? ` — ${number}` : ""}`);
-  }, onError: error => toast.error(error.message || "Failed to place call") });
+  const { data: messages, isLoading: messagesLoading, refetch: refetchMessages } = trpc.leadflowJobs.dayBoardMessages.useQuery({ leadflowJobId: job.id }, { enabled: tab === "Messages", refetchInterval: tab === "Messages" ? 15_000 : false, staleTime: 10_000 });
+  const sendSms = trpc.leadflowJobs.sendDayBoardMessage.useMutation({
+    onSuccess: () => { setDraft(""); void refetchMessages(); toast.success("Message sent to customer."); },
+    onError: error => toast.error(error.message || "Message could not be sent."),
+  });
   const previousInboundCount = useRef<number | null>(null);
   useEffect(() => {
     if (!messages) return;
-    const inbound = messages.filter(message => message.direction === "inbound").length;
+    const inbound = messages.filter(message => message.senderRole === "customer").length;
     if (previousInboundCount.current !== null && inbound > previousInboundCount.current) void triggerTestChime();
     previousInboundCount.current = inbound;
   }, [messages]);
   useEffect(() => { const handler = (event: KeyboardEvent) => event.key === "Escape" && close(); window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [close]);
-  const phone = recipient === "client" ? job.customerPhone : job.cleanerPhone;
   const duration = estimateDuration(job);
   const durationLabel = `${Math.floor(duration / 60)}h ${duration % 60 ? `${duration % 60}m` : ""}`.trim();
   const smsProgress = Math.round((job.stepsSuccess / Math.max(job.totalSteps, 1)) * 100);
   return <><div className="dbr-drawer-backdrop" onClick={close} /><aside className="dbr-drawer dbr-live-drawer">
     <header className="dbr-drawer-head"><div><StatusPill job={job} /><h2>{job.customerName ?? "Client"}</h2><p><MapPin size={12} />{job.jobAddress ?? "—"}</p></div><button onClick={close} aria-label="Close details"><X /></button></header>
-    <section className="dbr-drawer-meta">{[[Clock3, "Start", serviceTime(job)], [Home, "Duration", durationLabel], [UserRound, "Cleaner", job.cleanerName?.split(" ")[0] ?? "—"]].map(([Icon, label, value]) => { const MetaIcon = Icon as typeof Clock3; return <div key={label as string}><span><MetaIcon size={13} />{label as string}</span><b>{value as string}</b></div>; })}</section>
+    <section className="dbr-drawer-meta">{[[Clock3, "Start", serviceTime(job)], [Home, "Duration", durationLabel], [UserRound, job.cleanerName ? "Cleaner" : "Team", job.cleanerName?.split(" ")[0] ?? job.teamName ?? "—"]].map(([Icon, label, value]) => { const MetaIcon = Icon as typeof Clock3; return <div key={label as string}><span><MetaIcon size={13} />{label as string}</span><b>{value as string}</b></div>; })}</section>
     <section className="dbr-service"><div><small>Service</small><b>{job.serviceType ?? "—"}</b></div>{job.bedrooms != null && <span>{job.bedrooms} BR</span>}{job.bathrooms != null && <span>{job.bathrooms} BA</span>}</section>
     <section className="dbr-step-health"><header><span>SMS Steps</span><b>{job.stepsSuccess}/{job.totalSteps}</b></header><div><i style={{ width: `${smsProgress}%`, background: smsProgress > 75 ? "#30bd80" : "#e2a942" }} /></div></section>
-    {job.bookingStatus === "new" && <section className="dbr-alert is-warning"><AlertTriangle /><div><b>Unconfirmed in Launch27</b><p>Booking status is new — automation may skip this job.</p><button onClick={() => confirmAssignment(job.id)}>Confirm Assignment</button></div></section>}
     {job.etaTimestamp && (job.jobStatus === "on_the_way" || job.jobStatus === "running_late") && <section className="dbr-alert is-eta"><Activity /><div><b>ETA: {new Date(job.etaTimestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</b><p>Cleaner estimated arrival time</p></div></section>}
     {job.issueNote && <section className="dbr-alert is-issue"><AlertTriangle /><p>{job.issueNote}</p></section>}
-    <section className="dbr-voice"><button onClick={() => voiceAlert.mutate({ cleanerJobId: job.id })} disabled={voiceAlert.isPending}><Phone />{voiceAlert.isPending ? "Calling Cleaner…" : "Voice Alert Cleaner"}</button></section>
-    <nav className="dbr-drawer-tabs">{(["Timeline", "Messages", "Calls"] as DrawerTab[]).map(name => <button className={tab === name ? "is-active" : ""} key={name} onClick={() => { setTab(name); if (name === "Messages" && unread) markRead(job.id); }}>{name}{name === "Messages" && unread && <i />}</button>)}</nav>
+    <nav className="dbr-drawer-tabs">{(["Timeline", "Messages"] as DrawerTab[]).map(name => <button className={tab === name ? "is-active" : ""} key={name} onClick={() => { setTab(name); if (name === "Messages" && unread) markRead(job.id); }}>{name}{name === "Messages" && unread && <i />}</button>)}</nav>
     <div className="dbr-drawer-scroll">
       {tab === "Timeline" && <section className="dbr-event-list">{job.timeline.length === 0 ? <p className="dbr-live-empty">No events yet</p> : job.timeline.map((event, index) => <article key={event.id}><aside><i style={{ background: event.status === "failed" ? "#e77478" : event.status === "pending" ? "#e1aa43" : "#2ec281" }} />{index < job.timeline.length - 1 && <b />}</aside><div><header><strong>{event.label}</strong><time>{new Date(event.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}</time></header>{event.detail && <p>{event.detail}</p>}{event.status === "failed" && <small className="dbr-live-error">Failed{event.errorDetail ? ` · ${event.errorDetail}` : ""}</small>}</div></article>)}</section>}
-      {tab === "Messages" && <section className="dbr-messages dbr-live-messages">{messagesLoading ? <p className="dbr-live-empty">Loading messages…</p> : !messages?.length ? <p className="dbr-live-empty">No messages yet</p> : messages.map(message => <article className={message.direction === "outbound" ? "out" : "in"} key={`${message.direction}-${message.id}`}><small>{message.direction === "outbound" ? message.label.replace(/_/g, " ") : message.label} · {new Date(message.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}</small><p>{message.body}</p></article>)}</section>}
-      {tab === "Calls" && <section className="dbr-calls">{callsLoading ? <p className="dbr-live-empty">Loading calls…</p> : !calls?.length ? <p className="dbr-live-empty">No calls recorded for this job</p> : calls.map(call => { const isOpen = openTranscripts[call.id] ?? false; const recordingSrc = proxyRecordingUrl(call.recordingUrl); return <article key={call.id}><header><i><Mic /></i><div><b>{call.step?.replace(/_/g, " ") ?? "Call"}</b><span>{(call.outcome ?? "no answer").replace(/_/g, " ")}{call.durationSeconds ? ` · ${formatDuration(call.durationSeconds)}` : ""}</span></div></header>{call.summary && <p>{call.summary}</p>}{recordingSrc && <audio className="dbr-live-audio" src={recordingSrc} controls />}{call.recordingUrl && <footer><a href={call.recordingUrl} target="_blank" rel="noreferrer"><PlayCircle />Open recording</a>{call.transcript && <button onClick={() => setOpenTranscripts(previous => ({ ...previous, [call.id]: !isOpen }))}>{isOpen ? "Hide transcript" : "View transcript"}</button>}</footer>}{!call.recordingUrl && call.transcript && <footer><button onClick={() => setOpenTranscripts(previous => ({ ...previous, [call.id]: !isOpen }))}>{isOpen ? "Hide transcript" : "View transcript"}</button></footer>}{isOpen && call.transcript && <pre className="dbr-live-transcript">{call.transcript}</pre>}</article>; })}</section>}
+      {tab === "Messages" && <section className="dbr-messages dbr-live-messages">{messagesLoading ? <p className="dbr-live-empty">Loading messages…</p> : !messages?.length ? <p className="dbr-live-empty">No messages yet</p> : messages.map(message => <article className={message.senderRole === "customer" ? "in" : "out"} key={`${message.senderRole}-${message.id}`}><small>{message.senderRole === "customer" ? "Customer" : message.senderRole === "cleaner" ? "Cleaner" : "Office"} · {new Date(message.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}</small><p>{message.body}</p>{message.notificationStatus === "failed" && <small className="dbr-live-error">Delivery failed{message.notificationError ? ` · ${message.notificationError}` : ""}</small>}</article>)}</section>}
     </div>
-    {tab === "Messages" && <footer className="dbr-compose"><div><button className={recipient === "client" ? "is-active" : ""} onClick={() => setRecipient("client")}>Client</button><button className={recipient === "cleaner" ? "is-active" : ""} onClick={() => setRecipient("cleaner")}>Cleaner</button><small>{phone ?? "no phone on file"}</small></div><textarea value={draft} onChange={event => setDraft(event.target.value)} placeholder="Type a message..." /><button onClick={() => { if (draft.trim() && phone) sendSms.mutate({ cleanerJobId: job.id, to: phone, body: draft.trim() }); }} disabled={!draft.trim() || !phone || sendSms.isPending}><Send /></button></footer>}
+    {tab === "Messages" && <footer className="dbr-compose"><div><button className="is-active" type="button">Customer</button><small>{job.customerPhone ?? "no customer phone on file"}</small></div><textarea value={draft} onChange={event => setDraft(event.target.value)} placeholder="Type a message..." /><button onClick={() => { if (draft.trim() && job.customerPhone) sendSms.mutate({ leadflowJobId: job.id, body: draft.trim() }); }} disabled={!draft.trim() || !job.customerPhone || sendSms.isPending}><Send /></button></footer>}
   </aside></>;
 }
 
@@ -300,20 +289,18 @@ export default function DayBoardExactLive() {
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
   const [selected, setSelected] = useState<LiveJob | null>(null);
   const [lastRead, setLastRead] = useState<Record<number, number>>(() => { try { return JSON.parse(localStorage.getItem("dayboard_last_read") ?? "{}"); } catch { return {}; } });
-  const utils = trpc.useUtils();
-  const { data: jobs, isLoading, isFetching } = trpc.fieldMgmt.getJobsForDay.useQuery({ date }, { staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false, retry: false, throwOnError: false });
-  const confirmAssignment = trpc.fieldMgmt.confirmAssignment.useMutation({ onSuccess: () => { toast.success("Assignment confirmed — automation will now include this job."); void utils.fieldMgmt.getJobsForDay.invalidate({ date }); }, onError: error => toast.error(`Failed to confirm: ${error.message}`) });
+  const { data: jobs, isLoading, isFetching } = trpc.leadflowJobs.dayBoard.useQuery({ date }, { staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false, retry: false, throwOnError: false });
   const allJobs = (jobs ?? []) as LiveJob[];
   const activeJobs = useMemo(() => allJobs.filter(job => job.bookingStatus !== "rescheduled" && job.bookingStatus !== "cancelled"), [allJobs]);
   const removedJobs = useMemo(() => allJobs.filter(job => job.bookingStatus === "rescheduled" || job.bookingStatus === "cancelled"), [allJobs]);
   const jobIds = useMemo(() => allJobs.map(job => job.id), [allJobs]);
-  const { data: unreadReplies } = trpc.fieldMgmt.getJobUnreadReplies.useQuery({ cleanerJobIds: jobIds }, { enabled: jobIds.length > 0, refetchInterval: 60_000, staleTime: 55_000, retry: false, throwOnError: false });
-  const unreadJobIds = useMemo(() => new Set((unreadReplies ?? []).filter(reply => reply.latestReplyAt > (lastRead[reply.cleanerJobId] ?? 0)).map(reply => reply.cleanerJobId)), [lastRead, unreadReplies]);
+  const { data: unreadReplies } = trpc.leadflowJobs.dayBoardUnreadReplies.useQuery({ leadflowJobIds: jobIds }, { enabled: jobIds.length > 0, refetchInterval: 60_000, staleTime: 55_000, retry: false, throwOnError: false });
+  const unreadJobIds = useMemo(() => new Set((unreadReplies ?? []).filter(reply => reply.latestReplyAt > (lastRead[reply.leadflowJobId] ?? 0)).map(reply => reply.leadflowJobId)), [lastRead, unreadReplies]);
   useNewReplyNotifier(unreadJobIds, allJobs);
   useEffect(() => { const handler = (event: KeyboardEvent) => event.key === "Escape" && setSelected(null); window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, []);
   const stats = useMemo(() => ({
     total: activeJobs.length,
-    active: activeJobs.filter(job => ["in_progress", "on_the_way", "finishing_up", "wrapping_up"].includes(job.jobStatus ?? "")).length,
+    active: activeJobs.filter(job => ["in_progress", "on_the_way", "arrived", "finishing_up", "wrapping_up"].includes(job.jobStatus ?? "")).length,
     issues: activeJobs.filter(job => ["issue_at_property", "no_show"].includes(job.jobStatus ?? "")).length,
     done: activeJobs.filter(job => job.jobStatus === "completed").length,
     smsFailed: activeJobs.reduce((count, job) => count + job.timeline.filter(event => event.status === "failed").length, 0),
@@ -332,6 +319,6 @@ export default function DayBoardExactLive() {
         <footer className="dbr-legend">{(Object.keys(statusConfig) as LiveStatus[]).map(status => <span key={status}><i style={{ background: statusConfig[status].color }} />{statusConfig[status].label}</span>)}<em><i />SMS health bar</em></footer>
       </section>
     </section>
-    {selected && <DetailDrawer job={selected} close={() => setSelected(null)} unread={unreadJobIds.has(selected.id)} markRead={markRead} confirmAssignment={jobId => confirmAssignment.mutate({ cleanerJobId: jobId })} />}
+    {selected && <DetailDrawer job={selected} close={() => setSelected(null)} unread={unreadJobIds.has(selected.id)} markRead={markRead} />}
   </main>;
 }

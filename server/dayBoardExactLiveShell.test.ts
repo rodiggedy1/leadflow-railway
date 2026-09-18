@@ -41,31 +41,45 @@ describe("Day Board exact live shell", () => {
     expect(liveStyles).toContain(".dbr-live-shell .dbr-job{background:#202224!important}");
     expect(liveStyles).toContain('.dbr-job[data-status="completed"]{background:#1a392a!important}');
     expect(liveStyles).toContain('.dbr-job[data-status="on_the_way"]{background:linear-gradient');
+    expect(liveStyles).toContain('.dbr-job[data-status="arrived"]{background:linear-gradient');
     expect(liveStyles).toContain('.dbr-job[data-status="in_progress"]{background:linear-gradient');
   });
 
-  it("retains Day Board reads, polling, local read state, and action payloads", () => {
+  it("uses the owned Day Board projection, polling, local read state, and explicit customer messaging", () => {
     const shell = read("client/src/pages/DayBoardExactLive.tsx");
 
     for (const marker of [
-      "trpc.fieldMgmt.getJobsForDay.useQuery({ date }",
+      "trpc.leadflowJobs.dayBoard.useQuery({ date }",
       "staleTime: 30_000",
       "refetchInterval: 60_000",
-      "trpc.fieldMgmt.getJobUnreadReplies.useQuery",
+      "trpc.leadflowJobs.dayBoardUnreadReplies.useQuery",
       "staleTime: 55_000",
-      "trpc.fieldMgmt.getJobMessages.useQuery",
+      "trpc.leadflowJobs.dayBoardMessages.useQuery",
       "refetchInterval: tab === \"Messages\" ? 15_000 : false",
-      "trpc.fieldMgmt.getJobCalls.useQuery",
-      "trpc.fieldMgmt.sendJobSms.useMutation",
-      "trpc.fieldMgmt.voiceAlertCleaner.useMutation",
-      "trpc.fieldMgmt.confirmAssignment.useMutation",
-      "sendSms.mutate({ cleanerJobId: job.id, to: phone, body: draft.trim() })",
-      "voiceAlert.mutate({ cleanerJobId: job.id })",
-      "confirmAssignment.mutate({ cleanerJobId: jobId })",
+      "trpc.leadflowJobs.sendDayBoardMessage.useMutation",
+      "sendSms.mutate({ leadflowJobId: job.id, body: draft.trim() })",
       'localStorage.getItem("dayboard_last_read")',
       'localStorage.setItem("dayboard_last_read"',
       "event.key === \"Escape\"",
-      "proxyRecordingUrl(call.recordingUrl)",
     ]) expect(shell).toContain(marker);
+  });
+
+  it("reads persisted portal progress without creating statuses or automatic messages", () => {
+    const router = read("server/leadflowJobsRouter.ts");
+    const dayBoardBlock = router.slice(router.indexOf("dayBoard: dayBoardProcedure"), router.indexOf("customerProfile:"));
+
+    for (const marker of [
+      "dayBoard: dayBoardProcedure.input(dayBoardInput).query",
+      "leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))",
+      "dayBoardStatus(job.bookingStatus, job.progressStatus)",
+      "dayBoardMessages: dayBoardProcedure.input",
+      "dayBoardUnreadReplies: dayBoardProcedure.input",
+      "sendDayBoardMessage: dayBoardProcedure.input(dayBoardMessageInput).mutation",
+      'senderRole: "office"',
+      "sendSms({ to: job.customerPhone, content: input.body })",
+    ]) expect(dayBoardBlock).toContain(marker);
+
+    expect(dayBoardBlock).not.toContain("insert(cleanerPortalJobProgress)");
+    expect(dayBoardBlock).not.toContain("update(cleanerPortalJobProgress)");
   });
 });
