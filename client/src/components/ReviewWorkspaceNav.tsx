@@ -29,7 +29,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
       { label: "AI Calls", href: "/review/ai-calls-transcript", icon: PhoneCall },
     ],
   },
-  { label: "FINANCE & BILLING", items: [{ label: "Invoices", href: "/review/invoices", liveHref: "/admin/invoices", icon: Receipt }, { label: "Payments", href: "/review/payments", icon: CreditCard }] },
+  { label: "FINANCE & BILLING", items: [{ label: "Invoices", href: "/review/invoices", liveHref: "/admin/invoices", icon: Receipt }, { label: "Payments", href: "/review/payments", liveHref: "/admin/payments", icon: CreditCard }] },
   { label: "TEAM OPERATIONS", items: [{ label: "Team", href: "/review/team", icon: UsersRound }, { label: "Reviews & Quality", href: "/review/reviews-quality", icon: Star }, { label: "Payroll Summary", href: "/review/payroll-summary", icon: WalletCards }, { label: "Hiring Admin", href: "/review/hiring-admin", icon: UserRoundCheck }] },
 ];
 
