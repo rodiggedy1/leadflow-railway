@@ -42,8 +42,19 @@ const NAV = [
   { label: "Account", icon: Users },
 ];
 const AVATAR_COLORS = ["#d76b5b", "#4ca1af", "#d19d48", "#9871d3", "#4e9a72", "#c46a85"];
+const CUSTOMER_PORTRAITS = [
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/CucZtKJOfkDlJvMg.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bCfFsxIPapKjJReA.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qRwiNDAHRQQTxPbz.png",
+] as const;
 const initialsFor = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
 const avatarColorFor = (value: string) => AVATAR_COLORS[Math.abs(Array.from(value).reduce((total, character) => total + character.charCodeAt(0), 0)) % AVATAR_COLORS.length];
+const customerPortraitFor = (value: string) => CUSTOMER_PORTRAITS[Math.abs(Array.from(value).reduce((total, character) => total + character.charCodeAt(0), 0)) % CUSTOMER_PORTRAITS.length];
 const displayDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 const displayTime = (value: string) => {
   const [hour, minute] = value.split(":").map(Number);
@@ -64,7 +75,7 @@ function BookingListRow({ row, selected, onSelect }: { row: any; selected: boole
   const hasCard = row.paymentStatus === "card_on_file" || row.paymentStatus === "captured";
   const sourceMissing = row.status === "missing_from_launch27";
   return <button type="button" className={`bcr-booking-row ${selected ? "selected" : ""} ${sourceMissing || row.status === "needs_attention" ? "needs-attention" : ""}`} onClick={onSelect}>
-    <span className="bcr-customer-cell"><b>{row.status === "lead" ? "Lead" : row.requestedLocalTime ? displayRequestedTime(row.requestedLocalTime) : "—"}</b><i className={sourceMissing || row.status === "lead" || row.status === "needs_attention" ? "bcr-status-dot attention" : "bcr-status-dot"} /><span><span className="bcr-customer-name"><i style={{ background: avatarColorFor(row.customerName) }}>{initialsFor(row.customerName)}</i><strong>{row.customerName}</strong></span><small><MapPin size={11} />{row.address ?? "Details in progress"}</small></span></span>
+    <span className="bcr-customer-cell"><b>{row.status === "lead" ? "Lead" : row.requestedLocalTime ? displayRequestedTime(row.requestedLocalTime) : "—"}</b><i className={sourceMissing || row.status === "lead" || row.status === "needs_attention" ? "bcr-status-dot attention" : "bcr-status-dot"} /><span><span className="bcr-customer-name"><img className="bcr-customer-portrait" src={customerPortraitFor(row.customerName)} alt={`Customer portrait illustration for ${row.customerName}`} /><strong>{row.customerName}</strong></span><small><MapPin size={11} />{row.address ?? "Details in progress"}</small></span></span>
     <span className="bcr-service-cell"><strong>{row.serviceName ?? "Booking lead"}</strong><small>{home}{row.recurrence ? ` · ${labelRecurrence(row.recurrence)}` : ""}</small><em>{sourceLabel(row)}</em></span>
     <span className="bcr-team-cell"><i style={{ background: row.assignedTeamName ? avatarColorFor(row.assignedTeamName) : "#353535" }}>{row.assignedTeamName ? initialsFor(row.assignedTeamName) : "?"}</i><span><strong>{row.assignedTeamName ?? (row.assignmentStatus === "assigned" ? "Assigned" : "Unassigned")}</strong><small>{sourceMissing ? "Review source removal" : row.assignmentStatus === "assigned" ? "Team assigned" : "Needs review"}</small></span></span>
     <span className={hasCard ? "bcr-payment-ok" : "bcr-payment-missing"}><CreditCard size={14} />{row.paymentStatus === "captured" ? "Paid" : hasCard ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}` : "Not started"}</span>
