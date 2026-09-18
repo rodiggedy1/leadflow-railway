@@ -147,6 +147,7 @@ function PaymentsReviewRoute() { return <ReviewWorkspaceFrame><PaymentsReview />
 function AdminPaymentsExactReviewRoute() { return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminScheduleCRMExactRoute() { return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><ScheduleCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminAiCallsExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>; }
+function AdminHiringAdminExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/hiring-admin"><HiringAdminLive /></ReviewWorkspaceFrame>; }
 
 /**
  * OpsChatRedirect
@@ -200,7 +201,7 @@ function Router() {
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
         <Route path={"/call-assist"} component={LiveCallAssist} />
         <Route path={"/sse-test"} component={SseTest} />
-        <Route path={"/admin/hiring"} component={HiringAdminLive} />
+        <Route path={"/admin/hiring"} component={AdminHiringAdminExactReviewRoute} />
         <Route path={"/apply"} component={Apply} />
         <Route path={"/applicant-portal"} component={ApplicantPortal} />
         <Route path={"/interview/:candidateId"} component={AIInterview} />
@@ -370,7 +371,7 @@ function GlobalOpsChat() {
 
 function isReviewDerivedLiveShell(location: string) {
   const isScheduleWorkspace = location === "/admin/schedule";
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || location === "/admin/ai-calls" || isScheduleWorkspace;
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || location === "/admin/ai-calls" || location === "/admin/hiring" || isScheduleWorkspace;
 }
 
 function ReviewSafeGlobalOpsChat() {

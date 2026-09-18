@@ -1,5 +1,5 @@
-import { HiringAdminWorkspace } from "./HiringAdminReview";
+import HiringAdminExactLive from "./HiringAdminExactLive";
 
 export default function HiringAdminLive() {
-  return <HiringAdminWorkspace live />;
+  return <HiringAdminExactLive />;
 }
