@@ -50,7 +50,7 @@ const AIInterview = lazy(() => import("./pages/AIInterview"));
 const HiringStatus = lazy(() => import("./pages/HiringStatus"));
 const TeamPay = lazy(() => import("./pages/TeamPay"));
 const TeamAvailability = lazy(() => import("./pages/TeamAvailability"));
-const ConfirmationCalls = lazy(() => import("./pages/ConfirmationCalls"));
+const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsExactLive"));
 const MissedCalls = lazy(() => import("./pages/MissedCalls"));
 const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
 const Performance = lazy(() => import("./pages/Performance"));
@@ -129,6 +129,7 @@ function EmailsReviewRoute() { return <ReviewWorkspaceFrame><EmailsReview /></Re
 function SmsReviewRoute() { return <ReviewWorkspaceFrame><SmsReview /></ReviewWorkspaceFrame>; }
 function TeamReviewRoute() { return <ReviewWorkspaceFrame><TeamReview /></ReviewWorkspaceFrame>; }
 function ConfirmationCallsReviewRoute() { return <ReviewWorkspaceFrame><ConfirmationCallsReview /></ReviewWorkspaceFrame>; }
+function AdminConfirmationCallsExactReviewRoute() { return <AdminPageGuard pageId="confirmation-calls"><ReviewWorkspaceFrame navActivePath="/review/confirmation-calls"><ConfirmationCallsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function SettingsReviewRoute() { return <ReviewWorkspaceFrame><SettingsReview /></ReviewWorkspaceFrame>; }
 function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSummaryReview /></ReviewWorkspaceFrame>; }
@@ -194,7 +195,7 @@ function Router() {
         <Route path={"/hiring-status/:token"} component={HiringStatus} />
         <Route path={"/admin/team-pay"} component={TeamPay} />
         <Route path={"/admin/team-availability"} component={TeamAvailability} />
-        <Route path={"/admin/confirmation-calls"} component={ConfirmationCalls} />
+        <Route path={"/admin/confirmation-calls"} component={AdminConfirmationCallsExactReviewRoute} />
         <Route path={"/admin/missed-calls"} component={MissedCalls} />
         <Route path={"/admin/payroll-summary"} component={PayrollSummary} />
         <Route path={"/admin/performance"} component={Performance} />
@@ -355,15 +356,19 @@ function GlobalOpsChat() {
   );
 }
 
+function isReviewDerivedLiveShell(location: string) {
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls";
+}
+
 function ReviewSafeGlobalOpsChat() {
   const [location] = useLocation();
-  if (location.startsWith("/review/") || location === "/admin/settings") return null;
+  if (isReviewDerivedLiveShell(location)) return null;
   return <GlobalOpsChat />;
 }
 
 function RuntimePollingInstrumentation() {
   const [location] = useLocation();
-  if (location.startsWith("/review/") || location === "/admin/settings") return null;
+  if (isReviewDerivedLiveShell(location)) return null;
   return <PollingInstrumentation />;
 }
 
@@ -374,7 +379,7 @@ function PollingInstrumentation() {
 
 function RuntimeWatchers() {
   const [location] = useLocation();
-  if (location.startsWith("/review/") || location === "/admin/settings") return null;
+  if (isReviewDerivedLiveShell(location)) return null;
   return <><LeadAssignmentWatcher /><SuperAlertWatcher /></>;
 }
 
