@@ -49,6 +49,15 @@
 .schedule-crm-exact-live .scr-inline-dialog > div i { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
 .schedule-crm-exact-live .scr-inline-dialog > div small { margin-left: auto; color: #9e9e9e; font-size: 10px; }
 .schedule-crm-exact-live .scr-client-drawer { position: relative; }
+.schedule-crm-exact-live .scr-assignment-section { display: grid; gap: 8px; }
+.schedule-crm-exact-live .scr-assignment-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.schedule-crm-exact-live .scr-assignment-heading h3 { margin: 0; }
+.schedule-crm-exact-live .scr-assignment-heading span { min-width: 0; overflow: hidden; color: #b9b0fa; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.schedule-crm-exact-live .scr-assignment-section > p { margin: 0; color: #8c8c8c; font-size: 11px; line-height: 1.45; }
+.schedule-crm-exact-live .scr-assignment-open { display: flex; align-items: center; width: 100%; min-height: 34px; gap: 7px; padding: 0 10px; color: #e8e5ff; border: 1px solid #6553bc; border-radius: 7px; background: #292341; font-size: 11px; font-weight: 650; text-align: left; }
+.schedule-crm-exact-live .scr-assignment-open:hover { border-color: #8775e5; background: #31294d; }
+.schedule-crm-exact-live .scr-assignment-open svg { width: 14px; height: 14px; color: #af9eff; }
+.schedule-crm-exact-live .scr-assignment-open svg:last-child { margin-left: auto; color: #bcb5dd; }
 .schedule-crm-exact-live .scr-live-team-form { display: grid; gap: 11px; padding: 14px; }
 .schedule-crm-exact-live .scr-live-team-form label { display: grid; gap: 5px; color: #9d9d9d; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
 .schedule-crm-exact-live .scr-live-team-form input { height: 31px; padding: 0 9px; color: #e9e9e9; border: 1px solid #3a3a3a; border-radius: 6px; background: #191919; text-transform: none; }
