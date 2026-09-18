@@ -134,6 +134,7 @@ function AdminConfirmationCallsExactReviewRoute() { return <AdminPageGuard pageI
 function SettingsReviewRoute() { return <ReviewWorkspaceFrame><SettingsReview /></ReviewWorkspaceFrame>; }
 function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminCustomerProfileExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/customer-profile"><CustomerProfileExactLive /></ReviewWorkspaceFrame>; }
+function AdminBookingsCRMExactReviewRoute() { return <AdminPageGuard pageId="bookings"><ReviewWorkspaceFrame navActivePath="/review/bookings-crm"><NativeBookings /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSummaryReview /></ReviewWorkspaceFrame>; }
 function CustomerProfileReviewRoute() { return <ReviewWorkspaceFrame><CustomerProfileReview /></ReviewWorkspaceFrame>; }
 function ReviewsQualityReviewRoute() { return <ReviewWorkspaceFrame><ReviewsQualityReview /></ReviewWorkspaceFrame>; }
@@ -181,7 +182,7 @@ function Router() {
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
-        <Route path={"/admin/bookings"} component={NativeBookings} />
+        <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
         <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
