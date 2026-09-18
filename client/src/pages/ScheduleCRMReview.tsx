@@ -102,12 +102,12 @@ const unassignedJobs: ScheduleJob[] = [
 ];
 
 const PERSON_PORTRAITS: Record<string, string> = {
-  "Jordan Rivera": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Amelia Carter": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "Noah Bennett": "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  "Olivia Morgan": "/manus-storage/leads-crm-owner-grace-miller_7bf6a25c.png",
-  "Ethan Wells": "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  "Sophia Kim": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
+  "Jordan Rivera": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Amelia Carter": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "Noah Bennett": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "Olivia Morgan": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
+  "Ethan Wells": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "Sophia Kim": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
 };
 
 const teamInitials = (team: string) => team.replace("Team ", "").split(" ").map(part => part[0]).join("").slice(0, 2).toUpperCase();

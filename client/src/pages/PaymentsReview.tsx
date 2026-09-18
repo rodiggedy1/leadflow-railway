@@ -19,12 +19,12 @@ type StaticPayment = {
 
 const STATUS: Record<PaymentState, string> = { held: "Authorized hold", captured: "Captured", review: "Needs review", failed: "Failed", released: "Released" };
 const PORTRAITS: Record<string, string> = {
-  "Jordan Rivera": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Amelia Carter": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  "Sophia Kim": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "Noah Bennett": "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  "Ethan Wells": "/manus-storage/leads-crm-owner-emma-green_55d28723.png",
-  "Olivia Patel": "/manus-storage/leads-crm-owner-sarah-nguyen_2fbb7d63.png",
+  "Jordan Rivera": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Amelia Carter": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "Sophia Kim": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "Noah Bennett": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "Ethan Wells": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "Olivia Patel": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bCfFsxIPapKjJReA.png",
 };
 const STATIC_PAYMENTS: StaticPayment[] = [
   { id: "PAY-8942", customer: "Jordan Rivera", email: "jordan.rivera@example.com", amount: 248, state: "held", card: "Visa ·•••• 4242", method: "Card on file", created: "Today · 10:42 AM", invoice: "INV-2048", detail: "A static authorization hold is ready for an operations review before any follow-up decision.", note: "No live charge, hold, or payment method is connected in this review." },

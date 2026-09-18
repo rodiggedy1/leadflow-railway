@@ -32,8 +32,8 @@ const STATIC_ACTIVITY = [
   { label: "Payment method verified", detail: "Static card-on-file indicator", time: "Sep 1", icon: ShieldCheck, tone: "blue" },
 ];
 
-const STATIC_CUSTOMER_PORTRAIT = "/manus-storage/leads-crm-owner-emma-green_55d28723.png";
-const STATIC_TEAM_PORTRAIT = "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png";
+const STATIC_CUSTOMER_PORTRAIT = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png";
+const STATIC_TEAM_PORTRAIT = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png";
 const CUSTOMER_CALL_BARS = [43, 78, 56, 88, 49, 67, 91, 59, 74, 45, 69, 82, 52, 64, 78, 54, 87, 47, 72, 58, 81, 51, 73, 63, 46, 77, 55, 84, 50, 68, 80, 57, 71, 48, 86, 61, 75, 54, 82, 51, 67, 89, 59, 73, 44, 65, 78, 55, 70, 46, 63, 80, 52, 69, 43, 76] as const;
 
 function StaticAction({ label, onClick, className = "" }: { label: string; onClick: () => void; className?: string }) {

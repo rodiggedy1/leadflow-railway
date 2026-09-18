@@ -35,11 +35,11 @@ import "./operations-dashboard-leads-cohesion.css";
 type MapView = "map" | "list" | "timeline";
 type Team = { name: string; service: string; address: string; eta: string; left: string; top: string; tone: "green" | "amber" | "blue" | "slate"; photo: string };
 
-const TEAM_PORTRAIT = "/manus-storage/dashboard-team-portrait_ee89ad11.jpg";
+const TEAM_PORTRAIT = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/eynsSCUnhgtuGKVI.jpg";
 const HOME_IMAGES = [
-  "/manus-storage/dashboard-home-living_34007149.jpg",
-  "/manus-storage/dashboard-home-dining_02439dcf.jpg",
-  "/manus-storage/dashboard-growth-home_e675ad8d.jpg",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/hMWGJKKTKuWGDaBF.jpg",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/HjBcsFjgkXmKPkin.jpg",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/XhlIKNqoaYsrdCTN.jpg",
 ] as const;
 
 const TEAMS: Team[] = [
@@ -130,7 +130,7 @@ export default function OperationsDashboardReview() {
       <section className="odr-analytics-grid"><article className="odr-card odr-lead-sources"><header className="odr-card-head"><h2>Lead Sources</h2><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header>{LEAD_SOURCES.map(([name, count, change, width, color]) => <div className="odr-source-row" key={name}><span className="odr-source-logo" style={{ background: color }}>{name[0]}</span><b>{name}</b><i><em style={{ width, background: color }} /></i><strong>{count}</strong><small>↑ {change}</small></div>)}</article>
         <article className="odr-card odr-revenue"><header className="odr-card-head"><div><h2>Revenue</h2><p><b>$84,230</b> <em>↑ 28%</em></p></div><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header><div className="odr-chart"><span>$6K</span><span>$4K</span><span>$2K</span><span>$0</span><svg viewBox="0 0 460 170" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="odrRevenue" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#1ed69a" stopOpacity=".32"/><stop offset="1" stopColor="#1ed69a" stopOpacity="0"/></linearGradient></defs><path className="odr-chart-area" d="M0 145 L20 132 38 134 56 121 74 125 92 111 110 115 130 97 148 104 165 83 183 90 202 76 220 88 240 67 258 72 276 54 294 65 312 45 330 57 348 32 367 38 385 22 404 28 424 6 460 0 L460 170 L0 170Z"/><path className="odr-chart-line" d="M0 145 L20 132 38 134 56 121 74 125 92 111 110 115 130 97 148 104 165 83 183 90 202 76 220 88 240 67 258 72 276 54 294 65 312 45 330 57 348 32 367 38 385 22 404 28 424 6 460 0"/></svg><footer><span>Aug 16</span><span>Aug 23</span><span>Aug 30</span><span>Sep 6</span><span>Sep 13</span></footer></div></article>
         <article className="odr-card odr-service-mix"><header className="odr-card-head"><h2>Jobs by Service</h2></header><div className="odr-donut" style={{ background: "conic-gradient(#1ed69a 0 62%, #3b9bff 62% 80%, #ffad45 80% 88%, #8b6cff 88% 94%, #ff6868 94% 98%, #758391 98% 100%)" }}><div><strong>287</strong><small>Jobs</small></div></div><div className="odr-service-legend">{SERVICE_MIX.map(([name, value, color]) => <p key={name}><i style={{ background: color }} />{name}<b>{value}</b></p>)}</div></article>
-        <article className="odr-card odr-growth"><div className="odr-growth-copy"><h2>Add more services.<br />Reach more customers.</h2><p>Expand into lawn care, junk removal, handyman, and AI-powered service growth.</p><button type="button">Explore new services <ArrowRight /></button><footer><Wrench /><Briefcase /><Megaphone /><MoreHorizontal /></footer></div><img src="/manus-storage/dashboard-growth-home_e675ad8d.jpg" alt="Warm modern home interior" /></article>
+        <article className="odr-card odr-growth"><div className="odr-growth-copy"><h2>Add more services.<br />Reach more customers.</h2><p>Expand into lawn care, junk removal, handyman, and AI-powered service growth.</p><button type="button">Explore new services <ArrowRight /></button><footer><Wrench /><Briefcase /><Megaphone /><MoreHorizontal /></footer></div><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/XhlIKNqoaYsrdCTN.jpg" alt="Warm modern home interior" /></article>
       </section>
     </div>
   </main>;

@@ -25,9 +25,9 @@ type TranscriptCall = {
 };
 
 const CALLER_PORTRAITS: Record<string, string> = {
-  "Jordan Lee": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Avery Morgan": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  "Casey Rivera": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
+  "Jordan Lee": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Avery Morgan": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "Casey Rivera": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
 };
 
 const TRANSCRIPT_CALLS: TranscriptCall[] = [

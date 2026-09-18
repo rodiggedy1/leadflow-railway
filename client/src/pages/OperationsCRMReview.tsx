@@ -74,17 +74,17 @@ const NAV_GROUPS = [
 const initials = (name: string) => name.split(" ").map(part => part[0]).join("").slice(0, 2);
 const palette = ["#d76b5b", "#4ca1af", "#d19d48", "#9871d3", "#4e9a72", "#c46a85"];
 const OWNER_PORTRAITS: Record<string, string> = {
-  "Emma Green": "/manus-storage/leads-crm-owner-emma-green_55d28723.png",
-  "Mark Darnalds": "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  "Kate Chen": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  "Oliver Chan": "/manus-storage/leads-crm-owner-oliver-chan_8454e8e9.png",
-  "Sarah Nguyen": "/manus-storage/leads-crm-owner-sarah-nguyen_2fbb7d63.png",
-  "Alex Santos": "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  "Grace Miller": "/manus-storage/leads-crm-owner-grace-miller_7bf6a25c.png",
-  "Maria Keller": "/manus-storage/leads-crm-owner-maria-keller_063bfec2.png",
-  "Hannah Mills": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "James Taylor": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Ava Brooks": "/manus-storage/leads-crm-owner-ava-brooks_aa65601f.png",
+  "Emma Green": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "Mark Darnalds": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "Kate Chen": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "Oliver Chan": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/CucZtKJOfkDlJvMg.png",
+  "Sarah Nguyen": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bCfFsxIPapKjJReA.png",
+  "Alex Santos": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "Grace Miller": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
+  "Maria Keller": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qRwiNDAHRQQTxPbz.png",
+  "Hannah Mills": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "James Taylor": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Ava Brooks": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/tPTFyZvyIyVryrEa.png",
 };
 
 function OwnerPortrait({ owner, color, detail = false }: { owner: string; color: string; detail?: boolean }) {

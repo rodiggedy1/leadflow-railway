@@ -71,11 +71,11 @@ const INBOX_THREADS = [
 ];
 
 const LEAD_PORTRAITS: Record<string, string> = {
-  "Jordan Reeves": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Morgan Bell": "/manus-storage/leads-crm-owner-emma-green_55d28723.png",
-  "Amelia Ross": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "Devon Turner": "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  "Sophia Bell": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
+  "Jordan Reeves": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Morgan Bell": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "Amelia Ross": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "Devon Turner": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "Sophia Bell": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
 };
 
 type GroupMessageKind = "customer" | "dispatch" | "team" | "system";
@@ -146,7 +146,7 @@ function LeadPortrait({ name, initials, tone }: { name: string; initials: string
 }
 
 function GroupMessageAvatar({ from, kind }: { from: string; kind: Exclude<GroupMessageKind, "system"> }) {
-  if (from === "Madison") return <img className="ccc-group-avatar ccc-group-avatar-dispatch" src="/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png" alt="Madison static review portrait" />;
+  if (from === "Madison") return <img className="ccc-group-avatar ccc-group-avatar-dispatch" src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png" alt="Madison static review portrait" />;
   if (kind === "customer" && LEAD_PORTRAITS[from]) return <img className="ccc-group-avatar ccc-group-avatar-customer" src={LEAD_PORTRAITS[from]} alt={`${from} static review portrait`} />;
   if (kind === "team") return <span className="ccc-group-avatar ccc-group-avatar-team" aria-label="Team Harper static review avatar"><Users /></span>;
   const initials = from.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -246,7 +246,7 @@ export default function CommandChatCRMReview() {
                   <span className="ccc-command-glyph"><MessageSquare /></span>
                   <div className="ccc-reference-command-info"><strong>MIB Command</strong><div className="ccc-reference-header-metrics" aria-label="Static workspace metrics: 14 leads, 6 bookings, 1840 dollars booked today, 3 mentions"><span><Users /><b>14</b> Leads</span><span><CalendarClock /><b>6</b> Bookings</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>$1,840</b> Today</span><span className="ccc-header-metric-mentions"><Bell /><b>3</b> Mentions</span></div></div>
                 </div>
-                <div className="ccc-reference-chat-actions"><div className="ccc-presence" aria-label="Four static command participants"><img className="ccc-presence-portrait" src="/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png" alt="Madison static review portrait" /><img className="ccc-presence-portrait" src="/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png" alt="Jordan static review portrait" /><img className="ccc-presence-portrait" src="/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png" alt="Sophia static review portrait" /><span>+3</span></div><i className="ccc-reference-action-divider" aria-hidden="true" /><button aria-label="Call static MIB Command" onClick={() => showNotice("Calls are disabled in this review.")}><Phone /></button><button aria-label="More static MIB Command options" onClick={() => showNotice("More options are static in this review.")}><MoreHorizontal /></button></div>
+                <div className="ccc-reference-chat-actions"><div className="ccc-presence" aria-label="Four static command participants"><img className="ccc-presence-portrait" src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png" alt="Madison static review portrait" /><img className="ccc-presence-portrait" src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png" alt="Jordan static review portrait" /><img className="ccc-presence-portrait" src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png" alt="Sophia static review portrait" /><span>+3</span></div><i className="ccc-reference-action-divider" aria-hidden="true" /><button aria-label="Call static MIB Command" onClick={() => showNotice("Calls are disabled in this review.")}><Phone /></button><button aria-label="More static MIB Command options" onClick={() => showNotice("More options are static in this review.")}><MoreHorizontal /></button></div>
               </div>
             </div>
             {view === "issues" ? <IssueView onBack={() => setView("chat")} /> : view === "calls" ? <CallsView onBack={() => setView("chat")} /> : <>

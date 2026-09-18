@@ -81,14 +81,14 @@ const PHOTO_COLORS = ["linear-gradient(135deg,#6c5d4d,#2a2520 45%,#b49f7d)", "li
 const TEAM_AVATAR_COLORS: Record<string, string> = { "Team North": "#d76b5b", "Team Central": "#4ca1af", "Team West": "#d19d48", "Team East": "#9871d3", Unassigned: "#353535" };
 const CUSTOMER_AVATAR_COLORS: Record<string, string> = { SA: "#d76b5b", SB: "#4ca1af", SC: "#d19d48", SD: "#9871d3", SE: "#4e9a72", SF: "#c46a85", SG: "#d76b5b", SH: "#4ca1af" };
 const CUSTOMER_PORTRAITS: Record<string, string> = {
-  SA: "/manus-storage/leads-crm-owner-emma-green_55d28723.png",
-  SB: "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  SC: "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  SD: "/manus-storage/leads-crm-owner-oliver-chan_8454e8e9.png",
-  SE: "/manus-storage/leads-crm-owner-sarah-nguyen_2fbb7d63.png",
-  SF: "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  SG: "/manus-storage/leads-crm-owner-grace-miller_7bf6a25c.png",
-  SH: "/manus-storage/leads-crm-owner-maria-keller_063bfec2.png",
+  SA: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  SB: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  SC: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  SD: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/CucZtKJOfkDlJvMg.png",
+  SE: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bCfFsxIPapKjJReA.png",
+  SF: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  SG: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
+  SH: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qRwiNDAHRQQTxPbz.png",
 };
 const teamAvatarColor = (team: string | null) => TEAM_AVATAR_COLORS[team ?? "Unassigned"] ?? "#4e9a72";
 const customerAvatarColor = (initials: string) => CUSTOMER_AVATAR_COLORS[initials] ?? "#4e9a72";

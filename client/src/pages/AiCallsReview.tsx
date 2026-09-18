@@ -26,14 +26,14 @@ const CALLS: VoiceCall[] = [
 ];
 
 const CALLER_PORTRAITS: Record<string, string> = {
-  "Jordan Lee": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Avery Morgan": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  "Casey Rivera": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "Taylor Brooks": "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  "Morgan Price": "/manus-storage/leads-crm-owner-emma-green_55d28723.png",
-  "Riley Chen": "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  "Drew Parker": "/manus-storage/leads-crm-owner-oliver-chan_8454e8e9.png",
-  "Jamie Flores": "/manus-storage/leads-crm-owner-sarah-nguyen_2fbb7d63.png",
+  "Jordan Lee": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Avery Morgan": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "Casey Rivera": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "Taylor Brooks": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "Morgan Price": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "Riley Chen": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "Drew Parker": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/CucZtKJOfkDlJvMg.png",
+  "Jamie Flores": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bCfFsxIPapKjJReA.png",
 };
 
 function CallerPortrait({ caller, className }: { caller: string; className: string }) {

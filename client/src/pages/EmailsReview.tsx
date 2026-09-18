@@ -21,12 +21,12 @@ const THREADS: Thread[] = [
 ];
 
 const EMAIL_REVIEW_PORTRAITS: Record<string, string> = {
-  "Jordan Rivera": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Amelia Carter": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "Noah Bennett": "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  "Ethan Wells": "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  "Sophia Kim": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  "Madison Anders": "/manus-storage/leads-crm-owner-grace-miller_7bf6a25c.png",
+  "Jordan Rivera": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Amelia Carter": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "Noah Bennett": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "Ethan Wells": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "Sophia Kim": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "Madison Anders": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
 };
 
 function EmailReviewPortrait({ name, initials, className }: { name: string; initials: string; className: string }) {

@@ -76,9 +76,16 @@ describe("static review workspace snapshot", () => {
   it("keeps every deployed review page free of live query, mutation, fetch, and legacy job dependencies", () => {
     for (const filename of staticReviewPages) {
       const source = readFileSync(resolve(root, "client/src/pages", filename), "utf8");
-      for (const forbidden of ["trpc.", "useQuery", "useMutation", "fetch(", "axios", "WebSocket", "EventSource", "cleanerJobs", "cleaner_jobs"]) {
+      for (const forbidden of ["trpc.", "useQuery", "useMutation", "fetch(", "axios", "WebSocket", "EventSource", "cleanerJobs", "cleaner_jobs", "/manus-storage/"]) {
         expect(source, `${filename} contains ${forbidden}`).not.toContain(forbidden);
       }
     }
+  });
+
+  it("uses directly-deliverable CDN images instead of the unavailable preview storage proxy", () => {
+    const commandChat = readFileSync(resolve(root, "client/src/pages/CommandChatCRMReview.tsx"), "utf8");
+    const dashboard = readFileSync(resolve(root, "client/src/pages/OperationsDashboardReview.tsx"), "utf8");
+    expect(commandChat).toContain("https://files.manuscdn.com/");
+    expect(dashboard).toContain("https://files.manuscdn.com/");
   });
 });

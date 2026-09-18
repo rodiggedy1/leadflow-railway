@@ -19,13 +19,13 @@ type StaticJob = {
 };
 
 const CLIENT_PORTRAITS: Record<string, string> = {
-  "Jordan Rivera": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Amelia Carter": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "Noah Bennett": "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  "Sophia Kim": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  "Ethan Wells": "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  "Olivia Morgan": "/manus-storage/leads-crm-owner-emma-green_55d28723.png",
-  "Liam Parker": "/manus-storage/leads-crm-owner-oliver-chan_8454e8e9.png",
+  "Jordan Rivera": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Amelia Carter": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "Noah Bennett": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "Sophia Kim": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "Ethan Wells": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "Olivia Morgan": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "Liam Parker": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/CucZtKJOfkDlJvMg.png",
 };
 
 const hours = ["7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM"];

@@ -33,13 +33,13 @@ const emailThreads: Conversation[] = [
 ];
 
 const SMS_REVIEW_PORTRAITS: Record<string, string> = {
-  "Jordan Rivera": "/manus-storage/leads-crm-owner-james-taylor_6fac06b4.png",
-  "Sophia Kim": "/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png",
-  "Amelia Carter": "/manus-storage/leads-crm-owner-hannah-mills_c84fd53e.png",
-  "Noah Bennett": "/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png",
-  "Olivia Morgan": "/manus-storage/leads-crm-owner-emma-green_55d28723.png",
-  "Ethan Wells": "/manus-storage/leads-crm-owner-alex-santos_8f730ad0.png",
-  "Madison Anders": "/manus-storage/leads-crm-owner-grace-miller_7bf6a25c.png",
+  "Jordan Rivera": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/xDBqJDhyFPziPsOt.png",
+  "Sophia Kim": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "Amelia Carter": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/TtZGSsKomHzKvXmE.png",
+  "Noah Bennett": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "Olivia Morgan": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "Ethan Wells": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "Madison Anders": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
 };
 
 function SmsReviewPortrait({ name, initials, className, team = false, call = false }: { name: string; initials: string; className: string; team?: boolean; call?: boolean }) {
