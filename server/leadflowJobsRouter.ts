@@ -85,6 +85,60 @@ export const leadflowJobsRouter = router({
     };
   }),
 
+  customerDirectory: opsChatProcedure.input(z.object({ query: z.string().trim().max(80).default("") })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const rows = await db.select({
+      customerName: leadflowJobs.customerName,
+      customerPhone: leadflowJobs.customerPhone,
+      customerEmail: leadflowJobs.customerEmail,
+      jobDate: leadflowJobs.jobDate,
+      serviceName: leadflowJobs.serviceName,
+      jobAddress: leadflowJobs.jobAddress,
+      bookingStatus: leadflowJobs.bookingStatus,
+      teamName: leadflowJobs.teamName,
+      frequency: leadflowJobs.frequency,
+    }).from(leadflowJobs)
+      .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.id))
+      .limit(500);
+
+    const query = input.query.toLowerCase();
+    const customers = new Map<string, {
+      name: string;
+      phone: string;
+      email: string | null;
+      lastServiceDate: string;
+      serviceName: string | null;
+      address: string | null;
+      status: string;
+      teamName: string | null;
+      frequency: string | null;
+    }>();
+
+    for (const row of rows) {
+      const phone = (row.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+      if (phone.length !== 10) continue;
+      const name = row.customerName?.trim() || "Customer";
+      const searchable = `${name} ${phone} ${row.customerEmail ?? ""} ${row.jobAddress ?? ""}`.toLowerCase();
+      if (query && !searchable.includes(query)) continue;
+      const existing = customers.get(phone);
+      if (existing) continue;
+      customers.set(phone, {
+        name,
+        phone,
+        email: row.customerEmail,
+        lastServiceDate: row.jobDate,
+        serviceName: row.serviceName,
+        address: row.jobAddress,
+        status: row.bookingStatus,
+        teamName: row.teamName,
+        frequency: row.frequency,
+      });
+    }
+
+    return { customers: Array.from(customers.values()).slice(0, 80) };
+  }),
+
   list: bookingsAgentProcedure.input(listInput).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
