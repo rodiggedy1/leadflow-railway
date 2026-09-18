@@ -3,7 +3,11 @@
 .payments-live-exact .payments-board{height:100%;min-height:0;overflow:hidden}
 .payments-live-exact .payment-list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#45454b transparent}
 .payments-live-exact .payments-workbench{height:590px;min-height:590px}
-.payments-live-exact .payment-detail{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#45454b transparent}
+.payments-live-exact .payment-detail{min-height:0;overflow-y:scroll;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#777780 #242427}
+.payments-live-exact .payment-detail::-webkit-scrollbar{width:10px}
+.payments-live-exact .payment-detail::-webkit-scrollbar-track{background:#242427}
+.payments-live-exact .payment-detail::-webkit-scrollbar-thumb{border:2px solid #242427;border-radius:999px;background:#777780}
+.payments-live-exact .payment-detail::-webkit-scrollbar-thumb:hover{background:#9999a3}
 .payments-live-exact .payment-detail-empty{display:grid;place-items:center;align-content:center;gap:8px;text-align:center;color:#8e8e96}
 .payments-live-exact .payment-detail-empty h2{margin:0;color:#e9e9ee;font-size:17px}
 .payments-live-exact .payment-detail-empty p{margin:0;font-size:11px}

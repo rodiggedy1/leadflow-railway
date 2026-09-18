@@ -60,5 +60,7 @@ describe("Payments exact live shell", () => {
     expect(styles).toContain(".payments-live-exact .payments-workbench{height:590px;min-height:590px}");
     expect(styles).toContain(".payments-live-exact .payments-board{height:100%;min-height:0;overflow:hidden}");
     expect(styles).toContain(".payments-live-exact .payment-list{flex:1;min-height:0;overflow-y:auto");
+    expect(styles).toContain(".payments-live-exact .payment-detail{min-height:0;overflow-y:scroll;overscroll-behavior:contain");
+    expect(styles).toContain(".payments-live-exact .payment-detail::-webkit-scrollbar-thumb");
   });
 });
