@@ -51,7 +51,7 @@ const staticReviewPages = [
 ] as const;
 
 describe("static review workspace snapshot", () => {
-  it("mounts the existing review-only workspace suite only under /review paths", () => {
+  it("mounts the existing review-only workspace suite under /review paths and uses its exact Settings shell at the approved admin baseline", () => {
     const source = app();
     expect(source).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
     expect(source).toContain('import "./pages/review-typography.css";');
@@ -62,13 +62,15 @@ describe("static review workspace snapshot", () => {
       expect(source).toContain(`<Route path={"${path}"} component={${component}} />`);
     }
 
+    expect(source).toContain('function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsReview /></ReviewWorkspaceFrame></AdminPageGuard>; }');
+    expect(source).toContain('path={"/admin/settings"} component={AdminSettingsReviewRoute}');
     expect(source).not.toContain('path={"/admin/leads"} component={CommandChatCRMReviewRoute}');
     expect(source).not.toContain('path={"/admin/ops-chat"} component={CommandChatCRMReviewRoute}');
   });
 
   it("excludes global live watchers and polling instrumentation on review routes", () => {
     const source = app();
-    expect(source).toContain('if (location.startsWith("/review/")) return null;');
+    expect(source).toContain('if (location.startsWith("/review/") || location === "/admin/settings") return null;');
     expect(source).toContain("function RuntimeWatchers()");
     expect(source).toContain("function RuntimePollingInstrumentation()");
   });

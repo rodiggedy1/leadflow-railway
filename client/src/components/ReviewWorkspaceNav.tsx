@@ -32,10 +32,11 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
   { label: "TEAM OPERATIONS", items: [{ label: "Team", href: "/review/team", icon: UsersRound }, { label: "Reviews & Quality", href: "/review/reviews-quality", icon: Star }, { label: "Payroll Summary", href: "/review/payroll-summary", icon: WalletCards }, { label: "Hiring Admin", href: "/review/hiring-admin", icon: UserRoundCheck }] },
 ];
 
-export default function ReviewWorkspaceNav() {
+export default function ReviewWorkspaceNav({ activePath }: { activePath?: string }) {
   const [location] = useLocation();
   const defaultOpenRoutes = ["/review/operations-dashboard", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
-  const [expanded, setExpanded] = useState(() => defaultOpenRoutes.includes(location));
+  const routeKey = activePath ?? location;
+  const [expanded, setExpanded] = useState(() => defaultOpenRoutes.includes(routeKey));
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && setExpanded(false);
@@ -62,7 +63,7 @@ export default function ReviewWorkspaceNav() {
             <p>{group.label}</p>
             {group.items.map(item => {
               const Icon = item.icon;
-              const active = location === item.href;
+              const active = routeKey === item.href;
               return (
                 <a
                   href={item.href}
@@ -80,7 +81,7 @@ export default function ReviewWorkspaceNav() {
         ))}
       </nav>
       <div className="review-workspace-bottom">
-        <a href="/review/settings" className={location === "/review/settings" ? "is-active" : ""} aria-current={location === "/review/settings" ? "page" : undefined} onClick={() => setExpanded(true)}>
+        <a href="/review/settings" className={routeKey === "/review/settings" ? "is-active" : ""} aria-current={routeKey === "/review/settings" ? "page" : undefined} onClick={() => setExpanded(true)}>
           <SlidersHorizontal />
           <span>Settings</span>
         </a>

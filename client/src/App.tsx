@@ -14,6 +14,7 @@ import { useOpsStream } from "./hooks/useOpsStream";
 import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
 import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";
 import "./pages/review-typography.css";
+import AdminPageGuard from "./components/AdminPageGuard";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -111,8 +112,8 @@ function PageLoader() {
   );
 }
 
-function ReviewWorkspaceFrame({ children, hideNavigation = false }: { children: React.ReactNode; hideNavigation?: boolean }) {
-  return <div className={`review-nav-host ${hideNavigation ? "review-nav-host-without-nav" : ""}`}>{!hideNavigation && <ReviewWorkspaceNav />}{children}</div>;
+function ReviewWorkspaceFrame({ children, hideNavigation = false, navActivePath }: { children: React.ReactNode; hideNavigation?: boolean; navActivePath?: string }) {
+  return <div className={`review-nav-host ${hideNavigation ? "review-nav-host-without-nav" : ""}`}>{!hideNavigation && <ReviewWorkspaceNav activePath={navActivePath} />}{children}</div>;
 }
 
 function OperationsDashboardReviewRoute() { return <ReviewWorkspaceFrame><OperationsDashboardReview /></ReviewWorkspaceFrame>; }
@@ -129,6 +130,7 @@ function SmsReviewRoute() { return <ReviewWorkspaceFrame><SmsReview /></ReviewWo
 function TeamReviewRoute() { return <ReviewWorkspaceFrame><TeamReview /></ReviewWorkspaceFrame>; }
 function ConfirmationCallsReviewRoute() { return <ReviewWorkspaceFrame><ConfirmationCallsReview /></ReviewWorkspaceFrame>; }
 function SettingsReviewRoute() { return <ReviewWorkspaceFrame><SettingsReview /></ReviewWorkspaceFrame>; }
+function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsReview /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSummaryReview /></ReviewWorkspaceFrame>; }
 function CustomerProfileReviewRoute() { return <ReviewWorkspaceFrame><CustomerProfileReview /></ReviewWorkspaceFrame>; }
 function ReviewsQualityReviewRoute() { return <ReviewWorkspaceFrame><ReviewsQualityReview /></ReviewWorkspaceFrame>; }
@@ -177,7 +179,7 @@ function Router() {
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={SettingsPage} />
         <Route path={"/admin/bookings"} component={NativeBookings} />
-        <Route path={"/admin/settings"} component={SettingsPage} />
+        <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
         <Route path={"/admin/field-management"} component={FieldManagement} />
@@ -355,13 +357,13 @@ function GlobalOpsChat() {
 
 function ReviewSafeGlobalOpsChat() {
   const [location] = useLocation();
-  if (location.startsWith("/review/")) return null;
+  if (location.startsWith("/review/") || location === "/admin/settings") return null;
   return <GlobalOpsChat />;
 }
 
 function RuntimePollingInstrumentation() {
   const [location] = useLocation();
-  if (location.startsWith("/review/")) return null;
+  if (location.startsWith("/review/") || location === "/admin/settings") return null;
   return <PollingInstrumentation />;
 }
 
@@ -372,7 +374,7 @@ function PollingInstrumentation() {
 
 function RuntimeWatchers() {
   const [location] = useLocation();
-  if (location.startsWith("/review/")) return null;
+  if (location.startsWith("/review/") || location === "/admin/settings") return null;
   return <><LeadAssignmentWatcher /><SuperAlertWatcher /></>;
 }
 
