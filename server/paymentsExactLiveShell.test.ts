@@ -53,4 +53,12 @@ describe("Payments exact live shell", () => {
     expect(router).toContain("listAllCustomers: agentProcedure");
     expect(router).toContain("listAllCardAuthTokens: agentProcedure");
   });
+
+  it("keeps the desktop activity list within the fixed review workbench", () => {
+    const styles = read("client/src/pages/payments-exact-live.css");
+
+    expect(styles).toContain(".payments-live-exact .payments-workbench{height:590px;min-height:590px}");
+    expect(styles).toContain(".payments-live-exact .payments-board{height:100%;min-height:0;overflow:hidden}");
+    expect(styles).toContain(".payments-live-exact .payment-list{flex:1;min-height:0;overflow-y:auto");
+  });
 });
