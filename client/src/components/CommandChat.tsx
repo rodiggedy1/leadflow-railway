@@ -56,7 +56,6 @@ import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMe
 import { getCustomerAvatarUrl, getTeamAvatarUrl } from "@/lib/customerAvatar";
 import { IssueEngineOverlay, CreateIssueModal, ActiveIssuesPill } from "@/components/IssueEngineOverlay";
 import { TeamEtaModal } from "@/components/TeamEtaModal";
-import "./command-chat-rebuild.css";
 
 // ── Payment Link Modal ───────────────────────────────────────────────────────
 function _normalizePhone(raw: string) {
@@ -764,33 +763,73 @@ function HotLeadCard({
     : `Waiting ${Math.floor(mins / 60)}h ${mins % 60}m`;
 
   return (
-    <article
+    <div
       onAnimationEnd={() => setShaking(false)}
-      className={cn("mib-hot-lead-card", isFirst && "is-first", !isClaimed && shaking && "animate-lead-shake")}
+      className={cn(
+        "relative overflow-hidden",
+        !isClaimed && shaking && "animate-lead-shake",
+      )}
+            style={{
+        background:"#fff",
+        border: isFirst ? "1px solid #cfc3ff" : "1px solid #e6e9f2",
+        borderRadius:"18px",
+        padding:"13px 13px 11px",
+        marginBottom:"10px",
+        boxShadow: isFirst ? "0 14px 30px rgba(111,60,255,.13)" : "0 10px 24px rgba(35,40,73,.08)",
+        transition:".18s ease",
+        position:"relative"
+      }}
     >
-      {isThumbSms && <span className="mib-hot-lead-status" style={{ background: "#263946", color: "#b6d8ed" }}>New Thumbtack opportunity</span>}
-      {!isThumbSms && <span className="mib-hot-lead-status" style={isBooked ? { background: "#233b50", color: "#b9d8ee" } : isClaimed ? { background: "#1e473b", color: "#afe0c9" } : isLost || isCold ? { background: "#303035", color: "#b5b5bb" } : { background: "#493224", color: "#e9bf82" }}>{pillLabel}</span>}
+      {/* Purple left accent bar — only on selected (first) card, exact prototype .lead-card.selected:before */}
+      {isFirst && <div className="absolute left-0 top-4 bottom-4 w-1 rounded-r-[6px]" style={{background:"#6f3cff"}} />}
+      {/* Thumbtack label */}
+      {isThumbSms && (
+        <div className="flex items-center gap-1.5 px-3 pt-2.5">
+          <span className="text-sky-600 text-[10px]">📌</span>
+          <span className="text-[10px] font-semibold text-sky-700 uppercase tracking-widest">New Thumbtack Opportunity</span>
+        </div>
+      )}
+
+      {/* Card body — clickable to open SMS */}
       <div
-        className="mib-hot-lead-body"
+        className={cn(sessionId && "cursor-pointer")}
         onClick={() => {
-          if (sessionId) window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank");
+          console.log("[Operations] HotLeadCard clicked — sessionId:", sessionId, "leadName:", leadName);
+          if (sessionId) {
+            window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank");
+          }
           onSelectSession?.(sessionId ?? 0, leadName ?? "");
         }}
       >
-        <p className="mib-hot-lead-name">{leadName}</p>
-        <p className="mib-hot-lead-detail">{serviceType || leadPhone || "Lead context available"}</p>
-        {(isThumbSms && size) && <p className="mib-hot-lead-detail">{size}</p>}
+        {/* Status pill — exact prototype .lead-status */}
+        <span style={{display:"inline-flex",alignItems:"center",gap:"5px",padding:"5px 8px",borderRadius:"999px",fontSize:"10px",fontWeight:800,...(isBooked?{background:"#eff6ff",color:"#1d4ed8"}:isLost||isCold?{background:"#f1f5f9",color:"#64748b"}:isFollowUp?{background:"#fff6e8",color:"#df7e00"}:isClaimed?{background:"#eafaf4",color:"#0da875"}:{background:"#fff0f2",color:"#ff475f"})}}>
+          {pillLabel}
+        </span>
+        {/* Name — .lead-card h3: margin:8px 0 3px; font-size:16px */}
+        <p style={{margin:"8px 0 3px",fontSize:"16px",fontWeight:700,color:"#11182d"}}>{leadName}</p>
+        {/* Phone — .lead-card p: margin:3px 0; color:#64708b; font-size:12px */}
+        {leadPhone && <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>{leadPhone}</p>}
+        {/* Service — .lead-card p */}
+        {serviceType && <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>{serviceType}</p>}
+        {isThumbSms && size && <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>📍 {size}</p>}
+        {/* Source + wait — .lead-card p */}
+        <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>
+          {sourceDisplay ?? ""}
+          {!isResolved && !isClaimed && <> · <strong style={{color:"#11182d"}}>{waitLabel}</strong></>}
+          {isClaimed && claimedAt && <> · {new Date(claimedAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true,timeZone:"America/New_York"})}</>}
+          {isBooked && sessionStatus?.bookedAmount && <> · <strong style={{color:"#1d4ed8"}}>${sessionStatus.bookedAmount} booked</strong></>}
+        </p>
+        {/* Lead actions — exact prototype: .lead-actions { display:flex; align-items:center; gap:10px; margin-top:10px; color:#6f3cff } */}
+        <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"10px",color:"#6f3cff"}}>
+          <span>💬</span><span>☎</span>
+          <span
+            onClick={(e) => { e.stopPropagation(); if (!isClaimed && !claimLeadMutation.isPending) claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined }); }}
+            style={{marginLeft:"auto",background: isClaimed ? "#eafaf4" : "#f0ebff",padding:"5px 10px",borderRadius:"999px",fontWeight:800,fontSize:"11px",color: isClaimed ? "#0da875" : "#6f3cff",cursor: isClaimed ? "default" : "pointer",opacity: claimLeadMutation.isPending ? 0.6 : 1}}
+          >{estimatedPrice}</span>
+        </div>
       </div>
-      <footer className="mib-hot-lead-footer">
-        <span className="mib-hot-lead-wait">{sourceDisplay ?? "New lead"}{!isResolved && !isClaimed ? ` · ${waitLabel}` : isBooked && sessionStatus?.bookedAmount ? ` · $${sessionStatus.bookedAmount} booked` : ""}</span>
-        <button
-          type="button"
-          className={cn("mib-hot-lead-claim", isClaimed && "is-claimed")}
-          disabled={isClaimed || claimLeadMutation.isPending}
-          onClick={(event) => { event.stopPropagation(); if (!isClaimed && !claimLeadMutation.isPending) claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined }); }}
-        >{isClaimed ? "Claimed" : estimatedPrice}</button>
-      </footer>
-    </article>
+
+    </div>
   );
 }
 
@@ -856,13 +895,13 @@ function HotLeadsTray({
   }).length;
 
   return (
-    <div className="mib-hot-leads">
+    <div>
       {/* Header */}
-      <div className="mib-hot-leads-header">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <p className="mib-hot-leads-label">Hot Leads</p>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Hot Leads</p>
           {unclaimedCount > 0 && (
-            <span className="mib-hot-leads-count animate-pulse">
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold animate-pulse">
               {unclaimedCount}
             </span>
           )}
@@ -871,7 +910,7 @@ function HotLeadsTray({
           type="button"
           onClick={onCollapse}
           title="Collapse panel"
-          className="w-5 h-5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
+          className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-200 hover:text-slate-600 transition-colors"
         >
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
@@ -879,9 +918,9 @@ function HotLeadsTray({
 
       {/* Lead cards */}
       {leads.length === 0 ? (
-        <div className="rounded-xl bg-zinc-800/60 border border-zinc-700 p-4 text-center">
-          <Zap className="h-4 w-4 text-zinc-500 mx-auto mb-1" />
-          <p className="text-xs text-zinc-400">No new leads in the last 8 hours</p>
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 text-center">
+          <Zap className="h-4 w-4 text-slate-300 mx-auto mb-1" />
+          <p className="text-xs text-slate-400">No new leads in the last 8 hours</p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -4043,28 +4082,26 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
   const badgeColor = isOverdue ? "#d92d20" : "#b86600";
   const badgeBg = isOverdue ? "#fff0ef" : "#fff4dc";
   return (
-    <div className="mib-unanswered-card" style={{ padding: "4px 16px" }}>
-      <div className="mib-unanswered-shell" style={{ background: "#fff", border: "1px solid #e7e9f0", borderRadius: 20, boxShadow: "0 8px 28px rgba(28,32,55,0.05)", overflow: "hidden" }}>
+    <div style={{ padding: "4px 16px" }}>
+      <div style={{ background: "#fff", border: "1px solid #e7e9f0", borderRadius: 20, boxShadow: "0 8px 28px rgba(28,32,55,0.05)", overflow: "hidden" }}>
         {/* Summary row — always visible, click to expand */}
         <button
-          className="mib-unanswered-summary"
           style={{ width: "100%", border: 0, background: "transparent", padding: "16px 18px", display: "grid", gridTemplateColumns: "7px 1fr auto 22px", gap: 14, alignItems: "center", textAlign: "left" as const, cursor: "pointer" }}
           onClick={() => setIsExpanded(v => !v)}
         >
           {/* Left accent bar */}
-          <span className="mib-unanswered-accent" style={{ height: 43, borderRadius: 20, background: accentColor, display: "block" }} />
+          <span style={{ height: 43, borderRadius: 20, background: accentColor, display: "block" }} />
           {/* Name + badge + preview */}
           <span style={{ minWidth: 0 }}>
-            <span className="mib-unanswered-titleline" style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <span className="mib-unanswered-name" style={{ fontSize: 17, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, color: "#18192b" }}>{leadName}</span>
-              <span className="mib-unanswered-wait" style={{ fontSize: 11, fontWeight: 800, padding: "5px 9px", borderRadius: 999, color: badgeColor, background: badgeBg, whiteSpace: "nowrap" as const }}>Waiting {fmtAge(ageMs)}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <span style={{ fontSize: 17, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, color: "#18192b" }}>{leadName}</span>
+              <span style={{ fontSize: 11, fontWeight: 800, padding: "5px 9px", borderRadius: 999, color: badgeColor, background: badgeBg, whiteSpace: "nowrap" as const }}>Waiting {fmtAge(ageMs)}</span>
             </span>
-            {preview && <span className="mib-unanswered-preview" style={{ display: "block", marginTop: 5, color: "#737b8e", fontSize: 14, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>"{preview}"</span>}
+            {preview && <span style={{ display: "block", marginTop: 5, color: "#737b8e", fontSize: 14, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>"{preview}"</span>}
           </span>
           {/* Right: no-reply button + chevron */}
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              className="mib-unanswered-dismiss"
               onClick={e => { e.stopPropagation(); handleNoReply(); }}
               disabled={isSending}
               style={{ fontSize: 11, fontWeight: 800, color: "#626a79", background: "#f4f5f7", border: "1px solid #dfe2ea", borderRadius: 10, padding: "6px 10px", cursor: isSending ? "wait" : "pointer", opacity: isSending ? 0.6 : 1, whiteSpace: "nowrap" as const }}
@@ -4074,7 +4111,7 @@ function UnansweredAlarmCard({ msg, callerName, onSelectSession }: {
         </button>
         {/* Expanded detail */}
         {isExpanded && (
-          <div className="mib-unanswered-expanded" style={{ borderTop: "1px solid #eff0f4", padding: 18 }}>
+          <div style={{ borderTop: "1px solid #eff0f4", padding: 18 }}>
             <div style={{ display: "inline-block", fontSize: 12, fontWeight: 800, color: "#d92d20", background: "#fff1f0", border: "1px solid #ffd4d0", padding: "7px 10px", borderRadius: 999, marginBottom: 14 }}>
               🚨 UNANSWERED · {fmtAge(ageMs).toUpperCase()}
             </div>
@@ -4476,7 +4513,7 @@ const MessageList = memo(function MessageList({
 }: MessageListProps) {
   return (
     <>
-        <div ref={threadScrollRef} className="mib-stream flex-1 min-h-0 overflow-y-auto overflow-x-hidden chat-scroll-inset" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
+        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-4 chat-scroll-inset" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
           <div className="flex items-center justify-between mb-4">
             {searchOpen ? (
               <div className="flex items-center gap-1.5 flex-1 min-w-0 animate-in slide-in-from-left-2 duration-200">
@@ -4515,7 +4552,7 @@ const MessageList = memo(function MessageList({
                 </button>
               </div>
             ) : (
-              <p className="mib-stream-heading text-[10px] font-semibold tracking-widest uppercase">Conversation</p>
+              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
             )}
             <div className="flex items-center gap-1">
               {!searchOpen && pendingReminderCount > 0 && (
@@ -4590,7 +4627,7 @@ const MessageList = memo(function MessageList({
               </button>
             </div>
           </div>
-            <div ref={msgsContainerRef} className="mib-feed" style={{ paddingBottom: '8px' }}>
+          <div ref={msgsContainerRef} className="space-y-4" style={{ paddingBottom: '8px' }}>
             {channelLoading ? (
               <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
             ) : channelMsgs.length === 0 ? (
@@ -5606,14 +5643,14 @@ const MessageList = memo(function MessageList({
                       })()
                     : "today";
                   return (
-                    <div key={msg.id} className="mib-ops-summary flex justify-start">
-                      <div className="mib-ops-summary-card max-w-[82%] rounded-xl overflow-hidden border border-slate-300 shadow-sm">
-                        <div className="mib-ops-summary-head flex items-center gap-1.5 px-3 py-1.5 bg-slate-700">
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[82%] rounded-xl overflow-hidden border border-slate-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700">
                           <ClipboardList className="h-3 w-3 text-slate-200" />
                           <span className="text-[10px] font-semibold text-slate-200 uppercase tracking-widest">Ops Summary</span>
                           <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        <div className="mib-ops-summary-body px-3 py-2.5 bg-white">
+                        <div className="px-3 py-2.5 bg-white">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-sm font-semibold text-slate-900">{totalJobs} job{totalJobs !== 1 ? "s" : ""} — {summaryDateLabel}</span>
                             {allGood && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">All confirmed 🎉</span>}
@@ -6206,27 +6243,27 @@ const MessageList = memo(function MessageList({
                       key={msg.id}
                       ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
                       className={cn(
-                        "mib-feed-message group transition-colors duration-300",
-                        highlightedCmdMsgId === msg.id ? "is-highlighted" : "",
-                        isTaggedMsg ? "border-l-2 border-amber-400 pl-2 -ml-2 rounded-r-xl" : "",
-                        msg.threadParentId ? "border-l-2 border-sky-300" : ""
+                        "w-full group transition-colors duration-300",
+                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "",
+                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : "",
+                        msg.threadParentId ? "border-l-2 border-violet-300" : ""
                       )}
                     >
                       {/* Bubble + hover actions */}
-                      <div className={cn("mib-message-layout", isMine && !isAlert && "is-mine", isAlert && "is-alert")}>
+                      <div className={"relative flex items-end gap-2 w-full" + (isMine && !isAlert ? " justify-end" : "")}>
                         {/* Avatar — left for others, right for isMine */}
                         {!isAlert && !isMine && (
                           <div className="shrink-0 self-end mb-0.5">
                             {authorPhoto ? (
-                              <img src={authorPhoto} alt={msg.from} className="mib-message-avatar" />
+                              <img src={authorPhoto} alt={msg.from} className="w-7 h-7 rounded-full object-cover border border-white shadow-sm" />
                             ) : (
-                              <div className="mib-message-avatar flex items-center justify-center text-white text-[10px] font-bold" style={{ background: authorColor }}>{authorInitial}</div>
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border border-white shadow-sm" style={{ background: authorColor }}>{authorInitial}</div>
                             )}
                           </div>
                         )}
-                        <div className={"mib-message-bubble " + (isMine && !isAlert ? "ml-auto" : "")}>
+                        <div className={"rounded-2xl " + (isAlert ? "max-w-[560px] px-4 py-2.5 bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto px-5 py-4 bg-[#0f172a] text-white" : "w-full px-5 py-4 bg-[#f1f5f9] text-slate-900")}>
                           {/* Top row: sender label + role + time */}
-                          <div className="mib-message-meta flex items-center justify-between">
+                          <div className="flex items-center justify-between mb-2">
                             <span className={cn(
                               "text-xs",
                               isAlert ? "text-slate-400 font-normal" : isMine ? "text-slate-400 font-semibold" : "font-semibold"
@@ -6257,7 +6294,7 @@ const MessageList = memo(function MessageList({
                             <button
                               type="button"
                               onClick={() => setOpenThreadId(msg.threadParentId!)}
-                              className="mib-thread-context mb-2.5 w-full flex items-center gap-2 rounded-lg text-left group/thread"
+                              className="mb-2.5 w-full flex items-center gap-2 rounded-lg text-left group/thread"
                               style={{background:"#f5f1ff",border:"1px solid #d8ccff",borderRadius:"12px",padding:"9px 10px"}}
                             >
                               <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", "text-[#673fe4]")} />
@@ -6289,7 +6326,7 @@ const MessageList = memo(function MessageList({
                             <button
                               type="button"
                               onClick={() => msg.replyToId && scrollToCmdMsg(msg.replyToId)}
-                              className="mib-thread-context mb-2.5 w-full text-left cursor-pointer"
+                              className="mb-2.5 w-full text-left cursor-pointer"
                               style={{border:"1px solid #d8ccff",background:"#f5f1ff",color:"#673fe4",borderRadius:"12px",padding:"9px 10px",fontSize:"11px",display:"block"}}
                             >
                               <p className="font-semibold mb-0.5 truncate" style={{color:"#673fe4"}}>{msg.replyToAuthor ?? "Unknown"}</p>
@@ -6307,7 +6344,7 @@ const MessageList = memo(function MessageList({
                                   </div>
                                 )}
                                 {text.length > 0 && (
-                                  <p className="mib-message-body whitespace-pre-wrap break-words">
+                                  <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
                                     {text}
                                   </p>
                                 )}
@@ -6382,7 +6419,7 @@ const MessageList = memo(function MessageList({
                           {/* WhatsApp-style hover actions: Reply + quick-react strip */}
                         <div
                           className={cn(
-                            "mib-message-actions transition-opacity flex flex-col items-center gap-1 self-start mt-1",
+                            "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
                             isMine ? "order-first mr-1.5" : "ml-1.5"
                           )}
                         >
@@ -6444,7 +6481,7 @@ const MessageList = memo(function MessageList({
                         <button
                           onClick={() => setOpenThreadId(msg.id)}
                           className={cn(
-                            "mib-message-replies mt-1 ml-9 flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition",
+                            "mt-1 ml-9 flex items-center gap-1.5 text-xs font-medium text-violet-600 hover:text-violet-800 hover:bg-violet-50 px-2.5 py-1 rounded-full transition",
                             isMine ? "ml-auto mr-9" : "ml-9"
                           )}
                         >
@@ -9538,7 +9575,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   };
 
   return (
-    <div ref={containerRef} className="command-chat-rebuild flex flex-1 min-h-0 overflow-hidden" style={{ ['--workspace-gutter' as string]: '10px' } as React.CSSProperties}>
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden" style={{ ['--workspace-gutter' as string]: '16px' } as React.CSSProperties}>
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── My Assigned Leads Modal ────────────────────────────────────────────────────────────────────────────────── */}
@@ -9724,41 +9761,38 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── LEFT PANEL: Leads & Issues ── */}
       <div
-        className="mib-lead-rail shrink-0 flex flex-col overflow-hidden transition-[width] duration-200"
+        className="shrink-0 flex flex-col overflow-hidden transition-[width] duration-200"
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
         {/* Single scrollable area — header + content all scroll together */}
         {/* Single scrollable area */}
-        <div className="mib-lead-rail-scroll flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-        <div className="mib-lead-rail-card overflow-hidden">
-                <div className="mib-lead-rail-head">
+        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+        <div className="rounded-[28px] overflow-hidden" style={{background:"rgba(255,255,255,.88)",backdropFilter:"blur(18px)",border:"1px solid rgba(255,255,255,.72)",boxShadow:"0 20px 55px rgba(42,48,82,.10)",padding:"18px 14px"}}>
                 <div>
           {/* .eyebrow { font-size:11px; letter-spacing:.14em; color:#8b96ae; font-weight:800 } */}
-          <div className="mib-eyebrow">LEADS</div>
+          <div style={{fontSize:"11px",letterSpacing:".14em",color:"#8b96ae",fontWeight:800}}>✦ LEADS</div>
           {/* .leads-title { display:flex; justify-content:space-between; align-items:center; margin:4px 2px 12px } */}
           {/* .leads-title h2 { margin:0; font-family:Georgia,serif; font-size:26px } */}
-          <div className="flex items-center justify-between">
-            <h2 className="mib-lead-title">Hot leads</h2>
-            <Sparkles className="h-4 w-4 text-[#d8bb72]" />
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"4px 2px 12px"}}>
+            <h2 style={{margin:0,fontFamily:"Georgia,serif",fontSize:"26px"}}>Hot leads</h2>
+            <span style={{fontSize:"20px"}}>✨</span>
           </div>
           {/* .tabs { display:flex; border-bottom:1px solid #e8eaf2; margin-bottom:10px } */}
           {/* .tab { flex:1; border:0; background:transparent; padding:10px 4px; font-weight:700; color:#69748c; border-bottom:2px solid transparent } */}
           {/* .tab.active { color:#6f3cff; border-color:#6f3cff } */}
-          <div className="mib-lead-tabs">
-            <button onClick={() => setRightTab("leads")} className={cn("mib-lead-tab", rightTab === "leads" && "is-active")}>Hot leads</button>
-            <button onClick={() => setRightTab("followups")} className={cn("mib-lead-tab", rightTab === "followups" && "is-active")}>All leads</button>
-          </div>
+          <div style={{display:"flex",borderBottom:"1px solid #e8eaf2",marginBottom:"10px"}}>
+            <button onClick={() => setRightTab("leads")} style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="leads"?"#6f3cff":"#69748c",borderBottom:rightTab==="leads"?"2px solid #6f3cff":"2px solid transparent",cursor:"pointer"}}>Hot leads</button>
+            <button onClick={() => setRightTab("followups")} style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="followups"?"#6f3cff":"#69748c",borderBottom:rightTab==="followups"?"2px solid #6f3cff":"2px solid transparent",cursor:"pointer"}}>All leads</button>
           </div>
           {/* .filter-row { display:flex; gap:7px; margin:10px 0 } */}
           {/* .filter { border:0; background:transparent; color:#64708b; font-size:12px; padding:7px 10px; border-radius:999px } */}
           {/* .filter.active { background:#fff; border:1px solid #dfe3ef; color:#17213a; box-shadow:0 5px 12px rgba(40,46,75,.07) } */}
-          <div className="mib-lead-controls">
-          <div className="mib-lead-filters">
+          <div style={{display:"flex",gap:"7px",margin:"10px 0",flexWrap:"wrap"}}>
             {(["all","hot","new","follow"] as const).map((f) => {
               const active = (rightFilter ?? "all") === f;
               const labels: Record<string,string> = {all:"All",hot:"Hot",new:"New",follow:"Follow-ups"};
               return (
-                <button key={f} onClick={() => setRightFilter(f)} className={cn("mib-lead-filter", active && "is-active")}>
+                <button key={f} onClick={() => setRightFilter(f)} style={{border:active?"1px solid #dfe3ef":"0",background:active?"#fff":"transparent",color:active?"#17213a":"#64708b",fontSize:"12px",padding:"7px 10px",borderRadius:"999px",boxShadow:active?"0 5px 12px rgba(40,46,75,.07)":"none",cursor:"pointer",fontWeight:active?700:400}}>
                   {labels[f]}
                 </button>
               );
@@ -9767,10 +9801,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           {/* .search { display:flex; gap:8px; margin-bottom:12px } */}
           {/* input { width:100%; padding:11px 14px; border-radius:14px; border:1px solid #dfe3ee; background:#fff; outline:none } */}
 
-          <div>
-            <input className="mib-lead-search" type="text" value={rightSearch} onChange={(e) => setRightSearch(e.target.value)} placeholder="Search leads..." />
+          <div style={{display:"flex",gap:"8px",marginBottom:"12px"}}>
+            <input type="text" value={rightSearch} onChange={(e) => setRightSearch(e.target.value)} placeholder="Search leads..." style={{width:"100%",padding:"11px 14px",borderRadius:"14px",border:"1px solid #dfe3ee",background:"#fff",outline:"none"}} />
 
-          </div>
           </div>
           {/* ── Hot Leads Tray (shown when rightTab === "leads") ── */}
           {rightTab === "leads" && (
@@ -9797,7 +9830,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {rightTab === "leads" && (
           <>
-          <div className="mib-rail-divider" />
+          <div className="border-t border-slate-200" />
 
           {/* Auto-Raised Issues — only under leads tab */}
           <div>
@@ -9982,16 +10015,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       </div>
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
-      <div className="mib-center flex-1 min-w-0 flex flex-col overflow-hidden min-h-0" style={{ minWidth: MIN_CENTER }}>
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
         {/* White card wrapper with grey showing on sides */}
-        <div className="mib-center-card flex flex-col flex-1 min-h-0" style={{overflow: 'clip'}}>
+        <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0" style={{overflow: 'clip'}}>
         {/* Header */}
-        <div className="mib-command-header shrink-0">
+        <div className="px-4 pt-2 pb-2 border-b border-slate-200 bg-white shrink-0">
           {/* Compact single-row header */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="mib-command-title text-sm font-bold leading-none mr-2 whitespace-nowrap">MIB Command</span>
+                  <span className="text-sm font-bold text-slate-900 leading-none mr-2 whitespace-nowrap">MIB Command ✦</span>
                   {/* Stat cards */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -10103,32 +10136,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
             {/* Issue Engine pill */}
             <ActiveIssuesPill onClick={() => setIssueEngineOverlayOpen(true)} />
-            <div className="mib-header-tools" aria-label="Command Chat tools">
-              <button type="button" title="Mentions" onClick={unreadTagIds.length > 0 ? jumpToNextMention : () => setShowMentionHistory(true)}><Bell className="h-3.5 w-3.5" /></button>
-              <button type="button" title="Threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare className="h-3.5 w-3.5" /></button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button type="button" title="More command tools"><ChevronDown className="h-3.5 w-3.5" /></button>
-                </PopoverTrigger>
-                <PopoverContent className="mib-header-tool-menu" align="end" side="bottom">
-                  <button type="button" onClick={() => setLeadRepliesOpen(v => !v)}><MessageCircle className="h-3.5 w-3.5" />Lead chats</button>
-                  <button type="button" onClick={() => { setEmailsOpen(v => !v); setCsSmsOpen(false); setLeadRepliesOpen(false); setMissedCallsOpen(false); setTasksOpen(false); }}><Mail className="h-3.5 w-3.5" />Email inbox</button>
-                  <button type="button" onClick={() => { setMissedCallsOpen(v => !v); setCsSmsOpen(false); setLeadRepliesOpen(false); setTasksOpen(false); setEmailsOpen(false); }}><PhoneMissed className="h-3.5 w-3.5" />Missed calls</button>
-                  <button type="button" onClick={() => { setCsSmsOpen(v => !v); setLeadRepliesOpen(false); setMissedCallsOpen(false); setEmailsOpen(false); }}><Smartphone className="h-3.5 w-3.5" />Customer service SMS</button>
-                  <button type="button" onClick={() => setShowCallPanel(true)}><PhoneCall className="h-3.5 w-3.5" />AI call log</button>
-                  <button type="button" onClick={jumpToNextMadisonCard}><Sparkles className="h-3.5 w-3.5" />Madison focus</button>
-                  <button type="button" onClick={() => setShowDebrief(true)}><Bot className="h-3.5 w-3.5" />Madison briefing</button>
-                  <button type="button" onClick={() => setShowPaymentModal(true)}><DollarSign className="h-3.5 w-3.5" />Payment link</button>
-                </PopoverContent>
-              </Popover>
-            </div>
             {/* Agent presence circles — far right */}
             {agentList && agentList.length > 0 && (() => {
               const MAX_SHOW = 8;
               const visible = agentList.slice(0, MAX_SHOW);
               const overflow = agentList.length - MAX_SHOW;
               return (
-                <div className="mib-agent-stack flex items-center shrink-0" style={{ gap: 0 }}>
+                <div className="flex items-center shrink-0" style={{ gap: 0 }}>
                   {visible.map((ag, idx) => {
                     const status = senderStatusMap?.[ag.name] ?? "offline";
                     const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
@@ -10440,7 +10454,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
           {true && (
-            <div className="mib-command-tools shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
+            <div className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
@@ -11868,7 +11882,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           {/* WhatsApp single-row composer: [+] [textarea] [emoji] */}
           <div
             className={cn(
-              "mib-composer transition flex items-center gap-2",
+              "transition flex items-center gap-2",
               isDragging ? "ring-2 ring-slate-900/10" : ""
             )}
             style={{ margin: "0 16px 16px", padding: "10px 12px", border: isDragging ? "1px solid #b0b8cc" : "1px solid #e3e6ef", borderRadius: 18, background: isDragging ? "#f0f2f7" : "#fff", gap: 10 }}
@@ -12273,7 +12287,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── RIGHT PANEL: Madison's Moves (global); Operations remains customer-contextual elsewhere ── */}
       <div
-        className="mib-moves-host shrink-0 flex flex-col transition-[width] duration-200"
+        className="shrink-0 flex flex-col transition-[width] duration-200"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         <MadisonsMovesPanel />
@@ -12900,7 +12914,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </span>
                   )}
                 </div>
-                <div className="mib-command-metrics flex items-center gap-0">
+                <div className="flex items-center gap-2">
                   <input
                     type="time"
                     value={editedEtaTime}
