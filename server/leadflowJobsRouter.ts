@@ -1,7 +1,7 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
-import { bookingsAgentProcedure, router } from "./_core/trpc";
+import { bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
@@ -28,6 +28,63 @@ function parseBookingPhotoReference(bookingKey: string) {
 }
 
 export const leadflowJobsRouter = router({
+  customerProfile: opsChatProcedure.input(z.object({ phone: z.string().trim().min(7).max(30) })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const phone = input.phone.replace(/[^\d]/g, "").slice(-10);
+    if (phone.length !== 10) return { name: null, email: null, upcoming: null, history: [], payment: null };
+
+    const rows = await db.select({
+      id: leadflowJobs.id,
+      jobDate: leadflowJobs.jobDate,
+      customerName: leadflowJobs.customerName,
+      customerEmail: leadflowJobs.customerEmail,
+      serviceName: leadflowJobs.serviceName,
+      jobAddress: leadflowJobs.jobAddress,
+      bookingStatus: leadflowJobs.bookingStatus,
+      teamName: leadflowJobs.teamName,
+      jobTotalCents: leadflowJobs.jobTotalCents,
+      frequency: leadflowJobs.frequency,
+      bedrooms: leadflowJobs.bedrooms,
+      bathrooms: leadflowJobs.bathrooms,
+      customerNotes: leadflowJobs.customerNotes,
+      hasStripeCard: leadflowJobs.hasStripeCard,
+      paymentBrand: leadflowJobs.paymentBrand,
+      paymentLast4: leadflowJobs.paymentLast4,
+    }).from(leadflowJobs)
+      .where(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone}`)
+      .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.id))
+      .limit(50);
+
+    const history = rows.map((row) => ({
+      id: row.id,
+      date: row.jobDate,
+      serviceName: row.serviceName,
+      address: row.jobAddress,
+      status: row.bookingStatus,
+      teamName: row.teamName,
+      priceCents: row.jobTotalCents,
+      frequency: row.frequency,
+      bedrooms: row.bedrooms,
+      bathrooms: row.bathrooms,
+      notes: row.customerNotes,
+      paymentBrand: row.paymentBrand,
+      paymentLast4: row.paymentLast4,
+      hasStripeCard: Boolean(row.hasStripeCard),
+    }));
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const upcoming = history.filter((record) => record.date >= today && !/cancelled/i.test(record.status)).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+    const payment = history.find((record) => record.hasStripeCard || record.paymentBrand || record.paymentLast4) ?? null;
+
+    return {
+      name: rows[0]?.customerName ?? null,
+      email: rows.find((row) => row.customerEmail)?.customerEmail ?? null,
+      upcoming,
+      history,
+      payment: payment ? { hasStripeCard: payment.hasStripeCard, brand: payment.paymentBrand, last4: payment.paymentLast4 } : null,
+    };
+  }),
+
   list: bookingsAgentProcedure.input(listInput).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");

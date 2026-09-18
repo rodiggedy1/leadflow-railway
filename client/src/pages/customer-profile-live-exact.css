@@ -1,0 +1,53 @@
+/* Exact-review shell adapter: dynamic identities only; layout remains the copied review composition. */
+.customer-profile-live .cpr-live-avatar,
+.customer-profile-live .cpr-call-initials,
+.customer-profile-live .cpr-message-initials,
+.customer-profile-live .cpr-contact-initials {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.customer-profile-live .cpr-live-avatar {
+  background: linear-gradient(135deg, #536987, #263853);
+  color: #f3f7fd;
+}
+.customer-profile-live .cpr-message-initials,
+.customer-profile-live .cpr-contact-initials {
+  width: 31px;
+  height: 31px;
+  margin-top: 2px;
+  background: #dfe8f7;
+  border: 1px solid #cad7eb;
+  color: #45617f;
+  font-size: 10px;
+}
+.customer-profile-live .cpr-command-message.is-team .cpr-message-initials {
+  background: #1f453b;
+  border-color: #2e6254;
+  color: #d9f4e9;
+}
+.customer-profile-live .cpr-call-initials {
+  width: 40px;
+  height: 40px;
+  background: #dfe8f7;
+  border: 1px solid #cad7eb;
+  color: #45617f;
+  font-size: 12px;
+}
+.customer-profile-live .cpr-customer-call-identity > span:last-child { min-width: 0; }
+.customer-profile-live .cpr-booking-card { cursor: default; }
+.customer-profile-live .cpr-empty-copy { padding: 20px; margin: 0; }
+.customer-profile-live .cpr-notice {
+  margin: 0 26px 16px;
+  padding: 10px 12px;
+  border: 1px solid #d9e3ee;
+  border-radius: 10px;
+  background: #f3f7fc;
+  color: #53657a;
+  font-size: 12px;
+}
+.customer-profile-live .cpr-customer-call button:disabled { cursor: not-allowed; opacity: .58; }

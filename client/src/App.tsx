@@ -51,6 +51,7 @@ const HiringStatus = lazy(() => import("./pages/HiringStatus"));
 const TeamPay = lazy(() => import("./pages/TeamPay"));
 const TeamAvailability = lazy(() => import("./pages/TeamAvailability"));
 const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsExactLive"));
+const CustomerProfileExactLive = lazy(() => import("./pages/CustomerProfileExactLive"));
 const MissedCalls = lazy(() => import("./pages/MissedCalls"));
 const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
 const Performance = lazy(() => import("./pages/Performance"));
@@ -132,6 +133,7 @@ function ConfirmationCallsReviewRoute() { return <ReviewWorkspaceFrame><Confirma
 function AdminConfirmationCallsExactReviewRoute() { return <AdminPageGuard pageId="confirmation-calls"><ReviewWorkspaceFrame navActivePath="/review/confirmation-calls"><ConfirmationCallsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function SettingsReviewRoute() { return <ReviewWorkspaceFrame><SettingsReview /></ReviewWorkspaceFrame>; }
 function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
+function AdminCustomerProfileExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/customer-profile"><CustomerProfileExactLive /></ReviewWorkspaceFrame>; }
 function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSummaryReview /></ReviewWorkspaceFrame>; }
 function CustomerProfileReviewRoute() { return <ReviewWorkspaceFrame><CustomerProfileReview /></ReviewWorkspaceFrame>; }
 function ReviewsQualityReviewRoute() { return <ReviewWorkspaceFrame><ReviewsQualityReview /></ReviewWorkspaceFrame>; }
@@ -181,6 +183,7 @@ function Router() {
         <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/bookings"} component={NativeBookings} />
         <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />
+        <Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
         <Route path={"/admin/field-management"} component={FieldManagement} />
@@ -357,7 +360,7 @@ function GlobalOpsChat() {
 }
 
 function isReviewDerivedLiveShell(location: string) {
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls";
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile";
 }
 
 function ReviewSafeGlobalOpsChat() {
