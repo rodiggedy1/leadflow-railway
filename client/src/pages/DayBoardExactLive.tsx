@@ -200,11 +200,12 @@ function JobBlock({ job, selected, unread, onClick }: { job: LiveJob; selected: 
   const end = Math.min(BOARD_MINUTES, start + estimateDuration(job));
   const left = toPercent(Math.max(0, start));
   const width = toPercent(end - Math.max(0, start));
-  const config = statusConfig[normalizeStatus(job.jobStatus)];
+  const status = normalizeStatus(job.jobStatus);
+  const config = statusConfig[status];
   const Icon = config.icon;
   const smsRatio = job.stepsSuccess / Math.max(job.totalSteps, 1);
   const smsColor = smsRatio > .75 ? "#32c184" : smsRatio > .4 ? "#e3ae42" : "#e77478";
-  return <button type="button" onClick={onClick} aria-label={`${job.customerName ?? "Client"}, ${config.label}`} className={`dbr-job ${selected ? "is-selected" : ""}`} style={{ left: `${left}%`, width: `calc(${width}% - 4px)`, borderColor: config.color, color: config.color }}>
+  return <button type="button" onClick={onClick} aria-label={`${job.customerName ?? "Client"}, ${config.label}`} data-status={status} className={`dbr-job ${selected ? "is-selected" : ""}`} style={{ left: `${left}%`, width: `calc(${width}% - 4px)`, borderColor: config.color, color: config.color }}>
     <header><span className="dbr-job-client"><img src={customerPortrait(job.customerName)} alt={`Customer portrait for ${job.customerName ?? "Client"}`} /><span><Icon size={11} />{(job.customerName ?? "Client").split(" ")[0]}</span></span>{unread && <i />}</header>
     <p>{(job.jobAddress ?? "—").split(",")[0]}</p>
     <b className="dbr-sms-bar" style={{ width: `${smsRatio * 100}%`, background: smsColor }} />

@@ -35,9 +35,13 @@ describe("Day Board exact live shell", () => {
 
     expect(shell).not.toContain('from "@/components/DayBoard"');
     expect(shell).not.toContain('from "@/pages/FieldManagement"');
+    expect(shell).toContain("data-status={status}");
     expect(reviewStyles).toContain(".dbr-board-scroll{min-height:0;flex:1;overflow:auto");
     expect(reviewStyles).toContain(".dbr-drawer-scroll{min-height:0;flex:1;overflow:auto");
     expect(liveStyles).toContain(".dbr-live-shell .dbr-job{background:#202224!important}");
+    expect(liveStyles).toContain('.dbr-job[data-status="completed"]{background:#1a392a!important}');
+    expect(liveStyles).toContain('.dbr-job[data-status="on_the_way"]{background:linear-gradient');
+    expect(liveStyles).toContain('.dbr-job[data-status="in_progress"]{background:linear-gradient');
   });
 
   it("retains Day Board reads, polling, local read state, and action payloads", () => {
