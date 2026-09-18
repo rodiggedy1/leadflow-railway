@@ -17,6 +17,9 @@ describe("Customer Profile exact review shell", () => {
     expect(page).toContain("trpc.leads.getCsConversation.useQuery");
     expect(page).toContain("trpc.leadflowJobs.customerProfile.useQuery");
     expect(page).toContain("trpc.leadflowJobs.customerDirectory.useQuery");
+    expect(page).toContain("trpc.leadflowJobs.customerConversationSession.useQuery");
+    expect(page).toContain("const resolvedSessionId = hasSession ? sessionId : directoryConversationQuery.data?.sessionId ?? 0;");
+    expect(page).toContain("hasResolvedSession");
     expect(page).toContain("function CustomerDirectory");
     expect(page).toContain('data-live-customer-directory="true"');
     expect(page).toContain("hasRequestedDetail");
@@ -24,6 +27,7 @@ describe("Customer Profile exact review shell", () => {
     expect(page).toContain("CustomerCallEvidence");
     expect(page).toContain("CUSTOMER_CALL_BARS");
     expect(page).toContain("Continue in SMS");
+    expect(page).not.toContain("This customer was opened from the directory.");
     expect(page).not.toMatch(/\.useMutation\(/);
   });
 
@@ -31,6 +35,16 @@ describe("Customer Profile exact review shell", () => {
     const jobsRouter = read("server/leadflowJobsRouter.ts");
     expect(jobsRouter).toContain("customerProfile: opsChatProcedure");
     expect(jobsRouter).toContain("customerDirectory: opsChatProcedure");
+    expect(jobsRouter).toContain("customerConversationSession: opsChatProcedure");
+    expect(jobsRouter).toContain("conversationSessions.leadPhone");
+    expect(jobsRouter).toContain("orderBy(desc(conversationSessions.updatedAt), desc(conversationSessions.id))");
+    expect(jobsRouter).toContain('return { sessionId: sessions[0]?.sessionId ?? null };');
+    const conversationLookup = jobsRouter.slice(
+      jobsRouter.indexOf("customerConversationSession: opsChatProcedure"),
+      jobsRouter.indexOf("customerDirectory: opsChatProcedure")
+    );
+    expect(conversationLookup).toContain(".query(async ({ input }) =>");
+    expect(conversationLookup).not.toContain(".mutation(");
     expect(jobsRouter).toContain(".from(leadflowJobs)");
     expect(jobsRouter).toContain("const customers = new Map");
     expect(jobsRouter).toContain("customerNotes: leadflowJobs.customerNotes");
