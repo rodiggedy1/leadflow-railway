@@ -34,7 +34,7 @@ const RevenueAttribution = lazy(() => import("./pages/RevenueAttribution"));
 const CleanerDashboard = lazy(() => import("./pages/CleanerDashboard"));
 const CleanerPortal = lazy(() => import("./pages/CleanerPortal"));
 const JobTracker = lazy(() => import("./pages/JobTracker"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const SettingsExactLive = lazy(() => import("./pages/SettingsExactLive"));
 const CommandCenter = lazy(() => import("./pages/CommandCenter"));
 const TrackerFlow = lazy(() => import("./pages/TrackerFlow"));
 const FieldManagement = lazy(() => import("./pages/FieldManagement"));
@@ -130,7 +130,7 @@ function SmsReviewRoute() { return <ReviewWorkspaceFrame><SmsReview /></ReviewWo
 function TeamReviewRoute() { return <ReviewWorkspaceFrame><TeamReview /></ReviewWorkspaceFrame>; }
 function ConfirmationCallsReviewRoute() { return <ReviewWorkspaceFrame><ConfirmationCallsReview /></ReviewWorkspaceFrame>; }
 function SettingsReviewRoute() { return <ReviewWorkspaceFrame><SettingsReview /></ReviewWorkspaceFrame>; }
-function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsReview /></ReviewWorkspaceFrame></AdminPageGuard>; }
+function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSummaryReview /></ReviewWorkspaceFrame>; }
 function CustomerProfileReviewRoute() { return <ReviewWorkspaceFrame><CustomerProfileReview /></ReviewWorkspaceFrame>; }
 function ReviewsQualityReviewRoute() { return <ReviewWorkspaceFrame><ReviewsQualityReview /></ReviewWorkspaceFrame>; }
@@ -177,7 +177,7 @@ function Router() {
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
-        <Route path={"/admin/widget-config"} component={SettingsPage} />
+        <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/bookings"} component={NativeBookings} />
         <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/command-center"} component={CommandCenter} />

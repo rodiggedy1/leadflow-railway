@@ -1,0 +1,74 @@
+/*
+ * Live behavior layer for the exact approved Settings shell.
+ * This stylesheet introduces no outer layout or inherited header: it only gives
+ * production controls the same dimensions and surface hierarchy as the review
+ * component they occupy.
+ */
+.settings-live .settings-head>div>span { color: #92abc1; }
+.settings-live .settings-head>p { border-color: #2b495c; background: #18252e; color: #b8d4e5; }
+.settings-live .settings-head>p svg { color: #8ac9f0; }
+.settings-live .settings-flow:disabled { cursor: not-allowed; opacity: .72; }
+.settings-live .settings-flow-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.settings-live .settings-flow-grid .settings-flow:nth-child(4) { grid-column: span 3; min-height: 72px; }
+.settings-live .settings-live-loading,
+.settings-live .settings-live-empty { display: flex; align-items: center; gap: 8px; min-height: 86px; padding: 16px; color: #9299a2; font-size: 10px; }
+.settings-live .settings-live-loader { margin: 18px; color: #9dc8e8; }
+.settings-live .settings-live-fields { display: grid; gap: 0; }
+.settings-live .settings-live-field { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(220px, 1.2fr); align-items: center; gap: 16px; padding: 14px 16px; border-top: 1px solid #2c2c30; }
+.settings-live .settings-live-field:first-child { border-top: 0; }
+.settings-live .settings-live-field>div:first-child { min-width: 0; }
+.settings-live .settings-live-field b { display: block; color: #dedee3; font-size: 10px; }
+.settings-live .settings-live-field p { margin: 4px 0 0; color: #8b8b93; font-size: 9px; line-height: 1.4; }
+.settings-live .settings-live-input { display: flex; align-items: flex-end; gap: 7px; }
+.settings-live .settings-live-input textarea { width: 100%; min-height: 31px; max-height: 120px; resize: vertical; padding: 8px 9px; border: 1px solid #3c3c41; border-radius: 6px; outline: none; background: #242427; color: #dbdbe1; font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.settings-live .settings-live-input textarea:focus { border-color: #7da9ca; box-shadow: 0 0 0 2px rgba(125,169,202,.13); }
+.settings-live .settings-live-input .settings-save { flex: 0 0 auto; }
+.settings-live .settings-live-field .settings-toggle { justify-self: end; }
+.settings-live .settings-live-embed { padding: 16px; }
+.settings-live .settings-live-embed>div { max-width: none; }
+.settings-live .settings-live-embed .bg-card,
+.settings-live .settings-live-embed .bg-white,
+.settings-live .settings-live-embed .bg-muted { background-color: #212124 !important; }
+.settings-live .settings-live-embed .text-foreground,
+.settings-live .settings-live-embed .text-gray-900,
+.settings-live .settings-live-embed .text-gray-800,
+.settings-live .settings-live-embed .text-gray-700 { color: #e4e4e8 !important; }
+.settings-live .settings-live-embed .text-muted-foreground,
+.settings-live .settings-live-embed .text-gray-500,
+.settings-live .settings-live-embed .text-gray-400 { color: #96969e !important; }
+.settings-live .settings-live-embed .border,
+.settings-live .settings-live-embed .border-border,
+.settings-live .settings-live-embed .border-gray-200,
+.settings-live .settings-live-embed .divide-gray-100>*+* { border-color: #39393f !important; }
+.settings-live .settings-live-embed input,
+.settings-live .settings-live-embed textarea,
+.settings-live .settings-live-embed select { color: #e5e5e9 !important; border-color: #3b3b40 !important; background: #242427 !important; }
+.settings-live .settings-live-embed .bg-primary { background: #86b8d9 !important; color: #17212a !important; }
+.settings-live .settings-live-health>div { display: grid; gap: 4px; min-height: 68px; padding: 14px 16px; }
+.settings-live .settings-live-health b { color: #b7d6e7; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.settings-live .settings-live-health small { color: #898991; font-size: 9px; }
+.settings-live .settings-live-pay-tone { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; }
+.settings-live .settings-live-pay-tone.is-bonus { color: #8cd4b5; background: #173126; }
+.settings-live .settings-live-pay-tone.is-deduction { color: #e3a3a8; background: #3b2326; }
+.settings-live .settings-live-pay-tone.is-neutral { color: #b6c9ee; background: #202d43; }
+.settings-live .settings-pay-list article.is-inactive { opacity: .55; }
+.settings-live .settings-pay-list article>button:first-child.settings-toggle { width: 34px; padding: 0; }
+.settings-live .settings-live-custom-rules { margin-top: 14px; }
+.settings-live .settings-live-message-preview { margin-top: 5px !important; color: #abb7c1 !important; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.settings-live .settings-live-dialog { display: grid; gap: 12px; padding: 8px 0; }
+.settings-live .settings-live-dialog label { display: grid; gap: 6px; color: #555962; font-size: 12px; font-weight: 700; }
+.settings-live .settings-live-dialog select { height: 36px; padding: 0 9px; border: 1px solid #d6d6da; border-radius: 6px; background: white; color: #303038; }
+@media (max-width: 700px) {
+  .settings-live .settings-live-field { grid-template-columns: 1fr; gap: 9px; }
+  .settings-live .settings-live-field .settings-toggle { justify-self: start; }
+  .settings-live .settings-flow-grid .settings-flow:nth-child(4) { grid-column: auto; }
+}
+
+.settings-live .settings-live-openphone { margin-top: 14px; }
+.settings-live .settings-live-openphone-result { display: grid; gap: 8px; padding: 13px 16px; }
+.settings-live .settings-live-openphone-result>p { display: flex; align-items: center; gap: 5px; margin: 0; color: #8ed7b5; font-size: 9px; font-weight: 800; }
+.settings-live .settings-live-openphone-result>div { display: grid; grid-template-columns: minmax(0, 1fr) 135px auto; align-items: center; gap: 7px; padding-top: 8px; border-top: 1px solid #2c2c30; }
+.settings-live .settings-live-openphone-result>div>span { overflow: hidden; color: #d9d9df; font-size: 10px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.settings-live .settings-live-openphone-result select { height: 29px; padding: 0 7px; border: 1px solid #3c3c41; border-radius: 6px; outline: none; background: #242427; color: #d6d6dc; font-size: 9px; }
+.settings-live .settings-live-openphone-result .settings-save { height: 29px; }
+@media (max-width: 700px) { .settings-live .settings-live-openphone-result>div { grid-template-columns: 1fr; } }

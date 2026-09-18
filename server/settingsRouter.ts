@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { adminAgentProcedure, protectedProcedure, router } from "./_core/trpc";
+import { agentPageProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { appSettings, customPayRules } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -413,12 +413,14 @@ export async function getPayRules(): Promise<PayRules> {
   };
 }
 
+const settingsPageProcedure = agentPageProcedure("settings");
+
 export const settingsRouter = router({
   /**
-   * Book with AI draft access uses the same admin-agent session as the page guard.
-   * It is intentionally isolated from the legacy settings procedures below.
+   * Booking Widget access follows the same active-agent Settings permission
+   * enforced by the Settings page guard.
    */
-  getBookingWidgetDraft: adminAgentProcedure.query(async () => {
+  getBookingWidgetDraft: settingsPageProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     await seedDefaultSettings();
@@ -430,7 +432,7 @@ export const settingsRouter = router({
     return rows[0] ?? null;
   }),
 
-  updateBookingWidgetDraft: adminAgentProcedure
+  updateBookingWidgetDraft: settingsPageProcedure
     .input(z.object({ value: z.string().min(2).max(60_000) }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -446,7 +448,7 @@ export const settingsRouter = router({
   /**
    * Get all settings. Seeds defaults on first access.
    */
-  getAll: protectedProcedure.query(async () => {
+  getAll: settingsPageProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     await seedDefaultSettings();
@@ -457,7 +459,7 @@ export const settingsRouter = router({
   /**
    * Get a single setting by key.
    */
-  get: protectedProcedure
+  get: settingsPageProcedure
     .input(z.object({ key: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -474,7 +476,7 @@ export const settingsRouter = router({
   /**
    * Update a single setting value.
    */
-  update: protectedProcedure
+  update: settingsPageProcedure
     .input(z.object({ key: z.string(), value: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -490,7 +492,7 @@ export const settingsRouter = router({
    * Get the current pay rules (7 keys) as a typed object.
    * Used by the Pay Rules settings tab and the Cleaner Portal.
    */
-  getPayRules: protectedProcedure.query(async () => {
+  getPayRules: settingsPageProcedure.query(async () => {
     await seedDefaultSettings();
     return getPayRules();
   }),
@@ -498,7 +500,7 @@ export const settingsRouter = router({
   /**
    * Update multiple pay rule keys at once.
    */
-  updatePayRules: protectedProcedure
+  updatePayRules: settingsPageProcedure
     .input(
       z.object({
         fiveStarBonus:      z.number().min(0),
@@ -534,7 +536,7 @@ export const settingsRouter = router({
   /**
    * List all custom pay rules.
    */
-  listCustomPayRules: protectedProcedure.query(async () => {
+  listCustomPayRules: settingsPageProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const rows = await db.select().from(customPayRules).orderBy(customPayRules.createdAt);
@@ -544,7 +546,7 @@ export const settingsRouter = router({
   /**
    * Create a new custom pay rule.
    */
-  createCustomPayRule: protectedProcedure
+  createCustomPayRule: settingsPageProcedure
     .input(
       z.object({
         label:       z.string().min(1).max(128),
@@ -569,7 +571,7 @@ export const settingsRouter = router({
   /**
    * Update an existing custom pay rule.
    */
-  updateCustomPayRule: protectedProcedure
+  updateCustomPayRule: settingsPageProcedure
     .input(
       z.object({
         id:          z.number().int(),
@@ -598,7 +600,7 @@ export const settingsRouter = router({
   /**
    * Delete a custom pay rule permanently.
    */
-  deleteCustomPayRule: protectedProcedure
+  deleteCustomPayRule: settingsPageProcedure
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
