@@ -1,5 +1,6 @@
 /* Live behavior slots inside the approved Payments review composition. */
 .payments-live-exact .payments-bell:disabled{cursor:wait;opacity:.55}
+.payments-live-exact .payments-board{height:100%;min-height:0;overflow:hidden}
 .payments-live-exact .payment-list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#45454b transparent}
 .payments-live-exact .payments-workbench{height:590px;min-height:590px}
 .payments-live-exact .payment-detail{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#45454b transparent}
