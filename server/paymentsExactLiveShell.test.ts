@@ -48,6 +48,9 @@ describe("Payments exact live shell", () => {
     expect(shell).toContain("navigator.clipboard.writeText(text)");
     expect(shell).toContain("onClick={captureSelected}");
     expect(shell).toContain("onClick={cancelSelected}");
+    expect(shell).toContain("const primaryActionSlot = !selected ? null");
+    expect(shell).toContain("{primaryActionSlot}<section className=\"payment-lifecycle\">");
+    expect(shell.indexOf("{primaryActionSlot}<section className=\"payment-lifecycle\">")).toBeLessThan(shell.indexOf("payment-existing-fields payment-existing-fields--complete"));
     expect(router).toContain("generateCardAuthToken: agentProcedure");
     expect(router).toContain("createPreauth: agentProcedure");
     expect(router).toContain('capture_method: "manual"');
@@ -67,5 +70,6 @@ describe("Payments exact live shell", () => {
     expect(styles).toContain(".payments-live-exact .payment-detail{min-height:0;overflow-y:scroll;overscroll-behavior:contain");
     expect(styles).toContain(".payments-live-exact .payment-detail::-webkit-scrollbar-thumb");
     expect(styles).toContain(".payment-existing-fields--complete .payment-existing-fields__wide");
+    expect(styles).toContain(".payments-live-exact .payment-primary-actions{margin-top:10px");
   });
 });
