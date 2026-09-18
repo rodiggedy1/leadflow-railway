@@ -1,0 +1,57 @@
+/* Live-data adapters for the copied SMS review composition. */
+.sms-exact-live { width: calc(100% - var(--review-nav-width)); min-width: 0; flex: 1 1 auto; }
+.sms-exact-live > .operations-crm-review { width: 100%; min-width: 0; }
+.sms-exact-live .cic-top-tabs button:nth-child(2),
+.sms-exact-live .ocr-nav-primary button:nth-child(2) { display: none; }
+.sms-exact-live .operations-crm-review { min-height: 100dvh; }
+.sms-exact-live .cic-avatar.cic-live-avatar,
+.sms-exact-live .cic-thread-avatar.cic-live-avatar,
+.sms-exact-live .cic-ticket-avatar.cic-live-avatar,
+.sms-exact-live .cic-message-identity.cic-live-avatar {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #c46a85, #754d93);
+  font-style: normal;
+}
+.sms-exact-live .cic-live-avatar.is-team { background: linear-gradient(135deg, #18b989, #09886c); }
+.sms-exact-live .cic-owner-portrait { display: grid; place-items: center; width: 18px; height: 18px; margin-left: auto; border: 1px solid #555; border-radius: 50%; color: #fff; background: #c46a85; font-size: 7px; font-weight: 700; }
+.sms-exact-live .cic-message-meta { display: flex; align-items: center; gap: 5px; color: #777; font-size: 9px; }
+.sms-exact-live .cic-message-meta .cic-message-identity { width: 18px; height: 18px; flex-basis: 18px; border-radius: 50%; font-size: 6px; }
+.sms-exact-live .cic-message.outgoing .cic-message-meta { justify-content: flex-end; }
+.sms-exact-live .cic-live-empty { padding: 13px 8px; color: #777; font-size: 10px; line-height: 1.45; }
+.sms-exact-live .cic-live-media { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.sms-exact-live .cic-live-media a { display: block; max-width: 190px; }
+.sms-exact-live .cic-live-media img { display: block; width: 100%; max-height: 150px; border: 1px solid #3a3a3a; border-radius: 8px; object-fit: cover; }
+.sms-exact-live .cic-live-call { margin-left: 0; margin-right: auto; }
+.sms-exact-live .cic-live-call-detail { display: grid; gap: 8px; margin-top: 9px; }
+.sms-exact-live .cic-live-call-detail audio { width: 100%; height: 28px; accent-color: #30aa75; }
+.sms-exact-live .cic-live-call-detail p { margin: 0; color: #a0c6af; font-size: 10px; line-height: 1.45; }
+.sms-exact-live .cic-live-call-detail pre { max-height: 180px; margin: 0; overflow: auto; color: #b6c8bb; font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.sms-exact-live .cic-live-resolving { display: grid; min-height: 70px; place-items: center; border-color: #28664f; color: #8be0b9; background: #1e3029; font-size: 12px; font-weight: 600; }
+.sms-exact-live .cic-detail-layout { min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.sms-exact-live .cic-detail-layout > .cic-ticket-list,
+.sms-exact-live .cic-detail-layout > .cic-thread-main,
+.sms-exact-live .cic-detail-layout > .cic-right-panel { min-height: 0; height: 100%; }
+.sms-exact-live .cic-detail-layout > .cic-thread-main { overflow: hidden; }
+.sms-exact-live .cic-message p { overflow-wrap: anywhere; }
+.sms-exact-live .cic-live-emoji { position: relative; display: inline-flex; }
+.sms-exact-live .cic-live-emoji-picker { position: absolute; z-index: 120; bottom: calc(100% + 8px); left: 0; overflow: hidden; border: 1px solid #494949; border-radius: 10px; box-shadow: 0 18px 44px rgba(0, 0, 0, .55); }
+.sms-exact-live .cic-compose-actions > div .cic-live-emoji > button { width: 24px; padding: 0; justify-content: center; }
+.sms-exact-live .cic-live-tools-backdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .68); backdrop-filter: blur(3px); }
+.sms-exact-live .cic-live-tools { width: min(920px, 100%); height: min(760px, calc(100dvh - 48px)); overflow: hidden; border: 1px solid #444; border-radius: 13px; background: #171717; box-shadow: 0 28px 80px rgba(0, 0, 0, .6); }
+.sms-exact-live .cic-live-tools > header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #363636; color: #ededed; font-size: 13px; font-weight: 600; }
+.sms-exact-live .cic-live-tools > header button { display: grid; width: 27px; height: 27px; place-items: center; border: 0; border-radius: 50%; color: #a5a5a5; background: transparent; cursor: pointer; }
+.sms-exact-live .cic-live-tools > header button:hover { color: #fff; background: #2b2b2b; }
+.sms-exact-live .cic-live-tools-content { height: calc(100% - 48px); overflow: auto; padding: 16px; background: #f4f5f7; }
+.sms-exact-live .cic-live-tools-content > div { min-height: 100%; }
+.sms-exact-live .cic-team-job footer a { display: inline-flex; align-items: center; gap: 3px; padding: 4px 5px; border: 1px solid #3d3d3d; border-radius: 5px; color: #bbb; background: #262626; font-size: 8px; text-decoration: none; }
+.sms-exact-live .cic-live-new-message { max-height: min(720px, calc(100dvh - 40px)); overflow: auto; }
+.sms-exact-live .cic-modal footer .cic-send { border: 0; }
+.sms-exact-live .cic-modal button:disabled,
+.sms-exact-live .cic-composer button:disabled { cursor: not-allowed; opacity: .55; }
+@media (max-width: 760px) {
+  .sms-exact-live { width: 100%; }
+  .sms-exact-live .cic-live-tools-backdrop { padding: 0; }
+  .sms-exact-live .cic-live-tools { width: 100%; height: 100dvh; border: 0; border-radius: 0; }
+}

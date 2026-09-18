@@ -1,0 +1,459 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import Picker from "@emoji-mart/react";
+import emojiData from "@emoji-mart/data";
+import {
+  AlertTriangle,
+  Bell,
+  BookOpen,
+  Bot,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleDot,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  FileText,
+  HelpCircle,
+  Link2,
+  Lock,
+  Mail,
+  MapPin,
+  MessageCircle,
+  MoreHorizontal,
+  Phone,
+  Plus,
+  Search,
+  Send,
+  ShieldAlert,
+  Smile,
+  Sparkles,
+  Tag,
+  Users,
+  X,
+} from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { proxyRecordingUrl } from "@/lib/utils";
+import { useOpsStream } from "@/hooks/useOpsStream";
+import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
+import { batchCsInboxPhonesForNameLookup, mergeCsInboxNameMaps } from "@shared/csInboxPhoneNameBatching";
+import { getUnansweredUrgencyWindow, qualifiesForAtRisk } from "@shared/csAtRisk";
+import FAQPanel from "@/components/FAQPanel";
+import ObjectionsPanel from "@/components/ObjectionsPanel";
+import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
+import InsertResponseModal from "@/components/InsertResponseModal";
+import CsRightPanelClient from "@/components/CsRightPanelClient";
+import CsRightPanelTeam from "@/components/CsRightPanelTeam";
+import "./operations-crm-review.css";
+import "./cs-inbox-crm-review.css";
+import "./sms-review.css";
+import "./sms-leads-cohesion.css";
+import "./sms-identity-portraits.css";
+import "./sms-exact-live.css";
+
+type Lane = "New" | "Needs Response" | "Waiting on Customer" | "At Risk";
+type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
+type RawMessage = { role: string; content: string; ts?: number; senderName?: string; media?: string[] };
+type CallEntry = { id: number; outcome: string; summary: string | null; durationSeconds: number; recordingUrl: string | null; transcript: string | null; createdAt: number };
+
+type LiveConversation = {
+  id: number;
+  name: string;
+  initials: string;
+  phone: string;
+  queue: string | null;
+  lastMessage: string;
+  wait: string;
+  lastMsgTs?: number;
+  hasUnanswered: boolean;
+  csResolvedAt?: string | Date | null;
+  csStatusTier?: string | null;
+  lastSenderRole?: string | null;
+  lastCustomerMessageTs?: number | null;
+  messageCount?: number | null;
+  createdAt?: string | Date | number | null;
+  messages: { sender: MsgSender; text: string; time: string; ts?: number; senderName?: string; media?: string[] }[];
+  chips: string[];
+  priority: "P1" | "P2";
+  latestInteractionType?: "call" | "sms";
+  latestCallCreatedAt?: number | null;
+  latestCallDuration?: number | null;
+  latestCallSummary?: string | null;
+  latestCallRecordingUrl?: string | null;
+  lastInboundPhoneNumberId?: string | null;
+  personType?: "team" | "customer";
+};
+
+const LANES: Lane[] = ["New", "Needs Response", "Waiting on Customer", "At Risk"];
+const LANE_COLORS: Record<Lane, string> = {
+  New: "#3478f6",
+  "Needs Response": "#13b77a",
+  "Waiting on Customer": "#8b5cf6",
+  "At Risk": "#ff9f1a",
+};
+
+function isTeamMember(conversation: LiveConversation) {
+  return conversation.queue === "Teams" || conversation.personType === "team";
+}
+
+function relativeTime(timestamp?: number | null) {
+  if (!timestamp) return "—";
+  const age = Math.max(0, Date.now() - timestamp);
+  if (age < 60_000) return "now";
+  if (age < 3_600_000) return `${Math.floor(age / 60_000)}m`;
+  if (age < 86_400_000) return `${Math.floor(age / 3_600_000)}h`;
+  return `${Math.floor(age / 86_400_000)}d`;
+}
+
+function conversationTime(row: Record<string, unknown>, lastMessage?: RawMessage) {
+  const callTime = row.latestInteractionType === "call" ? Number(row.latestCallCreatedAt ?? 0) : 0;
+  return callTime || Number(row.lastMsgTs ?? 0) || lastMessage?.ts || 0;
+}
+
+function toConversation(row: Record<string, unknown>, names: Record<string, string>): LiveConversation {
+  let rawMessages: RawMessage[] = [];
+  try { rawMessages = JSON.parse(String(row.messageHistory ?? "[]")); } catch { rawMessages = []; }
+  const lastMessage = rawMessages.at(-1);
+  const phone = String(row.leadPhone ?? "");
+  const phone10 = phone.replace(/[^\d]/g, "").slice(-10);
+  const name = names[phone10] || String(row.leadName ?? "") || phone || "Unknown";
+  const effectiveTime = conversationTime(row, lastMessage);
+  const unanswered = Boolean(row.hasUnanswered ?? (lastMessage?.role === "user"));
+  return {
+    id: Number(row.id),
+    name,
+    initials: name.split(/\s+/).filter(Boolean).map(word => word[0]).join("").slice(0, 2).toUpperCase() || "?",
+    phone,
+    queue: typeof row.csQueue === "string" ? row.csQueue : null,
+    lastMessage: lastMessage?.content || String(row.lastMessageText ?? ""),
+    wait: relativeTime(effectiveTime),
+    lastMsgTs: Number(row.lastMsgTs ?? 0) || undefined,
+    hasUnanswered: unanswered,
+    csResolvedAt: (row.csResolvedAt as string | Date | null | undefined) ?? null,
+    csStatusTier: typeof row.csStatusTier === "string" ? row.csStatusTier : null,
+    lastSenderRole: typeof row.lastSenderRole === "string" ? row.lastSenderRole : null,
+    lastCustomerMessageTs: Number(row.lastCustomerMessageTs ?? 0) || null,
+    messageCount: Number(row.messageCount ?? rawMessages.length) || null,
+    createdAt: (row.createdAt as string | Date | number | null | undefined) ?? null,
+    messages: rawMessages.map(message => ({
+      sender: message.role === "user" ? "client" : message.role === "assistant" ? "agent" : message.role === "note" ? "note" : "system",
+      text: message.content,
+      time: message.ts ? new Date(message.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      ts: message.ts,
+      senderName: message.senderName,
+      media: message.media ?? [],
+    })),
+    chips: [typeof row.csStatusTier === "string" ? row.csStatusTier : null, unanswered ? "Needs Reply" : null].filter(Boolean) as string[],
+    priority: unanswered ? "P1" : "P2",
+    latestInteractionType: row.latestInteractionType === "call" ? "call" : "sms",
+    latestCallCreatedAt: Number(row.latestCallCreatedAt ?? 0) || null,
+    latestCallDuration: Number(row.latestCallDuration ?? 0) || null,
+    latestCallSummary: typeof row.latestCallSummary === "string" ? row.latestCallSummary : null,
+    latestCallRecordingUrl: typeof row.latestCallRecordingUrl === "string" ? row.latestCallRecordingUrl : null,
+    lastInboundPhoneNumberId: typeof row.lastInboundPhoneNumberId === "string" ? row.lastInboundPhoneNumberId : null,
+    personType: row.personType === "team" ? "team" : "customer",
+  };
+}
+
+function getCreatedTimestamp(conversation: LiveConversation) {
+  if (!conversation.createdAt) return 0;
+  return typeof conversation.createdAt === "number" ? conversation.createdAt : new Date(conversation.createdAt).getTime();
+}
+
+function getLane(conversation: LiveConversation, now: number): Lane {
+  const day = 24 * 60 * 60 * 1000;
+  if (conversation.latestInteractionType === "call" && conversation.latestCallCreatedAt) {
+    const isFresh = now - conversation.latestCallCreatedAt < day && getCreatedTimestamp(conversation) >= now - day && (conversation.messageCount ?? 999) <= 2;
+    return isFresh ? "New" : "Needs Response";
+  }
+  if (conversation.csResolvedAt) return "Waiting on Customer";
+  const urgency = getUnansweredUrgencyWindow({
+    lastSenderRole: conversation.lastSenderRole,
+    lastCustomerMessageTs: conversation.lastCustomerMessageTs,
+    now,
+  });
+  if (urgency === "at_risk") return "At Risk";
+  if (urgency === "needs_response") return "Needs Response";
+  const isNew = conversation.lastSenderRole === "user" && getCreatedTimestamp(conversation) >= now - day && (conversation.messageCount ?? 999) <= 2;
+  return isNew ? "New" : "Waiting on Customer";
+}
+
+function LiveAvatar({ conversation, className }: { conversation: LiveConversation; className: string }) {
+  return <span className={`${className} cic-live-avatar ${isTeamMember(conversation) ? "is-team" : ""}`} aria-label={conversation.name}>{conversation.initials}</span>;
+}
+
+function CrmSidebar({ total, needsResponse, atRisk, teams }: { total: number; needsResponse: number; atRisk: number; teams: number }) {
+  return (
+    <aside className="ocr-sidebar cic-sidebar">
+      <div className="ocr-brand"><div className="ocr-logo-mark"><span /><span /><span /><span /></div><div><strong>Sales CRM</strong><span>Company pipeline</span></div></div>
+      <div className="ocr-nav-scroll">
+        <nav className="ocr-nav-primary"><button className="is-active" type="button"><MessageCircle />All Conversations <b>{total}</b></button><button type="button"><Mail />Email <b>—</b></button><button type="button"><Sparkles />Next Best Action</button></nav>
+        <div className="ocr-nav-group"><p>VIEWS</p><button type="button"><i className="ocr-pipeline-dot dot-yellow" />Needs Response <b>{needsResponse}</b></button><button type="button"><i className="ocr-pipeline-dot dot-pink" />Unanswered <b>{atRisk}</b></button><button type="button"><i className="ocr-pipeline-dot dot-violet" />Hot Leads</button></div>
+        <div className="ocr-nav-group"><p>TEAMS</p><button type="button"><Users />Dispatch <b>{teams}</b></button></div>
+        <div className="ocr-nav-group"><p>REPORTING</p><button type="button"><CircleDot />Response health</button><button type="button"><AlertTriangle />At risk</button></div>
+      </div>
+      <div className="ocr-nav-utility"><button type="button"><Users />Invite teammates</button><button type="button"><HelpCircle />Help</button></div>
+      <div className="ocr-sidebar-footer"><div className="ocr-trial"><div><strong>14 Days</strong><span>Left on trials</span></div><button type="button"><CreditCard />Add Billings</button></div></div>
+    </aside>
+  );
+}
+
+function LiveNewMessageModal({ close, refresh }: { close: () => void; refresh: () => void }) {
+  const [tab, setTab] = useState<"customer" | "lead">("customer");
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [leadDetails, setLeadDetails] = useState("");
+  const [leadDraft, setLeadDraft] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadName, setLeadName] = useState("");
+  const [stage, setStage] = useState<"paste" | "review">("paste");
+  const sendWorkspaceMessage = trpc.leads.sendWorkspaceMessage.useMutation({ onSuccess: () => { refresh(); close(); } });
+  const generateFirstMessage = trpc.tools.generateFirstMessage.useMutation({
+    onSuccess: result => { setLeadDraft(result.message ?? ""); setStage("review"); },
+  });
+  const sendCustomer = () => {
+    if (!phone.trim() || !message.trim()) return;
+    sendWorkspaceMessage.mutate({ phone: phone.trim(), message: message.trim(), name: name.trim() || undefined });
+  };
+  const analyseLead = () => {
+    if (!leadDetails.trim()) return;
+    generateFirstMessage.mutate({ bookingDetails: leadDetails.trim() });
+  };
+  const sendLead = () => {
+    if (!leadPhone.trim() || !leadDraft.trim()) return;
+    sendWorkspaceMessage.mutate({ phone: leadPhone.trim(), message: leadDraft.trim(), name: leadName.trim() || undefined });
+  };
+  return (
+    <div className="cic-modal-backdrop" role="dialog" aria-modal="true" aria-label="New message">
+      <section className="cic-modal cic-live-new-message">
+        <header><span><MessageCircle />New Message</span><button type="button" onClick={close} aria-label="Close"><X /></button></header>
+        <nav><button type="button" className={tab === "customer" ? "is-active" : ""} onClick={() => setTab("customer")}>Customer</button><button type="button" className={tab === "lead" ? "is-active" : ""} onClick={() => setTab("lead")}>Lead</button></nav>
+        {tab === "customer" ? <>
+          <label>Customer phone<input value={phone} onChange={event => setPhone(event.target.value)} placeholder="(202) 555-0000" /></label>
+          <label>Customer name<input value={name} onChange={event => setName(event.target.value)} placeholder="Customer name" /></label>
+          <label>Message<textarea value={message} onChange={event => setMessage(event.target.value)} placeholder="Write a message…" /></label>
+          <footer><button type="button" onClick={close}>Cancel</button><button className="cic-send" type="button" onClick={sendCustomer} disabled={sendWorkspaceMessage.isPending || !phone.trim() || !message.trim()}>{sendWorkspaceMessage.isPending ? "Sending…" : "Send"}<Send size={13} /></button></footer>
+        </> : stage === "paste" ? <>
+          <label>Paste lead details<textarea value={leadDetails} onChange={event => setLeadDetails(event.target.value)} placeholder="Paste the lead exactly as received. Madison will extract the details and prepare the first message." /></label>
+          <footer><button type="button" onClick={close}>Cancel</button><button className="cic-send" type="button" onClick={analyseLead} disabled={generateFirstMessage.isPending || !leadDetails.trim()}>{generateFirstMessage.isPending ? "Analyzing…" : "Analyze lead"}<Sparkles size={13} /></button></footer>
+        </> : <>
+          <label>Customer phone<input value={leadPhone} onChange={event => setLeadPhone(event.target.value)} placeholder="(202) 555-0000" /></label>
+          <label>Customer name<input value={leadName} onChange={event => setLeadName(event.target.value)} placeholder="Customer name" /></label>
+          <label>First message<textarea value={leadDraft} onChange={event => setLeadDraft(event.target.value)} placeholder="Write a message…" /></label>
+          <footer><button type="button" onClick={() => setStage("paste")}>Back</button><button className="cic-send" type="button" onClick={sendLead} disabled={sendWorkspaceMessage.isPending || !leadPhone.trim() || !leadDraft.trim()}>{sendWorkspaceMessage.isPending ? "Sending…" : "Send & create"}<Send size={13} /></button></footer>
+        </>}
+      </section>
+    </div>
+  );
+}
+
+function LiveCustomerPanel({ conversation, openTools }: { conversation: LiveConversation; openTools: () => void }) {
+  const { data: profile } = trpc.leads.getClientProfile.useQuery({ phone: conversation.phone }, { enabled: !!conversation.phone, refetchOnWindowFocus: false, refetchInterval: 120_000 });
+  const today = profile?.todayJob;
+  return <aside className="cic-right-panel">
+    <section className="cic-profile-head"><LiveAvatar conversation={conversation} className="cic-avatar big" /><div><b>{profile?.name ?? conversation.name}</b><span>{profile?.firstBookingDate ? `Customer since ${new Date(profile.firstBookingDate).getFullYear()}` : "Customer"}</span><strong><Phone size={12} />{conversation.phone}</strong></div></section>
+    <section><header><b>Missions</b><button type="button" onClick={openTools}>+ Add</button></header>{[[CreditCard, "Send Payment Link", "Generate & send a payment link via SMS."], [FileText, "Send Quote", "Build & send a personalized quote."], [FileText, "Send Service Agreement", "Send the Satisfaction Guarantee via SMS."]].map(([Icon, label, copy]) => { const MissionIcon = Icon as typeof CreditCard; return <button className="cic-mission" key={label as string} type="button" onClick={openTools}><i><MissionIcon size={14} /></i><span><b>{label as string}</b><small>{copy as string}</small></span></button>; })}</section>
+    <section><h3><CalendarDays />Today’s job</h3>{today ? <div className="cic-job"><header><b>{today.serviceDateTime ? new Date(today.serviceDateTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Scheduled"}</b><span>{today.jobStatus ?? today.bookingStatus ?? "Scheduled"}</span></header><strong>{(today as { teamName?: string | null }).teamName ?? "Team pending"}</strong>{today.jobAddress && <p><MapPin size={12} />{today.jobAddress}</p>}<small>{today.serviceType ?? "Service details unavailable"}</small></div> : <div className="cic-live-empty">No job scheduled for today.</div>}</section>
+    <section><h3>Client profile</h3><div className="cic-metric-grid"><span><small>Frequency</small><b>{profile?.frequency ?? "—"}</b></span><span><small>Avg price</small><b>{profile?.avgPrice ? `$${profile.avgPrice}` : "—"}</b></span><span><small>Total bookings</small><b>{profile?.totalBookings ?? "—"}</b></span><span><small>Last booking</small><b>{profile?.recentJobs?.[0]?.date ?? "—"}</b></span></div></section>
+    <section><div className="cic-know"><header><Bot size={14} />Know before you reply</header><p><b>Last job</b>{profile?.recentJobs?.[0] ? `${profile.recentJobs[0].serviceType ?? "Service"} on ${profile.recentJobs[0].date ?? "a prior date"}` : "No prior booking history."}</p><p><b>History</b>{profile?.totalBookings ? `${profile.totalBookings} recorded booking${profile.totalBookings === 1 ? "" : "s"}.` : "No booking count available."}</p><p><b>Thread</b>{conversation.hasUnanswered ? "Customer is awaiting a reply." : "No current reply is required."}</p></div></section>
+    <section><div className="cic-insight"><header><Sparkles size={14} />AI insight</header><p>Review the live customer and booking context before sending. Keep the reply concise and confirm facts that affect the appointment.</p></div></section>
+    <section><h3>Recent jobs</h3><div className="cic-recent">{profile?.recentJobs?.length ? profile.recentJobs.slice(0, 2).map((job, index) => <span key={`${job.date}-${index}`}><b>{job.serviceType ?? "Service"}</b><small>{job.date ?? "—"} · {job.status ?? "—"}</small></span>) : <span><small>No recent jobs available.</small></span>}</div></section>
+    <section><h3>Thread status</h3><div className="cic-status-stack"><button type="button" onClick={openTools}><Tag />Customers<ChevronRight /></button><button type="button" onClick={openTools}><CircleDot />{conversation.csStatusTier ?? getLane(conversation, Date.now())}<ChevronRight /></button><button type="button" onClick={openTools}><Bell />{conversation.wait} since last message<ChevronRight /></button></div></section>
+  </aside>;
+}
+
+function LiveTeamPanel({ conversation, openTools }: { conversation: LiveConversation; openTools: () => void }) {
+  const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery({ phone: conversation.phone }, { enabled: !!conversation.phone, refetchOnWindowFocus: false });
+  const { data: todayJobs } = trpc.leads.getCleanerTodayJobs.useQuery({ cleanerProfileId: cleanerProfile?.id ?? 0 }, { enabled: !!cleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 });
+  return <aside className="cic-right-panel">
+    <section className="cic-profile-head team"><LiveAvatar conversation={conversation} className="cic-avatar big" /><div><b>{conversation.name}</b><span>Team member</span><strong><Phone size={12} />{conversation.phone}</strong></div></section>
+    <section><header><b>Missions</b><button type="button" onClick={openTools}>+ Add</button></header><button className="cic-mission" type="button" onClick={openTools}><i><MapPin size={14} /></i><span><b>Get ETA</b><small>Open the team action panel.</small></span></button></section>
+    <section><h3><CalendarDays />Today’s jobs</h3>{!todayJobs ? <div className="cic-live-empty">Loading today’s jobs…</div> : todayJobs.length === 0 ? <div className="cic-live-empty">No jobs scheduled today.</div> : todayJobs.map(job => <div className="cic-team-job" key={job.id}><header><b>{job.serviceDateTime ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}</b><span className={job.jobStatus === "running_late" ? "is-late" : ""}>{String(job.jobStatus ?? job.bookingStatus ?? "Scheduled").replaceAll("_", " ")}</span></header><strong>{job.customerName || "Customer"}</strong>{job.jobAddress && <p><MapPin size={12} />{job.jobAddress}</p>}{job.jobStatus === "running_late" && job.delayMinutes ? <small><AlertTriangle size={11} />Running {job.delayMinutes} min late</small> : null}<footer><button type="button" onClick={openTools}><Phone />Call client</button><button type="button" onClick={openTools}><MessageCircle />Text client</button>{job.bookingId ? <a href={`https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`} target="_blank" rel="noreferrer">L27</a> : null}</footer></div>)}</section>
+    <section><h3>Team actions</h3><div className="cic-team-actions"><button type="button" onClick={openTools}><Link2 />Send magic link</button><button type="button" onClick={openTools}><Copy />Copy magic link</button></div></section>
+    <section><h3>Thread status</h3><div className="cic-status-stack"><button type="button" onClick={openTools}><Users />Teams<ChevronRight /></button><button type="button" onClick={openTools}><CircleDot />{conversation.csStatusTier ?? getLane(conversation, Date.now())}<ChevronRight /></button><button type="button" onClick={openTools}><Bell />{conversation.wait} since last message<ChevronRight /></button></div></section>
+  </aside>;
+}
+
+function LiveToolDialog({ conversation, close, setCompose, messages }: { conversation: LiveConversation; close: () => void; setCompose: (value: string) => void; messages: { sender: MsgSender; text: string; ts?: number }[] }) {
+  return <div className="cic-live-tools-backdrop" role="dialog" aria-modal="true" aria-label="Conversation actions" onClick={close}><section className="cic-live-tools" onClick={event => event.stopPropagation()}><header><span>Conversation actions</span><button type="button" onClick={close}><X /></button></header><div className="cic-live-tools-content">{isTeamMember(conversation) ? <CsRightPanelTeam selected={{ id: conversation.id, name: conversation.name, initials: conversation.initials, phone: conversation.phone, queue: conversation.queue, status: conversation.csStatusTier ?? undefined, wait: conversation.wait }} /> : <CsRightPanelClient selected={{ id: conversation.id, name: conversation.name, initials: conversation.initials, phone: conversation.phone, queue: conversation.queue, status: conversation.csStatusTier ?? undefined, wait: conversation.wait, stats: { bookings: 0, complaints: 0 } }} setCompose={setCompose} messages={messages} />}</div></section></div>;
+}
+
+export default function SmsExactLive() {
+  const utils = trpc.useUtils();
+  const [selected, setSelected] = useState<LiveConversation | null>(null);
+  const [search, setSearch] = useState("");
+  const [detailSearch, setDetailSearch] = useState("");
+  const [detailFilter, setDetailFilter] = useState<"All" | "Leads" | "Teams">("All");
+  const [showNewMessage, setShowNewMessage] = useState(false);
+  const [compose, setCompose] = useState("");
+  const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
+  const [faqOpen, setFaqOpen] = useState(false);
+  const [objectionsOpen, setObjectionsOpen] = useState(false);
+  const [worldClassOpen, setWorldClassOpen] = useState(false);
+  const [responsesOpen, setResponsesOpen] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const [expandedCalls, setExpandedCalls] = useState<Set<number>>(new Set());
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const selectedIdRef = useRef<number | null>(null);
+  const selectedRef = useRef<LiveConversation | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const autoDraftedForRef = useRef<number | null>(null);
+  const threadRef = useRef<HTMLElement>(null);
+  const emojiRef = useRef<HTMLDivElement>(null);
+
+  const { data: rawRows, refetch: refetchInbox, isLoading: inboxLoading } = trpc.leads.listCsInbox.useQuery(
+    { showResolved: true },
+    { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 5_000 },
+  );
+  const phoneBatches = useMemo(() => batchCsInboxPhonesForNameLookup(rawRows?.map(row => row.leadPhone)), [rawRows]);
+  const nameCache = useRef(new Map<string, { expires: number; names: Record<string, string> }>());
+  const [names, setNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const missing = phoneBatches.filter(batch => (nameCache.current.get(batch.join(","))?.expires ?? 0) <= Date.now());
+    const publish = () => { if (!cancelled) setNames(mergeCsInboxNameMaps(phoneBatches.map(batch => nameCache.current.get(batch.join(","))?.names))); };
+    if (!missing.length) { publish(); return () => { cancelled = true; }; }
+    void Promise.allSettled(missing.map(async batch => {
+      const fetched = await utils.leads.batchResolveNames.fetch({ phones: batch });
+      nameCache.current.set(batch.join(","), { names: fetched, expires: Date.now() + 60_000 });
+    })).then(publish);
+    return () => { cancelled = true; };
+  }, [phoneBatches, utils]);
+
+  const conversations = useMemo(() => (rawRows ?? []).map(row => toConversation(row as unknown as Record<string, unknown>, names)), [rawRows, names]);
+  useEffect(() => { selectedIdRef.current = selected?.id ?? null; selectedRef.current = selected; }, [selected]);
+  useEffect(() => {
+    if (!selected) return;
+    const refreshed = conversations.find(conversation => conversation.id === selected.id);
+    if (refreshed && refreshed.lastInboundPhoneNumberId !== selected.lastInboundPhoneNumberId) setSelected(current => current?.id === refreshed.id ? { ...current, lastInboundPhoneNumberId: refreshed.lastInboundPhoneNumberId } : current);
+  }, [conversations, selected]);
+
+  useOpsStream({ onLeadUpdate: () => {
+    void utils.leads.listCsInbox.invalidate();
+    if (selectedIdRef.current) void utils.leads.getCsConversation.invalidate({ sessionId: selectedIdRef.current });
+  } }, { label: "SmsExactLive" });
+
+  const now = Date.now();
+  const activeConversations = useMemo(() => conversations.filter(conversation => {
+    if (!conversation.csResolvedAt) return true;
+    const resolved = new Date(conversation.csResolvedAt).getTime();
+    return conversation.latestInteractionType === "call" && (conversation.latestCallCreatedAt ?? 0) > resolved;
+  }), [conversations]);
+  const needsResponseCount = activeConversations.filter(conversation => getUnansweredUrgencyWindow({ lastSenderRole: conversation.lastSenderRole, lastCustomerMessageTs: conversation.lastCustomerMessageTs, now }) === "needs_response").length;
+  const atRiskCount = activeConversations.filter(conversation => qualifiesForAtRisk({ lastSenderRole: conversation.lastSenderRole, lastCustomerMessageTs: conversation.lastCustomerMessageTs, now })).length;
+  const teamCount = activeConversations.filter(isTeamMember).length;
+  const columns = useMemo(() => LANES.map(label => ({ label, conversations: activeConversations.filter(conversation => {
+    const haystack = `${conversation.name} ${conversation.phone} ${conversation.lastMessage} ${conversation.csStatusTier ?? ""}`.toLowerCase();
+    return haystack.includes(search.trim().toLowerCase()) && getLane(conversation, now) === label;
+  }).sort((a, b) => (b.latestCallCreatedAt ?? b.lastMsgTs ?? 0) - (a.latestCallCreatedAt ?? a.lastMsgTs ?? 0)) })), [activeConversations, search, now]);
+
+  const syncQuoOutbound = trpc.opsChat.syncCsOutboundMessages.useMutation({ onSuccess: (_result, variables) => { void utils.leads.listCsInbox.invalidate({ showResolved: true }); void utils.leads.getCsConversation.invalidate({ sessionId: variables.sessionId }); } });
+  useEffect(() => {
+    if (!selected || !selected.phone.trim()) return;
+    syncQuoOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone });
+  // This is the established outbound sync contract, scoped only to the selected conversation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.phone]);
+
+  const { data: detail } = trpc.leads.getCsConversation.useQuery({ sessionId: selected?.id ?? 0 }, { enabled: !!selected, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 });
+  const { data: clientProfile } = trpc.leads.getClientProfile.useQuery({ phone: selected?.phone ?? "" }, { enabled: !!selected && !isTeamMember(selected), staleTime: 60_000, refetchOnWindowFocus: false });
+  const detailMessages = useMemo(() => {
+    const detailWithHistory = detail as (typeof detail & { messageHistory?: string }) | undefined;
+    if (!detailWithHistory?.messageHistory) return selected?.messages ?? [];
+    let source: RawMessage[] = [];
+    try { source = JSON.parse(detailWithHistory.messageHistory); } catch { source = []; }
+    return source.map(message => ({ sender: message.role === "user" ? "client" : message.role === "assistant" ? "agent" : message.role === "note" ? "note" : "system", text: message.content, time: message.ts ? new Date(message.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "", ts: message.ts, senderName: message.senderName, media: message.media ?? [] })) as LiveConversation["messages"];
+  }, [detail?.messageHistory, selected?.messages]);
+  const calls = useMemo(() => ((detail as { calls?: CallEntry[] } | undefined)?.calls ?? []), [detail]);
+  const timeline = useMemo(() => [
+    ...detailMessages.map(message => ({ type: "message" as const, timestamp: message.ts ?? 0, message })),
+    ...calls.map(call => ({ type: "call" as const, timestamp: call.createdAt, call })),
+  ].sort((a, b) => a.timestamp - b.timestamp), [detailMessages, calls]);
+  useEffect(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight; }, [timeline, selected?.id]);
+
+  const sendMessage = trpc.leads.sendMessage.useMutation({
+    onSuccess: (_result, variables) => {
+      setCompose("");
+      const timestamp = Date.now();
+      utils.leads.listCsInbox.setData({ showResolved: true }, old => old?.map(row => {
+        if (row.id !== variables.sessionId) return row;
+        const rowWithHistory = row as typeof row & { messageHistory?: string };
+        return {
+          ...row,
+          messageHistory: JSON.stringify([...(JSON.parse(rowWithHistory.messageHistory ?? "[]") as RawMessage[]), { role: "assistant", content: variables.message, ts: timestamp }]),
+          hasUnanswered: false,
+          lastSenderRole: "assistant",
+          lastMsgTs: timestamp,
+        } as unknown as typeof row;
+      }));
+      utils.leads.getCsConversation.setData({ sessionId: variables.sessionId }, old => old ? { ...old, messageHistory: JSON.stringify([...(JSON.parse(old.messageHistory ?? "[]") as RawMessage[]), { role: "assistant", content: variables.message, ts: timestamp }]) } : old);
+    },
+  });
+  const saveNote = trpc.opsChat.addCsInbox2Note.useMutation({
+    onSuccess: (result, variables) => {
+      setCompose(""); setComposeMode("reply");
+      utils.leads.getCsConversation.setData({ sessionId: variables.sessionId }, old => old ? { ...old, messageHistory: JSON.stringify([...(JSON.parse(old.messageHistory ?? "[]") as RawMessage[]), result.note]) } : old);
+    },
+  });
+  const resolveSession = trpc.leads.resolveSession.useMutation({ onSuccess: (_result, variables) => {
+    setResolvingId(variables.sessionId);
+    window.setTimeout(() => { setResolvingId(null); setSelected(null); utils.leads.listCsInbox.setData({ showResolved: true }, old => old?.map(row => row.id === variables.sessionId ? ({ ...row, csResolvedAt: new Date() } as unknown as typeof row) : row)); void utils.leads.getUnansweredCsCount.invalidate(); }, 900);
+  } });
+  const sendCurrent = () => {
+    if (!selected || !compose.trim()) return;
+    const fromNumberId = getCsInboxReplyPhoneNumberIdForSelectedConversation(selected, conversations);
+    sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId, source: "cs_inbox" });
+  };
+  const saveCurrentNote = () => { if (selected && compose.trim()) saveNote.mutate({ sessionId: selected.id, note: compose.trim() }); };
+
+  const csAutoDraft = trpc.opsChat.csReply.useMutation({ onSuccess: result => { if (typeof result.reply === "string") setCompose(result.reply); } });
+  useEffect(() => {
+    if (!selected || !detail || detail.sessionId !== selected.id || autoDraftedForRef.current === selected.id) return;
+    autoDraftedForRef.current = selected.id;
+    const controller = new AbortController();
+    streamAbortRef.current?.abort(); streamAbortRef.current = controller;
+    const conversationContext = detailMessages.slice(-20).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n");
+    const classifyContext = detailMessages.slice(-5).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n");
+    const jobContext = clientProfile?.todayJob ? `${clientProfile.todayJob.serviceType ?? "Service"}\n${clientProfile.todayJob.jobAddress ?? ""}` : "";
+    void (async () => {
+      try {
+        const response = await fetch("/api/cs-reply-stream", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ conversationContext, classifyContext, customerName: selected.name, jobContext, sessionId: selected.id }), signal: controller.signal });
+        if (!response.ok || !response.body) throw new Error("Stream unavailable");
+        const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffered = ""; let accumulated = "";
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break;
+          if (selectedRef.current?.id !== selected.id) { void reader.cancel(); return; }
+          buffered += decoder.decode(value, { stream: true }); const lines = buffered.split("\n"); buffered = lines.pop() ?? "";
+          for (const line of lines) { if (!line.trim().startsWith("data:")) continue; const token = JSON.parse(line.trim().slice(5).trim()) as { token?: string }; if (token.token) { accumulated += token.token; setCompose(accumulated); } }
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") csAutoDraft.mutate({ conversationContext, customerName: selected.name, jobContext });
+      }
+    })();
+    return () => controller.abort();
+  // The existing draft behavior intentionally fires once when fresh detail loads for the selected conversation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, detail?.sessionId]);
+
+  const selectConversation = (conversation: LiveConversation) => { autoDraftedForRef.current = null; setSelected(conversation); setCompose(""); setComposeMode("reply"); setShowTools(false); };
+  const ticketConversations = useMemo(() => conversations.filter(conversation => detailFilter === "All" || detailFilter === "Teams" ? detailFilter === "All" || isTeamMember(conversation) : !isTeamMember(conversation)).filter(conversation => `${conversation.name} ${conversation.phone} ${conversation.lastMessage}`.toLowerCase().includes(detailSearch.toLowerCase())), [conversations, detailFilter, detailSearch]);
+
+  if (selected) {
+    return <div className="sms-review sms-exact-live"><main className="operations-crm-review cic-shell" data-live-sms="true"><CrmSidebar total={activeConversations.length} needsResponse={needsResponseCount} atRisk={atRiskCount} teams={teamCount} /><section className="cic-detail-layout">
+      <aside className="cic-ticket-list"><header><button type="button" onClick={() => setSelected(null)}><ChevronLeft />Back to board</button><div><span>Customer inbox</span><h2>Needs Response <b>{needsResponseCount}</b></h2></div><label><Search size={14} /><input value={detailSearch} onChange={event => setDetailSearch(event.target.value)} placeholder="Search conversations" /></label><nav><button type="button" className={detailFilter === "All" ? "is-active" : ""} onClick={() => setDetailFilter("All")}>All</button><button type="button" className={detailFilter === "Leads" ? "is-active" : ""} onClick={() => setDetailFilter("Leads")}>Leads</button><button type="button" className={detailFilter === "Teams" ? "is-active" : ""} onClick={() => setDetailFilter("Teams")}>Teams</button></nav></header><div>{ticketConversations.map(conversation => <button type="button" className={conversation.id === selected.id ? "is-selected" : ""} onClick={() => selectConversation(conversation)} key={conversation.id}><LiveAvatar conversation={conversation} className="cic-ticket-avatar" /><span><b>{conversation.name}</b><small>{conversation.lastMessage || "No messages yet"}</small></span><time>{conversation.wait}</time></button>)}</div></aside>
+      <main className="cic-thread-main"><header className="cic-thread-head"><LiveAvatar conversation={selected} className="cic-thread-avatar" /><div><h2>{selected.name}</h2><span>{selected.phone} · {isTeamMember(selected) ? "Team Member" : "Customer"}</span></div><div className="cic-thread-actions"><button type="button" onClick={() => setShowTools(true)}><MoreHorizontal /></button><button className="cic-resolve" type="button" disabled={resolveSession.isPending} onClick={() => resolveSession.mutate({ sessionId: selected.id })}><Check />{resolveSession.isPending ? "Resolving…" : "Resolve"}</button></div></header>
+        <section className="cic-context"><div><Sparkles size={14} /><strong>Madison</strong><span>{selected.lastMessage || "No recent message is available for this conversation."}</span></div><p><span>● {selected.hasUnanswered ? "Needs response" : "Waiting on customer"}</span>{selected.chips.map(chip => <i key={chip}>{chip.replaceAll("_", " ")}</i>)}</p></section>
+        <section className="cic-message-thread" ref={threadRef as React.RefObject<HTMLElement>}><div className="cic-day">Conversation</div>{timeline.map((entry, index) => entry.type === "call" ? <article className="cic-ai-call cic-live-call" key={`call-${entry.call.id}`}><header><span><Sparkles size={13} />AI Call</span><em>{entry.call.outcome?.replaceAll("_", " ") || "Completed"}</em></header><div><button type="button" onClick={() => setExpandedCalls(current => { const next = new Set(current); next.has(entry.call.id) ? next.delete(entry.call.id) : next.add(entry.call.id); return next; })}><span>▶</span></button><i>{Array.from({ length: 18 }, (_, item) => <b key={item} style={{ height: `${5 + ((item * 7) % 13)}px` }} />)}</i><time>{Math.floor((entry.call.durationSeconds ?? 0) / 60)}:{String((entry.call.durationSeconds ?? 0) % 60).padStart(2, "0")}</time><ChevronDown size={14} /></div>{expandedCalls.has(entry.call.id) && <div className="cic-live-call-detail">{entry.call.recordingUrl ? <audio controls src={proxyRecordingUrl(entry.call.recordingUrl) ?? undefined} /> : <small>No recording available.</small>}{entry.call.summary && <p>{entry.call.summary}</p>}{entry.call.transcript && <pre>{entry.call.transcript}</pre>}</div>}</article> : entry.message.sender === "note" ? <article className="cic-note" key={`message-${index}`}><header><Lock size={12} />Internal note <i>{entry.message.senderName ?? "Agent"}</i><time>{entry.message.time}</time></header><p>{entry.message.text}</p></article> : <article className={`cic-message ${entry.message.sender === "agent" ? "outgoing" : "incoming"}`} key={`message-${index}`}><div className="cic-message-meta"><LiveAvatar conversation={entry.message.sender === "agent" ? { ...selected, name: entry.message.senderName ?? "Agent", initials: (entry.message.senderName ?? "Agent").split(/\s+/).map(word => word[0]).join("").slice(0, 2), personType: "customer" } : selected} className="cic-message-identity" /><span>{entry.message.sender === "agent" ? entry.message.senderName ?? "Agent" : selected.name} · {entry.message.time}</span></div><p>{entry.message.text}</p>{entry.message.media?.length ? <div className="cic-live-media">{entry.message.media.map(url => <a href={url} target="_blank" rel="noreferrer" key={url}><img src={url} alt="MMS attachment" /></a>)}</div> : null}</article>)}{!timeline.length && <div className="cic-live-empty">No messages yet.</div>}</section>
+        <footer className={`cic-composer ${composeMode === "note" ? "is-note" : ""}`}><FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" /><InsertResponseModal open={responsesOpen} onClose={() => setResponsesOpen(false)} onInsert={text => { setCompose(text); setResponsesOpen(false); }} customerFirstName={selected.name.split(" ")[0]} /><ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} /><WorldClassReplyPanel open={worldClassOpen} onClose={() => setWorldClassOpen(false)} onInsert={text => { setCompose(text); setWorldClassOpen(false); }} conversationContext={detailMessages.slice(-5).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n")} customerName={selected.name} jobContext={clientProfile?.todayJob ? `${clientProfile.todayJob.serviceType ?? "Service"}\n${clientProfile.todayJob.jobAddress ?? ""}` : ""} />
+          <div className="cic-compose-top"><button type="button" className={composeMode === "reply" ? "is-active" : ""} onClick={() => setComposeMode("reply")}>Reply</button><button type="button" className={composeMode === "note" ? "is-active" : ""} onClick={() => setComposeMode("note")}><Lock size={11} />Internal Note</button></div><textarea value={compose} onChange={event => setCompose(event.target.value)} placeholder={composeMode === "note" ? "Add an internal note…" : `Reply to ${selected.name.split(" ")[0]}…`} onKeyDown={event => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composeMode === "note" ? saveCurrentNote() : sendCurrent(); } }} /><div className="cic-compose-actions"><div>{composeMode === "reply" && <><button type="button" onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles />World-Class</button><button type="button" onClick={() => setFaqOpen(true)}><BookOpen />FAQ</button><button type="button" onClick={() => setResponsesOpen(true)}><FileText />Responses</button><button type="button" onClick={() => setObjectionsOpen(true)}><ShieldAlert />Objections</button><span className="cic-live-emoji" ref={emojiRef}><button type="button" onClick={() => setShowEmojiPicker(open => !open)}><Smile /></button>{showEmojiPicker && <span className="cic-live-emoji-picker"><Picker data={emojiData} onEmojiSelect={(emoji: { native: string }) => { setCompose(current => current + emoji.native); setShowEmojiPicker(false); }} theme="dark" previewPosition="none" skinTonePosition="none" /></span>}</span></>}</div><button className="cic-send" type="button" disabled={composeMode === "note" ? saveNote.isPending || !compose.trim() : sendMessage.isPending || !compose.trim()} onClick={composeMode === "note" ? saveCurrentNote : sendCurrent}>{composeMode === "note" ? saveNote.isPending ? "Saving…" : "Save note" : sendMessage.isPending ? "Sending…" : "Send"}<Send size={13} /></button></div></footer>
+      </main>
+      {isTeamMember(selected) ? <LiveTeamPanel conversation={selected} openTools={() => setShowTools(true)} /> : <LiveCustomerPanel conversation={selected} openTools={() => setShowTools(true)} />}
+    </section>{showTools && <LiveToolDialog conversation={selected} close={() => setShowTools(false)} setCompose={setCompose} messages={detailMessages} />}</main></div>;
+  }
+
+  return <div className="sms-review sms-exact-live"><main className="operations-crm-review cic-shell" data-live-sms="true"><CrmSidebar total={activeConversations.length} needsResponse={needsResponseCount} atRisk={atRiskCount} teams={teamCount} /><section className="cic-workspace"><header className="ocr-header"><div className="ocr-page-title"><h1>SMS</h1><span><i />Live workspace</span></div><div className="ocr-header-actions"><button type="button" onClick={() => refetchInbox()} aria-label="Refresh conversations"><Search /></button><button className="has-notification" type="button" aria-label="Notifications"><Bell /></button><button className="ocr-profile" type="button"><i>MA</i><span>Madison</span><ChevronDown size={13} /></button></div></header><nav className="cic-top-tabs"><button className="is-active" type="button">Conversations</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Email</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Next Best Action</button></nav><section className="cic-toolbar"><div><label><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search any customer, phone..." /></label><button type="button">Filter active <ChevronDown /></button><button type="button">Last 90 days <ChevronDown /></button><button type="button"><Tag />Filters</button></div><span><button type="button" onClick={() => refetchInbox()} aria-label="Refresh">↻</button><button className="cic-new" type="button" onClick={() => setShowNewMessage(true)}><Plus />New Message</button></span></section><section className="cic-board-scroll"><div className="cic-board">{columns.map(column => <section className="cic-lane" key={column.label}><header><span style={{ background: LANE_COLORS[column.label] }} /><b>{column.label}</b><small>{column.conversations.length}</small><button type="button"><ChevronDown size={15} /></button></header><div className="cic-lane-cards">{column.conversations.map(conversation => resolvingId === conversation.id ? <div className="cic-card cic-live-resolving" key={conversation.id}>Resolved</div> : <button type="button" onClick={() => selectConversation(conversation)} className="cic-card" key={conversation.id}><div className="cic-card-head"><LiveAvatar conversation={conversation} className="cic-avatar" /><strong>{conversation.name}</strong><time className={column.label === "At Risk" ? "is-risk" : ""}>{conversation.wait}</time></div>{conversation.latestInteractionType === "call" && <span className="cic-call-label"><Sparkles size={11} />AI Call · {conversation.latestCallDuration ? `${Math.floor(conversation.latestCallDuration / 60)}m ${conversation.latestCallDuration % 60}s` : "Call"}</span>}<p>{conversation.latestInteractionType === "call" ? conversation.latestCallSummary || conversation.lastMessage : conversation.lastMessage || "No messages yet"}</p><div className="cic-chips">{conversation.chips.slice(0, 2).map(chip => <span key={chip} className={/risk|urgent/i.test(chip) ? "is-warn" : ""}>{chip.replaceAll("_", " ")}</span>)}</div><footer><b className={conversation.priority === "P1" ? "is-p1" : ""}>{conversation.priority}</b><span>· {isTeamMember(conversation) ? "Team" : "Customer"}</span><span className="cic-owner-portrait">MA</span></footer></button>)}{!column.conversations.length && <div className="cic-empty-card">{inboxLoading ? "Loading conversations…" : "No conversations"}</div>}<button className="cic-add-card" type="button" onClick={() => setShowNewMessage(true)}><Plus size={13} />Add Conversation</button></div></section>)}</div></section><footer className="cic-stats"><div><small>Total Conversations</small><b>{activeConversations.length}</b></div><div><small>Needs Response</small><b>{needsResponseCount}</b></div><div><small>Unanswered</small><b>{atRiskCount}</b></div><div><small>Hot Leads</small><b>{activeConversations.filter(conversation => conversation.csStatusTier === "hot_lead").length}</b></div><div><small>Teams</small><b>{teamCount}</b></div></footer></section>{showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void refetchInbox(); }} />}</main></div>;
+}

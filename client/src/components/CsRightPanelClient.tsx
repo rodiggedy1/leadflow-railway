@@ -9,7 +9,7 @@ import {
   Brain, Tag, RefreshCw, Copy, CircleDot, Briefcase, MapPin,
   TrendingUp, Users, X, ClipboardList,
 } from "lucide-react";
-import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle, Link2, Copy, Loader2, Send, FileText } from "lucide-react";
+import { Bot, CreditCard, User, Edit3, CheckCircle2, XCircle, Link2, Loader2, Send, FileText } from "lucide-react";
 import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
 import { toast } from "sonner";
 import {
