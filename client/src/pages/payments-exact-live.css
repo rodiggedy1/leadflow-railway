@@ -1,0 +1,38 @@
+/* Live behavior slots inside the approved Payments review composition. */
+.payments-live-exact .payments-bell:disabled{cursor:wait;opacity:.55}
+.payments-live-exact .payment-list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#45454b transparent}
+.payments-live-exact .payments-workbench{height:590px;min-height:590px}
+.payments-live-exact .payment-detail{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#45454b transparent}
+.payments-live-exact .payment-detail-empty{display:grid;place-items:center;align-content:center;gap:8px;text-align:center;color:#8e8e96}
+.payments-live-exact .payment-detail-empty h2{margin:0;color:#e9e9ee;font-size:17px}
+.payments-live-exact .payment-detail-empty p{margin:0;font-size:11px}
+.payments-live-exact .payment-live-warning{display:flex;align-items:flex-start;gap:7px;margin-top:10px;padding:9px 10px;border:1px solid rgba(239,127,130,.3);border-radius:8px;background:rgba(109,42,46,.22);color:#ffb9bc;font-size:10px;line-height:1.4}
+.payments-live-exact .payment-live-warning svg{flex:0 0 auto;margin-top:1px}
+.payments-live-exact .payment-live-panel{margin-top:10px;border:1px solid #35353a;border-radius:8px;background:#1b1b1e;overflow:hidden}
+.payments-live-exact .payment-live-panel>header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-bottom:1px solid #333338;color:#cfcfd4;font-size:10px;font-weight:800}
+.payments-live-exact .payment-live-panel>header em{color:#8f8f98;font-size:9px;font-style:normal;font-weight:600}
+.payments-live-exact .payment-live-panel>p{margin:0;padding:10px;color:#97979e;font-size:9px;line-height:1.5}
+.payments-live-exact .payment-live-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:end;gap:8px;padding:10px}
+.payments-live-exact .payment-live-form label,.payments-live-exact .payment-live-capture label,.payments-link-fields label{display:grid;gap:5px;color:#9d9da5;font-size:9px;font-weight:750}
+.payments-live-exact .payment-live-form label svg,.payments-link-fields label svg{color:#8dbfe9}
+.payments-live-exact .payment-live-form input,.payments-live-exact .payment-live-capture input,.payments-link-fields input{width:100%;height:30px;padding:0 8px;border:1px solid #45454b;border-radius:6px;background:#242427;color:#eeeeef;font:inherit;font-size:10px;outline:0}
+.payments-live-exact .payment-live-form input:focus,.payments-live-exact .payment-live-capture input:focus,.payments-link-fields input:focus{border-color:#87b9e5;box-shadow:0 0 0 2px rgba(118,181,232,.16)}
+.payments-live-exact .payment-live-capture{display:flex;align-items:end;gap:7px;flex-wrap:wrap;padding:10px}
+.payments-live-exact .payment-live-capture label{width:150px}
+.payments-live-exact .payments-live-overlay{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:22px;background:rgba(7,7,9,.72);backdrop-filter:blur(8px)}
+.payments-live-exact .payments-link-dialog{width:min(640px,100%);border:1px solid #3a3a40;border-radius:12px;background:#1b1b1e;box-shadow:0 20px 60px rgba(0,0,0,.48);overflow:hidden}
+.payments-live-exact .payments-link-dialog>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:18px;border-bottom:1px solid #35353a}
+.payments-live-exact .payments-link-dialog h2{margin:0;color:#f1f1f4;font-size:18px;letter-spacing:-.03em}
+.payments-live-exact .payments-link-dialog p{margin:5px 0 0;color:#98989f;font-size:10px;line-height:1.45}
+.payments-live-exact .payments-link-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:16px 18px}
+.payments-live-exact .payment-link-result{display:grid;gap:8px;margin:0 18px 14px;padding:10px;border:1px solid rgba(109,208,171,.26);border-radius:8px;background:rgba(52,126,97,.13);color:#d5f8ea;font-size:10px}
+.payments-live-exact .payment-link-result strong{display:flex;align-items:center;gap:5px}
+.payments-live-exact .payment-link-result code{overflow:hidden;padding:7px 8px;border:1px solid rgba(109,208,171,.2);border-radius:5px;background:#18251f;color:#bde7d4;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.payments-live-exact .payments-link-dialog>footer{display:flex;justify-content:flex-end;gap:7px;padding:13px 18px;border-top:1px solid #35353a}
+@media(max-width:980px){.payments-live-exact .payments-workbench{height:auto;min-height:0}.payments-live-exact .payment-list,.payments-live-exact .payment-detail{overflow:visible}.payments-live-exact .payment-live-form{grid-template-columns:1fr 1fr}.payments-live-exact .payment-live-form>.payment-action{width:max-content}.payments-live-exact .payment-live-capture label{width:100%}}
+@media(max-width:640px){.payments-live-exact .payments-link-fields{grid-template-columns:1fr}.payments-live-exact .payments-link-dialog>header{flex-direction:column}.payments-live-exact .payment-live-form{grid-template-columns:1fr}.payments-live-exact .payments-live-form>.payment-action{width:100%;justify-content:center}}
+.payments-live-exact .payment-existing-fields{margin-top:10px;padding:10px;border:1px solid #35353a;border-radius:8px;background:#202023}
+.payments-live-exact .payment-existing-fields>span{display:block;margin-bottom:8px;color:#96969c;font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+.payments-live-exact .payment-existing-fields>div{display:flex;flex-wrap:wrap;gap:8px}
+.payments-live-exact .payment-existing-fields p{display:grid;gap:3px;min-width:120px;flex:1 1 30%;margin:0;overflow:hidden;color:#d2d2d7;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.payments-live-exact .payment-existing-fields small{color:#888891;font-size:8px;font-weight:700;text-transform:uppercase}
