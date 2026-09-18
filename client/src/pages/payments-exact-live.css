@@ -55,3 +55,10 @@
 .payments-live-exact .payment-primary-action-form input{width:100%;height:30px;padding:0 8px;border:1px solid #45454b;border-radius:6px;background:#242427;color:#eeeeef;font:inherit;font-size:10px;outline:0}
 @media(max-width:980px){.payments-live-exact .payment-primary-action-form{grid-template-columns:1fr 1fr}.payments-live-exact .payment-primary-action-form>.payment-action{width:max-content}}
 @media(max-width:640px){.payments-live-exact .payment-primary-actions>header{align-items:flex-start;flex-direction:column}.payments-live-exact .payment-primary-action-form{grid-template-columns:1fr}.payments-live-exact .payment-primary-action-form>.payment-action{width:100%;justify-content:center}}
+
+.payments-live-exact .payments-content{padding-top:14px}
+.payments-live-exact .payments-page-head--compact{align-items:center;min-height:34px;margin-bottom:10px}
+.payments-live-exact .payments-page-head--compact h1{font-size:22px}
+.payments-live-exact .payments-page-head--compact h1 svg{width:22px;height:22px}
+.payments-live-exact .payments-page-head--compact+.payments-metrics{margin-top:0;margin-bottom:10px}
+@media(max-width:640px){.payments-live-exact .payments-page-head--compact{flex-direction:row;align-items:center}.payments-live-exact .payments-page-head--compact .payments-new{align-self:auto}}

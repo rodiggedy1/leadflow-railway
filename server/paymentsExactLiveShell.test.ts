@@ -20,6 +20,9 @@ describe("Payments exact live shell", () => {
     expect(shell).toContain('className="payments-review payments-live-exact"');
     expect(shell).toContain('className="payments-workbench"');
     expect(shell).toContain('className={`payment-detail payment-detail--${selected.state}`}');
+    expect(shell).toContain('className="payments-page-head payments-page-head--compact"');
+    expect(shell).not.toContain("Finance & billing · Live workspace");
+    expect(shell).not.toContain("Live records use the existing guarded Stripe workflows");
   });
 
   it("retains every card, link, authorization, capture, and cancellation path unchanged", () => {
@@ -71,5 +74,6 @@ describe("Payments exact live shell", () => {
     expect(styles).toContain(".payments-live-exact .payment-detail::-webkit-scrollbar-thumb");
     expect(styles).toContain(".payment-existing-fields--complete .payment-existing-fields__wide");
     expect(styles).toContain(".payments-live-exact .payment-primary-actions{margin-top:10px");
+    expect(styles).toContain(".payments-live-exact .payments-page-head--compact{align-items:center;min-height:34px;margin-bottom:10px}");
   });
 });
