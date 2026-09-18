@@ -1,6 +1,6 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobPhotos, cleanerPortalJobSignoffs, conversationSessions, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
 import { bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
@@ -83,6 +83,28 @@ export const leadflowJobsRouter = router({
       history,
       payment: payment ? { hasStripeCard: payment.hasStripeCard, brand: payment.paymentBrand, last4: payment.paymentLast4 } : null,
     };
+  }),
+
+  customerConversationSession: opsChatProcedure.input(z.object({ phone: z.string().trim().min(7).max(30) })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const phone = input.phone.replace(/[^\d]/g, "").slice(-10);
+    if (phone.length !== 10) return { sessionId: null };
+
+    const sessions = await db.select({ sessionId: conversationSessions.id })
+      .from(conversationSessions)
+      .where(and(
+        sql`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) = ${phone}`,
+        or(
+          eq(conversationSessions.leadSource, "cs-inbound"),
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+          eq(conversationSessions.leadSource, "cs_initiated")
+        )
+      ))
+      .orderBy(desc(conversationSessions.updatedAt), desc(conversationSessions.id))
+      .limit(1);
+
+    return { sessionId: sessions[0]?.sessionId ?? null };
   }),
 
   customerDirectory: opsChatProcedure.input(z.object({ query: z.string().trim().max(80).default("") })).query(async ({ input }) => {
