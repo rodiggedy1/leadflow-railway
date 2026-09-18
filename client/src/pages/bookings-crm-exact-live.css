@@ -1,0 +1,36 @@
+/* Live-only data states placed inside the approved Bookings CRM review composition. */
+.booking-crm-review .bcr-live-notice { margin: -1px 18px 7px; padding: 7px 10px; border: 1px solid rgba(113,92,254,.45); border-radius: 6px; background: rgba(91,72,230,.1); color: #c6bcff; font-size: 10px; line-height: 14px; }
+.booking-crm-review .bcr-header-actions button:disabled,
+.booking-crm-review .bcr-inline-action:disabled,
+.booking-crm-review .bcr-filter-button:disabled,
+.booking-crm-review .bcr-choice-grid button:disabled,
+.booking-crm-review .bcr-customer-actions button:disabled,
+.booking-crm-review .bcr-workspace-detail-footer button:disabled { cursor: not-allowed; opacity: .58; }
+.booking-crm-review .bcr-photo-review-empty { min-height: 72px; margin-top: 10px; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px dashed #424242; border-radius: 7px; color: #858585; font-size: 10px; text-align: center; }
+.booking-crm-review .bcr-photo-review-empty.error { color: #e6a29b; border-color: rgba(194,72,72,.45); background: rgba(137,47,47,.1); }
+.booking-crm-review .bcr-photo-thumb > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .86; }
+.booking-crm-review .bcr-photo-full { overflow: hidden; background: #111; }
+.booking-crm-review .bcr-photo-full img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.booking-crm-review .bcr-message-stack { display: grid; gap: 7px; margin-top: 10px; }
+.booking-crm-review .bcr-card-panel small { margin-top: 3px; color: #e2a2a2; font-size: 9px; line-height: 12px; }
+.booking-crm-review .bcr-signoff-not-home { margin-top: 10px; padding: 10px; border: 1px solid rgba(221,165,56,.36); border-radius: 7px; background: rgba(131,94,21,.12); color: #dfb56d; font-size: 10px; line-height: 14px; }
+.booking-crm-review .bcr-signoff-summary { margin-top: 10px; display: grid; gap: 9px; }
+.booking-crm-review .bcr-signoff-summary > div { padding: 9px; border: 1px solid #373737; border-radius: 6px; background: #1d1d1d; }
+.booking-crm-review .bcr-signoff-summary small { display: block; margin-bottom: 4px; color: #777; font-size: 8px; font-weight: 700; letter-spacing: .08em; }
+.booking-crm-review .bcr-signoff-summary p { margin: 0; color: #bcbcbc; font-size: 10px; line-height: 14px; }
+.booking-crm-review .bcr-signoff-summary img { max-width: 100%; max-height: 58px; display: block; margin-top: 5px; border-radius: 4px; background: #fff; }
+.booking-crm-review .bcr-signoff-response { font-size: 10px; font-weight: 600; }
+.booking-crm-review .bcr-signoff-response.great { color: #8ad4ad; }
+.booking-crm-review .bcr-signoff-response.touchup { color: #e4bf6c; }
+.booking-crm-review .bcr-signoff-response.issue { color: #e69c9c; }
+.booking-crm-review .bcr-workspace-detail-scroll { scrollbar-color: #3a3a3a transparent; scrollbar-width: thin; }
+.booking-crm-review .bcr-workspace-detail .bcr-card-panel > div { min-width: 0; }
+.booking-crm-review .bcr-workspace-detail .bcr-card-panel p { overflow-wrap: anywhere; }
+.booking-crm-review .bcr-workspace-detail .booking-payment-actions,
+.booking-crm-review .bcr-workspace-detail .portal-request-payment-actions { margin-top: 10px; }
+.booking-crm-review[data-live-bookings="true"] { height: 100dvh; min-height: 100dvh; }
+.booking-crm-review[data-live-bookings="true"] .bcr-workspace { height: 100dvh; min-height: 0; }
+.booking-crm-review[data-live-bookings="true"] .bcr-booking-list { min-height: 0; flex: 1; overflow-y: auto; scrollbar-color: #3a3a3a transparent; scrollbar-width: thin; }
+@media (max-width: 760px) {
+  .booking-crm-review .bcr-live-notice { margin-left: 10px; margin-right: 10px; }
+}

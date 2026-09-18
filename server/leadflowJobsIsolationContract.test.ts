@@ -66,22 +66,33 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(controlsSql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/i);
   });
 
-  it("renders the isolated jobs in the existing Bookings workspace", () => {
-    const workspace = read("client/src/components/NativeBookingsWorkspace.tsx");
-    expect(workspace).toContain("trpc.leadflowJobs.list.useQuery");
-    expect(workspace).toContain("leadflow:job:");
-    expect(workspace).toContain("Import next 30 days");
-    expect(workspace).toContain("Launch27 assignment");
-    expect(workspace).toContain("Save date");
-    expect(workspace).toContain("Refresh team & card details");
-    expect(workspace).toContain("Initial import completed");
-    expect(workspace).toContain("syncLeadflowJobsDate");
-    expect(workspace).toContain("cancelLeadflowJob");
-    expect(workspace).toContain("cancelActiveRecord");
-    expect(workspace).toContain("cancelBooking");
-    expect(workspace).toContain("cancelFunnel");
-    expect(workspace).toContain("cancelPortalRequest");
-    expect(workspace).toContain('disabled={cancellationPending} onClick={cancelActiveRecord}');
+  it("renders isolated jobs through the exact Bookings CRM review shell", () => {
+    const engine = read("client/src/components/NativeBookingsWorkspace.tsx");
+    const route = read("client/src/pages/NativeBookings.tsx");
+    const app = read("client/src/App.tsx");
+    const liveShell = read("client/src/pages/BookingsCRMExactLive.tsx");
+    expect(engine).toContain("trpc.leadflowJobs.list.useQuery");
+    expect(engine).toContain("leadflow:job:");
+    expect(engine).toContain("syncLeadflowJobsDate");
+    expect(engine).toContain("cancelLeadflowJob");
+    expect(engine).toContain("cancelActiveRecord");
+    expect(engine).toContain("cancelBooking");
+    expect(engine).toContain("cancelFunnel");
+    expect(engine).toContain("cancelPortalRequest");
+    expect(engine).toContain('disabled={cancellationPending} onClick={cancelActiveRecord}');
+    expect(route).toContain("BookingsCRMExactLive");
+    expect(route).not.toContain("bookings-ops-shell");
+    expect(app).toContain("AdminBookingsCRMExactReviewRoute");
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/bookings-crm"><NativeBookings /></ReviewWorkspaceFrame>');
+    expect(liveShell).toContain('import "./operations-crm-review.css"');
+    expect(liveShell).toContain('import "./bookings-crm-review.css"');
+    expect(liveShell).toContain("operations-crm-review booking-crm-review bcr-full-workspace");
+    expect(liveShell).toContain("ocr-drawer-backdrop");
+    expect(liveShell).toContain("Import next 30 days");
+    expect(liveShell).toContain("Refresh team & card details");
+    expect(liveShell).toContain("Save date");
+    expect(liveShell).toContain("Cleaner &amp; customer");
+    expect(liveShell).not.toContain("bookings-ops-shell");
   });
 
   it("cancels each detail-panel record by status only without payment or cleaner job side effects", () => {
