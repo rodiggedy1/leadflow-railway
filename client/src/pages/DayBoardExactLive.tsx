@@ -194,39 +194,17 @@ function StatusPill({ job }: { job: LiveJob }) {
   return <span className="dbr-status-pill" style={{ color: config.color, borderColor: `${config.color}65`, background: `${config.color}18` }}><Icon size={11} />{config.label}</span>;
 }
 
-type LaneTrack = { job: LiveJob; track: number; trackCount: number };
-
-function packLaneTracks(jobs: LiveJob[]): LaneTrack[] {
-  const trackEnds: number[] = [];
-  const packed = [...jobs]
-    .sort((first, second) => (parseToMinutes(first.serviceDateTime) ?? 0) - (parseToMinutes(second.serviceDateTime) ?? 0))
-    .map(job => {
-      const start = parseToMinutes(job.serviceDateTime) ?? 0;
-      const end = start + estimateDuration(job);
-      let track = trackEnds.findIndex(trackEnd => trackEnd <= start);
-      if (track === -1) {
-        track = trackEnds.length;
-        trackEnds.push(end);
-      } else {
-        trackEnds[track] = end;
-      }
-      return { job, track };
-    });
-
-  return packed.map(item => ({ ...item, trackCount: trackEnds.length || 1 }));
-}
-
-function JobBlock({ job, selected, unread, track, onClick }: { job: LiveJob; selected: boolean; unread: boolean; track: number; onClick: () => void }) {
+function JobBlock({ job, selected, unread, onClick }: { job: LiveJob; selected: boolean; unread: boolean; onClick: () => void }) {
   const start = parseToMinutes(job.serviceDateTime);
   if (start === null || start < -30 || start > BOARD_MINUTES) return null;
   const end = Math.min(BOARD_MINUTES, start + estimateDuration(job));
   const left = toPercent(Math.max(0, start));
-  const width = ((end - Math.max(0, start)) / BOARD_MINUTES) * 100;
+  const width = toPercent(end - Math.max(0, start));
   const config = statusConfig[normalizeStatus(job.jobStatus)];
   const Icon = config.icon;
   const smsRatio = job.stepsSuccess / Math.max(job.totalSteps, 1);
   const smsColor = smsRatio > .75 ? "#32c184" : smsRatio > .4 ? "#e3ae42" : "#e77478";
-  return <button type="button" onClick={onClick} aria-label={`${job.customerName ?? "Client"}, ${config.label}`} data-status={normalizeStatus(job.jobStatus)} className={`dbr-job dbr-live-job ${selected ? "is-selected" : ""}`} style={{ left: `${left}%`, width: `calc(${width}% - 4px)`, borderColor: config.color, color: config.color, "--dbr-track-index": track } as React.CSSProperties}>
+  return <button type="button" onClick={onClick} aria-label={`${job.customerName ?? "Client"}, ${config.label}`} className={`dbr-job ${selected ? "is-selected" : ""}`} style={{ left: `${left}%`, width: `calc(${width}% - 4px)`, borderColor: config.color, color: config.color }}>
     <header><span className="dbr-job-client"><img src={customerPortrait(job.customerName)} alt={`Customer portrait for ${job.customerName ?? "Client"}`} /><span><Icon size={11} />{(job.customerName ?? "Client").split(" ")[0]}</span></span>{unread && <i />}</header>
     <p>{(job.jobAddress ?? "—").split(",")[0]}</p>
     <b className="dbr-sms-bar" style={{ width: `${smsRatio * 100}%`, background: smsColor }} />
@@ -240,9 +218,7 @@ function LiveTimelineBoard({ jobs, date, selected, unreadJobIds, select }: { job
       const key = job.cleanerName ?? job.teamName ?? "Unassigned";
       grouped.set(key, [...(grouped.get(key) ?? []), job]);
     }
-    return Array.from(grouped.entries())
-      .map(([name, laneJobs]) => ({ name, jobs: packLaneTracks(laneJobs) }))
-      .sort((first, second) => Math.min(...first.jobs.map(item => parseToMinutes(item.job.serviceDateTime) ?? 9999)) - Math.min(...second.jobs.map(item => parseToMinutes(item.job.serviceDateTime) ?? 9999)));
+    return Array.from(grouped.entries()).sort(([, first], [, second]) => Math.min(...first.map(job => parseToMinutes(job.serviceDateTime) ?? 9999)) - Math.min(...second.map(job => parseToMinutes(job.serviceDateTime) ?? 9999)));
   }, [jobs]);
   const [nowPosition, setNowPosition] = useState<number | null>(null);
   useEffect(() => {
@@ -259,9 +235,9 @@ function LiveTimelineBoard({ jobs, date, selected, unreadJobIds, select }: { job
   }, [date]);
   return <section className="dbr-timeline-card">
     <header className="dbr-time-axis"><span>Team</span><div>{hours.map(hour => <b key={hour}>{hour}</b>)}</div></header>
-    <div className="dbr-lanes">{lanes.map(lane => <section className="dbr-lane dbr-live-lane" key={lane.name} style={{ minHeight: `${88 + (Math.max(1, lane.jobs[0]?.trackCount ?? 1) - 1) * 52}px` }}>
-      <header><span className="dbr-team-avatar" style={{ background: teamColor(lane.name) }} aria-hidden="true">{getInitials(lane.name)}</span><div><b>{lane.name}</b><small>{`${lane.name.split(" ")[0]} · ${lane.jobs.length} job${lane.jobs.length === 1 ? "" : "s"}`}</small></div></header>
-      <div className="dbr-lane-time">{hours.map(hour => <i key={hour} />)}{nowPosition != null && <b className="dbr-now-line" style={{ left: `${nowPosition}%` }}><span>Now</span></b>}{lane.jobs.map(({ job, track }) => <JobBlock key={job.id} job={job} track={track} selected={selected?.id === job.id} unread={unreadJobIds.has(job.id)} onClick={() => select(job)} />)}</div>
+    <div className="dbr-lanes">{lanes.map(([name, teamJobs]) => <section className="dbr-lane" key={name}>
+      <header><span className="dbr-team-avatar" style={{ background: teamColor(name) }} aria-hidden="true">{getInitials(name)}</span><div><b>{name}</b><small>{`${name.split(" ")[0]} · ${teamJobs.length} job${teamJobs.length === 1 ? "" : "s"}`}</small></div></header>
+      <div className="dbr-lane-time">{hours.map(hour => <i key={hour} />)}{nowPosition != null && <b className="dbr-now-line" style={{ left: `${nowPosition}%` }}><span>Now</span></b>}{teamJobs.map(job => <JobBlock key={job.id} job={job} selected={selected?.id === job.id} unread={unreadJobIds.has(job.id)} onClick={() => select(job)} />)}</div>
     </section>)}</div>
     <LiveSmsHealthStrip jobs={jobs} />
   </section>;

@@ -34,8 +34,6 @@ describe("Day Board exact live shell", () => {
 
     expect(shell).not.toContain('from "@/components/DayBoard"');
     expect(shell).not.toContain('from "@/pages/FieldManagement"');
-    expect(shell).toContain("function packLaneTracks");
-    expect(shell).toContain('className={`dbr-job dbr-live-job');
     expect(reviewStyles).toContain(".dbr-board-scroll{min-height:0;flex:1;overflow:auto");
     expect(reviewStyles).toContain(".dbr-drawer-scroll{min-height:0;flex:1;overflow:auto");
   });
