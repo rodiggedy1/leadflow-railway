@@ -95,6 +95,7 @@ const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const PaymentsReview = lazy(() => import("./pages/PaymentsReview"));
 const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 const ScheduleCRMExactLive = lazy(() => import("./pages/ScheduleCRMExactLive"));
+const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -146,6 +147,7 @@ function AdminInvoicesExactReviewRoute() { return <AdminPageGuard pageId="invoic
 function PaymentsReviewRoute() { return <ReviewWorkspaceFrame><PaymentsReview /></ReviewWorkspaceFrame>; }
 function AdminPaymentsExactReviewRoute() { return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminScheduleCRMExactRoute() { return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><ScheduleCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
+function AdminDayBoardExactLiveRoute() { return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/day-board-crm"><DayBoardExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminAiCallsExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>; }
 function AdminHiringAdminExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/hiring-admin"><HiringAdminLive /></ReviewWorkspaceFrame>; }
 
@@ -197,6 +199,7 @@ function Router() {
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
         <Route path={"/admin/field-management"} component={FieldManagement} />
         <Route path={"/admin/schedule"} component={AdminScheduleCRMExactRoute} />
+        <Route path={"/admin/day-board"} component={AdminDayBoardExactLiveRoute} />
         <Route path={"/admin/reactivation"} component={ReactivationEngine} />
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
         <Route path={"/call-assist"} component={LiveCallAssist} />
@@ -371,7 +374,8 @@ function GlobalOpsChat() {
 
 function isReviewDerivedLiveShell(location: string) {
   const isScheduleWorkspace = location === "/admin/schedule";
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || location === "/admin/ai-calls" || location === "/admin/hiring" || isScheduleWorkspace;
+  const isDayBoardWorkspace = location === "/admin/day-board";
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || location === "/admin/ai-calls" || location === "/admin/hiring" || isScheduleWorkspace || isDayBoardWorkspace;
 }
 
 function ReviewSafeGlobalOpsChat() {
