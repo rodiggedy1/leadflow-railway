@@ -34,9 +34,13 @@ describe("Payments exact live shell", () => {
     expect(shell).toContain("trpc.stripe.capturePayment.useMutation");
     expect(shell).toContain("trpc.stripe.cancelPreauth.useMutation");
     expect(shell).toContain('record.kind === "card" || ["held", "review", "failed"].includes(record.state)');
-    expect(shell).toContain("Existing authorization details");
+    expect(shell).toContain("Existing record details");
     expect(shell).toContain("createdBy: authorization.createdBy");
     expect(shell).toContain("actionBy: authorization.actionBy");
+    expect(shell).toContain("serviceDate: link.jobDate");
+    expect(shell).toContain("serviceAddress: link.jobAddress");
+    expect(shell).toContain("completedAt: timestamp(link.completedAt)");
+    expect(shell).toContain("paymentIntentId: authorization.stripePaymentIntentId");
     expect(shell).toContain("customerPhone: normalizePhone(linkPhone.trim())");
     expect(shell).toContain("customerPhone: selected.phone");
     expect(shell).toContain("authorizationId: selected.authorizationId, amountCents: cents");
@@ -62,5 +66,6 @@ describe("Payments exact live shell", () => {
     expect(styles).toContain(".payments-live-exact .payment-list{flex:1;min-height:0;overflow-y:auto");
     expect(styles).toContain(".payments-live-exact .payment-detail{min-height:0;overflow-y:scroll;overscroll-behavior:contain");
     expect(styles).toContain(".payments-live-exact .payment-detail::-webkit-scrollbar-thumb");
+    expect(styles).toContain(".payment-existing-fields--complete .payment-existing-fields__wide");
   });
 });

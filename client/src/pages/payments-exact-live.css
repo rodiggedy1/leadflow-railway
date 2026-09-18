@@ -41,3 +41,5 @@
 .payments-live-exact .payment-existing-fields>div{display:flex;flex-wrap:wrap;gap:8px}
 .payments-live-exact .payment-existing-fields p{display:grid;gap:3px;min-width:120px;flex:1 1 30%;margin:0;overflow:hidden;color:#d2d2d7;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
 .payments-live-exact .payment-existing-fields small{color:#888891;font-size:8px;font-weight:700;text-transform:uppercase}
+.payments-live-exact .payment-existing-fields--complete p{min-height:29px}
+.payments-live-exact .payment-existing-fields--complete .payment-existing-fields__wide{flex-basis:100%;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
