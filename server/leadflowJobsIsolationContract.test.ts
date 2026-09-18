@@ -80,6 +80,9 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(engine).toContain("cancelFunnel");
     expect(engine).toContain("cancelPortalRequest");
     expect(engine).toContain('disabled={cancellationPending} onClick={cancelActiveRecord}');
+    expect(engine).toContain("const scheduledPortalRows = portalRequestRows.filter((row) => row.requestedLocalDate === date);");
+    expect(engine).toContain("if (view === \"bookings\") return [...scheduledPortalRows, ...scheduledRows];");
+    expect(engine).not.toContain("return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows];");
     expect(route).toContain("BookingsCRMExactLive");
     expect(route).not.toContain("bookings-ops-shell");
     expect(app).toContain("AdminBookingsCRMExactReviewRoute");

@@ -262,7 +262,8 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
     const scheduledRows = [...funnelRows.filter((row) => row.status !== "lead" && !isCancelledBookingStatus(row.status)), ...bookingRows, ...importedRows]
       .filter((row) => row.requestedLocalDate === date)
       .filter((row) => row.source !== "leadflow" || status === "All" || status === "Confirmed");
-    if (view === "bookings") return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows];
+    const scheduledPortalRows = portalRequestRows.filter((row) => row.requestedLocalDate === date);
+    if (view === "bookings") return [...scheduledPortalRows, ...scheduledRows];
     return inProgressFunnelRows;
   }, [bookings, date, funnelLeads, leadflowJobsQuery.data, portalRequests, status, view]);
 
