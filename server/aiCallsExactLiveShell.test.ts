@@ -17,6 +17,13 @@ describe("AI Calls exact transcript workspace", () => {
     expect(shell).toContain('className="transcript-queue"');
     expect(shell).toContain('className="transcript-main-stage"');
     expect(shell).toContain('className="transcript-brief"');
+    expect(shell).toContain("LIVE_CALLER_PORTRAITS");
+    expect(shell).toContain("function LivePersonPortrait");
+    expect(shell).toContain("caller|customer|client|user");
+    expect(shell).toContain('className="voice-page-status voice-page-status--wide ai-calls-live-status"');
+    expect(shell).toContain('className="transcript-caller-portrait transcript-caller-portrait--queue"');
+    expect(shell).toContain('className="transcript-caller-portrait transcript-caller-portrait--hero"');
+    expect(shell).toContain('className="transcript-caller-portrait transcript-caller-portrait--turn"');
     expect(shell).toContain("trpc.callMatrix.getCallHistory.useQuery");
     expect(shell).toContain("proxyRecordingUrl(selectedHistory?.recordingUrl)");
     expect(shell).toContain("trpc.callMatrix.getPeople.useQuery");
@@ -32,6 +39,8 @@ describe("AI Calls exact transcript workspace", () => {
 
     const styles = read("client/src/pages/ai-calls-exact-live.css");
     expect(styles).toContain(".ai-calls-exact-live .transcript-turns { max-height: 365px; overflow-y: auto;");
+    expect(styles).toContain(".ai-calls-exact-live .transcript-live-portrait");
+    expect(styles).toContain(".ai-calls-exact-live .ai-calls-live-status");
 
     expect(app).toContain('const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));');
     expect(app).toContain('function AdminAiCallsExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>; }');

@@ -136,6 +136,16 @@ const MERGE_FIELDS = [
 ];
 
 const WAVEFORM_BARS = [38, 72, 56, 86, 48, 67, 91, 58, 75, 43, 68, 82, 51, 62, 77, 54, 88, 46, 69, 58, 81, 49, 73, 63, 45, 78, 56, 84, 52, 66, 79, 57, 70, 47, 85, 61, 76, 54, 82, 49, 68, 90, 59, 74, 43, 65, 78, 55, 71, 46, 64, 82, 53, 69, 42, 76, 58, 84, 47, 66, 56, 75, 44, 70, 52, 81, 48, 63, 72, 45, 67, 54, 79, 50, 62, 73, 46, 68, 57, 77, 44, 64, 51, 71, 47, 61, 55, 69, 43, 58, 49, 64, 46, 56, 41, 52] as const;
+const LIVE_CALLER_PORTRAITS = [
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/CucZtKJOfkDlJvMg.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bCfFsxIPapKjJReA.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qRwiNDAHRQQTxPbz.png",
+] as const;
 
 function todayET() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -208,6 +218,11 @@ function initials(value: string) {
   return value.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "?";
 }
 
+function portraitFor(value: string) {
+  const hash = Array.from(value).reduce((total, character) => total + character.charCodeAt(0), 0);
+  return LIVE_CALLER_PORTRAITS[Math.abs(hash) % LIVE_CALLER_PORTRAITS.length];
+}
+
 function formatDuration(seconds: number | null) {
   if (!seconds) return "—";
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
@@ -233,14 +248,14 @@ function splitTranscript(transcript: string | null): TranscriptTurn[] {
     const source = match[1].trim();
     const text = match[2].trim();
     if (/^(ava|assistant|ai)$/i.test(source)) return { speaker: "assistant", label: "Ava · AI assistant", text };
-    if (/^(caller|customer|client)$/i.test(source)) return { speaker: "caller", label: source, text };
+    if (/^(caller|customer|client|user)$/i.test(source)) return { speaker: "caller", label: source, text };
     if (/^(system|note|cue)$/i.test(source)) return { speaker: "system", label: source, text };
     return { speaker: "record", label: source, text };
   });
 }
 
-function LiveAvatar({ value, className }: { value: string; className: string }) {
-  return <span className={`${className} transcript-live-avatar`} aria-label={`${value} record`}>{initials(value)}</span>;
+function LivePersonPortrait({ value, className }: { value: string; className: string }) {
+  return <img className={`${className} transcript-live-portrait`} src={portraitFor(value)} alt={`Call participant portrait for ${value}`} />;
 }
 
 function ReviewWaveform() {
@@ -502,25 +517,26 @@ export default function AiCallsExactLive() {
 
     <div className="voice-content voice-content--transcript">
       <section className="transcript-page-head"><div><span className="voice-eyebrow">AI Calls · Live workspace</span><h1>Hear the decision in context</h1><p>The existing call history, recordings, and stored transcripts are presented in the approved transcript-forward review composition.</p></div><button type="button" className="transcript-back-link" onClick={() => openComposer()}><ArrowLeft size={14} />Command Deck version</button></section>
+      <p className="voice-page-status voice-page-status--wide ai-calls-live-status"><Sparkles size={14} />Live transcript workspace · existing call records, recordings, and transcripts are connected</p>
       {flash && <p className="voice-page-status voice-page-status--wide"><Sparkles size={14} />{flash}</p>}
 
       <section className="transcript-lab-layout" aria-label="AI Calls transcript workspace">
         <aside className="transcript-queue">
           <header><div><span className="voice-eyebrow">Recent calls</span><h2>Conversation queue</h2></div><span>{historyLoading ? "Loading" : `${historyItems.length} live`}</span></header>
-          {historyError ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>Call history could not load</strong><p>{historyError.message}</p></div> : historyItems.length === 0 && !historyLoading ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>No AI matrix calls yet</strong><p>Open Call Matrix to prepare an existing guarded call workflow.</p></div> : <div className="transcript-queue-list">{historyItems.map((call) => <button type="button" key={call.id} className={`transcript-queue-row ${selectedHistory?.id === call.id ? "is-selected" : ""}`} onClick={() => setSelectedHistoryId(call.id)}><LiveAvatar value={call.calledPhone ?? "?"} className="transcript-caller-portrait transcript-caller-portrait--queue" /><span className="transcript-queue-copy"><strong>{call.calledPhone ?? "Unknown caller"}</strong><small>{call.summary ?? call.endedReason ?? "Existing call record"}</small><em><Clock3 size={11} />{call.createdAt ?? "Recorded call"}</em></span><span className={`transcript-queue-dot is-${toneForOutcome(call.outcome)}`} aria-hidden="true" /></button>)}</div>}
+          {historyError ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>Call history could not load</strong><p>{historyError.message}</p></div> : historyItems.length === 0 && !historyLoading ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>No AI matrix calls yet</strong><p>Open Call Matrix to prepare an existing guarded call workflow.</p></div> : <div className="transcript-queue-list">{historyItems.map((call) => <button type="button" key={call.id} className={`transcript-queue-row ${selectedHistory?.id === call.id ? "is-selected" : ""}`} onClick={() => setSelectedHistoryId(call.id)}><LivePersonPortrait value={call.calledPhone ?? "Unknown caller"} className="transcript-caller-portrait transcript-caller-portrait--queue" /><span className="transcript-queue-copy"><strong>{call.calledPhone ?? "Unknown caller"}</strong><small>{call.summary ?? call.endedReason ?? "Existing call record"}</small><em><Clock3 size={11} />{call.createdAt ?? "Recorded call"}</em></span><span className={`transcript-queue-dot is-${toneForOutcome(call.outcome)}`} aria-hidden="true" /></button>)}</div>}
           <footer><FileText size={14} /><span>Existing call records</span></footer>
         </aside>
 
         <article className="transcript-main-stage">
           {selectedHistory ? <>
             <section className="transcript-listening-card">
-              <div className="transcript-listening-head"><div className="transcript-caller-identity"><LiveAvatar value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--hero" /><div><h2>{callerLabel}</h2><p><PhoneIncoming size={14} />AI-handled outbound call</p></div></div><span className={`transcript-outcome is-${currentTone}`}>{currentStageLabel}</span></div>
+              <div className="transcript-listening-head"><div className="transcript-caller-identity"><LivePersonPortrait value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--hero" /><div><h2>{callerLabel}</h2><p><PhoneIncoming size={14} />AI-handled outbound call</p></div></div><span className={`transcript-outcome is-${currentTone}`}>{currentStageLabel}</span></div>
               <div className="transcript-waveform-row"><button type="button" className="transcript-play" aria-label={selectedRecordingUrl ? (isPlaying ? "Pause recording" : "Play recording") : "Recording unavailable"} disabled={!selectedRecordingUrl} onClick={togglePlayback}><Play size={17} fill="currentColor" /></button><ReviewWaveform /><span>{formatDuration(selectedHistory.durationSeconds)}</span></div>
               {selectedRecordingUrl && <audio ref={audioRef} src={selectedRecordingUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} preload="metadata" />}
               <footer><span><Headphones size={14} />{selectedRecordingUrl ? (isPlaying ? "Playing existing recording" : "Existing recording available") : "No recording stored"}</span><span>{selectedHistory.createdAt ?? "Existing call record"}</span></footer>
             </section>
 
-            <section className="transcript-record" aria-label={`Transcript for ${callerLabel}`}><header><div><span className="voice-eyebrow">Conversation evidence</span><h2>Transcript</h2></div><span className="transcript-record-source">Existing record</span></header>{transcriptTurns.length ? <div className="transcript-turns">{transcriptTurns.map((turn, index) => <article className={`transcript-turn transcript-turn--${turn.speaker === "assistant" ? "madison" : turn.speaker}`} key={`${turn.label}-${index}`}><div className="transcript-speaker"><span className="transcript-speaker-avatar">{turn.speaker === "assistant" ? <Sparkles size={14} /> : turn.speaker === "caller" ? <LiveAvatar value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--turn" /> : <FileText size={14} />}</span><strong>{turn.label}</strong></div><p>{turn.text}</p></article>)}</div> : <div className="voice-empty"><FileText size={28} /><strong>No transcript was stored for this call</strong><p>The existing call record remains available in the queue.</p></div>}</section>
+            <section className="transcript-record" aria-label={`Transcript for ${callerLabel}`}><header><div><span className="voice-eyebrow">Conversation evidence</span><h2>Transcript</h2></div><span className="transcript-record-source">Existing record</span></header>{transcriptTurns.length ? <div className="transcript-turns">{transcriptTurns.map((turn, index) => <article className={`transcript-turn transcript-turn--${turn.speaker === "assistant" ? "madison" : turn.speaker}`} key={`${turn.label}-${index}`}><div className="transcript-speaker"><span className="transcript-speaker-avatar">{turn.speaker === "assistant" ? <Sparkles size={14} /> : turn.speaker === "caller" ? <LivePersonPortrait value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--turn" /> : <FileText size={14} />}</span><strong>{turn.label}</strong></div><p>{turn.text}</p></article>)}</div> : <div className="voice-empty"><FileText size={28} /><strong>No transcript was stored for this call</strong><p>The existing call record remains available in the queue.</p></div>}</section>
           </> : <div className="voice-empty voice-review-surface"><AudioLines size={28} /><strong>Select an existing call</strong><p>Choose a call record to review its available recording and transcript.</p></div>}
         </article>
 
