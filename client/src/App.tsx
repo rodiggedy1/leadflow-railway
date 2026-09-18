@@ -54,6 +54,7 @@ const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsE
 const CustomerProfileExactLive = lazy(() => import("./pages/CustomerProfileExactLive"));
 const MissedCalls = lazy(() => import("./pages/MissedCalls"));
 const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
+const PayrollSummaryExactLive = lazy(() => import("./pages/PayrollSummaryExactLive"));
 const Performance = lazy(() => import("./pages/Performance"));
 const Metrics = lazy(() => import("./pages/Metrics"));
 const LeadNurturing = lazy(() => import("./pages/LeadNurturing"));
@@ -136,6 +137,7 @@ function AdminSettingsReviewRoute() { return <AdminPageGuard pageId="settings"><
 function AdminCustomerProfileExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/customer-profile"><CustomerProfileExactLive /></ReviewWorkspaceFrame>; }
 function AdminBookingsCRMExactReviewRoute() { return <AdminPageGuard pageId="bookings"><ReviewWorkspaceFrame navActivePath="/review/bookings-crm"><NativeBookings /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function PayrollSummaryReviewRoute() { return <ReviewWorkspaceFrame><PayrollSummaryReview /></ReviewWorkspaceFrame>; }
+function AdminPayrollSummaryExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>; }
 function CustomerProfileReviewRoute() { return <ReviewWorkspaceFrame><CustomerProfileReview /></ReviewWorkspaceFrame>; }
 function ReviewsQualityReviewRoute() { return <ReviewWorkspaceFrame><ReviewsQualityReview /></ReviewWorkspaceFrame>; }
 function InvoicesReviewRoute() { return <ReviewWorkspaceFrame><InvoicesReview /></ReviewWorkspaceFrame>; }
@@ -203,7 +205,7 @@ function Router() {
         <Route path={"/admin/team-availability"} component={TeamAvailability} />
         <Route path={"/admin/confirmation-calls"} component={AdminConfirmationCallsExactReviewRoute} />
         <Route path={"/admin/missed-calls"} component={MissedCalls} />
-        <Route path={"/admin/payroll-summary"} component={PayrollSummary} />
+        <Route path={"/admin/payroll-summary"} component={AdminPayrollSummaryExactReviewRoute} />
         <Route path={"/admin/performance"} component={Performance} />
         <Route path={"/admin/metrics"} component={Metrics} />
         <Route path={"/admin/lead-nurturing"} component={LeadNurturing} />
@@ -363,7 +365,7 @@ function GlobalOpsChat() {
 }
 
 function isReviewDerivedLiveShell(location: string) {
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments";
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary";
 }
 
 function ReviewSafeGlobalOpsChat() {
