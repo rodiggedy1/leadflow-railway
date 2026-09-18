@@ -10,6 +10,7 @@ describe("Day Board exact live shell", () => {
     const app = read("client/src/App.tsx");
     const shell = read("client/src/pages/DayBoardExactLive.tsx");
     const reviewStyles = read("client/src/pages/day-board-crm-review.css");
+    const liveStyles = read("client/src/pages/day-board-exact-live.css");
 
     expect(app).toContain('const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));');
     expect(app).toContain("function AdminDayBoardExactLiveRoute()");
@@ -36,6 +37,7 @@ describe("Day Board exact live shell", () => {
     expect(shell).not.toContain('from "@/pages/FieldManagement"');
     expect(reviewStyles).toContain(".dbr-board-scroll{min-height:0;flex:1;overflow:auto");
     expect(reviewStyles).toContain(".dbr-drawer-scroll{min-height:0;flex:1;overflow:auto");
+    expect(liveStyles).toContain(".dbr-live-shell .dbr-job{background:#202224!important}");
   });
 
   it("retains Day Board reads, polling, local read state, and action payloads", () => {
