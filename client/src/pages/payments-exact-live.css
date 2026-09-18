@@ -43,3 +43,15 @@
 .payments-live-exact .payment-existing-fields small{color:#888891;font-size:8px;font-weight:700;text-transform:uppercase}
 .payments-live-exact .payment-existing-fields--complete p{min-height:29px}
 .payments-live-exact .payment-existing-fields--complete .payment-existing-fields__wide{flex-basis:100%;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
+
+.payments-live-exact .payment-primary-actions{margin-top:10px;border:1px solid #3b3b41;border-radius:8px;background:#1b1b1e;overflow:hidden}
+.payments-live-exact .payment-primary-actions>header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-bottom:1px solid #333338;color:#d8d8de;font-size:10px;font-weight:800}
+.payments-live-exact .payment-primary-actions>header em{color:#8f8f98;font-size:9px;font-style:normal;font-weight:600}
+.payments-live-exact .payment-primary-actions__controls{display:flex;align-items:flex-end;gap:7px;flex-wrap:wrap;padding:10px}
+.payments-live-exact .payment-primary-capture{display:grid;gap:5px;color:#9d9da5;font-size:9px;font-weight:750}
+.payments-live-exact .payment-primary-capture input{width:146px;height:30px;padding:0 8px;border:1px solid #45454b;border-radius:6px;background:#242427;color:#eeeeef;font:inherit;font-size:10px;outline:0}
+.payments-live-exact .payment-primary-action-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:end;gap:8px;padding:10px;border-top:1px solid #333338}
+.payments-live-exact .payment-primary-action-form label{display:grid;gap:5px;color:#9d9da5;font-size:9px;font-weight:750}
+.payments-live-exact .payment-primary-action-form input{width:100%;height:30px;padding:0 8px;border:1px solid #45454b;border-radius:6px;background:#242427;color:#eeeeef;font:inherit;font-size:10px;outline:0}
+@media(max-width:980px){.payments-live-exact .payment-primary-action-form{grid-template-columns:1fr 1fr}.payments-live-exact .payment-primary-action-form>.payment-action{width:max-content}}
+@media(max-width:640px){.payments-live-exact .payment-primary-actions>header{align-items:flex-start;flex-direction:column}.payments-live-exact .payment-primary-action-form{grid-template-columns:1fr}.payments-live-exact .payment-primary-action-form>.payment-action{width:100%;justify-content:center}}
