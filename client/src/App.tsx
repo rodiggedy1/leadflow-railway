@@ -60,7 +60,7 @@ const Metrics = lazy(() => import("./pages/Metrics"));
 const LeadNurturing = lazy(() => import("./pages/LeadNurturing"));
 const EmailInbox = lazy(() => import("./pages/EmailInbox"));
 const SenderPoliciesPage = lazy(() => import("./pages/SenderPoliciesPage"));
-const AICallMatrix = lazy(() => import("./pages/AICallMatrix"));
+const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));
 const CleanerCalls = lazy(() => import("./pages/CleanerCalls"));
 const CardAuth = lazy(() => import("./pages/CardAuth"));
 const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalConnected"));
@@ -146,6 +146,7 @@ function AdminInvoicesExactReviewRoute() { return <AdminPageGuard pageId="invoic
 function PaymentsReviewRoute() { return <ReviewWorkspaceFrame><PaymentsReview /></ReviewWorkspaceFrame>; }
 function AdminPaymentsExactReviewRoute() { return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminScheduleCRMExactRoute() { return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><ScheduleCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
+function AdminAiCallsExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>; }
 
 /**
  * OpsChatRedirect
@@ -214,7 +215,7 @@ function Router() {
         <Route path={"/admin/lead-nurturing"} component={LeadNurturing} />
         <Route path={"/admin/inbox"} component={EmailInbox} />
         <Route path={"/admin/inbox/sender-policies"} component={SenderPoliciesPage} />
-        <Route path={"/admin/ai-calls"} component={AICallMatrix} />
+        <Route path={"/admin/ai-calls"} component={AdminAiCallsExactReviewRoute} />
         <Route path={"/admin/cleaner-calls"} component={CleanerCalls} />
         <Route path={"/pay/:token"} component={CardAuth} />
         <Route path={"/admin/payments"} component={AdminPaymentsExactReviewRoute} />
@@ -369,7 +370,7 @@ function GlobalOpsChat() {
 
 function isReviewDerivedLiveShell(location: string) {
   const isScheduleWorkspace = location === "/admin/schedule";
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || isScheduleWorkspace;
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || location === "/admin/ai-calls" || isScheduleWorkspace;
 }
 
 function ReviewSafeGlobalOpsChat() {

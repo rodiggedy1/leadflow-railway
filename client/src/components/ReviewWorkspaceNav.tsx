@@ -26,7 +26,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
     items: [
       { label: "SMS", href: "/review/sms", icon: MessageSquareMore },
       { label: "Emails", href: "/review/emails", icon: Mail },
-      { label: "AI Calls", href: "/review/ai-calls-transcript", icon: PhoneCall },
+      { label: "AI Calls", href: "/review/ai-calls-transcript", liveHref: "/admin/ai-calls", icon: PhoneCall },
     ],
   },
   { label: "FINANCE & BILLING", items: [{ label: "Invoices", href: "/review/invoices", liveHref: "/admin/invoices", icon: Receipt }, { label: "Payments", href: "/review/payments", liveHref: "/admin/payments", icon: CreditCard }] },
