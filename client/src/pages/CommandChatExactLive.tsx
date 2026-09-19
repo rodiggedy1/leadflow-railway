@@ -64,6 +64,15 @@ type ChannelMessage = {
   replyCount: number;
 };
 
+type CommandLead = {
+  id: number;
+  name: string;
+  sourceLabel: string;
+  detail: string;
+  ts: number;
+  queue: "web" | "incoming";
+};
+
 const CHANNELS: Array<{ key: ChannelKey; label: string; icon: string; tone: string }> = [
   { key: "command", label: "MIB Command", icon: "✦", tone: "neutral" },
   { key: "urgent", label: "Urgent", icon: "!", tone: "amber" },
@@ -80,6 +89,7 @@ const ISSUE_TYPES = [
   ["payment_problem", "Payment problem"],
   ["other", "Other"],
 ] as const;
+const HIDDEN_COMMAND_QUICK_ACTIONS = ["new_lead", "escalation_nudge", "call_summary", "call_ended", "call_debrief", "missed_call"] as const;
 
 function initials(value: string) {
   return value.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "MI";
@@ -114,8 +124,47 @@ function mediaUrls(value: string | null) {
   }
 }
 
+function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
+  if (message.quickAction !== "new_lead") return null;
+  let metadata: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(message.metadata ?? "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) metadata = parsed as Record<string, unknown>;
+  } catch {
+    // Retain the source message as a safe, generic incoming lead when legacy metadata is malformed.
+  }
+  const getText = (key: string) => typeof metadata[key] === "string" ? metadata[key] : "";
+  const source = getText("source") || getText("utmSource");
+  const sourceKey = source.trim().toLowerCase();
+  const isWebOrQuoteForm = !sourceKey || ["widget", "widget-popup", "webform", "quoteform", "quote_form"].includes(sourceKey);
+  const isIncoming = !isWebOrQuoteForm;
+  const sourceLabel = isIncoming
+    ? (source.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || message.from.replace(/^[^A-Za-z0-9]+/, "") || "Incoming lead")
+    : (sourceKey === "widget" || sourceKey === "widget-popup" ? "Web form" : "Quote form");
+  const name = getText("leadName") || "New lead";
+  const price = metadata.price === undefined || metadata.price === null || metadata.price === "" ? "" : `$${metadata.price}`;
+  const detail = [getText("serviceType"), getText("size"), price].filter(Boolean).join(" · ") || "New inquiry";
+  return { id: message.id, name, sourceLabel, detail, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
+}
+
+function isHiddenCommandNotification(message: ChannelMessage) {
+  if (HIDDEN_COMMAND_QUICK_ACTIONS.includes(message.quickAction as (typeof HIDDEN_COMMAND_QUICK_ACTIONS)[number])) return true;
+  if (message.quickAction === "madison_email_draft") return /thumbtack|direct lead|yelp|bark/i.test(message.body);
+  return message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body);
+}
+
 function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: string | null; className?: string }) {
   return photoUrl ? <img className={className} src={photoUrl} alt={`${name} profile`} /> : <span className={className}>{initials(name)}</span>;
+}
+
+function LeadQueue({ title, description, leads }: { title: string; description: string; leads: CommandLead[] }) {
+  return (
+    <article className="ccc-context-card ccc-live-lead-queue">
+      <header><span><Users />{title}</span><b>{leads.length}</b></header>
+      <p className="ccc-live-lead-queue-description">{description}</p>
+      {leads.length ? <div className="ccc-live-lead-list">{leads.slice(0, 6).map((lead) => <a href="/admin/leads" key={lead.id} className="ccc-live-lead-row"><span className="ccc-live-lead-initials">{initials(lead.name)}</span><span><strong>{lead.name}</strong><small>{lead.sourceLabel} · {lead.detail}</small></span><time>{formatRelative(lead.ts)}</time><ChevronRight /></a>)}</div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
+    </article>
+  );
 }
 
 function LoginGate({ onSuccess }: { onSuccess: () => void }) {
@@ -263,10 +312,17 @@ export default function CommandChatExactLive() {
 
   const photoMap = useMemo(() => photosData?.photos ?? {}, [photosData?.photos]);
   const rootMessages = useMemo(() => (channelMessages as ChannelMessage[]).filter((message) => !message.threadParentId), [channelMessages]);
+  const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null), [rootMessages]);
+  const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
+  const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
+  const visibleRootMessages = useMemo(
+    () => rootMessages.filter((message) => !isHiddenCommandNotification(message)),
+    [rootMessages],
+  );
   const filteredMessages = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return term ? rootMessages.filter((message) => `${message.from} ${message.body}`.toLowerCase().includes(term)) : rootMessages;
-  }, [rootMessages, search]);
+    return term ? visibleRootMessages.filter((message) => `${message.from} ${message.body}`.toLowerCase().includes(term)) : visibleRootMessages;
+  }, [visibleRootMessages, search]);
   const reactionsByMessage = useMemo(() => {
     const grouped: Record<number, Record<string, { count: number; names: string[] }>> = {};
     for (const item of reactionRows) {
@@ -278,12 +334,10 @@ export default function CommandChatExactLive() {
     return grouped;
   }, [reactionRows]);
   const metrics = useMemo(() => {
-    const since = Date.now() - 24 * 60 * 60 * 1000;
-    const activity = rootMessages.filter((message) => message.ts >= since).length;
-    const mentions = rootMessages.filter((message) => message.body.toLowerCase().includes(`@${callerName.split(" ")[0].toLowerCase()}`)).length;
-    const participants = new Set(rootMessages.slice(-80).map((message) => message.from)).size;
-    return { activity, mentions, participants };
-  }, [callerName, rootMessages]);
+    const mentions = visibleRootMessages.filter((message) => message.body.toLowerCase().includes(`@${callerName.split(" ")[0].toLowerCase()}`)).length;
+    const participants = new Set(visibleRootMessages.slice(-80).map((message) => message.from)).size;
+    return { mentions, participants };
+  }, [callerName, visibleRootMessages]);
 
   function showNotice(message: string) {
     setNotice(message);
@@ -402,10 +456,10 @@ export default function CommandChatExactLive() {
             <div className="ccc-left-section ccc-conversations-section">
               <div className="ccc-panel-heading ccc-conversation-heading"><div><span>COMMAND CHANNELS</span></div><button type="button" aria-label="Search command messages" onClick={() => document.querySelector<HTMLInputElement>(".ccc-live .ccc-conversation-search input")?.focus()}><Search /></button></div>
               <label className="ccc-search ccc-conversation-search"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search command messages..." /></label>
-              <div className="ccc-conversation-filters" aria-label="Command conversation filters"><button className="active">All <b>{rootMessages.length}</b></button><button type="button" onClick={() => setView("issues")}>Issues <b>{openIssues.length}</b></button><button type="button" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}>Threads <b>{activeThreads.length}</b></button></div>
+              <div className="ccc-conversation-filters" aria-label="Command conversation filters"><button className="active">All <b>{visibleRootMessages.length}</b></button><button type="button" onClick={() => setView("issues")}>Issues <b>{openIssues.length}</b></button><button type="button" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}>Threads <b>{activeThreads.length}</b></button></div>
               <div className="ccc-conversation-list ccc-inbox-list">
                 {CHANNELS.map((item) => {
-                  const count = item.key === "command" ? rootMessages.length : (channelCounts?.[item.key] ?? 0);
+                  const count = item.key === "command" ? visibleRootMessages.length : (channelCounts?.[item.key] ?? 0);
                   return <button key={item.key} type="button" className={`ccc-conversation ccc-channel-thread ccc-channel-thread-${item.tone} ${channel === item.key ? "active" : ""}`} onClick={() => { setChannel(item.key); setView("chat"); setThreadId(null); }}><span className="ccc-channel-thread-icon">{item.icon}</span><span className="ccc-conv-copy ccc-inbox-copy"><strong>{item.label}</strong><small>{count ? `${count} active messages` : "No messages yet"}</small></span><span className="ccc-conv-meta ccc-inbox-meta"><time>{item.key === channel ? "open" : ""}</time>{count > 0 && <b>{count > 99 ? "99+" : count}</b>}</span></button>;
                 })}
               </div>
@@ -414,7 +468,7 @@ export default function CommandChatExactLive() {
           </aside>
 
           <section className="ccc-command-panel ccc-center-panel">
-            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><span><Users /><b>{metrics.participants}</b> Contributors</span><span><Activity /><b>{metrics.activity}</b> Today</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>{openIssues.length}</b> Open issues</span><span className="ccc-header-metric-mentions"><Bell /><b>{metrics.mentions}</b> Mentions</span></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence" aria-label="Active command participants">{agents.agents.slice(0, 3).map((agent) => <Avatar key={agent.id} name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" />)}{agents.agents.length > 3 && <span>+{agents.agents.length - 3}</span>}</div><i className="ccc-reference-action-divider" aria-hidden="true" /><button type="button" aria-label="View channel threads" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}><MessageSquare /></button><button type="button" aria-label="Channel actions" onClick={() => setModal("pin")}><MoreHorizontal /></button></div></div></div>
+            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><span><Users /><b>{metrics.participants}</b> Contributors</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>{openIssues.length}</b> Open issues</span><span className="ccc-header-metric-mentions"><Bell /><b>{metrics.mentions}</b> Mentions</span></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence" aria-label="Active command participants">{agents.agents.slice(0, 5).map((agent) => <Avatar key={agent.id} name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" />)}{agents.agents.length > 5 && <span>+{agents.agents.length - 5}</span>}</div></div></div></div>
             <div className="ccc-reference-chat-tabs"><button type="button" className={view === "chat" ? "active" : ""} onClick={() => setView("chat")}>Messages</button><button type="button" className={view === "issues" ? "active" : ""} onClick={() => setView("issues")}>Issues <b>{openIssues.length}</b></button><button type="button" className={view === "calls" ? "active" : ""} onClick={() => setView("calls")}>Threads <b>{activeThreads.length}</b></button></div>
             {view === "issues" ? <IssuesView issues={openIssues} onBack={() => setView("chat")} /> : view === "calls" ? <ThreadsView threads={activeThreads} onOpen={(id) => setThreadId(id)} onBack={() => setView("chat")} /> : <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
@@ -428,7 +482,7 @@ export default function CommandChatExactLive() {
             </>}
           </section>
 
-          <aside className="ccc-command-panel ccc-right-panel"><div className="ccc-lead-context-topline"><strong>Command context</strong><button type="button" onClick={() => setModal("booking")}>{callerName}<ChevronDown /></button></div><article className="ccc-context-card ccc-live-profile"><div className="ccc-context-lead-summary"><Avatar name={profile?.name || callerName} photoUrl={profile?.photoUrl} className="ccc-lead-portrait" /><div><strong>{profile?.name || callerName}</strong><span>Command channel participant</span><small><i />Connected</small></div><b>{rootMessages.length}</b></div><div className="ccc-context-actions"><button type="button" className="ccc-context-primary" onClick={() => setModal("booking")}>Announce booking <ChevronRight /></button><button type="button" aria-label="Open command issues" onClick={() => setView("issues")}><ShieldAlert /></button><button type="button" aria-label="Open channel threads" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}><MessageSquare /></button><button type="button" aria-label="Pin a note" onClick={() => setModal("pin")}><Pin /></button></div></article><article className="ccc-context-card"><header><span><ShieldAlert />Open issues</span><b>{openIssues.length}</b></header>{openIssues.length ? openIssues.slice(0, 3).map((issue) => <button type="button" key={issue.id} className="ccc-live-issue-link" onClick={() => setView("issues")}><span className={`ccc-op-dot ${issue.severity === "critical" || issue.severity === "high" ? "amber" : "mint"}`} /><div><strong>{issue.title}</strong><small>{issue.ownerName ? `Owner: ${issue.ownerName}` : "Needs owner"}</small></div><ChevronRight /></button>) : <p className="ccc-live-card-empty">No open issues in the command queue.</p>}</article><article className="ccc-context-card ccc-context-moves"><header><span><Sparkles />Command actions</span><b>4</b></header><div className="ccc-context-move-list"><button className="ccc-context-move ccc-context-move-priority" onClick={() => setModal("issue")}><span>Priority</span><strong>Raise an operational issue</strong><em>Open issue <ChevronRight /></em></button><button className="ccc-context-move ccc-context-move-opportunity" onClick={() => setModal("booking")}><span>Win</span><strong>Celebrate a confirmed booking</strong><em>Announce booking <ChevronRight /></em></button><button className="ccc-context-move ccc-context-move-followup" onClick={() => setModal("reminder")}><span>Follow-up</span><strong>Keep a command item on time</strong><em>Set reminder <ChevronRight /></em></button></div></article><article className="ccc-context-card ccc-context-related"><header><span>Live signals</span></header><button type="button" onClick={() => setView("chat")}><MessageSquare /><span>Channel messages</span><b>{rootMessages.length}</b><ChevronRight /></button><button type="button" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}><MessageSquare /><span>Active threads</span><b>{activeThreads.length}</b><ChevronRight /></button><button type="button" onClick={() => setView("issues")}><ShieldAlert /><span>Unresolved issues</span><b>{openIssues.length}</b><ChevronRight /></button><button type="button" onClick={() => setModal("pin")}><Pin /><span>Pinned note</span><b>{activePin ? "1" : "0"}</b><ChevronRight /></button></article></aside>
+          <aside className="ccc-command-panel ccc-right-panel"><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} /></aside>
         </div>
       </section>
       {threadId !== null && <ThreadDrawer thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} />}
