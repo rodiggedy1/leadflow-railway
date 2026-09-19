@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { adminAgentProcedure, agentPageProcedure, router } from "./_core/trpc";
+import { adminAgentProcedure, agentPageProcedure, agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import {
   conversationSessions,
@@ -25,7 +25,7 @@ import {
   campaignBlasts,
   smsOptOuts,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
 const NON_LEAD_SOURCES = [
   "cs_initiated",
   "cs-inbound",
@@ -49,7 +49,8 @@ import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSo
 type LeadsCrmHistoryEntry = {
   role?: string;
   content?: string;
-  ts?: number;
+  ts?: number | string;
+  opMsgId?: string;
 };
 
 function leadsCrmMilliseconds(value: Date | string | number | null | undefined): number {
@@ -218,6 +219,50 @@ function sourceLabel(src: string): string {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const commandCenterRouter = router({
+  /**
+   * Read-only event source for Command Chat's middle timeline. The client
+   * supplies only team session IDs already rendered in the untouched left
+   * rail, and this expands those exact conversations into inbound SMS events.
+   * No state is changed.
+   */
+  listInboundTeamSmsEvents: agentProcedure
+    .input(z.object({ sessionIds: z.array(z.number().int().positive()).max(500) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      const sessionIds = [...new Set(input.sessionIds)];
+      if (!db || sessionIds.length === 0) return [];
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          messageHistory: conversationSessions.messageHistory,
+        })
+        .from(conversationSessions)
+        .where(inArray(conversationSessions.id, sessionIds));
+
+      const events: Array<{ id: string; sessionId: number; name: string; body: string; ts: number }> = [];
+      for (const session of sessions) {
+        const history = parseLeadsCrmHistory(session.messageHistory);
+        for (const [index, message] of history.entries()) {
+          const body = message.content?.trim();
+          const ts = leadsCrmMilliseconds(message.ts);
+          if (message.role !== "user" || !body || !ts) continue;
+          events.push({
+            id: `${session.id}:${message.opMsgId ?? index}:${ts}`,
+            sessionId: session.id,
+            name: session.leadName?.trim() || "Team",
+            body,
+            ts,
+          });
+        }
+      }
+
+      return events
+        .sort((left, right) => right.ts - left.ts)
+        .slice(0, 500)
+        .reverse();
+    }),
+
   /**
    * Read-only data contract for the new Leads CRM. This procedure is limited
    * to agents with the existing "leads" permission and never changes lead,

@@ -10,6 +10,7 @@ describe("Command Chat exact live shell", () => {
     const page = read("client/src/pages/CommandChatExactLive.tsx");
     const styles = read("client/src/pages/command-chat-exact-live.css");
     const app = read("client/src/App.tsx");
+    const commandCenter = read("server/commandCenterRouter.ts");
 
     for (const stylesheet of [
       "command-chat-crm-review.css",
@@ -113,26 +114,34 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('smsInbox.filter((conversation) => conversation.lastSenderRole === "user")');
     expect(page).toContain('SMS <b>{inboundSmsInbox.length}</b>');
     expect(page).toContain('{inboundSmsInbox.map((conversation) => <SmsInboxRow');
-    expect(page).toContain('const latestInboundTeamMessage = useMemo(');
-    expect(page).toContain('inboundSmsInbox.find((conversation) => conversation.personType === "team") ?? null');
-    expect(page).not.toContain('smsInbox.find((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user") ?? null');
-    expect(page).toContain('{latestInboundTeamMessage && <TeamSmsFeedMessage conversation={latestInboundTeamMessage} onOpen={() => setSelectedSmsConversation(latestInboundTeamMessage)} />}');
-    expect(page).toContain('{visibleRootMessages.map((message) => <LiveMessage');
-    expect(page.indexOf('{visibleRootMessages.map((message) => <LiveMessage')).toBeLessThan(page.indexOf('{latestInboundTeamMessage && <TeamSmsFeedMessage'));
+    expect(page).toContain('const leftTeamSmsSessionIds = useMemo(');
+    expect(page).toContain('trpc.commandCenter.listInboundTeamSmsEvents.useQuery');
+    expect(page).toContain('{ sessionIds: leftTeamSmsSessionIds }');
+    expect(page).toContain('const commandTimeline = useMemo<CommandTimelineEntry[]>(');
+    expect(page).toContain('...visibleRootMessages.map((message) => ({ kind: "internal" as const');
+    expect(page).toContain('...(teamSmsEvents as TeamSmsStreamEvent[]).map((event) => ({ kind: "team-sms" as const');
+    expect(page).toContain('.sort((left, right) => left.ts - right.ts || left.id.localeCompare(right.id))');
+    expect(page).toContain('commandTimeline.map((entry) => entry.kind === "internal"');
+    expect(page).not.toContain('const latestInboundTeamMessage = useMemo(');
+    expect(page).not.toContain('{latestInboundTeamMessage && <TeamSmsFeedMessage');
     expect(page).toContain('const messageStreamRef = useRef<HTMLDivElement>(null);');
     expect(page).toContain('const centerFeedInitialScrollDone = useRef(false);');
     expect(page).toContain('stream.scrollTop = stream.scrollHeight;');
     expect(page).toContain('className="ccc-message-stream" ref={messageStreamRef}');
-    expect(page).not.toContain('conversation.personType === "team" && Boolean(conversation.lastMessageText?.trim())');
-    expect(page).not.toContain('const commandFeed = useMemo<CommandFeedEntry[]>(');
-    expect(page).not.toContain('].sort((left, right) => right.ts - left.ts)');
-    expect(page).toContain('function TeamSmsFeedMessage({ conversation, onOpen }');
-    expect(page).toContain('const body = conversation.lastMessageText?.trim() || conversation.aiSummary?.trim() || "No message preview available.";');
+    expect(page).toContain('function TeamSmsFeedMessage({ event, onOpen }');
+    expect(page).toContain('const { name, body, ts: timestamp } = event;');
     expect(page).toContain('className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"');
     expect(page).toContain('<Heart fill="currentColor" /> <b>3</b>');
     expect(page).toContain('className="ccc-live-team-sms-reactions"');
-    expect(page).toContain('onOpen={() => setSelectedSmsConversation(latestInboundTeamMessage)}');
+    expect(page).toContain('const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) setSelectedSmsConversation(conversation);');
     expect(page).toContain('conversation.personType === "team" ? name : "Customer"');
+    expect(commandCenter).toContain('listInboundTeamSmsEvents: agentProcedure');
+    expect(commandCenter).toContain('sessionIds: z.array(z.number().int().positive()).max(500)');
+    expect(commandCenter).toContain('.where(inArray(conversationSessions.id, sessionIds));');
+    expect(commandCenter).toContain('if (message.role !== "user" || !body || !ts) continue;');
+    for (const prohibited of ["cleaner" + "Jobs", "cleaner" + "_jobs"]) {
+      expect(commandCenter).not.toContain(prohibited);
+    }
     expect(page).toContain('function LeftRailThreads({ threads, onOpen }');
     expect(page).toContain('function ThreadPanel({ thread, callerName, draft, pending, photoMap, onDraft, onSend, onClose }');
     expect(page).toContain('threadId !== null ? <ThreadPanel');
