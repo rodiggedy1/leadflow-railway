@@ -162,7 +162,7 @@ function AdminLeadsCRMExactLiveRoute() {
   // Preserve existing deep-linked utility dashboards while the default Leads
   // destination is the independent, review-derived CRM.
   if (tab && tab !== "leads") return <AdminDashboard />;
-  return <AdminPageGuard pageId="leads"><LeadsCRMExactLive /></AdminPageGuard>;
+  return <AdminPageGuard pageId="leads"><ReviewWorkspaceFrame navActivePath="/review/leads-crm"><LeadsCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 /**
  * OpsChatRedirect

@@ -11,7 +11,7 @@ type ReviewDestination = {
 };
 
 const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
-  { label: "CRM OVERVIEW", items: [{ label: "Dashboard", href: "/review/operations-dashboard", icon: LayoutDashboard }, { label: "Workspace Chat", href: "/review/command-chat-crm", liveHref: "/admin/command-chat", icon: Command }, { label: "Leads CRM", href: "/review/leads-crm", icon: LayoutDashboard }, { label: "Bookings CRM", href: "/review/bookings-crm", liveHref: "/admin/bookings", icon: CalendarDays }] },
+  { label: "CRM OVERVIEW", items: [{ label: "Dashboard", href: "/review/operations-dashboard", icon: LayoutDashboard }, { label: "Workspace Chat", href: "/review/command-chat-crm", liveHref: "/admin/command-chat", icon: Command }, { label: "Leads CRM", href: "/review/leads-crm", liveHref: "/admin/leads", icon: LayoutDashboard }, { label: "Bookings CRM", href: "/review/bookings-crm", liveHref: "/admin/bookings", icon: CalendarDays }] },
   {
     label: "CUSTOMER OPERATIONS",
     items: [
