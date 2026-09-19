@@ -428,7 +428,7 @@ export default function CommandChatExactLive() {
     [rootMessages],
   );
   const teamInboxMessages = useMemo(
-    () => smsInbox.filter((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user" && Boolean(conversation.lastMessageText?.trim())),
+    () => smsInbox.filter((conversation) => conversation.personType === "team" && Boolean(conversation.lastMessageText?.trim())),
     [smsInbox],
   );
   const commandFeed = useMemo<CommandFeedEntry[]>(
@@ -722,7 +722,7 @@ function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversat
 function TeamSmsFeedMessage({ conversation, onOpen }: { conversation: SmsInboxConversation; onOpen: () => void }) {
   const name = smsConversationName(conversation);
   const timestamp = smsInboxTimestamp(conversation);
-  const body = conversation.lastMessageText?.trim() || "Team text message";
+  const body = conversation.lastMessageText?.trim() || "No message preview available.";
   return <article className="ccc-live-team-sms-message"><span className="ccc-live-team-sms-avatar"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><em>Team</em><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{body}</p><footer><MessageSquare />Reply to team <ChevronRight /></footer></button></div></article>;
 }
 

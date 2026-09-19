@@ -106,12 +106,15 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('onClick={() => onOpen(issue.id)}');
     expect(page).toContain('<IssueEngineOverlay open={issueEngineOpen}');
     expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
+    expect(page).toContain('const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
     expect(page).toContain('const teamInboxMessages = useMemo(');
-    expect(page).toContain('conversation.personType === "team" && conversation.lastSenderRole === "user"');
+    expect(page).toContain('conversation.personType === "team" && Boolean(conversation.lastMessageText?.trim())');
+    expect(page).not.toContain('conversation.personType === "team" && conversation.lastSenderRole === "user"');
     expect(page).toContain('const commandFeed = useMemo<CommandFeedEntry[]>(');
     expect(page).toContain('function TeamSmsFeedMessage({ conversation, onOpen }');
+    expect(page).toContain('const body = conversation.lastMessageText?.trim() || "No message preview available.";');
     expect(page).toContain('onOpen={() => setSelectedSmsConversation(entry.conversation)}');
     expect(page).toContain('conversation.personType === "team" ? name : "Customer"');
     expect(page).toContain('function LeftRailThreads({ threads, onOpen }');
@@ -137,6 +140,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live-sms-drawer");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-message");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-card");
+    expect(styles).toContain(".ccc-live .ccc-live-team-sms-card:hover footer");
     expect(styles).toContain(".ccc-live .ccc-right-panel-thread-open");
     expect(styles).toContain(".ccc-live .ccc-reference-header-metrics .ccc-header-metric-control");
     expect(styles).toContain(".ccc-live .ccc-group-message .ccc-live-mention");
