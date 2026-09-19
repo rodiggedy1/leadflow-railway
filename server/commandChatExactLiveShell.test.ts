@@ -70,7 +70,14 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('if (message.quickAction === "sync_watchdog") return true;');
     expect(page).toContain('if (message.role === "system" && /\\bSync Alert\\b/i.test(message.body)) return true;');
     expect(page).toContain('message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body)');
+    expect(page).toContain('function isServiceAlert(message: ChannelMessage)');
+    expect(page).toContain('message.quickAction === "post_start_overdue" || message.quickAction === "possible_noshow"');
     expect(page).toContain('const visibleRootMessages = useMemo(');
+    expect(page).toContain('!isHiddenCommandNotification(message) && !isServiceAlert(message)');
+    expect(page).toContain('const serviceAlerts = useMemo(');
+    expect(page).toContain('rootMessages.filter(isServiceAlert).sort((left, right) => right.ts - left.ts)');
+    expect(page).toContain('function ServiceAlertPanel({ alerts }: { alerts: ChannelMessage[] })');
+    expect(page).toContain('className="ccc-context-card ccc-live-service-alerts"');
     expect(page).toContain('function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null');
     expect(page).toContain('function ConfirmationReplyCard({ alert, timestamp }');
     expect(page).toContain('href="/admin/confirmation-calls"');
@@ -82,6 +89,8 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const incomingLeads = useMemo(');
     expect(page).toContain('<LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} />');
     expect(page).toContain('<LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} />');
+    expect(page).toContain('<ServiceAlertPanel alerts={serviceAlerts} />');
+    expect(page.indexOf('<LeadQueue title="Other Incoming Leads"')).toBeLessThan(page.indexOf('<ServiceAlertPanel alerts={serviceAlerts} />'));
     expect(page).toContain('agents.agents.slice(0, 5)');
     expect(page).toContain('type LeftRailMode = "sms" | "issues" | "threads";');
     expect(page).toContain('const [leftRailMode, setLeftRailMode] = useState<LeftRailMode>("sms");');
@@ -160,6 +169,8 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live-message-media");
     expect(styles).toContain(".ccc-live .ccc-live-lead-queue");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary");
+    expect(styles).toContain(".ccc-live .ccc-live-service-alerts");
+    expect(styles).toContain(".ccc-live .ccc-live-service-alert-scroll");
     expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
     expect(styles).toContain(".ccc-live .ccc-live-left-rail");
     expect(styles).toContain(".ccc-live-sms-drawer");

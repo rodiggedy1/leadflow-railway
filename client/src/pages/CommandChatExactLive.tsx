@@ -250,6 +250,10 @@ function isHiddenCommandNotification(message: ChannelMessage) {
   return message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body);
 }
 
+function isServiceAlert(message: ChannelMessage) {
+  return message.role === "system" && (message.quickAction === "post_start_overdue" || message.quickAction === "possible_noshow");
+}
+
 function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: string | null; className?: string }) {
   return photoUrl ? <img className={className} src={photoUrl} alt={`${name} profile`} /> : <span className={className}>{initials(name)}</span>;
 }
@@ -272,6 +276,20 @@ function LeadQueue({ title, description, leads }: { title: string; description: 
       </div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
     </article>
   );
+}
+
+function ServiceAlertPanel({ alerts }: { alerts: ChannelMessage[] }) {
+  if (!alerts.length) return null;
+  return <article className="ccc-context-card ccc-live-service-alerts">
+    <header><span><Activity />Service alerts</span><b>{alerts.length}</b></header>
+    <p className="ccc-live-service-alerts-description">Latest field check-in notices</p>
+    <div className="ccc-live-service-alert-scroll" aria-label="Service alert history">
+      {alerts.map((alert) => <div className="ccc-live-service-alert" key={alert.id}>
+        <div><span className={alert.quickAction === "possible_noshow" ? "is-critical" : ""}>{alert.quickAction === "possible_noshow" ? "Possible no-show" : "Overdue check-in"}</span><time>{formatTime(alert.ts)}</time></div>
+        <p>{alert.body}</p>
+      </div>)}
+    </div>
+  </article>;
 }
 
 function LoginGate({ onSuccess }: { onSuccess: () => void }) {
@@ -449,8 +467,12 @@ export default function CommandChatExactLive() {
   const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null), [rootMessages]);
   const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
   const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
+  const serviceAlerts = useMemo(
+    () => rootMessages.filter(isServiceAlert).sort((left, right) => right.ts - left.ts),
+    [rootMessages],
+  );
   const visibleRootMessages = useMemo(
-    () => rootMessages.filter((message) => !isHiddenCommandNotification(message)),
+    () => rootMessages.filter((message) => !isHiddenCommandNotification(message) && !isServiceAlert(message)),
     [rootMessages],
   );
   const commandTimeline = useMemo<CommandTimelineEntry[]>(
@@ -673,7 +695,7 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} /><ServiceAlertPanel alerts={serviceAlerts} /></>}
           </aside>
         </div>
       </section>
