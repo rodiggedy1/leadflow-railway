@@ -52,6 +52,11 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('const renderableTimeline = useMemo');
     expect(page).toContain('entry.message.text.trim() && <p>{entry.message.text}</p>');
     expect(page).not.toContain('initialMission={initialMission}');
+    expect(page).toContain('<FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" theme="dark" />');
+    expect(page).toContain('customerFirstName={selected.name.split(" ")[0]} theme="dark"');
+    expect(page).toContain('<ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} theme="dark" />');
+    expect(page).toContain('jobContext={clientProfile?.todayJob ?');
+    expect(page).toContain('theme="dark" />');
     expect(customerPanel).toContain('initialMission?: "payment" | "quote" | "agreement" | null;');
     expect(customerPanel).toContain('if (initialMission === "payment") firePaymentLink();');
     expect(customerPanel).toContain('if (initialMission === "quote") setShowQuoteWidget(true);');
@@ -62,6 +67,12 @@ describe("SMS exact-live shell", () => {
     expect(css).toContain('.sms-exact-live .cic-live-media video');
     expect(css).toContain('.sms-exact-live .cic-live-mission');
     expect(css).toContain('.sms-exact-live .cic-inline-mission');
+    expect(css).toContain('/* Dark composer assistants');
+    expect(css).toContain('.cic-assistant-dark-backdrop');
+    expect(css).toContain('.cic-response-assistant-dark');
+    expect(css).toContain('.cic-objections-assistant-dark');
+    expect(css).toContain('.cic-worldclass-assistant-dark');
+    expect(css).toContain('.sms-exact-live .cic-composer { position: relative; }');
     expect(app).toContain('const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));');
     expect(app).toContain('function AdminSmsExactLiveRoute()');
     expect(app).toContain('const isSmsWorkspace = location === "/admin/sms";');

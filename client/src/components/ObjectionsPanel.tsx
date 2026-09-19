@@ -69,10 +69,11 @@ type Message = { role: "user" | "assistant"; content: string };
 interface Props {
   open: boolean;
   onClose: () => void;
+  theme?: "dark";
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-export default function ObjectionsPanel({ open, onClose }: Props) {
+export default function ObjectionsPanel({ open, onClose, theme }: Props) {
   const [customInput, setCustomInput] = useState("");
   const [history, setHistory] = useState<Message[]>([]);
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
@@ -146,7 +147,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
   const hasConversation = history.length > 0;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl"
+    <div className={`absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl ${theme === "dark" ? "cic-assistant-dark cic-objections-assistant-dark" : ""}`}
       style={{ maxHeight: "min(380px, calc(100vh - 220px))", minHeight: "200px" }}
     >
       {/* Header */}
