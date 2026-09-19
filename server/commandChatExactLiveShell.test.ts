@@ -44,6 +44,9 @@ describe("Command Chat exact live shell", () => {
       "getChannelCounts.useQuery",
       "listActiveThreads.useQuery",
       "getThreadReplies.useQuery",
+      "listCsInbox.useQuery",
+      "getCsConversation.useQuery",
+      "leads.sendMessage.useMutation",
       "toggleReaction.useMutation",
       "getReactions.useMutation",
       "uploadOpsPhoto.useMutation",
@@ -73,6 +76,14 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('href="/admin/confirmation-calls"');
     expect(page).toContain('function leadFromCommandMessage(message: ChannelMessage): CommandLead | null');
     expect(page).toContain('function customerPortraitFor(value: string)');
+    expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
+    expect(page).toContain('function SmsConversationDrawer({ conversation, liveRows, callerName, onClose }');
+    expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation');
+    expect(page).toContain('source: "cs_inbox"');
+    expect(page).toContain('className="ccc-left-section ccc-live-sms-inbox"');
+    expect(page).toContain('<span>TEXT MESSAGES</span>');
+    expect(page).toContain('setView("calls")');
+    expect(page).not.toContain('ccc-live-thread-list');
     expect(page).toContain('className="ccc-live-lead-primary"');
     expect(page).toContain('className="ccc-live-lead-primary-copy"');
     expect(page).toContain('const webAndQuoteLeads = useMemo(');
@@ -88,6 +99,9 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-lead-queue");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary");
     expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
+    expect(styles).toContain(".ccc-live .ccc-live-sms-inbox");
+    expect(styles).toContain(".ccc-live-sms-backdrop");
+    expect(styles).toContain(".ccc-live-sms-drawer");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
     expect(app).toContain('function AdminCommandChatExactLiveRoute() { return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>; }');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');

@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import "./command-chat-crm-review.css";
 import "./command-chat-left-cohesion.css";
 import "./command-chat-lead-queue.css";
@@ -80,6 +81,28 @@ type ConfirmationReplyAlert = {
   serviceDate: string | null;
   replyText: string;
   replyUrl: string | null;
+};
+
+type SmsInboxConversation = {
+  id: number;
+  leadName: string | null;
+  leadPhone: string | null;
+  lastMessageText: string | null;
+  lastMsgTs: number | null;
+  lastMessageTs: number | null;
+  lastSenderRole: string | null;
+  hasUnanswered: boolean;
+  aiSummary: string | null;
+  csQueue: string | null;
+  personType: "team" | "customer";
+  lastInboundPhoneNumberId: string | null;
+};
+
+type SmsInboxMessage = {
+  role: string;
+  content: string;
+  ts?: number;
+  senderName?: string;
 };
 
 const CHANNELS: Array<{ key: ChannelKey; label: string; icon: string; tone: string }> = [
@@ -159,6 +182,30 @@ function customerPortraitFor(value: string) {
   return CUSTOMER_PORTRAITS[Math.abs(total) % CUSTOMER_PORTRAITS.length];
 }
 
+function smsInboxName(conversation: SmsInboxConversation) {
+  return conversation.leadName?.trim() || conversation.leadPhone?.trim() || "Unknown customer";
+}
+
+function smsInboxTimestamp(conversation: SmsInboxConversation) {
+  return Number(conversation.lastMsgTs ?? conversation.lastMessageTs ?? 0);
+}
+
+function formatSmsInboxTime(value: number) {
+  if (!value) return "—";
+  const timestamp = new Date(value);
+  const now = new Date();
+  const sameDay = timestamp.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay) return timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (timestamp.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return timestamp.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function smsInboxPreview(conversation: SmsInboxConversation) {
+  return conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No text preview available.";
+}
+
 function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null {
   if (message.role !== "system" || !message.from.includes("Customer SMS Reply")) return null;
   let metadata: Record<string, unknown> = {};
@@ -233,6 +280,63 @@ function LeadQueue({ title, description, leads }: { title: string; description: 
   );
 }
 
+function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversation; onOpen: () => void }) {
+  const name = smsInboxName(conversation);
+  const isTeam = conversation.personType === "team" || conversation.csQueue === "Teams";
+  const timestamp = smsInboxTimestamp(conversation);
+  return <button type="button" className="ccc-live-sms-row" onClick={onOpen}>
+    {isTeam ? <span className="ccc-live-sms-team-avatar" aria-label={`${name} team conversation`}><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}
+    <span className="ccc-live-sms-row-copy"><strong>{name}</strong><small>{smsInboxPreview(conversation)}</small></span>
+    <span className="ccc-live-sms-row-meta"><time>{formatSmsInboxTime(timestamp)}</time><i className={conversation.hasUnanswered ? "is-unread" : ""} /></span>
+  </button>;
+}
+
+function SmsConversationDrawer({ conversation, liveRows, callerName, onClose }: { conversation: SmsInboxConversation; liveRows: SmsInboxConversation[]; callerName: string; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const [draft, setDraft] = useState("");
+  const name = smsInboxName(conversation);
+  const { data: detail, isLoading } = trpc.leads.getCsConversation.useQuery({ sessionId: conversation.id }, { staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 });
+  const sendSms = trpc.leads.sendMessage.useMutation({
+    onSuccess: () => {
+      setDraft("");
+      void utils.leads.listCsInbox.invalidate({ showResolved: false });
+      void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
+    },
+  });
+  const messages = useMemo(() => {
+    try {
+      const raw = JSON.parse(detail?.messageHistory ?? "[]") as unknown;
+      return Array.isArray(raw) ? raw.filter((message): message is SmsInboxMessage => Boolean(message) && typeof message === "object" && typeof (message as SmsInboxMessage).content === "string") : [];
+    } catch {
+      return [];
+    }
+  }, [detail?.messageHistory]);
+  const reply = () => {
+    if (!draft.trim()) return;
+    const fromNumberId = getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, liveRows);
+    sendSms.mutate({ sessionId: conversation.id, message: draft.trim(), fromNumberId, source: "cs_inbox" });
+  };
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return <div className="ccc-live-sms-backdrop" role="dialog" aria-modal="true" aria-label={`Text conversation with ${name}`} onMouseDown={onClose}>
+    <aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
+      <header><div>{conversation.personType === "team" || conversation.csQueue === "Teams" ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" onClick={onClose} aria-label="Close text conversation"><X /></button></header>
+      <section className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary?.trim() || "No AI summary has been saved for this conversation yet."}</small></span></section>
+      <div className="ccc-live-sms-messages">{isLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text conversation…</div> : messages.length ? messages.map((message, index) => {
+        const outgoing = message.role === "assistant" || message.role === "agent";
+        const label = outgoing ? message.senderName || callerName : name;
+        return <article key={`${message.ts ?? index}-${index}`} className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`}><small>{label} · {message.ts ? formatTime(message.ts) : ""}</small><p>{message.content}</p></article>;
+      }) : <div className="ccc-live-empty"><MessageSquare />No text messages are available.</div>}</div>
+      <footer><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); reply(); } }} placeholder={`Reply to ${name.split(" ")[0]}…`} /><button type="button" disabled={!draft.trim() || sendSms.isPending} onClick={reply} aria-label="Send text reply">{sendSms.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></footer>
+    </aside>
+  </div>;
+}
+
 function LoginGate({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -291,6 +395,7 @@ export default function CommandChatExactLive() {
   const [draft, setDraft] = useState("");
   const [modal, setModal] = useState<ModalKind>(null);
   const [threadId, setThreadId] = useState<number | null>(null);
+  const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
   const [threadDraft, setThreadDraft] = useState("");
   const [notice, setNotice] = useState("");
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
@@ -322,6 +427,10 @@ export default function CommandChatExactLive() {
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
   const { data: threadDetail } = trpc.opsChat.getThreadReplies.useQuery({ parentId: threadId ?? 0 }, { enabled: isAuthenticated && threadId !== null });
+  const { data: smsInboxRows = [], isLoading: smsInboxLoading } = trpc.leads.listCsInbox.useQuery(
+    { showResolved: false },
+    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+  );
 
   const messageIds = useMemo(() => (channelMessages as ChannelMessage[]).map((message) => message.id).filter((id) => id > 0).slice(-500), [channelMessages]);
   const reactionsMutation = trpc.opsChat.getReactions.useMutation();
@@ -381,6 +490,10 @@ export default function CommandChatExactLive() {
   const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null), [rootMessages]);
   const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
   const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
+  const smsInbox = useMemo(() => (smsInboxRows as unknown as SmsInboxConversation[])
+    .filter((conversation) => Boolean(conversation.leadPhone))
+    .sort((left, right) => smsInboxTimestamp(right) - smsInboxTimestamp(left)), [smsInboxRows]);
+  const smsInboxPreviewRows = useMemo(() => smsInbox.slice(0, 8), [smsInbox]);
   const visibleRootMessages = useMemo(
     () => rootMessages.filter((message) => !isHiddenCommandNotification(message)),
     [rootMessages],
@@ -421,6 +534,10 @@ export default function CommandChatExactLive() {
       if (!updatedChannel || updatedChannel === channel) void utils.opsChat.listChannelMessages.invalidate({ channel });
       void utils.opsChat.listActiveThreads.invalidate();
       void utils.opsChat.getChannelCounts.invalidate();
+    },
+    onLeadUpdate: () => {
+      void utils.leads.listCsInbox.invalidate({ showResolved: false });
+      if (selectedSmsConversation) void utils.leads.getCsConversation.invalidate({ sessionId: selectedSmsConversation.id });
     },
     onReactionUpdate: () => {
       if (messageIds.length) void reactionsMutation.mutateAsync({ messageIds }).then((result) => setReactionRows(result.reactions));
@@ -522,14 +639,14 @@ export default function CommandChatExactLive() {
             <div className="ccc-left-section ccc-conversations-section">
               <div className="ccc-panel-heading ccc-conversation-heading"><div><span>COMMAND CHANNELS</span></div><button type="button" aria-label="Search command messages" onClick={() => document.querySelector<HTMLInputElement>(".ccc-live .ccc-conversation-search input")?.focus()}><Search /></button></div>
               <label className="ccc-search ccc-conversation-search"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search command messages..." /></label>
-              <div className="ccc-conversation-filters" aria-label="Command conversation filters"><button className="active">All <b>{visibleRootMessages.length}</b></button><button type="button" onClick={() => setView("issues")}>Issues <b>{openIssues.length}</b></button><button type="button" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}>Threads <b>{activeThreads.length}</b></button></div>
+              <div className="ccc-conversation-filters" aria-label="Command conversation filters"><button className="active">All <b>{visibleRootMessages.length}</b></button><button type="button" onClick={() => setView("issues")}>Issues <b>{openIssues.length}</b></button><button type="button" onClick={() => setView("calls")}>Threads <b>{activeThreads.length}</b></button></div>
               <div className="ccc-conversation-list ccc-inbox-list">
                 {CHANNELS.map((item) => {
                   const count = item.key === "command" ? visibleRootMessages.length : (channelCounts?.[item.key] ?? 0);
                   return <button key={item.key} type="button" className={`ccc-conversation ccc-channel-thread ccc-channel-thread-${item.tone} ${channel === item.key ? "active" : ""}`} onClick={() => { setChannel(item.key); setView("chat"); setThreadId(null); }}><span className="ccc-channel-thread-icon">{item.icon}</span><span className="ccc-conv-copy ccc-inbox-copy"><strong>{item.label}</strong><small>{count ? `${count} active messages` : "No messages yet"}</small></span><span className="ccc-conv-meta ccc-inbox-meta"><time>{item.key === channel ? "open" : ""}</time>{count > 0 && <b>{count > 99 ? "99+" : count}</b>}</span></button>;
                 })}
               </div>
-              <div className="ccc-left-section ccc-live-thread-list"><div className="ccc-section-label"><span>ACTIVE THREADS</span><b>{activeThreads.length}</b></div>{activeThreads.slice(0, 8).map((thread) => <button type="button" key={thread.parentId} className="ccc-live-thread-row" onClick={() => setThreadId(thread.parentId)}><span>{initials(thread.parentFrom)}</span><div><strong>{thread.parentFrom}</strong><small>{thread.lastReplyBody || thread.parentBody}</small></div><b>{thread.replyCount}</b></button>)}</div>
+              <div className="ccc-left-section ccc-live-sms-inbox"><div className="ccc-section-label"><span>TEXT MESSAGES</span><b>{smsInbox.length}</b></div><p className="ccc-live-sms-inbox-intro">Live customer and team replies</p>{smsInboxPreviewRows.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => setSelectedSmsConversation(conversation)} />)}{!smsInboxPreviewRows.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : "No active text conversations."}</p>}<a className="ccc-live-sms-open-workspace" href="/admin/sms">Open SMS workspace <ChevronRight /></a></div>
             </div>
           </aside>
 
@@ -552,6 +669,7 @@ export default function CommandChatExactLive() {
         </div>
       </section>
       {threadId !== null && <ThreadDrawer thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} liveRows={smsInbox} callerName={callerName} onClose={() => setSelectedSmsConversation(null)} />}
       {modal && <ActionModal kind={modal} onClose={() => setModal(null)} issueTitle={issueTitle} issueNotes={issueNotes} issueType={issueType} reminderBody={reminderBody} reminderMinutes={reminderMinutes} pinBody={pinBody} bookingPerson={bookingPerson} bookingAmount={bookingAmount} bookingNote={bookingNote} onIssueTitle={setIssueTitle} onIssueNotes={setIssueNotes} onIssueType={setIssueType} onReminderBody={setReminderBody} onReminderMinutes={setReminderMinutes} onPinBody={setPinBody} onBookingPerson={setBookingPerson} onBookingAmount={setBookingAmount} onBookingNote={setBookingNote} pending={createIssue.isPending || setReminder.isPending || pinNote.isPending || announceBooking.isPending} onSubmit={() => {
         if (modal === "issue") createIssue.mutate({ title: issueTitle.trim(), issueType, severity: "medium", notes: issueNotes.trim() || undefined, createdByName: profile?.name || callerName });
         if (modal === "reminder") setReminder.mutate({ channel, body: reminderBody.trim(), authorName: profile?.name || callerName, triggerAt: Date.now() + reminderMinutes * 60_000 });
