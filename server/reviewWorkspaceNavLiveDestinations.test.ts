@@ -10,6 +10,7 @@ describe("Review Workspace live destinations", () => {
     const nav = read("client/src/components/ReviewWorkspaceNav.tsx");
     const app = read("client/src/App.tsx");
 
+    expect(nav).toContain('liveHref: "/admin/command-chat"');
     expect(nav).toContain('liveHref: "/admin/bookings"');
     expect(nav).toContain('liveHref: "/admin/customer-profile"');
     expect(nav).toContain('liveHref: "/admin/confirmation-calls"');
@@ -27,6 +28,7 @@ describe("Review Workspace live destinations", () => {
     expect(nav).toContain('href: "/review/payments"');
     expect(nav).toContain('href: "/review/schedule-crm"');
 
+    expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
     expect(app).toContain('<Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />');
     expect(app).toContain('<Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />');
     expect(app).toContain('<Route path={"/admin/confirmation-calls"} component={AdminConfirmationCallsExactReviewRoute} />');
