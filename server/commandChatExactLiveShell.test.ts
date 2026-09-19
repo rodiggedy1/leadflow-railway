@@ -64,7 +64,7 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('mediaUrl: attachmentUrls.length ? JSON.stringify(attachmentUrls) : undefined');
     expect(page).toContain('"madison_sms_draft",');
     expect(page).toContain('"madison_email_draft",');
-    expect(page).toContain('"madison_call_summary",');
+    expect(page).not.toContain('  "madison_call_summary",');
     expect(page).toContain('"madison_auto_sent",');
     expect(page).toContain('function isHiddenCommandNotification(message: ChannelMessage)');
     expect(page).toContain('if (message.quickAction === "sync_watchdog") return true;');
@@ -80,6 +80,12 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('className="ccc-context-card ccc-live-service-alerts"');
     expect(page).toContain('function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null');
     expect(page).toContain('function ConfirmationReplyCard({ alert, timestamp }');
+    expect(page).toContain('function callHandoffFromMessage(message: ChannelMessage): IncomingCallHandoff | null');
+    expect(page).toContain('function IncomingCallHandoffCard({ handoff, timestamp }');
+    expect(page).toContain('if (callHandoff) return <IncomingCallHandoffCard handoff={callHandoff} timestamp={message.ts} />;');
+    expect(page).toContain('AI-handled inbound call');
+    expect(page).toContain('className="ccc-voice-handoff"');
+    expect(page).toContain('proxyRecordingUrl(handoff.recordingUrl)');
     expect(page).toContain('href="/admin/confirmation-calls"');
     expect(page).toContain('function leadFromCommandMessage(message: ChannelMessage): CommandLead | null');
     expect(page).toContain('function customerPortraitFor(value: string)');

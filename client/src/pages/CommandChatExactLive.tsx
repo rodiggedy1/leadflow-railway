@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, type ReactNode, useEffect, useMemo, useRef, use
 import {
   Activity,
   AlertTriangle,
+  AudioLines,
   Bell,
   CalendarClock,
   Check,
@@ -12,6 +13,7 @@ import {
   Clock3,
   FileText,
   Heart,
+  Headphones,
   ImagePlus,
   Loader2,
   Megaphone,
@@ -21,6 +23,7 @@ import {
   Paperclip,
   Phone,
   Pin,
+  Play,
   Plus,
   Send,
   ShieldAlert,
@@ -29,6 +32,7 @@ import {
   X,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { proxyRecordingUrl } from "@/lib/utils";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
@@ -81,6 +85,13 @@ type ConfirmationReplyAlert = {
   serviceDate: string | null;
   replyText: string;
   replyUrl: string | null;
+};
+
+type IncomingCallHandoff = {
+  callerName: string;
+  durationSeconds: number | null;
+  outcome: string;
+  recordingUrl: string | null;
 };
 
 type SmsInboxConversation = {
@@ -140,7 +151,6 @@ const HIDDEN_COMMAND_QUICK_ACTIONS = [
   "missed_call",
   "madison_sms_draft",
   "madison_email_draft",
-  "madison_call_summary",
   "madison_auto_sent",
 ] as const;
 const CUSTOMER_PORTRAITS = [
@@ -153,6 +163,7 @@ const CUSTOMER_PORTRAITS = [
   "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
   "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qRwiNDAHRQQTxPbz.png",
 ] as const;
+const VOICE_HANDOFF_BARS = [42, 78, 57, 88, 49, 68, 91, 61, 76, 45, 70, 83, 54, 66, 79, 51, 87, 47, 72, 59, 82, 53, 74, 64, 46, 77, 55, 84, 50, 69, 80, 58, 73, 48, 86, 62, 75, 56, 81, 52, 67, 89, 60, 74, 44, 65, 78, 54, 71, 46, 63, 80, 52, 68, 43, 75, 57, 82, 48, 65] as const;
 
 function initials(value: string) {
   return value.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "MI";
@@ -217,6 +228,25 @@ function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationRepl
   const customerName = (dateMatch ? subject.slice(0, dateMatch.index) : subject).trim() || "Customer";
   const replyText = message.body.split("\n").find((line) => line.trim().startsWith(">"))?.replace(/^\s*>\s*/, "").replace(/^"|"$/g, "").trim() || "No reply text recorded.";
   return { intent, customerName, serviceDate: dateMatch?.[1] ?? null, replyText, replyUrl: /^https?:\/\/\S+$/i.test(replyText) ? replyText : null };
+}
+
+function callHandoffFromMessage(message: ChannelMessage): IncomingCallHandoff | null {
+  if (message.quickAction !== "madison_call_summary") return null;
+  let metadata: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(message.metadata ?? "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) metadata = parsed as Record<string, unknown>;
+  } catch {
+    // The persisted stream entry remains available even when legacy metadata is malformed.
+  }
+  const firstBodyLine = message.body.split("\n").find(Boolean)?.split(" · ")[0]?.trim();
+  const callerName = typeof metadata.callerName === "string" && metadata.callerName.trim()
+    ? metadata.callerName.trim()
+    : firstBodyLine || "Incoming caller";
+  const durationSeconds = typeof metadata.durationSeconds === "number" ? metadata.durationSeconds : null;
+  const outcome = typeof metadata.outcome === "string" && metadata.outcome.trim() ? metadata.outcome : "completed";
+  const recordingUrl = typeof metadata.recordingUrl === "string" ? metadata.recordingUrl : mediaUrls(message.mediaUrl)[0] ?? null;
+  return { callerName, durationSeconds, outcome, recordingUrl };
 }
 
 function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
@@ -718,9 +748,38 @@ function LiveMessage({ message, callerName, photoUrl, mentionPattern, reactions,
   const system = message.role === "system";
   const media = mediaUrls(message.mediaUrl);
   const confirmationReply = confirmationReplyFromMessage(message);
+  const callHandoff = callHandoffFromMessage(message);
   if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
+  if (callHandoff) return <IncomingCallHandoffCard handoff={callHandoff} timestamp={message.ts} />;
   if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{message.body}<time>{formatTime(message.ts)}</time></span></div>;
   return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em><time>{formatTime(message.ts)}</time></div>{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<p>{renderMentionBody(message.body, mentionPattern)}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}><img src={url} alt="Command attachment" /></a>)}</div>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
+}
+
+function formatCallDuration(seconds: number | null) {
+  if (!seconds || seconds < 1) return "—";
+  return seconds < 60 ? `0:${String(seconds).padStart(2, "0")}` : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function outcomeLabel(outcome: string) {
+  return outcome.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function IncomingCallHandoffCard({ handoff, timestamp }: { handoff: IncomingCallHandoff; timestamp: number }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const recordingUrl = proxyRecordingUrl(handoff.recordingUrl);
+  const playLabel = recordingUrl ? (playing ? "Pause incoming call recording" : "Play incoming call recording") : "Recording unavailable";
+  const togglePlayback = () => {
+    if (!audioRef.current) return;
+    if (audioRef.current.paused) void audioRef.current.play();
+    else audioRef.current.pause();
+  };
+  return <article className="ccc-voice-handoff" aria-label={`AI-handled inbound call from ${handoff.callerName}`}>
+    <header><div className="ccc-voice-handoff-identity"><img src={customerPortraitFor(handoff.callerName)} alt={`Caller portrait illustration for ${handoff.callerName}`} /><span><strong>{handoff.callerName}</strong><small><AudioLines />AI-handled inbound call</small></span></div><b>{outcomeLabel(handoff.outcome)}</b></header>
+    <div className="ccc-voice-handoff-player"><button type="button" aria-label={playLabel} disabled={!recordingUrl} onClick={togglePlayback}><Play fill="currentColor" /></button><span className="ccc-voice-handoff-waveform" aria-hidden="true">{VOICE_HANDOFF_BARS.map((height, index) => <i key={index} className={index < 11 ? "is-blue" : index < 30 ? "is-olive" : index < 41 ? "is-amber" : "is-silver"} style={{ height: `${height}%` }} />)}</span><time>{formatCallDuration(handoff.durationSeconds)}</time></div>
+    {recordingUrl && <audio ref={audioRef} src={recordingUrl} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} preload="metadata" />}
+    <footer><span><Headphones />{recordingUrl ? (playing ? "Playing call recording" : "Recording available") : "No recording stored"}</span><time>{dateLabel(timestamp)} · {formatTime(timestamp)}</time></footer>
+  </article>;
 }
 
 function renderMentionBody(body: string, mentionPattern: RegExp | null): ReactNode {

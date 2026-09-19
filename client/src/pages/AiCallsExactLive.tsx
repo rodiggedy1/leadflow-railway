@@ -60,9 +60,11 @@ type PersonItem = {
   risk: string;
 };
 type HistoryRow = {
-  id: number;
+  id: string;
+  source: "inbound" | "outbound";
   step: string;
   calledPhone: string | null;
+  callerName: string | null;
   outcome: string;
   durationSeconds: number | null;
   transcript: string | null;
@@ -71,6 +73,7 @@ type HistoryRow = {
   recordingUrl: string | null;
   createdAt: string | null;
   vapiCallId: string | null;
+  sortTs: number;
 };
 type TemplateRow = {
   id: number;
@@ -228,6 +231,20 @@ function formatDuration(seconds: number | null) {
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+function formatCallHistoryTime(value: Date | string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/New_York",
+  }).format(date) + " EST";
+}
+
 function toneForOutcome(outcome: string) {
   if (outcome === "answered") return "mint";
   if (outcome === "voicemail") return "amber";
@@ -305,7 +322,7 @@ export default function AiCallsExactLive() {
   const [scenarioSearching, setScenarioSearching] = useState(false);
   const [script, setScript] = useState("");
   const [flash, setFlash] = useState<string | null>(null);
-  const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [activeVapiCallId, setActiveVapiCallId] = useState<string | null>(null);
@@ -318,7 +335,8 @@ export default function AiCallsExactLive() {
 
   const { data: peopleData, isLoading: peopleLoading, error: peopleError } = trpc.callMatrix.getPeople.useQuery({ date }, { staleTime: 60_000 });
   const { data: templates } = trpc.callMatrix.getTemplates.useQuery(undefined, { staleTime: 30_000 });
-  const { data: callHistory, isLoading: historyLoading, error: historyError } = trpc.callMatrix.getCallHistory.useQuery({ limit: 50 }, { staleTime: 30_000 });
+  const { data: matrixCallHistory, isLoading: matrixHistoryLoading, error: matrixHistoryError } = trpc.callMatrix.getCallHistory.useQuery({ limit: 50 }, { staleTime: 30_000 });
+  const { data: inboundCallHistory, isLoading: inboundHistoryLoading, error: inboundHistoryError } = trpc.voice.listCalls.useQuery({ limit: 50, offset: 0 }, { staleTime: 30_000 });
   const matchScenarioMutation = trpc.callMatrix.matchScenario.useMutation();
   const startCallMutation = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
@@ -338,7 +356,34 @@ export default function AiCallsExactLive() {
   });
   const utils = trpc.useUtils();
 
-  const historyItems = (callHistory ?? []) as HistoryRow[];
+  const historyItems = useMemo<HistoryRow[]>(() => {
+    const matrixRows = (matrixCallHistory ?? []).map((call) => ({
+      ...call,
+      id: `matrix-${call.id}`,
+      source: "outbound" as const,
+      callerName: null,
+      sortTs: Date.parse(call.createdAt ?? "") || 0,
+    }));
+    const inboundRows = (inboundCallHistory?.calls ?? []).map((call) => ({
+      id: `voice-${call.id}`,
+      source: "inbound" as const,
+      step: "incoming",
+      calledPhone: call.callerPhone,
+      callerName: call.callerName,
+      outcome: call.outcome,
+      durationSeconds: call.durationSeconds,
+      transcript: call.transcript,
+      summary: call.summary,
+      endedReason: call.endedReason,
+      recordingUrl: call.recordingUrl,
+      createdAt: formatCallHistoryTime(call.createdAt),
+      vapiCallId: call.vapiCallId,
+      sortTs: call.createdAt ? new Date(call.createdAt).getTime() : 0,
+    }));
+    return [...matrixRows, ...inboundRows].sort((left, right) => right.sortTs - left.sortTs || right.id.localeCompare(left.id));
+  }, [inboundCallHistory?.calls, matrixCallHistory]);
+  const historyLoading = matrixHistoryLoading || inboundHistoryLoading;
+  const historyError = matrixHistoryError ?? inboundHistoryError;
   const customerItems = useMemo(() => ((peopleData?.customers ?? []) as CustomerRow[]).map(customerToItem), [peopleData]);
   const cleanerItems = useMemo(() => ((peopleData?.cleaners ?? []) as CleanerRow[]).map(cleanerToItem), [peopleData]);
   const allItems = audience === "customer" ? customerItems : cleanerItems;
@@ -505,7 +550,7 @@ export default function AiCallsExactLive() {
     setComposerOpen(true);
   }
 
-  const callerLabel = selectedHistory?.calledPhone ?? "Unknown caller";
+  const callerLabel = selectedHistory?.callerName ?? selectedHistory?.calledPhone ?? "Unknown caller";
   const currentStageLabel = selectedHistory ? labelForOutcome(selectedHistory.outcome) : "No call selected";
   const currentTone = toneForOutcome(selectedHistory?.outcome ?? "");
 
@@ -523,14 +568,14 @@ export default function AiCallsExactLive() {
       <section className="transcript-lab-layout" aria-label="AI Calls transcript workspace">
         <aside className="transcript-queue">
           <header><div><span className="voice-eyebrow">Recent calls</span><h2>Conversation queue</h2></div><span>{historyLoading ? "Loading" : `${historyItems.length} live`}</span></header>
-          {historyError ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>Call history could not load</strong><p>{historyError.message}</p></div> : historyItems.length === 0 && !historyLoading ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>No AI matrix calls yet</strong><p>Open Call Matrix to prepare an existing guarded call workflow.</p></div> : <div className="transcript-queue-list">{historyItems.map((call) => <button type="button" key={call.id} className={`transcript-queue-row ${selectedHistory?.id === call.id ? "is-selected" : ""}`} onClick={() => setSelectedHistoryId(call.id)}><LivePersonPortrait value={call.calledPhone ?? "Unknown caller"} className="transcript-caller-portrait transcript-caller-portrait--queue" /><span className="transcript-queue-copy"><strong>{call.calledPhone ?? "Unknown caller"}</strong><small>{call.summary ?? call.endedReason ?? "Existing call record"}</small><em><Clock3 size={11} />{call.createdAt ?? "Recorded call"}</em></span><span className={`transcript-queue-dot is-${toneForOutcome(call.outcome)}`} aria-hidden="true" /></button>)}</div>}
+          {historyError ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>Call history could not load</strong><p>{historyError.message}</p></div> : historyItems.length === 0 && !historyLoading ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>No AI calls yet</strong><p>Incoming calls and existing Call Matrix calls will appear here.</p></div> : <div className="transcript-queue-list">{historyItems.map((call) => { const callName = call.callerName ?? call.calledPhone ?? "Unknown caller"; return <button type="button" key={call.id} className={`transcript-queue-row ${selectedHistory?.id === call.id ? "is-selected" : ""}`} onClick={() => setSelectedHistoryId(call.id)}><LivePersonPortrait value={callName} className="transcript-caller-portrait transcript-caller-portrait--queue" /><span className="transcript-queue-copy"><strong>{callName}</strong><small>{call.summary ?? call.endedReason ?? "Existing call record"}</small><em><Clock3 size={11} />{call.createdAt ?? "Recorded call"}</em></span><span className={`transcript-queue-dot is-${toneForOutcome(call.outcome)}`} aria-hidden="true" /></button>; })}</div>}
           <footer><FileText size={14} /><span>Existing call records</span></footer>
         </aside>
 
         <article className="transcript-main-stage">
           {selectedHistory ? <>
             <section className="transcript-listening-card">
-              <div className="transcript-listening-head"><div className="transcript-caller-identity"><LivePersonPortrait value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--hero" /><div><h2>{callerLabel}</h2><p><PhoneIncoming size={14} />AI-handled outbound call</p></div></div><span className={`transcript-outcome is-${currentTone}`}>{currentStageLabel}</span></div>
+              <div className="transcript-listening-head"><div className="transcript-caller-identity"><LivePersonPortrait value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--hero" /><div><h2>{callerLabel}</h2><p><PhoneIncoming size={14} />AI-handled {selectedHistory.source} call</p></div></div><span className={`transcript-outcome is-${currentTone}`}>{currentStageLabel}</span></div>
               <div className="transcript-waveform-row"><button type="button" className="transcript-play" aria-label={selectedRecordingUrl ? (isPlaying ? "Pause recording" : "Play recording") : "Recording unavailable"} disabled={!selectedRecordingUrl} onClick={togglePlayback}><Play size={17} fill="currentColor" /></button><ReviewWaveform /><span>{formatDuration(selectedHistory.durationSeconds)}</span></div>
               {selectedRecordingUrl && <audio ref={audioRef} src={selectedRecordingUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} preload="metadata" />}
               <footer><span><Headphones size={14} />{selectedRecordingUrl ? (isPlaying ? "Playing existing recording" : "Existing recording available") : "No recording stored"}</span><span>{selectedHistory.createdAt ?? "Existing call record"}</span></footer>
