@@ -723,7 +723,7 @@ function TeamSmsFeedMessage({ conversation, onOpen }: { conversation: SmsInboxCo
   const name = smsConversationName(conversation);
   const timestamp = smsInboxTimestamp(conversation);
   const body = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";
-  return <article className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"><span className="ccc-group-avatar ccc-group-avatar-team"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><em>Team</em><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{body}</p><span className="ccc-live-team-reply-hint"><MessageSquare />Reply</span></button></div></article>;
+  return <article className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"><span className="ccc-group-avatar ccc-group-avatar-team"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{body}</p><span className="ccc-live-team-reply-hint"><MessageSquare />Reply</span></button><div className="ccc-live-team-sms-reactions" aria-label="Team message reactions"><span><Heart fill="currentColor" /> <b>3</b></span><span><Users /></span></div></div></article>;
 }
 
 function SmsConversationDrawer({ conversation, conversations, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; onClose: () => void }) {
