@@ -21,9 +21,32 @@
 .sms-exact-live .cic-message-meta .cic-message-identity { width: 18px; height: 18px; flex-basis: 18px; border-radius: 50%; font-size: 6px; }
 .sms-exact-live .cic-message.outgoing .cic-message-meta { justify-content: flex-end; }
 .sms-exact-live .cic-live-empty { padding: 13px 8px; color: #777; font-size: 10px; line-height: 1.45; }
-.sms-exact-live .cic-live-media { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.sms-exact-live .cic-live-media a { display: block; max-width: 190px; }
-.sms-exact-live .cic-live-media img { display: block; width: 100%; max-height: 150px; border: 1px solid #3a3a3a; border-radius: 8px; object-fit: cover; }
+.sms-exact-live .cic-live-media { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.sms-exact-live .cic-live-media button { display: block; max-width: 240px; padding: 0; overflow: hidden; border: 1px solid #414146; border-radius: 10px; background: #111113; box-shadow: 0 5px 14px rgba(0, 0, 0, .24); cursor: zoom-in; }
+.sms-exact-live .cic-live-media button:hover { border-color: #7462d9; }
+.sms-exact-live .cic-live-media img { display: block; max-width: 240px; max-height: 280px; min-width: 82px; min-height: 82px; object-fit: contain; }
+.sms-exact-live .cic-live-media video { display: block; width: min(240px, 100%); max-height: 280px; border: 1px solid #414146; border-radius: 10px; background: #0f0f11; object-fit: contain; }
+.sms-exact-live .cic-live-missions { padding: 16px 14px 12px; }
+.sms-exact-live .cic-live-missions > header { margin-bottom: 9px; }
+.sms-exact-live .cic-live-missions > header > b { color: #8d8d95; font-size: 10px; font-weight: 750; letter-spacing: .14em; }
+.sms-exact-live .cic-live-missions > header > button { color: #af9aff; font-size: 12px; font-weight: 600; }
+.sms-exact-live .cic-live-mission { display: flex; width: 100%; align-items: flex-start; gap: 12px; padding: 12px 0; border: 0; border-bottom: 1px solid #303035; background: transparent; color: #f1f1f4; text-align: left; cursor: pointer; }
+.sms-exact-live .cic-live-mission:first-child { padding-top: 10px; }
+.sms-exact-live .cic-live-mission:last-child { border-bottom: 0; padding-bottom: 7px; }
+.sms-exact-live .cic-live-mission > i { display: grid; width: 40px; height: 40px; place-items: center; flex: 0 0 40px; border-radius: 9px; background: #2b214c; color: #b7a0ff; }
+.sms-exact-live .cic-live-mission > span { display: grid; min-width: 0; gap: 4px; padding-top: 1px; }
+.sms-exact-live .cic-live-mission b { color: #f1f1f4; font-size: 14px; font-weight: 700; line-height: 1.25; }
+.sms-exact-live .cic-live-mission small { color: #929299; font-size: 11px; line-height: 1.4; }
+.sms-exact-live .cic-live-mission:hover > i { background: #392b62; color: #c6b3ff; }
+.sms-exact-live .cic-mms-lightbox { position: fixed; z-index: 210; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .84); backdrop-filter: blur(4px); }
+.sms-exact-live .cic-mms-lightbox > img { max-width: min(90vw, 1200px); max-height: 88dvh; border: 1px solid #56565d; border-radius: 12px; object-fit: contain; box-shadow: 0 28px 90px rgba(0, 0, 0, .7); }
+.sms-exact-live .cic-mms-lightbox button,
+.sms-exact-live .cic-mms-lightbox a { position: absolute; display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid rgba(255, 255, 255, .2); border-radius: 50%; color: #fff; background: rgba(24, 24, 27, .78); cursor: pointer; }
+.sms-exact-live .cic-mms-lightbox-close { top: 20px; right: 20px; }
+.sms-exact-live .cic-mms-lightbox-original { top: 20px; left: 20px; }
+.sms-exact-live .cic-mms-lightbox-previous { left: 22px; top: 50%; transform: translateY(-50%); }
+.sms-exact-live .cic-mms-lightbox-next { right: 22px; top: 50%; transform: translateY(-50%); }
+.sms-exact-live .cic-mms-lightbox-count { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 5px 9px; border-radius: 999px; color: #fff; background: rgba(24, 24, 27, .78); font-size: 11px; }
 .sms-exact-live .cic-live-call { margin-left: 0; margin-right: auto; }
 .sms-exact-live .cic-live-call-detail { display: grid; gap: 8px; margin-top: 9px; }
 .sms-exact-live .cic-live-call-detail audio { width: 100%; height: 28px; accent-color: #30aa75; }

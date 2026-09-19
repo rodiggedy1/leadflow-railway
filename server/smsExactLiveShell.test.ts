@@ -36,8 +36,17 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('function customerPortraitFor(value: string)');
     expect(page).toContain('cic-live-avatar cic-portrait');
     expect(page).toContain('new Event("review-workspace-collapse")');
+    expect(page).toContain('function mediaDisplayUrl(url: string)');
+    expect(page).toContain('function isVideoMedia(url: string)');
+    expect(page).toContain('`/api/media-proxy?url=${encodeURIComponent(url)}`');
+    expect(page).toContain('<video controls preload="metadata"');
+    expect(page).toContain('const [mmsLightbox, setMmsLightbox]');
+    expect(page).toContain('className="cic-live-mission"');
     expect(css).toContain('scrollbar-color: #4a4a51 #18181a;');
     expect(css).toContain('::-webkit-scrollbar-thumb');
+    expect(css).toContain('.sms-exact-live .cic-mms-lightbox');
+    expect(css).toContain('.sms-exact-live .cic-live-media video');
+    expect(css).toContain('.sms-exact-live .cic-live-mission');
     expect(app).toContain('const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));');
     expect(app).toContain('function AdminSmsExactLiveRoute()');
     expect(app).toContain('const isSmsWorkspace = location === "/admin/sms";');
