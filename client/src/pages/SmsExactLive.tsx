@@ -31,6 +31,7 @@ import {
   Smile,
   Sparkles,
   Tag,
+  UserRound,
   Users,
   X,
 } from "lucide-react";
@@ -83,7 +84,6 @@ type LiveConversation = {
   createdAt?: string | Date | number | null;
   messages: { sender: MsgSender; text: string; time: string; ts?: number; senderName?: string; media?: string[] }[];
   chips: string[];
-  priority: "P1" | "P2";
   latestInteractionType?: "call" | "sms";
   latestCallCreatedAt?: number | null;
   latestCallDuration?: number | null;
@@ -190,7 +190,6 @@ function toConversation(row: Record<string, unknown>, names: Record<string, stri
       media: message.media ?? [],
     })),
     chips: [typeof row.csStatusTier === "string" ? row.csStatusTier : null, unanswered ? "Needs Reply" : null].filter(Boolean) as string[],
-    priority: unanswered ? "P1" : "P2",
     latestInteractionType: row.latestInteractionType === "call" ? "call" : "sms",
     latestCallCreatedAt: Number(row.latestCallCreatedAt ?? 0) || null,
     latestCallDuration: Number(row.latestCallDuration ?? 0) || null,
@@ -229,6 +228,14 @@ function LiveAvatar({ conversation, className, showPortrait = true }: { conversa
     return <img className={`${className} cic-live-avatar cic-portrait`} src={customerPortraitFor(conversation.name)} alt={`Portrait illustration for ${conversation.name}`} />;
   }
   return <span className={`${className} cic-live-avatar ${isTeamMember(conversation) ? "is-team" : ""}`} aria-label={conversation.name}>{conversation.initials}</span>;
+}
+
+function LastAgentBadge({ name, photoUrl }: { name?: string | null; photoUrl?: string | null }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const initials = name?.split(/\s+/).filter(Boolean).map(part => part[0]).join("").slice(0, 2).toUpperCase() || "A";
+  const label = name ? `Last human agent: ${name}` : "No human agent reply yet";
+  if (!photoUrl || imageFailed) return <span className={`cic-owner-portrait${name ? " is-agent" : " is-unassigned"}`} title={label} aria-label={label}>{name ? initials : <UserRound size={10} />}</span>;
+  return <img className="cic-owner-portrait cic-owner-photo" src={photoUrl} alt={label} title={label} onError={() => setImageFailed(true)} />;
 }
 
 function CrmSidebar({ total, needsResponse, atRisk, teams }: { total: number; needsResponse: number; atRisk: number; teams: number }) {
@@ -393,6 +400,11 @@ export default function SmsExactLive() {
     { showResolved: true },
     { staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 5_000 },
   );
+  const { data: agentPhotoMapData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const agentPhotoMap = agentPhotoMapData?.photos ?? {};
   const phoneBatches = useMemo(() => batchCsInboxPhonesForNameLookup(rawRows?.map(row => row.leadPhone)), [rawRows]);
   const nameCache = useRef(new Map<string, { expires: number; names: Record<string, string> }>());
   const [names, setNames] = useState<Record<string, string>>({});
@@ -449,6 +461,15 @@ export default function SmsExactLive() {
     const haystack = `${conversation.name} ${conversation.phone} ${conversation.lastMessage} ${conversation.csStatusTier ?? ""}`.toLowerCase();
     return haystack.includes(search.trim().toLowerCase()) && getLane(conversation, now) === label;
   }).sort((a, b) => (b.latestCallCreatedAt ?? b.lastMsgTs ?? 0) - (a.latestCallCreatedAt ?? a.lastMsgTs ?? 0)) })), [activeConversations, search, now]);
+  const activeCardSessionIds = useMemo(
+    () => [...new Set(columns.flatMap(column => column.conversations.map(conversation => conversation.id)))].sort((a, b) => a - b).slice(0, 800),
+    [columns],
+  );
+  const lastAgentNames = trpc.leads.getCsInboxLastAgents.useQuery(
+    { sessionIds: activeCardSessionIds },
+    { enabled: activeCardSessionIds.length > 0, staleTime: 30_000, refetchOnWindowFocus: false },
+  );
+  const lastAgentNameBySessionId = lastAgentNames.data ?? {};
 
   const syncQuoOutbound = trpc.opsChat.syncCsOutboundMessages.useMutation({ onSuccess: (_result, variables) => { void utils.leads.listCsInbox.invalidate({ showResolved: true }); void utils.leads.getCsConversation.invalidate({ sessionId: variables.sessionId }); } });
   useEffect(() => {
@@ -556,5 +577,5 @@ export default function SmsExactLive() {
     </section>{showTools && <LiveToolDialog conversation={selected} close={() => setShowTools(false)} setCompose={setCompose} messages={detailMessages} />}</main></div>{mmsLightbox && mmsLightboxUrl && <div className="cic-mms-lightbox" role="dialog" aria-modal="true" aria-label="MMS photo viewer" onClick={closeMmsLightbox}><button className="cic-mms-lightbox-close" type="button" onClick={closeMmsLightbox} aria-label="Close photo"><X /></button><a className="cic-mms-lightbox-original" href={mmsLightbox.urls[mmsLightbox.index]} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()} aria-label="Open original photo"><ExternalLink /></a>{mmsLightbox.index > 0 && <button className="cic-mms-lightbox-previous" type="button" onClick={event => { event.stopPropagation(); previousMmsPhoto(); }} aria-label="Previous photo"><ChevronLeft /></button>}{mmsLightbox.index < mmsLightbox.urls.length - 1 && <button className="cic-mms-lightbox-next" type="button" onClick={event => { event.stopPropagation(); nextMmsPhoto(); }} aria-label="Next photo"><ChevronRight /></button>}{mmsLightbox.urls.length > 1 && <span className="cic-mms-lightbox-count">{mmsLightbox.index + 1} / {mmsLightbox.urls.length}</span>}<img src={mmsLightboxUrl} alt="MMS photo enlarged" onClick={event => event.stopPropagation()} /></div>}</>;
   }
 
-  return <div className="sms-review sms-exact-live"><main className="operations-crm-review cic-shell" data-live-sms="true"><CrmSidebar total={activeConversations.length} needsResponse={needsResponseCount} atRisk={atRiskCount} teams={teamCount} /><section className="cic-workspace"><header className="ocr-header"><div className="ocr-page-title"><h1>SMS</h1><span><i />Live workspace</span></div><div className="ocr-header-actions"><button type="button" onClick={() => refetchInbox()} aria-label="Refresh conversations"><Search /></button><button className="has-notification" type="button" aria-label="Notifications"><Bell /></button><button className="ocr-profile" type="button"><i>MA</i><span>Madison</span><ChevronDown size={13} /></button></div></header><nav className="cic-top-tabs"><button className="is-active" type="button">Conversations</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Email</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Next Best Action</button></nav><section className="cic-toolbar"><div><label><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search any customer, phone..." /></label><button type="button">Filter active <ChevronDown /></button><button type="button">Last 90 days <ChevronDown /></button><button type="button"><Tag />Filters</button></div><span><button type="button" onClick={() => refetchInbox()} aria-label="Refresh">↻</button><button className="cic-new" type="button" onClick={() => setShowNewMessage(true)}><Plus />New Message</button></span></section><section className="cic-board-scroll"><div className="cic-board">{columns.map(column => <section className="cic-lane" key={column.label}><header><span style={{ background: LANE_COLORS[column.label] }} /><b>{column.label}</b><small>{column.conversations.length}</small><button type="button"><ChevronDown size={15} /></button></header><div className="cic-lane-cards">{column.conversations.map(conversation => resolvingId === conversation.id ? <div className="cic-card cic-live-resolving" key={conversation.id}>Resolved</div> : <button type="button" onClick={() => selectConversation(conversation)} className="cic-card" key={conversation.id}><div className="cic-card-head"><LiveAvatar conversation={conversation} className="cic-avatar" /><strong>{conversation.name}</strong><time className={column.label === "At Risk" ? "is-risk" : ""}>{conversation.wait}</time></div>{conversation.latestInteractionType === "call" && <span className="cic-call-label"><Sparkles size={11} />AI Call · {conversation.latestCallDuration ? `${Math.floor(conversation.latestCallDuration / 60)}m ${conversation.latestCallDuration % 60}s` : "Call"}</span>}<p>{conversation.latestInteractionType === "call" ? conversation.latestCallSummary || conversation.lastMessage : conversation.lastMessage || "No messages yet"}</p><div className="cic-chips">{conversation.chips.slice(0, 2).map(chip => <span key={chip} className={/risk|urgent/i.test(chip) ? "is-warn" : ""}>{chip.replaceAll("_", " ")}</span>)}</div><footer><b className={conversation.priority === "P1" ? "is-p1" : ""}>{conversation.priority}</b><span>· {isTeamMember(conversation) ? "Team" : "Customer"}</span><span className="cic-owner-portrait">MA</span></footer></button>)}{!column.conversations.length && <div className="cic-empty-card">{inboxLoading ? "Loading conversations…" : "No conversations"}</div>}<button className="cic-add-card" type="button" onClick={() => setShowNewMessage(true)}><Plus size={13} />Add Conversation</button></div></section>)}</div></section><footer className="cic-stats"><div><small>Total Conversations</small><b>{activeConversations.length}</b></div><div><small>Needs Response</small><b>{needsResponseCount}</b></div><div><small>Unanswered</small><b>{atRiskCount}</b></div><div><small>Hot Leads</small><b>{activeConversations.filter(conversation => conversation.csStatusTier === "hot_lead").length}</b></div><div><small>Teams</small><b>{teamCount}</b></div></footer></section>{showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void refetchInbox(); }} />}</main></div>;
+  return <div className="sms-review sms-exact-live"><main className="operations-crm-review cic-shell" data-live-sms="true"><CrmSidebar total={activeConversations.length} needsResponse={needsResponseCount} atRisk={atRiskCount} teams={teamCount} /><section className="cic-workspace"><header className="ocr-header"><div className="ocr-page-title"><h1>SMS</h1><span><i />Live workspace</span></div><div className="ocr-header-actions"><button type="button" onClick={() => refetchInbox()} aria-label="Refresh conversations"><Search /></button><button className="has-notification" type="button" aria-label="Notifications"><Bell /></button><button className="ocr-profile" type="button"><i>MA</i><span>Madison</span><ChevronDown size={13} /></button></div></header><nav className="cic-top-tabs"><button className="is-active" type="button">Conversations</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Email</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Next Best Action</button></nav><section className="cic-toolbar"><div><label><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search any customer, phone..." /></label><button type="button">Filter active <ChevronDown /></button><button type="button">Last 90 days <ChevronDown /></button><button type="button"><Tag />Filters</button></div><span><button type="button" onClick={() => refetchInbox()} aria-label="Refresh">↻</button><button className="cic-new" type="button" onClick={() => setShowNewMessage(true)}><Plus />New Message</button></span></section><section className="cic-board-scroll"><div className="cic-board">{columns.map(column => <section className="cic-lane" key={column.label}><header><span style={{ background: LANE_COLORS[column.label] }} /><b>{column.label}</b><small>{column.conversations.length}</small><button type="button"><ChevronDown size={15} /></button></header><div className="cic-lane-cards">{column.conversations.map(conversation => resolvingId === conversation.id ? <div className="cic-card cic-live-resolving" key={conversation.id}>Resolved</div> : <button type="button" onClick={() => selectConversation(conversation)} className="cic-card" key={conversation.id}><div className="cic-card-head"><LiveAvatar conversation={conversation} className="cic-avatar" /><strong>{conversation.name}</strong><time className={column.label === "At Risk" ? "is-risk" : ""}>{conversation.wait}</time></div>{conversation.latestInteractionType === "call" && <span className="cic-call-label"><Sparkles size={11} />AI Call · {conversation.latestCallDuration ? `${Math.floor(conversation.latestCallDuration / 60)}m ${conversation.latestCallDuration % 60}s` : "Call"}</span>}<p>{conversation.latestInteractionType === "call" ? conversation.latestCallSummary || conversation.lastMessage : conversation.lastMessage || "No messages yet"}</p><div className="cic-chips">{conversation.chips.slice(0, 2).map(chip => <span key={chip} className={/risk|urgent/i.test(chip) ? "is-warn" : ""}>{chip.replaceAll("_", " ")}</span>)}</div><footer><span>{isTeamMember(conversation) ? "Team" : "Customer"}</span><LastAgentBadge name={lastAgentNameBySessionId[conversation.id] ?? null} photoUrl={lastAgentNameBySessionId[conversation.id] ? agentPhotoMap[lastAgentNameBySessionId[conversation.id]!] ?? null : null} /></footer></button>)}{!column.conversations.length && <div className="cic-empty-card">{inboxLoading ? "Loading conversations…" : "No conversations"}</div>}<button className="cic-add-card" type="button" onClick={() => setShowNewMessage(true)}><Plus size={13} />Add Conversation</button></div></section>)}</div></section><footer className="cic-stats"><div><small>Total Conversations</small><b>{activeConversations.length}</b></div><div><small>Needs Response</small><b>{needsResponseCount}</b></div><div><small>Unanswered</small><b>{atRiskCount}</b></div><div><small>Hot Leads</small><b>{activeConversations.filter(conversation => conversation.csStatusTier === "hot_lead").length}</b></div><div><small>Teams</small><b>{teamCount}</b></div></footer></section>{showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void refetchInbox(); }} />}</main></div>;
 }

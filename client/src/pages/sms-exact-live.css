@@ -16,7 +16,10 @@
 }
 .sms-exact-live .cic-live-avatar.is-team { background: linear-gradient(135deg, #18b989, #09886c); }
 .sms-exact-live img.cic-live-avatar.cic-portrait { display: block; background: #303035; object-fit: cover; }
-.sms-exact-live .cic-owner-portrait { display: grid; place-items: center; width: 18px; height: 18px; margin-left: auto; border: 1px solid #555; border-radius: 50%; color: #fff; background: #c46a85; font-size: 7px; font-weight: 700; }
+.sms-exact-live .cic-owner-portrait { display: grid; flex: 0 0 18px; place-items: center; width: 18px; height: 18px; margin-left: auto; overflow: hidden; border: 1px solid #555; border-radius: 50%; color: #fff; background: #45454b; font-size: 7px; font-weight: 700; object-fit: cover; }
+.sms-exact-live .cic-owner-portrait.is-agent { border-color: #7b65b5; background: linear-gradient(135deg, #8b6cd2, #54407d); }
+.sms-exact-live .cic-owner-portrait.is-unassigned { border-color: #4e4e54; color: #b8b8be; background: #303036; }
+.sms-exact-live img.cic-owner-portrait.cic-owner-photo { display: block; }
 .sms-exact-live .cic-message-meta { display: flex; align-items: center; gap: 5px; color: #777; font-size: 9px; }
 .sms-exact-live .cic-message-meta .cic-message-identity { width: 18px; height: 18px; flex-basis: 18px; border-radius: 50%; font-size: 6px; }
 .sms-exact-live .cic-message.outgoing .cic-message-meta { justify-content: flex-end; }
