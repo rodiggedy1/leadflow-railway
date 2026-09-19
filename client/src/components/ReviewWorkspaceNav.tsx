@@ -25,7 +25,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
     label: "CUSTOMER COMMUNICATION",
     items: [
       { label: "SMS", href: "/review/sms", liveHref: "/admin/sms", icon: MessageSquareMore },
-      { label: "Emails", href: "/review/emails", icon: Mail },
+      { label: "Emails", href: "/review/emails", liveHref: "/admin/emails", icon: Mail },
       { label: "AI Calls", href: "/review/ai-calls-transcript", liveHref: "/admin/ai-calls", icon: PhoneCall },
     ],
   },

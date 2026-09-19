@@ -19,6 +19,7 @@ describe("Review Workspace live destinations", () => {
     expect(nav).toContain('liveHref: "/admin/schedule"');
     expect(nav).toContain('liveHref: "/admin/day-board"');
     expect(nav).toContain('liveHref: "/admin/sms"');
+    expect(nav).toContain('liveHref: "/admin/emails"');
     expect(nav).toContain('liveHref: "/admin/ai-calls"');
     expect(nav).toContain('const settingsHref = useLiveDestinations ? "/admin/settings" : "/review/settings";');
     expect(nav).toContain('const href = useLiveDestinations ? item.liveHref ?? item.href : item.href;');
@@ -35,6 +36,7 @@ describe("Review Workspace live destinations", () => {
     expect(app).toContain('<Route path={"/admin/schedule"} component={AdminScheduleCRMExactRoute} />');
     expect(app).toContain('<Route path={"/admin/day-board"} component={AdminDayBoardExactLiveRoute} />');
     expect(app).toContain('<Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />');
+    expect(app).toContain('<Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />');
     expect(app).toContain('<Route path={"/admin/ai-calls"} component={AdminAiCallsExactReviewRoute} />');
     expect(app).toContain('<Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />');
   });

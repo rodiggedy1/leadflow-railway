@@ -97,6 +97,7 @@ const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 const ScheduleCRMExactLive = lazy(() => import("./pages/ScheduleCRMExactLive"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
+const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -150,6 +151,7 @@ function AdminPaymentsExactReviewRoute() { return <AdminPageGuard pageId="paymen
 function AdminScheduleCRMExactRoute() { return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><ScheduleCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminDayBoardExactLiveRoute() { return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/day-board-crm"><DayBoardExactLive /></ReviewWorkspaceFrame></AdminPageGuard>; }
 function AdminSmsExactLiveRoute() { return <ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>; }
+function AdminEmailsExactLiveRoute() { return <ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>; }
 function AdminAiCallsExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>; }
 function AdminHiringAdminExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/hiring-admin"><HiringAdminLive /></ReviewWorkspaceFrame>; }
 
@@ -180,6 +182,7 @@ function Router() {
         <Route path={"/admin/leads"} component={AdminDashboard} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
+        <Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
@@ -379,7 +382,8 @@ function isReviewDerivedLiveShell(location: string) {
   const isScheduleWorkspace = location === "/admin/schedule";
   const isDayBoardWorkspace = location === "/admin/day-board";
   const isSmsWorkspace = location === "/admin/sms";
-  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || location === "/admin/ai-calls" || location === "/admin/hiring" || isScheduleWorkspace || isDayBoardWorkspace || isSmsWorkspace;
+  const isEmailsWorkspace = location === "/admin/emails";
+  return location.startsWith("/review/") || location === "/admin/settings" || location === "/admin/confirmation-calls" || location === "/admin/customer-profile" || location === "/admin/invoices" || location === "/admin/payments" || location === "/admin/payroll-summary" || location === "/admin/ai-calls" || location === "/admin/hiring" || isScheduleWorkspace || isDayBoardWorkspace || isSmsWorkspace || isEmailsWorkspace;
 }
 
 function ReviewSafeGlobalOpsChat() {
