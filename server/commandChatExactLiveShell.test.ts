@@ -84,6 +84,8 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('agents.agents.slice(0, 5)');
     expect(page).toContain('type LeftRailMode = "sms" | "issues" | "threads";');
     expect(page).toContain('const [leftRailMode, setLeftRailMode] = useState<LeftRailMode>("sms");');
+    expect(page).toContain('type CenterFeedMode = "all" | "mentions";');
+    expect(page).toContain('const [centerFeedMode, setCenterFeedMode] = useState<CenterFeedMode>("all");');
     expect(page).toContain('className="ccc-left-section ccc-conversations-section ccc-live-left-rail"');
     expect(page).toContain('className="ccc-panel-tabs ccc-live-left-rail-tabs"');
     expect(page).toContain('setLeftRailMode("sms")');
@@ -91,6 +93,12 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('setLeftRailMode("threads")');
     expect(page).toContain('<LeftRailIssues issues={openIssues} />');
     expect(page).toContain('<LeftRailThreads threads={activeThreads} onOpen={(id) => { setThreadDraft(""); setThreadId(id); }} />');
+    expect(page).toContain('const mentionMessages = useMemo(');
+    expect(page).toContain('const displayedMessages = centerFeedMode === "mentions" ? mentionMessages : visibleRootMessages;');
+    expect(page).toContain('onClick={() => setLeftRailMode("issues")}');
+    expect(page).toContain('onClick={() => setCenterFeedMode((mode) => mode === "mentions" ? "all" : "mentions")}');
+    expect(page).toContain('aria-pressed={centerFeedMode === "mentions"}');
+    expect(page).toContain('No command messages mention you.');
     expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
@@ -116,6 +124,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-left-rail");
     expect(styles).toContain(".ccc-live-sms-drawer");
     expect(styles).toContain(".ccc-live .ccc-right-panel-thread-open");
+    expect(styles).toContain(".ccc-live .ccc-reference-header-metrics .ccc-header-metric-control");
     expect(styles).not.toContain("ccc-live-thread-drawer");
     expect(styles).not.toContain("ccc-live-thread-panel{position:fixed");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
