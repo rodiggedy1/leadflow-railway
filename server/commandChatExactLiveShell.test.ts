@@ -41,7 +41,6 @@ describe("Command Chat exact live shell", () => {
       "sendMessage.useMutation",
       "getAllAgentPhotoMap.useQuery",
       "getAgentStatusList.useQuery",
-      "getChannelCounts.useQuery",
       "listActiveThreads.useQuery",
       "getThreadReplies.useQuery",
       "toggleReaction.useMutation",
@@ -52,6 +51,9 @@ describe("Command Chat exact live shell", () => {
       "setReminder.useMutation",
       "pinNote.useMutation",
       "announceBooking.useMutation",
+      "listCsInbox.useQuery",
+      "getCsConversation.useQuery",
+      "leads.sendMessage.useMutation",
     ]) {
       expect(page).toContain(procedure);
     }
@@ -80,6 +82,12 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('<LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} />');
     expect(page).toContain('<LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} />');
     expect(page).toContain('agents.agents.slice(0, 5)');
+    expect(page).toContain('ccc-live-sms-section');
+    expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
+    expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
+    expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
+    expect(page).not.toContain('COMMAND CHANNELS');
+    expect(page).not.toContain('ccc-live-thread-list');
     expect(page).not.toContain('<Activity /><b>{metrics.activity}</b> Today');
     expect(page).not.toContain('aria-label="View channel threads" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}><MessageSquare /></button><button type="button" aria-label="Channel actions"');
     expect(page).not.toContain('ccc-reference-action-divider');
@@ -88,6 +96,8 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-lead-queue");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary");
     expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
+    expect(styles).toContain(".ccc-live .ccc-live-sms-section");
+    expect(styles).toContain(".ccc-live-sms-drawer");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
     expect(app).toContain('function AdminCommandChatExactLiveRoute() { return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>; }');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
