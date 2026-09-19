@@ -103,6 +103,10 @@ type SmsInboxMessage = {
   ts?: number;
 };
 
+type CommandFeedEntry =
+  | { kind: "channel"; ts: number; message: ChannelMessage }
+  | { kind: "team-sms"; ts: number; conversation: SmsInboxConversation };
+
 const CHANNELS: Array<{ key: ChannelKey; label: string; icon: string; tone: string }> = [
   { key: "command", label: "MIB Command", icon: "✦", tone: "neutral" },
   { key: "urgent", label: "Urgent", icon: "!", tone: "amber" },
@@ -423,6 +427,17 @@ export default function CommandChatExactLive() {
     () => rootMessages.filter((message) => !isHiddenCommandNotification(message)),
     [rootMessages],
   );
+  const teamInboxMessages = useMemo(
+    () => smsInbox.filter((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user" && Boolean(conversation.lastMessageText?.trim())),
+    [smsInbox],
+  );
+  const commandFeed = useMemo<CommandFeedEntry[]>(
+    () => [
+      ...visibleRootMessages.map((message) => ({ kind: "channel" as const, ts: message.ts, message })),
+      ...teamInboxMessages.map((conversation) => ({ kind: "team-sms" as const, ts: smsInboxTimestamp(conversation), conversation })),
+    ].sort((left, right) => right.ts - left.ts),
+    [teamInboxMessages, visibleRootMessages],
+  );
   const effectiveMentionNames = useMemo(() => new Set([callerName, profile?.name].filter((name): name is string => Boolean(name))), [callerName, profile?.name]);
   const mentionPattern = useMemo(() => {
     if (!effectiveMentionNames.size) return null;
@@ -613,7 +628,7 @@ export default function CommandChatExactLive() {
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
               <div className="ccc-message-stream">
-                {messagesLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div> : visibleRootMessages.length === 0 ? <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div> : visibleRootMessages.map((message) => <LiveMessage key={message.id} message={message} callerName={callerName} photoUrl={photoMap[message.from] ?? null} mentionPattern={mentionPattern} reactions={reactionsByMessage[message.id] ?? {}} onThread={() => setThreadId(message.id)} onReaction={(emoji) => toggleReaction.mutate({ messageId: message.id, emoji })} />)}
+                {messagesLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div> : commandFeed.length === 0 ? <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div> : commandFeed.map((entry) => entry.kind === "channel" ? <LiveMessage key={`channel-${entry.message.id}`} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} mentionPattern={mentionPattern} reactions={reactionsByMessage[entry.message.id] ?? {}} onThread={() => setThreadId(entry.message.id)} onReaction={(emoji) => toggleReaction.mutate({ messageId: entry.message.id, emoji })} /> : <TeamSmsFeedMessage key={`team-sms-${entry.conversation.id}`} conversation={entry.conversation} onOpen={() => setSelectedSmsConversation(entry.conversation)} />)}
               </div>
               <div className="ccc-quick-actions"><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
               <div className="ccc-composer"><div>{attachmentUrls.length > 0 && <div className="ccc-live-attachments">{attachmentUrls.map((url) => <span key={url}><img src={url} alt="Pending command attachment" /><button type="button" onClick={() => setAttachmentUrls((urls) => urls.filter((item) => item !== url))}><X /></button></span>)}</div>}<textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submitMessage(); } }} placeholder={recording ? "Recording voice note…" : "Message the command channel…"} /><div className="ccc-composer-tools"><span><button type="button" aria-label="Attach image" disabled={uploadPhoto.isPending} onClick={() => fileInputRef.current?.click()}>{uploadPhoto.isPending ? <Loader2 className="animate-spin" /> : <Paperclip />}</button><button type="button" aria-label={recording ? "Stop voice recording" : "Record voice note"} disabled={transcribeVoice.isPending} onClick={() => void toggleRecording()}>{recording ? <span className="ccc-live-recording" /> : transcribeVoice.isPending ? <Loader2 className="animate-spin" /> : <Mic />}</button><button type="button" aria-label="Add check mark" onClick={() => setDraft((value) => `${value}${value ? " " : ""}✅`)}><Check /></button></span><button type="button" className="ccc-send" disabled={sendMessage.isPending || (!draft.trim() && !attachmentUrls.length)} onClick={submitMessage}>{sendMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}Send</button></div></div></div>
@@ -704,6 +719,13 @@ function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversat
   </button>;
 }
 
+function TeamSmsFeedMessage({ conversation, onOpen }: { conversation: SmsInboxConversation; onOpen: () => void }) {
+  const name = smsConversationName(conversation);
+  const timestamp = smsInboxTimestamp(conversation);
+  const body = conversation.lastMessageText?.trim() || "Team text message";
+  return <article className="ccc-live-team-sms-message"><span className="ccc-live-team-sms-avatar"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><em>Team</em><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{body}</p><footer><MessageSquare />Reply to team <ChevronRight /></footer></button></div></article>;
+}
+
 function SmsConversationDrawer({ conversation, conversations, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [draft, setDraft] = useState("");
@@ -737,7 +759,7 @@ function SmsConversationDrawer({ conversation, conversations, onClose }: { conve
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
     <header><div>{conversation.personType === "team" ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{conversation.personType === "team" ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
-    <div className="ccc-live-sms-messages">{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => <article className={`ccc-live-sms-message ${message.role === "user" ? "" : "is-outgoing"}`} key={`${message.ts ?? index}-${message.content}`}><small>{message.role === "user" ? "Customer" : "MIB Team"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{message.content}</p></article>)}</div>
+    <div className="ccc-live-sms-messages">{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => <article className={`ccc-live-sms-message ${message.role === "user" ? "" : "is-outgoing"}`} key={`${message.ts ?? index}-${message.content}`}><small>{message.role === "user" ? conversation.personType === "team" ? name : "Customer" : "MIB Team"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{message.content}</p></article>)}</div>
     <footer><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder="Write a text reply…" /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></footer>
   </aside></div>;
 }

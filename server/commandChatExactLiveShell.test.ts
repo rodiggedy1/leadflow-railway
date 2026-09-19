@@ -108,6 +108,12 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
+    expect(page).toContain('const teamInboxMessages = useMemo(');
+    expect(page).toContain('conversation.personType === "team" && conversation.lastSenderRole === "user"');
+    expect(page).toContain('const commandFeed = useMemo<CommandFeedEntry[]>(');
+    expect(page).toContain('function TeamSmsFeedMessage({ conversation, onOpen }');
+    expect(page).toContain('onOpen={() => setSelectedSmsConversation(entry.conversation)}');
+    expect(page).toContain('conversation.personType === "team" ? name : "Customer"');
     expect(page).toContain('function LeftRailThreads({ threads, onOpen }');
     expect(page).toContain('function ThreadPanel({ thread, callerName, draft, pending, photoMap, onDraft, onSend, onClose }');
     expect(page).toContain('threadId !== null ? <ThreadPanel');
@@ -129,6 +135,8 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
     expect(styles).toContain(".ccc-live .ccc-live-left-rail");
     expect(styles).toContain(".ccc-live-sms-drawer");
+    expect(styles).toContain(".ccc-live .ccc-live-team-sms-message");
+    expect(styles).toContain(".ccc-live .ccc-live-team-sms-card");
     expect(styles).toContain(".ccc-live .ccc-right-panel-thread-open");
     expect(styles).toContain(".ccc-live .ccc-reference-header-metrics .ccc-header-metric-control");
     expect(styles).toContain(".ccc-live .ccc-group-message .ccc-live-mention");
