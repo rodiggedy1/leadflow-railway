@@ -4,10 +4,10 @@
 .sms-exact-live .cic-top-tabs button:nth-child(2),
 .sms-exact-live .ocr-nav-primary button:nth-child(2) { display: none; }
 .sms-exact-live .operations-crm-review { min-height: 100dvh; }
-.sms-exact-live .cic-avatar.cic-live-avatar,
-.sms-exact-live .cic-thread-avatar.cic-live-avatar,
-.sms-exact-live .cic-ticket-avatar.cic-live-avatar,
-.sms-exact-live .cic-message-identity.cic-live-avatar {
+.sms-exact-live .cic-avatar.cic-live-avatar:not(.cic-portrait),
+.sms-exact-live .cic-thread-avatar.cic-live-avatar:not(.cic-portrait),
+.sms-exact-live .cic-ticket-avatar.cic-live-avatar:not(.cic-portrait),
+.sms-exact-live .cic-message-identity.cic-live-avatar:not(.cic-portrait) {
   display: grid;
   place-items: center;
   color: #fff;
@@ -15,6 +15,7 @@
   font-style: normal;
 }
 .sms-exact-live .cic-live-avatar.is-team { background: linear-gradient(135deg, #18b989, #09886c); }
+.sms-exact-live img.cic-live-avatar.cic-portrait { display: block; background: #303035; object-fit: cover; }
 .sms-exact-live .cic-owner-portrait { display: grid; place-items: center; width: 18px; height: 18px; margin-left: auto; border: 1px solid #555; border-radius: 50%; color: #fff; background: #c46a85; font-size: 7px; font-weight: 700; }
 .sms-exact-live .cic-message-meta { display: flex; align-items: center; gap: 5px; color: #777; font-size: 9px; }
 .sms-exact-live .cic-message-meta .cic-message-identity { width: 18px; height: 18px; flex-basis: 18px; border-radius: 50%; font-size: 6px; }
@@ -35,6 +36,46 @@
 .sms-exact-live .cic-detail-layout > .cic-right-panel { min-height: 0; height: 100%; }
 .sms-exact-live .cic-detail-layout > .cic-thread-main { overflow: hidden; }
 .sms-exact-live .cic-message p { overflow-wrap: anywhere; }
+.sms-exact-live .cic-board-scroll,
+.sms-exact-live .cic-lane-cards,
+.sms-exact-live .cic-ticket-list,
+.sms-exact-live .cic-message-thread,
+.sms-exact-live .cic-right-panel,
+.sms-exact-live .cic-live-tools-content,
+.sms-exact-live .cic-live-new-message,
+.sms-exact-live .cic-live-call-detail pre { scrollbar-color: #4a4a51 #18181a; scrollbar-width: thin; }
+.sms-exact-live .cic-board-scroll::-webkit-scrollbar,
+.sms-exact-live .cic-lane-cards::-webkit-scrollbar,
+.sms-exact-live .cic-ticket-list::-webkit-scrollbar,
+.sms-exact-live .cic-message-thread::-webkit-scrollbar,
+.sms-exact-live .cic-right-panel::-webkit-scrollbar,
+.sms-exact-live .cic-live-tools-content::-webkit-scrollbar,
+.sms-exact-live .cic-live-new-message::-webkit-scrollbar,
+.sms-exact-live .cic-live-call-detail pre::-webkit-scrollbar { width: 9px; height: 9px; }
+.sms-exact-live .cic-board-scroll::-webkit-scrollbar-track,
+.sms-exact-live .cic-lane-cards::-webkit-scrollbar-track,
+.sms-exact-live .cic-ticket-list::-webkit-scrollbar-track,
+.sms-exact-live .cic-message-thread::-webkit-scrollbar-track,
+.sms-exact-live .cic-right-panel::-webkit-scrollbar-track,
+.sms-exact-live .cic-live-tools-content::-webkit-scrollbar-track,
+.sms-exact-live .cic-live-new-message::-webkit-scrollbar-track,
+.sms-exact-live .cic-live-call-detail pre::-webkit-scrollbar-track { background: #18181a; }
+.sms-exact-live .cic-board-scroll::-webkit-scrollbar-thumb,
+.sms-exact-live .cic-lane-cards::-webkit-scrollbar-thumb,
+.sms-exact-live .cic-ticket-list::-webkit-scrollbar-thumb,
+.sms-exact-live .cic-message-thread::-webkit-scrollbar-thumb,
+.sms-exact-live .cic-right-panel::-webkit-scrollbar-thumb,
+.sms-exact-live .cic-live-tools-content::-webkit-scrollbar-thumb,
+.sms-exact-live .cic-live-new-message::-webkit-scrollbar-thumb,
+.sms-exact-live .cic-live-call-detail pre::-webkit-scrollbar-thumb { border: 2px solid #18181a; border-radius: 999px; background: #4a4a51; }
+.sms-exact-live .cic-board-scroll::-webkit-scrollbar-thumb:hover,
+.sms-exact-live .cic-lane-cards::-webkit-scrollbar-thumb:hover,
+.sms-exact-live .cic-ticket-list::-webkit-scrollbar-thumb:hover,
+.sms-exact-live .cic-message-thread::-webkit-scrollbar-thumb:hover,
+.sms-exact-live .cic-right-panel::-webkit-scrollbar-thumb:hover,
+.sms-exact-live .cic-live-tools-content::-webkit-scrollbar-thumb:hover,
+.sms-exact-live .cic-live-new-message::-webkit-scrollbar-thumb:hover,
+.sms-exact-live .cic-live-call-detail pre::-webkit-scrollbar-thumb:hover { background: #676770; }
 .sms-exact-live .cic-live-emoji { position: relative; display: inline-flex; }
 .sms-exact-live .cic-live-emoji-picker { position: absolute; z-index: 120; bottom: calc(100% + 8px); left: 0; overflow: hidden; border: 1px solid #494949; border-radius: 10px; box-shadow: 0 18px 44px rgba(0, 0, 0, .55); }
 .sms-exact-live .cic-compose-actions > div .cic-live-emoji > button { width: 24px; padding: 0; justify-content: center; }

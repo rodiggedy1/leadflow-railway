@@ -47,6 +47,12 @@ export default function ReviewWorkspaceNav({ activePath }: { activePath?: string
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useEffect(() => {
+    const collapseNavigation = () => setExpanded(false);
+    window.addEventListener("review-workspace-collapse", collapseNavigation);
+    return () => window.removeEventListener("review-workspace-collapse", collapseNavigation);
+  }, []);
+
   return (
     <aside className={`review-workspace-nav ${expanded ? "is-expanded" : ""}`} aria-label="Review workspaces">
       <button
