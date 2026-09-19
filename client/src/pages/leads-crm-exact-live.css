@@ -3,7 +3,6 @@
 .leads-crm-live .ocr-live-filter-menu { position: absolute; z-index: 12; top: calc(100% + 7px); left: 0; min-width: 176px; padding: 6px; border: 1px solid #3d3d3d; border-radius: 9px; background: #242424; box-shadow: 0 16px 30px rgba(0, 0, 0, .32); }
 .leads-crm-live .ocr-live-filter-menu button { width: 100%; min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: #dbdbdb; font-size: 12px; text-align: left; cursor: pointer; }
 .leads-crm-live .ocr-live-filter-menu button:hover { background: #303030; color: #fff; }
-.leads-crm-live .ocr-live-table .ocr-company small { display: block; max-width: 140px; overflow: hidden; margin-top: 2px; margin-left: 31px; color: #747474; font-size: 10px; font-weight: 500; line-height: 12px; text-overflow: ellipsis; }
 .leads-crm-live .ocr-live-table .ocr-company button { display: flex; align-items: center; gap: 7px; max-width: 148px; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .leads-crm-live .ocr-live-table .ocr-company button > span { overflow: hidden; text-overflow: ellipsis; }
 .leads-crm-live .ocr-lead-portrait { width: 24px; height: 24px; flex: 0 0 24px; object-fit: cover; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: #2a2a2a; }
@@ -12,7 +11,6 @@
 .leads-crm-live .ocr-live-table .ocr-owner { max-width: 128px; overflow: hidden; }
 .leads-crm-live .ocr-live-table .ocr-owner span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .leads-crm-live .ocr-live-table .ocr-money { color: #dedede !important; }
-.leads-crm-live .ocr-win-probability { color: #d6c4ff; font-weight: 650; }
 .leads-crm-live .ocr-live-table .ocr-activity-bars span { opacity: .24; }
 .leads-crm-live .ocr-live-table .ocr-activity-bars span.is-live { opacity: 1; }
 .leads-crm-live .ocr-live-unread { color: #52db95; font-size: 12px; font-weight: 550; }

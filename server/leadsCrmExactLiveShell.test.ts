@@ -26,10 +26,14 @@ describe("Leads CRM exact-live shell", () => {
     expect(page).toContain("trpc.commandCenter.listIncomingLeads.useQuery");
     expect(page).toContain("Pipeline value");
     expect(page).toContain("Win probability");
+    expect(page).toContain("function ProbabilityMeter");
+    expect(page).toContain("DEFAULT_WIN_PROBABILITY = 50");
+    expect(page).toContain("<ProbabilityMeter value={DEFAULT_WIN_PROBABILITY} />");
     expect(page).toContain("DEFAULT_ACTIVITY_TREND");
     expect(page).toContain("customerPortraitFor(name)");
     expect(page).toContain("displayStage(lead.stage)");
     expect(page).toContain('"Quote"');
+    expect(page).not.toContain("<small>{lead.phone}</small>");
     expect(page).not.toContain("SAMPLE_ROWS");
     expect(page).not.toContain("Static review");
     expect(page).not.toContain("Preview controls only");
