@@ -15,6 +15,7 @@
 .ccc-live .ccc-live-empty{display:flex;align-items:center;justify-content:center;gap:8px;min-height:160px;color:#85858c;font-size:11px}.ccc-live .ccc-live-empty svg{width:18px}
 .ccc-live .ccc-group-message{position:relative}.ccc-live .ccc-group-message>div{min-width:0}
 .ccc-live .ccc-group-message p{white-space:pre-wrap;overflow-wrap:anywhere}
+.ccc-live .ccc-group-message .ccc-live-mention{padding:1px 3px;border-radius:4px;background:#5c3e8e;color:#f2eaff;font-weight:800;box-shadow:inset 0 -1px rgba(255,255,255,.18)}
 .ccc-live .ccc-live-quoted-reply{display:block;max-width:100%;margin:0 0 5px;padding:5px 7px;overflow:hidden;border:1px solid #414146;border-radius:7px;background:#232326;color:#a7a7ae;font-size:9px;text-align:left;text-overflow:ellipsis;white-space:nowrap}
 .ccc-live .ccc-live-message-media{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ccc-live .ccc-live-message-media a{display:block;max-width:190px;overflow:hidden;border:1px solid #424247;border-radius:9px;background:#202023}.ccc-live .ccc-live-message-media img{display:block;width:100%;max-height:190px;object-fit:cover}
 .ccc-live .ccc-live-message-tools{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:5px}.ccc-live .ccc-live-message-tools button{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 6px;border:1px solid #3b3b40;border-radius:10px;background:#262629;color:#aaaab1;font-size:8px}.ccc-live .ccc-live-message-tools button:hover{background:#313135;color:#f1f1f3}.ccc-live .ccc-live-message-tools b{font-size:8px}
@@ -58,3 +59,7 @@
 
 /* Keep the navigation above fixed; only the selectable lower-left slot scrolls. */
 .ccc-live .ccc-left-panel{display:flex;flex-direction:column;overflow:hidden}.ccc-live .ccc-command-navigation{flex:0 0 auto}.ccc-live .ccc-live-left-rail{display:flex;flex:1;min-height:0;flex-direction:column;overflow:hidden}.ccc-live .ccc-live-sms-list,.ccc-live .ccc-live-left-rail-list{scrollbar-width:thin;scrollbar-color:#4a4a51 #18181a}.ccc-live .ccc-live-sms-list::-webkit-scrollbar,.ccc-live .ccc-live-left-rail-list::-webkit-scrollbar{width:8px}.ccc-live .ccc-live-sms-list::-webkit-scrollbar-track,.ccc-live .ccc-live-left-rail-list::-webkit-scrollbar-track{background:#18181a}.ccc-live .ccc-live-sms-list::-webkit-scrollbar-thumb,.ccc-live .ccc-live-left-rail-list::-webkit-scrollbar-thumb{border:2px solid #18181a;border-radius:999px;background:#4a4a51}
+
+/* Header controls acknowledge mentions one at a time; issue rows open the existing Issue Engine. */
+.ccc-live .ccc-reference-header-metrics .ccc-header-metric-control:hover:not(:disabled){background:#28282b;color:#ededf0}.ccc-live .ccc-reference-header-metrics .ccc-header-metric-control:disabled{cursor:default;opacity:.48}
+.ccc-live .ccc-live-left-issue{width:100%;border:0;background:transparent;color:inherit;text-align:left}.ccc-live .ccc-live-left-issue:hover{background:#202023}
