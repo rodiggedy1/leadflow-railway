@@ -89,6 +89,7 @@ type ConfirmationReplyAlert = {
 
 type IncomingCallHandoff = {
   callerName: string;
+  callerPhone: string | null;
   durationSeconds: number | null;
   outcome: string;
   recordingUrl: string | null;
@@ -239,14 +240,20 @@ function callHandoffFromMessage(message: ChannelMessage): IncomingCallHandoff | 
   } catch {
     // The persisted stream entry remains available even when legacy metadata is malformed.
   }
-  const firstBodyLine = message.body.split("\n").find(Boolean)?.split(" · ")[0]?.trim();
+  const firstBodyLine = message.body.split("\n").find(Boolean)?.trim();
+  const bodyIdentity = firstBodyLine?.split(" · ").map((value) => value.trim()).filter(Boolean) ?? [];
+  const bodyName = bodyIdentity[0] ?? null;
+  const bodyPhone = bodyIdentity[1] ?? null;
   const callerName = typeof metadata.callerName === "string" && metadata.callerName.trim()
     ? metadata.callerName.trim()
-    : firstBodyLine || "Incoming caller";
+    : bodyName || "Incoming caller";
+  const callerPhone = typeof metadata.callerPhone === "string" && metadata.callerPhone.trim()
+    ? metadata.callerPhone.trim()
+    : bodyPhone;
   const durationSeconds = typeof metadata.durationSeconds === "number" ? metadata.durationSeconds : null;
   const outcome = typeof metadata.outcome === "string" && metadata.outcome.trim() ? metadata.outcome : "completed";
   const recordingUrl = typeof metadata.recordingUrl === "string" ? metadata.recordingUrl : mediaUrls(message.mediaUrl)[0] ?? null;
-  return { callerName, durationSeconds, outcome, recordingUrl };
+  return { callerName, callerPhone, durationSeconds, outcome, recordingUrl };
 }
 
 function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
@@ -775,7 +782,7 @@ function IncomingCallHandoffCard({ handoff, timestamp }: { handoff: IncomingCall
     else audioRef.current.pause();
   };
   return <article className="ccc-voice-handoff" aria-label={`AI-handled inbound call from ${handoff.callerName}`}>
-    <header><div className="ccc-voice-handoff-identity"><img src={customerPortraitFor(handoff.callerName)} alt={`Caller portrait illustration for ${handoff.callerName}`} /><span><strong>{handoff.callerName}</strong><small><AudioLines />AI-handled inbound call</small></span></div><b>{outcomeLabel(handoff.outcome)}</b></header>
+    <header><div className="ccc-voice-handoff-identity"><img src={customerPortraitFor(handoff.callerName)} alt={`Caller portrait illustration for ${handoff.callerName}`} /><span><strong>{handoff.callerName}</strong><small><AudioLines />AI-handled inbound call{handoff.callerPhone && <>{" · "}{handoff.callerPhone}</>}</small></span></div><b>{outcomeLabel(handoff.outcome)}</b></header>
     <div className="ccc-voice-handoff-player"><button type="button" aria-label={playLabel} disabled={!recordingUrl} onClick={togglePlayback}><Play fill="currentColor" /></button><span className="ccc-voice-handoff-waveform" aria-hidden="true">{VOICE_HANDOFF_BARS.map((height, index) => <i key={index} className={index < 11 ? "is-blue" : index < 30 ? "is-olive" : index < 41 ? "is-amber" : "is-silver"} style={{ height: `${height}%` }} />)}</span><time>{formatCallDuration(handoff.durationSeconds)}</time></div>
     {recordingUrl && <audio ref={audioRef} src={recordingUrl} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} preload="metadata" />}
     <footer><span><Headphones />{recordingUrl ? (playing ? "Playing call recording" : "Recording available") : "No recording stored"}</span><time>{dateLabel(timestamp)} · {formatTime(timestamp)}</time></footer>

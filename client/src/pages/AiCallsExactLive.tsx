@@ -65,6 +65,7 @@ type HistoryRow = {
   step: string;
   calledPhone: string | null;
   callerName: string | null;
+  callerPhone: string | null;
   outcome: string;
   durationSeconds: number | null;
   transcript: string | null;
@@ -362,6 +363,7 @@ export default function AiCallsExactLive() {
       id: `matrix-${call.id}`,
       source: "outbound" as const,
       callerName: null,
+      callerPhone: null,
       sortTs: Date.parse(call.createdAt ?? "") || 0,
     }));
     const inboundRows = (inboundCallHistory?.calls ?? []).map((call) => ({
@@ -370,6 +372,7 @@ export default function AiCallsExactLive() {
       step: "incoming",
       calledPhone: call.callerPhone,
       callerName: call.callerName,
+      callerPhone: call.callerPhone,
       outcome: call.outcome,
       durationSeconds: call.durationSeconds,
       transcript: call.transcript,
@@ -551,6 +554,8 @@ export default function AiCallsExactLive() {
   }
 
   const callerLabel = selectedHistory?.callerName ?? selectedHistory?.calledPhone ?? "Unknown caller";
+  const callerPhone = selectedHistory?.callerPhone ?? null;
+  const callerIdentity = callerPhone && callerPhone !== callerLabel ? `${callerLabel} · ${callerPhone}` : callerLabel;
   const currentStageLabel = selectedHistory ? labelForOutcome(selectedHistory.outcome) : "No call selected";
   const currentTone = toneForOutcome(selectedHistory?.outcome ?? "");
 
@@ -568,14 +573,14 @@ export default function AiCallsExactLive() {
       <section className="transcript-lab-layout" aria-label="AI Calls transcript workspace">
         <aside className="transcript-queue">
           <header><div><span className="voice-eyebrow">Recent calls</span><h2>Conversation queue</h2></div><span>{historyLoading ? "Loading" : `${historyItems.length} live`}</span></header>
-          {historyError ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>Call history could not load</strong><p>{historyError.message}</p></div> : historyItems.length === 0 && !historyLoading ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>No AI calls yet</strong><p>Incoming calls and existing Call Matrix calls will appear here.</p></div> : <div className="transcript-queue-list">{historyItems.map((call) => { const callName = call.callerName ?? call.calledPhone ?? "Unknown caller"; return <button type="button" key={call.id} className={`transcript-queue-row ${selectedHistory?.id === call.id ? "is-selected" : ""}`} onClick={() => setSelectedHistoryId(call.id)}><LivePersonPortrait value={callName} className="transcript-caller-portrait transcript-caller-portrait--queue" /><span className="transcript-queue-copy"><strong>{callName}</strong><small>{call.summary ?? call.endedReason ?? "Existing call record"}</small><em><Clock3 size={11} />{call.createdAt ?? "Recorded call"}</em></span><span className={`transcript-queue-dot is-${toneForOutcome(call.outcome)}`} aria-hidden="true" /></button>; })}</div>}
+          {historyError ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>Call history could not load</strong><p>{historyError.message}</p></div> : historyItems.length === 0 && !historyLoading ? <div className="voice-empty"><PhoneIncoming size={28} /><strong>No AI calls yet</strong><p>Incoming calls and existing Call Matrix calls will appear here.</p></div> : <div className="transcript-queue-list">{historyItems.map((call) => { const callName = call.callerName ?? call.calledPhone ?? "Unknown caller"; const callPhone = call.callerPhone && call.callerPhone !== callName ? call.callerPhone : null; const callDetail = [callPhone, call.summary ?? call.endedReason ?? "Existing call record"].filter(Boolean).join(" · "); return <button type="button" key={call.id} className={`transcript-queue-row ${selectedHistory?.id === call.id ? "is-selected" : ""}`} onClick={() => setSelectedHistoryId(call.id)}><LivePersonPortrait value={callName} className="transcript-caller-portrait transcript-caller-portrait--queue" /><span className="transcript-queue-copy"><strong>{callName}</strong><small>{callDetail}</small><em><Clock3 size={11} />{call.createdAt ?? "Recorded call"}</em></span><span className={`transcript-queue-dot is-${toneForOutcome(call.outcome)}`} aria-hidden="true" /></button>; })}</div>}
           <footer><FileText size={14} /><span>Existing call records</span></footer>
         </aside>
 
         <article className="transcript-main-stage">
           {selectedHistory ? <>
             <section className="transcript-listening-card">
-              <div className="transcript-listening-head"><div className="transcript-caller-identity"><LivePersonPortrait value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--hero" /><div><h2>{callerLabel}</h2><p><PhoneIncoming size={14} />AI-handled {selectedHistory.source} call</p></div></div><span className={`transcript-outcome is-${currentTone}`}>{currentStageLabel}</span></div>
+              <div className="transcript-listening-head"><div className="transcript-caller-identity"><LivePersonPortrait value={callerLabel} className="transcript-caller-portrait transcript-caller-portrait--hero" /><div><h2>{callerLabel}</h2><p><PhoneIncoming size={14} />AI-handled {selectedHistory.source} call{callerPhone && <>{" · "}{callerPhone}</>}</p></div></div><span className={`transcript-outcome is-${currentTone}`}>{currentStageLabel}</span></div>
               <div className="transcript-waveform-row"><button type="button" className="transcript-play" aria-label={selectedRecordingUrl ? (isPlaying ? "Pause recording" : "Play recording") : "Recording unavailable"} disabled={!selectedRecordingUrl} onClick={togglePlayback}><Play size={17} fill="currentColor" /></button><ReviewWaveform /><span>{formatDuration(selectedHistory.durationSeconds)}</span></div>
               {selectedRecordingUrl && <audio ref={audioRef} src={selectedRecordingUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} preload="metadata" />}
               <footer><span><Headphones size={14} />{selectedRecordingUrl ? (isPlaying ? "Playing existing recording" : "Existing recording available") : "No recording stored"}</span><span>{selectedHistory.createdAt ?? "Existing call record"}</span></footer>
@@ -586,7 +591,7 @@ export default function AiCallsExactLive() {
         </article>
 
         <aside className="transcript-brief">
-          <section className="transcript-brief-card transcript-brief-card--signal"><span className="voice-eyebrow">Call cue</span><h2>{selectedHistory?.summary ?? selectedHistory?.endedReason ?? "Select an existing call record"}</h2><div className="transcript-brief-meta"><span>Duration <strong>{formatDuration(selectedHistory?.durationSeconds ?? null)}</strong></span><span>Contact <strong>{callerLabel}</strong></span></div></section>
+          <section className="transcript-brief-card transcript-brief-card--signal"><span className="voice-eyebrow">Call cue</span><h2>{selectedHistory?.summary ?? selectedHistory?.endedReason ?? "Select an existing call record"}</h2><div className="transcript-brief-meta"><span>Duration <strong>{formatDuration(selectedHistory?.durationSeconds ?? null)}</strong></span><span>Contact <strong>{callerIdentity}</strong></span></div></section>
           <section className="transcript-brief-card"><span className="voice-eyebrow">Recommended next step</span><strong className="transcript-next-step">Prepare a new call with the existing Call Matrix workflow.</strong><button type="button" onClick={() => openComposer()}><Sparkles size={14} />Prepare follow-up</button></section>
           <section className="transcript-brief-card transcript-brief-card--note"><span className="voice-eyebrow">Call record</span><p>{selectedHistory ? `Outcome: ${currentStageLabel}${selectedHistory.endedReason ? ` · ${selectedHistory.endedReason}` : ""}` : "No call record is selected."}</p></section>
         </aside>

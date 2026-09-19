@@ -28,6 +28,9 @@ describe("AI Calls exact transcript workspace", () => {
     expect(shell).toContain("trpc.voice.listCalls.useQuery");
     expect(shell).toContain('source: "inbound" as const');
     expect(shell).toContain('source: "outbound" as const');
+    expect(shell).toContain("callerPhone: call.callerPhone");
+    expect(shell).toContain('const callerIdentity = callerPhone && callerPhone !== callerLabel');
+    expect(shell).toContain('AI-handled {selectedHistory.source} call{callerPhone &&');
     expect(shell).toContain('Incoming calls and existing Call Matrix calls will appear here.');
     expect(shell).toContain("proxyRecordingUrl(selectedHistory?.recordingUrl)");
     expect(shell).toContain("trpc.callMatrix.getPeople.useQuery");

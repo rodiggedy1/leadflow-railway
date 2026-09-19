@@ -81,6 +81,9 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null');
     expect(page).toContain('function ConfirmationReplyCard({ alert, timestamp }');
     expect(page).toContain('function callHandoffFromMessage(message: ChannelMessage): IncomingCallHandoff | null');
+    expect(page).toContain('callerPhone: string | null;');
+    expect(page).toContain('typeof metadata.callerPhone === "string" && metadata.callerPhone.trim()');
+    expect(page).toContain('AI-handled inbound call{handoff.callerPhone &&');
     expect(page).toContain('function IncomingCallHandoffCard({ handoff, timestamp }');
     expect(page).toContain('if (callHandoff) return <IncomingCallHandoffCard handoff={callHandoff} timestamp={message.ts} />;');
     expect(page).toContain('AI-handled inbound call');
