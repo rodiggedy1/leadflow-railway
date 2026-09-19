@@ -88,6 +88,7 @@ type ConfirmationReplyAlert = {
 };
 
 type IncomingCallHandoff = {
+  vapiCallId: string | null;
   callerName: string;
   callerPhone: string | null;
   durationSeconds: number | null;
@@ -126,6 +127,11 @@ type TeamSmsStreamEvent = {
 type CommandTimelineEntry =
   | { kind: "internal"; id: string; ts: number; message: ChannelMessage }
   | { kind: "team-sms"; id: string; ts: number; event: TeamSmsStreamEvent };
+
+type VoiceCallerIdentity = {
+  callerName: string | null;
+  callerPhone: string | null;
+};
 
 const CHANNELS: Array<{ key: ChannelKey; label: string; icon: string; tone: string }> = [
   { key: "command", label: "MIB Command", icon: "✦", tone: "neutral" },
@@ -250,10 +256,13 @@ function callHandoffFromMessage(message: ChannelMessage): IncomingCallHandoff | 
   const callerPhone = typeof metadata.callerPhone === "string" && metadata.callerPhone.trim()
     ? metadata.callerPhone.trim()
     : bodyPhone;
+  const vapiCallId = typeof metadata.vapiCallId === "string" && metadata.vapiCallId.trim()
+    ? metadata.vapiCallId.trim()
+    : null;
   const durationSeconds = typeof metadata.durationSeconds === "number" ? metadata.durationSeconds : null;
   const outcome = typeof metadata.outcome === "string" && metadata.outcome.trim() ? metadata.outcome : "completed";
   const recordingUrl = typeof metadata.recordingUrl === "string" ? metadata.recordingUrl : mediaUrls(message.mediaUrl)[0] ?? null;
-  return { callerName, callerPhone, durationSeconds, outcome, recordingUrl };
+  return { vapiCallId, callerName, callerPhone, durationSeconds, outcome, recordingUrl };
 }
 
 function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
@@ -445,6 +454,15 @@ export default function CommandChatExactLive() {
     { sessionIds: leftTeamSmsSessionIds },
     { enabled: isAuthenticated && leftTeamSmsSessionIds.length > 0, staleTime: 15_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
   );
+  const { data: inboundVoiceCallHistory } = trpc.voice.listCalls.useQuery(
+    { limit: 50, offset: 0 },
+    { enabled: isAuthenticated, staleTime: 30_000, refetchInterval: 30_000, refetchIntervalInBackground: false },
+  );
+  const voiceCallIdentityByVapiId = useMemo(() => new Map<string, VoiceCallerIdentity>(
+    (inboundVoiceCallHistory?.calls ?? [])
+      .filter((call) => Boolean(call.vapiCallId))
+      .map((call) => [call.vapiCallId, { callerName: call.callerName?.trim() || null, callerPhone: call.callerPhone?.trim() || null }]),
+  ), [inboundVoiceCallHistory?.calls]);
 
   const messageIds = useMemo(() => (channelMessages as ChannelMessage[]).map((message) => message.id).filter((id) => id > 0).slice(-500), [channelMessages]);
   const reactionsMutation = trpc.opsChat.getReactions.useMutation();
@@ -723,7 +741,7 @@ export default function CommandChatExactLive() {
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
               <div className="ccc-message-stream" ref={messageStreamRef}>
-                {messagesLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div> : commandTimeline.length === 0 ? <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div> : commandTimeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} mentionPattern={mentionPattern} reactions={reactionsByMessage[entry.message.id] ?? {}} onThread={() => setThreadId(entry.message.id)} onReaction={(emoji) => toggleReaction.mutate({ messageId: entry.message.id, emoji })} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) setSelectedSmsConversation(conversation); }} />)}
+                {messagesLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div> : commandTimeline.length === 0 ? <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div> : commandTimeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} reactions={reactionsByMessage[entry.message.id] ?? {}} onThread={() => setThreadId(entry.message.id)} onReaction={(emoji) => toggleReaction.mutate({ messageId: entry.message.id, emoji })} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) setSelectedSmsConversation(conversation); }} />)}
               </div>
               <div className="ccc-quick-actions"><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
               <div className="ccc-composer"><div>{attachmentUrls.length > 0 && <div className="ccc-live-attachments">{attachmentUrls.map((url) => <span key={url}><img src={url} alt="Pending command attachment" /><button type="button" onClick={() => setAttachmentUrls((urls) => urls.filter((item) => item !== url))}><X /></button></span>)}</div>}<textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submitMessage(); } }} placeholder={recording ? "Recording voice note…" : "Message the command channel…"} /><div className="ccc-composer-tools"><span><button type="button" aria-label="Attach image" disabled={uploadPhoto.isPending} onClick={() => fileInputRef.current?.click()}>{uploadPhoto.isPending ? <Loader2 className="animate-spin" /> : <Paperclip />}</button><button type="button" aria-label={recording ? "Stop voice recording" : "Record voice note"} disabled={transcribeVoice.isPending} onClick={() => void toggleRecording()}>{recording ? <span className="ccc-live-recording" /> : transcribeVoice.isPending ? <Loader2 className="animate-spin" /> : <Mic />}</button><button type="button" aria-label="Add check mark" onClick={() => setDraft((value) => `${value}${value ? " " : ""}✅`)}><Check /></button></span><button type="button" className="ccc-send" disabled={sendMessage.isPending || (!draft.trim() && !attachmentUrls.length)} onClick={submitMessage}>{sendMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}Send</button></div></div></div>
@@ -749,15 +767,21 @@ export default function CommandChatExactLive() {
   );
 }
 
-function LiveMessage({ message, callerName, photoUrl, mentionPattern, reactions, onThread, onReaction }: { message: ChannelMessage; callerName: string; photoUrl: string | null; mentionPattern: RegExp | null; reactions: Record<string, { count: number; names: string[] }>; onThread: () => void; onReaction: (emoji: string) => void }) {
+function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId, mentionPattern, reactions, onThread, onReaction }: { message: ChannelMessage; callerName: string; photoUrl: string | null; voiceCallIdentityByVapiId: Map<string, VoiceCallerIdentity>; mentionPattern: RegExp | null; reactions: Record<string, { count: number; names: string[] }>; onThread: () => void; onReaction: (emoji: string) => void }) {
   const mine = message.from === callerName;
   const team = message.role === "agent" && !mine;
   const system = message.role === "system";
   const media = mediaUrls(message.mediaUrl);
   const confirmationReply = confirmationReplyFromMessage(message);
   const callHandoff = callHandoffFromMessage(message);
+  const voiceCaller = callHandoff?.vapiCallId ? voiceCallIdentityByVapiId.get(callHandoff.vapiCallId) : null;
+  const resolvedCallHandoff = callHandoff ? {
+    ...callHandoff,
+    callerName: voiceCaller?.callerName || callHandoff.callerName,
+    callerPhone: voiceCaller?.callerPhone || callHandoff.callerPhone,
+  } : null;
   if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
-  if (callHandoff) return <IncomingCallHandoffCard handoff={callHandoff} timestamp={message.ts} />;
+  if (resolvedCallHandoff) return <IncomingCallHandoffCard handoff={resolvedCallHandoff} timestamp={message.ts} />;
   if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{message.body}<time>{formatTime(message.ts)}</time></span></div>;
   return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em><time>{formatTime(message.ts)}</time></div>{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<p>{renderMentionBody(message.body, mentionPattern)}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}><img src={url} alt="Command attachment" /></a>)}</div>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
 }
