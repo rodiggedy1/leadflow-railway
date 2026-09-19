@@ -421,13 +421,17 @@ export default function CommandChatExactLive() {
   const smsInbox = useMemo(() => (smsInboxRows as unknown as SmsInboxConversation[])
     .filter((conversation) => Boolean(conversation.leadPhone))
     .sort((left, right) => smsInboxTimestamp(right) - smsInboxTimestamp(left)), [smsInboxRows]);
+  const inboundSmsInbox = useMemo(
+    () => smsInbox.filter((conversation) => conversation.lastSenderRole === "user"),
+    [smsInbox],
+  );
   const visibleRootMessages = useMemo(
     () => rootMessages.filter((message) => !isHiddenCommandNotification(message)),
     [rootMessages],
   );
   const latestInboundTeamMessage = useMemo(
-    () => smsInbox.find((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user") ?? null,
-    [smsInbox],
+    () => inboundSmsInbox.find((conversation) => conversation.personType === "team") ?? null,
+    [inboundSmsInbox],
   );
   const latestInternalMessageId = visibleRootMessages.length ? visibleRootMessages[visibleRootMessages.length - 1].id : 0;
   const latestTeamMessageTimestamp = latestInboundTeamMessage ? smsInboxTimestamp(latestInboundTeamMessage) : 0;
@@ -614,14 +618,14 @@ export default function CommandChatExactLive() {
             </div>
             <div className="ccc-left-section ccc-conversations-section ccc-live-left-rail">
               <div className="ccc-panel-tabs ccc-live-left-rail-tabs" aria-label="Command activity views">
-                <button type="button" className={leftRailMode === "sms" ? "active" : ""} onClick={() => setLeftRailMode("sms")}>SMS <b>{smsInbox.length}</b></button>
+                <button type="button" className={leftRailMode === "sms" ? "active" : ""} onClick={() => setLeftRailMode("sms")}>SMS <b>{inboundSmsInbox.length}</b></button>
                 <button type="button" className={leftRailMode === "issues" ? "active" : ""} onClick={() => setLeftRailMode("issues")}>Issues <b>{openIssues.length}</b></button>
                 <button type="button" className={leftRailMode === "threads" ? "active" : ""} onClick={() => setLeftRailMode("threads")}>Threads <b>{activeThreads.length}</b></button>
               </div>
               <div className="ccc-live-left-rail-content">
                 {leftRailMode === "sms" ? <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
-                  {smsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => setSelectedSmsConversation(conversation)} />)}
-                  {!smsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : "No active text conversations."}</p>}
+                  {inboundSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => setSelectedSmsConversation(conversation)} />)}
+                  {!inboundSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : "No active text conversations."}</p>}
                 </div> : leftRailMode === "issues" ? <LeftRailIssues issues={openIssues} onOpen={openIssueEngine} /> : <LeftRailThreads threads={activeThreads} onOpen={(id) => { setThreadDraft(""); setThreadId(id); }} />}
               </div>
             </div>

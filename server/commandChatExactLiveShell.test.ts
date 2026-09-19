@@ -109,8 +109,13 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
+    expect(page).toContain('const inboundSmsInbox = useMemo(');
+    expect(page).toContain('smsInbox.filter((conversation) => conversation.lastSenderRole === "user")');
+    expect(page).toContain('SMS <b>{inboundSmsInbox.length}</b>');
+    expect(page).toContain('{inboundSmsInbox.map((conversation) => <SmsInboxRow');
     expect(page).toContain('const latestInboundTeamMessage = useMemo(');
-    expect(page).toContain('smsInbox.find((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user") ?? null');
+    expect(page).toContain('inboundSmsInbox.find((conversation) => conversation.personType === "team") ?? null');
+    expect(page).not.toContain('smsInbox.find((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user") ?? null');
     expect(page).toContain('{latestInboundTeamMessage && <TeamSmsFeedMessage conversation={latestInboundTeamMessage} onOpen={() => setSelectedSmsConversation(latestInboundTeamMessage)} />}');
     expect(page).toContain('{visibleRootMessages.map((message) => <LiveMessage');
     expect(page.indexOf('{visibleRootMessages.map((message) => <LiveMessage')).toBeLessThan(page.indexOf('{latestInboundTeamMessage && <TeamSmsFeedMessage'));
