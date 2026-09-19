@@ -99,6 +99,7 @@ const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
 const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
 const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));
+const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -156,7 +157,13 @@ function AdminEmailsExactLiveRoute() { return <ReviewWorkspaceFrame navActivePat
 function AdminCommandChatExactLiveRoute() { return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>; }
 function AdminAiCallsExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>; }
 function AdminHiringAdminExactReviewRoute() { return <ReviewWorkspaceFrame navActivePath="/review/hiring-admin"><HiringAdminLive /></ReviewWorkspaceFrame>; }
-
+function AdminLeadsCRMExactLiveRoute() {
+  const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  // Preserve existing deep-linked utility dashboards while the default Leads
+  // destination is the independent, review-derived CRM.
+  if (tab && tab !== "leads") return <AdminDashboard />;
+  return <AdminPageGuard pageId="leads"><LeadsCRMExactLive /></AdminPageGuard>;
+}
 /**
  * OpsChatRedirect
  * /admin/ops-chat is now an overlay — redirect to /admin/leads and open the overlay.
@@ -181,7 +188,7 @@ function Router() {
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
-        <Route path={"/admin/leads"} component={AdminDashboard} />
+        <Route path={"/admin/leads"} component={AdminLeadsCRMExactLiveRoute} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
         <Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />
