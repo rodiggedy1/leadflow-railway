@@ -59,12 +59,17 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('useOpsStream({');
     expect(page).toContain('fetch("/api/agents/login"');
     expect(page).toContain('mediaUrl: attachmentUrls.length ? JSON.stringify(attachmentUrls) : undefined');
-    expect(page).toContain('const HIDDEN_COMMAND_QUICK_ACTIONS = ["new_lead", "escalation_nudge", "call_summary", "call_ended", "call_debrief", "missed_call"] as const;');
+    expect(page).toContain('"madison_sms_draft",');
+    expect(page).toContain('"madison_email_draft",');
+    expect(page).toContain('"madison_call_summary",');
+    expect(page).toContain('"madison_auto_sent",');
     expect(page).toContain('function isHiddenCommandNotification(message: ChannelMessage)');
-    expect(page).toContain('if (message.quickAction === "madison_email_draft") return /thumbtack|direct lead|yelp|bark/i.test(message.body);');
     expect(page).toContain('message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body)');
     expect(page).toContain('const visibleRootMessages = useMemo(');
     expect(page).toContain('function leadFromCommandMessage(message: ChannelMessage): CommandLead | null');
+    expect(page).toContain('function customerPortraitFor(value: string)');
+    expect(page).toContain('className="ccc-live-lead-primary"');
+    expect(page).toContain('className="ccc-live-lead-primary-copy"');
     expect(page).toContain('const webAndQuoteLeads = useMemo(');
     expect(page).toContain('const incomingLeads = useMemo(');
     expect(page).toContain('<LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} />');
@@ -76,6 +81,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live-thread-drawer");
     expect(styles).toContain(".ccc-live-message-media");
     expect(styles).toContain(".ccc-live .ccc-live-lead-queue");
+    expect(styles).toContain(".ccc-live .ccc-live-lead-primary");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
     expect(app).toContain('function AdminCommandChatExactLiveRoute() { return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>; }');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');

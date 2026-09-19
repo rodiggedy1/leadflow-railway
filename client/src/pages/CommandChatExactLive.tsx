@@ -69,6 +69,7 @@ type CommandLead = {
   name: string;
   sourceLabel: string;
   detail: string;
+  priceLabel: string | null;
   ts: number;
   queue: "web" | "incoming";
 };
@@ -89,7 +90,28 @@ const ISSUE_TYPES = [
   ["payment_problem", "Payment problem"],
   ["other", "Other"],
 ] as const;
-const HIDDEN_COMMAND_QUICK_ACTIONS = ["new_lead", "escalation_nudge", "call_summary", "call_ended", "call_debrief", "missed_call"] as const;
+const HIDDEN_COMMAND_QUICK_ACTIONS = [
+  "new_lead",
+  "escalation_nudge",
+  "call_summary",
+  "call_ended",
+  "call_debrief",
+  "missed_call",
+  "madison_sms_draft",
+  "madison_email_draft",
+  "madison_call_summary",
+  "madison_auto_sent",
+] as const;
+const CUSTOMER_PORTRAITS = [
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOtabpUhLIcbLXur.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/CucZtKJOfkDlJvMg.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bCfFsxIPapKjJReA.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bvdqcqtPZSJhgtqq.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qRwiNDAHRQQTxPbz.png",
+] as const;
 
 function initials(value: string) {
   return value.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "MI";
@@ -124,6 +146,11 @@ function mediaUrls(value: string | null) {
   }
 }
 
+function customerPortraitFor(value: string) {
+  const total = Array.from(value).reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  return CUSTOMER_PORTRAITS[Math.abs(total) % CUSTOMER_PORTRAITS.length];
+}
+
 function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   if (message.quickAction !== "new_lead") return null;
   let metadata: Record<string, unknown> = {};
@@ -142,14 +169,14 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
     ? (source.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || message.from.replace(/^[^A-Za-z0-9]+/, "") || "Incoming lead")
     : (sourceKey === "widget" || sourceKey === "widget-popup" ? "Web form" : "Quote form");
   const name = getText("leadName") || "New lead";
-  const price = metadata.price === undefined || metadata.price === null || metadata.price === "" ? "" : `$${metadata.price}`;
-  const detail = [getText("serviceType"), getText("size"), price].filter(Boolean).join(" · ") || "New inquiry";
-  return { id: message.id, name, sourceLabel, detail, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
+  const rawPrice = metadata.price === undefined || metadata.price === null || metadata.price === "" ? "" : String(metadata.price);
+  const priceLabel = rawPrice ? (rawPrice.startsWith("$") ? rawPrice : `$${rawPrice}`) : null;
+  const detail = [getText("serviceType"), getText("size")].filter(Boolean).join(" · ") || "New inquiry";
+  return { id: message.id, name, sourceLabel, detail, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
 }
 
 function isHiddenCommandNotification(message: ChannelMessage) {
   if (HIDDEN_COMMAND_QUICK_ACTIONS.includes(message.quickAction as (typeof HIDDEN_COMMAND_QUICK_ACTIONS)[number])) return true;
-  if (message.quickAction === "madison_email_draft") return /thumbtack|direct lead|yelp|bark/i.test(message.body);
   return message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body);
 }
 
@@ -158,11 +185,21 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
 }
 
 function LeadQueue({ title, description, leads }: { title: string; description: string; leads: CommandLead[] }) {
+  const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
+  const [primaryLead, ...remainingLeads] = orderedLeads;
   return (
-    <article className="ccc-context-card ccc-live-lead-queue">
+    <article className={`ccc-context-card ccc-live-lead-queue ${primaryLead ? "has-leads" : ""}`}>
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
-      {leads.length ? <div className="ccc-live-lead-list">{leads.slice(0, 6).map((lead) => <a href="/admin/leads" key={lead.id} className="ccc-live-lead-row"><span className="ccc-live-lead-initials">{initials(lead.name)}</span><span><strong>{lead.name}</strong><small>{lead.sourceLabel} · {lead.detail}</small></span><time>{formatRelative(lead.ts)}</time><ChevronRight /></a>)}</div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
+      {primaryLead ? <div className="ccc-live-lead-list">
+        <a href="/admin/leads" className="ccc-live-lead-primary">
+          <img src={customerPortraitFor(primaryLead.name)} alt={`Client portrait illustration for ${primaryLead.name}`} />
+          <span className="ccc-live-lead-primary-copy"><strong>{primaryLead.name}</strong><small>{primaryLead.queue === "web" ? `Quote requested · ${primaryLead.sourceLabel}` : `${primaryLead.sourceLabel} · ${primaryLead.detail}`}</small><em><i />New inquiry · {formatRelative(primaryLead.ts)}</em></span>
+          {primaryLead.priceLabel && <b>{primaryLead.priceLabel}</b>}
+          <footer><span>View lead <ChevronRight /></span></footer>
+        </a>
+        {remainingLeads.slice(0, 2).map((lead) => <a href="/admin/leads" key={lead.id} className="ccc-live-lead-row"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></a>)}
+      </div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
     </article>
   );
 }
