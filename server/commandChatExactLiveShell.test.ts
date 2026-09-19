@@ -192,6 +192,9 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live-sms-drawer");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-message");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-card");
+    expect(styles).toContain(".ccc-live .ccc-group-message-team .ccc-live-team-sms-card>p");
+    expect(styles).toContain("background:transparent!important");
+    expect(styles).toContain("border:0!important");
     expect(styles).toContain(".ccc-live .ccc-live-team-reply-hint");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-reactions");
     expect(styles).toContain(".ccc-live .ccc-live-sms-list{flex:1;min-height:0;overflow-y:auto}");
