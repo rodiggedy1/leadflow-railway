@@ -10,6 +10,7 @@ describe("SMS exact-live shell", () => {
     const page = read("client/src/pages/SmsExactLive.tsx");
     const css = read("client/src/pages/sms-exact-live.css");
     const app = read("client/src/App.tsx");
+    const customerPanel = read("client/src/components/CsRightPanelClient.tsx");
 
     expect(page).toContain('import "./cs-inbox-crm-review.css";');
     expect(page).toContain('import "./sms-review.css";');
@@ -42,6 +43,12 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('<video controls preload="metadata"');
     expect(page).toContain('const [mmsLightbox, setMmsLightbox]');
     expect(page).toContain('className="cic-live-mission"');
+    expect(page).toContain('runMission={mission => openTools(mission)}');
+    expect(page).toContain('initialMission={initialMission}');
+    expect(customerPanel).toContain('initialMission?: "payment" | "quote" | "agreement" | null;');
+    expect(customerPanel).toContain('if (initialMission === "payment") firePaymentLink();');
+    expect(customerPanel).toContain('if (initialMission === "quote") setShowQuoteWidget(true);');
+    expect(customerPanel).toContain('if (initialMission === "agreement")');
     expect(css).toContain('scrollbar-color: #4a4a51 #18181a;');
     expect(css).toContain('::-webkit-scrollbar-thumb');
     expect(css).toContain('.sms-exact-live .cic-mms-lightbox');

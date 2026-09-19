@@ -343,9 +343,10 @@ interface Props {
   messages?: { sender: string; text: string; ts?: number }[];
   missionSection?: React.ReactNode;
   onPaymentLink?: () => void;
+  initialMission?: "payment" | "quote" | "agreement" | null;
 }
 
-export default function CsRightPanelClient({ selected, setCompose, messages = [], missionSection, onPaymentLink }: Props) {
+export default function CsRightPanelClient({ selected, setCompose, messages = [], missionSection, onPaymentLink, initialMission = null }: Props) {
   const [debriefDismissed, setDebriefDismissed] = useState<Record<number, boolean>>({});
   const [upsellResult, setUpsellResult] = useState<{ upsell: { signal: string; pitch: string; upsellType: string } | null } | null>(null);
   const [upsellLoading, setUpsellLoading] = useState(false);
@@ -436,6 +437,18 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
       text: serviceAgreementSmsText.trim(),
     });
   }
+
+  useEffect(() => {
+    if (!initialMission) return;
+    if (initialMission === "payment") firePaymentLink();
+    if (initialMission === "quote") setShowQuoteWidget(true);
+    if (initialMission === "agreement") {
+      setServiceAgreementSmsText(SERVICE_AGREEMENT_SMS);
+      setShowServiceAgreementWidget(true);
+    }
+  // The dialog mounts once per explicit mission-card click, so this invokes the existing review flow exactly once.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMission, selected.id]);
 
   useEffect(() => {
     if (!selected || selected.id <= 0 || messages.length === 0) return;
