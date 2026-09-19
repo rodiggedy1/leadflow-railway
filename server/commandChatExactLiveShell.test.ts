@@ -28,10 +28,10 @@ describe("Command Chat exact live shell", () => {
       'className="ccc-command-grid"',
       'className="ccc-command-panel ccc-left-panel"',
       'className="ccc-command-panel ccc-center-panel"',
-      'className="ccc-command-panel ccc-right-panel"',
+      'ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}',
       'className="ccc-message-stream"',
       'className="ccc-composer"',
-      'className="ccc-live-thread-drawer"',
+      'className="ccc-live-thread-panel"',
     ]) {
       expect(page).toContain(marker);
     }
@@ -82,28 +82,42 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('<LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} />');
     expect(page).toContain('<LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} />');
     expect(page).toContain('agents.agents.slice(0, 5)');
-    expect(page).toContain('ccc-live-sms-section');
+    expect(page).toContain('type LeftRailMode = "sms" | "issues" | "threads";');
+    expect(page).toContain('const [leftRailMode, setLeftRailMode] = useState<LeftRailMode>("sms");');
+    expect(page).toContain('className="ccc-left-section ccc-conversations-section ccc-live-left-rail"');
+    expect(page).toContain('className="ccc-panel-tabs ccc-live-left-rail-tabs"');
+    expect(page).toContain('setLeftRailMode("sms")');
+    expect(page).toContain('setLeftRailMode("issues")');
+    expect(page).toContain('setLeftRailMode("threads")');
+    expect(page).toContain('<LeftRailIssues issues={openIssues} />');
+    expect(page).toContain('<LeftRailThreads threads={activeThreads} onOpen={(id) => { setThreadDraft(""); setThreadId(id); }} />');
     expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
-    expect(page).toContain('className="ccc-alt-view ccc-live-threads-view"');
-    expect(page).toContain('className="ccc-live-threads-list" aria-label="Active command threads"');
-    expect(page).toContain('role="dialog"');
+    expect(page).toContain('function LeftRailThreads({ threads, onOpen }');
+    expect(page).toContain('function ThreadPanel({ thread, callerName, draft, pending, photoMap, onDraft, onSend, onClose }');
+    expect(page).toContain('threadId !== null ? <ThreadPanel');
+    expect(page).toContain('ccc-right-panel-thread-open');
+    expect(page).toContain('aria-label="Close command thread"');
     expect(page).not.toContain('COMMAND CHANNELS');
-    expect(page).not.toContain('ccc-live-thread-list');
+    expect(page).not.toContain('ccc-reference-chat-tabs');
+    expect(page).not.toContain('ccc-live-threads-view');
     expect(page).not.toContain('<div className="ccc-live-thread-backdrop"');
+    expect(page).not.toContain('ThreadDrawer');
+    expect(page).not.toContain('role="dialog"');
     expect(page).not.toContain('<Activity /><b>{metrics.activity}</b> Today');
     expect(page).not.toContain('aria-label="View channel threads" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}><MessageSquare /></button><button type="button" aria-label="Channel actions"');
     expect(page).not.toContain('ccc-reference-action-divider');
-    expect(styles).toContain(".ccc-live-thread-drawer");
+    expect(styles).toContain(".ccc-live-thread-panel");
     expect(styles).toContain(".ccc-live-message-media");
     expect(styles).toContain(".ccc-live .ccc-live-lead-queue");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary");
     expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
-    expect(styles).toContain(".ccc-live .ccc-live-sms-section");
+    expect(styles).toContain(".ccc-live .ccc-live-left-rail");
     expect(styles).toContain(".ccc-live-sms-drawer");
-    expect(styles).toContain(".ccc-live .ccc-live-threads-view");
-    expect(styles).toContain(".ccc-live-thread-drawer{position:fixed");
+    expect(styles).toContain(".ccc-live .ccc-right-panel-thread-open");
+    expect(styles).not.toContain("ccc-live-thread-drawer");
+    expect(styles).not.toContain("ccc-live-thread-panel{position:fixed");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
     expect(app).toContain('function AdminCommandChatExactLiveRoute() { return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>; }');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
