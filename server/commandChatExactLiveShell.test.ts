@@ -109,12 +109,13 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
-    expect(page).toContain('const teamInboxMessages = useMemo(');
-    expect(page).toContain('conversation.personType === "team" && conversation.lastSenderRole === "user"');
+    expect(page).toContain('const latestInboundTeamMessage = useMemo(');
+    expect(page).toContain('smsInbox.find((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user") ?? null');
+    expect(page).toContain('...(latestInboundTeamMessage ? [{ kind: "team-sms" as const, ts: smsInboxTimestamp(latestInboundTeamMessage), conversation: latestInboundTeamMessage }] : []),');
     expect(page).not.toContain('conversation.personType === "team" && Boolean(conversation.lastMessageText?.trim())');
     expect(page).toContain('const commandFeed = useMemo<CommandFeedEntry[]>(');
     expect(page).toContain('function TeamSmsFeedMessage({ conversation, onOpen }');
-    expect(page).toContain('const body = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
+    expect(page).toContain('const body = conversation.lastMessageText?.trim() || conversation.aiSummary?.trim() || "No message preview available.";');
     expect(page).toContain('className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"');
     expect(page).toContain('<Heart fill="currentColor" /> <b>3</b>');
     expect(page).toContain('className="ccc-live-team-sms-reactions"');
@@ -145,6 +146,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-card");
     expect(styles).toContain(".ccc-live .ccc-live-team-reply-hint");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-reactions");
+    expect(styles).toContain(".ccc-live .ccc-live-sms-list{flex:1;min-height:0;overflow-y:auto}");
     expect(styles).not.toContain(".ccc-live .ccc-live-team-sms-card:hover footer");
     expect(styles).toContain(".ccc-live .ccc-right-panel-thread-open");
     expect(styles).toContain(".ccc-live .ccc-reference-header-metrics .ccc-header-metric-control");

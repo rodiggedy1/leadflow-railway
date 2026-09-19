@@ -75,3 +75,7 @@
 
 /* Compact reference proportions: no enlarged avatar, bubble, or reaction controls. */
 .ccc-live .ccc-live-team-sms-message{grid-template-columns:43px minmax(0,1fr);gap:10px;max-width:82%;margin:5px 0 10px 32px}.ccc-live .ccc-live-team-sms-message>.ccc-group-avatar{width:43px;height:43px;border-color:#2f6c59;background:radial-gradient(circle at 35% 25%,#1d5a49,#17372e);color:#a5e6cf;box-shadow:0 0 0 4px rgba(41,130,99,.08)}.ccc-live .ccc-live-team-sms-message>.ccc-group-avatar svg{width:21px;height:21px}.ccc-live .ccc-live-team-sms-message .ccc-message-meta{gap:6px;margin:1px 0 5px}.ccc-live .ccc-live-team-sms-message .ccc-message-meta strong{font-size:12px;font-weight:700}.ccc-live .ccc-live-team-sms-message .ccc-message-meta time{font-size:11px}.ccc-live .ccc-live-team-sms-card{width:min(100%,560px);border-radius:6px 16px 16px 16px}.ccc-live .ccc-live-team-sms-card p{padding:12px 14px 11px;font-size:14px;line-height:1.42}.ccc-live .ccc-live-team-sms-reactions{gap:7px;margin-top:7px}.ccc-live .ccc-live-team-sms-reactions>span{gap:4px;width:34px;height:34px;font-size:10px}.ccc-live .ccc-live-team-sms-reactions>span:first-child{min-width:45px;padding:0 8px}.ccc-live .ccc-live-team-sms-reactions b{font-size:11px}.ccc-live .ccc-live-team-sms-reactions svg{width:14px;height:14px}
+
+
+/* The SMS tab owns its own scroll region; navigation and tabs remain fixed above it. */
+.ccc-live .ccc-live-sms-list{flex:1;min-height:0;overflow-y:auto}

@@ -427,16 +427,16 @@ export default function CommandChatExactLive() {
     () => rootMessages.filter((message) => !isHiddenCommandNotification(message)),
     [rootMessages],
   );
-  const teamInboxMessages = useMemo(
-    () => smsInbox.filter((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user"),
+  const latestInboundTeamMessage = useMemo(
+    () => smsInbox.find((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user") ?? null,
     [smsInbox],
   );
   const commandFeed = useMemo<CommandFeedEntry[]>(
     () => [
       ...visibleRootMessages.map((message) => ({ kind: "channel" as const, ts: message.ts, message })),
-      ...teamInboxMessages.map((conversation) => ({ kind: "team-sms" as const, ts: smsInboxTimestamp(conversation), conversation })),
+      ...(latestInboundTeamMessage ? [{ kind: "team-sms" as const, ts: smsInboxTimestamp(latestInboundTeamMessage), conversation: latestInboundTeamMessage }] : []),
     ].sort((left, right) => right.ts - left.ts),
-    [teamInboxMessages, visibleRootMessages],
+    [latestInboundTeamMessage, visibleRootMessages],
   );
   const effectiveMentionNames = useMemo(() => new Set([callerName, profile?.name].filter((name): name is string => Boolean(name))), [callerName, profile?.name]);
   const mentionPattern = useMemo(() => {
@@ -722,7 +722,7 @@ function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversat
 function TeamSmsFeedMessage({ conversation, onOpen }: { conversation: SmsInboxConversation; onOpen: () => void }) {
   const name = smsConversationName(conversation);
   const timestamp = smsInboxTimestamp(conversation);
-  const body = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";
+  const body = conversation.lastMessageText?.trim() || conversation.aiSummary?.trim() || "No message preview available.";
   return <article className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"><span className="ccc-group-avatar ccc-group-avatar-team"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{body}</p><span className="ccc-live-team-reply-hint"><MessageSquare />Reply</span></button><div className="ccc-live-team-sms-reactions" aria-label="Team message reactions"><span><Heart fill="currentColor" /> <b>3</b></span><span><Users /></span></div></div></article>;
 }
 
