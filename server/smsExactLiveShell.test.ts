@@ -43,8 +43,15 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('<video controls preload="metadata"');
     expect(page).toContain('const [mmsLightbox, setMmsLightbox]');
     expect(page).toContain('className="cic-live-mission"');
-    expect(page).toContain('runMission={mission => openTools(mission)}');
-    expect(page).toContain('initialMission={initialMission}');
+    expect(page).toContain('function InlineCustomerMission');
+    expect(page).toContain('activeMission={activeMission}');
+    expect(page).toContain('setActiveMission={setActiveMission}');
+    expect(page).toContain('trpc.aiConcierge.chat.useMutation');
+    expect(page).toContain('trpc.aiConcierge.sendPaymentLinkSms.useMutation');
+    expect(page).toContain('trpc.csMissions.sendQuoteSms.useMutation');
+    expect(page).toContain('const renderableTimeline = useMemo');
+    expect(page).toContain('entry.message.text.trim() && <p>{entry.message.text}</p>');
+    expect(page).not.toContain('initialMission={initialMission}');
     expect(customerPanel).toContain('initialMission?: "payment" | "quote" | "agreement" | null;');
     expect(customerPanel).toContain('if (initialMission === "payment") firePaymentLink();');
     expect(customerPanel).toContain('if (initialMission === "quote") setShowQuoteWidget(true);');
@@ -54,6 +61,7 @@ describe("SMS exact-live shell", () => {
     expect(css).toContain('.sms-exact-live .cic-mms-lightbox');
     expect(css).toContain('.sms-exact-live .cic-live-media video');
     expect(css).toContain('.sms-exact-live .cic-live-mission');
+    expect(css).toContain('.sms-exact-live .cic-inline-mission');
     expect(app).toContain('const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));');
     expect(app).toContain('function AdminSmsExactLiveRoute()');
     expect(app).toContain('const isSmsWorkspace = location === "/admin/sms";');

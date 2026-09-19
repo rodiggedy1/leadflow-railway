@@ -119,3 +119,40 @@
   .sms-exact-live .cic-live-tools-backdrop { padding: 0; }
   .sms-exact-live .cic-live-tools { width: 100%; height: 100dvh; border: 0; border-radius: 0; }
 }
+
+/* The three visible mission cards expand within the right panel; only utility actions use the legacy dialog. */
+.sms-exact-live .cic-inline-mission { display: grid; gap: 10px; margin: 0 14px 14px; padding: 12px; border: 1px solid #40336a; border-radius: 12px; background: linear-gradient(145deg, #1d1928, #16151d); box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 9px 22px rgba(0,0,0,.18); }
+.sms-exact-live .cic-inline-mission > header { display: flex; align-items: center; justify-content: space-between; margin: -1px 0 1px; color: #eeeafd; font-size: 12px; font-weight: 750; }
+.sms-exact-live .cic-inline-mission > header > span { display: inline-flex; align-items: center; gap: 7px; }
+.sms-exact-live .cic-inline-mission > header svg { color: #b8a5ff; }
+.sms-exact-live .cic-inline-mission > header button { display: grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 6px; color: #9892a8; background: transparent; cursor: pointer; }
+.sms-exact-live .cic-inline-mission > header button:hover { color: #fff; background: #302b40; }
+.sms-exact-live .cic-inline-mission label { display: grid; gap: 6px; color: #b9b3c8; font-size: 9px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.sms-exact-live .cic-inline-mission textarea,
+.sms-exact-live .cic-inline-mission input,
+.sms-exact-live .cic-inline-mission select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #484153; border-radius: 8px; outline: none; color: #efedf4; background: #121116; font: 11px/1.45 inherit; }
+.sms-exact-live .cic-inline-mission textarea { min-height: 88px; padding: 9px 10px; resize: vertical; }
+.sms-exact-live .cic-inline-mission input,
+.sms-exact-live .cic-inline-mission select { height: 31px; padding: 0 8px; }
+.sms-exact-live .cic-inline-mission textarea:focus,
+.sms-exact-live .cic-inline-mission input:focus,
+.sms-exact-live .cic-inline-mission select:focus { border-color: #8069e9; box-shadow: 0 0 0 2px rgba(128,105,233,.14); }
+.sms-exact-live .cic-inline-mission-recipient,
+.sms-exact-live .cic-inline-mission-loading { margin: 0; color: #9e98ad; font-size: 10px; line-height: 1.4; }
+.sms-exact-live .cic-inline-mission-recipient b { color: #ded9e9; }
+.sms-exact-live .cic-inline-mission footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sms-exact-live .cic-inline-mission footer a { display: inline-flex; align-items: center; gap: 4px; color: #b8a5ff; font-size: 10px; text-decoration: none; }
+.sms-exact-live .cic-inline-mission footer a:hover { color: #d3c7ff; }
+.sms-exact-live .cic-inline-send,
+.sms-exact-live .cic-inline-secondary { border: 0; border-radius: 8px; padding: 8px 10px; color: #fff; background: linear-gradient(135deg, #7456d6, #9a7df0); font-size: 10px; font-weight: 750; cursor: pointer; }
+.sms-exact-live .cic-inline-secondary { color: #c5bed7; background: #2a2732; }
+.sms-exact-live .cic-inline-send:disabled { cursor: not-allowed; opacity: .5; }
+.sms-exact-live .cic-inline-quote-grid { display: grid; grid-template-columns: .8fr .8fr 1.4fr; gap: 7px; }
+.sms-exact-live .cic-inline-extras { display: flex; flex-wrap: wrap; gap: 5px; }
+.sms-exact-live .cic-inline-extras button { border: 1px solid #484153; border-radius: 999px; padding: 5px 7px; color: #c8c2d4; background: #18161e; font-size: 9px; line-height: 1.2; cursor: pointer; }
+.sms-exact-live .cic-inline-extras button.is-selected { border-color: #826ae9; color: #f2efff; background: #46367c; }
+.sms-exact-live .cic-inline-price { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.sms-exact-live .cic-inline-price > span { display: flex; align-items: center; justify-content: space-between; padding: 0 9px; border: 1px solid #40336a; border-radius: 8px; color: #b7a4f5; background: #241e35; font-size: 10px; }
+.sms-exact-live .cic-inline-price > span b { color: #ede9ff; font-size: 12px; }
+.sms-exact-live .cic-inline-price label { gap: 4px; }
+@media (max-width: 1180px) { .sms-exact-live .cic-inline-quote-grid { grid-template-columns: 1fr; } }
