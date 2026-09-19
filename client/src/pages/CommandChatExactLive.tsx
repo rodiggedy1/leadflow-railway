@@ -74,6 +74,14 @@ type CommandLead = {
   queue: "web" | "incoming";
 };
 
+type ConfirmationReplyAlert = {
+  intent: "cancellation" | "unclear";
+  customerName: string;
+  serviceDate: string | null;
+  replyText: string;
+  replyUrl: string | null;
+};
+
 const CHANNELS: Array<{ key: ChannelKey; label: string; icon: string; tone: string }> = [
   { key: "command", label: "MIB Command", icon: "✦", tone: "neutral" },
   { key: "urgent", label: "Urgent", icon: "!", tone: "amber" },
@@ -151,6 +159,25 @@ function customerPortraitFor(value: string) {
   return CUSTOMER_PORTRAITS[Math.abs(total) % CUSTOMER_PORTRAITS.length];
 }
 
+function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null {
+  if (message.role !== "system" || !message.from.includes("Customer SMS Reply")) return null;
+  let metadata: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(message.metadata ?? "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) metadata = parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const intent = metadata.intent === "cancellation" ? "cancellation" : metadata.intent === "unclear" ? "unclear" : null;
+  if (!intent) return null;
+  const titleLine = message.body.split("\n").find((line) => /\*\*(?:Cancellation Request|Unclear SMS Reply)\*\*/i.test(line));
+  const subject = titleLine?.match(/\*\*(?:Cancellation Request|Unclear SMS Reply)\*\*\s*—\s*(.*)$/i)?.[1]?.trim() || "Customer";
+  const dateMatch = subject.match(/\s+\((\d{4}-\d{2}-\d{2})\)\s*$/);
+  const customerName = (dateMatch ? subject.slice(0, dateMatch.index) : subject).trim() || "Customer";
+  const replyText = message.body.split("\n").find((line) => line.trim().startsWith(">"))?.replace(/^\s*>\s*/, "").replace(/^"|"$/g, "").trim() || "No reply text recorded.";
+  return { intent, customerName, serviceDate: dateMatch?.[1] ?? null, replyText, replyUrl: /^https?:\/\/\S+$/i.test(replyText) ? replyText : null };
+}
+
 function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   if (message.quickAction !== "new_lead") return null;
   let metadata: Record<string, unknown> = {};
@@ -177,6 +204,8 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
 
 function isHiddenCommandNotification(message: ChannelMessage) {
   if (HIDDEN_COMMAND_QUICK_ACTIONS.includes(message.quickAction as (typeof HIDDEN_COMMAND_QUICK_ACTIONS)[number])) return true;
+  if (message.quickAction === "sync_watchdog") return true;
+  if (message.role === "system" && /\bSync Alert\b/i.test(message.body)) return true;
   return message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body);
 }
 
@@ -539,8 +568,24 @@ function LiveMessage({ message, callerName, photoUrl, reactions, onThread, onRea
   const team = message.role === "agent" && !mine;
   const system = message.role === "system";
   const media = mediaUrls(message.mediaUrl);
+  const confirmationReply = confirmationReplyFromMessage(message);
+  if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
   if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{message.body}<time>{formatTime(message.ts)}</time></span></div>;
   return <article className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em><time>{formatTime(message.ts)}</time></div>{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<p>{message.body}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}><img src={url} alt="Command attachment" /></a>)}</div>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
+}
+
+function ConfirmationReplyCard({ alert, timestamp }: { alert: ConfirmationReplyAlert; timestamp: number }) {
+  const isCancellation = alert.intent === "cancellation";
+  const attachmentHost = alert.replyUrl ? (() => {
+    try { return new URL(alert.replyUrl).hostname.replace(/^www\./, ""); } catch { return "external attachment"; }
+  })() : null;
+  return <article className={`ccc-live-confirmation-reply ${isCancellation ? "is-cancellation" : "is-unclear"}`}>
+    <header><span><Phone />Confirmation reply</span><time>{formatTime(timestamp)}</time></header>
+    <div><span className="ccc-live-confirmation-reply-status">{isCancellation ? "Cancellation request" : "Needs clarification"}</span><strong>{alert.customerName}</strong>{alert.serviceDate && <small>Service date · {alert.serviceDate}</small>}
+      {alert.replyUrl ? <a className="ccc-live-confirmation-reply-link" href={alert.replyUrl} target="_blank" rel="noreferrer"><Paperclip />Media link received · {attachmentHost}</a> : <blockquote>“{alert.replyText}”</blockquote>}
+      <a className="ccc-live-confirmation-reply-action" href="/admin/confirmation-calls">Open Confirmation Calls <ChevronRight /></a>
+    </div>
+  </article>;
 }
 
 function IssuesView({ issues, onBack }: { issues: Array<{ id: number; title: string; issueType: string; severity: string; notes: string | null; ownerName: string | null }>; onBack: () => void }) {

@@ -64,8 +64,13 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('"madison_call_summary",');
     expect(page).toContain('"madison_auto_sent",');
     expect(page).toContain('function isHiddenCommandNotification(message: ChannelMessage)');
+    expect(page).toContain('if (message.quickAction === "sync_watchdog") return true;');
+    expect(page).toContain('if (message.role === "system" && /\\bSync Alert\\b/i.test(message.body)) return true;');
     expect(page).toContain('message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body)');
     expect(page).toContain('const visibleRootMessages = useMemo(');
+    expect(page).toContain('function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null');
+    expect(page).toContain('function ConfirmationReplyCard({ alert, timestamp }');
+    expect(page).toContain('href="/admin/confirmation-calls"');
     expect(page).toContain('function leadFromCommandMessage(message: ChannelMessage): CommandLead | null');
     expect(page).toContain('function customerPortraitFor(value: string)');
     expect(page).toContain('className="ccc-live-lead-primary"');
@@ -82,6 +87,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live-message-media");
     expect(styles).toContain(".ccc-live .ccc-live-lead-queue");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary");
+    expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
     expect(app).toContain('function AdminCommandChatExactLiveRoute() { return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>; }');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
