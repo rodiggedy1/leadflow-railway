@@ -428,7 +428,7 @@ export default function CommandChatExactLive() {
     [rootMessages],
   );
   const teamInboxMessages = useMemo(
-    () => smsInbox.filter((conversation) => conversation.personType === "team"),
+    () => smsInbox.filter((conversation) => conversation.personType === "team" && conversation.lastSenderRole === "user"),
     [smsInbox],
   );
   const commandFeed = useMemo<CommandFeedEntry[]>(

@@ -110,9 +110,8 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
     expect(page).toContain('const teamInboxMessages = useMemo(');
-    expect(page).toContain('smsInbox.filter((conversation) => conversation.personType === "team")');
+    expect(page).toContain('conversation.personType === "team" && conversation.lastSenderRole === "user"');
     expect(page).not.toContain('conversation.personType === "team" && Boolean(conversation.lastMessageText?.trim())');
-    expect(page).not.toContain('conversation.personType === "team" && conversation.lastSenderRole === "user"');
     expect(page).toContain('const commandFeed = useMemo<CommandFeedEntry[]>(');
     expect(page).toContain('function TeamSmsFeedMessage({ conversation, onOpen }');
     expect(page).toContain('const body = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
