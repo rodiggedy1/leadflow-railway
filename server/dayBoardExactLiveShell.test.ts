@@ -91,6 +91,16 @@ describe("Day Board exact live shell", () => {
     expect(shell).not.toContain('(job.customerName ?? "Client").split(" ")[0]');
   });
 
+  it("shows the scheduled time before the address within the fixed job-card detail row", () => {
+    const shell = read("client/src/pages/DayBoardExactLive.tsx");
+    const gridlessStyles = read("client/src/pages/day-board-crm-gridless.css");
+
+    expect(shell).toContain("const scheduledTime = serviceTime(job);");
+    expect(shell).toContain('<time className="dbr-job-time">{scheduledTime}</time>');
+    expect(shell).toContain('<span aria-hidden="true"> · </span>{(job.jobAddress ?? "—").split(",")[0]}');
+    expect(gridlessStyles).toContain(".dbr-job .dbr-job-time{color:#f0f1f2;font-weight:750;opacity:1}");
+  });
+
   it("reads persisted portal progress without creating statuses or automatic messages", () => {
     const router = read("server/leadflowJobsRouter.ts");
     const dayBoardBlock = router.slice(router.indexOf("dayBoard: dayBoardProcedure"), router.indexOf("customerProfile:"));

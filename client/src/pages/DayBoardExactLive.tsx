@@ -225,9 +225,10 @@ function JobBlock({ job, overlapRow, selected, unread, onClick }: { job: LiveJob
   const Icon = config.icon;
   const smsRatio = job.stepsSuccess / Math.max(job.totalSteps, 1);
   const smsColor = smsRatio > .75 ? "#32c184" : smsRatio > .4 ? "#e3ae42" : "#e77478";
+  const scheduledTime = serviceTime(job);
   return <button type="button" onClick={onClick} aria-label={`${job.customerName ?? "Client"}, ${config.label}`} data-status={status} className={`dbr-job ${selected ? "is-selected" : ""}`} style={{ top: `${DAY_BOARD_JOB_TOP + overlapRow * DAY_BOARD_OVERLAP_ROW_HEIGHT}px`, bottom: "auto", height: `${DAY_BOARD_JOB_HEIGHT}px`, left: `${left}%`, width: `calc(${width}% - 4px)`, borderColor: config.color, color: config.color }}>
     <header><span className="dbr-job-client"><img src={customerPortrait(job.customerName)} alt={`Customer portrait for ${job.customerName ?? "Client"}`} /><span><Icon size={11} />{job.customerName ?? "Client"}</span></span>{unread && <i />}</header>
-    <p>{(job.jobAddress ?? "—").split(",")[0]}</p>
+    <p><time className="dbr-job-time">{scheduledTime}</time><span aria-hidden="true"> · </span>{(job.jobAddress ?? "—").split(",")[0]}</p>
     <b className="dbr-sms-bar" style={{ width: `${smsRatio * 100}%`, background: smsColor }} />
   </button>;
 }
