@@ -100,6 +100,7 @@ const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
 const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
 const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));
 const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
+const BookingFlowReview = lazy(() => import("./pages/BookingFlowReview"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -164,6 +165,7 @@ function AdminLeadsCRMExactLiveRoute() {
   if (tab && tab !== "leads") return <AdminDashboard />;
   return <AdminPageGuard pageId="leads"><ReviewWorkspaceFrame navActivePath="/review/leads-crm"><LeadsCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
+function BookingFlowReviewRoute() { return <BookingFlowReview />; }
 /**
  * OpsChatRedirect
  * /admin/ops-chat is now an overlay — redirect to /admin/leads and open the overlay.
@@ -270,6 +272,7 @@ function Router() {
         <Route path={"/review/reviews-quality"} component={ReviewsQualityReviewRoute} />
         <Route path={"/review/invoices"} component={InvoicesReviewRoute} />
         <Route path={"/review/payments"} component={PaymentsReviewRoute} />
+        <Route path={"/review/book-now"} component={BookingFlowReviewRoute} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
