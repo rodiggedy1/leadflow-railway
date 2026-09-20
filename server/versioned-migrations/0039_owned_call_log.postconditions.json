@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "table": "call_log",
+  "columns": [
+    { "name": "leadflowJobId", "columnType": "int", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "idx_call_log_leadflow_job", "columns": ["leadflowJobId"], "unique": false }
+  ]
+}

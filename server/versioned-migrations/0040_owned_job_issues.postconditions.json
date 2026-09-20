@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "table": "job_issues",
+  "columns": [
+    { "name": "cleanerJobId", "columnType": "int", "nullable": true },
+    { "name": "leadflowJobId", "columnType": "int", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "idx_job_issues_leadflow_job_date", "columns": ["leadflowJobId", "jobDate"], "unique": false }
+  ]
+}

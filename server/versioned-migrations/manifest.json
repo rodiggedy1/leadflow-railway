@@ -263,6 +263,46 @@
       "sha256": "c954199757bc3c770a4c92f9bbdbd0fec74975e10a21eba9b652e1c825985474",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0035_create_applicant_portal_handoff_tokens.postconditions.json"
+    },
+    {
+      "id": "0036_owned_schedule_assignments",
+      "mode": "owned-schedule-existing-table-schema",
+      "sqlFile": "0036_owned_schedule_assignments.sql",
+      "sha256": "aee8e505204944c636350452bc362f2edac742572d2cc17bdde34b7acd175af6",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0036_owned_schedule_assignments.postconditions.json"
+    },
+    {
+      "id": "0037_owned_schedule_job_locks",
+      "mode": "owned-schedule-existing-table-schema",
+      "sqlFile": "0037_owned_schedule_job_locks.sql",
+      "sha256": "94a056170166ebbca9106d3342da9f6d5104793e8015231afd3ef1f4521287b1",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0037_owned_schedule_job_locks.postconditions.json"
+    },
+    {
+      "id": "0038_owned_field_mgmt_calls",
+      "mode": "owned-schedule-existing-table-schema",
+      "sqlFile": "0038_owned_field_mgmt_calls.sql",
+      "sha256": "9a283329a5a70826b21673a3f2532ce9134c961b6a5f52ec3ea6e0eb99402272",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0038_owned_field_mgmt_calls.postconditions.json"
+    },
+    {
+      "id": "0039_owned_call_log",
+      "mode": "owned-schedule-existing-table-schema",
+      "sqlFile": "0039_owned_call_log.sql",
+      "sha256": "aa77cfb92537e9a17502e48a3b5621fe8ae35b236e800c9e96effed493e280e8",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0039_owned_call_log.postconditions.json"
+    },
+    {
+      "id": "0040_owned_job_issues",
+      "mode": "owned-schedule-existing-table-schema",
+      "sqlFile": "0040_owned_job_issues.sql",
+      "sha256": "933460c660c40a6f8cac8d74b3d37adc6459f1f18fb1b54ba83f1521c8091d7e",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0040_owned_job_issues.postconditions.json"
     }
   ]
 }

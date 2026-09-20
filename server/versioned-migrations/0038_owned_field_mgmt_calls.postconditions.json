@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "table": "field_mgmt_calls",
+  "columns": [
+    { "name": "cleanerJobId", "columnType": "int", "nullable": true },
+    { "name": "leadflowJobId", "columnType": "int", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "idx_field_mgmt_calls_leadflow_job", "columns": ["leadflowJobId"], "unique": false }
+  ]
+}

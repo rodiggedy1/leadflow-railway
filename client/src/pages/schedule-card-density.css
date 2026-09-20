@@ -1,0 +1,148 @@
+/* Full-width operational card scan with balanced medium-density vertical rhythm. */
+.scr-shell .scr-job-card {
+  min-height: 102px;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, auto);
+  grid-template-areas: "person timing" "context drive";
+  align-items: center;
+  gap: 12px 16px;
+  padding: 13px 14px;
+}
+
+.scr-shell .scr-job-person {
+  grid-area: person;
+  min-width: 0;
+}
+
+.scr-shell .scr-job-person-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #f0f0f0;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scr-shell .scr-job-context {
+  grid-area: context;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.scr-shell .scr-job-service {
+  min-width: 0;
+  overflow: hidden;
+  color: #d8d8d8;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scr-shell .scr-job-address {
+  min-width: 0;
+  overflow: hidden;
+  align-items: center;
+  color: #939393;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scr-shell .scr-job-timing {
+  grid-area: timing;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  justify-items: end;
+}
+
+.scr-shell .scr-job-card-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.scr-shell .scr-job-card-top > svg:first-child {
+  margin-right: auto;
+}
+
+.scr-shell .scr-job-tag {
+  margin-left: 0;
+  white-space: nowrap;
+}
+
+.scr-shell .scr-drive {
+  grid-area: drive;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  color: #a2a2a2;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.scr-shell .scr-request,
+.scr-shell .scr-conflict {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Route columns become true three-zone scan cards only when their own width supports it. */
+.scr-shell .scr-team-jobs,
+.scr-shell .scr-unassigned {
+  container-type: inline-size;
+}
+
+@container (min-width: 620px) {
+  .scr-shell .scr-job-card {
+    min-height: 94px;
+    grid-template-columns: minmax(156px, .82fr) minmax(0, 1.35fr) minmax(138px, .83fr);
+    grid-template-areas: "person context timing";
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .scr-shell .scr-job-person,
+  .scr-shell .scr-job-context {
+    align-self: center;
+  }
+
+  .scr-shell .scr-job-context,
+  .scr-shell .scr-job-timing {
+    align-content: center;
+  }
+
+  .scr-shell .scr-job-timing {
+    align-self: stretch;
+  }
+
+  .scr-shell .scr-drive {
+    grid-area: timing;
+    align-self: end;
+  }
+}
+
+@media (max-width: 720px) {
+  .scr-shell .scr-job-card {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "person timing" "context context";
+    grid-template-areas: "person timing" "context drive";
+    gap: 10px 12px;
+    padding: 11px 12px;
+  }
+
+  .scr-shell .scr-job-timing {
+    align-content: start;
+    gap: 6px;
+  }
+
+  .scr-shell .scr-job-card-top > svg:first-child {
+    display: none;
+  }
+}

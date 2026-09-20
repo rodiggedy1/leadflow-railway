@@ -74,6 +74,7 @@ const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
 const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
+const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -110,6 +111,10 @@ function OpsChatRedirect() {
 
 function AdminDayBoardExactLiveRoute() {
   return <AdminPageGuard pageId="field-management"><DayBoardExactLive /></AdminPageGuard>;
+}
+
+function AdminScheduleCRMExactRoute() {
+  return <AdminPageGuard pageId="field-management"><LeadflowScheduleCRMExactLive /></AdminPageGuard>;
 }
 
 function AdminSmsExactLiveRoute() {
@@ -154,6 +159,7 @@ function Router() {
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
         <Route path={"/admin/field-management"} component={FieldManagement} />
+        <Route path={"/admin/schedule"} component={AdminScheduleCRMExactRoute} />
         <Route path={"/admin/day-board"} component={AdminDayBoardExactLiveRoute} />
         <Route path={"/admin/reactivation"} component={ReactivationEngine} />
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
