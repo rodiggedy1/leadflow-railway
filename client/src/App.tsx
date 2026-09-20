@@ -12,6 +12,8 @@ const OpsChat = lazy(() => import("./pages/OpsChat"));
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "./hooks/useOpsStream";
 import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
+import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";
+import "./pages/review-typography.css";
 import AdminPageGuard from "./components/AdminPageGuard";
 
 // Route-level code splitting — each page loads only when its route is visited.
@@ -95,6 +97,10 @@ function PageLoader() {
   );
 }
 
+function ReviewWorkspaceFrame({ children, navActivePath }: { children: React.ReactNode; navActivePath: string }) {
+  return <div className="review-nav-host"><ReviewWorkspaceNav activePath={navActivePath} />{children}</div>;
+}
+
 /**
  * OpsChatRedirect
  * /admin/ops-chat is now an overlay — redirect to /admin/leads and open the overlay.
@@ -110,19 +116,19 @@ function OpsChatRedirect() {
 }
 
 function AdminDayBoardExactLiveRoute() {
-  return <AdminPageGuard pageId="field-management"><DayBoardExactLive /></AdminPageGuard>;
+  return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/day-board-crm"><DayBoardExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
 function AdminScheduleCRMExactRoute() {
-  return <AdminPageGuard pageId="field-management"><LeadflowScheduleCRMExactLive /></AdminPageGuard>;
+  return <AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><LeadflowScheduleCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
 function AdminSmsExactLiveRoute() {
-  return <SmsExactLive />;
+  return <ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>;
 }
 
 function AdminEmailsExactLiveRoute() {
-  return <EmailsExactLive />;
+  return <ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>;
 }
 
 function Router() {

@@ -43,12 +43,13 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live .email-detail-list,");
   });
 
-  it("uses the dedicated live route without importing shared review navigation", () => {
+  it("uses the dedicated live route inside the original shared review navigation", () => {
     const app = read("client/src/App.tsx");
     expect(app).toContain('const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));');
     expect(app).toContain('function AdminEmailsExactLiveRoute()');
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />');
     expect(app).toContain('location === "/admin/sms" || location === "/admin/emails"');
-    expect(app).not.toContain(["ReviewWorkspace", "Frame"].join(""));
+    expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
   });
 });

@@ -6,7 +6,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 describe("Day Board exact live shell", () => {
-  it("keeps the approved Day Board composition without the shared preview navigation bundle", () => {
+  it("keeps the approved Day Board composition inside the original shared workspace navigation", () => {
     const app = read("client/src/App.tsx");
     const shell = read("client/src/pages/DayBoardExactLive.tsx");
     const reviewStyles = read("client/src/pages/day-board-crm-review.css");
@@ -14,13 +14,13 @@ describe("Day Board exact live shell", () => {
 
     expect(app).toContain('const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));');
     expect(app).toContain("function AdminDayBoardExactLiveRoute()");
-    expect(app).toContain('<AdminPageGuard pageId="field-management"><DayBoardExactLive /></AdminPageGuard>');
+    expect(app).toContain('<AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/day-board-crm"><DayBoardExactLive /></ReviewWorkspaceFrame></AdminPageGuard>');
     expect(app).toContain('<Route path={"/admin/day-board"} component={AdminDayBoardExactLiveRoute} />');
     expect(app).toContain("function isDayBoardExactLiveRoute(location: string)");
     expect(app).toContain("<DayBoardSafeGlobalOpsChat />");
     expect(app).toContain("<DayBoardSafePollingInstrumentation />");
     expect(app).toContain("<DayBoardSafeRuntimeWatchers />");
-    expect(app).not.toContain(["ReviewWorkspace", "Frame"].join(""));
+    expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
 
     for (const marker of [
       'import "./day-board-crm-review.css"',

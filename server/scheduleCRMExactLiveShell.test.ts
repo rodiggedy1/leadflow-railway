@@ -26,7 +26,7 @@ describe("LeadFlow-owned Schedule workspace", () => {
     const shell = read("client/src/pages/LeadflowScheduleCRMExactLive.tsx");
 
     expect(app).toContain('const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));');
-    expect(app).toContain('<AdminPageGuard pageId="field-management"><LeadflowScheduleCRMExactLive /></AdminPageGuard>');
+    expect(app).toContain('<AdminPageGuard pageId="field-management"><ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><LeadflowScheduleCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>');
     expect(app).toContain('<Route path={"/admin/schedule"} component={AdminScheduleCRMExactRoute} />');
     expect(shell).toContain('trpc.leadflowSchedule.getSchedule.useQuery({ date }');
     expect(shell).toContain('trpc.leadflowSchedule.getJobLocks.useQuery({ date })');

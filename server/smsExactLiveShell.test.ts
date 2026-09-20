@@ -90,9 +90,10 @@ describe("SMS exact-live shell", () => {
     expect(worldClassPanel).toContain('cic-worldclass-assistant-dark');
     expect(app).toContain('const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));');
     expect(app).toContain('function AdminSmsExactLiveRoute()');
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />');
     expect(app).toContain('location === "/admin/day-board" || location === "/admin/sms"');
-    expect(app).not.toContain(["ReviewWorkspace", "Frame"].join(""));
+    expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
   });
 
   it("uses only LeadFlow-owned context reads for customer, team, and card names", () => {
