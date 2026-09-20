@@ -12,6 +12,7 @@ const OpsChat = lazy(() => import("./pages/OpsChat"));
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "./hooks/useOpsStream";
 import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
+import AdminPageGuard from "./components/AdminPageGuard";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -70,6 +71,7 @@ const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
+const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -104,6 +106,10 @@ function OpsChatRedirect() {
   return null;
 }
 
+function AdminDayBoardExactLiveRoute() {
+  return <AdminPageGuard pageId="field-management"><DayBoardExactLive /></AdminPageGuard>;
+}
+
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -136,6 +142,7 @@ function Router() {
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
         <Route path={"/admin/field-management"} component={FieldManagement} />
+        <Route path={"/admin/day-board"} component={AdminDayBoardExactLiveRoute} />
         <Route path={"/admin/reactivation"} component={ReactivationEngine} />
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
         <Route path={"/call-assist"} component={LiveCallAssist} />
@@ -285,18 +292,44 @@ function GlobalOpsChat() {
   );
 }
 
-function App() {
+function isDayBoardExactLiveRoute(location: string) {
+  return location === "/admin/day-board";
+}
+
+function DayBoardSafeGlobalOpsChat() {
+  const [location] = useLocation();
+  if (isDayBoardExactLiveRoute(location)) return null;
+  return <GlobalOpsChat />;
+}
+
+function PollingInstrumentation() {
   usePollingInstrumentation();
+  return null;
+}
+
+function DayBoardSafePollingInstrumentation() {
+  const [location] = useLocation();
+  if (isDayBoardExactLiveRoute(location)) return null;
+  return <PollingInstrumentation />;
+}
+
+function DayBoardSafeRuntimeWatchers() {
+  const [location] = useLocation();
+  if (isDayBoardExactLiveRoute(location)) return null;
+  return <><LeadAssignmentWatcher /><SuperAlertWatcher /></>;
+}
+
+function App() {
   return (
     <ErrorBoundary>
       <OpsChatProvider>
         <ThemeProvider defaultTheme="light">
-          <TooltipProvider>
+            <TooltipProvider>
             <Toaster />
             <Router />
-            <GlobalOpsChat />
-            <LeadAssignmentWatcher />
-            <SuperAlertWatcher />
+            <DayBoardSafeGlobalOpsChat />
+            <DayBoardSafePollingInstrumentation />
+            <DayBoardSafeRuntimeWatchers />
           </TooltipProvider>
         </ThemeProvider>
       </OpsChatProvider>
