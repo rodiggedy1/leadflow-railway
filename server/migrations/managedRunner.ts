@@ -64,7 +64,12 @@ function validateManifest(manifest: ManagedMigrationManifest): void {
     if (migration.replayMode !== "verified-idempotent") {
       throw new ManagedMigrationError(`Unsupported replay mode for ${migration.id}`);
     }
-    if (migration.mode && migration.mode !== "create-table" && migration.mode !== "additive-columns-existing-table") {
+    if (
+      migration.mode
+      && migration.mode !== "create-table"
+      && migration.mode !== "additive-columns-existing-table"
+      && migration.mode !== "owned-schedule-existing-table-schema"
+    ) {
       throw new ManagedMigrationError(`Unsupported migration mode for ${migration.id}`);
     }
     ids.add(migration.id);
@@ -287,6 +292,73 @@ function validateAdditiveColumnsSql(sql: string, postconditions: TablePostcondit
   }
 }
 
+/**
+ * The owned Schedule cutover changes only declared nullable integer columns and
+ * indexes on one already-existing table. Anything else fails before execution.
+ */
+function validateOwnedScheduleExistingTableSchemaSql(sql: string, postconditions: TablePostconditions): void {
+  if (!postconditions.columns.length || !postconditions.indexes.length) {
+    throw new ManagedMigrationError("owned-schedule-existing-table-schema requires columns and indexes");
+  }
+  const columns = new Map(postconditions.columns.map(column => [column.name, column]));
+  const indexes = new Map(postconditions.indexes.map(index => [index.name, index]));
+  const seenColumns = new Set<string>();
+  const seenIndexes = new Set<string>();
+  const tableName = escapeRegExp(postconditions.table);
+  const addColumn = new RegExp(`^ALTER\\s+TABLE\\s+\`${tableName}\`\\s+ADD\\s+COLUMN\\s+IF\\s+NOT\\s+EXISTS\\s+\`([A-Za-z0-9_]+)\`\\s+int\\s+NULL\\s*;?$`, "i");
+  const modifyColumn = new RegExp(`^ALTER\\s+TABLE\\s+\`${tableName}\`\\s+MODIFY\\s+COLUMN\\s+\`([A-Za-z0-9_]+)\`\\s+int\\s+NULL\\s*;?$`, "i");
+  const createIndex = new RegExp(`^CREATE\\s+(UNIQUE\\s+)?INDEX\\s+IF\\s+NOT\\s+EXISTS\\s+\`([A-Za-z0-9_]+)\`\\s+ON\\s+\`${tableName}\`\\s*\\((\`[A-Za-z0-9_]+\`(?:\\s*,\\s*\`[A-Za-z0-9_]+\`)*)\\)\\s*;?$`, "i");
+  const assertColumn = (name: string) => {
+    const expected = columns.get(name);
+    if (
+      !expected
+      || seenColumns.has(name)
+      || expected.columnType.toLowerCase() !== "int"
+      || !expected.nullable
+      || expected.autoIncrement
+      || expected.default !== undefined
+    ) {
+      throw new ManagedMigrationError(`Unexpected owned Schedule column statement for ${name}`);
+    }
+    seenColumns.add(name);
+  };
+
+  for (const statement of splitStatements(sql)) {
+    const added = statement.match(addColumn);
+    if (added) {
+      assertColumn(added[1]);
+      continue;
+    }
+    const modified = statement.match(modifyColumn);
+    if (modified) {
+      assertColumn(modified[1]);
+      continue;
+    }
+    const index = statement.match(createIndex);
+    if (index) {
+      const [, uniqueKeyword, indexName, columnsText] = index;
+      const expected = indexes.get(indexName);
+      const indexColumns = columnsText.split(",").map(column => column.trim().slice(1, -1));
+      if (
+        !expected
+        || seenIndexes.has(indexName)
+        || expected.unique !== Boolean(uniqueKeyword)
+        || expected.columns.join("\u0000") !== indexColumns.join("\u0000")
+      ) {
+        throw new ManagedMigrationError(`Unexpected owned Schedule index statement for ${indexName}`);
+      }
+      seenIndexes.add(indexName);
+      continue;
+    }
+    throw new ManagedMigrationError(
+      `owned-schedule-existing-table-schema only permits declared nullable integer ALTERs and indexes for ${postconditions.table}`,
+    );
+  }
+  if (seenColumns.size !== columns.size || seenIndexes.size !== indexes.size) {
+    throw new ManagedMigrationError("Missing declared owned Schedule column or index statement");
+  }
+}
+
 async function failAdditiveMigration(
   db: MigrationDb,
   migration: ManagedMigration,
@@ -365,6 +437,68 @@ async function runAdditiveColumnsExistingTableMigration(
   }
 }
 
+async function runOwnedScheduleExistingTableSchemaMigration(
+  db: MigrationDb,
+  migration: ManagedMigration,
+  sql: string,
+  postconditions: TablePostconditions,
+  existing: LedgerRow | undefined,
+  before: Awaited<ReturnType<typeof verifyPostconditions>>,
+  logger: Pick<Console, "info" | "error">,
+): Promise<MigrationRunResult> {
+  if (!before.tableExists) {
+    return failAdditiveMigration(db, migration, `Target table ${postconditions.table} is missing for ${migration.id}`);
+  }
+  if (existing?.state === "applied") {
+    if (!before.valid) {
+      throw new ManagedMigrationError(`Applied migration ${migration.id} has schema drift: ${before.differences.join("; ")}`);
+    }
+    logger.info("migration_skipped", { migrationId: migration.id, reason: "already_applied" });
+    return { id: migration.id, outcome: "skipped" };
+  }
+  if (before.valid) {
+    await markStarted(db, migration);
+    await markApplied(db, migration);
+    logger.info("migration_recovered", { migrationId: migration.id, reason: "existing_schema_verified" });
+    return { id: migration.id, outcome: "recovered" };
+  }
+
+  const permittedDifferences = new Set([
+    ...postconditions.columns.flatMap(column => [
+      `missing column ${column.name}`,
+      `column ${column.name} nullability differs`,
+    ]),
+    ...postconditions.indexes.map(index => `missing index ${index.name}`),
+  ]);
+  const unexpected = before.differences.filter(difference => !permittedDifferences.has(difference));
+  if (unexpected.length) {
+    return failAdditiveMigration(
+      db,
+      migration,
+      `Existing table for ${migration.id} is divergent: ${unexpected.join("; ")}`,
+    );
+  }
+
+  validateOwnedScheduleExistingTableSchemaSql(sql, postconditions);
+  await markStarted(db, migration);
+  try {
+    logger.info("migration_started", { migrationId: migration.id });
+    await executeMigrationSql(db, sql);
+    const after = await verifyPostconditions(db, postconditions);
+    if (!after.valid) {
+      throw new ManagedMigrationError(`Postconditions failed for ${migration.id}: ${after.differences.join("; ")}`);
+    }
+    logger.info("migration_postconditions_passed", { migrationId: migration.id });
+    await markApplied(db, migration);
+    logger.info("migration_applied", { migrationId: migration.id });
+    return { id: migration.id, outcome: "applied" };
+  } catch (error) {
+    await markFailed(db, migration, error);
+    logger.error("migration_failed", { migrationId: migration.id, error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+}
+
 async function runOneMigration(
   db: MigrationDb,
   migration: ManagedMigration,
@@ -380,6 +514,9 @@ async function runOneMigration(
   const before = await verifyPostconditions(db, postconditions);
   if (migration.mode === "additive-columns-existing-table") {
     return runAdditiveColumnsExistingTableMigration(db, migration, sql, postconditions, existing, before, logger);
+  }
+  if (migration.mode === "owned-schedule-existing-table-schema") {
+    return runOwnedScheduleExistingTableSchemaMigration(db, migration, sql, postconditions, existing, before, logger);
   }
   if (existing?.state === "applied") {
     if (!before.valid) {

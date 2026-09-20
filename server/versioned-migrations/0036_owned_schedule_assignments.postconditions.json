@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "table": "schedule_assignments",
+  "columns": [
+    { "name": "cleanerJobId", "columnType": "int", "nullable": true },
+    { "name": "teamId", "columnType": "int", "nullable": true },
+    { "name": "leadflowJobId", "columnType": "int", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "uq_schedule_assignments_leadflow_job_date", "columns": ["leadflowJobId", "jobDate"], "unique": true }
+  ]
+}

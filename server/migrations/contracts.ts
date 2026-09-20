@@ -7,7 +7,10 @@ export interface ManagedMigration {
   replayMode: "verified-idempotent";
   postconditionsFile: string;
   /** Defaults to create-table so existing manifests remain immutable and unchanged. */
-  mode?: "create-table" | "additive-columns-existing-table";
+  mode?:
+    | "create-table"
+    | "additive-columns-existing-table"
+    | "owned-schedule-existing-table-schema";
 }
 
 export interface ManagedMigrationManifest {

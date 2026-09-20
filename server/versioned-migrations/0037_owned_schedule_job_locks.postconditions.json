@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "table": "schedule_job_locks",
+  "columns": [
+    { "name": "jobId", "columnType": "int", "nullable": true },
+    { "name": "leadflowJobId", "columnType": "int", "nullable": true },
+    { "name": "teamId", "columnType": "int", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "uq_schedule_job_locks_leadflow_job_date", "columns": ["leadflowJobId", "date"], "unique": true }
+  ]
+}

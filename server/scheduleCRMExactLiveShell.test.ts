@@ -4,67 +4,78 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
+const legacyJobSymbol = ["cleaner", "Jobs"].join("");
+const legacyJobTable = ["cleaner", "jobs"].join("_");
 
-describe("Schedule CRM exact live shell", () => {
-  it("replaces only the Schedule tab outer shell with the approved Schedule CRM composition", () => {
+const ownedClientFiles = [
+  "client/src/App.tsx",
+  "client/src/pages/LeadflowScheduleCRMExactLive.tsx",
+  "client/src/components/LeadflowScheduleMap.tsx",
+  "client/src/components/LeadflowScheduleIssueDialog.tsx",
+  "client/src/components/LeadflowScheduleCallLogPanel.tsx",
+];
+
+const ownedServerFiles = [
+  "server/leadflowScheduleRouter.ts",
+  "server/leadflowScheduleCallsRouter.ts",
+];
+
+describe("LeadFlow-owned Schedule workspace", () => {
+  it("routes the approved Schedule composition through the isolated owned API", () => {
     const app = read("client/src/App.tsx");
-    const shell = read("client/src/pages/ScheduleCRMExactLive.tsx");
-    const styles = read("client/src/pages/schedule-crm-exact-live.css");
+    const shell = read("client/src/pages/LeadflowScheduleCRMExactLive.tsx");
 
-    expect(app).toContain('const ScheduleCRMExactLive = lazy(() => import("./pages/ScheduleCRMExactLive"));');
-    expect(app).toContain("function AdminScheduleCRMExactRoute()");
-    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><ScheduleCRMExactLive /></ReviewWorkspaceFrame>');
+    expect(app).toContain('const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));');
+    expect(app).toContain('<LeadflowScheduleCRMExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/schedule"} component={AdminScheduleCRMExactRoute} />');
-    expect(app).toContain('location === "/admin/schedule"');
-    expect(shell).toContain('import "./schedule-crm-review.css"');
-    expect(shell).toContain('className="ocr-shell scr-shell schedule-crm-exact-live"');
-    expect(shell).toContain('className="scr-page-head"');
-    expect(shell).toContain('className="scr-schedule-main"');
-    expect(shell).toContain('className="scr-map-panel"');
-    expect(shell).toContain('className="scr-client-drawer"');
-    expect(styles).toContain('.schedule-crm-exact-live .scr-schedule-main');
-    expect(styles).toContain('.schedule-crm-exact-live .scr-route-stack');
-    expect(styles).toContain('flex-direction: column');
-    expect(styles).toContain('flex: 0 0 auto');
-    expect(styles).toContain('overflow-y: auto');
+    expect(shell).toContain('trpc.leadflowSchedule.getSchedule.useQuery({ date }');
+    expect(shell).toContain('trpc.leadflowSchedule.getJobLocks.useQuery({ date })');
+    expect(shell).toContain('trpc.leadflowSchedule.analyzeSchedule.useQuery({ date }');
+    expect(shell).toContain('trpc.leadflowScheduleCalls.getDayIssues.useQuery({ jobDate: date }');
+    expect(shell).toContain('trpc.leadflowSchedule.suggestSlots.useQuery({ address: suggestAddress, date }');
+    expect(shell).toContain('trpc.leadflowSchedule.optimizeDay.useMutation');
+    expect(shell).toContain('trpc.leadflowSchedule.manualAssign.useMutation');
+    expect(shell).toContain('<LeadflowScheduleCallLogPanel');
+    expect(shell).toContain('<LeadflowScheduleIssueDialog');
+    expect(shell).toContain('<LeadflowScheduleMap');
   });
 
-  it("retains the existing live schedule reads, safe detail surfaces, and action contracts", () => {
-    const shell = read("client/src/pages/ScheduleCRMExactLive.tsx");
+  it("keeps read paths explicit and action paths human-triggered", () => {
+    const scheduleRouter = read("server/leadflowScheduleRouter.ts");
+    const callsRouter = read("server/leadflowScheduleCallsRouter.ts");
 
     for (const marker of [
-      "trpc.scheduling.getSchedule.useQuery({ date }",
-      "trpc.scheduling.getJobLocks.useQuery({ date })",
-      "trpc.scheduling.analyzeSchedule.useQuery({ date }",
-      "trpc.calls.getDayIssues.useQuery({ jobDate: date }",
-      "trpc.scheduling.suggestSlots.useQuery({ address: suggestAddress, date }",
-      "trpc.scheduling.optimizeDay.useMutation",
-      "trpc.scheduling.resetOptimization.useMutation",
-      "trpc.scheduling.rerunDistances.useMutation",
-      "trpc.scheduling.lockJob.useMutation",
-      "trpc.scheduling.manualAssign.useMutation",
-      "className=\"scr-assignment-section\"",
-      "Assign a team",
-      "Change team",
-      "onClick={() => setShowReassign(true)}",
-      "trpc.scheduling.upsertTeam.useMutation",
-      "trpc.scheduling.archiveTeam.useMutation",
-      "<CallLogPanel",
-      "<IssueDialog",
-      "<ScheduleMap",
-      "useOpsStream({ onJobUpdate:",
-    ]) expect(shell).toContain(marker);
+      "getSchedule: agentProcedure",
+      "getJobLocks: agentProcedure",
+      "analyzeSchedule: agentProcedure",
+      "suggestSlots: agentProcedure",
+      "optimizeDay: agentProcedure",
+      "resetOptimization: agentProcedure",
+      "manualAssign: agentProcedure",
+      "lockJob: agentProcedure",
+      "unassignJob: agentProcedure",
+      "leadflowJobId",
+      "notInArray(leadflowJobs.bookingStatus",
+    ]) expect(scheduleRouter).toContain(marker);
+
+    for (const marker of [
+      "raiseIssue: agentProcedure",
+      "fireCall: agentProcedure",
+      "getDayIssues: agentProcedure",
+      "getCallLog: agentProcedure",
+      "leadflowJobId",
+      "postOutboundVapiCall",
+    ]) expect(callsRouter).toContain(marker);
+
+    expect(scheduleRouter).not.toContain("invokeLLM");
+    expect(scheduleRouter).not.toContain("confirmationCalls");
   });
 
-  it("keeps the edited client sources free of prohibited booking-data identifiers", () => {
-    for (const relativePath of [
-      "client/src/pages/ScheduleCRMExactLive.tsx",
-      "client/src/pages/schedule-crm-exact-live.css",
-      "client/src/components/ReviewWorkspaceNav.tsx",
-      "client/src/App.tsx",
-    ]) {
+  it("keeps every new Schedule source file outside the legacy job boundary", () => {
+    for (const relativePath of [...ownedClientFiles, ...ownedServerFiles]) {
       const source = read(relativePath);
-      expect(source).not.toMatch(/cleaner[_]?jobs/i);
+      expect(source).not.toContain(legacyJobSymbol);
+      expect(source).not.toContain(legacyJobTable);
     }
   });
 });

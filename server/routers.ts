@@ -42,6 +42,8 @@ import { commandCenterRouter } from "./commandCenterRouter";
 import { metricsRouter } from "./metricsRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { schedulingRouter } from "./schedulingRouter";
+import { leadflowScheduleRouter } from "./leadflowScheduleRouter";
+import { leadflowScheduleCallsRouter } from "./leadflowScheduleCallsRouter";
 import { opsChatRouter } from "./opsChatRouter";
 import { madisonMovesRouter } from "./madisonsMovesRouter";
 import { madisonRouter } from "./madisonRouter";
@@ -7525,6 +7527,8 @@ Return JSON with exactly these fields:
   aiConcierge: aiConciergeRouter,
   csMissions: csMissionsRouter,
   scheduling: schedulingRouter,
+  leadflowSchedule: leadflowScheduleRouter,
+  leadflowScheduleCalls: leadflowScheduleCallsRouter,
   opsChat: opsChatRouter,
   madison: madisonRouter,
   followUps: followUpsRouter,
