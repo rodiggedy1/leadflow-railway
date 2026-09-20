@@ -24,9 +24,10 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('trpc.opsChat.addCsInbox2Note.useMutation');
     expect(page).toContain('trpc.leads.resolveSession.useMutation');
     expect(page).toContain('trpc.leads.sendWorkspaceMessage.useMutation');
-    expect(page).toContain('trpc.leads.getClientProfile.useQuery');
+    expect(page).toContain('trpc.leadflowJobs.smsCustomerContext.useQuery');
     expect(page).toContain('trpc.leads.getCleanerProfileByPhone.useQuery');
-    expect(page).toContain('trpc.leads.getCleanerTodayJobs.useQuery');
+    expect(page).toContain('trpc.leadflowJobs.smsTeamTodayJobs.useQuery');
+    expect(page).toContain('utils.leadflowJobs.smsResolveNames.fetch');
     expect(page).toContain('trpc.opsChat.getAllAgentPhotoMap.useQuery');
     expect(page).toContain('trpc.leads.getCsInboxLastAgents.useQuery');
     expect(page).toContain('sort((a, b) => a - b).slice(0, 800)');
@@ -88,9 +89,30 @@ describe("SMS exact-live shell", () => {
     expect(app).toContain('const isSmsWorkspace = location === "/admin/sms";');
   });
 
-  it("does not introduce the retired booking dependency", () => {
+  it("uses only LeadFlow-owned context reads for customer, team, and card names", () => {
     const page = read("client/src/pages/SmsExactLive.tsx");
-    expect(page).not.toContain(["cleaner", "Jobs"].join(""));
-    expect(page).not.toContain(["cleaner", "_jobs"].join(""));
+    const router = read("server/leadflowJobsRouter.ts");
+    const smsContext = router.slice(router.indexOf("smsCustomerContext:"), router.indexOf("customerProfile:"));
+    const legacySymbol = ["cleaner", "Jobs"].join("");
+    const legacyTable = ["cleaner", "_jobs"].join("");
+
+    for (const marker of [
+      "smsCustomerContext: opsChatProcedure.input(smsPhoneInput).query",
+      "smsTeamTodayJobs: opsChatProcedure.input",
+      "smsResolveNames: opsChatProcedure.input(smsPhonesInput).query",
+      "leadflowJobs",
+      "cleanerPortalJobProgress",
+      "cleanerProfiles",
+    ]) expect(smsContext).toContain(marker);
+    expect(smsContext).not.toContain(legacySymbol);
+    expect(smsContext).not.toContain(legacyTable);
+    expect(smsContext).not.toContain(".insert(");
+    expect(smsContext).not.toContain(".update(");
+    expect(smsContext).not.toContain(".delete(");
+    expect(page).not.toContain(legacySymbol);
+    expect(page).not.toContain(legacyTable);
+    expect(page).not.toContain("trpc.leads.getClientProfile.useQuery");
+    expect(page).not.toContain("trpc.leads.getCleanerTodayJobs.useQuery");
+    expect(page).not.toContain("utils.leads.batchResolveNames.fetch");
   });
 });

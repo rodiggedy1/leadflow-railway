@@ -340,7 +340,7 @@ function InlineCustomerMission({ mission, conversation, profile, close }: { miss
 }
 
 function LiveCustomerPanel({ conversation, openTools, activeMission, setActiveMission }: { conversation: LiveConversation; openTools: () => void; activeMission: CustomerMission | null; setActiveMission: (mission: CustomerMission | null) => void }) {
-  const { data: profile } = trpc.leads.getClientProfile.useQuery({ phone: conversation.phone }, { enabled: !!conversation.phone, refetchOnWindowFocus: false, refetchInterval: 120_000 });
+  const { data: profile } = trpc.leadflowJobs.smsCustomerContext.useQuery({ phone: conversation.phone }, { enabled: !!conversation.phone, refetchOnWindowFocus: false, refetchInterval: 120_000 });
   const today = profile?.todayJob;
   return <aside className="cic-right-panel">
     <section className="cic-profile-head"><LiveAvatar conversation={conversation} className="cic-avatar big" /><div><b>{profile?.name ?? conversation.name}</b><span>{profile?.firstBookingDate ? `Customer since ${new Date(profile.firstBookingDate).getFullYear()}` : "Customer"}</span><strong><Phone size={12} />{conversation.phone}</strong></div></section>
@@ -356,7 +356,7 @@ function LiveCustomerPanel({ conversation, openTools, activeMission, setActiveMi
 
 function LiveTeamPanel({ conversation, openTools }: { conversation: LiveConversation; openTools: () => void }) {
   const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery({ phone: conversation.phone }, { enabled: !!conversation.phone, refetchOnWindowFocus: false });
-  const { data: todayJobs } = trpc.leads.getCleanerTodayJobs.useQuery({ cleanerProfileId: cleanerProfile?.id ?? 0 }, { enabled: !!cleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 });
+  const { data: todayJobs } = trpc.leadflowJobs.smsTeamTodayJobs.useQuery({ cleanerProfileId: cleanerProfile?.id ?? 0 }, { enabled: !!cleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 });
   return <aside className="cic-right-panel">
     <section className="cic-profile-head team"><LiveAvatar conversation={conversation} className="cic-avatar big" /><div><b>{conversation.name}</b><span>Team member</span><strong><Phone size={12} />{conversation.phone}</strong></div></section>
     <section><header><b>Missions</b><button type="button" onClick={openTools}>+ Add</button></header><button className="cic-mission" type="button" onClick={openTools}><i><MapPin size={14} /></i><span><b>Get ETA</b><small>Open the team action panel.</small></span></button></section>
@@ -429,7 +429,7 @@ export default function SmsExactLive() {
     const publish = () => { if (!cancelled) setNames(mergeCsInboxNameMaps(phoneBatches.map(batch => nameCache.current.get(batch.join(","))?.names))); };
     if (!missing.length) { publish(); return () => { cancelled = true; }; }
     void Promise.allSettled(missing.map(async batch => {
-      const fetched = await utils.leads.batchResolveNames.fetch({ phones: batch });
+      const fetched = await utils.leadflowJobs.smsResolveNames.fetch({ phones: batch });
       nameCache.current.set(batch.join(","), { names: fetched, expires: Date.now() + 60_000 });
     })).then(publish);
     return () => { cancelled = true; };
@@ -480,7 +480,7 @@ export default function SmsExactLive() {
   }, [selected?.id, selected?.phone]);
 
   const { data: detail } = trpc.leads.getCsConversation.useQuery({ sessionId: selected?.id ?? 0 }, { enabled: !!selected, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 });
-  const { data: clientProfile } = trpc.leads.getClientProfile.useQuery({ phone: selected?.phone ?? "" }, { enabled: !!selected && !isTeamMember(selected), staleTime: 60_000, refetchOnWindowFocus: false });
+  const { data: clientProfile } = trpc.leadflowJobs.smsCustomerContext.useQuery({ phone: selected?.phone ?? "" }, { enabled: !!selected && !isTeamMember(selected), staleTime: 60_000, refetchOnWindowFocus: false });
   const detailMessages = useMemo(() => {
     const detailWithHistory = detail as (typeof detail & { messageHistory?: string }) | undefined;
     if (!detailWithHistory?.messageHistory) return selected?.messages ?? [];
