@@ -60,6 +60,14 @@ import { toast } from "sonner";
 
 type TriggerKind = "time" | "keyword" | "status" | "exception" | "no-show" | "post-start";
 type ActionKind = "sms" | "sms-client" | "call" | "sms+call" | "cs-alert" | "vapi-call" | "vapi+cs";
+const FIELD_MANAGEMENT_TABS = ["workflow", "log", "board", "tower", "schedule", "concierge"] as const;
+type FieldManagementTab = (typeof FIELD_MANAGEMENT_TABS)[number];
+
+function initialFieldManagementTab(): FieldManagementTab {
+  if (typeof window === "undefined") return "board";
+  const requestedTab = new URLSearchParams(window.location.search).get("tab");
+  return FIELD_MANAGEMENT_TABS.includes(requestedTab as FieldManagementTab) ? requestedTab as FieldManagementTab : "board";
+}
 
 interface WorkflowStep {
   id: number;
@@ -1537,7 +1545,12 @@ function LastSyncedBadge() {
 
 export default function FieldManagement() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
-  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower" | "schedule" | "concierge">("board");
+  const [activeTab, setActiveTab] = useState<FieldManagementTab>(initialFieldManagementTab);
+  const selectTab = (tab: FieldManagementTab) => {
+    setActiveTab(tab);
+    const query = tab === "board" ? "" : `?tab=${tab}`;
+    window.history.replaceState(null, "", `/admin/field-management${query}`);
+  };
 
   return (
     <AdminPageGuard pageId="field-management">
@@ -1564,10 +1577,10 @@ export default function FieldManagement() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
-          {(["board", "tower", "schedule", "log", "workflow", "concierge"] as const).map((tab) => (
+          {FIELD_MANAGEMENT_TABS.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => selectTab(tab)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab
                   ? "bg-white text-gray-900 shadow-sm"

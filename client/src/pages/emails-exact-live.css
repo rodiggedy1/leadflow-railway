@@ -185,3 +185,15 @@
   .emails-live .emails-live-lane-marker { display: none; }
   .emails-live .email-detail-thread article.is-outgoing { margin-left: 7%; }
 }
+
+.emails-live-with-sidebar {
+  display: grid;
+  grid-template-columns: 218px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.emails-live-with-sidebar .emails-live { min-width: 0; }
+
+@media (max-width: 760px) {
+  .emails-live-with-sidebar { display: block; }
+}

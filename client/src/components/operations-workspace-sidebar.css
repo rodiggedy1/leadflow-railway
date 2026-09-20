@@ -1,0 +1,98 @@
+.operations-workspace-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex: 0 0 218px;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 100vh;
+  color: #d6d9e4;
+  background: #16171b;
+  border-right: 1px solid #2b2d34;
+}
+
+.operations-workspace-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 74px;
+  padding: 0 17px;
+  color: inherit;
+  border-bottom: 1px solid #2b2d34;
+  text-decoration: none;
+}
+
+.operations-workspace-mark {
+  display: grid;
+  grid-template-columns: repeat(2, 7px);
+  grid-template-rows: repeat(2, 7px);
+  gap: 3px;
+}
+
+.operations-workspace-mark i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: #ee7d60;
+}
+
+.operations-workspace-mark i:nth-child(2) { background: #7bc5f1; }
+.operations-workspace-mark i:nth-child(3) { background: #9b8ce7; }
+.operations-workspace-mark i:nth-child(4) { background: #55cda2; }
+
+.operations-workspace-brand > span:last-child { display: grid; gap: 2px; }
+.operations-workspace-brand strong { color: #f0f1f5; font-size: 13px; line-height: 1; }
+.operations-workspace-brand small { color: #8d919c; font-size: 10px; }
+
+.operations-workspace-links {
+  display: grid;
+  align-content: start;
+  gap: 19px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 19px 10px;
+}
+
+.operations-workspace-links section { display: grid; gap: 4px; }
+.operations-workspace-links p {
+  margin: 0 0 3px;
+  padding: 0 8px;
+  color: #717682;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .11em;
+}
+
+.operations-workspace-links a,
+.operations-workspace-sidebar-footer a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 0 9px;
+  color: #b3b8c5;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background .16s ease, color .16s ease;
+}
+
+.operations-workspace-links a:hover,
+.operations-workspace-sidebar-footer a:hover { color: #f2f3f7; background: #25272e; }
+.operations-workspace-links a.is-active { color: #fff4ef; background: #603d35; }
+.operations-workspace-links svg,
+.operations-workspace-sidebar-footer svg { width: 15px; height: 15px; stroke-width: 1.9; }
+
+.operations-workspace-sidebar-footer {
+  display: grid;
+  gap: 3px;
+  padding: 11px 10px 15px;
+  border-top: 1px solid #2b2d34;
+}
+
+@media (max-width: 760px) {
+  .operations-workspace-sidebar { display: none; }
+}

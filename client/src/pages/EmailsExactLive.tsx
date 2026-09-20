@@ -3,6 +3,7 @@ import DOMPurify from "dompurify";
 import { Bell, Check, ChevronDown, ChevronLeft, Link2, Mail, MoreHorizontal, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import OperationsWorkspaceSidebar from "@/components/OperationsWorkspaceSidebar";
 import "./emails-review.css";
 import "./emails-detail-review.css";
 import "./emails-detail-compact-header.css";
@@ -360,7 +361,7 @@ export default function EmailsExactLive() {
     if (selectedThreadId) resolveEmailThread.mutate({ threadId: selectedThreadId });
   };
 
-  return <main className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}`}>
+  return <div className="emails-live-with-sidebar"><OperationsWorkspaceSidebar activePath="/admin/emails" /><main className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}`}>
     {!selectedThreadId && <header className="emails-utility"><label><Search size={17} /><input aria-label="Search email threads" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search emails…" /><kbd>⌘ K</kbd></label><div><button type="button" className="emails-live-disabled-control" aria-label="Email notifications"><Bell size={18} /></button><span>MIB</span></div></header>}
     {selectedThreadId ? <EmailDetailWorkspace groups={groups} selectedId={selectedThreadId} detail={emailThread.data as LiveEmailDetail | undefined} replyMode={replyMode} setReplyMode={setReplyMode} reply={emailReply} setReply={setEmailReply} draft={emailAiDraft.data} draftDismissed={dismissedDrafts.has(selectedThreadId)} onPick={openThread} onClose={closeThread} onInsertDraft={insertDraft} onDismissDraft={dismissDraft} onSend={sendReply} onResolve={resolveThread} isSending={sendEmailReply.isPending} isResolving={resolveEmailThread.isPending} /> : <div className="emails-content">
       <section className="emails-head"><div><span>Customer communication · Live workspace</span><h1><Mail size={27} />Emails</h1><p>Review the live email queue, open thread context, and prepare replies without leaving the customer communication workspace.</p></div><p><Sparkles size={14} />Live threads are grouped by the existing queue rules.</p></section>
@@ -370,5 +371,5 @@ export default function EmailsExactLive() {
         {!emailInbox.isLoading && groups.map(group => <section className="emails-lane" key={group.lane}><header><span style={{ background: LANE_COLORS[group.lane] }} /><b>{group.lane}</b><small>{group.threads.length}</small><ChevronDown size={13} /></header><div>{group.threads.map(thread => <EmailCard key={thread.threadId} thread={thread} lane={group.lane} selected={false} onPick={() => openThread(thread.threadId)} />)}{group.threads.length === 0 && <p className="emails-lane-empty">No conversations</p>}</div></section>)}
       </div></section>
     </div>}
-  </main>;
+  </main></div>;
 }

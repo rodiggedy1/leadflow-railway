@@ -24,6 +24,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { triggerTestChime, useNewReplyNotifier } from "@/hooks/useNewReplyNotifier";
+import OperationsWorkspaceSidebar from "@/components/OperationsWorkspaceSidebar";
 import "./operations-crm-review.css";
 import "./day-board-crm-review.css";
 import "./day-board-crm-gridless.css";
@@ -187,27 +188,6 @@ function formatDuration(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function CrmRail() {
-  const [, navigate] = useLocation();
-  const items = [
-    ["Day Board", CalendarDays, "/admin/day-board"],
-    ["Schedule", Clock3, "/admin/schedule"],
-    ["Team availability", Users, "/admin/team-availability"],
-    ["Route optimization", Activity, "/admin/field-management"],
-  ] as const;
-  return <aside className="ocr-sidebar dbr-sidebar">
-    <div className="ocr-brand"><div className="ocr-logo-mark"><span /><span /><span /><span /></div><div><strong>Sales CRM</strong><span>Company pipeline</span></div></div>
-    <div className="ocr-nav-scroll">
-      <nav className="ocr-nav-primary">{items.map(([label, Icon, destination]) => <button type="button" className={label === "Day Board" ? "is-active" : ""} key={label} onClick={() => navigate(destination)}><Icon />{label}</button>)}</nav>
-      <div className="ocr-nav-group"><p>VIEWS</p><button><i className="ocr-pipeline-dot dot-yellow" />Today</button><button><i className="ocr-pipeline-dot dot-pink" />Needs attention</button><button><i className="ocr-pipeline-dot dot-violet" />Unassigned</button></div>
-      <div className="ocr-nav-group"><p>TEAMS</p><button onClick={() => navigate("/admin/team-availability")}><Users />All field teams</button></div>
-      <div className="ocr-nav-group"><p>REPORTING</p><button><CircleDot />Daily health</button><button><AlertTriangle />Exceptions</button></div>
-    </div>
-    <div className="ocr-nav-utility"><button><Users />Invite teammates</button><button><HelpCircle />Help</button></div>
-    <div className="ocr-sidebar-footer"><div className="ocr-trial"><div><strong>14 Days</strong><span>Left on trials</span></div><button><ExternalLink />Add Billings</button></div></div>
-  </aside>;
-}
-
 function StatusPill({ job }: { job: LiveJob }) {
   const config = statusConfig[normalizeStatus(job.jobStatus)];
   const Icon = config.icon;
@@ -337,7 +317,7 @@ export default function DayBoardExactLive() {
   const dateRail = useMemo(() => [-1, 0, 1, 2, 3].map(offset => addDays(date, offset)), [date]);
   const markRead = useCallback((jobId: number) => setLastRead(previous => { const next = { ...previous, [jobId]: Date.now() }; try { localStorage.setItem("dayboard_last_read", JSON.stringify(next)); } catch {} return next; }), []);
   return <main className="operations-crm-review dbr-shell dbr-live-shell">
-    <CrmRail />
+    <OperationsWorkspaceSidebar activePath="/admin/day-board" />
     <section className="dbr-workspace">
       <header className="ocr-header"><div className="ocr-page-title"><h1>Day Board</h1><span><i />Live workspace</span></div><div className="ocr-header-actions"><button onClick={() => navigate("/admin/field-management")} title="Open Field Management"><Activity /></button><button className="has-notification" title="Day Board notifications"><Bell /></button><button className="ocr-profile"><i>MA</i><span>Madison</span><ChevronDown size={13} /></button></div></header>
       <nav className="dbr-page-tabs"><button onClick={() => navigate("/admin/schedule")}>Schedule</button><button className="is-active">Day Board</button><button onClick={() => navigate("/admin/team-availability")}>Team availability</button><button onClick={() => navigate("/admin/field-management")}>Workflow</button></nav>

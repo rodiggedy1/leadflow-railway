@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import LeadflowScheduleCallLogPanel from "@/components/LeadflowScheduleCallLogPanel";
 import LeadflowScheduleIssueDialog from "@/components/LeadflowScheduleIssueDialog";
 import { LeadflowScheduleMap } from "@/components/LeadflowScheduleMap";
+import OperationsWorkspaceSidebar from "@/components/OperationsWorkspaceSidebar";
 import "./operations-crm-review.css";
 import "./schedule-crm-review.css";
 import "./schedule-leads-cohesion.css";
@@ -166,33 +167,6 @@ function service(job: Job) {
   return parts.join(" / ") || "Cleaning service";
 }
 
-function ScheduleSidebar() {
-  const [location] = window.location.pathname ? [window.location.pathname] : [""];
-  const tabLink = (tab: string) => `/admin/field-management?tab=${tab}`;
-  const staticGroups = [
-    ["Operations", "board"],
-    ["Control Tower", "tower"],
-    ["Schedule", "schedule"],
-    ["Job Log", "log"],
-    ["Workflow", "workflow"],
-    ["AI Concierge", "concierge"],
-  ] as const;
-  return (
-    <aside className="ocr-sidebar scr-sidebar" aria-label="Schedule workspaces">
-      <div className="ocr-brand"><div className="ocr-logo-mark" aria-hidden="true"><span /><span /><span /><span /></div><div><strong>Sales CRM</strong><small>Company pipeline</small></div></div>
-      <div className="ocr-nav-scroll">
-        <nav className="ocr-nav-primary">
-          {staticGroups.map(([label, tab]) => <a key={tab} href={tab === "schedule" ? "/admin/schedule" : tabLink(tab)} className={tab === "schedule" ? "is-active" : ""}><CalendarDays size={16} /><span>{label}</span></a>)}
-        </nav>
-        <div className="ocr-nav-group"><p>TEAM</p><a href="/admin/schedule"><Users />Team routes</a><a href="/admin/schedule"><Navigation />Coverage</a></div>
-        <div className="ocr-nav-group"><p>REPORTING</p><a href={tabLink("schedule")}><ShieldAlert />Schedule health</a><a href={tabLink("log")}><FileText />Day log</a></div>
-      </div>
-      <div className="ocr-utility"><a href="/admin/settings"><Settings2 />Settings</a></div>
-      <div className="ocr-billing"><div><strong>Live</strong><small>Scheduling workspace</small></div><a href={location === "/admin/schedule" ? "#schedule" : "/admin/schedule"}><Calendar />Open schedule</a></div>
-    </aside>
-  );
-}
-
 function LiveJobCard({ job, selected, locked, conflict, onSelect }: { job: Job; selected: boolean; locked: boolean; conflict: boolean; onSelect: () => void }) {
   const name = customerName(job);
   const kind = frequency(job);
@@ -323,7 +297,7 @@ export default function LeadflowScheduleCRMExactLive() {
   const currentTeamCount = teams.filter(team => team.isActive === 1 && !team.isArchived).length;
 
   return <main className="ocr-shell scr-shell schedule-crm-exact-live" id="schedule">
-    <ScheduleSidebar />
+    <OperationsWorkspaceSidebar activePath="/admin/schedule" />
     <section className="scr-workspace">
       <header className="scr-page-head"><div><div className="scr-title-line"><h1>Schedule</h1><span><i />Live workspace</span></div><p>Route planning, team availability, and day-of assignments.</p></div><div className="scr-head-actions"><button type="button" onClick={() => setShowTeams(true)}><Settings2 />Teams</button><button type="button" onClick={() => setShowCalls(true)}><Phone />Calls{dayIssues.length > 0 && <span className="scr-counter">{dayIssues.length}</span>}</button><button type="button" disabled={optimize.isPending || activeJobs.length === 0} onClick={() => optimize.mutate({ date })}><Sparkles />{hasAssignments ? "Re-optimize" : "Optimize Routes"}</button><button className={showAnalysis ? "is-active" : ""} type="button" onClick={() => setShowAnalysis(value => !value)}><ShieldAlert />Analyze</button></div></header>
       <nav className="scr-workspace-tabs"><a href="/admin/field-management?tab=board">Day Board</a><a href="/admin/field-management?tab=tower">Control Tower</a><button className="is-active" type="button">Schedule</button><a href="/admin/field-management?tab=log">Job Log</a><a href="/admin/field-management?tab=workflow">Workflow</a><a href="/admin/field-management?tab=concierge">✦ AI Concierge</a></nav>
