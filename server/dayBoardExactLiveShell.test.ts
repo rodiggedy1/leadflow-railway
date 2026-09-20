@@ -84,6 +84,13 @@ describe("Day Board exact live shell", () => {
     expect(shell).toContain("return firstStart - secondStart || first.id - second.id;");
   });
 
+  it("keeps the complete customer name on each timeline job card", () => {
+    const shell = read("client/src/pages/DayBoardExactLive.tsx");
+
+    expect(shell).toContain("<Icon size={11} />{job.customerName ?? \"Client\"}</span>");
+    expect(shell).not.toContain('(job.customerName ?? "Client").split(" ")[0]');
+  });
+
   it("reads persisted portal progress without creating statuses or automatic messages", () => {
     const router = read("server/leadflowJobsRouter.ts");
     const dayBoardBlock = router.slice(router.indexOf("dayBoard: dayBoardProcedure"), router.indexOf("customerProfile:"));
