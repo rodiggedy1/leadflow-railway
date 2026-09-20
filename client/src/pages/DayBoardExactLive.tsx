@@ -85,6 +85,10 @@ const hours = ["7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "12 PM", "1 PM", "2 PM"
 const BOARD_START_HOUR = 7;
 const BOARD_END_HOUR = 21;
 const BOARD_MINUTES = (BOARD_END_HOUR - BOARD_START_HOUR) * 60;
+const DAY_BOARD_LANE_BASE_HEIGHT = 88;
+const DAY_BOARD_OVERLAP_ROW_HEIGHT = 60;
+const DAY_BOARD_JOB_TOP = 20;
+const DAY_BOARD_JOB_HEIGHT = 48;
 
 const statusConfig: Record<LiveStatus, { label: string; color: string; icon: typeof Clock3 }> = {
   not_started: { label: "Not Started", color: "#84909b", icon: Clock3 },
@@ -160,6 +164,25 @@ function estimateDuration(job: LiveJob) {
   return 90 + bedrooms * 20;
 }
 
+export function allocateOverlapRows(jobs: LiveJob[]) {
+  const rowEndMinutes: number[] = [];
+  return [...jobs].sort((first, second) => {
+    const firstStart = parseToMinutes(first.serviceDateTime) ?? Number.MAX_SAFE_INTEGER;
+    const secondStart = parseToMinutes(second.serviceDateTime) ?? Number.MAX_SAFE_INTEGER;
+    return firstStart - secondStart || first.id - second.id;
+  }).map(job => {
+    const start = parseToMinutes(job.serviceDateTime);
+    if (start === null || start < -30 || start > BOARD_MINUTES) return { job, overlapRow: 0 };
+
+    const visibleStart = Math.max(0, start);
+    const visibleEnd = Math.min(BOARD_MINUTES, start + estimateDuration(job));
+    const availableRow = rowEndMinutes.findIndex(rowEnd => rowEnd <= visibleStart);
+    const overlapRow = availableRow === -1 ? rowEndMinutes.length : availableRow;
+    rowEndMinutes[overlapRow] = visibleEnd;
+    return { job, overlapRow };
+  });
+}
+
 function formatDuration(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
@@ -191,7 +214,7 @@ function StatusPill({ job }: { job: LiveJob }) {
   return <span className="dbr-status-pill" style={{ color: config.color, borderColor: `${config.color}65`, background: `${config.color}18` }}><Icon size={11} />{config.label}</span>;
 }
 
-function JobBlock({ job, selected, unread, onClick }: { job: LiveJob; selected: boolean; unread: boolean; onClick: () => void }) {
+function JobBlock({ job, overlapRow, selected, unread, onClick }: { job: LiveJob; overlapRow: number; selected: boolean; unread: boolean; onClick: () => void }) {
   const start = parseToMinutes(job.serviceDateTime);
   if (start === null || start < -30 || start > BOARD_MINUTES) return null;
   const end = Math.min(BOARD_MINUTES, start + estimateDuration(job));
@@ -202,7 +225,7 @@ function JobBlock({ job, selected, unread, onClick }: { job: LiveJob; selected: 
   const Icon = config.icon;
   const smsRatio = job.stepsSuccess / Math.max(job.totalSteps, 1);
   const smsColor = smsRatio > .75 ? "#32c184" : smsRatio > .4 ? "#e3ae42" : "#e77478";
-  return <button type="button" onClick={onClick} aria-label={`${job.customerName ?? "Client"}, ${config.label}`} data-status={status} className={`dbr-job ${selected ? "is-selected" : ""}`} style={{ left: `${left}%`, width: `calc(${width}% - 4px)`, borderColor: config.color, color: config.color }}>
+  return <button type="button" onClick={onClick} aria-label={`${job.customerName ?? "Client"}, ${config.label}`} data-status={status} className={`dbr-job ${selected ? "is-selected" : ""}`} style={{ top: `${DAY_BOARD_JOB_TOP + overlapRow * DAY_BOARD_OVERLAP_ROW_HEIGHT}px`, bottom: "auto", height: `${DAY_BOARD_JOB_HEIGHT}px`, left: `${left}%`, width: `calc(${width}% - 4px)`, borderColor: config.color, color: config.color }}>
     <header><span className="dbr-job-client"><img src={customerPortrait(job.customerName)} alt={`Customer portrait for ${job.customerName ?? "Client"}`} /><span><Icon size={11} />{(job.customerName ?? "Client").split(" ")[0]}</span></span>{unread && <i />}</header>
     <p>{(job.jobAddress ?? "—").split(",")[0]}</p>
     <b className="dbr-sms-bar" style={{ width: `${smsRatio * 100}%`, background: smsColor }} />
@@ -233,10 +256,15 @@ function LiveTimelineBoard({ jobs, date, selected, unreadJobIds, select }: { job
   }, [date]);
   return <section className="dbr-timeline-card">
     <header className="dbr-time-axis"><span>Team</span><div>{hours.map(hour => <b key={hour}>{hour}</b>)}</div></header>
-    <div className="dbr-lanes">{lanes.map(([name, teamJobs]) => <section className="dbr-lane" key={name}>
-      <header><span className="dbr-team-avatar" style={{ background: teamColor(name) }} aria-hidden="true">{getInitials(name)}</span><div><b>{name}</b><small>{`${name.split(" ")[0]} · ${teamJobs.length} job${teamJobs.length === 1 ? "" : "s"}`}</small></div></header>
-      <div className="dbr-lane-time">{hours.map(hour => <i key={hour} />)}{nowPosition != null && <b className="dbr-now-line" style={{ left: `${nowPosition}%` }}><span>Now</span></b>}{teamJobs.map(job => <JobBlock key={job.id} job={job} selected={selected?.id === job.id} unread={unreadJobIds.has(job.id)} onClick={() => select(job)} />)}</div>
-    </section>)}</div>
+    <div className="dbr-lanes">{lanes.map(([name, teamJobs]) => {
+      const placedJobs = allocateOverlapRows(teamJobs);
+      const overlapRows = Math.max(1, ...placedJobs.map(({ overlapRow }) => overlapRow + 1));
+      const laneHeight = DAY_BOARD_LANE_BASE_HEIGHT + (overlapRows - 1) * DAY_BOARD_OVERLAP_ROW_HEIGHT;
+      return <section className="dbr-lane" key={name} style={{ minHeight: `${laneHeight}px` }}>
+        <header><span className="dbr-team-avatar" style={{ background: teamColor(name) }} aria-hidden="true">{getInitials(name)}</span><div><b>{name}</b><small>{`${name.split(" ")[0]} · ${teamJobs.length} job${teamJobs.length === 1 ? "" : "s"}`}</small></div></header>
+        <div className="dbr-lane-time">{hours.map(hour => <i key={hour} />)}{nowPosition != null && <b className="dbr-now-line" style={{ left: `${nowPosition}%` }}><span>Now</span></b>}{placedJobs.map(({ job, overlapRow }) => <JobBlock key={job.id} job={job} overlapRow={overlapRow} selected={selected?.id === job.id} unread={unreadJobIds.has(job.id)} onClick={() => select(job)} />)}</div>
+      </section>;
+    })}</div>
     <LiveSmsHealthStrip jobs={jobs} />
   </section>;
 }

@@ -64,6 +64,26 @@ describe("Day Board exact live shell", () => {
     ]) expect(shell).toContain(marker);
   });
 
+  it("stacks only visually overlapping jobs within their existing team lane", () => {
+    const shell = read("client/src/pages/DayBoardExactLive.tsx");
+
+    for (const marker of [
+      "function allocateOverlapRows(jobs: LiveJob[])",
+      "rowEndMinutes.findIndex(rowEnd => rowEnd <= visibleStart)",
+      "start + estimateDuration(job)",
+      "DAY_BOARD_OVERLAP_ROW_HEIGHT",
+      "const placedJobs = allocateOverlapRows(teamJobs)",
+      "const laneHeight = DAY_BOARD_LANE_BASE_HEIGHT + (overlapRows - 1) * DAY_BOARD_OVERLAP_ROW_HEIGHT",
+      'style={{ minHeight: `${laneHeight}px` }}',
+      "overlapRow={overlapRow}",
+      'top: `${DAY_BOARD_JOB_TOP + overlapRow * DAY_BOARD_OVERLAP_ROW_HEIGHT}px`',
+      'bottom: "auto"',
+      'height: `${DAY_BOARD_JOB_HEIGHT}px`',
+    ]) expect(shell).toContain(marker);
+
+    expect(shell).toContain("return firstStart - secondStart || first.id - second.id;");
+  });
+
   it("reads persisted portal progress without creating statuses or automatic messages", () => {
     const router = read("server/leadflowJobsRouter.ts");
     const dayBoardBlock = router.slice(router.indexOf("dayBoard: dayBoardProcedure"), router.indexOf("customerProfile:"));
