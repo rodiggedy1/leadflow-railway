@@ -1,0 +1,187 @@
+/* Live-data adapters for the copied Emails review workspace. */
+.emails-live .emails-live-disabled-control { cursor: default; }
+.emails-live .emails-live-disabled-control:disabled { opacity: .72; }
+
+.emails-live .emails-live-card-portrait {
+  width: 27px;
+  height: 27px;
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow: 0 1px 4px rgba(0,0,0,.22);
+}
+
+.emails-live .emails-card>div>.emails-live-card-portrait {
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.emails-live .emails-card footer {
+  gap: 6px;
+}
+
+.emails-live .emails-live-lane-marker {
+  overflow: hidden;
+  max-width: 88px;
+  margin-left: auto;
+  color: #92929a;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .045em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.emails-live .emails-live-lane-marker.lane-new { color: #9acced; }
+.emails-live .emails-live-lane-marker.lane-needs-response { color: #edca79; }
+.emails-live .emails-live-lane-marker.lane-waiting-on-customer { color: #bdcbd5; }
+.emails-live .emails-live-lane-marker.lane-at-risk { color: #ef9ca6; }
+
+.emails-live .emails-live-agent-circle {
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid #4b4b52;
+  border-radius: 50%;
+  background: #303034;
+  color: #d7d7dc;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.emails-live .emails-live-board-state {
+  grid-column: 1 / -1;
+  min-height: 250px;
+  display: grid;
+  place-items: center;
+  color: #96969d;
+  font-size: 11px;
+}
+
+.emails-live.has-detail .email-detail-workspace {
+  width: 100%;
+}
+
+.emails-live .email-detail-list .emails-live-disabled-control,
+.emails-live .email-detail-title-row .emails-live-disabled-control,
+.emails-live .email-detail-context .emails-live-disabled-control,
+.emails-live .email-detail-compose-actions .emails-live-disabled-control {
+  cursor: default;
+}
+
+.emails-live .email-detail-main button:disabled,
+.emails-live .email-detail-context button:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.emails-live .emails-live-thread-state {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  color: #93939a;
+  font-size: 11px;
+}
+
+.emails-live .email-detail-thread article {
+  overflow: hidden;
+}
+
+.emails-live .emails-live-outgoing-avatar {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(126,211,165,.42);
+  border-radius: 50%;
+  background: #294638;
+  color: #d9f5e8;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.emails-live .emails-live-message-html {
+  margin-top: 11px;
+  padding-left: 32px;
+  overflow-wrap: anywhere;
+  color: #c7c7cc;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.emails-live .emails-live-message-html p,
+.emails-live .emails-live-message-html div,
+.emails-live .emails-live-message-html blockquote {
+  margin: 0 0 10px;
+}
+
+.emails-live .emails-live-message-html p:last-child,
+.emails-live .emails-live-message-html div:last-child,
+.emails-live .emails-live-message-html blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.emails-live .emails-live-message-html img {
+  max-width: 100%;
+  height: auto;
+}
+
+.emails-live .emails-live-message-html a {
+  color: #a7d6ee;
+  text-decoration: underline;
+}
+
+.emails-live .email-detail-compose-box textarea:disabled {
+  min-height: 75px;
+  color: #85858d;
+  cursor: not-allowed;
+}
+
+.emails-live .email-detail-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.emails-live .email-detail-send:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.emails-live .email-detail-context p b {
+  overflow-wrap: anywhere;
+}
+
+.emails-live ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.emails-live ::-webkit-scrollbar-track {
+  background: #18181a;
+}
+
+.emails-live ::-webkit-scrollbar-thumb {
+  border: 2px solid #18181a;
+  border-radius: 999px;
+  background: #45454b;
+}
+
+.emails-live ::-webkit-scrollbar-thumb:hover {
+  background: #5d5d65;
+}
+
+.emails-live .email-detail-list,
+.emails-live .email-detail-thread,
+.emails-live .email-detail-context {
+  scrollbar-color: #45454b #18181a;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 800px) {
+  .emails-live .emails-live-lane-marker { display: none; }
+  .emails-live .email-detail-thread article.is-outgoing { margin-left: 7%; }
+}

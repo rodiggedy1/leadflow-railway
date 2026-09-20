@@ -1,0 +1,203 @@
+/* Leads CRM-style identity and signal layer for the static Email detail review. */
+.emails-review.has-detail {
+  --email-mint: #55b983;
+  --email-amber: #c89f53;
+  --email-coral: #c9616d;
+  --email-blue: #5b9cc6;
+}
+
+.email-detail-portrait,
+.email-detail-initial {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.17);
+  border-radius: 50%;
+  background: #303035;
+  color: #e7e7ea;
+  object-fit: cover;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.email-detail-portrait-card,
+.email-detail-initial.email-detail-portrait-card { width: 20px; height: 20px; }
+.email-detail-portrait-header,
+.email-detail-initial.email-detail-portrait-header { width: 28px; height: 28px; }
+.email-detail-portrait-message,
+.email-detail-initial.email-detail-portrait-message { width: 25px; height: 25px; }
+.email-detail-portrait-profile,
+.email-detail-initial.email-detail-portrait-profile { width: 39px; height: 39px; }
+
+.email-detail-thread-card.is-selected {
+  border-color: #385265;
+  background: #20282d;
+  box-shadow: inset 2px 0 0 var(--email-blue);
+}
+
+.email-detail-thread-card>div i { background: var(--email-blue); }
+.email-detail-title-row section button:first-child,
+.email-detail-context>section:last-child button:first-child,
+.email-detail-compose-actions .email-detail-send { border-color: #238f66; background: #1b8d63; color: #f5fbf8; }
+.email-detail-title-row section button:first-child { border-color: #3c725f; background: #202d27; color: #d9f5e8; }
+.email-detail-title-row section button:first-child svg,
+.email-detail-context>section:last-child button:first-child svg { color: #7ed3a5; }
+
+.email-detail-thread article.is-outgoing {
+  border-color: #2f493e;
+  background: #202924;
+  box-shadow: inset 2px 0 0 var(--email-mint);
+}
+
+.email-detail-thread article.is-outgoing header .email-detail-portrait { border-color: rgba(126,211,165,.42); }
+.email-detail-thread article:first-child { border-color: #343f47; box-shadow: inset 2px 0 0 var(--email-blue); }
+
+.email-detail-ai-draft {
+  border-color: #4a402d;
+  background: #20201e;
+  box-shadow: inset 2px 0 0 var(--email-amber);
+}
+
+.email-detail-ai-draft header>span,
+.email-detail-ai-draft header>span svg { color: #edca79; }
+.email-detail-ai-draft header button { background: #1b8d63; }
+.email-detail-ai-draft header button:last-child { color: #c6b887; }
+.email-detail-ai-draft small { color: #aa9a72; }
+.email-detail-ai-draft p { color: #dbd3bc; }
+
+.email-detail-profile p i:first-child { border-color: #2f493e; background: #202924; color: #8cdbac; }
+.email-detail-profile p i:last-child { border-color: #344b5a; background: #20282d; color: #a7d6ee; }
+.email-detail-status.status-new { color: #9acced; }
+.email-detail-status.status-needs-response { color: #edca79; }
+.email-detail-status.status-waiting-on-customer { color: #b9c8d2; }
+.email-detail-status.status-at-risk { color: #ef9ca6; }
+
+.email-detail-context>section:last-child button:last-child svg { color: #c89f53; }
+
+/* Current-detail context-panel hierarchy: identity, full-width tags, thread metadata, then a clear action stack. */
+.emails-review.has-detail .email-detail-workspace {
+  grid-template-columns: 280px minmax(470px, 1fr) 304px;
+}
+
+.email-detail-context {
+  background: #171719;
+  border-left-color: #303033;
+}
+
+.email-detail-context > section {
+  padding: 20px;
+  border-bottom-color: #303033;
+}
+
+.email-detail-profile {
+  display: grid;
+  gap: 16px;
+}
+
+.email-detail-profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.email-detail-portrait-profile,
+.email-detail-initial.email-detail-portrait-profile {
+  width: 62px;
+  height: 62px;
+  border-color: rgba(255,255,255,.35);
+  box-shadow: 0 5px 16px rgba(0,0,0,.26);
+}
+
+.email-detail-profile-identity > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.email-detail-profile-identity b {
+  overflow: hidden;
+  color: #f0f0f2;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email-detail-profile-identity small {
+  overflow: hidden;
+  color: #aaaab1;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email-detail-profile-tags {
+  display: grid;
+  gap: 8px;
+}
+
+.email-detail-profile-tags span {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #355449;
+  border-radius: 999px;
+  background: #1d2b25;
+  color: #96d8b4;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.email-detail-profile-tags span:last-child {
+  border-color: #365469;
+  background: #1c292f;
+  color: #a6d3e9;
+}
+
+.email-detail-context-section h3 {
+  margin-bottom: 18px;
+  color: #ededf0;
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+
+.email-detail-thread-details p {
+  gap: 6px;
+  margin-bottom: 19px;
+}
+
+.email-detail-thread-details p:last-child { margin-bottom: 0; }
+.email-detail-thread-details p span { color: #86868d; font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.email-detail-thread-details p b { color: #dbdbdf; font-size: 12px; font-weight: 700; }
+
+.email-detail-context-actions > div { gap: 10px; }
+.email-detail-context-actions button {
+  min-height: 44px;
+  padding: 0 13px;
+  border-color: #3c3c41;
+  border-radius: 9px;
+  background: #202023;
+  color: #dedee2;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.email-detail-context-actions button:first-child {
+  border-color: #238f66;
+  background: #1b9b6d;
+  color: #f4fbf7;
+  box-shadow: none;
+}
+
+.email-detail-context-actions button:first-child svg { color: #d9f5e8; }
+.email-detail-context-actions button:hover { border-color: #54545a; background: #27272a; }
+.email-detail-context-actions button:first-child:hover { border-color: #2bab7b; background: #1fa575; }
+
+@media (max-width: 1120px) {
+  .emails-review.has-detail .email-detail-workspace { grid-template-columns: 250px minmax(430px, 1fr); }
+}

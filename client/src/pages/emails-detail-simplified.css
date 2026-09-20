@@ -1,0 +1,52 @@
+/* A clicked email should use the available screen for the thread, not duplicate navigation. */
+.emails-review.has-detail > .emails-utility {
+  display: none;
+}
+
+.emails-review.has-detail .email-detail-workspace {
+  height: 100dvh;
+}
+
+.email-detail-main > header {
+  padding: 8px 14px;
+}
+
+.email-detail-title-row {
+  min-height: 26px;
+  margin-left: 0;
+}
+
+.email-detail-title-row h1 {
+  font-size: 14px;
+}
+
+.email-detail-sender {
+  padding: 6px 0 0;
+}
+
+.email-detail-thread {
+  padding-top: 14px;
+}
+
+.email-detail-list-brand > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.email-detail-list-brand .email-detail-inbox-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #96969d;
+  font-size: 9px;
+}
+
+.email-detail-list-brand .email-detail-inbox-back:hover {
+  color: #e4e4e7;
+}
