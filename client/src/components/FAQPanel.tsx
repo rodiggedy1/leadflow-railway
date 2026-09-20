@@ -30,9 +30,10 @@ interface FAQPanelProps {
   open: boolean;
   onClose: () => void;
   context?: string;
+  theme?: "dark";
 }
 
-export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
+export default function FAQPanel({ open, onClose, context, theme }: FAQPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [visible, setVisible] = useState(false); // drives CSS animation
@@ -118,7 +119,7 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
     <>
       {/* Backdrop — stops clicks on the chat behind it */}
       <div
-        className="absolute inset-0 z-30 bg-black/10 backdrop-blur-[1px]"
+        className={cn("absolute inset-0 z-30 backdrop-blur-[1px]", theme === "dark" ? "bg-black/65 cic-assistant-dark-backdrop" : "bg-black/10")}
         onClick={onClose}
       />
 
@@ -129,6 +130,7 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
           "shadow-[0_-8px_40px_rgba(15,23,42,0.16)] border-t border-slate-200",
           "flex flex-col",
           "transition-all duration-200 ease-out",
+          theme === "dark" && "cic-assistant-dark cic-faq-assistant-dark",
           visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
         style={{ maxHeight: "60vh" }}

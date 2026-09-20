@@ -1,0 +1,1 @@
+.sms-review{width:calc(100% - var(--review-nav-width));min-width:0;flex:1 1 auto}.sms-review>.operations-crm-review{width:100%;min-width:0}.sms-review .cic-top-tabs button:nth-child(2),.sms-review .ocr-nav-primary button:nth-child(2){display:none}

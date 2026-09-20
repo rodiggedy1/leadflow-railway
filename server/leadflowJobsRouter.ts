@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
-import { agentPageProcedure, bookingsAgentProcedure, router } from "./_core/trpc";
+import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
+import { agentPageProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
@@ -41,7 +41,8 @@ const dayBoardMessageInput = z.object({
   leadflowJobId: z.number().int().positive(),
   body: z.string().trim().min(1).max(1_600),
 });
-
+const smsPhoneInput = z.object({ phone: z.string().trim().min(7).max(30) });
+const smsPhonesInput = z.object({ phones: z.array(z.string()).max(100) });
 const dayBoardProcedure = agentPageProcedure("field-management");
 
 const DAY_BOARD_STATUS_LABELS: Record<string, string> = {
@@ -53,6 +54,14 @@ const DAY_BOARD_STATUS_LABELS: Record<string, string> = {
 
 function dayBoardStatus(bookingStatus: string, progressStatus: string | null) {
   return progressStatus ?? (bookingStatus === "completed" ? "completed" : "assigned");
+}
+
+function easternBusinessDate() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function normalizedPhone(phone: string) {
+  return phone.replace(/[^\d]/g, "").slice(-10);
 }
 
 export const leadflowJobsRouter = router({
@@ -238,6 +247,159 @@ export const leadflowJobsRouter = router({
 
     if (!result.success) throw new Error(result.error ?? "SMS send failed");
     return { success: true, id: messageId };
+  }),
+
+  /**
+   * Read-only customer context for the SMS workspace. Every booking field is
+   * sourced from LeadFlow-owned jobs and explicit portal progress.
+   */
+  smsCustomerContext: opsChatProcedure.input(smsPhoneInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const phone = normalizedPhone(input.phone);
+    if (phone.length !== 10) return null;
+
+    const rows = await db.select({
+      id: leadflowJobs.id,
+      jobDate: leadflowJobs.jobDate,
+      customerName: leadflowJobs.customerName,
+      customerPhone: leadflowJobs.customerPhone,
+      jobAddress: leadflowJobs.jobAddress,
+      serviceDateTime: leadflowJobs.serviceDateTime,
+      serviceName: leadflowJobs.serviceName,
+      bookingStatus: leadflowJobs.bookingStatus,
+      teamName: leadflowJobs.teamName,
+      frequency: leadflowJobs.frequency,
+      bedrooms: leadflowJobs.bedrooms,
+      bathrooms: leadflowJobs.bathrooms,
+      jobTotalCents: leadflowJobs.jobTotalCents,
+      launch27BookingId: leadflowJobs.launch27BookingId,
+      progressStatus: cleanerPortalJobProgress.jobStatus,
+    }).from(leadflowJobs)
+      .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
+      .where(and(
+        sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone}`,
+        ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+      ))
+      .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.serviceDateTime), desc(leadflowJobs.id))
+      .limit(50);
+
+    const today = easternBusinessDate();
+    const todayRow = rows.find(row => row.jobDate === today) ?? null;
+    const recentJobs = rows.slice(0, 6).map(row => ({
+      date: row.jobDate,
+      address: row.jobAddress,
+      serviceType: row.serviceName,
+      status: row.progressStatus ?? row.bookingStatus ?? "scheduled",
+      price: row.jobTotalCents ? Math.round(row.jobTotalCents / 100) : null,
+      source: "leadflow" as const,
+      bookingId: row.launch27BookingId ? String(row.launch27BookingId) : null,
+    }));
+    const averagePrice = rows.length
+      ? Math.round(rows.reduce((total, row) => total + (row.jobTotalCents ?? 0), 0) / rows.length / 100)
+      : null;
+
+    return {
+      name: rows[0]?.customerName ?? null,
+      phone: `+1${phone}`,
+      address: rows[0]?.jobAddress ?? null,
+      frequency: rows[0]?.frequency ?? null,
+      totalBookings: rows.length,
+      firstBookingDate: rows.length ? rows[rows.length - 1].jobDate : null,
+      lastBookingDate: rows[0]?.jobDate ?? null,
+      avgPrice: averagePrice,
+      todayJob: todayRow ? {
+        id: todayRow.id,
+        customerName: todayRow.customerName,
+        jobAddress: todayRow.jobAddress,
+        serviceDateTime: todayRow.serviceDateTime,
+        jobDate: todayRow.jobDate,
+        serviceType: todayRow.serviceName,
+        jobStatus: todayRow.progressStatus,
+        bookingStatus: todayRow.bookingStatus,
+        issueNote: null,
+        delayMinutes: null,
+        teamName: todayRow.teamName,
+        bookingId: todayRow.launch27BookingId,
+        bedrooms: todayRow.bedrooms,
+        bathrooms: todayRow.bathrooms,
+      } : null,
+      recentJobs,
+    };
+  }),
+
+  /** Read-only owned-job schedule for the selected SMS team conversation. */
+  smsTeamTodayJobs: opsChatProcedure.input(z.object({ cleanerProfileId: z.number().int().positive() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const profiles = await db.select({ launch27TeamId: cleanerProfiles.launch27TeamId })
+      .from(cleanerProfiles)
+      .where(and(eq(cleanerProfiles.id, input.cleanerProfileId), eq(cleanerProfiles.isActive, 1)))
+      .limit(1);
+    const teamId = profiles[0]?.launch27TeamId;
+    if (!teamId) return [];
+
+    const jobs = await db.select({
+      id: leadflowJobs.id,
+      jobDate: leadflowJobs.jobDate,
+      serviceDateTime: leadflowJobs.serviceDateTime,
+      customerName: leadflowJobs.customerName,
+      jobAddress: leadflowJobs.jobAddress,
+      serviceType: leadflowJobs.serviceName,
+      bookingStatus: leadflowJobs.bookingStatus,
+      bedrooms: leadflowJobs.bedrooms,
+      bathrooms: leadflowJobs.bathrooms,
+      customerNotes: leadflowJobs.customerNotes,
+      customerPhone: leadflowJobs.customerPhone,
+      bookingId: leadflowJobs.launch27BookingId,
+      jobStatus: cleanerPortalJobProgress.jobStatus,
+    }).from(leadflowJobs)
+      .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
+      .where(and(
+        eq(leadflowJobs.teamId, teamId),
+        eq(leadflowJobs.jobDate, easternBusinessDate()),
+        ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+      ))
+      .orderBy(asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
+
+    return jobs.map(job => ({
+      ...job,
+      staffNotes: null,
+      adminNotes: null,
+      checklistItems: null,
+      issueNote: null,
+      delayMinutes: null,
+    }));
+  }),
+
+  /** Read-only name resolution for SMS cards from profiles and LeadFlow-owned jobs. */
+  smsResolveNames: opsChatProcedure.input(smsPhonesInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const phones = Array.from(new Set(input.phones.map(normalizedPhone).filter(phone => phone.length === 10)));
+    if (!phones.length) return {} as Record<string, string>;
+
+    const result: Record<string, string> = {};
+    const profiles = await db.select({ phone: cleanerProfiles.phone, name: cleanerProfiles.name })
+      .from(cleanerProfiles)
+      .where(inArray(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10)`, phones));
+    for (const profile of profiles) {
+      const phone = normalizedPhone(profile.phone ?? "");
+      if (phone && profile.name) result[phone] = profile.name;
+    }
+
+    const jobRows = await db.select({ customerPhone: leadflowJobs.customerPhone, customerName: leadflowJobs.customerName })
+      .from(leadflowJobs)
+      .where(and(
+        inArray(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10)`, phones),
+        ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+      ))
+      .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.serviceDateTime), desc(leadflowJobs.id));
+    for (const job of jobRows) {
+      const phone = normalizedPhone(job.customerPhone ?? "");
+      if (phone && job.customerName && !result[phone]) result[phone] = job.customerName;
+    }
+    return result;
   }),
 
   list: bookingsAgentProcedure.input(listInput).query(async ({ input }) => {

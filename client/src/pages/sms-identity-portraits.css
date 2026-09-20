@@ -1,0 +1,40 @@
+/* Portrait-only identity layer for the static SMS review; team initials and call iconography remain intentionally distinct. */
+.sms-review .cic-portrait,
+.sms-review .cic-ticket-avatar,
+.sms-review .cic-message-identity,
+.sms-review .cic-owner-portrait {
+  display: block;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 50%;
+  background: #303035;
+  color: #e7e7ea;
+  object-fit: cover;
+  box-shadow: 0 1px 4px rgba(0,0,0,.24);
+}
+
+.sms-review .cic-card .cic-portrait { width: 25px; height: 25px; }
+.sms-review .cic-owner-portrait { width: 18px; height: 18px; margin-left: auto; }
+.sms-review .cic-thread-avatar.cic-portrait { width: 32px; height: 32px; }
+.sms-review .cic-profile-head .cic-avatar.big.cic-portrait { width: 39px; height: 39px; flex-basis: 39px; border-radius: 12px; }
+
+.sms-review .cic-ticket-avatar {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 7px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.sms-review .cic-ticket-avatar.cic-portrait { object-fit: cover; }
+.sms-review .cic-ticket-avatar.is-team,
+.sms-review .cic-message-identity.is-team { background: linear-gradient(135deg,#18b989,#09886c); color: #fff; }
+
+.sms-review .cic-message-meta { display: flex; align-items: center; gap: 6px; }
+.sms-review .cic-message-identity { width: 22px; height: 22px; }
+.sms-review .cic-message.outgoing .cic-message-meta { justify-content: flex-end; }
+.sms-review .cic-message.outgoing .cic-message-identity { order: 2; }

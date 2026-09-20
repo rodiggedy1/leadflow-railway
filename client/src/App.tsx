@@ -72,6 +72,7 @@ const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
+const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -110,6 +111,10 @@ function AdminDayBoardExactLiveRoute() {
   return <AdminPageGuard pageId="field-management"><DayBoardExactLive /></AdminPageGuard>;
 }
 
+function AdminSmsExactLiveRoute() {
+  return <SmsExactLive />;
+}
+
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -122,6 +127,7 @@ function Router() {
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
+        <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
@@ -293,7 +299,7 @@ function GlobalOpsChat() {
 }
 
 function isDayBoardExactLiveRoute(location: string) {
-  return location === "/admin/day-board";
+  return location === "/admin/day-board" || location === "/admin/sms";
 }
 
 function DayBoardSafeGlobalOpsChat() {

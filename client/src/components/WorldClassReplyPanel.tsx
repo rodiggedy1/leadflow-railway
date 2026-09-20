@@ -23,9 +23,10 @@ interface Props {
   conversationContext?: string; // last few messages from the inbox conversation
   customerName?: string; // customer's full name
   jobContext?: string; // upcoming job details (date, service type, cleaner/team name)
+  theme?: "dark";
 }
 
-export default function WorldClassReplyPanel({ open, onClose, onInsert, conversationContext, customerName, jobContext }: Props) {
+export default function WorldClassReplyPanel({ open, onClose, onInsert, conversationContext, customerName, jobContext, theme }: Props) {
   const [scenarioInput, setScenarioInput] = useState("");
   const [history, setHistory] = useState<Message[]>([]);
   const [copied, setCopied] = useState(false);
@@ -80,9 +81,9 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert, conversa
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-40 bg-black/20" onClick={() => { handleReset(); onClose(); }} />
+      <div className={`fixed inset-0 z-40 bg-black/20 ${theme === "dark" ? "cic-assistant-dark-backdrop" : ""}`} onClick={() => { handleReset(); onClose(); }} />
       <div
-        className="fixed z-50 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
+        className={`fixed z-50 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden ${theme === "dark" ? "cic-assistant-dark cic-worldclass-assistant-dark" : ""}`}
         style={{
           top: 0,
           left: 0,
