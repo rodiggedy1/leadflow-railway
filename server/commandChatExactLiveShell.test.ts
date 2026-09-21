@@ -136,6 +136,12 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
     expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
+    expect(page).toContain('const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);');
+    expect(page).toContain('const messageListRef = useRef<HTMLDivElement>(null);');
+    expect(page).toContain('messageListRef.current.scrollTop = messageListRef.current.scrollHeight;');
+    expect(page).toContain('scrollAfterSendRef.current = true;');
+    expect(page).toContain('setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, ts: Date.now() }]);');
+    expect(page).toContain('className="ccc-live-sms-messages" ref={messageListRef}');
     expect(page).toContain('trpc.commandCenter.listCommandChatInbox.useQuery');
     expect(page).not.toContain('trpc.leads.listCsInbox.useQuery');
     expect(page).toContain('const inboundSmsInbox = useMemo(');

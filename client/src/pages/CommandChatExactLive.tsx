@@ -867,6 +867,10 @@ function TeamSmsFeedMessage({ event, onOpen }: { event: TeamSmsStreamEvent; onOp
 function SmsConversationDrawer({ conversation, conversations, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [draft, setDraft] = useState("");
+  const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const initialBottomScrollDone = useRef(false);
+  const scrollAfterSendRef = useRef(false);
   const { data: detail } = trpc.leads.getCsConversation.useQuery(
     { sessionId: conversation.id },
     { staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
@@ -874,11 +878,34 @@ function SmsConversationDrawer({ conversation, conversations, onClose }: { conve
   const messages = useMemo(() => {
     let parsed: SmsInboxMessage[] = [];
     try { parsed = JSON.parse(detail?.messageHistory ?? "[]") as SmsInboxMessage[]; } catch { parsed = []; }
-    return parsed.filter((message) => Boolean(message.content?.trim()));
-  }, [detail?.messageHistory]);
+    const persisted = parsed.filter((message) => Boolean(message.content?.trim()));
+    const notYetPersisted = confirmedOutgoing.filter((outgoing) => !persisted.some((message) =>
+      message.role === outgoing.role && message.content === outgoing.content && Math.abs((message.ts ?? 0) - (outgoing.ts ?? 0)) < 15_000,
+    ));
+    return [...persisted, ...notYetPersisted].sort((left, right) => (left.ts ?? 0) - (right.ts ?? 0));
+  }, [confirmedOutgoing, detail?.messageHistory]);
+  useEffect(() => {
+    setConfirmedOutgoing([]);
+    initialBottomScrollDone.current = false;
+    scrollAfterSendRef.current = false;
+  }, [conversation.id]);
+  useEffect(() => {
+    if (!detail || (initialBottomScrollDone.current && !scrollAfterSendRef.current)) return;
+    const animationFrame = requestAnimationFrame(() => {
+      if (!messageListRef.current) return;
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+      initialBottomScrollDone.current = true;
+      scrollAfterSendRef.current = false;
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [conversation.id, detail, messages.length]);
   const sendReply = trpc.leads.sendMessage.useMutation({
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
       setDraft("");
+      if (!result.duplicate) {
+        scrollAfterSendRef.current = true;
+        setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, ts: Date.now() }]);
+      }
       void utils.commandCenter.listCommandChatInbox.invalidate();
       void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
     },
@@ -897,7 +924,7 @@ function SmsConversationDrawer({ conversation, conversations, onClose }: { conve
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
     <header><div>{conversation.personType === "team" ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{conversation.personType === "team" ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
-    <div className="ccc-live-sms-messages">{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => <article className={`ccc-live-sms-message ${message.role === "user" ? "" : "is-outgoing"}`} key={`${message.ts ?? index}-${message.content}`}><small>{message.role === "user" ? conversation.personType === "team" ? name : "Customer" : "MIB Team"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{message.content}</p></article>)}</div>
+    <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => <article className={`ccc-live-sms-message ${message.role === "user" ? "" : "is-outgoing"}`} key={`${message.ts ?? index}-${message.content}`}><small>{message.role === "user" ? conversation.personType === "team" ? name : "Customer" : "MIB Team"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{message.content}</p></article>)}</div>
     <footer><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder="Write a text reply…" /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></footer>
   </aside></div>;
 }
