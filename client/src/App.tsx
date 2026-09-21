@@ -34,7 +34,7 @@ const RevenueAttribution = lazy(() => import("./pages/RevenueAttribution"));
 const CleanerDashboard = lazy(() => import("./pages/CleanerDashboard"));
 const CleanerPortal = lazy(() => import("./pages/CleanerPortal"));
 const JobTracker = lazy(() => import("./pages/JobTracker"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const SettingsExactLive = lazy(() => import("./pages/SettingsExactLive"));
 const CommandCenter = lazy(() => import("./pages/CommandCenter"));
 const TrackerFlow = lazy(() => import("./pages/TrackerFlow"));
 const FieldManagement = lazy(() => import("./pages/FieldManagement"));
@@ -108,6 +108,10 @@ function ReviewWorkspaceFrame({ children, navActivePath, hideNavigation = false 
 
 function AdminHiringAdminExactReviewRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/hiring-admin"><HiringAdminLive /></ReviewWorkspaceFrame>;
+}
+
+function AdminSettingsReviewRoute() {
+  return <AdminPageGuard pageId="settings"><ReviewWorkspaceFrame navActivePath="/review/settings"><SettingsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
 /**
@@ -207,10 +211,10 @@ function Router() {
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
-        <Route path={"/admin/widget-config"} component={SettingsPage} />
+        <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
         <Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />
-        <Route path={"/admin/settings"} component={SettingsPage} />
+        <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
         <Route path={"/admin/field-management"} component={FieldManagement} />
@@ -370,7 +374,8 @@ function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
   const isTeamWorkspace = location === "/admin/team";
   const isHiringWorkspace = location === "/admin/hiring";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace;
+  const isSettingsWorkspace = location === "/admin/settings" || location === "/admin/widget-config";
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace || isSettingsWorkspace;
 }
 
 function DayBoardSafeGlobalOpsChat() {
