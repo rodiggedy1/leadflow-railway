@@ -60,7 +60,6 @@ const EmailInbox = lazy(() => import("./pages/EmailInbox"));
 const SenderPoliciesPage = lazy(() => import("./pages/SenderPoliciesPage"));
 const CleanerCalls = lazy(() => import("./pages/CleanerCalls"));
 const CardAuth = lazy(() => import("./pages/CardAuth"));
-const AdminPayments = lazy(() => import("./pages/AdminPayments"));
 const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalConnected"));
 const SmsCampaigns = lazy(() => import("./pages/SmsCampaigns"));
 const IconPicker = lazy(() => import("./pages/IconPicker"));
@@ -81,6 +80,7 @@ const CustomerProfileExactLive = lazy(() => import("./pages/CustomerProfileExact
 const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsExactLive"));
 const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));
 const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
+const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -159,6 +159,10 @@ function AdminInvoicesExactReviewRoute() {
   return <AdminPageGuard pageId="invoices"><ReviewWorkspaceFrame navActivePath="/review/invoices"><InvoicesExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AdminPaymentsExactReviewRoute() {
+  return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
+
 function AdminLeadsCRMExactLiveRoute() {
   const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
   if (tab && tab !== "leads") return <AdminDashboard />;
@@ -225,7 +229,7 @@ function Router() {
         <Route path={"/admin/ai-calls"} component={AdminAiCallsExactReviewRoute} />
         <Route path={"/admin/cleaner-calls"} component={CleanerCalls} />
         <Route path={"/pay/:token"} component={CardAuth} />
-        <Route path={"/admin/payments"} component={AdminPayments} />
+        <Route path={"/admin/payments"} component={AdminPaymentsExactReviewRoute} />
         <Route path={"/admin/sms-campaigns"} component={SmsCampaigns} />
         <Route path={"/admin/readiness"} component={ReadinessDashboard} />
         <Route path={"/admin/invoices"} component={AdminInvoicesExactReviewRoute} />
@@ -354,7 +358,7 @@ function GlobalOpsChat() {
 
 function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || isCommandChatWorkspace;
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace;
 }
 
 function DayBoardSafeGlobalOpsChat() {
