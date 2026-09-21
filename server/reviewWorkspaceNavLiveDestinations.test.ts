@@ -39,6 +39,9 @@ describe("Review Workspace live destinations", () => {
     expect(navStyles).toContain('.review-workspace-mark i:nth-child(2){background:#8bb4d9}');
     expect(navStyles).toContain('.review-workspace-mark i:nth-child(3){background:#b083d3}');
     expect(navStyles).toContain('.review-workspace-mark i:nth-child(4){background:#80cba9}');
+    expect(navStyles).toContain('a.is-active{border-color:#74513e;background:#3b2921;color:#e7b38d');
+    expect(navStyles).toContain('.review-workspace-nav:not(.is-expanded) .review-workspace-group{padding-left:8px;padding-right:8px}');
+    expect(navStyles).toContain('.review-workspace-nav:not(.is-expanded) .review-workspace-group a span{display:none}');
     expect(nav).toContain('const [tooltip, setTooltip] = useState<{ label: string; top: number } | null>(null);');
     expect(nav).toContain('const showBaseboardTooltip = (event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>, label: string) => {');
     expect(nav).toContain('onMouseEnter={(event) => showBaseboardTooltip(event, item.label)}');
@@ -46,14 +49,12 @@ describe("Review Workspace live destinations", () => {
     expect(nav).toContain('className="review-workspace-tooltip" role="tooltip"');
     expect(navStyles).toContain('.review-workspace-tooltip{position:absolute');
     expect(navStyles).toContain('top:var(--baseboard-tooltip-top)');
-    expect(navStyles).toContain('.review-workspace-nav:not(.is-expanded){background:#111113;border-right-color:#242427}');
-    expect(navStyles).toContain('.review-workspace-nav:not(.is-expanded) .review-workspace-bottom{border-top-color:#242427;background:#111113}');
     expect(nav).not.toContain("setTimeout(");
     const tooltipCss = navStyles.slice(navStyles.indexOf(".review-workspace-tooltip"));
     expect(tooltipCss).not.toContain("transition:");
 
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
-    expect(app).toContain("function AdminCommandChatExactLiveRoute()");
+    expect(app).toContain('function AdminCommandChatExactLiveRoute()');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/command-chat-crm"><CommandChatExactLive /></ReviewWorkspaceFrame>');
     const defaultOpenRoutes = nav.slice(nav.indexOf("const defaultOpenRoutes"), nav.indexOf("const routeKey"));
     expect(defaultOpenRoutes).not.toContain("/review/command-chat-crm");

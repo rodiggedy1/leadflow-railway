@@ -9,6 +9,7 @@ describe("Command Chat exact live shell", () => {
   it("keeps the approved review composition while binding only existing Command Chat data and actions", () => {
     const page = read("client/src/pages/CommandChatExactLive.tsx");
     const styles = read("client/src/pages/command-chat-exact-live.css");
+    const headerStyles = read("client/src/pages/command-chat-header-composition.css");
     const app = read("client/src/App.tsx");
     const commandCenter = read("server/commandCenterRouter.ts");
 
@@ -42,6 +43,11 @@ describe("Command Chat exact live shell", () => {
       "sendMessage.useMutation",
       "getAllAgentPhotoMap.useQuery",
       "getAgentStatusList.useQuery",
+      "listActiveThreads.useQuery",
+      "leads.stats.useQuery",
+      "getPendingSuperAlerts.useQuery",
+      "getSuperAlertMessageIds.useQuery",
+      "acknowledgeSuperAlert.useMutation",
       "getThreadReplies.useQuery",
       "toggleReaction.useMutation",
       "getReactions.useMutation",
@@ -97,6 +103,11 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('proxyRecordingUrl(handoff.recordingUrl)');
     expect(page).toContain('href="/admin/confirmation-calls"');
     expect(page).toContain('function leadFromCommandMessage(message: ChannelMessage): CommandLead | null');
+    expect(page).toContain('sessionId: number | null;');
+    expect(page).toContain('const rawSessionId = metadata.sessionId;');
+    expect(page).toContain('function leadHref(lead: CommandLead)');
+    expect(page).toContain('`/admin/leads?leadId=${lead.sessionId}`');
+    expect(page).toContain('href={leadHref(primaryLead)}');
     expect(page).toContain('function customerPortraitFor(value: string)');
     expect(page).toContain('className="ccc-live-lead-primary"');
     expect(page).toContain('className="ccc-live-lead-primary-copy"');
@@ -106,11 +117,35 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('<LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} />');
     expect(page).toContain('<ServiceAlertPanel alerts={serviceAlerts} />');
     expect(page.indexOf('<LeadQueue title="Other Incoming Leads"')).toBeLessThan(page.indexOf('<ServiceAlertPanel alerts={serviceAlerts} />'));
-    expect(page).toContain('agents.agents.slice(0, 5)');
+    expect(page).toContain('headerAgentPresence.map((agent, index) =>');
     expect(page).toContain('const [smsSearch, setSmsSearch] = useState("");');
     expect(page).toContain('const visibleSmsInbox = useMemo(() => {');
     expect(page).toContain('import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";');
     expect(page).toContain('const [issueEngineOpen, setIssueEngineOpen] = useState(false);');
+    expect(page).toContain('import AllThreadsPanel from "@/components/AllThreadsPanel";');
+    expect(page).toContain('const [allThreadsOpen, setAllThreadsOpen] = useState(false);');
+    expect(page).toContain('const activeThreadCount = activeThreads.length;');
+    expect(page).toContain('const unreadThreadCount = activeThreads.filter((thread) => thread.hasUnread).length;');
+    expect(page).toContain('const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));');
+    expect(page).toContain('{ dateFrom: todayDateStr, dateTo: todayDateStr }');
+    expect(page).toContain('const todayBookingCount = todayStats?.bookedCount ?? 0;');
+    expect(page).toContain('const todayRevenue = todayStats?.bookedRevenue ?? 0;');
+    expect(page).toContain('setTodayDateStr((currentDate) => currentDate === nextDate ? currentDate : nextDate);');
+    expect(page).toContain('className="ccc-header-metric-bookings"');
+    expect(page).toContain('<b>{todayBookingCount}</b> Booked');
+    expect(page).toContain('<b>${todayRevenue.toLocaleString()}</b> Today');
+    expect(page).not.toContain('<Users /><b>{metrics.participants}</b> Contributors');
+    expect(page).toContain('<b>{openIssues.length}</b> Issues');
+    expect(page).toContain('<AlertTriangle /><b>{openIssues.length}</b> Issues</button>');
+    expect(page).not.toContain('<CircleDollarSign /><b>{openIssues.length}</b> Issues</button>');
+    expect(page).toContain('function commandPresenceStatus(agent: { lastSeenAt: number | null; awayStatus: string | null; onCallSince: number | null }, now: number)');
+    expect(page).toContain('const headerAgentPresence = useMemo(() => {');
+    expect(page).toContain('headerAgentPresence.map((agent, index) =>');
+    expect(page).toContain('ccc-live-presence-${agent.presence}');
+    expect(page).not.toContain('agents.agents.slice(0, 5)');
+    expect(page).toContain('aria-label="Open all command threads"');
+    expect(page).toContain('<b>{activeThreadCount}</b> Threads');
+    expect(page).toContain('<AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />');
     expect(page).toContain('const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);');
     expect(page).toContain('className="ccc-left-section ccc-conversations-section ccc-live-left-rail"');
     expect(page).toContain('className="ccc-live-sms-header"');
@@ -131,6 +166,30 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('onClick={focusNextMention}');
     expect(page).toContain('function renderMentionBody(body: string, mentionPattern: RegExp | null): ReactNode');
     expect(page).toContain('className="ccc-live-mention"');
+    expect(page).toContain('const [mentionQuery, setMentionQuery] = useState<string | null>(null);');
+    expect(page).toContain('const mentionSuggestions = useMemo(');
+    expect(page).toContain('const candidateNames = new Set([...Object.keys(photoMap), ...agents.agents.map((agent) => agent.name)]);');
+    expect(page).toContain('for (const name of Array.from(candidateNames)) {');
+    expect(page).toContain('const selectMention = (name: string) => {');
+    expect(page).toContain('const updateMentionQuery = (value: string, selectionStart: number) => {');
+    expect(page).toContain('mentionQuery !== null && mentionSuggestions.length > 0');
+    expect(page).toContain('<div className="ccc-composer">\n                {mentionQuery !== null && mentionSuggestions.length > 0');
+    expect(page).toContain('<div className="ccc-live-composer-body">\n                {attachmentUrls.length > 0');
+    expect(page).not.toContain('<b>{metrics.mentions}</b> Mentions');
+    expect(page).toContain('<Bell /><b>{metrics.mentions}</b></button>');
+    expect(page).toContain('onSuperAlert: () => {');
+    expect(page).toContain('const superAlertMessageIdSet = useMemo(() => new Set(superAlertMessageIds), [superAlertMessageIds]);');
+    expect(page).toContain('const activeSuperAlert = pendingSuperAlerts[0] ?? null;');
+    expect(page).toContain('function SuperAlertOverlay({ alert, pending, onReply }');
+    expect(page).toContain('setThreadId(activeSuperAlert.messageId);');
+    expect(page).toContain('superAlert={superAlertMessageIdSet.has(entry.message.id)}');
+    expect(page).toContain('const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);');
+    expect(page).toContain('function commandAttachmentUrl(url: string)');
+    expect(page).toContain('onOpenPhoto={setLightboxUrl}');
+    expect(page).toContain('<PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />');
+    expect(page).toContain('function PhotoLightbox({ url, onClose }');
+    expect(page).toContain('onClick={() => onOpenPhoto(url)}');
+    expect(page).not.toContain('<a href={url} target="_blank" rel="noreferrer" key={url}>');
     expect(page).toContain('<IssueEngineOverlay open={issueEngineOpen}');
     expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
     expect(page).toContain('const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
@@ -188,7 +247,7 @@ describe("Command Chat exact live shell", () => {
     expect(page).not.toContain('ccc-live-threads-view');
     expect(page).not.toContain('<div className="ccc-live-thread-backdrop"');
     expect(page).not.toContain('ThreadDrawer');
-    expect(page).not.toContain('role="dialog"');
+    expect(page).not.toContain('className="ccc-live-thread-backdrop" role="dialog"');
     expect(page).not.toContain('<Activity /><b>{metrics.activity}</b> Today');
     expect(page).not.toContain('aria-label="View channel threads" onClick={() => setThreadId(activeThreads[0]?.parentId ?? null)}><MessageSquare /></button><button type="button" aria-label="Channel actions"');
     expect(page).not.toContain('ccc-reference-action-divider');
@@ -216,10 +275,23 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-right-panel-thread-open");
     expect(styles).toContain(".ccc-live .ccc-reference-header-metrics .ccc-header-metric-control");
     expect(styles).toContain(".ccc-live .ccc-group-message .ccc-live-mention");
+    expect(styles).toContain(".ccc-live-mention-picker");
+    expect(styles).toContain(".ccc-live .ccc-composer{position:relative;overflow:visible}");
+    expect(styles).toContain(".ccc-live-super-alert");
+    expect(styles).toContain(".ccc-live-super-alert-badge");
+    expect(styles).toContain(".ccc-live-photo-lightbox");
+    expect(headerStyles).toContain(".ccc-live-header-presence");
+    expect(headerStyles).toContain(".ccc-live-presence-agent>i");
+    expect(headerStyles).toContain(".ccc-reference-header-metrics>*{display:inline-flex");
+    expect(headerStyles).toContain(".ccc-reference-header-metrics{display:flex!important;align-items:center;gap:0;min-width:0;margin:4px 0 0");
+    expect(headerStyles).toContain(".ccc-reference-header-metrics>*+*:before");
+    expect(headerStyles).toContain(".ccc-reference-header-metrics>* svg{width:17px;height:17px");
+    expect(headerStyles).toContain(".ccc-reference-header-metrics>* b{color:#eeeeef;font-size:13px");
+    expect(styles).not.toContain(".ccc-header-metric-control:before{width:2px;height:2px");
     expect(styles).not.toContain("ccc-live-thread-drawer");
     expect(styles).not.toContain("ccc-live-thread-panel{position:fixed");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
-    expect(app).toContain("function AdminCommandChatExactLiveRoute()");
+    expect(app).toContain('function AdminCommandChatExactLiveRoute()');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/command-chat-crm"><CommandChatExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
     expect(app).toContain('const isCommandChatWorkspace = location === "/admin/command-chat";');

@@ -14,8 +14,8 @@
  *   assignment, so the overlay appears within milliseconds.
  * - Plays a chime when pendingAssignment transitions from null → non-null.
  * - Renders a fixed overlay (z-[9999]) so it appears on top of every page.
- * - On "Got it", calls acknowledgeAssignment and optionally navigates to /agent
- *   if the current user is an agent (so they land on Lead Ops).
+ * - On "Got it", calls acknowledgeAssignment and opens the assigned lead's
+ *   existing Leads CRM detail deep link.
  */
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -57,6 +57,7 @@ export default function LeadAssignmentWatcher() {
   // Sound: play when pendingAssignment transitions from null/undefined → a real row
   const { playSound } = useNotificationSound();
   const prevAssignmentId = useRef<number | null>(null);
+  const assignedSessionIdRef = useRef<number | null>(null);
   useEffect(() => {
     if (!pendingAssignment) {
       prevAssignmentId.current = null;
@@ -73,10 +74,12 @@ export default function LeadAssignmentWatcher() {
   const acknowledgeAssignment = trpc.leads.acknowledgeAssignment.useMutation({
     onSuccess: () => {
       utils.leads.getPendingAssignment.invalidate();
-      // Navigate agent to their dashboard (Lead Ops tab) so they can follow up
-      if (isAgent) {
-        navigate("/agent");
-      }
+      const sessionId = assignedSessionIdRef.current;
+      assignedSessionIdRef.current = null;
+      if (!isAgent || !sessionId) return;
+      const alreadyViewingAssignedLead = window.location.pathname === "/admin/leads"
+        && new URLSearchParams(window.location.search).get("leadId") === String(sessionId);
+      if (!alreadyViewingAssignedLead) navigate(`/admin/leads?leadId=${sessionId}`);
     },
   });
 
@@ -129,15 +132,14 @@ export default function LeadAssignmentWatcher() {
             )}
           </div>
           <p className="text-xs text-amber-700 font-medium mb-4">
-            ⚡ Head to Lead Ops to follow up immediately.
+            ⚡ Open the assigned lead to follow up immediately.
           </p>
           <button
             disabled={acknowledgeAssignment.isPending}
-            onClick={() =>
-              acknowledgeAssignment.mutate({
-                assignmentId: pendingAssignment.id,
-              })
-            }
+            onClick={() => {
+              assignedSessionIdRef.current = pendingAssignment.sessionId;
+              acknowledgeAssignment.mutate({ assignmentId: pendingAssignment.id });
+            }}
             className="w-full rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-3 text-sm transition flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {acknowledgeAssignment.isPending ? (
@@ -145,7 +147,7 @@ export default function LeadAssignmentWatcher() {
             ) : (
               <ArrowRight className="h-4 w-4" />
             )}
-            Got it — Go to Lead Ops
+            Got it — Open lead detail
           </button>
         </div>
       </div>

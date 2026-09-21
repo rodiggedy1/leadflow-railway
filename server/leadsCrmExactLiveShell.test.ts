@@ -7,6 +7,7 @@ const route = readFileSync(resolve(import.meta.dirname, "../client/src/App.tsx")
 const workspaceNav = readFileSync(resolve(import.meta.dirname, "../client/src/components/ReviewWorkspaceNav.tsx"), "utf8");
 const liveStyles = readFileSync(resolve(import.meta.dirname, "../client/src/pages/leads-crm-exact-live.css"), "utf8");
 const server = readFileSync(resolve(import.meta.dirname, "commandCenterRouter.ts"), "utf8");
+const coreRouter = readFileSync(resolve(import.meta.dirname, "routers.ts"), "utf8");
 
 const forbiddenLegacySymbol = ["cleaner", "Jobs"].join("");
 const forbiddenLegacyTable = ["cleaner", "_jobs"].join("");
@@ -32,6 +33,16 @@ describe("Leads CRM exact-live shell", () => {
     expect(page).toContain("DEFAULT_ACTIVITY_TREND");
     expect(page).toContain("customerPortraitFor(name)");
     expect(page).toContain("displayStage(lead.stage)");
+    expect(page).toContain('const requestedLeadId = useMemo(() => {');
+    expect(page).toContain('const requestedLead = rows.find((lead) => lead.id === requestedLeadId);');
+    expect(page).toContain('if (requestedLead) setDetailLead(requestedLead);');
+    expect(page).toContain('const detailWasOpenRef = useRef(false);');
+    expect(page).toContain('params.set("leadId", String(detailLead.id));');
+    expect(page).toContain('params.delete("leadId");');
+    expect(page).toContain('const [leadSearch, setLeadSearch] = useState(requestedSearch);');
+    expect(page).toContain('className="ocr-live-lead-search"');
+    expect(page).toContain('Search leads by name, phone, email, source, service, address, or owner');
+    expect(page).toContain('lead.phone.replace(/\\D/g, "").includes(digits)');
     expect(page).toContain('"Quote"');
     expect(page).not.toContain("<small>{lead.phone}</small>");
     expect(page).not.toContain("SAMPLE_ROWS");
@@ -39,13 +50,21 @@ describe("Leads CRM exact-live shell", () => {
     expect(page).not.toContain("Preview controls only");
   });
 
-  it("keeps the first live CRM release read-only", () => {
+  it("keeps messaging and lead lifecycle controls read-only while allowing requested admin identity edits", () => {
     expect(page).not.toContain("sendMessage.useMutation");
     expect(page).not.toContain("sendWorkspaceMessage.useMutation");
     expect(page).not.toContain("markBooked");
     expect(page).not.toContain("resolveSession");
+    expect(page).toContain("trpc.agents.list.useQuery");
+    expect(page).toContain("trpc.leads.adminAssignAgent.useMutation");
+    expect(page).toContain("trpc.leads.updateLeadPhone.useMutation");
+    expect(page).toContain('aria-label="Edit lead assignee"');
+    expect(page).toContain('aria-label="Edit lead phone"');
     expect(server).toContain('listIncomingLeads: agentPageProcedure("leads")');
     expect(server).not.toContain("listIncomingLeads: adminAgentProcedure");
+    expect(coreRouter).toContain("updateLeadPhone: agentProcedure");
+    expect(coreRouter).toContain("leadPhone: z.string().min(1).max(30).trim()");
+    expect(coreRouter).toContain("return { success: true, leadPhone: normalized };");
   });
 
   it("gates the default admin leads route while preserving existing utility deep links", () => {
@@ -71,5 +90,8 @@ describe("Leads CRM exact-live shell", () => {
     expect(liveStyles).toContain(".review-nav-host > .ocr-live-login");
     expect(liveStyles).toContain(".ocr-live-login");
     expect(liveStyles).toContain(".ocr-live-notice");
+    expect(liveStyles).toContain(".ocr-live-lead-search");
+    expect(liveStyles).toContain(".ocr-live-editor");
+    expect(liveStyles).toContain(".ocr-live-editor-save");
   });
 });

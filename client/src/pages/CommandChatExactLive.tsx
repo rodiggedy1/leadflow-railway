@@ -26,11 +26,13 @@ import {
   SquarePen,
   Users,
   X,
+  Zap,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
+import AllThreadsPanel from "@/components/AllThreadsPanel";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import "./command-chat-crm-review.css";
 import "./command-chat-left-cohesion.css";
@@ -66,6 +68,7 @@ type ChannelMessage = {
 
 type CommandLead = {
   id: number;
+  sessionId: number | null;
   name: string;
   sourceLabel: string;
   detail: string;
@@ -200,6 +203,20 @@ function mediaUrls(value: string | null) {
   }
 }
 
+function commandAttachmentUrl(url: string) {
+  return url.includes(".r2.dev/") ? `/api/media-proxy?url=${encodeURIComponent(url)}` : url;
+}
+
+function commandPresenceStatus(agent: { lastSeenAt: number | null; awayStatus: string | null; onCallSince: number | null }, now: number) {
+  if (agent.onCallSince) return "on-call" as const;
+  if (agent.awayStatus) return "away" as const;
+  if (!agent.lastSeenAt) return "offline" as const;
+  const inactiveMinutes = Math.floor((now - agent.lastSeenAt) / 60_000);
+  if (inactiveMinutes <= 2) return "online" as const;
+  if (inactiveMinutes <= 15) return "away" as const;
+  return "offline" as const;
+}
+
 function customerPortraitFor(value: string) {
   const total = Array.from(value).reduce((sum, character) => sum + character.charCodeAt(0), 0);
   return CUSTOMER_PORTRAITS[Math.abs(total) % CUSTOMER_PORTRAITS.length];
@@ -281,7 +298,14 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   const rawPrice = metadata.price === undefined || metadata.price === null || metadata.price === "" ? "" : String(metadata.price);
   const priceLabel = rawPrice ? (rawPrice.startsWith("$") ? rawPrice : `$${rawPrice}`) : null;
   const detail = [getText("serviceType"), getText("size")].filter(Boolean).join(" · ") || "New inquiry";
-  return { id: message.id, name, sourceLabel, detail, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
+  const rawSessionId = metadata.sessionId;
+  const parsedSessionId = typeof rawSessionId === "number" ? rawSessionId : typeof rawSessionId === "string" && /^\d+$/.test(rawSessionId) ? Number(rawSessionId) : null;
+  const sessionId = parsedSessionId !== null && Number.isSafeInteger(parsedSessionId) && parsedSessionId > 0 ? parsedSessionId : null;
+  return { id: message.id, sessionId, name, sourceLabel, detail, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
+}
+
+function leadHref(lead: CommandLead) {
+  return lead.sessionId ? `/admin/leads?leadId=${lead.sessionId}` : `/admin/leads?search=${encodeURIComponent(lead.name)}`;
 }
 
 function isHiddenCommandNotification(message: ChannelMessage) {
@@ -307,13 +331,13 @@ function LeadQueue({ title, description, leads }: { title: string; description: 
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
       {primaryLead ? <div className="ccc-live-lead-list">
-        <a href="/admin/leads" className="ccc-live-lead-primary">
+        <a href={leadHref(primaryLead)} className="ccc-live-lead-primary">
           <img src={customerPortraitFor(primaryLead.name)} alt={`Client portrait illustration for ${primaryLead.name}`} />
           <span className="ccc-live-lead-primary-copy"><strong>{primaryLead.name}</strong><small>{primaryLead.queue === "web" ? `Quote requested · ${primaryLead.sourceLabel}` : `${primaryLead.sourceLabel} · ${primaryLead.detail}`}</small><em><i />New inquiry · {formatRelative(primaryLead.ts)}</em></span>
           {primaryLead.priceLabel && <b>{primaryLead.priceLabel}</b>}
           <footer><span>View lead <ChevronRight /></span></footer>
         </a>
-        {remainingLeads.slice(0, 2).map((lead) => <a href="/admin/leads" key={lead.id} className="ccc-live-lead-row"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></a>)}
+        {remainingLeads.slice(0, 2).map((lead) => <a href={leadHref(lead)} key={lead.id} className="ccc-live-lead-row"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></a>)}
       </div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
     </article>
   );
@@ -387,12 +411,16 @@ export default function CommandChatExactLive() {
   const callerName = agentMe?.name || "MIB Team";
   const channel: ChannelKey = "command";
   const [smsSearch, setSmsSearch] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionStart, setMentionStart] = useState(0);
   const [issueEngineOpen, setIssueEngineOpen] = useState(false);
   const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
   const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);
   const [draft, setDraft] = useState("");
   const [modal, setModal] = useState<ModalKind>(null);
   const [threadId, setThreadId] = useState<number | null>(null);
+  const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [threadDraft, setThreadDraft] = useState("");
   const [notice, setNotice] = useState("");
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
@@ -407,6 +435,9 @@ export default function CommandChatExactLive() {
   const [bookingAmount, setBookingAmount] = useState("");
   const [bookingNote, setBookingNote] = useState("");
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recorderChunks = useRef<Blob[]>([]);
@@ -424,6 +455,13 @@ export default function CommandChatExactLive() {
   const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
+  const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 30_000 });
+  const { data: todayStats } = trpc.leads.stats.useQuery(
+    { dateFrom: todayDateStr, dateTo: todayDateStr },
+    { enabled: isAuthenticated, staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false },
+  );
+  const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(undefined, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 3_000, refetchIntervalInBackground: false });
+  const { data: superAlertMessageIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery({ channel }, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 60_000 });
   const { data: threadDetail } = trpc.opsChat.getThreadReplies.useQuery({ parentId: threadId ?? 0 }, { enabled: isAuthenticated && threadId !== null });
   const { data: smsInboxRows = [], isLoading: smsInboxLoading } = trpc.commandCenter.listCommandChatInbox.useQuery(
     undefined,
@@ -520,8 +558,34 @@ export default function CommandChatExactLive() {
   const setReminder = trpc.opsChat.setReminder.useMutation({ onSuccess: () => { setModal(null); setReminderBody(""); showNotice("Reminder scheduled."); } });
   const pinNote = trpc.opsChat.pinNote.useMutation({ onSuccess: () => { setModal(null); setPinBody(""); void utils.opsChat.getChannelPin.invalidate({ channel }); } });
   const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: () => { setModal(null); setBookingPerson(""); setBookingAmount(""); setBookingNote(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); } });
+  const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
+    onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
+    onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),
+  });
 
   const photoMap = useMemo(() => photosData?.photos ?? {}, [photosData?.photos]);
+  const mentionNames = useMemo(() => {
+    const byFirstName: Record<string, string> = {};
+    const candidateNames = new Set([...Object.keys(photoMap), ...agents.agents.map((agent) => agent.name)]);
+    for (const name of Array.from(candidateNames)) {
+      if (!name || name === callerName) continue;
+      const firstName = name.split(" ")[0].toLowerCase();
+      if (!byFirstName[firstName] || name.length > byFirstName[firstName].length) byFirstName[firstName] = name;
+    }
+    return Object.values(byFirstName).sort();
+  }, [agents.agents, callerName, photoMap]);
+  const mentionSuggestions = useMemo(
+    () => mentionQuery === null ? [] : mentionNames.filter((name) => name.toLowerCase().startsWith(mentionQuery.toLowerCase())),
+    [mentionNames, mentionQuery],
+  );
+  const superAlertMessageIdSet = useMemo(() => new Set(superAlertMessageIds), [superAlertMessageIds]);
+  const activeSuperAlert = pendingSuperAlerts[0] ?? null;
+  const todayBookingCount = todayStats?.bookedCount ?? 0;
+  const todayRevenue = todayStats?.bookedRevenue ?? 0;
+  const headerAgentPresence = useMemo(() => {
+    const now = Date.now();
+    return agents.agents.map((agent) => ({ ...agent, presence: commandPresenceStatus(agent, now) }));
+  }, [agents.agents]);
   const rootMessages = useMemo(() => (channelMessages as ChannelMessage[]).filter((message) => !message.threadParentId), [channelMessages]);
   const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null), [rootMessages]);
   const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
@@ -567,6 +631,8 @@ export default function CommandChatExactLive() {
     const participants = new Set(visibleRootMessages.slice(-80).map((message) => message.from)).size;
     return { mentions: unreadMentionIds.length, participants };
   }, [unreadMentionIds.length, visibleRootMessages]);
+  const activeThreadCount = activeThreads.length;
+  const unreadThreadCount = activeThreads.filter((thread) => thread.hasUnread).length;
 
   function showNotice(message: string) {
     setNotice(message);
@@ -577,6 +643,14 @@ export default function CommandChatExactLive() {
   useEffect(() => () => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const nextDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      setTodayDateStr((currentDate) => currentDate === nextDate ? currentDate : nextDate);
+    }, 60_000);
+    return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -600,6 +674,10 @@ export default function CommandChatExactLive() {
       if (messageIds.length) void reactionsMutation.mutateAsync({ messageIds }).then((result) => setReactionRows(result.reactions));
     },
     onReminderUpdate: () => void utils.opsChat.listChannelMessages.invalidate({ channel }),
+    onSuperAlert: () => {
+      void utils.opsChat.getPendingSuperAlerts.invalidate();
+      void utils.opsChat.getSuperAlertMessageIds.invalidate({ channel });
+    },
   }, { enabled: isAuthenticated, label: "CommandChatExactLive" });
 
   useEffect(() => {
@@ -624,6 +702,33 @@ export default function CommandChatExactLive() {
       authorRole: "office",
       mediaUrl: attachmentUrls.length ? JSON.stringify(attachmentUrls) : undefined,
     });
+  };
+
+  const selectMention = (name: string) => {
+    const selectionEnd = composerRef.current?.selectionStart ?? draft.length;
+    const before = draft.slice(0, mentionStart);
+    const after = draft.slice(selectionEnd);
+    const next = `${before}@${name} ${after}`;
+    setDraft(next);
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      const cursor = `${before}@${name} `.length;
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const updateMentionQuery = (value: string, selectionStart: number) => {
+    setDraft(value);
+    const before = value.slice(0, selectionStart);
+    const match = before.match(/@([\w\s]*)$/);
+    if (!match) {
+      setMentionQuery(null);
+      return;
+    }
+    setMentionStart(selectionStart - match[0].length);
+    setMentionIndex(0);
+    setMentionQuery(match[1]);
   };
 
   const submitThreadReply = () => {
@@ -736,15 +841,21 @@ export default function CommandChatExactLive() {
           </aside>
 
           <section className="ccc-command-panel ccc-center-panel">
-            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><span><Users /><b>{metrics.participants}</b> Contributors</span><button type="button" className="ccc-header-metric-control ccc-header-metric-money" onClick={() => openIssueEngine()}><CircleDollarSign /><b>{openIssues.length}</b> Open issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b> Mentions</button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence" aria-label="Active command participants">{agents.agents.slice(0, 5).map((agent) => <Avatar key={agent.id} name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" />)}{agents.agents.length > 5 && <span>+{agents.agents.length - 5}</span>}</div></div></div></div>
+            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{activeThreadCount}</b> Threads{unreadThreadCount > 0 && <i>{unreadThreadCount > 9 ? "9+" : unreadThreadCount}</i>}</button><span className="ccc-header-metric-bookings"><CalendarClock /><b>{todayBookingCount}</b> Booked</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /><i aria-hidden="true" /></span>)}</div></div></div></div>
             <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
               <div className="ccc-message-stream" ref={messageStreamRef}>
-                {messagesLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div> : commandTimeline.length === 0 ? <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div> : commandTimeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} reactions={reactionsByMessage[entry.message.id] ?? {}} onThread={() => setThreadId(entry.message.id)} onReaction={(emoji) => toggleReaction.mutate({ messageId: entry.message.id, emoji })} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) setSelectedSmsConversation(conversation); }} />)}
+                {messagesLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div> : commandTimeline.length === 0 ? <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div> : commandTimeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlert={superAlertMessageIdSet.has(entry.message.id)} reactions={reactionsByMessage[entry.message.id] ?? {}} onOpenPhoto={setLightboxUrl} onThread={() => setThreadId(entry.message.id)} onReaction={(emoji) => toggleReaction.mutate({ messageId: entry.message.id, emoji })} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) setSelectedSmsConversation(conversation); }} />)}
               </div>
               <div className="ccc-quick-actions"><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
-              <div className="ccc-composer"><div>{attachmentUrls.length > 0 && <div className="ccc-live-attachments">{attachmentUrls.map((url) => <span key={url}><img src={url} alt="Pending command attachment" /><button type="button" onClick={() => setAttachmentUrls((urls) => urls.filter((item) => item !== url))}><X /></button></span>)}</div>}<textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submitMessage(); } }} placeholder={recording ? "Recording voice note…" : "Message the command channel…"} /><div className="ccc-composer-tools"><span><button type="button" aria-label="Attach image" disabled={uploadPhoto.isPending} onClick={() => fileInputRef.current?.click()}>{uploadPhoto.isPending ? <Loader2 className="animate-spin" /> : <Paperclip />}</button><button type="button" aria-label={recording ? "Stop voice recording" : "Record voice note"} disabled={transcribeVoice.isPending} onClick={() => void toggleRecording()}>{recording ? <span className="ccc-live-recording" /> : transcribeVoice.isPending ? <Loader2 className="animate-spin" /> : <Mic />}</button><button type="button" aria-label="Add check mark" onClick={() => setDraft((value) => `${value}${value ? " " : ""}✅`)}><Check /></button></span><button type="button" className="ccc-send" disabled={sendMessage.isPending || (!draft.trim() && !attachmentUrls.length)} onClick={submitMessage}>{sendMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}Send</button></div></div></div>
+              <div className="ccc-composer">
+                {mentionQuery !== null && mentionSuggestions.length > 0 && <div className="ccc-live-mention-picker" role="listbox" aria-label="Mention a team member">{mentionSuggestions.map((name, index) => <button type="button" role="option" aria-selected={index === mentionIndex} className={index === mentionIndex ? "active" : ""} key={name} onMouseDown={(event) => { event.preventDefault(); selectMention(name); }}><Avatar name={name} photoUrl={photoMap[name] ?? null} /><span>{name}</span><small>@{name}</small></button>)}</div>}
+                <div className="ccc-live-composer-body">
+                {attachmentUrls.length > 0 && <div className="ccc-live-attachments">{attachmentUrls.map((url) => <span key={url}><img src={url} alt="Pending command attachment" /><button type="button" onClick={() => setAttachmentUrls((urls) => urls.filter((item) => item !== url))}><X /></button></span>)}</div>}
+                <textarea ref={composerRef} value={draft} onChange={(event) => updateMentionQuery(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={(event) => { if (mentionQuery !== null && mentionSuggestions.length > 0) { if (event.key === "ArrowDown") { event.preventDefault(); setMentionIndex((index) => Math.min(index + 1, mentionSuggestions.length - 1)); return; } if (event.key === "ArrowUp") { event.preventDefault(); setMentionIndex((index) => Math.max(index - 1, 0)); return; } if (event.key === "Tab") { event.preventDefault(); selectMention(mentionSuggestions[mentionIndex]); return; } if (event.key === "Escape") { event.preventDefault(); setMentionQuery(null); return; } } if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); setMentionQuery(null); submitMessage(); } }} placeholder={recording ? "Recording voice note…" : "Message the command channel…"} />
+                <div className="ccc-composer-tools"><span><button type="button" aria-label="Attach image" disabled={uploadPhoto.isPending} onClick={() => fileInputRef.current?.click()}>{uploadPhoto.isPending ? <Loader2 className="animate-spin" /> : <Paperclip />}</button><button type="button" aria-label={recording ? "Stop voice recording" : "Record voice note"} disabled={transcribeVoice.isPending} onClick={() => void toggleRecording()}>{recording ? <span className="ccc-live-recording" /> : transcribeVoice.isPending ? <Loader2 className="animate-spin" /> : <Mic />}</button><button type="button" aria-label="Add check mark" onClick={() => setDraft((value) => `${value}${value ? " " : ""}✅`)}><Check /></button></span><button type="button" className="ccc-send" disabled={sendMessage.isPending || (!draft.trim() && !attachmentUrls.length)} onClick={submitMessage}>{sendMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}Send</button></div>
+              </div></div>
               <input ref={fileInputRef} type="file" accept="image/*" className="ccc-live-file-input" onChange={(event) => void stageImage(event)} />
             </>
           </section>
@@ -755,6 +866,9 @@ export default function CommandChatExactLive() {
         </div>
       </section>
       {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} onClose={() => setSelectedSmsConversation(null)} />}
+      <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
+      {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+      {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
       {modal && <ActionModal kind={modal} onClose={() => setModal(null)} issueTitle={issueTitle} issueNotes={issueNotes} issueType={issueType} reminderBody={reminderBody} reminderMinutes={reminderMinutes} pinBody={pinBody} bookingPerson={bookingPerson} bookingAmount={bookingAmount} bookingNote={bookingNote} onIssueTitle={setIssueTitle} onIssueNotes={setIssueNotes} onIssueType={setIssueType} onReminderBody={setReminderBody} onReminderMinutes={setReminderMinutes} onPinBody={setPinBody} onBookingPerson={setBookingPerson} onBookingAmount={setBookingAmount} onBookingNote={setBookingNote} pending={createIssue.isPending || setReminder.isPending || pinNote.isPending || announceBooking.isPending} onSubmit={() => {
         if (modal === "issue") createIssue.mutate({ title: issueTitle.trim(), issueType, severity: "medium", notes: issueNotes.trim() || undefined, createdByName: profile?.name || callerName });
         if (modal === "reminder") setReminder.mutate({ channel, body: reminderBody.trim(), authorName: profile?.name || callerName, triggerAt: Date.now() + reminderMinutes * 60_000 });
@@ -767,7 +881,15 @@ export default function CommandChatExactLive() {
   );
 }
 
-function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId, mentionPattern, reactions, onThread, onReaction }: { message: ChannelMessage; callerName: string; photoUrl: string | null; voiceCallIdentityByVapiId: Map<string, VoiceCallerIdentity>; mentionPattern: RegExp | null; reactions: Record<string, { count: number; names: string[] }>; onThread: () => void; onReaction: (emoji: string) => void }) {
+function SuperAlertOverlay({ alert, pending, onReply }: { alert: { id: number; messageId: number; senderName: string; messageBody: string }; pending: boolean; onReply: () => void }) {
+  return <div className="ccc-live-super-alert" role="alertdialog" aria-modal="true" aria-label={`Super Alert from ${alert.senderName}`}><section><header><Zap /><span><strong>Super Alert</strong><small>From {alert.senderName}</small></span></header><p>{alert.messageBody}</p><small>You were tagged twice. Reply in the linked Command Chat thread to acknowledge it.</small><button type="button" disabled={pending} onClick={onReply}>{pending ? <Loader2 className="animate-spin" /> : <MessageSquare />}Reply in thread</button></section></div>;
+}
+
+function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  return <div className="ccc-live-photo-lightbox" onMouseDown={onClose} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} role="dialog" aria-modal="true" aria-label="Command attachment preview" tabIndex={-1} ref={(element) => element?.focus()}><button type="button" aria-label="Close photo" onMouseDown={(event) => event.stopPropagation()} onClick={onClose}><X /></button><img src={commandAttachmentUrl(url)} alt="Full-size command attachment" onMouseDown={(event) => event.stopPropagation()} /></div>;
+}
+
+function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId, mentionPattern, superAlert, reactions, onOpenPhoto, onThread, onReaction }: { message: ChannelMessage; callerName: string; photoUrl: string | null; voiceCallIdentityByVapiId: Map<string, VoiceCallerIdentity>; mentionPattern: RegExp | null; superAlert: boolean; reactions: Record<string, { count: number; names: string[] }>; onOpenPhoto: (url: string) => void; onThread: () => void; onReaction: (emoji: string) => void }) {
   const mine = message.from === callerName;
   const team = message.role === "agent" && !mine;
   const system = message.role === "system";
@@ -783,7 +905,7 @@ function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId,
   if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
   if (resolvedCallHandoff) return <IncomingCallHandoffCard handoff={resolvedCallHandoff} timestamp={message.ts} />;
   if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{message.body}<time>{formatTime(message.ts)}</time></span></div>;
-  return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em><time>{formatTime(message.ts)}</time></div>{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<p>{renderMentionBody(message.body, mentionPattern)}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}><img src={url} alt="Command attachment" /></a>)}</div>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
+  return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"} ${superAlert ? "ccc-live-super-alert-message" : ""}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em>{superAlert && <em className="ccc-live-super-alert-badge"><Zap />Super Alert</em>}<time>{formatTime(message.ts)}</time></div>{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<p>{renderMentionBody(message.body, mentionPattern)}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <button type="button" key={url} onClick={() => onOpenPhoto(url)} aria-label="Open command attachment"><img src={commandAttachmentUrl(url)} alt="Command attachment" /></button>)}</div>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
 }
 
 function formatCallDuration(seconds: number | null) {
