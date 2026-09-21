@@ -146,3 +146,16 @@
   opacity: .45;
   cursor: default;
 }
+
+/* Each dispatch row is one customer-facing selection control; team avatars and portrait circles are intentionally omitted. */
+.confirmation-review button.ops-dispatch-card {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.confirmation-review .ops-confirm-person > b::before,
+.confirmation-review .ops-result-card > header > div > b::before {
+  display: none;
+}

@@ -70,6 +70,24 @@ describe("Confirmation Calls exact review shell", () => {
     expect(shellSource).toContain("call.transcript");
   });
 
+  it("does not leave sent confirmation rows as inert dispatch checkboxes", () => {
+    expect(shellSource).toContain('if (!isLoading && pending.length === 0 && results.length > 0) setTab("results")');
+    expect(shellSource).toContain("pending.length > 0 ? <button className=\"ops-quiet\"");
+    expect(shellSource).toContain("pending.map((job) => {");
+    expect(shellSource).toContain("All confirmation messages have been sent. Open Results to review their outcomes.");
+    expect(shellSource).not.toContain("<div className=\"ops-dispatch-stack\">{jobs.map((job) => {");
+  });
+
+  it("uses one customer-facing dispatch control without team labels or decorative portraits", () => {
+    expect(shellSource).toContain('return <button type="button" className={`ops-dispatch-card');
+    expect(shellSource).toContain('aria-pressed={selected.includes(job.id)}');
+    expect(shellSource).not.toContain('type="checkbox" disabled={!isPending}');
+    expect(shellSource).not.toContain('{job.teamName ?? "—"}');
+    const identityStyles = readFileSync(resolve(root, "client/src/pages/confirmation-calls-crm-identity.css"), "utf8");
+    expect(identityStyles).toContain("Each dispatch row is one customer-facing selection control");
+    expect(identityStyles).toContain(".ops-confirm-person > b::before");
+  });
+
   it("does not route the live admin page to static data or static action handlers", () => {
     expect(shellSource).not.toContain("INITIAL_ITEMS");
     expect(shellSource).not.toContain("StaticConfirmation");
