@@ -1,0 +1,148 @@
+/* CRM-style identity and operational signal layer. It uses only existing static queue markup. */
+.confirmation-review .ops-dispatch-card,
+.confirmation-review .ops-result-card {
+  position: relative;
+  border-color: #303034;
+  background: #1f1f22;
+}
+
+.confirmation-review .ops-dispatch-card {
+  box-shadow: inset 2px 0 0 #c89f53;
+}
+
+.confirmation-review .ops-dispatch-card:has(.ops-confirm-status.is-sent) {
+  box-shadow: inset 2px 0 0 #55b983;
+}
+
+.confirmation-review .ops-dispatch-card:has(.ops-confirm-status.is-warn) {
+  box-shadow: inset 2px 0 0 #c9616d;
+}
+
+.confirmation-review .ops-time {
+  flex-basis: 104px;
+}
+
+.confirmation-review .ops-time small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #a7a7ad;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.confirmation-review .ops-time small::before {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+
+.confirmation-review .ops-dispatch-card:nth-child(1) .ops-time small::before,
+.confirmation-review .ops-dispatch-card:nth-child(3) .ops-time small::before,
+.confirmation-review .ops-result-card:nth-child(1) .ops-time small::before { content: "TH"; background: #d76b5b; }
+.confirmation-review .ops-dispatch-card:nth-child(2) .ops-time small::before,
+.confirmation-review .ops-dispatch-card:nth-child(5) .ops-time small::before,
+.confirmation-review .ops-result-card:nth-child(3) .ops-time small::before { content: "TM"; background: #4ca1af; }
+.confirmation-review .ops-dispatch-card:nth-child(4) .ops-time small::before,
+.confirmation-review .ops-result-card:nth-child(2) .ops-time small::before { content: "TS"; background: #d19d48; }
+
+.confirmation-review .ops-confirm-person > b,
+.confirmation-review .ops-result-card > header > div > b {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: #f1f1f3;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirmation-review .ops-confirm-person > b::before,
+.confirmation-review .ops-result-card > header > div > b::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 50%;
+  background-position: center;
+  background-size: cover;
+}
+
+.confirmation-review .ops-dispatch-card:nth-child(1) .ops-confirm-person > b::before { background-image: url("/manus-storage/leads-crm-owner-emma-green_55d28723.png"); }
+.confirmation-review .ops-dispatch-card:nth-child(2) .ops-confirm-person > b::before { background-image: url("/manus-storage/leads-crm-owner-mark-darnalds_cf661d0b.png"); }
+.confirmation-review .ops-dispatch-card:nth-child(3) .ops-confirm-person > b::before,
+.confirmation-review .ops-result-card:nth-child(1) > header > div > b::before { background-image: url("/manus-storage/leads-crm-owner-kate-chen_1285ffcf.png"); }
+.confirmation-review .ops-dispatch-card:nth-child(4) .ops-confirm-person > b::before,
+.confirmation-review .ops-result-card:nth-child(2) > header > div > b::before { background-image: url("/manus-storage/leads-crm-owner-oliver-chan_8454e8e9.png"); }
+.confirmation-review .ops-dispatch-card:nth-child(5) .ops-confirm-person > b::before,
+.confirmation-review .ops-result-card:nth-child(3) > header > div > b::before { background-image: url("/manus-storage/leads-crm-owner-sarah-nguyen_2fbb7d63.png"); }
+
+.confirmation-review .ops-confirm-status:not(.is-sent):not(.is-warn) {
+  border-color: #6a5632;
+  background: #2d281d;
+  color: #efcb83;
+}
+
+.confirmation-review .ops-confirm-status.is-sent,
+.confirmation-review .ops-outcome.is-confirmed,
+.confirmation-review .ops-result-summary span.is-good {
+  border-color: #3c765e;
+  background: #20342b;
+  color: #95dfb8;
+}
+
+.confirmation-review .ops-confirm-status.is-warn,
+.confirmation-review .ops-outcome.is-no_answer,
+.confirmation-review .ops-outcome.is-cancel,
+.confirmation-review .ops-result-summary span:nth-child(3) {
+  border-color: #73444a;
+  background: #382326;
+  color: #ef9fa9;
+}
+
+.confirmation-review .ops-result-card.is-confirmed { border-left-color: #55b983; }
+.confirmation-review .ops-result-card.is-reschedule { border-left-color: #c89f53; }
+.confirmation-review .ops-result-card.is-no_answer,
+.confirmation-review .ops-result-card.is-cancel { border-left-color: #c9616d; }
+
+@media (max-width: 720px) {
+  .confirmation-review .ops-time { flex-basis: 78px; }
+  .confirmation-review .ops-time small { justify-content: flex-start; }
+}
+
+/* Live exact-shell adapter: keeps the original outcome menu behavior in the approved compact review slot. */
+.confirmation-review .ops-outcome-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 25px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #96969d;
+}
+
+.confirmation-review .ops-outcome-edit:hover:not(:disabled) {
+  background: #29292e;
+  color: #e8e8eb;
+}
+
+.confirmation-review .ops-outcome-edit:disabled {
+  opacity: .45;
+  cursor: default;
+}

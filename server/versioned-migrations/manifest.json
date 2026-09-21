@@ -303,6 +303,14 @@
       "sha256": "933460c660c40a6f8cac8d74b3d37adc6459f1f18fb1b54ba83f1521c8091d7e",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0040_owned_job_issues.postconditions.json"
+    },
+    {
+      "id": "0041_owned_confirmation_calls",
+      "mode": "owned-schedule-existing-table-schema",
+      "sqlFile": "0041_owned_confirmation_calls.sql",
+      "sha256": "6483eab1117b8580bb08b84aad0c99be4dcd22f4a2d37c51f0a1ba492282a6c9",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0041_owned_confirmation_calls.postconditions.json"
     }
   ]
 }

@@ -80,6 +80,7 @@ const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowSchedule
 const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
 const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));
 const CustomerProfileExactLive = lazy(() => import("./pages/CustomerProfileExactLive"));
+const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -146,6 +147,10 @@ function AdminCustomerProfileExactReviewRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/customer-profile"><CustomerProfileExactLive /></ReviewWorkspaceFrame>;
 }
 
+function AdminConfirmationCallsExactReviewRoute() {
+  return <AdminPageGuard pageId="confirmation-calls"><ReviewWorkspaceFrame navActivePath="/review/confirmation-calls"><ConfirmationCallsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
+
 function AdminLeadsCRMExactLiveRoute() {
   const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
   if (tab && tab !== "leads") return <AdminDashboard />;
@@ -201,7 +206,7 @@ function Router() {
         <Route path={"/hiring-status/:token"} component={HiringStatus} />
         <Route path={"/admin/team-pay"} component={TeamPay} />
         <Route path={"/admin/team-availability"} component={TeamAvailability} />
-        <Route path={"/admin/confirmation-calls"} component={ConfirmationCalls} />
+        <Route path={"/admin/confirmation-calls"} component={AdminConfirmationCallsExactReviewRoute} />
         <Route path={"/admin/missed-calls"} component={MissedCalls} />
         <Route path={"/admin/payroll-summary"} component={PayrollSummary} />
         <Route path={"/admin/performance"} component={Performance} />
@@ -341,7 +346,7 @@ function GlobalOpsChat() {
 
 function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || isCommandChatWorkspace;
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || isCommandChatWorkspace;
 }
 
 function DayBoardSafeGlobalOpsChat() {

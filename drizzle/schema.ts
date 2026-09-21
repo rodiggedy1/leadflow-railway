@@ -3164,8 +3164,10 @@ export type ConfirmationCallStatus = (typeof confirmationCallStatuses)[number];
 
 export const confirmationCalls = mysqlTable("confirmation_calls", {
   id: int("id").autoincrement().primaryKey(),
-  /** The job this call is about (cleanerJobs.id) */
-  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Deprecated legacy job reference; never used by LeadFlow-owned confirmation flows. */
+  cleanerJobId: int("cleanerJobId"),
+  /** LeadFlow-owned job reference for all new confirmation records. */
+  leadflowJobId: int("leadflowJobId"),
   /** Job date (YYYY-MM-DD) */
   jobDate: varchar("jobDate", { length: 20 }).notNull(),
   /** Client name (denormalized for display) */
@@ -3226,6 +3228,7 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
 }, (t) => ({
   idxJobDate: index("idx_cc_job_date").on(t.jobDate),
   idxJobId: index("idx_cc_job_id").on(t.cleanerJobId),
+  idxLeadflowJobId: index("idx_cc_leadflow_job_id").on(t.leadflowJobId),
   idxVapi: index("idx_cc_vapi").on(t.vapiCallId),
 }));
 export type ConfirmationCall = typeof confirmationCalls.$inferSelect;

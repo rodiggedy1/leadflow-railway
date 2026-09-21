@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "table": "confirmation_calls",
+  "columns": [
+    { "name": "cleanerJobId", "columnType": "int", "nullable": true },
+    { "name": "leadflowJobId", "columnType": "int", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "idx_cc_leadflow_job_id", "columns": ["leadflowJobId"], "unique": false }
+  ]
+}

@@ -60,6 +60,7 @@ import { nurtureRouter } from "./nurtureRouter";
 import { endEnrollment } from "./nurtureSequence";
 import { callsRouter } from "./callsRouter";
 import { confirmationCallsRouter } from "./confirmationCallsRouter";
+import { leadflowConfirmationCallsRouter } from "./leadflowConfirmationCallsRouter";
 import { missedCallsRouter } from "./missedCallsRouter";
 import { gmailRouter } from "./gmailRouter";
 import { callMatrixRouter } from "./callMatrixRouter";
@@ -134,6 +135,7 @@ export const appRouter = router({
   applicantPortal: applicantPortalRouter,
   customerPortalReview: customerPortalReviewRouter,
   leadflowJobs: leadflowJobsRouter,
+  leadflowConfirmationCalls: leadflowConfirmationCallsRouter,
   cleanerPortalReadOnly: cleanerPortalReadOnlyRouter,
   cleanerPortalProgress: cleanerPortalProgressRouter,
   cleanerPortalPhotos: cleanerPortalPhotoRouter,
