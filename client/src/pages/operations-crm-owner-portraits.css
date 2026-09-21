@@ -1,0 +1,28 @@
+.operations-crm-review .ocr-owner-portrait {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: block;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  background: #f2f0ec;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+
+.operations-crm-review .ocr-owner > .ocr-owner-portrait {
+  margin-right: 0;
+}
+
+.operations-crm-review .ocr-owner {
+  gap: 6px;
+}
+
+.operations-crm-review .ocr-detail-contact > .ocr-owner-portrait {
+  width: 52px;
+  height: 52px;
+  flex-basis: 52px;
+  border-width: 2px;
+  box-shadow: 0 0 0 1px #3a3a3a;
+}

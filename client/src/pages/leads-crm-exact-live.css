@@ -1,0 +1,39 @@
+/* Live-only additions: the approved operations-crm review CSS remains the layout source. */
+.leads-crm-live .ocr-live-filter-wrap { position: relative; }
+.leads-crm-live .ocr-live-filter-menu { position: absolute; z-index: 12; top: calc(100% + 7px); left: 0; min-width: 176px; padding: 6px; border: 1px solid #3d3d3d; border-radius: 9px; background: #242424; box-shadow: 0 16px 30px rgba(0, 0, 0, .32); }
+.leads-crm-live .ocr-live-filter-menu button { width: 100%; min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: #dbdbdb; font-size: 12px; text-align: left; cursor: pointer; }
+.leads-crm-live .ocr-live-filter-menu button:hover { background: #303030; color: #fff; }
+.leads-crm-live .ocr-live-table .ocr-company button { display: flex; align-items: center; gap: 7px; max-width: 148px; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.leads-crm-live .ocr-live-table .ocr-company button > span { overflow: hidden; text-overflow: ellipsis; }
+.leads-crm-live .ocr-lead-portrait { width: 24px; height: 24px; flex: 0 0 24px; object-fit: cover; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: #2a2a2a; }
+.leads-crm-live .ocr-lead-detail-portrait { width: 64px; height: 64px; flex: 0 0 64px; object-fit: cover; border: 1px solid rgba(255,255,255,.18); border-radius: 18px; background: #292929; box-shadow: inset 0 1px rgba(255,255,255,.06), 0 5px 11px rgba(0,0,0,.2); }
+.leads-crm-live .ocr-live-table .ocr-owner > i { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%; font-size: 7px; }
+.leads-crm-live .ocr-live-table .ocr-owner { max-width: 128px; overflow: hidden; }
+.leads-crm-live .ocr-live-table .ocr-owner span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leads-crm-live .ocr-live-table .ocr-money { color: #dedede !important; }
+.leads-crm-live .ocr-live-table .ocr-activity-bars span { opacity: .24; }
+.leads-crm-live .ocr-live-table .ocr-activity-bars span.is-live { opacity: 1; }
+.leads-crm-live .ocr-live-unread { color: #52db95; font-size: 12px; font-weight: 550; }
+.leads-crm-live .ocr-live-empty { min-height: 168px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #898989; font-size: 13px; }
+.leads-crm-live .ocr-live-notice { position: fixed; z-index: 50; right: 22px; bottom: 20px; display: flex; align-items: center; gap: 10px; max-width: 360px; padding: 10px 12px; border: 1px solid #454545; border-radius: 9px; background: #282828; box-shadow: 0 16px 32px rgba(0, 0, 0, .38); color: #ececec; font-size: 12px; }
+.leads-crm-live .ocr-live-notice button { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: #a3a3a3; cursor: pointer; }
+.leads-crm-live .ocr-live-notice button:hover { color: #fff; background: #363636; }
+.leads-crm-live .ocr-detail-stat-grid > div:last-child strong { overflow: hidden; color: #f3f3f3; font-size: 13px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.leads-crm-live .ocr-detail-scorecard article footer b { color: #b9b9b9; }
+.leads-crm-live .ocr-detail-scorecard article footer b::first-letter { color: #4be096; }
+.leads-crm-live .ocr-detail-section-heading button:disabled { cursor: default; opacity: .92; }
+.leads-crm-live .ocr-detail-drawer-footer > span { color: #949494; font-size: 12px; }
+.ocr-live-loading, .ocr-live-login { min-height: 100dvh; display: grid; place-items: center; background: #151515; color: #ededed; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.review-nav-host > .ocr-live-login { width: calc(100% - var(--review-nav-width)); min-width: 0; flex: 1 1 0 !important; }
+.ocr-live-login-card { width: min(100% - 32px, 370px); padding: 28px; display: grid; gap: 14px; border: 1px solid #363636; border-radius: 14px; background: #1e1e1e; box-shadow: 0 20px 40px rgba(0, 0, 0, .35); }
+.ocr-live-login-mark { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: #4124fb; color: #fff; }
+.ocr-live-login-mark svg { width: 18px; height: 18px; }
+.ocr-live-login-card > div + div strong { display: block; font-size: 18px; }
+.ocr-live-login-card > div + div span { display: block; margin-top: 4px; color: #929292; font-size: 12px; }
+.ocr-live-login-card label { display: grid; gap: 6px; color: #b7b7b7; font-size: 12px; }
+.ocr-live-login-card input { height: 38px; padding: 0 10px; border: 1px solid #3b3b3b; border-radius: 7px; outline: none; background: #171717; color: #f5f5f5; }
+.ocr-live-login-card input:focus { border-color: #705cff; box-shadow: 0 0 0 3px rgba(65, 36, 251, .18); }
+.ocr-live-login-card > p { margin: 0; color: #ff848d; font-size: 12px; }
+.ocr-live-login-card > button { height: 38px; border: 0; border-radius: 8px; background: #4124fb; color: #fff; font-weight: 600; cursor: pointer; }
+.ocr-live-login-card > button:disabled { opacity: .55; cursor: wait; }
+@media (max-width: 760px) { .leads-crm-live .ocr-live-notice { right: 12px; bottom: 12px; left: 12px; max-width: none; } }

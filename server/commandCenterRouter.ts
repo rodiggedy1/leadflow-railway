@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { adminAgentProcedure, router } from "./_core/trpc";
+import { adminAgentProcedure, agentPageProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import {
   conversationSessions,
@@ -43,7 +43,49 @@ import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { getCompletedBookingsForDate } from "./launch27";
 import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
+import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSources";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+
+type LeadsCrmHistoryEntry = {
+  role?: string;
+  content?: string;
+  ts?: number | string;
+};
+
+function leadsCrmMilliseconds(value: Date | string | number | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  if (value instanceof Date) return value.getTime();
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseLeadsCrmHistory(value: string | null): LeadsCrmHistoryEntry[] {
+  try {
+    const parsed = JSON.parse(value ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Converts actual message timestamps into twelve buckets for the preceding thirty days. */
+function leadsCrmThirtyDayActivity(history: LeadsCrmHistoryEntry[], now: number): number[] {
+  const bucketCount = 12;
+  const periodMs = 30 * 24 * 60 * 60 * 1000;
+  const periodStart = now - periodMs;
+  const buckets = Array.from({ length: bucketCount }, () => 0);
+
+  for (const entry of history) {
+    const timestamp = Number(entry.ts);
+    if (!Number.isFinite(timestamp) || timestamp < periodStart || timestamp > now) continue;
+    const bucket = Math.min(bucketCount - 1, Math.floor(((timestamp - periodStart) / periodMs) * bucketCount));
+    buckets[bucket] += 1;
+  }
+
+  return buckets;
+}
 
 function calcRevenue(row: {
   bookedAmount?: number | null;
@@ -176,6 +218,70 @@ function sourceLabel(src: string): string {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const commandCenterRouter = router({
+  /**
+   * Read-only data contract for Leads CRM. The existing leads-page permission
+   * is the only access gate; this procedure does not change lead, messaging,
+   * booking, assignment, or automation state.
+   */
+  listIncomingLeads: agentPageProcedure("leads")
+    .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const excludedSources = sql.raw(LEADS_CRM_EXCLUDED_SOURCES.map((source) => `'${source}'`).join(", "));
+      const leadOnly = or(
+        isNull(conversationSessions.leadSource),
+        sql`${conversationSessions.leadSource} NOT IN (${excludedSources})`,
+      );
+      const sessions = await db
+        .select()
+        .from(conversationSessions)
+        .where(leadOnly)
+        .orderBy(desc(sql`COALESCE(${conversationSessions.lastCustomerMessageTs}, ${conversationSessions.lastMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
+        .limit(input?.limit ?? 500);
+
+      const now = Date.now();
+      return sessions.map((session) => {
+        const history = parseLeadsCrmHistory(session.messageHistory);
+        const historyLast = history.at(-1);
+        const lastActivityAt = Math.max(
+          leadsCrmMilliseconds(historyLast?.ts),
+          leadsCrmMilliseconds(session.lastMessageTs),
+          leadsCrmMilliseconds(session.lastCustomerMessageTs),
+          leadsCrmMilliseconds(session.updatedAt),
+          leadsCrmMilliseconds(session.createdAt),
+        );
+        const lastRole = historyLast?.role ?? session.lastMessageRole ?? null;
+        const lastReadAt = Number(session.lastReadAt ?? 0);
+        const hasUnread = (lastRole === "user" || lastRole === "customer") && lastActivityAt > lastReadAt;
+
+        return {
+          id: session.id,
+          name: session.leadName ?? null,
+          phone: session.leadPhone,
+          email: null,
+          source: session.leadSource ?? null,
+          stage: session.stage,
+          ownerName: session.assignedAgentName ?? null,
+          serviceType: session.serviceType ?? null,
+          bedrooms: session.bedrooms ?? null,
+          bathrooms: session.bathrooms ?? null,
+          address: session.address ?? null,
+          quotedPrice: session.quotedPrice ?? null,
+          bookedAmount: session.bookedAmount ?? null,
+          isBooked: session.isBooked === 1,
+          messageCount: session.messageCount ?? history.length,
+          lastMessage: session.lastMessageText ?? historyLast?.content ?? null,
+          lastMessageRole: lastRole,
+          lastActivityAt,
+          createdAt: leadsCrmMilliseconds(session.createdAt),
+          hasUnread,
+          activity: leadsCrmThirtyDayActivity(history, now),
+        };
+      });
+    }),
+
   /**
    * KPI stat cards for the top row.
    * Returns current-period stats + comparison to previous period.

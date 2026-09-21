@@ -77,6 +77,7 @@ const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
 const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
 const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));
+const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -131,6 +132,12 @@ function AdminEmailsExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>;
 }
 
+function AdminLeadsCRMExactLiveRoute() {
+  const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  if (tab && tab !== "leads") return <AdminDashboard />;
+  return <AdminPageGuard pageId="leads"><ReviewWorkspaceFrame navActivePath="/review/leads-crm"><LeadsCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
+
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -141,7 +148,7 @@ function Router() {
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
-        <Route path={"/admin/leads"} component={AdminDashboard} />
+        <Route path={"/admin/leads"} component={AdminLeadsCRMExactLiveRoute} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
         <Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />
