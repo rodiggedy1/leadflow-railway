@@ -5,6 +5,7 @@ import { agentPageProcedure, bookingsAgentProcedure, opsChatProcedure, router } 
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
+import { leadflowCallMatrixRouter } from "./leadflowCallMatrixRouter";
 import { sendSms } from "./openphone";
 
 const listInput = z.object({
@@ -65,6 +66,8 @@ function normalizedPhone(phone: string) {
 }
 
 export const leadflowJobsRouter = router({
+  callMatrix: leadflowCallMatrixRouter,
+
   /**
    * Read-only Day Board projection of LeadFlow-owned jobs and explicit Cleaner
    * Portal progress. No status is inferred from time; every non-neutral state
