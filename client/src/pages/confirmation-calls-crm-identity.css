@@ -147,12 +147,51 @@
   cursor: default;
 }
 
-/* Each dispatch row is one customer-facing selection control; team avatars and portrait circles are intentionally omitted. */
-.confirmation-review button.ops-dispatch-card {
-  width: 100%;
-  color: inherit;
-  font: inherit;
-  text-align: left;
+/* Each dispatch row has one explicit, accessible selector; team avatars and portrait circles are intentionally omitted. */
+.confirmation-review .ops-dispatch-card {
+  position: relative;
+}
+
+.confirmation-review .ops-selection-control {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.confirmation-review .ops-selection-indicator {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  border: 2px solid #74747c;
+  border-radius: 6px;
+  background: #18181a;
+  color: transparent;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+
+.confirmation-review .ops-selection-control:checked + .ops-selection-indicator {
+  border-color: #4fdaa0;
+  background: #209766;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(79,218,160,.18);
+}
+
+.confirmation-review .ops-selection-control:focus-visible + .ops-selection-indicator {
+  outline: 2px solid #f2f2f4;
+  outline-offset: 3px;
+}
+
+.confirmation-review .ops-dispatch-card.is-selected {
+  border-color: #4fdaa0;
+  background: linear-gradient(90deg, rgba(35,151,103,.30), #202a25 32%, #1f1f22 100%);
+  box-shadow: inset 4px 0 0 #4fdaa0, inset 0 0 0 1px rgba(79,218,160,.28);
 }
 
 .confirmation-review .ops-confirm-person > b::before,

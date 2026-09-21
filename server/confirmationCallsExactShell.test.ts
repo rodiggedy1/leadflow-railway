@@ -78,13 +78,16 @@ describe("Confirmation Calls exact review shell", () => {
     expect(shellSource).not.toContain("<div className=\"ops-dispatch-stack\">{jobs.map((job) => {");
   });
 
-  it("uses one customer-facing dispatch control without team labels or decorative portraits", () => {
-    expect(shellSource).toContain('return <button type="button" className={`ops-dispatch-card');
-    expect(shellSource).toContain('aria-pressed={selected.includes(job.id)}');
-    expect(shellSource).not.toContain('type="checkbox" disabled={!isPending}');
+  it("uses one clear customer-facing selector without team labels or decorative portraits", () => {
+    expect(shellSource).toContain('className="ops-selection-control" type="checkbox"');
+    expect(shellSource).toContain('className="ops-selection-indicator" aria-hidden="true"');
+    expect(shellSource).toContain('aria-label={`Select ${job.customerName ?? "customer"} for confirmation SMS`}');
     expect(shellSource).not.toContain('{job.teamName ?? "—"}');
     const identityStyles = readFileSync(resolve(root, "client/src/pages/confirmation-calls-crm-identity.css"), "utf8");
-    expect(identityStyles).toContain("Each dispatch row is one customer-facing selection control");
+    expect(identityStyles).toContain("Each dispatch row has one explicit, accessible selector");
+    expect(identityStyles).toContain(".ops-selection-control:checked + .ops-selection-indicator");
+    expect(identityStyles).toContain("background: #209766");
+    expect(identityStyles).toContain(".ops-dispatch-card.is-selected");
     expect(identityStyles).toContain(".ops-confirm-person > b::before");
   });
 
