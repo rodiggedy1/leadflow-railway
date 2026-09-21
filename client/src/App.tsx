@@ -145,7 +145,7 @@ function AdminEmailsExactLiveRoute() {
 }
 
 function AdminCommandChatExactLiveRoute() {
-  return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>;
+  return <ReviewWorkspaceFrame navActivePath="/review/command-chat-crm"><CommandChatExactLive /></ReviewWorkspaceFrame>;
 }
 
 function AdminBookingsCRMExactReviewRoute() {

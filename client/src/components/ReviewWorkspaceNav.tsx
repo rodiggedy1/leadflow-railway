@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type FocusEvent, type MouseEvent } from "react";
 import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Command, CreditCard, LayoutDashboard, Mail, MessageSquareMore, PanelsTopLeft, PhoneCall, PhoneOutgoing, Receipt, SlidersHorizontal, Star, UserRound, UserRoundCheck, UsersRound, WalletCards } from "lucide-react";
 import { useLocation } from "wouter";
 import "./review-workspace-nav.css";
@@ -40,6 +40,16 @@ export default function ReviewWorkspaceNav({ activePath }: { activePath?: string
   const useLiveDestinations = activePath !== undefined;
   const settingsHref = useLiveDestinations ? "/admin/settings" : "/review/settings";
   const [expanded, setExpanded] = useState(() => defaultOpenRoutes.includes(routeKey));
+  const [tooltip, setTooltip] = useState<{ label: string; top: number } | null>(null);
+
+  const showBaseboardTooltip = (event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>, label: string) => {
+    if (expanded) return;
+    const target = event.currentTarget;
+    const navTop = target.closest(".review-workspace-nav")?.getBoundingClientRect().top ?? 0;
+    const rect = target.getBoundingClientRect();
+    setTooltip({ label, top: rect.top - navTop + rect.height / 2 });
+  };
+  const hideBaseboardTooltip = () => setTooltip(null);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && setExpanded(false);
@@ -54,16 +64,20 @@ export default function ReviewWorkspaceNav({ activePath }: { activePath?: string
   }, []);
 
   return (
-    <aside className={`review-workspace-nav ${expanded ? "is-expanded" : ""}`} aria-label="Review workspaces">
+    <aside className={`review-workspace-nav ${expanded ? "is-expanded" : ""}`} aria-label="Baseboard navigation" style={tooltip ? { "--baseboard-tooltip-top": `${tooltip.top}px` } as CSSProperties : undefined}>
       <button
         type="button"
         className="review-workspace-toggle"
-        aria-label={expanded ? "Collapse review navigation" : "Open review navigation"}
+        aria-label={expanded ? "Collapse Baseboard navigation" : "Open Baseboard navigation"}
         aria-expanded={expanded}
         onClick={() => setExpanded(value => !value)}
+        onMouseEnter={(event) => showBaseboardTooltip(event, "Baseboard")}
+        onMouseLeave={hideBaseboardTooltip}
+        onFocus={(event) => showBaseboardTooltip(event, "Baseboard")}
+        onBlur={hideBaseboardTooltip}
       >
         <span className="review-workspace-mark"><i /><i /><i /><i /></span>
-        <span className="review-workspace-toggle-copy"><strong>Workspaces</strong><small>Review only</small></span>
+        <span className="review-workspace-toggle-copy"><strong>Baseboard</strong></span>
         {expanded ? <ChevronLeft /> : <ChevronRight />}
       </button>
       <nav className="review-workspace-scroll">
@@ -81,6 +95,10 @@ export default function ReviewWorkspaceNav({ activePath }: { activePath?: string
                   aria-current={active ? "page" : undefined}
                   key={item.href}
                   onClick={() => setExpanded(defaultOpenRoutes.includes(item.href))}
+                  onMouseEnter={(event) => showBaseboardTooltip(event, item.label)}
+                  onMouseLeave={hideBaseboardTooltip}
+                  onFocus={(event) => showBaseboardTooltip(event, item.label)}
+                  onBlur={hideBaseboardTooltip}
                 >
                   <Icon />
                   <span>{item.label}</span>
@@ -91,12 +109,13 @@ export default function ReviewWorkspaceNav({ activePath }: { activePath?: string
         ))}
       </nav>
       <div className="review-workspace-bottom">
-        <a href={settingsHref} className={routeKey === "/review/settings" ? "is-active" : ""} aria-current={routeKey === "/review/settings" ? "page" : undefined} onClick={() => setExpanded(true)}>
+        <a href={settingsHref} className={routeKey === "/review/settings" ? "is-active" : ""} aria-current={routeKey === "/review/settings" ? "page" : undefined} onClick={() => setExpanded(true)} onMouseEnter={(event) => showBaseboardTooltip(event, "Settings")} onMouseLeave={hideBaseboardTooltip} onFocus={(event) => showBaseboardTooltip(event, "Settings")} onBlur={hideBaseboardTooltip}>
           <SlidersHorizontal />
           <span>Settings</span>
         </a>
         <div className="review-workspace-footer"><span>Static pages</span><small>18 workspaces</small></div>
       </div>
+      {tooltip && <div className="review-workspace-tooltip" role="tooltip">{tooltip.label}</div>}
     </aside>
   );
 }

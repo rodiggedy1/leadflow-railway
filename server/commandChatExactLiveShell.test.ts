@@ -210,10 +210,9 @@ describe("Command Chat exact live shell", () => {
     expect(styles).not.toContain("ccc-live-thread-drawer");
     expect(styles).not.toContain("ccc-live-thread-panel{position:fixed");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
-    expect(app).toContain("function AdminCommandChatExactLiveRoute() {");
-    expect(app).toContain("<ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>");
+    expect(app).toContain("function AdminCommandChatExactLiveRoute()");
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/command-chat-crm"><CommandChatExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
-    expect(app).toContain("hideNavigation ? null : <ReviewWorkspaceNav");
     expect(app).toContain('const isCommandChatWorkspace = location === "/admin/command-chat";');
   });
 
