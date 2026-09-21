@@ -44,7 +44,7 @@
 .payments-live-exact .payment-existing-fields--complete p{min-height:29px}
 .payments-live-exact .payment-existing-fields--complete .payment-existing-fields__wide{flex-basis:100%;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
 
-.payments-live-exact .payment-primary-actions{margin-top:10px;border:1px solid rgba(109,208,171,.42);border-radius:8px;background:rgba(52,126,97,.14);box-shadow:inset 3px 0 0 #6dd0ab;overflow:hidden}
+.payments-live-exact .payment-primary-actions{flex:0 0 auto;margin-top:10px;border:1px solid rgba(109,208,171,.42);border-radius:8px;background:rgba(52,126,97,.14);box-shadow:inset 3px 0 0 #6dd0ab;overflow:hidden}
 .payments-live-exact .payment-primary-actions>header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;border-bottom:1px solid rgba(109,208,171,.24);color:#ddf8eb;font-size:10px;font-weight:800}
 .payments-live-exact .payment-primary-actions>header em{color:#8f8f98;font-size:9px;font-style:normal;font-weight:600}
 .payments-live-exact .payment-primary-actions__controls{display:flex;align-items:flex-end;gap:7px;flex-wrap:wrap;padding:10px}
@@ -63,6 +63,7 @@
 .payments-live-exact .payments-page-head--compact+.payments-metrics{margin-top:0;margin-bottom:10px}
 @media(max-width:640px){.payments-live-exact .payments-page-head--compact{flex-direction:row;align-items:center}.payments-live-exact .payments-page-head--compact .payments-new{align-self:auto}}
 
-/* The action area intentionally replaces the former safety-only panel. */
-.payments-live-exact .payment-existing-fields + .payment-primary-actions .payment-action.is-primary{background:#6dd0ab;color:#13231c;border-color:#93e8c8}
-.payments-live-exact .payment-existing-fields + .payment-primary-actions .payment-action.is-danger{border-color:rgba(244,154,157,.6);background:rgba(109,42,46,.32);color:#ffc4c6}
+/* Keep the original detail layout, but never collapse live controls below the fold. */
+.payments-live-exact .payment-total-band,.payments-live-exact .payment-detail-grid,.payments-live-exact .payment-lifecycle,.payments-live-exact .payment-existing-fields,.payments-live-exact .payment-action-dock{flex:0 0 auto}
+.payments-live-exact .payment-detail-grid + .payment-primary-actions .payment-action.is-primary{background:#6dd0ab;color:#13231c;border-color:#93e8c8}
+.payments-live-exact .payment-detail-grid + .payment-primary-actions .payment-action.is-danger{border-color:rgba(244,154,157,.6);background:rgba(109,42,46,.32);color:#ffc4c6}
