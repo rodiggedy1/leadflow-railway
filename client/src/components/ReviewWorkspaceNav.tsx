@@ -30,7 +30,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
     ],
   },
   { label: "FINANCE & BILLING", items: [{ label: "Invoices", href: "/review/invoices", liveHref: "/admin/invoices", icon: Receipt }, { label: "Payments", href: "/review/payments", liveHref: "/admin/payments", icon: CreditCard }] },
-  { label: "TEAM OPERATIONS", items: [{ label: "Team", href: "/review/team", icon: UsersRound }, { label: "Reviews & Quality", href: "/review/reviews-quality", icon: Star }, { label: "Payroll Summary", href: "/review/payroll-summary", liveHref: "/admin/payroll-summary", icon: WalletCards }, { label: "Hiring Admin", href: "/review/hiring-admin", liveHref: "/admin/hiring", icon: UserRoundCheck }] },
+  { label: "TEAM OPERATIONS", items: [{ label: "Team", href: "/review/team", liveHref: "/admin/team", icon: UsersRound }, { label: "Reviews & Quality", href: "/review/reviews-quality", icon: Star }, { label: "Payroll Summary", href: "/review/payroll-summary", liveHref: "/admin/payroll-summary", icon: WalletCards }, { label: "Hiring Admin", href: "/review/hiring-admin", liveHref: "/admin/hiring", icon: UserRoundCheck }] },
 ];
 
 export default function ReviewWorkspaceNav({ activePath }: { activePath?: string }) {

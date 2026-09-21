@@ -25,7 +25,7 @@ const PAGE_URLS: Record<string, string> = {
   "pipeline":          "/admin/leads?tab=pipeline",
   "callbacks":         "/admin/leads?tab=callbacks",
   "calls":             "/admin/calls",
-  "agents":            "/admin/leads?tab=agents",
+  "agents":            "/admin/team",
   "leaderboard":       "/admin/leads?tab=leaderboard",
   "campaigns":         "/admin/campaigns",
   "always-on":         "/admin/always-on",

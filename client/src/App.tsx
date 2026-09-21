@@ -70,6 +70,7 @@ const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
+const TeamExactLive = lazy(() => import("./pages/TeamExactLive"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
 const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
@@ -163,6 +164,10 @@ function AdminPaymentsExactReviewRoute() {
   return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AdminTeamExactLiveRoute() {
+  return <AdminPageGuard pageId="agents"><ReviewWorkspaceFrame navActivePath="/review/team"><TeamExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
+
 function AdminLeadsCRMExactLiveRoute() {
   const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
   if (tab && tab !== "leads") return <AdminDashboard />;
@@ -233,6 +238,7 @@ function Router() {
         <Route path={"/admin/sms-campaigns"} component={SmsCampaigns} />
         <Route path={"/admin/readiness"} component={ReadinessDashboard} />
         <Route path={"/admin/invoices"} component={AdminInvoicesExactReviewRoute} />
+        <Route path={"/admin/team"} component={AdminTeamExactLiveRoute} />
         <Route path={"/admin/madison-focus"} component={MadisonFocus} />
         <Route path={"/admin/madison-debrief"} component={DebriefRedirect} />
         <Route path={"/madison-debug"} component={MadisonDebugPanel} />
@@ -358,7 +364,8 @@ function GlobalOpsChat() {
 
 function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace;
+  const isTeamWorkspace = location === "/admin/team";
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace;
 }
 
 function DayBoardSafeGlobalOpsChat() {
