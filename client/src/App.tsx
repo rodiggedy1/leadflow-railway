@@ -106,6 +106,10 @@ function ReviewWorkspaceFrame({ children, navActivePath, hideNavigation = false 
   return <div className="review-nav-host">{hideNavigation ? null : <ReviewWorkspaceNav activePath={navActivePath ?? "/review/leads-crm"} />}{children}</div>;
 }
 
+function AdminHiringAdminExactReviewRoute() {
+  return <ReviewWorkspaceFrame navActivePath="/review/hiring-admin"><HiringAdminLive /></ReviewWorkspaceFrame>;
+}
+
 /**
  * OpsChatRedirect
  * /admin/ops-chat is now an overlay — redirect to /admin/leads and open the overlay.
@@ -216,7 +220,7 @@ function Router() {
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
         <Route path={"/call-assist"} component={LiveCallAssist} />
         <Route path={"/sse-test"} component={SseTest} />
-        <Route path={"/admin/hiring"} component={HiringAdminLive} />
+        <Route path={"/admin/hiring"} component={AdminHiringAdminExactReviewRoute} />
         <Route path={"/apply"} component={Apply} />
         <Route path={"/applicant-portal"} component={ApplicantPortal} />
         <Route path={"/interview/:candidateId"} component={AIInterview} />
@@ -365,7 +369,8 @@ function GlobalOpsChat() {
 function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
   const isTeamWorkspace = location === "/admin/team";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace;
+  const isHiringWorkspace = location === "/admin/hiring";
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace;
 }
 
 function DayBoardSafeGlobalOpsChat() {

@@ -4,100 +4,77 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "..");
 const app = readFileSync(path.join(root, "client/src/App.tsx"), "utf8");
+const nav = readFileSync(path.join(root, "client/src/components/ReviewWorkspaceNav.tsx"), "utf8");
 const live = readFileSync(path.join(root, "client/src/pages/HiringAdminLive.tsx"), "utf8");
-const page = readFileSync(path.join(root, "client/src/pages/HiringAdminReview.tsx"), "utf8");
-const styles = readFileSync(path.join(root, "client/src/pages/hiring-admin-review.css"), "utf8");
+const shell = readFileSync(path.join(root, "client/src/pages/HiringAdminExactLive.tsx"), "utf8");
+const styles = readFileSync(path.join(root, "client/src/pages/hiring-admin-dashboard-review.css"), "utf8");
+const liveStyles = readFileSync(path.join(root, "client/src/pages/hiring-admin-exact-live.css"), "utf8");
 
-describe("exact-design Hiring admin release", () => {
-  it("routes the live hiring page through the approved design shell instead of the old visual page", () => {
-    expect(app).toContain('const HiringAdminLive = lazy(() => import("./pages/HiringAdminLive"));');
-    expect(app).toContain('<Route path={"/admin/hiring"} component={HiringAdminLive} />');
-    expect(app).not.toContain('<Route path={"/admin/hiring"} component={HiringPipeline} />');
-    expect(live).toContain("return <HiringAdminWorkspace live />;");
+// The review shell is intentionally copied before live behavior is attached.
+describe("exact-design Hiring Admin release", () => {
+  it("routes the live page through the review workspace frame and exact adapter", () => {
+    expect(app).toContain("function AdminHiringAdminExactReviewRoute()");
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/hiring-admin"><HiringAdminLive /></ReviewWorkspaceFrame>');
+    expect(app).toContain('<Route path={"/admin/hiring"} component={AdminHiringAdminExactReviewRoute} />');
+    expect(app).toContain('location === "/admin/hiring"');
+    expect(live).toContain('import HiringAdminExactLive from "./HiringAdminExactLive";');
+    expect(live).toContain("return <HiringAdminExactLive />;");
+    expect(nav).toContain('{ label: "Hiring Admin", href: "/review/hiring-admin", liveHref: "/admin/hiring", icon: UserRoundCheck }');
   });
 
-  it("keeps the approved visual shell intact", () => {
-    for (const element of ["hiring-review-sidebar", "hiring-review-header", "hiring-review-kpis", "hiring-review-coverage", "hiring-review-kanban", "hiring-review-drawer"]) {
-      expect(page).toContain(element);
+  it("starts from the approved dashboard shell instead of preserving the legacy outer layout", () => {
+    for (const element of ["hadr-page", "hadr-utility", "hadr-intro", "hadr-notice", "hadr-kpis", "hadr-coverage", "hadr-pipeline", "hadr-board", "hadr-drawer"]) {
+      expect(shell).toContain(element);
     }
-    expect(styles).toContain(".hiring-review-sidebar");
-    expect(styles).toContain(".hiring-review-drawer");
+    expect(styles).toContain(".hadr-utility");
+    expect(styles).toContain(".hadr-board");
+    expect(styles).toContain(".hadr-drawer");
+    expect(shell).not.toContain("hiring-review-sidebar");
   });
 
-  it("reuses existing hiring queries and actions rather than adding a separate workflow", () => {
-    for (const contract of ["trpc.hiring.getCandidates.useQuery", "trpc.hiring.getPipelineStats.useQuery", "trpc.hiring.updateStage.useMutation", "trpcUtils.hiring.getSessionByPhone.fetch", "trpcUtils.leads.getById.fetch"]) {
-      expect(page).toContain(contract);
+  it("preserves the existing live candidate queries and stage-change semantics", () => {
+    for (const contract of [
+      "trpc.hiring.getCandidates.useQuery",
+      "trpc.hiring.getPipelineStats.useQuery",
+      "trpc.hiring.updateStage.useMutation",
+      "trpcUtils.hiring.getSessionByPhone.fetch",
+      "trpcUtils.leads.getById.fetch",
+      "sendSmsNotification",
+      "commitStageChange",
+      "requestColumnMove",
+      "window.confirm(`Reject ${drawerApplicant.name}?`)",
+    ]) {
+      expect(shell).toContain(contract);
     }
-    expect(page).not.toContain('fetch("/api');
+    expect(shell).not.toContain('fetch("/api');
   });
 
-  it("reuses the existing application and AI-interview players in the right-hand detail drawer", () => {
-    expect(page).toContain('import { InterviewRecordingCard, VideoInterviewCard } from "./HiringPipeline";');
-    expect(page).toContain("videoUrl: candidate.videoUrl ?? null");
-    expect(page).toContain("interviewVideoUrl: candidate.interviewVideoUrl ?? null");
-    expect(page).toContain("<VideoInterviewCard videoUrl={selectedApplicant.videoUrl} />");
-    expect(page).toContain("<InterviewRecordingCard videoUrl={selectedApplicant.interviewVideoUrl} candidateId={selectedApplicant.id} />");
-  });
-
-  it("shows a compact card indicator only when an existing application or interview video is available", () => {
-    expect(page).toContain("const videoCount = Number(Boolean(applicant.videoUrl)) + Number(Boolean(applicant.interviewVideoUrl));");
-    expect(page).toContain("videoCount > 0");
-    expect(page).toContain("hiring-review-applicant-video-indicator");
-    expect(styles).toContain(".hiring-review-applicant-video-indicator");
-    expect(page).toContain("function DraggableApplicantCard");
-    expect(page).toContain("<div className=\"hiring-review-chip-row\">");
-  });
-
-  it("counts every submitted application specialty in its own existing-style Service coverage card", () => {
-    expect(page).toContain("const LIVE_COVERAGE_SERVICES = [");
-    for (const service of ["Home cleaning", "TV mounting", "Furniture assembly", "Picture hanging", "Minor home repairs", "Handyman visit", "Plumbing help", "Electrical & lighting", "Interior painting", "Lawn & yard care", "Pressure washing", "Moving help", "Junk removal"]) {
-      expect(page).toContain(`\"${service}\"`);
+  it("keeps the existing confirmation, message drawer, and media workflow in matching review slots", () => {
+    for (const contract of [
+      "setSmsPending",
+      ">Yes, send SMS</button>",
+      ">Skip</button>",
+      ">Cancel</button>",
+      "<ConversationDrawer",
+      "<VideoInterviewCard videoUrl={drawerApplicant.applicationVideoUrl} />",
+      "<InterviewRecordingCard videoUrl={drawerApplicant.interviewVideoUrl} candidateId={drawerApplicant.id} />",
+    ]) {
+      expect(shell).toContain(contract);
     }
-    expect(page).toContain("specialties.some((specialty) => applicant.tags.includes(specialty))");
-    expect(page).not.toContain("applicant.tags.some((tag) => tag.toLowerCase().includes(normalized");
   });
 
-  it("keeps the first Service coverage row compact and filters the existing board by an exact clicked specialty", () => {
-    expect(page).toContain('const [coverageExpanded, setCoverageExpanded] = useState(false);');
-    expect(page).toContain('const [selectedCoverageService, setSelectedCoverageService] = useState<string | null>(null);');
-    expect(page).toContain('coverageServices.slice(0, 6)');
-    expect(page).toContain('Show all services (${coverageServices.length})');
-    expect(page).toContain('setSelectedCoverageService((selected) => selected === title ? null : title)');
-    expect(page).toContain('applicant.tags.some((tag) => selectedCoverageSpecialties.includes(tag))');
-    expect(page).toContain('coverageFilteredApplicants.length');
-    expect(page).toContain('aria-pressed={live ? selectedCoverageService === title : undefined}');
-    expect(styles).toContain('.hiring-review-service.is-selected');
+  it("retains accessible existing drag and adjacent-column movement controls", () => {
+    for (const contract of ["DndContext", "DragOverlay", "useDraggable", "useDroppable", "MouseSensor", "TouchSensor", "KeyboardSensor", "closestCorners", "canMoveBetween", "hadr-card-menu-popover"]) {
+      expect(shell).toContain(contract);
+    }
+    expect(shell).toContain('onDragCancel={() => setActiveApplicant(null)}');
+    expect(styles).toContain("touch-action:pan-y");
+    expect(styles).toContain(".hadr-column.is-drop-target");
   });
 
-  it("keeps every service chip inside its own equal-width board lane without clipping card content", () => {
-    expect(page).toContain("applicant.tags.map((tag) => <span key={tag}>{tag}</span>)");
-    expect(page).not.toContain("applicant.tags.slice");
-    expect(page).not.toContain("+N");
-    for (const rule of [".hiring-review-kanban,.hiring-review-column,.hiring-review-column__cards,.hiring-review-applicant-card,.hiring-review-chip-row{min-width:0}", ".hiring-review-column__cards{width:100%}", ".hiring-review-applicant-card{width:100%;box-sizing:border-box;min-width:0}", "overflow-wrap:anywhere"]) {
-      expect(styles).toContain(rule);
-    }
-    expect(styles).not.toContain(".hiring-review-column{overflow:hidden}");
-    expect(styles).not.toContain(".hiring-review-applicant-card{max-width:100%;overflow:hidden}");
-  });
-
-  it("reuses the existing DnD Kit stage workflow with accessible cross-column controls and no new API path", () => {
-    for (const contract of ["DndContext", "DragOverlay", "useDraggable", "useDroppable", "MouseSensor", "TouchSensor", "KeyboardSensor", "closestCorners", "requestColumnMove", "commitStageChange", "hiring-review-card-menu__popover"]) {
-      expect(page).toContain(contract);
-    }
-    expect(page).toContain('const REVIEW_STAGE_FOR_COLUMN: Record<ReviewColumn, string>');
-    expect(page).toContain('Math.abs(currentIndex - targetIndex) !== 1');
-    expect(page).toContain('Math.abs(REVIEW_COLUMN_ORDER.indexOf(applicant.column) - REVIEW_COLUMN_ORDER.indexOf(target)) !== 1');
-    expect(page).toContain('disabled: !dragEnabled || !isValidTarget');
-    expect(page).toContain('delete next[applicant.id]');
-    expect(page).toContain('MessageSquare,');
-    expect(page).toContain('<MessageSquare className="w-5 h-5 text-amber-600" />');
-    expect(page).toContain('onDragCancel={() => setActiveApplicant(null)}');
-    expect(page).toContain('commitStageChange(applicant, smsPending.stage, smsPending.column, false)');
-    expect(page).toContain('commitStageChange(applicant, smsPending.stage, smsPending.column, true)');
-    expect(page).toContain('>Cancel</button>');
-    expect(page).not.toContain('fetch("/api');
-    for (const rule of ["touch-action:pan-y", ".hiring-review-column.is-drop-target", ".hiring-review-drag-overlay", "prefers-reduced-motion"]) {
-      expect(styles).toContain(rule);
-    }
+  it("keeps every real candidate row inside the review-sized lane rather than lengthening the page", () => {
+    expect(liveStyles).toContain(".hadr-live-page .hadr-column{height:clamp(500px,58vh,640px);min-height:0;display:flex;flex-direction:column}");
+    expect(liveStyles).toContain(".hadr-live-page .hadr-column-cards{min-height:0;flex:1 1 auto;overflow-y:auto");
+    expect(liveStyles).toContain("scrollbar-gutter:stable");
   });
 });

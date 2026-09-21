@@ -1,0 +1,14 @@
+/* Live data and existing Hiring Admin controls inside the approved review composition. */
+.hadr-live-page .hadr-live-video-list{display:grid;gap:10px;margin-top:12px}
+.hadr-live-page .hadr-drawer section>header>a{padding:0;border:0;background:transparent;color:#b8b8bf;font-size:10px;font-weight:700;text-decoration:underline}
+.hadr-live-page .hadr-drawer footer button:disabled{cursor:not-allowed;opacity:.48}
+.hadr-live-page .hadr-applicant{cursor:grab}
+.hadr-live-page .hadr-applicant:active{cursor:grabbing}
+.hadr-live-page .hadr-coverage-card[aria-disabled="true"],.hadr-live-page .hadr-quiet-control[aria-disabled="true"],.hadr-live-page .hadr-drawer button[aria-disabled="true"]{cursor:default}
+/* The static reference has a fixed-length mock queue. Real candidate lanes retain every row in the same review-sized board. */
+.hadr-live-page .hadr-column{height:clamp(500px,58vh,640px);min-height:0;display:flex;flex-direction:column}
+.hadr-live-page .hadr-column-cards{min-height:0;flex:1 1 auto;overflow-y:auto;scrollbar-gutter:stable;padding-right:3px}
+.hadr-live-page .hadr-column-cards::-webkit-scrollbar{width:7px}
+.hadr-live-page .hadr-column-cards::-webkit-scrollbar-track{background:transparent}
+.hadr-live-page .hadr-column-cards::-webkit-scrollbar-thumb{border-radius:999px;background:#48484e}
+@media(max-width:720px){.hadr-live-page .hadr-live-video-list{gap:8px}.hadr-live-page .hadr-column{height:auto;min-height:0}.hadr-live-page .hadr-column-cards{overflow:visible;padding-right:0}}
