@@ -1,0 +1,185 @@
+/* Leads CRM-inspired highlight hierarchy: selection may remain violet; meaning uses neutral, mint, amber, coral, and blue. */
+.ccc-widget-app .ccc-panel-tabs .active {
+  color: #f2f2f2;
+}
+
+.ccc-widget-app .ccc-panel-tabs .active::after {
+  height: 1px;
+  background: #b9abff;
+}
+
+.ccc-widget-app .ccc-command-name {
+  color: #efefef;
+}
+
+.ccc-widget-app .ccc-command-name svg {
+  color: #67ca9a;
+  fill: rgba(103, 202, 154, 0.13);
+}
+
+.ccc-widget-app .ccc-pin {
+  border-color: #3d3a2d;
+  background: #20201e;
+  box-shadow: inset 2px 0 0 #c89f53;
+}
+
+.ccc-widget-app .ccc-stat-pills strong,
+.ccc-widget-app .ccc-lead-meta b {
+  color: #e6e6e6;
+}
+
+.ccc-widget-app .ccc-thread-bar b {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #464649;
+  border-radius: 50%;
+  background: #313133;
+  color: #d6d6d9;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.ccc-widget-app .ccc-thread-bar b.attention {
+  border-color: #765f34;
+  background: #3c321d;
+  color: #f1ce7e;
+}
+
+.ccc-widget-app .ccc-thread-bar b.red {
+  border-color: #79414a;
+  background: #49282d;
+  color: #f0a1ab;
+}
+
+.ccc-widget-app .ccc-message-out p {
+  border-color: #3d687b;
+  background: #223b49;
+  color: #f6fbff;
+}
+
+.ccc-widget-app .ccc-message-system svg,
+.ccc-widget-app .ccc-quick-actions svg {
+  color: #c69d58;
+}
+
+.ccc-widget-app .ccc-send {
+  background: #1b8d63;
+}
+
+.ccc-widget-app .ccc-send:hover {
+  background: #22a574;
+}
+
+.ccc-widget-app .ccc-move-violet {
+  border-color: #3f3a2b;
+  background: #20201e;
+  box-shadow: inset 2px 0 0 #c89f53;
+}
+
+.ccc-widget-app .ccc-move-violet > div span,
+.ccc-widget-app .ccc-move-violet > div b {
+  color: #ddb96e;
+}
+
+.ccc-widget-app .ccc-move {
+  position: relative;
+  border-color: #353537;
+  background: #202020;
+}
+
+.ccc-widget-app .ccc-move-coral {
+  border-color: #4b3337;
+  background: #202020;
+  box-shadow: inset 2px 0 0 #c9616d;
+}
+
+.ccc-widget-app .ccc-move-mint {
+  border-color: #2f493e;
+  background: #202020;
+  box-shadow: inset 2px 0 0 #55b983;
+}
+
+.ccc-widget-app .ccc-move-coral > div span,
+.ccc-widget-app .ccc-move-coral > div b {
+  color: #ea9aa4;
+}
+
+.ccc-widget-app .ccc-move-mint > div span,
+.ccc-widget-app .ccc-move-mint > div b {
+  color: #89d7aa;
+}
+
+.ccc-widget-app .ccc-move > div span::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 5px 1px 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ccc-widget-app .ccc-move > button,
+.ccc-widget-app .ccc-large-issue footer button {
+  color: #a9d8bf;
+}
+
+.ccc-widget-app .ccc-op-dot.violet {
+  background: #5b9cc6;
+}
+
+.ccc-widget-app .ccc-rule-card > svg {
+  color: #d3ad67;
+}
+
+.ccc-widget-app .ccc-issue-card {
+  border-color: #4b3337;
+  background: #202020;
+  box-shadow: inset 2px 0 0 #c9616d;
+}
+
+.ccc-widget-app .ccc-issue-card.warm {
+  border-color: #4a402d;
+  background: #202020;
+  box-shadow: inset 2px 0 0 #c89f53;
+}
+
+.ccc-widget-app .ccc-large-issue {
+  border-color: #4b3337;
+  background: #202020;
+  box-shadow: inset 2px 0 0 #c9616d;
+}
+
+.ccc-widget-app .ccc-large-issue.amber {
+  border-color: #4a402d;
+  background: #202020;
+  box-shadow: inset 2px 0 0 #c89f53;
+}
+
+.ccc-widget-app .ccc-call-row > span,
+.ccc-widget-app .ccc-static-modal header > div > svg {
+  color: #91bada;
+}
+
+.ccc-widget-app .ccc-static-modal footer button:last-child {
+  border-color: #238f66;
+  background: #1b8d63;
+}
+
+.ccc-widget-app .ccc-notice {
+  border-color: #376351;
+  background: #20362e;
+  color: #d9f5e8;
+}
+
+.ccc-widget-app .ccc-notice svg {
+  color: #7ed3a5;
+}

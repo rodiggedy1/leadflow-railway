@@ -10,7 +10,7 @@ describe("shared workspace navigation production shell", () => {
     const app = read("client/src/App.tsx");
 
     expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
-    expect(app).toContain('<ReviewWorkspaceNav activePath={navActivePath} />');
+    expect(app).toContain('hideNavigation ? null : <ReviewWorkspaceNav activePath={navActivePath ?? "/review/leads-crm"} />');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/day-board-crm"><DayBoardExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><LeadflowScheduleCRMExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>');

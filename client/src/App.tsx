@@ -78,6 +78,7 @@ const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
 const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
 const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));
 const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
+const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -98,8 +99,8 @@ function PageLoader() {
   );
 }
 
-function ReviewWorkspaceFrame({ children, navActivePath }: { children: React.ReactNode; navActivePath: string }) {
-  return <div className="review-nav-host"><ReviewWorkspaceNav activePath={navActivePath} />{children}</div>;
+function ReviewWorkspaceFrame({ children, navActivePath, hideNavigation = false }: { children: React.ReactNode; navActivePath?: string; hideNavigation?: boolean }) {
+  return <div className="review-nav-host">{hideNavigation ? null : <ReviewWorkspaceNav activePath={navActivePath ?? "/review/leads-crm"} />}{children}</div>;
 }
 
 /**
@@ -132,6 +133,10 @@ function AdminEmailsExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>;
 }
 
+function AdminCommandChatExactLiveRoute() {
+  return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>;
+}
+
 function AdminLeadsCRMExactLiveRoute() {
   const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
   if (tab && tab !== "leads") return <AdminDashboard />;
@@ -152,6 +157,7 @@ function Router() {
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
         <Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />
+        <Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
@@ -324,7 +330,8 @@ function GlobalOpsChat() {
 }
 
 function isDayBoardExactLiveRoute(location: string) {
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails";
+  const isCommandChatWorkspace = location === "/admin/command-chat";
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || isCommandChatWorkspace;
 }
 
 function DayBoardSafeGlobalOpsChat() {

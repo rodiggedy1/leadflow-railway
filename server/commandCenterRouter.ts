@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { adminAgentProcedure, agentPageProcedure, router } from "./_core/trpc";
+import { adminAgentProcedure, agentPageProcedure, agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import {
   conversationSessions,
@@ -25,7 +25,7 @@ import {
   campaignBlasts,
   smsOptOuts,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
 const NON_LEAD_SOURCES = [
   "cs_initiated",
   "cs-inbound",
@@ -50,6 +50,7 @@ type LeadsCrmHistoryEntry = {
   role?: string;
   content?: string;
   ts?: number | string;
+  opMsgId?: string;
 };
 
 function leadsCrmMilliseconds(value: Date | string | number | null | undefined): number {
@@ -218,6 +219,156 @@ function sourceLabel(src: string): string {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const commandCenterRouter = router({
+  listCommandChatInbox: agentProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+
+      const inboundMessageActivityFilter = sql`(
+        JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+        OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
+      )`;
+      const inboundVoiceCallActivityFilter = sql`EXISTS (
+        SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
+      )`;
+      const csTouchedOutboundFilter = eq(conversationSessions.csQueue as any, "CS");
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadPhone: conversationSessions.leadPhone,
+          leadName: conversationSessions.leadName,
+          csQueue: conversationSessions.csQueue,
+          aiSummary: conversationSessions.aiSummary,
+          lastInboundPhoneNumberId: conversationSessions.lastInboundPhoneNumberId,
+          lastMessageText: conversationSessions.lastMessageText,
+          lastMessageTs: conversationSessions.lastMessageTs,
+          lastMessageRole: conversationSessions.lastMessageRole,
+          updatedAt: conversationSessions.updatedAt,
+        })
+        .from(conversationSessions)
+        .where(or(
+          and(or(inboundMessageActivityFilter, csTouchedOutboundFilter), isNull(conversationSessions.csResolvedAt)),
+          inboundVoiceCallActivityFilter,
+        ));
+
+      const augmented = sessions.map((session) => {
+        const lastMsgTs = session.lastMessageTs && session.lastMessageTs > 0
+          ? session.lastMessageTs
+          : session.updatedAt.getTime();
+        const lastSenderRole: "user" | "assistant" | null = session.lastMessageRole === "user"
+          ? "user"
+          : session.lastMessageRole === "assistant"
+            ? "assistant"
+            : null;
+        return {
+          ...session,
+          lastMsgTs,
+          hasUnanswered: session.lastMessageRole === "user",
+          lastSenderRole,
+        };
+      });
+
+      const sessionIds = augmented.map((session) => session.id);
+      const latestCallBySession = new Map<number, number>();
+      if (sessionIds.length > 0) {
+        const rows = await db.execute(sql`
+          SELECT sessionId, MAX(UNIX_TIMESTAMP(createdAt) * 1000) AS latestCallTs
+          FROM voice_calls
+          WHERE sessionId IN (${sql.raw(sessionIds.join(","))})
+          GROUP BY sessionId
+        `);
+        for (const row of (rows as any)[0] as Array<{ sessionId: number; latestCallTs: number }>) {
+          if (row.sessionId) latestCallBySession.set(Number(row.sessionId), Number(row.latestCallTs));
+        }
+      }
+
+      const normalizePhone = (phone: string) => phone.replace(/[^\d]/g, "").slice(-10);
+      const sessionsByPhone = new Map<string, typeof augmented>();
+      for (const session of augmented) {
+        const phone = session.leadPhone?.trim() || "__no_phone__";
+        const group = sessionsByPhone.get(phone) ?? [];
+        group.push(session);
+        sessionsByPhone.set(phone, group);
+      }
+      const canonicalSessions = Array.from(sessionsByPhone.values()).map((group) => group.reduce((current, candidate) =>
+        Math.max(candidate.lastMessageTs ?? 0, latestCallBySession.get(candidate.id) ?? 0)
+          > Math.max(current.lastMessageTs ?? 0, latestCallBySession.get(current.id) ?? 0)
+          ? candidate
+          : current,
+      ));
+
+      const phoneDigits = canonicalSessions
+        .map((session) => session.leadPhone?.trim())
+        .filter((phone): phone is string => Boolean(phone))
+        .map(normalizePhone)
+        .filter(Boolean);
+      const teamPhoneSet = new Set<string>();
+      if (phoneDigits.length > 0) {
+        const profiles = await db.execute(sql`
+          SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) AS phone10
+          FROM cleaner_profiles
+          WHERE isActive = 1
+            AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) IN (${sql.raw(phoneDigits.map((phone) => `'${phone}'`).join(","))})
+        `);
+        for (const row of (profiles as any)[0] as Array<{ phone10: string | null }>) {
+          if (row.phone10) teamPhoneSet.add(String(row.phone10));
+        }
+      }
+
+      return canonicalSessions
+        .map((session) => ({
+          ...session,
+          personType: session.csQueue === "Teams" || teamPhoneSet.has(normalizePhone(session.leadPhone ?? ""))
+            ? "team" as const
+            : "customer" as const,
+        }))
+        .sort((left, right) => right.lastMsgTs - left.lastMsgTs);
+    }),
+
+  /**
+   * Read-only event source for Command Chat's middle timeline. The client
+   * supplies only team session IDs already rendered in the untouched left
+   * rail, and this expands those exact conversations into inbound SMS events.
+   * No state is changed.
+   */
+  listInboundTeamSmsEvents: agentProcedure
+    .input(z.object({ sessionIds: z.array(z.number().int().positive()).max(500) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      const sessionIds = Array.from(new Set(input.sessionIds));
+      if (!db || sessionIds.length === 0) return [];
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          messageHistory: conversationSessions.messageHistory,
+        })
+        .from(conversationSessions)
+        .where(inArray(conversationSessions.id, sessionIds));
+
+      const events: Array<{ id: string; sessionId: number; name: string; body: string; ts: number }> = [];
+      for (const session of sessions) {
+        const history = parseLeadsCrmHistory(session.messageHistory);
+        for (const [index, message] of Array.from(history.entries())) {
+          const body = message.content?.trim();
+          const ts = leadsCrmMilliseconds(message.ts);
+          if (message.role !== "user" || !body || !ts) continue;
+          events.push({
+            id: `${session.id}:${message.opMsgId ?? index}:${ts}`,
+            sessionId: session.id,
+            name: session.leadName?.trim() || "Team",
+            body,
+            ts,
+          });
+        }
+      }
+
+      return events
+        .sort((left, right) => right.ts - left.ts)
+        .slice(0, 500)
+        .reverse();
+    }),
+
   /**
    * Read-only data contract for Leads CRM. The existing leads-page permission
    * is the only access gate; this procedure does not change lead, messaging,
