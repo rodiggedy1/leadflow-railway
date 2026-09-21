@@ -1003,6 +1003,76 @@ export const opsChatRouter = router({
   }),
 
   /**
+   * Mark every active Command Chat thread as read for the current caller.
+   * This only writes the caller's own per-thread read markers; it never
+   * changes messages, thread contents, or any other user's read state.
+   */
+  markAllActiveThreadsRead: opsChatProcedure.mutation(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return { markedThreadCount: 0 };
+
+    const replies = await db
+      .select({ threadParentId: opsChatMessages.threadParentId, id: opsChatMessages.id })
+      .from(opsChatMessages)
+      .where(and(
+        eq(opsChatMessages.channel, "command"),
+        isNotNull(opsChatMessages.threadParentId),
+      ));
+
+    const latestReplyByParent = new Map<number, number>();
+    for (const reply of replies) {
+      if (!reply.threadParentId) continue;
+      const latestId = latestReplyByParent.get(reply.threadParentId) ?? 0;
+      if (reply.id > latestId) latestReplyByParent.set(reply.threadParentId, reply.id);
+    }
+    if (latestReplyByParent.size === 0) return { markedThreadCount: 0 };
+
+    const callerId = ctx.opsCaller.id;
+    const callerName = ctx.opsCaller.name;
+    const threadChannels = Array.from(latestReplyByParent.keys(), (parentId) => `thread:${parentId}`);
+    const existingReads = await db
+      .select({ channel: opsChatReads.channel, lastReadMessageId: opsChatReads.lastReadMessageId })
+      .from(opsChatReads)
+      .where(and(
+        eq(opsChatReads.callerId, callerId),
+        isNull(opsChatReads.cleanerJobId),
+        inArray(opsChatReads.channel, threadChannels),
+      ));
+    const existingReadByChannel = new Map<string, number>();
+    for (const read of existingReads) {
+      if (read.channel) {
+        existingReadByChannel.set(read.channel, Math.max(existingReadByChannel.get(read.channel) ?? 0, read.lastReadMessageId));
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      for (const [parentId, lastReplyMessageId] of Array.from(latestReplyByParent.entries())) {
+        const channel = `thread:${parentId}`;
+        const lastReadMessageId = Math.max(existingReadByChannel.get(channel) ?? 0, lastReplyMessageId);
+        if (existingReadByChannel.has(channel)) {
+          await tx.update(opsChatReads)
+            .set({ lastReadMessageId, callerName, updatedAt: new Date() })
+            .where(and(
+              eq(opsChatReads.callerId, callerId),
+              eq(opsChatReads.channel, channel),
+              isNull(opsChatReads.cleanerJobId),
+            ));
+        } else {
+          await tx.insert(opsChatReads).values({
+            callerId,
+            callerName,
+            channel,
+            cleanerJobId: null,
+            lastReadMessageId,
+          });
+        }
+      }
+    });
+
+    return { markedThreadCount: latestReplyByParent.size };
+  }),
+
+  /**
    * Channel message counts for the sidebar badges.
    */
   getChannelCounts: opsChatProcedure.query(async () => {

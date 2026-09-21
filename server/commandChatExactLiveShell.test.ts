@@ -12,6 +12,8 @@ describe("Command Chat exact live shell", () => {
     const headerStyles = read("client/src/pages/command-chat-header-composition.css");
     const app = read("client/src/App.tsx");
     const commandCenter = read("server/commandCenterRouter.ts");
+    const allThreadsPanel = read("client/src/components/AllThreadsPanel.tsx");
+    const opsChatRouter = read("server/opsChatRouter.ts");
 
     for (const stylesheet of [
       "command-chat-crm-review.css",
@@ -76,7 +78,10 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('if (message.role === "system" && /\\bSync Alert\\b/i.test(message.body)) return true;');
     expect(page).toContain('message.quickAction === "unanswered_alarm" && /new .*lead/i.test(message.body)');
     expect(page).toContain('function isServiceAlert(message: ChannelMessage)');
-    expect(page).toContain('message.quickAction === "post_start_overdue" || message.quickAction === "possible_noshow"');
+    expect(page).toContain('message.quickAction === "post_start_overdue"');
+    expect(page).toContain('message.quickAction === "possible_noshow"');
+    expect(page).toContain('if (message.role !== "system") return false;');
+    expect(page).toContain('/\\bno\\s*-?\\s*check-?in\\b/i.test(message.body)');
     expect(page).toContain('const visibleRootMessages = useMemo(');
     expect(page).toContain('!isHiddenCommandNotification(message) && !isServiceAlert(message)');
     expect(page).toContain('const serviceAlerts = useMemo(');
@@ -143,9 +148,20 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('headerAgentPresence.map((agent, index) =>');
     expect(page).toContain('ccc-live-presence-${agent.presence}');
     expect(page).not.toContain('agents.agents.slice(0, 5)');
-    expect(page).toContain('aria-label="Open all command threads"');
-    expect(page).toContain('<b>{activeThreadCount}</b> Threads');
+    expect(page).toContain('aria-label="Open all unread command threads"');
+    expect(page).toContain('<b>{unreadThreadCount}</b> Threads');
+    expect(page).not.toContain('<b>{activeThreadCount}</b> Threads');
     expect(page).toContain('<AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />');
+    expect(allThreadsPanel).toContain('trpc.opsChat.markRead.useMutation');
+    expect(allThreadsPanel).toContain('trpc.opsChat.markAllActiveThreadsRead.useMutation');
+    expect(allThreadsPanel).toContain('channel: `thread:${thread.parentId}`');
+    expect(allThreadsPanel).toContain('lastMessageId: thread.lastReplyMsgId');
+    expect(allThreadsPanel).toContain('Mark all read');
+    expect(allThreadsPanel).toContain('bg-[#1b1b1e]');
+    expect(opsChatRouter).toContain('markAllActiveThreadsRead: opsChatProcedure.mutation');
+    expect(opsChatRouter).toContain('eq(opsChatMessages.channel, "command")');
+    expect(opsChatRouter).toContain('eq(opsChatReads.callerId, callerId)');
+    expect(opsChatRouter).toContain('return { markedThreadCount: latestReplyByParent.size };');
     expect(page).toContain('const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);');
     expect(page).toContain('className="ccc-left-section ccc-conversations-section ccc-live-left-rail"');
     expect(page).toContain('className="ccc-live-sms-header"');
