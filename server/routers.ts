@@ -45,6 +45,7 @@ import { schedulingRouter } from "./schedulingRouter";
 import { leadflowScheduleRouter } from "./leadflowScheduleRouter";
 import { leadflowScheduleCallsRouter } from "./leadflowScheduleCallsRouter";
 import { opsChatRouter } from "./opsChatRouter";
+import { commandChatBookingSummaryRouter } from "./commandChatBookingSummaryRouter";
 import { madisonMovesRouter } from "./madisonsMovesRouter";
 import { madisonRouter } from "./madisonRouter";
 import { followUpsRouter } from "./followUpsRouter";
@@ -131,6 +132,7 @@ export const appRouter = router({
   bookingFunnel: bookingFunnelRouter,
   bookingPayments: bookingPaymentRouter,
   bookingPaymentAdmin: bookingPaymentAdminRouter,
+  commandChatBookingSummary: commandChatBookingSummaryRouter,
   customerPortal: customerPortalRouter,
   applicantPortal: applicantPortalRouter,
   customerPortalReview: customerPortalReviewRouter,
