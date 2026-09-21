@@ -52,8 +52,10 @@ describe("Payments exact live shell", () => {
     expect(shell).toContain("onClick={captureSelected}");
     expect(shell).toContain("onClick={cancelSelected}");
     expect(shell).toContain("const primaryActionSlot = !selected ? null");
-    expect(shell).toContain("{primaryActionSlot}<section className=\"payment-lifecycle\">");
-    expect(shell.indexOf("{primaryActionSlot}<section className=\"payment-lifecycle\">")).toBeLessThan(shell.indexOf("payment-existing-fields payment-existing-fields--complete"));
+    expect(shell).toContain('visible.find(record => record.kind === "authorization" && record.state === "held")');
+    expect(shell).toContain('visible.find(record => record.kind === "card")');
+    expect(shell).toContain('</section>{primaryActionSlot}<footer className="payment-action-dock">');
+    expect(shell).not.toContain("Existing card safeguards remain in force");
     expect(router).toContain("generateCardAuthToken: agentProcedure");
     expect(router).toContain("createPreauth: agentProcedure");
     expect(router).toContain('capture_method: "manual"');
@@ -73,7 +75,8 @@ describe("Payments exact live shell", () => {
     expect(styles).toContain(".payments-live-exact .payment-detail{min-height:0;overflow-y:scroll;overscroll-behavior:contain");
     expect(styles).toContain(".payments-live-exact .payment-detail::-webkit-scrollbar-thumb");
     expect(styles).toContain(".payment-existing-fields--complete .payment-existing-fields__wide");
-    expect(styles).toContain(".payments-live-exact .payment-primary-actions{margin-top:10px");
+    expect(styles).toContain(".payments-live-exact .payment-primary-actions{margin-top:10px;border:1px solid rgba(109,208,171,.42)");
+    expect(styles).toContain("payment-existing-fields + .payment-primary-actions");
     expect(styles).toContain(".payments-live-exact .payments-page-head--compact{align-items:center;min-height:34px;margin-bottom:10px}");
   });
 });
