@@ -137,6 +137,10 @@ function AdminCommandChatExactLiveRoute() {
   return <ReviewWorkspaceFrame hideNavigation><CommandChatExactLive /></ReviewWorkspaceFrame>;
 }
 
+function AdminBookingsCRMExactReviewRoute() {
+  return <AdminPageGuard pageId="bookings"><ReviewWorkspaceFrame navActivePath="/review/bookings-crm"><NativeBookings /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
+
 function AdminLeadsCRMExactLiveRoute() {
   const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
   if (tab && tab !== "leads") return <AdminDashboard />;
@@ -173,7 +177,7 @@ function Router() {
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={SettingsPage} />
-        <Route path={"/admin/bookings"} component={NativeBookings} />
+        <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
         <Route path={"/admin/settings"} component={SettingsPage} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />

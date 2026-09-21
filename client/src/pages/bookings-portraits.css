@@ -1,0 +1,12 @@
+/* Role-specific portrait treatment for isolated static Bookings identities. */
+.booking-crm-review .bcr-customer-name > .bcr-customer-portrait {
+  width: 23px;
+  height: 23px;
+  display: block;
+  flex: 0 0 23px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.23);
+  border-radius: 50%;
+  background: #2b2b2e;
+  object-fit: cover;
+}

@@ -1,0 +1,3 @@
+/* Leads CRM account-owner avatar treatment carried into static Bookings team names. */
+.booking-crm-review .bcr-team-cell > i { border: 1px solid rgba(255,255,255,.23); color: #fff; }
+.booking-crm-review .bcr-team-option i { border: 1px solid rgba(255,255,255,.23); color: #fff; }

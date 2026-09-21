@@ -4,7 +4,7 @@ import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import { CalendarDays, ChevronLeft, ChevronRight, Copy, CreditCard, Download, ExternalLink, Filter, ImageIcon, Loader2, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "@/pages/bookings-preview.css";
 
@@ -151,7 +151,7 @@ function BookingListRow({ row, selected, onSelect }: { row: WorkspaceRow; select
   </button>;
 }
 
-export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeEnabled: boolean }) {
+export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { realtimeEnabled: boolean; render?: (model: any) => ReactNode }) {
   const [view, setView] = useState<"bookings" | "leads">("bookings");
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [date, setDate] = useState(businessDate);
@@ -262,7 +262,8 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
     const scheduledRows = [...funnelRows.filter((row) => row.status !== "lead" && !isCancelledBookingStatus(row.status)), ...bookingRows, ...importedRows]
       .filter((row) => row.requestedLocalDate === date)
       .filter((row) => row.source !== "leadflow" || status === "All" || status === "Confirmed");
-    if (view === "bookings") return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows];
+    const scheduledPortalRows = portalRequestRows.filter((row) => row.requestedLocalDate === date);
+    if (view === "bookings") return [...scheduledPortalRows, ...scheduledRows];
     return inProgressFunnelRows;
   }, [bookings, date, funnelLeads, leadflowJobsQuery.data, portalRequests, status, view]);
 
@@ -344,7 +345,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
       setActiveKey(null);
       refreshBookingAndFunnelQueries();
     };
-    const onError = (error: Error) => setImportSummary(`Cancellation failed: ${error.message}`);
+    const onError = (error: { message: string }) => setImportSummary(`Cancellation failed: ${error.message}`);
     if (active.source === "leadflow") {
       cancelLeadflowJob.mutate({ jobId: active.id }, { onSuccess, onError });
       return;
@@ -359,6 +360,56 @@ export default function NativeBookingsWorkspace({ realtimeEnabled }: { realtimeE
     }
     cancelPortalRequest.mutate({ id: active.id }, { onSuccess, onError });
   };
+
+  if (render) return <>{render({
+    active,
+    activeKey,
+    activePhoto,
+    activePhotoBookingKey,
+    afterPhotos,
+    assigned,
+    beforePhotos,
+    cancellationPending,
+    cancelActiveRecord,
+    cards,
+    customerMagicLink,
+    date,
+    dates,
+    detailQuery,
+    funnelDetailQuery,
+    funnelListQuery,
+    importLeadflowJobs,
+    importSummary,
+    leadflowJobsImportStatus,
+    leadflowJobsQuery,
+    listQuery,
+    metricRows,
+    photoLightbox,
+    portalPaymentAvailable,
+    refreshBookingAndFunnelQueries,
+    refreshLeadflowJobDetails,
+    rescheduleDate,
+    revenueCents,
+    rows,
+    setActiveKey,
+    setDate,
+    setImportSummary,
+    setPhotoLightbox,
+    setQuery,
+    setRescheduleDate,
+    setStatus,
+    setView,
+    staffMessages,
+    staffMessagesQuery,
+    staffPhotosQuery,
+    staffSignoffQuery,
+    status,
+    syncLeadflowJobsDate,
+    updateLeadflowJob,
+    view,
+    query,
+    copyCustomerMagicLink,
+  })}</>;
 
   return <main className={`bookings-ops-shell ${active ? "has-detail" : ""}`}>
     {active && <BookingSignoffReview bookingKey={activePhotoBookingKey} signoff={staffSignoffQuery.data} isLoading={staffSignoffQuery.isLoading} isError={staffSignoffQuery.isError} />}
