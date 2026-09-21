@@ -6,28 +6,24 @@ import {
   Bell,
   CalendarClock,
   Check,
-  ChevronDown,
   ChevronRight,
   CircleDot,
   CircleDollarSign,
-  Clock3,
-  FileText,
   Heart,
   Headphones,
-  ImagePlus,
   Loader2,
   Megaphone,
   MessageSquare,
   Mic,
-  MoreHorizontal,
   Paperclip,
   Phone,
   Pin,
   Play,
-  Plus,
   Send,
-  ShieldAlert,
+  Search,
+  SlidersHorizontal,
   Sparkles,
+  SquarePen,
   Users,
   X,
 } from "lucide-react";
@@ -48,7 +44,6 @@ import "./command-chat-reference-composition.css";
 import "./command-chat-header-composition.css";
 import "./command-chat-exact-live.css";
 
-type LeftRailMode = "sms" | "issues" | "threads";
 type ModalKind = "issue" | "reminder" | "pin" | "booking" | null;
 type ChannelKey = "command" | "urgent" | "dispatch" | "general" | "cleaners";
 type ChannelMessage = {
@@ -391,7 +386,7 @@ export default function CommandChatExactLive() {
   const isAuthenticated = Boolean(agentMe);
   const callerName = agentMe?.name || "MIB Team";
   const channel: ChannelKey = "command";
-  const [leftRailMode, setLeftRailMode] = useState<LeftRailMode>("sms");
+  const [smsSearch, setSmsSearch] = useState("");
   const [issueEngineOpen, setIssueEngineOpen] = useState(false);
   const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
   const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);
@@ -426,7 +421,6 @@ export default function CommandChatExactLive() {
     { channel },
     { enabled: isAuthenticated, refetchInterval: 30_000, refetchIntervalInBackground: false },
   );
-  const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
@@ -442,6 +436,16 @@ export default function CommandChatExactLive() {
     () => smsInbox.filter((conversation) => conversation.lastSenderRole === "user"),
     [smsInbox],
   );
+  const visibleSmsInbox = useMemo(() => {
+    const query = smsSearch.trim().toLowerCase();
+    if (!query) return inboundSmsInbox;
+    return inboundSmsInbox.filter((conversation) => [
+      smsConversationName(conversation),
+      conversation.leadPhone,
+      conversation.lastMessageText,
+      conversation.aiSummary,
+    ].some((value) => value?.toLowerCase().includes(query)));
+  }, [inboundSmsInbox, smsSearch]);
   const leftTeamSmsSessionIds = useMemo(
     () => inboundSmsInbox.filter((conversation) => conversation.personType === "team").map((conversation) => conversation.id),
     [inboundSmsInbox],
@@ -714,23 +718,19 @@ export default function CommandChatExactLive() {
       <section className="ccc-workspace">
         <div className="ccc-command-grid">
           <aside className="ccc-command-panel ccc-left-panel">
-            <div className="ccc-command-navigation">
-              <div className="ccc-command-brand"><div><Sparkles /><span><strong>MIB Command</strong><small>Operate. Serve. Grow.</small></span></div><button type="button" aria-label="Start a new command message" onClick={() => document.querySelector<HTMLTextAreaElement>(".ccc-live .ccc-composer textarea")?.focus()}><Plus /></button></div>
-              <nav aria-label="MIB Command live destinations">
-                <a href="/admin/sms"><MessageSquare />SMS</a><a href="/admin/bookings"><CalendarClock />Bookings CRM</a><a href="/admin/leads"><Users />Leads CRM</a><a href="/admin/schedule"><CalendarClock />Schedule</a><a href="/admin/ai-calls"><Phone />AI Calls</a><a href="/admin/payroll-summary"><Activity />Payroll Summary</a><a href="/admin/settings"><MoreHorizontal />Settings</a>
-              </nav>
-            </div>
             <div className="ccc-left-section ccc-conversations-section ccc-live-left-rail">
-              <div className="ccc-panel-tabs ccc-live-left-rail-tabs" aria-label="Command activity views">
-                <button type="button" className={leftRailMode === "sms" ? "active" : ""} onClick={() => setLeftRailMode("sms")}>SMS <b>{inboundSmsInbox.length}</b></button>
-                <button type="button" className={leftRailMode === "issues" ? "active" : ""} onClick={() => setLeftRailMode("issues")}>Issues <b>{openIssues.length}</b></button>
-                <button type="button" className={leftRailMode === "threads" ? "active" : ""} onClick={() => setLeftRailMode("threads")}>Threads <b>{activeThreads.length}</b></button>
-              </div>
+              <header className="ccc-live-sms-header">
+                <div className="ccc-live-sms-title"><span><strong>SMS</strong><b>{inboundSmsInbox.length}</b></span><a href="/admin/sms" aria-label="Open SMS workspace to compose a new message"><SquarePen /></a></div>
+                <div className="ccc-live-sms-filter-tabs" role="tablist" aria-label="SMS conversation views">
+                  <button type="button" className="active" aria-selected="true">All</button><button type="button">Unread</button><button type="button">Needs Reply</button><button type="button">Starred</button>
+                </div>
+                <div className="ccc-live-sms-search"><label><Search /><input value={smsSearch} onChange={(event) => setSmsSearch(event.target.value)} placeholder="Search conversations..." aria-label="Search SMS conversations" /></label><button type="button" aria-label="SMS filter options"><SlidersHorizontal /></button></div>
+              </header>
               <div className="ccc-live-left-rail-content">
-                {leftRailMode === "sms" ? <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
-                  {inboundSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => setSelectedSmsConversation(conversation)} />)}
-                  {!inboundSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : "No active text conversations."}</p>}
-                </div> : leftRailMode === "issues" ? <LeftRailIssues issues={openIssues} onOpen={openIssueEngine} /> : <LeftRailThreads threads={activeThreads} onOpen={(id) => { setThreadDraft(""); setThreadId(id); }} />}
+                <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
+                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => setSelectedSmsConversation(conversation)} />)}
+                  {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
+                </div>
               </div>
             </div>
           </aside>
@@ -841,14 +841,6 @@ function ConfirmationReplyCard({ alert, timestamp }: { alert: ConfirmationReplyA
       <a className="ccc-live-confirmation-reply-action" href="/admin/confirmation-calls">Open Confirmation Calls <ChevronRight /></a>
     </div>
   </article>;
-}
-
-function LeftRailIssues({ issues, onOpen }: { issues: Array<{ id: number; title: string; issueType: string; severity: string; notes: string | null; ownerName: string | null }>; onOpen: (id: number) => void }) {
-  return <div className="ccc-live-left-rail-list ccc-live-issues-list" aria-label="Active command issues">{issues.length ? issues.map((issue) => <button type="button" className={`ccc-live-left-issue ${issue.severity === "critical" || issue.severity === "high" ? "is-urgent" : ""}`} key={issue.id} onClick={() => onOpen(issue.id)}><AlertTriangle /><span><strong>{issue.title}</strong><small>{issue.ownerName ? `Owner · ${issue.ownerName}` : issue.issueType.replaceAll("_", " ")}</small></span></button>) : <div className="ccc-live-empty"><ShieldAlert />The issue queue is clear.</div>}</div>;
-}
-
-function LeftRailThreads({ threads, onOpen }: { threads: Array<{ parentId: number; parentFrom: string; parentBody: string; replyCount: number; lastReplyBody: string | null; lastReplyTs: number; hasUnread: boolean }>; onOpen: (id: number) => void }) {
-  return <div className="ccc-live-left-rail-list ccc-live-threads-list" aria-label="Active command threads">{threads.length ? threads.map((thread) => <button type="button" className="ccc-live-left-thread" key={thread.parentId} onClick={() => onOpen(thread.parentId)}><span className="ccc-channel-thread-icon"><MessageSquare /></span><span><strong>{thread.parentFrom}</strong><small>{thread.lastReplyBody || thread.parentBody}</small></span><b className={thread.hasUnread ? "is-unread" : ""}>{thread.replyCount}</b></button>) : <div className="ccc-live-empty"><MessageSquare />Start a thread from any command message.</div>}</div>;
 }
 
 function ThreadPanel({ thread, callerName, draft, pending, photoMap, onDraft, onSend, onClose }: { thread: { parent: { id: number; ts: number; from: string; role: string; body: string; mediaUrl: string | null; quickAction: string | null; threadParentId: number | null } | null; replies: Array<{ id: number; ts: number; from: string; role: string; body: string; mediaUrl: string | null; quickAction: string | null; threadParentId: number | null }> } | undefined; callerName: string; draft: string; pending: boolean; photoMap: Record<string, string | null>; onDraft: (value: string) => void; onSend: () => void; onClose: () => void }) {

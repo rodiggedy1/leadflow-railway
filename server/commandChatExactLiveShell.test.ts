@@ -42,7 +42,6 @@ describe("Command Chat exact live shell", () => {
       "sendMessage.useMutation",
       "getAllAgentPhotoMap.useQuery",
       "getAgentStatusList.useQuery",
-      "listActiveThreads.useQuery",
       "getThreadReplies.useQuery",
       "toggleReaction.useMutation",
       "getReactions.useMutation",
@@ -108,18 +107,22 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('<ServiceAlertPanel alerts={serviceAlerts} />');
     expect(page.indexOf('<LeadQueue title="Other Incoming Leads"')).toBeLessThan(page.indexOf('<ServiceAlertPanel alerts={serviceAlerts} />'));
     expect(page).toContain('agents.agents.slice(0, 5)');
-    expect(page).toContain('type LeftRailMode = "sms" | "issues" | "threads";');
-    expect(page).toContain('const [leftRailMode, setLeftRailMode] = useState<LeftRailMode>("sms");');
+    expect(page).toContain('const [smsSearch, setSmsSearch] = useState("");');
+    expect(page).toContain('const visibleSmsInbox = useMemo(() => {');
     expect(page).toContain('import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";');
     expect(page).toContain('const [issueEngineOpen, setIssueEngineOpen] = useState(false);');
     expect(page).toContain('const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);');
     expect(page).toContain('className="ccc-left-section ccc-conversations-section ccc-live-left-rail"');
-    expect(page).toContain('className="ccc-panel-tabs ccc-live-left-rail-tabs"');
-    expect(page).toContain('setLeftRailMode("sms")');
-    expect(page).toContain('setLeftRailMode("issues")');
-    expect(page).toContain('setLeftRailMode("threads")');
-    expect(page).toContain('<LeftRailIssues issues={openIssues} onOpen={openIssueEngine} />');
-    expect(page).toContain('<LeftRailThreads threads={activeThreads} onOpen={(id) => { setThreadDraft(""); setThreadId(id); }} />');
+    expect(page).toContain('className="ccc-live-sms-header"');
+    expect(page).toContain('className="ccc-live-sms-title"');
+    expect(page).toContain('className="ccc-live-sms-filter-tabs" role="tablist"');
+    expect(page).toContain('>All</button><button type="button">Unread</button><button type="button">Needs Reply</button><button type="button">Starred</button>');
+    expect(page).toContain('placeholder="Search conversations..."');
+    expect(page).toContain('href="/admin/sms" aria-label="Open SMS workspace to compose a new message"');
+    expect(page).not.toContain('className="ccc-command-navigation"');
+    expect(page).not.toContain('aria-label="MIB Command live destinations"');
+    expect(page).not.toContain('LeftRailIssues');
+    expect(page).not.toContain('LeftRailThreads');
     expect(page).toContain('const mentionMessages = useMemo(');
     expect(page).toContain('const focusNextMention = () => {');
     expect(page).toContain('setUnreadMentionIds(remainingIds);');
@@ -128,8 +131,6 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('onClick={focusNextMention}');
     expect(page).toContain('function renderMentionBody(body: string, mentionPattern: RegExp | null): ReactNode');
     expect(page).toContain('className="ccc-live-mention"');
-    expect(page).toContain('function LeftRailIssues({ issues, onOpen }');
-    expect(page).toContain('onClick={() => onOpen(issue.id)}');
     expect(page).toContain('<IssueEngineOverlay open={issueEngineOpen}');
     expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
     expect(page).toContain('const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
@@ -139,8 +140,8 @@ describe("Command Chat exact live shell", () => {
     expect(page).not.toContain('trpc.leads.listCsInbox.useQuery');
     expect(page).toContain('const inboundSmsInbox = useMemo(');
     expect(page).toContain('smsInbox.filter((conversation) => conversation.lastSenderRole === "user")');
-    expect(page).toContain('SMS <b>{inboundSmsInbox.length}</b>');
-    expect(page).toContain('{inboundSmsInbox.map((conversation) => <SmsInboxRow');
+    expect(page).toContain('<strong>SMS</strong><b>{inboundSmsInbox.length}</b>');
+    expect(page).toContain('{visibleSmsInbox.map((conversation) => <SmsInboxRow');
     expect(page).toContain('const leftTeamSmsSessionIds = useMemo(');
     expect(page).toContain('trpc.commandCenter.listInboundTeamSmsEvents.useQuery');
     expect(page).toContain('{ sessionIds: leftTeamSmsSessionIds }');
@@ -172,7 +173,6 @@ describe("Command Chat exact live shell", () => {
     for (const prohibited of ["cleaner" + "Jobs", "cleaner" + "_jobs"]) {
       expect(commandCenter).not.toContain(prohibited);
     }
-    expect(page).toContain('function LeftRailThreads({ threads, onOpen }');
     expect(page).toContain('function ThreadPanel({ thread, callerName, draft, pending, photoMap, onDraft, onSend, onClose }');
     expect(page).toContain('threadId !== null ? <ThreadPanel');
     expect(page).toContain('ccc-right-panel-thread-open');
@@ -194,6 +194,9 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-service-alert-scroll");
     expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
     expect(styles).toContain(".ccc-live .ccc-live-left-rail");
+    expect(styles).toContain(".ccc-live .ccc-live-sms-header{flex:0 0 auto");
+    expect(styles).toContain(".ccc-live .ccc-live-sms-filter-tabs");
+    expect(styles).toContain(".ccc-live .ccc-live-sms-search");
     expect(styles).toContain(".ccc-live-sms-drawer");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-message");
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-card");
