@@ -46,7 +46,7 @@ describe("Command Chat exact live shell", () => {
       "getAllAgentPhotoMap.useQuery",
       "getAgentStatusList.useQuery",
       "listActiveThreads.useQuery",
-      "commandChatBookingSummary.getToday.useQuery",
+      "leads.stats.useQuery",
       "getPendingSuperAlerts.useQuery",
       "getSuperAlertMessageIds.useQuery",
       "acknowledgeSuperAlert.useMutation",
@@ -132,35 +132,11 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const activeThreadCount = activeThreads.length;');
     expect(page).toContain('const unreadThreadCount = activeThreads.filter((thread) => thread.hasUnread).length;');
     expect(page).toContain('const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));');
-    expect(page).toContain('{ date: todayDateStr }');
-    expect(page).toContain('const todayBookingCount = todayCommandBookingSummary?.count ?? 0;');
-    expect(page).toContain('const todayRevenue = todayCommandBookingSummary?.revenue ?? 0;');
-    expect(page).toContain('const bookingAnnouncements = todayCommandBookingSummary?.announcements ?? [];');
-    expect(page).toContain('const bookingAnnouncementsByAuthor = useMemo(() => {');
-    expect(page).toContain('className="ccc-header-metric-hover ccc-header-metric-bookings"');
-    expect(page).toContain('const [bookingDetailOpen, setBookingDetailOpen] = useState<"bookings" | "revenue" | null>(null);');
-    expect(page).toContain('const bookingDetailRef = useRef<HTMLDivElement>(null);');
-    expect(page).toContain('if (!bookingDetailRef.current?.contains(event.target as Node)) setBookingDetailOpen(null);');
-    expect(page).toContain('if (event.key === "Escape") setBookingDetailOpen(null);');
-    expect(page).toContain('bookingDetailOpen === "bookings" ? "is-open" : ""');
-    expect(page).toContain('bookingDetailOpen === "revenue" ? "is-open" : ""');
-    expect(page).toContain('onClick={(event) => event.stopPropagation()}');
-    expect(page).toContain('Bookings by agent');
-    expect(page).toContain('className="ccc-header-metric-hover ccc-header-metric-money"');
-    expect(page).toContain('booked today');
-    expect(page).not.toContain('TooltipTrigger');
-    expect(page).not.toContain('TooltipContent');
-    expect(page).toContain('utils.commandChatBookingSummary.getToday.invalidate({ date: todayDateStr });');
-    const bookingSummaryRouter = read("server/commandChatBookingSummaryRouter.ts");
-    expect(bookingSummaryRouter).toContain('getToday: opsChatProcedure');
-    expect(bookingSummaryRouter).toContain('eq(opsChatMessages.quickAction, "announce_booking")');
-    expect(bookingSummaryRouter).toContain('JSON.parse(row.metadata ?? "{}") as Record<string, unknown>');
-    expect(bookingSummaryRouter).toContain('announcements,');
-    expect(styles).toContain('.ccc-booking-header-tooltip');
-    expect(styles).toContain('.ccc-booking-header-tooltip.is-open');
-    expect(styles).toContain('scrollbar-color:#54545b transparent');
+    expect(page).toContain('{ dateFrom: todayDateStr, dateTo: todayDateStr }');
+    expect(page).toContain('const todayBookingCount = todayStats?.bookedCount ?? 0;');
+    expect(page).toContain('const todayRevenue = todayStats?.bookedRevenue ?? 0;');
     expect(page).toContain('setTodayDateStr((currentDate) => currentDate === nextDate ? currentDate : nextDate);');
-    expect(page).toContain('ccc-header-metric-hover ccc-header-metric-bookings');
+    expect(page).toContain('className="ccc-header-metric-bookings"');
     expect(page).toContain('<b>{todayBookingCount}</b> Booked');
     expect(page).toContain('<b>${todayRevenue.toLocaleString()}</b> Today');
     expect(page).not.toContain('<Users /><b>{metrics.participants}</b> Contributors');
@@ -203,7 +179,7 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('setUnreadMentionIds(remainingIds);');
     expect(page).toContain('localStorage.setItem(mentionStorageKey, String(nextId))');
     expect(page).toContain('aria-label="Open next unread mention"');
-    expect(page).toContain('setBookingDetailOpen(null); focusNextMention();');
+    expect(page).toContain('onClick={focusNextMention}');
     expect(page).toContain('function renderMentionBody(body: string, mentionPattern: RegExp | null): ReactNode');
     expect(page).toContain('className="ccc-live-mention"');
     expect(page).toContain('const [mentionQuery, setMentionQuery] = useState<string | null>(null);');
@@ -332,7 +308,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).not.toContain("ccc-live-thread-panel{position:fixed");
     expect(app).toContain('const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));');
     expect(app).toContain('function AdminCommandChatExactLiveRoute()');
-    expect(app).toContain('return <ReviewWorkspaceFrame navActivePath="/review/command-chat-crm"><CommandChatExactLive /></ReviewWorkspaceFrame>;');
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/command-chat-crm"><CommandChatExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
     expect(app).toContain('const isCommandChatWorkspace = location === "/admin/command-chat";');
   });

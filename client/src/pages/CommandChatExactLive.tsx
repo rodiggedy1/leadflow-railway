@@ -440,7 +440,6 @@ export default function CommandChatExactLive() {
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
-  const [bookingDetailOpen, setBookingDetailOpen] = useState<"bookings" | "revenue" | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -448,7 +447,6 @@ export default function CommandChatExactLive() {
   const streamRef = useRef<MediaStream | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageStreamRef = useRef<HTMLDivElement>(null);
-  const bookingDetailRef = useRef<HTMLDivElement>(null);
   const centerFeedInitialScrollDone = useRef(false);
 
   const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
@@ -461,8 +459,8 @@ export default function CommandChatExactLive() {
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
   const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 30_000 });
-  const { data: todayCommandBookingSummary } = trpc.commandChatBookingSummary.getToday.useQuery(
-    { date: todayDateStr },
+  const { data: todayStats } = trpc.leads.stats.useQuery(
+    { dateFrom: todayDateStr, dateTo: todayDateStr },
     { enabled: isAuthenticated, staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false },
   );
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(undefined, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 3_000, refetchIntervalInBackground: false });
@@ -562,7 +560,7 @@ export default function CommandChatExactLive() {
   });
   const setReminder = trpc.opsChat.setReminder.useMutation({ onSuccess: () => { setModal(null); setReminderBody(""); showNotice("Reminder scheduled."); } });
   const pinNote = trpc.opsChat.pinNote.useMutation({ onSuccess: () => { setModal(null); setPinBody(""); void utils.opsChat.getChannelPin.invalidate({ channel }); } });
-  const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: () => { setModal(null); setBookingPerson(""); setBookingAmount(""); setBookingNote(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); void utils.commandChatBookingSummary.getToday.invalidate({ date: todayDateStr }); } });
+  const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: () => { setModal(null); setBookingPerson(""); setBookingAmount(""); setBookingNote(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); } });
   const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
     onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),
@@ -585,16 +583,8 @@ export default function CommandChatExactLive() {
   );
   const superAlertMessageIdSet = useMemo(() => new Set(superAlertMessageIds), [superAlertMessageIds]);
   const activeSuperAlert = pendingSuperAlerts[0] ?? null;
-  const todayBookingCount = todayCommandBookingSummary?.count ?? 0;
-  const todayRevenue = todayCommandBookingSummary?.revenue ?? 0;
-  const bookingAnnouncements = todayCommandBookingSummary?.announcements ?? [];
-  const bookingAnnouncementsByAuthor = useMemo(() => {
-    const grouped = new Map<string, number>();
-    for (const announcement of bookingAnnouncements) {
-      grouped.set(announcement.authorName || "Unassigned", (grouped.get(announcement.authorName || "Unassigned") ?? 0) + 1);
-    }
-    return Array.from(grouped.entries()).sort((left, right) => right[1] - left[1]);
-  }, [bookingAnnouncements]);
+  const todayBookingCount = todayStats?.bookedCount ?? 0;
+  const todayRevenue = todayStats?.bookedRevenue ?? 0;
   const headerAgentPresence = useMemo(() => {
     const now = Date.now();
     return agents.agents.map((agent) => ({ ...agent, presence: commandPresenceStatus(agent, now) }));
@@ -667,22 +657,6 @@ export default function CommandChatExactLive() {
   }, []);
 
   useEffect(() => {
-    if (!bookingDetailOpen) return;
-    const closeOnClickAway = (event: MouseEvent) => {
-      if (!bookingDetailRef.current?.contains(event.target as Node)) setBookingDetailOpen(null);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setBookingDetailOpen(null);
-    };
-    document.addEventListener("mousedown", closeOnClickAway);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnClickAway);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [bookingDetailOpen]);
-
-  useEffect(() => {
     let lastSeenId = 0;
     try { lastSeenId = Number.parseInt(localStorage.getItem(mentionStorageKey) ?? "0", 10) || 0; } catch { /* browser storage is optional */ }
     setUnreadMentionIds(mentionMessages.filter((message) => message.id > lastSeenId).map((message) => message.id));
@@ -690,10 +664,7 @@ export default function CommandChatExactLive() {
 
   useOpsStream({
     onNewMessage: (updatedChannel) => {
-      if (!updatedChannel || updatedChannel === channel) {
-        void utils.opsChat.listChannelMessages.invalidate({ channel });
-        void utils.commandChatBookingSummary.getToday.invalidate({ date: todayDateStr });
-      }
+      if (!updatedChannel || updatedChannel === channel) void utils.opsChat.listChannelMessages.invalidate({ channel });
       void utils.opsChat.listActiveThreads.invalidate();
       void utils.opsChat.getChannelCounts.invalidate();
     },
@@ -873,7 +844,7 @@ export default function CommandChatExactLive() {
           </aside>
 
           <section className="ccc-command-panel ccc-center-panel">
-            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics" ref={bookingDetailRef}><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => { setBookingDetailOpen(null); setAllThreadsOpen(true); }}><MessageSquare /><b>{unreadThreadCount}</b> Threads</button><span className="ccc-header-metric-hover ccc-header-metric-bookings" tabIndex={0} role="button" aria-expanded={bookingDetailOpen === "bookings"} aria-label={`${todayBookingCount} bookings today; show booking details`} onClick={() => setBookingDetailOpen((current) => current === "bookings" ? null : "bookings")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setBookingDetailOpen((current) => current === "bookings" ? null : "bookings"); } }}><CalendarClock /><b>{todayBookingCount}</b> Booked<div className={`ccc-booking-header-tooltip ${bookingDetailOpen === "bookings" ? "is-open" : ""}`} onClick={(event) => event.stopPropagation()}><strong>Bookings by agent</strong><div>{bookingAnnouncementsByAuthor.length ? bookingAnnouncementsByAuthor.map(([authorName, count]) => <p key={authorName}><span>{authorName}</span><b>{count}</b></p>) : <em>No bookings yet today</em>}</div></div></span><span className="ccc-header-metric-hover ccc-header-metric-money" tabIndex={0} role="button" aria-expanded={bookingDetailOpen === "revenue"} aria-label={`${todayRevenue.toLocaleString()} booked today; show booking details`} onClick={() => setBookingDetailOpen((current) => current === "revenue" ? null : "revenue")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setBookingDetailOpen((current) => current === "revenue" ? null : "revenue"); } }}><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today<div className={`ccc-booking-header-tooltip ccc-booking-header-tooltip-revenue ${bookingDetailOpen === "revenue" ? "is-open" : ""}`} onClick={(event) => event.stopPropagation()}><strong>${todayRevenue.toLocaleString()} booked today</strong><small>{todayBookingCount} booking{todayBookingCount === 1 ? "" : "s"}</small><div>{bookingAnnouncements.length ? bookingAnnouncements.map((announcement) => <p key={`${announcement.createdAt}-${announcement.personName}`}><span><b>{announcement.personName}</b><i>by {announcement.authorName || "Unassigned"}</i></span><b>{announcement.amount === null ? "—" : `$${announcement.amount.toLocaleString()}`}</b></p>) : <em>No bookings yet today</em>}</div></div></span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => { setBookingDetailOpen(null); openIssueEngine(); }}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={() => { setBookingDetailOpen(null); focusNextMention(); }}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /><i aria-hidden="true" /></span>)}</div></div></div></div>
+            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{unreadThreadCount}</b> Threads</button><span className="ccc-header-metric-bookings"><CalendarClock /><b>{todayBookingCount}</b> Booked</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /><i aria-hidden="true" /></span>)}</div></div></div></div>
             <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
