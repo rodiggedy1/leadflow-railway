@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
 import { agentPageProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
@@ -400,6 +400,139 @@ export const leadflowJobsRouter = router({
       if (phone && job.customerName && !result[phone]) result[phone] = job.customerName;
     }
     return result;
+  }),
+
+  customerProfile: opsChatProcedure.input(z.object({ phone: z.string().trim().min(7).max(30) })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const phone = input.phone.replace(/[^\d]/g, "").slice(-10);
+    if (phone.length !== 10) return { name: null, email: null, upcoming: null, history: [], payment: null };
+
+    const rows = await db.select({
+      id: leadflowJobs.id,
+      jobDate: leadflowJobs.jobDate,
+      customerName: leadflowJobs.customerName,
+      customerEmail: leadflowJobs.customerEmail,
+      serviceName: leadflowJobs.serviceName,
+      jobAddress: leadflowJobs.jobAddress,
+      bookingStatus: leadflowJobs.bookingStatus,
+      teamName: leadflowJobs.teamName,
+      jobTotalCents: leadflowJobs.jobTotalCents,
+      frequency: leadflowJobs.frequency,
+      bedrooms: leadflowJobs.bedrooms,
+      bathrooms: leadflowJobs.bathrooms,
+      customerNotes: leadflowJobs.customerNotes,
+      hasStripeCard: leadflowJobs.hasStripeCard,
+      paymentBrand: leadflowJobs.paymentBrand,
+      paymentLast4: leadflowJobs.paymentLast4,
+    }).from(leadflowJobs)
+      .where(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone}`)
+      .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.id))
+      .limit(50);
+
+    const history = rows.map((row) => ({
+      id: row.id,
+      date: row.jobDate,
+      serviceName: row.serviceName,
+      address: row.jobAddress,
+      status: row.bookingStatus,
+      teamName: row.teamName,
+      priceCents: row.jobTotalCents,
+      frequency: row.frequency,
+      bedrooms: row.bedrooms,
+      bathrooms: row.bathrooms,
+      notes: row.customerNotes,
+      paymentBrand: row.paymentBrand,
+      paymentLast4: row.paymentLast4,
+      hasStripeCard: Boolean(row.hasStripeCard),
+    }));
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const upcoming = history.filter((record) => record.date >= today && !/cancelled/i.test(record.status)).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+    const payment = history.find((record) => record.hasStripeCard || record.paymentBrand || record.paymentLast4) ?? null;
+
+    return {
+      name: rows[0]?.customerName ?? null,
+      email: rows.find((row) => row.customerEmail)?.customerEmail ?? null,
+      upcoming,
+      history,
+      payment: payment ? { hasStripeCard: payment.hasStripeCard, brand: payment.paymentBrand, last4: payment.paymentLast4 } : null,
+    };
+  }),
+
+  customerConversationSession: opsChatProcedure.input(z.object({ phone: z.string().trim().min(7).max(30) })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const phone = input.phone.replace(/[^\d]/g, "").slice(-10);
+    if (phone.length !== 10) return { sessionId: null };
+
+    const sessions = await db.select({ sessionId: conversationSessions.id })
+      .from(conversationSessions)
+      .where(and(
+        sql`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) = ${phone}`,
+        or(
+          eq(conversationSessions.leadSource, "cs-inbound"),
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+          eq(conversationSessions.leadSource, "cs_initiated")
+        )
+      ))
+      .orderBy(desc(conversationSessions.updatedAt), desc(conversationSessions.id))
+      .limit(1);
+
+    return { sessionId: sessions[0]?.sessionId ?? null };
+  }),
+
+  customerDirectory: opsChatProcedure.input(z.object({ query: z.string().trim().max(80).default("") })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const rows = await db.select({
+      customerName: leadflowJobs.customerName,
+      customerPhone: leadflowJobs.customerPhone,
+      customerEmail: leadflowJobs.customerEmail,
+      jobDate: leadflowJobs.jobDate,
+      serviceName: leadflowJobs.serviceName,
+      jobAddress: leadflowJobs.jobAddress,
+      bookingStatus: leadflowJobs.bookingStatus,
+      teamName: leadflowJobs.teamName,
+      frequency: leadflowJobs.frequency,
+    }).from(leadflowJobs)
+      .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.id))
+      .limit(500);
+
+    const query = input.query.toLowerCase();
+    const customers = new Map<string, {
+      name: string;
+      phone: string;
+      email: string | null;
+      lastServiceDate: string;
+      serviceName: string | null;
+      address: string | null;
+      status: string;
+      teamName: string | null;
+      frequency: string | null;
+    }>();
+
+    for (const row of rows) {
+      const phone = (row.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+      if (phone.length !== 10) continue;
+      const name = row.customerName?.trim() || "Customer";
+      const searchable = `${name} ${phone} ${row.customerEmail ?? ""} ${row.jobAddress ?? ""}`.toLowerCase();
+      if (query && !searchable.includes(query)) continue;
+      const existing = customers.get(phone);
+      if (existing) continue;
+      customers.set(phone, {
+        name,
+        phone,
+        email: row.customerEmail,
+        lastServiceDate: row.jobDate,
+        serviceName: row.serviceName,
+        address: row.jobAddress,
+        status: row.bookingStatus,
+        teamName: row.teamName,
+        frequency: row.frequency,
+      });
+    }
+
+    return { customers: Array.from(customers.values()).slice(0, 80) };
   }),
 
   list: bookingsAgentProcedure.input(listInput).query(async ({ input }) => {

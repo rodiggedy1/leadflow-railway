@@ -79,6 +79,7 @@ const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
 const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));
 const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
 const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));
+const CustomerProfileExactLive = lazy(() => import("./pages/CustomerProfileExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -141,6 +142,10 @@ function AdminBookingsCRMExactReviewRoute() {
   return <AdminPageGuard pageId="bookings"><ReviewWorkspaceFrame navActivePath="/review/bookings-crm"><NativeBookings /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AdminCustomerProfileExactReviewRoute() {
+  return <ReviewWorkspaceFrame navActivePath="/review/customer-profile"><CustomerProfileExactLive /></ReviewWorkspaceFrame>;
+}
+
 function AdminLeadsCRMExactLiveRoute() {
   const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
   if (tab && tab !== "leads") return <AdminDashboard />;
@@ -178,6 +183,7 @@ function Router() {
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={SettingsPage} />
         <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
+        <Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />
         <Route path={"/admin/settings"} component={SettingsPage} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
         <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
@@ -335,7 +341,7 @@ function GlobalOpsChat() {
 
 function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || isCommandChatWorkspace;
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || isCommandChatWorkspace;
 }
 
 function DayBoardSafeGlobalOpsChat() {

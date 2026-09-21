@@ -507,6 +507,12 @@ export default function CsRightPanelClient({ selected, setCompose, messages = []
               <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
             </div>
           </div>
+          <a
+            href={`/admin/customer-profile?sessionId=${selected.id}&phone=${encodeURIComponent(selected.phone)}&name=${encodeURIComponent(name ?? selected.name)}`}
+            style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:'6px',padding:'8px 10px',borderRadius:'9px',border:'1px solid #e5e7ee',color:'#475467',fontSize:'12px',fontWeight:700,textDecoration:'none',whiteSpace:'nowrap'}}
+          >
+            Open profile <ExternalLink style={{width:'13px',height:'13px'}} />
+          </a>
         </div>
       </div>
       {/* Scrollable body */}
