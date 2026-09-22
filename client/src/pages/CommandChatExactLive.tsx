@@ -31,8 +31,11 @@ import {
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { useTabLeader } from "@/hooks/useTabLeader";
 import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
+import AiConcierge from "@/components/AiConcierge";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import "./command-chat-crm-review.css";
 import "./command-chat-left-cohesion.css";
@@ -413,6 +416,7 @@ export default function CommandChatExactLive() {
   const isAuthenticated = Boolean(agentMe);
   const callerName = agentMe?.name || "MIB Team";
   const channel: ChannelKey = "command";
+  const LEAD_ALERT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bMcVRxTSaTukZing.wav";
   const [smsSearch, setSmsSearch] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -440,6 +444,7 @@ export default function CommandChatExactLive() {
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
+  const [madisonOpen, setMadisonOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -448,6 +453,7 @@ export default function CommandChatExactLive() {
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageStreamRef = useRef<HTMLDivElement>(null);
   const centerFeedInitialScrollDone = useRef(false);
+  const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
 
   const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
   const { data: photosData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
@@ -455,6 +461,8 @@ export default function CommandChatExactLive() {
     { channel },
     { enabled: isAuthenticated, refetchInterval: 30_000, refetchIntervalInBackground: false },
   );
+  const { muted: notifMuted } = useNotificationSound();
+  const { isLeader: isNotifLeader } = useTabLeader();
   const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
@@ -683,6 +691,36 @@ export default function CommandChatExactLive() {
     },
   }, { enabled: isAuthenticated, label: "CommandChatExactLive" });
 
+  // The exact Command Chat already owns the command-channel query, so use it for
+  // the established alert behavior rather than introducing a second watcher.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      lastSeenCommandMsgIdRef.current = undefined;
+      return;
+    }
+    const realMessages = (channelMessages as ChannelMessage[]).filter((message) => message.id > 0);
+    if (!realMessages.length) return;
+    const currentMaxId = Math.max(...realMessages.map((message) => message.id));
+    if (lastSeenCommandMsgIdRef.current === undefined) {
+      // First load — initialize silently so historical leads never alert.
+      lastSeenCommandMsgIdRef.current = currentMaxId;
+      return;
+    }
+    if (currentMaxId > lastSeenCommandMsgIdRef.current) {
+      const newLeads = realMessages.filter(
+        (message) => message.id > lastSeenCommandMsgIdRef.current! && message.quickAction === "new_lead",
+      );
+      if (newLeads.length > 0 && isNotifLeader && !notifMuted) {
+        try {
+          const audio = new Audio(LEAD_ALERT_URL);
+          audio.volume = 0.75;
+          audio.play().catch(() => {});
+        } catch {}
+      }
+      lastSeenCommandMsgIdRef.current = currentMaxId;
+    }
+  }, [channelMessages, isAuthenticated, isNotifLeader, notifMuted]);
+
   useEffect(() => {
     const stream = messageStreamRef.current;
     if (!stream) return;
@@ -879,6 +917,59 @@ export default function CommandChatExactLive() {
         if (modal === "booking") announceBooking.mutate({ channel: "command", personName: bookingPerson.trim(), amount: bookingAmount.trim() || undefined, note: bookingNote.trim() || undefined, authorName: profile?.name || callerName });
       }} />}
       <IssueEngineOverlay open={issueEngineOpen} onClose={() => { setIssueEngineOpen(false); setIssueEngineInitialId(null); }} callerName={callerName} agentPhotoMap={photoMap} agentList={agents.agents.map((agent) => ({ id: agent.id, name: agent.name, photoUrl: agent.photoUrl ?? null }))} initialIssueId={issueEngineInitialId} />
+      {madisonOpen && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 80,
+            right: 16,
+            width: 380,
+            height: "calc(100vh - 100px)",
+            zIndex: 9999,
+            borderRadius: 20,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 8px 40px rgba(116,71,245,0.22), 0 2px 12px rgba(0,0,0,0.12)",
+            border: "1px solid #e0d7ff",
+            background: "#fff",
+          }}
+        >
+          <AiConcierge
+            agentPhotoUrl={profile?.photoUrl ?? undefined}
+            onClose={() => setMadisonOpen(false)}
+            compact
+          />
+        </div>
+      )}
+      <button
+        onClick={() => setMadisonOpen(o => !o)}
+        style={{
+          position: "fixed",
+          bottom: 16,
+          right: 16,
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          border: "none",
+          cursor: "pointer",
+          zIndex: 10000,
+          padding: 0,
+          overflow: "hidden",
+          boxShadow: madisonOpen
+            ? "0 0 0 3px #7447f5, 0 4px 20px rgba(116,71,245,0.4)"
+            : "0 2px 12px rgba(0,0,0,0.18)",
+          transition: "box-shadow 0.2s",
+        }}
+        title="Ask Madison"
+        aria-label="Open Madison"
+      >
+        <img
+          src="/madison-avatar.jpg"
+          alt="Madison"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      </button>
       {notice && <div className="ccc-notice" role="status"><CircleDot />{notice}</div>}
     </main>
   );
