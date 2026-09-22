@@ -88,3 +88,6 @@
 
 /* A team SMS owns exactly one bubble: the clickable card, never its nested message paragraph. */
 .ccc-live .ccc-group-message-team .ccc-live-team-sms-card>p{display:block;width:100%!important;box-sizing:border-box;margin:0!important;padding:12px 14px 11px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+
+/* Command Chat's floating Madison surface is deliberately dark without changing concierge behavior. */
+.ccc-live .madison-compact-dark .text-gray-500{color:#9299a7!important}.ccc-live .madison-compact-dark [style*="background: rgb(255, 255, 255)"],.ccc-live .madison-compact-dark [style*="background: rgb(255, 253, 249)"],.ccc-live .madison-compact-dark [style*="background: rgba(255, 255, 255"]{background:#252934!important;border-color:#3b404c!important}.ccc-live .madison-compact-dark [style*="color: rgb(32, 36, 49)"],.ccc-live .madison-compact-dark [style*="color: rgb(45, 48, 57)"],.ccc-live .madison-compact-dark [style*="color: rgb(45, 31, 61)"]{color:#eef0f5!important}.ccc-live .madison-compact-dark [style*="color: rgb(112, 115, 125)"],.ccc-live .madison-compact-dark [style*="color: rgb(138, 138, 154)"],.ccc-live .madison-compact-dark [style*="color: rgb(154, 150, 160)"]{color:#a8adba!important}

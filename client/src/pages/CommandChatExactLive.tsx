@@ -932,13 +932,14 @@ export default function CommandChatExactLive() {
             flexDirection: "column",
             boxShadow: "0 8px 40px rgba(116,71,245,0.22), 0 2px 12px rgba(0,0,0,0.12)",
             border: "1px solid #e0d7ff",
-            background: "#fff",
+            background: "#17191f",
           }}
         >
           <AiConcierge
             agentPhotoUrl={profile?.photoUrl ?? undefined}
             onClose={() => setMadisonOpen(false)}
             compact
+            dark
           />
         </div>
       )}

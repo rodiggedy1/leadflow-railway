@@ -1018,6 +1018,7 @@ function PostToCommandChatButton({
 function MessageBubble({
   msg,
   agentPhotoUrl,
+  dark,
   onPickTeam,
   onPickClient,
   onAddMessage,
@@ -1027,6 +1028,7 @@ function MessageBubble({
 }: {
   msg: Message;
   agentPhotoUrl?: string;
+  dark?: boolean;
   onPickTeam: (jobId: number, teamName: string) => void;
   onPickClient: (phone: string, name: string, messageHint: string | null, entityType?: string, cleanerProfileId?: number) => void;
   onAddMessage: (m: Message) => void;
@@ -1064,12 +1066,12 @@ function MessageBubble({
   // AI message
   return (
     <div className="flex items-start gap-3">
-      <div className="w-9 h-9 rounded-full flex-shrink-0 mt-1 overflow-hidden" style={{ border: "2px solid rgba(255,255,255,0.9)", boxShadow: "0 4px 12px rgba(54,38,25,0.12)" }}>
+      <div className="w-9 h-9 rounded-full flex-shrink-0 mt-1 overflow-hidden" style={{ border: dark ? "2px solid #353a45" : "2px solid rgba(255,255,255,0.9)", boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.32)" : "0 4px 12px rgba(54,38,25,0.12)" }}>
         <img src="/madison-avatar.jpg" alt="Madison" className="w-full h-full object-cover" />
       </div>
       <div className="max-w-[82%]">
         {msg.content.type === "text" && (
-          <div className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed" style={{ background: "linear-gradient(135deg, rgba(250,244,255,0.95), rgba(244,234,250,0.85))", border: "1px solid #e5d9ea", color: "#2d3039" }}>
+          <div className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed" style={{ background: dark ? "#252934" : "linear-gradient(135deg, rgba(250,244,255,0.95), rgba(244,234,250,0.85))", border: dark ? "1px solid #3b404c" : "1px solid #e5d9ea", color: dark ? "#edf0f5" : "#2d3039" }}>
             {msg.content.text}
           </div>
         )}
@@ -1080,7 +1082,7 @@ function MessageBubble({
           </div>
         )}
         {msg.content.type === "clarify" && (
-          <div className="rounded-2xl rounded-tl-sm px-4 py-3" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea"}}>
+          <div className="rounded-2xl rounded-tl-sm px-4 py-3" style={{background:dark ? "#252934" : "linear-gradient(135deg,#fffdf9,#f7f0ff)",border:dark ? "1px solid #3b404c" : "1px solid #e5d9ea"}}>
             <ClarifyCardView card={msg.content.card} onPickTeam={onPickTeam} />
             <div className="text-right text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
@@ -2819,12 +2821,12 @@ const HINT_EXAMPLES = [
   'Try: "Call Sarah about her upcoming clean"',
 ];
 
-export function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
+export function CommandPicker({ onSelect, onClose, dark }: { onSelect: (cmd: string) => void; onClose: () => void; dark?: boolean }) {
   return (
-    <div className="mb-2 rounded-xl overflow-hidden" style={{background:"#fffdf9",border:"1px solid #e8dff0",boxShadow:"0 4px 24px rgba(120,80,160,0.08)"}}>
-      <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #ede6f5"}}>
-        <p className="text-sm font-semibold" style={{color:"#2d1f3d"}}>Some examples of things you can ask...</p>
-        <button onClick={onClose} className="transition-colors text-lg leading-none" style={{color:"#9b8aaa"}} onMouseEnter={e=>(e.currentTarget.style.color="#6b3fa0")} onMouseLeave={e=>(e.currentTarget.style.color="#9b8aaa")}>✕</button>
+    <div className="mb-2 rounded-xl overflow-hidden" style={{background:dark ? "#252934" : "#fffdf9",border:dark ? "1px solid #3b404c" : "1px solid #e8dff0",boxShadow:dark ? "0 4px 24px rgba(0,0,0,0.3)" : "0 4px 24px rgba(120,80,160,0.08)"}}>
+      <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:dark ? "1px solid #3b404c" : "1px solid #ede6f5"}}>
+        <p className="text-sm font-semibold" style={{color:dark ? "#f0f2f7" : "#2d1f3d"}}>Some examples of things you can ask...</p>
+        <button onClick={onClose} className="transition-colors text-lg leading-none" style={{color:dark ? "#aeb4c0" : "#9b8aaa"}} onMouseEnter={e=>(e.currentTarget.style.color=dark ? "#d4c7ff" : "#6b3fa0")} onMouseLeave={e=>(e.currentTarget.style.color=dark ? "#aeb4c0" : "#9b8aaa")}>✕</button>
       </div>
       <div className="grid grid-cols-2 gap-1.5 p-2">
         {EXAMPLES.map((ex) => (
@@ -2832,13 +2834,13 @@ export function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) =
             key={ex.label}
             onClick={() => { onSelect(ex.example); onClose(); }}
             className="flex flex-col gap-1 p-2 rounded-xl transition-all text-left"
-            style={{background:"rgba(255,255,255,0.85)",border:"1px solid #ede6f5"}}
-            onMouseEnter={e=>(e.currentTarget.style.background="#f3eeff")}
-            onMouseLeave={e=>(e.currentTarget.style.background="rgba(255,255,255,0.85)")}
+            style={{background:dark ? "#2d313c" : "rgba(255,255,255,0.85)",border:dark ? "1px solid #414652" : "1px solid #ede6f5"}}
+            onMouseEnter={e=>(e.currentTarget.style.background=dark ? "#383d4a" : "#f3eeff")}
+            onMouseLeave={e=>(e.currentTarget.style.background=dark ? "#2d313c" : "rgba(255,255,255,0.85)")}
           >
             <span className="text-base leading-none">{ex.emoji}</span>
-            <p className="text-xs font-semibold mt-1" style={{color:"#2d1f3d"}}>{ex.label}</p>
-            <p className="text-[11px] leading-snug" style={{color:"#8b7a9e"}}>{ex.example}</p>
+            <p className="text-xs font-semibold mt-1" style={{color:dark ? "#eef0f5" : "#2d1f3d"}}>{ex.label}</p>
+            <p className="text-[11px] leading-snug" style={{color:dark ? "#aeb4c0" : "#8b7a9e"}}>{ex.example}</p>
           </button>
         ))}
       </div>
@@ -2868,10 +2870,12 @@ function MissionCard({
   mission,
   viewState,
   onSetViewState,
+  dark,
 }: {
   mission: MadisonMission;
   viewState: MissionViewState;
   onSetViewState: (id: string, state: MissionViewState) => void;
+  dark?: boolean;
 }) {
   const isExpanded = viewState === "expanded";
   const autoCollapseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2923,7 +2927,7 @@ function MissionCard({
   };
 
   return (
-    <div style={{ background: "#ffffff", border: "1px solid #e6e8ef", borderRadius: 15, overflow: "hidden", boxShadow: "0 10px 24px rgba(35,40,73,0.08)" }}>
+    <div style={{ background: dark ? "#252934" : "#ffffff", border: dark ? "1px solid #3b404c" : "1px solid #e6e8ef", borderRadius: 15, overflow: "hidden", boxShadow: dark ? "0 10px 24px rgba(0,0,0,0.28)" : "0 10px 24px rgba(35,40,73,0.08)" }}>
       {/* Header — always visible, click to toggle */}
       <button
         type="button"
@@ -2935,8 +2939,8 @@ function MissionCard({
           <Zap className="w-3.5 h-3.5" style={{ color: "#7447f5" }} />
         </div>
         <div className="flex-1 min-w-0 overflow-hidden">
-          <p className="text-[13px] font-bold truncate leading-tight" style={{ color: "#202431" }}>{mission.missionTitle}</p>
-          <p className="text-[11px] mt-0.5 truncate" style={{ color: "#70737d" }}>
+          <p className="text-[13px] font-bold truncate leading-tight" style={{ color: dark ? "#f0f2f6" : "#202431" }}>{mission.missionTitle}</p>
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: dark ? "#a8adba" : "#70737d" }}>
             {mission.missionStats.completed} action{mission.missionStats.completed !== 1 ? "s" : ""}
             {" · "}{missionTimeAgo(mission.missionCompletedAt)}
           </p>
@@ -2953,7 +2957,7 @@ function MissionCard({
       {isExpanded && (
         <div className="px-4 pb-4">
           {/* Timestamps */}
-          <div className="flex items-center gap-4 mb-3 pt-1" style={{ borderTop: "1px solid #e2e5ee" }}>
+          <div className="flex items-center gap-4 mb-3 pt-1" style={{ borderTop: dark ? "1px solid #3b404c" : "1px solid #e2e5ee" }}>
             <div className="flex items-center gap-1.5">
               <Clock className="w-3 h-3" style={{ color: "#9a96a0" }} />
               <span className="text-[11px]" style={{ color: "#9a96a0" }}>Started {fmtAbsTime(mission.missionStartedAt)}</span>
@@ -2974,7 +2978,7 @@ function MissionCard({
               >
                 {stepIcon(step.status)}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs leading-snug" style={{ color: "#202431" }}>{step.label}</p>
+                  <p className="text-xs leading-snug" style={{ color: dark ? "#eef0f5" : "#202431" }}>{step.label}</p>
                   {step.detail && (
                     <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "#70737d" }}>{step.detail}</p>
                   )}
@@ -2991,7 +2995,7 @@ function MissionCard({
           {/* Summary */}
           <div
             className="pt-3"
-            style={{ borderTop: "1px solid #e2e5ee" }}
+            style={{ borderTop: dark ? "1px solid #3b404c" : "1px solid #e2e5ee" }}
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-[11px] leading-relaxed" style={{ color: "#70737d" }}>{mission.missionSummary}</p>
@@ -3013,7 +3017,7 @@ type MissionStep = MadisonMission["missionSteps"][number];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchToCSSession, initialSummary }: { agentPhotoUrl?: string; onClose?: () => void; compact?: boolean; onSwitchToCSSession?: (sessionId: number) => void; initialSummary?: string }) {
+export default function AiConcierge({ agentPhotoUrl, onClose, compact, dark, onSwitchToCSSession, initialSummary }: { agentPhotoUrl?: string; onClose?: () => void; compact?: boolean; dark?: boolean; onSwitchToCSSession?: (sessionId: number) => void; initialSummary?: string }) {
   const { user } = useAuth();
   // Use the agent's numeric id (from agent cookie session) as the stable userId for
   // mission history. Agents do NOT use Manus OAuth, so user?.openId is always undefined.
@@ -3719,21 +3723,21 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
   handleSendRef.current = handleSend;
   return (
     <>
-    <div className="flex flex-col h-full overflow-hidden" style={{ minHeight: compact ? 0 : 600, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: "1px solid rgba(255,255,255,0.72)", borderRadius: 28, boxShadow: "0 20px 55px rgba(42,48,82,0.10)" }}>
+    <div className={`flex flex-col h-full overflow-hidden${dark ? " madison-compact-dark" : ""}`} style={{ minHeight: compact ? 0 : 600, background: dark ? "#17191f" : "rgba(255,255,255,0.88)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: dark ? "1px solid #343844" : "1px solid rgba(255,255,255,0.72)", borderRadius: 28, boxShadow: dark ? "0 20px 55px rgba(0,0,0,0.42)" : "0 20px 55px rgba(42,48,82,0.10)" }}>
       {/* Header — compact (inline) vs full (slide-in) */}
       {compact ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px 10px", borderBottom: "1px solid #e2e5ee", background: "transparent" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px 10px", borderBottom: dark ? "1px solid #343844" : "1px solid #e2e5ee", background: "transparent" }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
-            <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: "2px solid #ffffff", boxShadow: "0 0 0 3px #ffffff, 0 0 0 4px #e8e0ff, 0 4px 10px rgba(42,48,82,0.12)" }} />
-            <span style={{ position: "absolute", right: 1, bottom: 2, width: 9, height: 9, background: "#32bd75", border: "2px solid #fffdf9", borderRadius: "50%", display: "block" }} />
+            <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: dark ? "2px solid #292d37" : "2px solid #ffffff", boxShadow: dark ? "0 0 0 3px #292d37, 0 0 0 4px #8f71ff, 0 4px 10px rgba(0,0,0,0.36)" : "0 0 0 3px #ffffff, 0 0 0 4px #e8e0ff, 0 4px 10px rgba(42,48,82,0.12)" }} />
+            <span style={{ position: "absolute", right: 1, bottom: 2, width: 9, height: 9, background: "#32bd75", border: dark ? "2px solid #17191f" : "2px solid #fffdf9", borderRadius: "50%", display: "block" }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 500, color: "#202431", letterSpacing: "-0.02em" }}>Madison</span>
+              <span style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 500, color: dark ? "#f3f4f7" : "#202431", letterSpacing: "-0.02em" }}>Madison</span>
               <span style={{ color: "#c9a8ff", fontSize: 13 }}>♡</span>
-              <span style={{ padding: "2px 7px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>BETA</span>
+              <span style={{ padding: "2px 7px", color: dark ? "#d4c7ff" : "#7447f5", background: dark ? "#312a51" : "#eee5ff", border: dark ? "1px solid #564a86" : "1px solid #d8c5ff", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>BETA</span>
             </div>
-            <p style={{ margin: "2px 0 0", fontSize: 11, color: "#70737d", display: "flex", alignItems: "center", gap: 4 }}>
+            <p style={{ margin: "2px 0 0", fontSize: 11, color: dark ? "#a8adba" : "#70737d", display: "flex", alignItems: "center", gap: 4 }}>
               Madison
               <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 6 }}>
                 <span style={{ width: 6, height: 6, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
@@ -3795,20 +3799,21 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
                 mission={mission}
                 viewState={missionViewState[mission.missionId] ?? (mission.isNew ? "expanded" : "collapsed")}
                 onSetViewState={setMissionViewState}
+                dark={dark}
               />
             ))}
             {missions.length > 0 && <div className="pt-1" style={{ borderTop: "1px solid #e2e5ee" }} />}
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={(rawDate) => { setReadinessDate(rawDate); setReadinessOpen(true); }} onSwitchToCSSession={onSwitchToCSSession} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} dark={dark} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={(rawDate) => { setReadinessDate(rawDate); setReadinessOpen(true); }} onSwitchToCSSession={onSwitchToCSSession} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ border: "2px solid rgba(255,255,255,0.9)", boxShadow: "0 4px 12px rgba(54,38,25,0.12)" }}>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ border: dark ? "2px solid #353a45" : "2px solid rgba(255,255,255,0.9)", boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.32)" : "0 4px 12px rgba(54,38,25,0.12)" }}>
               <img src="/madison-avatar.jpg" alt="Madison" className="w-full h-full object-cover" />
             </div>
-            <div className="rounded-2xl rounded-tl-sm px-4 py-3" style={{ background: "linear-gradient(135deg, rgba(250,244,255,0.95), rgba(244,234,250,0.85))", border: "1px solid #e5d9ea" }}>
+            <div className="rounded-2xl rounded-tl-sm px-4 py-3" style={{ background: dark ? "#252934" : "linear-gradient(135deg, rgba(250,244,255,0.95), rgba(244,234,250,0.85))", border: dark ? "1px solid #3b404c" : "1px solid #e5d9ea" }}>
               <div className="flex gap-1 items-center h-5">
                 <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -3821,7 +3826,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3" style={{ borderTop: "1px solid #e2e5ee", background: "#ffffff", backdropFilter: "blur(16px)", position: "relative" }}>
+      <div className="px-4 py-3" style={{ borderTop: dark ? "1px solid #343844" : "1px solid #e2e5ee", background: dark ? "#20232b" : "#ffffff", backdropFilter: "blur(16px)", position: "relative" }}>
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (
@@ -3924,7 +3929,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
           </div>
         )}
 
-        <div className="relative overflow-hidden transition-colors" style={{ background: "#ffffff", border: "1px solid #e2e5ee", borderRadius: 16, boxShadow: "none" }}>
+        <div className="relative overflow-hidden transition-colors" style={{ background: dark ? "#161820" : "#ffffff", border: dark ? "1px solid #3a3e49" : "1px solid #e2e5ee", borderRadius: 16, boxShadow: "none" }}>
           {/* Text input area */}
           <textarea
             ref={inputRef}
@@ -3936,18 +3941,18 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
             placeholder="Ask anything or type a command..."
             rows={2}
             className="w-full bg-transparent text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-[#aaa6ab]"
-            style={{ color: "#202431", minHeight: 52 }}
+            style={{ color: dark ? "#eef0f5" : "#202431", minHeight: 52 }}
           />
           {/* Toolbar */}
           <div className="flex items-center justify-between px-3 pb-3 pt-1">
             <div className="flex items-center gap-0.5">
-              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: "#74757b" }}>
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: dark ? "#aeb4c0" : "#74757b" }}>
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
               <div>
                 <button
                   onClick={() => setShowCommands((v) => !v)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: "#74757b" }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: dark ? "#aeb4c0" : "#74757b" }}
                 >
                   <Zap className="w-3.5 h-3.5" />
                   <span>Commands</span>
@@ -3955,7 +3960,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
               </div>
               <button
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium"
-                style={{ color: "#74757b" }}
+                style={{ color: dark ? "#aeb4c0" : "#74757b" }}
                 onClick={() => { setInput("what's going on today"); setTimeout(() => inputRef.current?.focus(), 0); }}
               >
                 <Sun className="w-3.5 h-3.5" />
@@ -3965,7 +3970,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
             <div className="flex items-center gap-2">
               {/* PTT mic button — hold to talk, release to fill composer */}
               <button
-                style={{ width: 36, height: 36, borderRadius: 12, border: isPttActive ? "1px solid #ef4444" : "1px solid #e0e4ef", background: isPttActive ? "#ef4444" : isTranscribing ? "#f5f3ff" : "#fff", color: isPttActive ? "#fff" : isTranscribing ? "#a78bfa" : "#6e7890", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: isTranscribing ? "wait" : "pointer", transition: "background .15s", userSelect: "none" }}
+                style={{ width: 36, height: 36, borderRadius: 12, border: isPttActive ? "1px solid #ef4444" : dark ? "1px solid #414652" : "1px solid #e0e4ef", background: isPttActive ? "#ef4444" : isTranscribing ? dark ? "#302b50" : "#f5f3ff" : dark ? "#292d37" : "#fff", color: isPttActive ? "#fff" : isTranscribing ? "#a78bfa" : dark ? "#c3c8d3" : "#6e7890", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: isTranscribing ? "wait" : "pointer", transition: "background .15s", userSelect: "none" }}
                 onMouseDown={(e) => { e.preventDefault(); if (!isPttActiveRef.current && !isTranscribing) { isPttActiveRef.current = true; setIsPttActive(true); startRecording(); } }}
                 onMouseUp={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
                 onMouseLeave={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
@@ -3995,7 +4000,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
             </div>
           </div>
         {!input && (
-          <p className="px-4 pb-2 text-[11px] transition-all" style={{ color: "#9a96a0" }}>💡 {HINT_EXAMPLES[hintIdx]}</p>
+          <p className="px-4 pb-2 text-[11px] transition-all" style={{ color: dark ? "#9097a5" : "#9a96a0" }}>💡 {HINT_EXAMPLES[hintIdx]}</p>
         )}
         </div>
         {showCommands && (
@@ -4003,6 +4008,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
             <CommandPicker
               onSelect={(cmd) => { setInput(cmd); setShowCommands(false); inputRef.current?.focus(); }}
               onClose={() => setShowCommands(false)}
+              dark={dark}
             />
           </div>
         )}
