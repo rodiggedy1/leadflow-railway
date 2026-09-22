@@ -443,6 +443,7 @@ export default function CommandChatExactLive() {
   const [bookingNote, setBookingNote] = useState("");
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
   const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
   const [madisonOpen, setMadisonOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -453,6 +454,7 @@ export default function CommandChatExactLive() {
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageStreamRef = useRef<HTMLDivElement>(null);
   const centerFeedInitialScrollDone = useRef(false);
+  const scrollAfterSendRef = useRef(false);
   const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
 
   const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
@@ -536,15 +538,7 @@ export default function CommandChatExactLive() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, messageIds.join(",")]);
 
-  const sendMessage = trpc.opsChat.sendMessage.useMutation({
-    onSuccess: () => {
-      setDraft("");
-      setAttachmentUrls([]);
-      void utils.opsChat.listChannelMessages.invalidate({ channel });
-      void utils.opsChat.getChannelCounts.invalidate();
-    },
-    onError: () => showNotice("Message could not be sent. Please try again."),
-  });
+  const sendMessage = trpc.opsChat.sendMessage.useMutation();
   const uploadPhoto = trpc.opsChat.uploadOpsPhoto.useMutation({ onError: () => showNotice("Photo upload failed. Please try again.") });
   const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation({
     onSuccess: (result) => setDraft((value) => [value, result.text].filter(Boolean).join(value ? "\n" : "")),
@@ -598,6 +592,16 @@ export default function CommandChatExactLive() {
     return agents.agents.map((agent) => ({ ...agent, presence: commandPresenceStatus(agent, now) }));
   }, [agents.agents]);
   const rootMessages = useMemo(() => (channelMessages as ChannelMessage[]).filter((message) => !message.threadParentId), [channelMessages]);
+  const pendingRootMessages = useMemo(
+    () => pendingOutgoingMessages.filter((pending) => !rootMessages.some((persisted) => (
+      persisted.from === pending.from
+      && persisted.role === pending.role
+      && persisted.body === pending.body
+      && persisted.mediaUrl === pending.mediaUrl
+      && Math.abs(persisted.ts - pending.ts) < 15_000
+    ))),
+    [pendingOutgoingMessages, rootMessages],
+  );
   const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null), [rootMessages]);
   const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
   const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
@@ -606,8 +610,8 @@ export default function CommandChatExactLive() {
     [rootMessages],
   );
   const visibleRootMessages = useMemo(
-    () => rootMessages.filter((message) => !isHiddenCommandNotification(message) && !isServiceAlert(message)),
-    [rootMessages],
+    () => [...rootMessages, ...pendingRootMessages].filter((message) => !isHiddenCommandNotification(message) && !isServiceAlert(message)),
+    [pendingRootMessages, rootMessages],
   );
   const commandTimeline = useMemo<CommandTimelineEntry[]>(
     () => [
@@ -724,24 +728,70 @@ export default function CommandChatExactLive() {
   useEffect(() => {
     const stream = messageStreamRef.current;
     if (!stream) return;
-    const nearBottom = !centerFeedInitialScrollDone.current || stream.scrollHeight - stream.scrollTop - stream.clientHeight < 72;
-    if (!nearBottom) return;
+    const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 72;
+    const shouldScroll = scrollAfterSendRef.current || !centerFeedInitialScrollDone.current || nearBottom;
+    if (!shouldScroll) return;
     const frame = requestAnimationFrame(() => {
       stream.scrollTop = stream.scrollHeight;
       centerFeedInitialScrollDone.current = true;
+      scrollAfterSendRef.current = false;
     });
     return () => cancelAnimationFrame(frame);
-  }, [latestTimelineTimestamp]);
+  }, [latestTimelineTimestamp, pendingRootMessages.length]);
+
+  useEffect(() => {
+    setPendingOutgoingMessages((current) => {
+      const persistedIds = new Set(pendingOutgoingMessages.filter((pending) => !pendingRootMessages.includes(pending)).map((pending) => pending.id));
+      if (!persistedIds.size) return current;
+      return current.filter((pending) => !persistedIds.has(pending.id));
+    });
+  }, [pendingOutgoingMessages, pendingRootMessages]);
 
   const submitMessage = () => {
     const body = draft.trim();
     if (!body && !attachmentUrls.length) return;
+    const authorName = profile?.name || callerName;
+    const sentAttachments = attachmentUrls;
+    const sentMediaUrl = sentAttachments.length ? JSON.stringify(sentAttachments) : null;
+    const sentAt = Date.now();
+    const localMessage: ChannelMessage = {
+      id: -sentAt,
+      ts: sentAt,
+      from: authorName,
+      role: "office",
+      body: body || "Photo",
+      mediaUrl: sentMediaUrl,
+      quickAction: null,
+      metadata: null,
+      replyToId: null,
+      replyToBody: null,
+      replyToAuthor: null,
+      threadParentId: null,
+      threadParentBody: null,
+      threadParentFrom: null,
+      replyCount: 0,
+    };
+    scrollAfterSendRef.current = true;
+    setPendingOutgoingMessages((current) => [...current, localMessage]);
+    setDraft("");
+    setAttachmentUrls([]);
     sendMessage.mutate({
       channel,
-      body: body || "Photo",
-      authorName: profile?.name || callerName,
+      body: localMessage.body,
+      authorName,
       authorRole: "office",
-      mediaUrl: attachmentUrls.length ? JSON.stringify(attachmentUrls) : undefined,
+      mediaUrl: sentMediaUrl ?? undefined,
+    }, {
+      onSuccess: () => {
+        void utils.opsChat.listChannelMessages.invalidate({ channel });
+        void utils.opsChat.getChannelCounts.invalidate();
+      },
+      onError: () => {
+        setPendingOutgoingMessages((current) => current.filter((message) => message.id !== localMessage.id));
+        setDraft((current) => current || body);
+        setAttachmentUrls((current) => current.length ? current : sentAttachments);
+        showNotice("Message could not be sent. Please try again.");
+      },
     });
   };
 
@@ -787,6 +837,7 @@ export default function CommandChatExactLive() {
         void utils.opsChat.getThreadReplies.invalidate({ parentId: parent.id });
         void utils.opsChat.listChannelMessages.invalidate({ channel });
       },
+      onError: () => showNotice("Message could not be sent. Please try again."),
     });
   };
 

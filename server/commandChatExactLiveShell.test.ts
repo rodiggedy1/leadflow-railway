@@ -68,7 +68,8 @@ describe("Command Chat exact live shell", () => {
 
     expect(page).toContain('useOpsStream({');
     expect(page).toContain('fetch("/api/agents/login"');
-    expect(page).toContain('mediaUrl: attachmentUrls.length ? JSON.stringify(attachmentUrls) : undefined');
+    expect(page).toContain('const sentMediaUrl = sentAttachments.length ? JSON.stringify(sentAttachments) : null;');
+    expect(page).toContain('mediaUrl: sentMediaUrl ?? undefined');
     expect(page).toContain('import { useNotificationSound } from "@/hooks/useNotificationSound";');
     expect(page).toContain('import { useTabLeader } from "@/hooks/useTabLeader";');
     expect(page).toContain('const { muted: notifMuted } = useNotificationSound();');
@@ -272,6 +273,15 @@ describe("Command Chat exact live shell", () => {
     expect(page).not.toContain('{latestInboundTeamMessage && <TeamSmsFeedMessage');
     expect(page).toContain('const messageStreamRef = useRef<HTMLDivElement>(null);');
     expect(page).toContain('const centerFeedInitialScrollDone = useRef(false);');
+    expect(page).toContain('const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);');
+    expect(page).toContain('const scrollAfterSendRef = useRef(false);');
+    expect(page).toContain('const pendingRootMessages = useMemo(');
+    expect(page).toContain('const shouldScroll = scrollAfterSendRef.current || !centerFeedInitialScrollDone.current || nearBottom;');
+    expect(page).toContain('scrollAfterSendRef.current = true;');
+    expect(page).toContain('setPendingOutgoingMessages((current) => [...current, localMessage]);');
+    expect(page).toContain('setDraft("");');
+    expect(page).toContain('setPendingOutgoingMessages((current) => current.filter((message) => message.id !== localMessage.id));');
+    expect(page).toContain('setDraft((current) => current || body);');
     expect(page).toContain('stream.scrollTop = stream.scrollHeight;');
     expect(page).toContain('className="ccc-message-stream" ref={messageStreamRef}');
     expect(page).toContain('function TeamSmsFeedMessage({ event, onOpen }');
