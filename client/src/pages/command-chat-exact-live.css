@@ -111,17 +111,17 @@
 .ccc-widget-app .ccc-live-away-trigger:disabled{cursor:wait;opacity:.72;}
 .ccc-widget-app .ccc-live-away-trigger svg{width:12px;height:12px;}
 .ccc-widget-app .ccc-live-away-trigger svg:last-child{width:10px;height:10px;margin-left:-2px;}
-.ccc-widget-app .ccc-live-away-menu{position:absolute;right:0;bottom:calc(100% + 8px);z-index:80;width:218px;padding:6px;border:1px solid #48484d;border-radius:11px;background:#202022;box-shadow:0 16px 44px rgba(0,0,0,.45);}
-.ccc-widget-app .ccc-live-away-menu>p{margin:3px 6px 6px;color:#929298;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
-.ccc-widget-app .ccc-live-away-option{display:flex;width:100%;align-items:center;gap:9px;margin:2px 0;padding:8px;border:1px solid transparent;border-radius:8px;text-align:left;transition:filter .12s ease;}
-.ccc-widget-app .ccc-live-away-option:hover{filter:brightness(1.12);}
-.ccc-widget-app .ccc-live-away-option>span{width:24px;text-align:center;font-size:17px;line-height:1;}
-.ccc-widget-app .ccc-live-away-option>div{min-width:0;}
-.ccc-widget-app .ccc-live-away-option strong,.ccc-widget-app .ccc-live-away-option small{display:block;}
-.ccc-widget-app .ccc-live-away-option strong{font-size:11px;line-height:1.15;}
-.ccc-widget-app .ccc-live-away-option small{margin-top:2px;color:#a7a7ae;font-size:9px;line-height:1.15;}
-.ccc-widget-app .ccc-live-away-option.tone-amber{border-color:#6d592b;background:#342e1f;color:#f0ca6a;}
-.ccc-widget-app .ccc-live-away-option.tone-green{border-color:#286a51;background:#1d352c;color:#88e2b5;}
-.ccc-widget-app .ccc-live-away-option.tone-indigo{border-color:#4d4a82;background:#292743;color:#b8b3ff;}
-.ccc-widget-app .ccc-live-away-option.tone-blue{border-color:#305e79;background:#1e3240;color:#91d4ed;}
-@media(max-width:1120px){.ccc-widget-app .ccc-quick-actions .ccc-live-away-trigger{padding:0 7px;font-size:8px;}.ccc-widget-app .ccc-live-away-menu{width:204px;}}
+.ccc-live-away-menu{position:fixed;z-index:10001;width:218px;padding:6px;border:1px solid #48484d;border-radius:11px;background:#202022;box-shadow:0 16px 44px rgba(0,0,0,.45);transform:translateY(-100%);}
+.ccc-live-away-menu>p{margin:3px 6px 6px;color:#929298;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+.ccc-live-away-option{display:flex;width:100%;align-items:center;gap:9px;margin:2px 0;padding:8px;border:1px solid transparent;border-radius:8px;text-align:left;transition:filter .12s ease;}
+.ccc-live-away-option:hover{filter:brightness(1.12);}
+.ccc-live-away-option>span{width:24px;text-align:center;font-size:17px;line-height:1;}
+.ccc-live-away-option>div{min-width:0;}
+.ccc-live-away-option strong,.ccc-live-away-option small{display:block;}
+.ccc-live-away-option strong{font-size:11px;line-height:1.15;}
+.ccc-live-away-option small{margin-top:2px;color:#a7a7ae;font-size:9px;line-height:1.15;}
+.ccc-live-away-option.tone-amber{border-color:#6d592b;background:#342e1f;color:#f0ca6a;}
+.ccc-live-away-option.tone-green{border-color:#286a51;background:#1d352c;color:#88e2b5;}
+.ccc-live-away-option.tone-indigo{border-color:#4d4a82;background:#292743;color:#b8b3ff;}
+.ccc-live-away-option.tone-blue{border-color:#305e79;background:#1e3240;color:#91d4ed;}
+@media(max-width:1120px){.ccc-widget-app .ccc-quick-actions .ccc-live-away-trigger{padding:0 7px;font-size:8px;}.ccc-live-away-menu{width:204px;}}

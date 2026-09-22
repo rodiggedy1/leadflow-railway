@@ -1,4 +1,5 @@
 import { FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Activity,
   AlertTriangle,
@@ -884,7 +885,7 @@ export default function CommandChatExactLive() {
                 <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} teamSmsConversations={teamSmsConversations} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReaction={handleReaction} onOpenSmsConversation={setSelectedSmsConversation} />
               </div>
               {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
-              <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
+              <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
               <CommandComposer
                 authorName={profile?.name || callerName}
                 mentionNames={mentionNames}
@@ -1130,23 +1131,40 @@ function AwayStatusControl({
   onSetStatus: (status: AwayStatus) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const controlRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const updateMenuPosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuWidth = window.matchMedia("(max-width: 1120px)").matches ? 204 : 218;
+    setMenuPosition({
+      top: Math.max(8, rect.top - 8),
+      left: Math.min(Math.max(8, rect.right - menuWidth), window.innerWidth - menuWidth - 8),
+    });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!controlRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!controlRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    updateMenuPosition();
     document.addEventListener("pointerdown", closeOnOutsideClick);
     document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
     return () => {
       document.removeEventListener("pointerdown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [open]);
+  }, [open, updateMenuPosition]);
 
   if (status) return <div className="ccc-live-away-control" ref={controlRef}>
     <button type="button" className="ccc-live-away-trigger is-away" onClick={() => onSetStatus(null)} disabled={pending} aria-label="Mark yourself available">
@@ -1155,15 +1173,15 @@ function AwayStatusControl({
   </div>;
 
   return <div className="ccc-live-away-control" ref={controlRef}>
-    <button type="button" className="ccc-live-away-trigger" onClick={() => setOpen((current) => !current)} disabled={pending} aria-expanded={open} aria-haspopup="menu">
+    <button type="button" className="ccc-live-away-trigger" ref={triggerRef} onClick={() => { if (open) { setOpen(false); } else { updateMenuPosition(); setOpen(true); } }} disabled={pending} aria-expanded={open} aria-haspopup="menu">
       {pending ? <Loader2 className="animate-spin" /> : <CircleDot />}<span>Away</span><ChevronDown />
     </button>
-    {open && <div className="ccc-live-away-menu" role="menu" aria-label="Set away status">
+    {open && menuPosition && typeof document !== "undefined" && createPortal(<div className="ccc-live-away-menu" ref={menuRef} role="menu" aria-label="Set away status" style={menuPosition}>
       <p>Set status</p>
       {AWAY_STATUSES.map((option) => <button type="button" key={option.key} role="menuitem" className={`ccc-live-away-option tone-${option.tone}`} onClick={() => { setOpen(false); onSetStatus(option.key); }}>
         <span>{option.emoji}</span><div><strong>{option.label}</strong><small>{option.sub}</small></div>
       </button>)}
-    </div>}
+    </div>, document.body)}
   </div>;
 }
 
