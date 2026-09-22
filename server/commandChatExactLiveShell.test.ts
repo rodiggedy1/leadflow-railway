@@ -16,6 +16,7 @@ describe("Command Chat exact live shell", () => {
     const opsChatRouter = read("server/opsChatRouter.ts");
     const agentDashboard = read("client/src/pages/AgentDashboard.tsx");
     const main = read("client/src/main.tsx");
+    const headerLine = page.split("\n").find((line) => line.includes('className="ccc-reference-chat-header"')) ?? "";
 
     for (const stylesheet of [
       "command-chat-crm-review.css",
@@ -220,10 +221,13 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const setAwayStatusMutation = trpc.agents.setAwayStatus.useMutation');
     expect(page).toContain('function AwayStatusControl({');
     expect(page).toContain('<AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus}');
+    expect(page).toContain('<div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus}');
+    expect(headerLine).not.toContain('AwayStatusControl');
     expect(page).toContain('quickAction: `away_status:${status ?? "back"}`');
     expect(page).toContain('I&apos;m Back');
-    expect(styles).toContain('.ccc-live-away-trigger');
+    expect(styles).toContain('.ccc-quick-actions .ccc-live-away-trigger');
     expect(styles).toContain('.ccc-live-away-menu');
+    expect(styles).toContain('bottom:calc(100% + 8px)');
     expect(page).toContain('const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);');
     expect(page).toContain('className="ccc-left-section ccc-conversations-section ccc-live-left-rail"');
     expect(page).toContain('className="ccc-live-sms-header"');
