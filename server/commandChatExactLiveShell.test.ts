@@ -72,14 +72,22 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('mediaUrl: sentMediaUrl ?? undefined');
     expect(page).toContain('import { useNotificationSound } from "@/hooks/useNotificationSound";');
     expect(page).toContain('import { useTabLeader } from "@/hooks/useTabLeader";');
-    expect(page).toContain('const { muted: notifMuted } = useNotificationSound();');
+    expect(page).toContain('const { playSound, muted: notifMuted } = useNotificationSound();');
     expect(page).toContain('const { isLeader: isNotifLeader } = useTabLeader();');
     expect(page).toContain('const LEAD_ALERT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bMcVRxTSaTukZing.wav";');
     expect(page).toContain('const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);');
+    expect(page).toContain('const [incomingCommandMessage, setIncomingCommandMessage] = useState<{ from: string } | null>(null);');
+    expect(page).toContain('const centerFeedNearBottomRef = useRef(true);');
     expect(page).toContain('const realMessages = (channelMessages as ChannelMessage[]).filter((message) => message.id > 0);');
     expect(page).toContain('if (lastSeenCommandMsgIdRef.current === undefined) {');
     expect(page).toContain('message.id > lastSeenCommandMsgIdRef.current! && message.quickAction === "new_lead",');
     expect(page).toContain('if (newLeads.length > 0 && isNotifLeader && !notifMuted) {');
+    expect(page).toContain('const newHumanMessages = realMessages.filter((message) => (');
+    expect(page).toContain('message.quickAction === null');
+    expect(page).toContain('} else if (newHumanMessages.length > 0 && isNotifLeader && !notifMuted) {');
+    expect(page).toContain('playSound();');
+    expect(page).toContain('if (newHumanMessages.length > 0 && !centerFeedNearBottomRef.current) {');
+    expect(page).toContain('showIncomingCommandMessage(newHumanMessages.at(-1)!.from);');
     expect(page).toContain('audio.volume = 0.75;');
     expect((page.match(/opsChat\.listChannelMessages\.useQuery/g) ?? [])).toHaveLength(1);
     expect(page).toContain('import AiConcierge from "@/components/AiConcierge";');
@@ -279,6 +287,7 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const scrollAfterSendRef = useRef(false);');
     expect(page).toContain('const pendingRootMessages = useMemo(');
     expect(page).toContain('const shouldScroll = scrollAfterSendRef.current || !centerFeedInitialScrollDone.current || nearBottom;');
+    expect(page).toContain('const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 250;');
     expect(page).toContain('scrollAfterSendRef.current = true;');
     expect(page).toContain('setPendingOutgoingMessages((current) => [...current, localMessage]);');
     expect(page).toContain('setDraft("");');
@@ -286,6 +295,9 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('setDraft((current) => current || body);');
     expect(page).toContain('stream.scrollTop = stream.scrollHeight;');
     expect(page).toContain('className="ccc-message-stream" ref={messageStreamRef}');
+    expect(page).toContain('onScroll={trackCommandFeedScroll}');
+    expect(page).toContain('className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}');
+    expect(page).toContain('New message from {incomingCommandMessage.from}');
     expect(page).toContain('function TeamSmsFeedMessage({ event, onOpen }');
     expect(page).toContain('const { name, body, ts: timestamp } = event;');
     expect(page).toContain('className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"');
@@ -331,7 +343,8 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-sms-filter-tabs");
     expect(styles).toContain(".ccc-live .ccc-live-sms-search");
     expect(styles).toContain(".ccc-live-sms-drawer");
-    expect(styles).toContain(".ccc-live .ccc-live-team-sms-message");
+    expect(styles).toContain('.ccc-live .ccc-live-team-sms-message');
+    expect(styles).toContain('.ccc-live .ccc-live-new-command-message');
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-card");
     expect(styles).toContain(".ccc-live .ccc-group-message-team .ccc-live-team-sms-card>p");
     expect(styles).toContain("background:transparent!important");
@@ -363,6 +376,9 @@ describe("Command Chat exact live shell", () => {
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/command-chat-crm"><CommandChatExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />');
     expect(app).toContain('const isCommandChatWorkspace = location === "/admin/command-chat";');
+    expect(app).toContain('function OpsChatRedirect()');
+    expect(app).toContain('navigate("/admin/command-chat");');
+    expect(app).not.toContain('open();\n    navigate("/admin/leads");');
   });
 
   it("does not mount the legacy CommandChat or OpsChat page as the new route shell", () => {

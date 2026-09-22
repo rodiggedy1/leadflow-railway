@@ -116,14 +116,13 @@ function AdminSettingsReviewRoute() {
 
 /**
  * OpsChatRedirect
- * /admin/ops-chat is now an overlay — redirect to /admin/leads and open the overlay.
+ * The retired legacy Command Chat entry point always resolves to the one
+ * exact-live Command Chat workspace. It never opens the legacy overlay.
  */
 function OpsChatRedirect() {
-  const { open } = useOpsChatWindow();
   const [, navigate] = useLocation();
   useEffect(() => {
-    open();
-    navigate("/admin/leads");
+    navigate("/admin/command-chat");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }

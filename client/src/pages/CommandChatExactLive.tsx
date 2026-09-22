@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -6,6 +6,7 @@ import {
   Bell,
   CalendarClock,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleDot,
   CircleDollarSign,
@@ -446,6 +447,7 @@ export default function CommandChatExactLive() {
   const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
   const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
   const [madisonOpen, setMadisonOpen] = useState(false);
+  const [incomingCommandMessage, setIncomingCommandMessage] = useState<{ from: string } | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -454,8 +456,10 @@ export default function CommandChatExactLive() {
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageStreamRef = useRef<HTMLDivElement>(null);
   const centerFeedInitialScrollDone = useRef(false);
+  const centerFeedNearBottomRef = useRef(true);
   const scrollAfterSendRef = useRef(false);
   const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
+  const incomingCommandMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
   const { data: photosData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
@@ -463,7 +467,7 @@ export default function CommandChatExactLive() {
     { channel },
     { enabled: isAuthenticated, refetchInterval: 30_000, refetchIntervalInBackground: false },
   );
-  const { muted: notifMuted } = useNotificationSound();
+  const { playSound, muted: notifMuted } = useNotificationSound();
   const { isLeader: isNotifLeader } = useTabLeader();
   const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
@@ -654,8 +658,36 @@ export default function CommandChatExactLive() {
     noticeTimer.current = setTimeout(() => setNotice(""), 3000);
   }
 
+  const showIncomingCommandMessage = useCallback((from: string) => {
+    if (incomingCommandMessageTimer.current) clearTimeout(incomingCommandMessageTimer.current);
+    setIncomingCommandMessage({ from });
+    incomingCommandMessageTimer.current = setTimeout(() => setIncomingCommandMessage(null), 6000);
+  }, []);
+
+  const dismissIncomingCommandMessage = useCallback(() => {
+    if (incomingCommandMessageTimer.current) clearTimeout(incomingCommandMessageTimer.current);
+    setIncomingCommandMessage(null);
+    const stream = messageStreamRef.current;
+    if (!stream) return;
+    requestAnimationFrame(() => {
+      stream.scrollTop = stream.scrollHeight;
+      centerFeedNearBottomRef.current = true;
+    });
+  }, []);
+
+  const trackCommandFeedScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const stream = event.currentTarget;
+    const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 250;
+    centerFeedNearBottomRef.current = nearBottom;
+    if (nearBottom && incomingCommandMessage) {
+      if (incomingCommandMessageTimer.current) clearTimeout(incomingCommandMessageTimer.current);
+      setIncomingCommandMessage(null);
+    }
+  }, [incomingCommandMessage]);
+
   useEffect(() => () => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    if (incomingCommandMessageTimer.current) clearTimeout(incomingCommandMessageTimer.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
@@ -713,27 +745,39 @@ export default function CommandChatExactLive() {
       const newLeads = realMessages.filter(
         (message) => message.id > lastSeenCommandMsgIdRef.current! && message.quickAction === "new_lead",
       );
+      const newHumanMessages = realMessages.filter((message) => (
+        message.id > lastSeenCommandMsgIdRef.current!
+        && message.quickAction === null
+        && !effectiveMentionNames.has(message.from)
+      ));
       if (newLeads.length > 0 && isNotifLeader && !notifMuted) {
         try {
           const audio = new Audio(LEAD_ALERT_URL);
           audio.volume = 0.75;
           audio.play().catch(() => {});
         } catch {}
+      } else if (newHumanMessages.length > 0 && isNotifLeader && !notifMuted) {
+        playSound();
+      }
+      if (newHumanMessages.length > 0 && !centerFeedNearBottomRef.current) {
+        showIncomingCommandMessage(newHumanMessages.at(-1)!.from);
       }
       lastSeenCommandMsgIdRef.current = currentMaxId;
     }
-  }, [channelMessages, isAuthenticated, isNotifLeader, notifMuted]);
+  }, [channelMessages, effectiveMentionNames, isAuthenticated, isNotifLeader, notifMuted, playSound, showIncomingCommandMessage]);
 
   useEffect(() => {
     const stream = messageStreamRef.current;
     if (!stream) return;
-    const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 72;
+    const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 250;
     const shouldScroll = scrollAfterSendRef.current || !centerFeedInitialScrollDone.current || nearBottom;
     if (!shouldScroll) return;
     const frame = requestAnimationFrame(() => {
       stream.scrollTop = stream.scrollHeight;
       centerFeedInitialScrollDone.current = true;
+      centerFeedNearBottomRef.current = true;
       scrollAfterSendRef.current = false;
+      setIncomingCommandMessage(null);
     });
     return () => cancelAnimationFrame(frame);
   }, [latestTimelineTimestamp, pendingRootMessages.length]);
@@ -936,9 +980,10 @@ export default function CommandChatExactLive() {
             <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
-              <div className="ccc-message-stream" ref={messageStreamRef}>
+              <div className="ccc-message-stream" ref={messageStreamRef} onScroll={trackCommandFeedScroll}>
                 <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} teamSmsConversations={teamSmsConversations} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReaction={handleReaction} onOpenSmsConversation={setSelectedSmsConversation} />
               </div>
+              {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
               <div className="ccc-quick-actions"><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
               <div className="ccc-composer">
                 {mentionQuery !== null && mentionSuggestions.length > 0 && <div className="ccc-live-mention-picker" role="listbox" aria-label="Mention a team member">{mentionSuggestions.map((name, index) => <button type="button" role="option" aria-selected={index === mentionIndex} className={index === mentionIndex ? "active" : ""} key={name} onMouseDown={(event) => { event.preventDefault(); selectMention(name); }}><Avatar name={name} photoUrl={photoMap[name] ?? null} /><span>{name}</span><small>@{name}</small></button>)}</div>}
