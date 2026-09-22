@@ -373,6 +373,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain('.ccc-live .ccc-live-new-command-message');
     expect(styles).toContain('.ccc-live .ccc-live-message-link');
     expect(styles).toContain('.ccc-live-sms-outbound-sender');
+    expect(styles).toContain('.ccc-live-sms-outbound-avatar{display:grid;place-items:center;width:24px;height:24px;');
     expect(styles).toContain(".ccc-live .ccc-live-team-sms-card");
     expect(styles).toContain(".ccc-live .ccc-group-message-team .ccc-live-team-sms-card>p");
     expect(styles).toContain("background:transparent!important");

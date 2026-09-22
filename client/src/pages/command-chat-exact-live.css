@@ -100,4 +100,4 @@
 .ccc-live .ccc-live-message-link{color:#80c8f0;text-decoration:underline;text-decoration-color:rgba(128,200,240,.55);text-underline-offset:2px;overflow-wrap:anywhere}.ccc-live .ccc-live-message-link:hover{color:#c4e7fa;text-decoration-color:currentColor}.ccc-live .ccc-live-message-link:focus-visible{outline:2px solid #92d4f6;outline-offset:2px;border-radius:2px}
 
 /* Outbound SMS keeps the real Command Chat sender instead of a generic team label. */
-.ccc-live-sms-outbound-sender{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px}.ccc-live-sms-outbound-avatar{display:grid;place-items:center;width:15px;height:15px;overflow:hidden;border:1px solid #5f738e;border-radius:50%;background:#354a5c;color:#eaf5fc;font-size:6px;font-weight:800;object-fit:cover}
+.ccc-live-sms-outbound-sender{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px}.ccc-live-sms-outbound-avatar{display:grid;place-items:center;width:24px;height:24px;overflow:hidden;border:1px solid #5f738e;border-radius:50%;background:#354a5c;color:#eaf5fc;font-size:8px;font-weight:800;object-fit:cover}
