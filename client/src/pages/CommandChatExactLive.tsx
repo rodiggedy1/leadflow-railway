@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -419,20 +419,14 @@ export default function CommandChatExactLive() {
   const channel: ChannelKey = "command";
   const LEAD_ALERT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bMcVRxTSaTukZing.wav";
   const [smsSearch, setSmsSearch] = useState("");
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [mentionIndex, setMentionIndex] = useState(0);
-  const [mentionStart, setMentionStart] = useState(0);
   const [issueEngineOpen, setIssueEngineOpen] = useState(false);
   const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
   const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);
-  const [draft, setDraft] = useState("");
   const [modal, setModal] = useState<ModalKind>(null);
   const [threadId, setThreadId] = useState<number | null>(null);
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [threadDraft, setThreadDraft] = useState("");
   const [notice, setNotice] = useState("");
-  const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
-  const [recording, setRecording] = useState(false);
   const [issueTitle, setIssueTitle] = useState("");
   const [issueNotes, setIssueNotes] = useState("");
   const [issueType, setIssueType] = useState<(typeof ISSUE_TYPES)[number][0]>("internal_task");
@@ -448,11 +442,6 @@ export default function CommandChatExactLive() {
   const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
   const [madisonOpen, setMadisonOpen] = useState(false);
   const [incomingCommandMessage, setIncomingCommandMessage] = useState<{ from: string } | null>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const recorderChunks = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageStreamRef = useRef<HTMLDivElement>(null);
   const centerFeedInitialScrollDone = useRef(false);
@@ -538,12 +527,7 @@ export default function CommandChatExactLive() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, messageIds.join(",")]);
 
-  const sendMessage = trpc.opsChat.sendMessage.useMutation();
-  const uploadPhoto = trpc.opsChat.uploadOpsPhoto.useMutation({ onError: () => showNotice("Photo upload failed. Please try again.") });
-  const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation({
-    onSuccess: (result) => setDraft((value) => [value, result.text].filter(Boolean).join(value ? "\n" : "")),
-    onError: () => showNotice("Voice note could not be transcribed."),
-  });
+  const sendThreadMessage = trpc.opsChat.sendMessage.useMutation();
   const toggleReaction = trpc.opsChat.toggleReaction.useMutation({
     onSuccess: () => {
       void utils.opsChat.listChannelMessages.invalidate({ channel });
@@ -582,10 +566,6 @@ export default function CommandChatExactLive() {
     }
     return Object.values(byFirstName).sort();
   }, [agents.agents, callerName, photoMap]);
-  const mentionSuggestions = useMemo(
-    () => mentionQuery === null ? [] : mentionNames.filter((name) => name.toLowerCase().startsWith(mentionQuery.toLowerCase())),
-    [mentionNames, mentionQuery],
-  );
   const superAlertMessageIdSet = useMemo(() => new Set(superAlertMessageIds), [superAlertMessageIds]);
   const activeSuperAlert = pendingSuperAlerts[0] ?? null;
   const todayBookingCount = todayStats?.bookedCount ?? 0;
@@ -652,11 +632,21 @@ export default function CommandChatExactLive() {
   const activeThreadCount = activeThreads.length;
   const unreadThreadCount = activeThreads.filter((thread) => thread.hasUnread).length;
 
-  function showNotice(message: string) {
+  const showNotice = useCallback((message: string) => {
     setNotice(message);
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => setNotice(""), 3000);
-  }
+  }, []);
+
+  const addPendingOutgoingMessage = useCallback((message: ChannelMessage) => {
+    scrollAfterSendRef.current = true;
+    setPendingOutgoingMessages((current) => [...current, message]);
+  }, []);
+
+  const restoreFailedOutgoingMessage = useCallback((messageId: number) => {
+    setPendingOutgoingMessages((current) => current.filter((message) => message.id !== messageId));
+    showNotice("Message could not be sent. Please try again.");
+  }, [showNotice]);
 
   const showIncomingCommandMessage = useCallback((from: string) => {
     if (incomingCommandMessageTimer.current) clearTimeout(incomingCommandMessageTimer.current);
@@ -688,7 +678,6 @@ export default function CommandChatExactLive() {
   useEffect(() => () => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     if (incomingCommandMessageTimer.current) clearTimeout(incomingCommandMessageTimer.current);
-    streamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
   useEffect(() => {
@@ -790,85 +779,10 @@ export default function CommandChatExactLive() {
     });
   }, [pendingOutgoingMessages, pendingRootMessages]);
 
-  const submitMessage = () => {
-    const body = draft.trim();
-    if (!body && !attachmentUrls.length) return;
-    const authorName = profile?.name || callerName;
-    const sentAttachments = attachmentUrls;
-    const sentMediaUrl = sentAttachments.length ? JSON.stringify(sentAttachments) : null;
-    const sentAt = Date.now();
-    const localMessage: ChannelMessage = {
-      id: -sentAt,
-      ts: sentAt,
-      from: authorName,
-      role: "office",
-      body: body || "Photo",
-      mediaUrl: sentMediaUrl,
-      quickAction: null,
-      metadata: null,
-      replyToId: null,
-      replyToBody: null,
-      replyToAuthor: null,
-      threadParentId: null,
-      threadParentBody: null,
-      threadParentFrom: null,
-      replyCount: 0,
-    };
-    scrollAfterSendRef.current = true;
-    setPendingOutgoingMessages((current) => [...current, localMessage]);
-    setDraft("");
-    setAttachmentUrls([]);
-    sendMessage.mutate({
-      channel,
-      body: localMessage.body,
-      authorName,
-      authorRole: "office",
-      mediaUrl: sentMediaUrl ?? undefined,
-    }, {
-      onSuccess: () => {
-        void utils.opsChat.listChannelMessages.invalidate({ channel });
-        void utils.opsChat.getChannelCounts.invalidate();
-      },
-      onError: () => {
-        setPendingOutgoingMessages((current) => current.filter((message) => message.id !== localMessage.id));
-        setDraft((current) => current || body);
-        setAttachmentUrls((current) => current.length ? current : sentAttachments);
-        showNotice("Message could not be sent. Please try again.");
-      },
-    });
-  };
-
-  const selectMention = (name: string) => {
-    const selectionEnd = composerRef.current?.selectionStart ?? draft.length;
-    const before = draft.slice(0, mentionStart);
-    const after = draft.slice(selectionEnd);
-    const next = `${before}@${name} ${after}`;
-    setDraft(next);
-    setMentionQuery(null);
-    requestAnimationFrame(() => {
-      const cursor = `${before}@${name} `.length;
-      composerRef.current?.focus();
-      composerRef.current?.setSelectionRange(cursor, cursor);
-    });
-  };
-
-  const updateMentionQuery = (value: string, selectionStart: number) => {
-    setDraft(value);
-    const before = value.slice(0, selectionStart);
-    const match = before.match(/@([\w\s]*)$/);
-    if (!match) {
-      setMentionQuery(null);
-      return;
-    }
-    setMentionStart(selectionStart - match[0].length);
-    setMentionIndex(0);
-    setMentionQuery(match[1]);
-  };
-
   const submitThreadReply = () => {
     const parent = threadDetail?.parent;
     if (!parent || !threadDraft.trim()) return;
-    sendMessage.mutate({
+    sendThreadMessage.mutate({
       channel,
       body: threadDraft.trim(),
       authorName: profile?.name || callerName,
@@ -903,52 +817,6 @@ export default function CommandChatExactLive() {
     setUnreadMentionIds([]);
   };
 
-  const stageImage = async (event: ChangeEvent<HTMLInputElement>) => {
-    const image = event.target.files?.[0];
-    event.target.value = "";
-    if (!image) return;
-    if (!image.type.startsWith("image/")) {
-      showNotice("Command Chat supports image attachments only.");
-      return;
-    }
-    try {
-      const dataBase64 = await fileToBase64(image);
-      const result = await uploadPhoto.mutateAsync({ filename: image.name, mimeType: image.type, dataBase64 });
-      setAttachmentUrls((urls) => [...urls, result.url]);
-    } catch {
-      // The mutation reports the error to the user.
-    }
-  };
-
-  const toggleRecording = async () => {
-    if (recording) {
-      recorderRef.current?.stop();
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      showNotice("Voice recording is unavailable in this browser.");
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      recorderChunks.current = [];
-      streamRef.current = stream;
-      recorder.addEventListener("dataavailable", (event) => { if (event.data.size) recorderChunks.current.push(event.data); });
-      recorder.addEventListener("stop", () => {
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        setRecording(false);
-        const blob = new Blob(recorderChunks.current, { type: recorder.mimeType || "audio/webm" });
-        void blobToBase64(blob).then((dataBase64) => transcribeVoice.mutate({ dataBase64, mimeType: blob.type || "audio/webm" }));
-      });
-      recorderRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch {
-      showNotice("Microphone access was not granted.");
-    }
-  };
 
   if (agentLoading) return <main className="ccc-app ccc-live-loading"><Loader2 className="animate-spin" /></main>;
   if (agentError || !agentMe) return <LoginGate onSuccess={() => void refetchAgent()} />;
@@ -985,19 +853,19 @@ export default function CommandChatExactLive() {
               </div>
               {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
               <div className="ccc-quick-actions"><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
-              <div className="ccc-composer">
-                {mentionQuery !== null && mentionSuggestions.length > 0 && <div className="ccc-live-mention-picker" role="listbox" aria-label="Mention a team member">{mentionSuggestions.map((name, index) => <button type="button" role="option" aria-selected={index === mentionIndex} className={index === mentionIndex ? "active" : ""} key={name} onMouseDown={(event) => { event.preventDefault(); selectMention(name); }}><Avatar name={name} photoUrl={photoMap[name] ?? null} /><span>{name}</span><small>@{name}</small></button>)}</div>}
-                <div className="ccc-live-composer-body">
-                {attachmentUrls.length > 0 && <div className="ccc-live-attachments">{attachmentUrls.map((url) => <span key={url}><img src={url} alt="Pending command attachment" /><button type="button" onClick={() => setAttachmentUrls((urls) => urls.filter((item) => item !== url))}><X /></button></span>)}</div>}
-                <textarea ref={composerRef} value={draft} onChange={(event) => updateMentionQuery(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={(event) => { if (mentionQuery !== null && mentionSuggestions.length > 0) { if (event.key === "ArrowDown") { event.preventDefault(); setMentionIndex((index) => Math.min(index + 1, mentionSuggestions.length - 1)); return; } if (event.key === "ArrowUp") { event.preventDefault(); setMentionIndex((index) => Math.max(index - 1, 0)); return; } if (event.key === "Tab") { event.preventDefault(); selectMention(mentionSuggestions[mentionIndex]); return; } if (event.key === "Escape") { event.preventDefault(); setMentionQuery(null); return; } } if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); setMentionQuery(null); submitMessage(); } }} placeholder={recording ? "Recording voice note…" : "Message the command channel…"} />
-                <div className="ccc-composer-tools"><span><button type="button" aria-label="Attach image" disabled={uploadPhoto.isPending} onClick={() => fileInputRef.current?.click()}>{uploadPhoto.isPending ? <Loader2 className="animate-spin" /> : <Paperclip />}</button><button type="button" aria-label={recording ? "Stop voice recording" : "Record voice note"} disabled={transcribeVoice.isPending} onClick={() => void toggleRecording()}>{recording ? <span className="ccc-live-recording" /> : transcribeVoice.isPending ? <Loader2 className="animate-spin" /> : <Mic />}</button><button type="button" aria-label="Add check mark" onClick={() => setDraft((value) => `${value}${value ? " " : ""}✅`)}><Check /></button></span><button type="button" className="ccc-send" disabled={sendMessage.isPending || (!draft.trim() && !attachmentUrls.length)} onClick={submitMessage}>{sendMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}Send</button></div>
-              </div></div>
-              <input ref={fileInputRef} type="file" accept="image/*" className="ccc-live-file-input" onChange={(event) => void stageImage(event)} />
+              <CommandComposer
+                authorName={profile?.name || callerName}
+                mentionNames={mentionNames}
+                photoMap={photoMap}
+                onOptimisticMessage={addPendingOutgoingMessage}
+                onOutgoingFailure={restoreFailedOutgoingMessage}
+                onNotice={showNotice}
+              />
             </>
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} /><ServiceAlertPanel alerts={serviceAlerts} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} /><ServiceAlertPanel alerts={serviceAlerts} /></>}
           </aside>
         </div>
       </section>
@@ -1194,6 +1062,179 @@ const CommandTimelineFeed = memo(function CommandTimelineFeed({ messagesLoading,
   if (messagesLoading) return <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div>;
   if (timeline.length === 0) return <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div>;
   return <>{timeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlert={superAlertMessageIdSet.has(entry.message.id)} reactions={reactionsByMessage[entry.message.id] ?? {}} onOpenPhoto={onOpenPhoto} onThread={() => onOpenThread(entry.message.id)} onReaction={(emoji) => onReaction(entry.message.id, emoji)} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) onOpenSmsConversation(conversation); }} />)}</>;
+});
+
+
+const CommandComposer = memo(function CommandComposer({
+  authorName,
+  mentionNames,
+  photoMap,
+  onOptimisticMessage,
+  onOutgoingFailure,
+  onNotice,
+}: {
+  authorName: string;
+  mentionNames: string[];
+  photoMap: Record<string, string | null>;
+  onOptimisticMessage: (message: ChannelMessage) => void;
+  onOutgoingFailure: (messageId: number) => void;
+  onNotice: (message: string) => void;
+}) {
+  const utils = trpc.useUtils();
+  const [draft, setDraft] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionStart, setMentionStart] = useState(0);
+  const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
+  const [recording, setRecording] = useState(false);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderChunks = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const mentionSuggestions = useMemo(
+    () => mentionQuery === null ? [] : mentionNames.filter((name) => name.toLowerCase().startsWith(mentionQuery.toLowerCase())),
+    [mentionNames, mentionQuery],
+  );
+  const uploadPhoto = trpc.opsChat.uploadOpsPhoto.useMutation({ onError: () => onNotice("Photo upload failed. Please try again.") });
+  const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation({
+    onSuccess: (result) => setDraft((value) => [value, result.text].filter(Boolean).join(value ? "\n" : "")),
+    onError: () => onNotice("Voice note could not be transcribed."),
+  });
+  const sendMessage = trpc.opsChat.sendMessage.useMutation();
+
+  useEffect(() => () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const selectMention = useCallback((name: string) => {
+    const selectionEnd = composerRef.current?.selectionStart ?? draft.length;
+    const before = draft.slice(0, mentionStart);
+    const after = draft.slice(selectionEnd);
+    const next = `${before}@${name} ${after}`;
+    setDraft(next);
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      const cursor = `${before}@${name} `.length;
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(cursor, cursor);
+    });
+  }, [draft, mentionStart]);
+
+  const updateMentionQuery = useCallback((value: string, selectionStart: number) => {
+    setDraft(value);
+    const before = value.slice(0, selectionStart);
+    const match = before.match(/@([\w\s]*)$/);
+    if (!match) {
+      setMentionQuery(null);
+      return;
+    }
+    setMentionStart(selectionStart - match[0].length);
+    setMentionIndex(0);
+    setMentionQuery(match[1]);
+  }, []);
+
+  const submitMessage = useCallback(() => {
+    const body = draft.trim();
+    if (!body && !attachmentUrls.length) return;
+    const sentAttachments = attachmentUrls;
+    const sentMediaUrl = sentAttachments.length ? JSON.stringify(sentAttachments) : null;
+    const sentAt = Date.now();
+    const localMessage: ChannelMessage = {
+      id: -sentAt,
+      ts: sentAt,
+      from: authorName,
+      role: "office",
+      body: body || "Photo",
+      mediaUrl: sentMediaUrl,
+      quickAction: null,
+      metadata: null,
+      replyToId: null,
+      replyToBody: null,
+      replyToAuthor: null,
+      threadParentId: null,
+      threadParentBody: null,
+      threadParentFrom: null,
+      replyCount: 0,
+    };
+    onOptimisticMessage(localMessage);
+    setDraft("");
+    setAttachmentUrls([]);
+    sendMessage.mutate({
+      channel: "command",
+      body: localMessage.body,
+      authorName,
+      authorRole: "office",
+      mediaUrl: sentMediaUrl ?? undefined,
+    }, {
+      onSuccess: () => {
+        void utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+        void utils.opsChat.getChannelCounts.invalidate();
+      },
+      onError: () => {
+        onOutgoingFailure(localMessage.id);
+        setDraft((current) => current || body);
+        setAttachmentUrls((current) => current.length ? current : sentAttachments);
+      },
+    });
+  }, [attachmentUrls, authorName, draft, onOptimisticMessage, onOutgoingFailure, sendMessage, utils]);
+
+  const stageImage = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const image = event.target.files?.[0];
+    event.target.value = "";
+    if (!image) return;
+    if (!image.type.startsWith("image/")) {
+      onNotice("Command Chat supports image attachments only.");
+      return;
+    }
+    try {
+      const dataBase64 = await fileToBase64(image);
+      const result = await uploadPhoto.mutateAsync({ filename: image.name, mimeType: image.type, dataBase64 });
+      setAttachmentUrls((urls) => [...urls, result.url]);
+    } catch {
+      // The mutation reports its own failure through the notice callback.
+    }
+  }, [onNotice, uploadPhoto]);
+
+  const toggleRecording = useCallback(async () => {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      onNotice("Voice recording is unavailable in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recorderChunks.current = [];
+      streamRef.current = stream;
+      recorder.addEventListener("dataavailable", (event) => { if (event.data.size) recorderChunks.current.push(event.data); });
+      recorder.addEventListener("stop", () => {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        setRecording(false);
+        const blob = new Blob(recorderChunks.current, { type: recorder.mimeType || "audio/webm" });
+        void blobToBase64(blob).then((dataBase64) => transcribeVoice.mutate({ dataBase64, mimeType: blob.type || "audio/webm" }));
+      });
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      onNotice("Microphone access was not granted.");
+    }
+  }, [onNotice, recording, transcribeVoice]);
+
+  return <div className="ccc-composer">
+    {mentionQuery !== null && mentionSuggestions.length > 0 && <div className="ccc-live-mention-picker" role="listbox" aria-label="Mention a team member">{mentionSuggestions.map((name, index) => <button type="button" role="option" aria-selected={index === mentionIndex} className={index === mentionIndex ? "active" : ""} key={name} onMouseDown={(event) => { event.preventDefault(); selectMention(name); }}><Avatar name={name} photoUrl={photoMap[name] ?? null} /><span>{name}</span><small>@{name}</small></button>)}</div>}
+    <div className="ccc-live-composer-body">
+      {attachmentUrls.length > 0 && <div className="ccc-live-attachments">{attachmentUrls.map((url) => <span key={url}><img src={url} alt="Pending command attachment" /><button type="button" onClick={() => setAttachmentUrls((urls) => urls.filter((item) => item !== url))}><X /></button></span>)}</div>}
+      <textarea ref={composerRef} value={draft} onChange={(event) => updateMentionQuery(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={(event) => { if (mentionQuery !== null && mentionSuggestions.length > 0) { if (event.key === "ArrowDown") { event.preventDefault(); setMentionIndex((index) => Math.min(index + 1, mentionSuggestions.length - 1)); return; } if (event.key === "ArrowUp") { event.preventDefault(); setMentionIndex((index) => Math.max(index - 1, 0)); return; } if (event.key === "Tab") { event.preventDefault(); selectMention(mentionSuggestions[mentionIndex]); return; } if (event.key === "Escape") { event.preventDefault(); setMentionQuery(null); return; } } if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); setMentionQuery(null); submitMessage(); } }} placeholder={recording ? "Recording voice note…" : "Message the command channel…"} />
+      <div className="ccc-composer-tools"><span><button type="button" aria-label="Attach image" disabled={uploadPhoto.isPending} onClick={() => fileInputRef.current?.click()}>{uploadPhoto.isPending ? <Loader2 className="animate-spin" /> : <Paperclip />}</button><button type="button" aria-label={recording ? "Stop voice recording" : "Record voice note"} disabled={transcribeVoice.isPending} onClick={() => void toggleRecording()}>{recording ? <span className="ccc-live-recording" /> : transcribeVoice.isPending ? <Loader2 className="animate-spin" /> : <Mic />}</button><button type="button" aria-label="Add check mark" onClick={() => setDraft((value) => `${value}${value ? " " : ""}✅`)}><Check /></button></span><button type="button" className="ccc-send" disabled={sendMessage.isPending || (!draft.trim() && !attachmentUrls.length)} onClick={submitMessage}>{sendMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}Send</button></div>
+    </div>
+    <input ref={fileInputRef} type="file" accept="image/*" className="ccc-live-file-input" onChange={(event) => void stageImage(event)} />
+  </div>;
 });
 
 function SmsConversationDrawer({ conversation, conversations, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; onClose: () => void }) {
