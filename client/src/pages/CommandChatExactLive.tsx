@@ -116,6 +116,7 @@ type SmsInboxMessage = {
   role: string;
   content: string;
   ts?: number;
+  senderName?: string;
 };
 
 type TeamSmsStreamEvent = {
@@ -869,7 +870,7 @@ export default function CommandChatExactLive() {
           </aside>
         </div>
       </section>
-      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} onClose={() => setSelectedSmsConversation(null)} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} onClose={() => setSelectedSmsConversation(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
@@ -962,8 +963,8 @@ function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId,
   } : null;
   if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
   if (resolvedCallHandoff) return <IncomingCallHandoffCard handoff={resolvedCallHandoff} timestamp={message.ts} />;
-  if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{message.body}<time>{formatTime(message.ts)}</time></span></div>;
-  return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"} ${superAlert ? "ccc-live-super-alert-message" : ""}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em>{superAlert && <em className="ccc-live-super-alert-badge"><Zap />Super Alert</em>}<time>{formatTime(message.ts)}</time></div>{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<p>{renderMentionBody(message.body, mentionPattern)}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <button type="button" key={url} onClick={() => onOpenPhoto(url)} aria-label="Open command attachment"><img src={commandAttachmentUrl(url)} alt="Command attachment" /></button>)}</div>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
+  if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{renderMessageBody(message.body)}<time>{formatTime(message.ts)}</time></span></div>;
+  return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"} ${superAlert ? "ccc-live-super-alert-message" : ""}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em>{superAlert && <em className="ccc-live-super-alert-badge"><Zap />Super Alert</em>}<time>{formatTime(message.ts)}</time></div>{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<p>{renderMessageBody(message.body, mentionPattern)}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <button type="button" key={url} onClick={() => onOpenPhoto(url)} aria-label="Open command attachment"><img src={commandAttachmentUrl(url)} alt="Command attachment" /></button>)}</div>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
 }
 
 function formatCallDuration(seconds: number | null) {
@@ -1009,6 +1010,29 @@ function renderMentionBody(body: string, mentionPattern: RegExp | null): ReactNo
   return content;
 }
 
+const MESSAGE_URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+function messageUrlHref(value: string) {
+  return value.startsWith("www.") ? `https://${value}` : value;
+}
+
+function renderMessageBody(body: string, mentionPattern: RegExp | null = null): ReactNode {
+  const content: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of Array.from(body.matchAll(MESSAGE_URL_PATTERN))) {
+    const start = match.index ?? 0;
+    if (start > cursor) content.push(renderMentionBody(body.slice(cursor, start), mentionPattern));
+    const rawUrl = match[0];
+    const punctuation = rawUrl.match(/[.,!;:]+$/)?.[0] ?? "";
+    const url = punctuation ? rawUrl.slice(0, -punctuation.length) : rawUrl;
+    content.push(<a className="ccc-live-message-link" href={messageUrlHref(url)} target="_blank" rel="noreferrer" key={`${start}-${url}`}>{url}</a>);
+    if (punctuation) content.push(punctuation);
+    cursor = start + rawUrl.length;
+  }
+  if (cursor < body.length) content.push(renderMentionBody(body.slice(cursor), mentionPattern));
+  return content.length ? content : body;
+}
+
 function ConfirmationReplyCard({ alert, timestamp }: { alert: ConfirmationReplyAlert; timestamp: number }) {
   const isCancellation = alert.intent === "cancellation";
   const attachmentHost = alert.replyUrl ? (() => {
@@ -1041,7 +1065,7 @@ function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversat
 
 function TeamSmsFeedMessage({ event, onOpen }: { event: TeamSmsStreamEvent; onOpen: () => void }) {
   const { name, body, ts: timestamp } = event;
-  return <article className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"><span className="ccc-group-avatar ccc-group-avatar-team"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{body}</p><span className="ccc-live-team-reply-hint"><MessageSquare />Reply</span></button><div className="ccc-live-team-sms-reactions" aria-label="Team message reactions"><span><Heart fill="currentColor" /> <b>3</b></span><span><Users /></span></div></div></article>;
+  return <article className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"><span className="ccc-group-avatar ccc-group-avatar-team"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{renderMessageBody(body)}</p><span className="ccc-live-team-reply-hint"><MessageSquare />Reply</span></button><div className="ccc-live-team-sms-reactions" aria-label="Team message reactions"><span><Heart fill="currentColor" /> <b>3</b></span><span><Users /></span></div></div></article>;
 }
 
 const CommandTimelineFeed = memo(function CommandTimelineFeed({ messagesLoading, timeline, callerName, photoMap, voiceCallIdentityByVapiId, mentionPattern, superAlertMessageIdSet, reactionsByMessage, teamSmsConversations, onOpenPhoto, onOpenThread, onReaction, onOpenSmsConversation }: {
@@ -1237,7 +1261,7 @@ const CommandComposer = memo(function CommandComposer({
   </div>;
 });
 
-function SmsConversationDrawer({ conversation, conversations, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; onClose: () => void }) {
+function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [draft, setDraft] = useState("");
   const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
@@ -1277,7 +1301,7 @@ function SmsConversationDrawer({ conversation, conversations, onClose }: { conve
       setDraft("");
       if (!result.duplicate) {
         scrollAfterSendRef.current = true;
-        setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, ts: Date.now() }]);
+        setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now() }]);
       }
       void utils.commandCenter.listCommandChatInbox.invalidate();
       void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
@@ -1297,13 +1321,18 @@ function SmsConversationDrawer({ conversation, conversations, onClose }: { conve
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
     <header><div>{conversation.personType === "team" ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{conversation.personType === "team" ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
-    <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => <article className={`ccc-live-sms-message ${message.role === "user" ? "" : "is-outgoing"}`} key={`${message.ts ?? index}-${message.content}`}><small>{message.role === "user" ? conversation.personType === "team" ? name : "Customer" : "MIB Team"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{message.content}</p></article>)}</div>
+    <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
+      const outgoing = message.role !== "user";
+      const senderName = message.senderName?.trim() || callerName;
+      const senderPhotoUrl = photoMap[senderName] ?? (senderName === callerName ? callerPhotoUrl : null);
+      return <article className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`} key={`${message.ts ?? index}-${message.content}`}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={senderName} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{senderName}</span> : conversation.personType === "team" ? name : "Customer"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{renderMessageBody(message.content)}</p></article>;
+    })}</div>
     <footer><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder="Write a text reply…" /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></footer>
   </aside></div>;
 }
 
 function LiveThreadEntry({ entry, mine, photo, root = false }: { entry: { from: string; body: string; ts: number }; mine: boolean; photo: string | null; root?: boolean }) {
-  return <article className={`ccc-live-thread-entry ${mine ? "is-mine" : ""} ${root ? "is-root" : ""}`}><Avatar name={entry.from} photoUrl={photo} className="ccc-group-avatar" /><div><div><strong>{entry.from}</strong><time>{formatTime(entry.ts)}</time></div><p>{entry.body}</p></div></article>;
+  return <article className={`ccc-live-thread-entry ${mine ? "is-mine" : ""} ${root ? "is-root" : ""}`}><Avatar name={entry.from} photoUrl={photo} className="ccc-group-avatar" /><div><div><strong>{entry.from}</strong><time>{formatTime(entry.ts)}</time></div><p>{renderMessageBody(entry.body)}</p></div></article>;
 }
 
 function ActionModal({ kind, onClose, issueTitle, issueNotes, issueType, reminderBody, reminderMinutes, pinBody, bookingPerson, bookingAmount, bookingNote, onIssueTitle, onIssueNotes, onIssueType, onReminderBody, onReminderMinutes, onPinBody, onBookingPerson, onBookingAmount, onBookingNote, pending, onSubmit }: { kind: Exclude<ModalKind, null>; onClose: () => void; issueTitle: string; issueNotes: string; issueType: (typeof ISSUE_TYPES)[number][0]; reminderBody: string; reminderMinutes: number; pinBody: string; bookingPerson: string; bookingAmount: string; bookingNote: string; onIssueTitle: (value: string) => void; onIssueNotes: (value: string) => void; onIssueType: (value: (typeof ISSUE_TYPES)[number][0]) => void; onReminderBody: (value: string) => void; onReminderMinutes: (value: number) => void; onPinBody: (value: string) => void; onBookingPerson: (value: string) => void; onBookingAmount: (value: string) => void; onBookingNote: (value: string) => void; pending: boolean; onSubmit: () => void }) {
