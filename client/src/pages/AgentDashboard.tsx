@@ -65,7 +65,6 @@ import {
 } from "lucide-react";
 import CallGuide from "@/components/CallGuide";
 import { useLocation } from "wouter";
-import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
@@ -1809,10 +1808,10 @@ type ViewMode = "all" | "my" | "unassigned" | "booked";
 
 export default function AgentDashboard() {
   const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [showCallGuide, setShowCallGuide] = useState(false);
-  const { state: opsChatState, open: openOpsChat, minimize: minimizeOpsChat } = useOpsChatWindow();
   const [stageFilter, setStageFilter] = useState("all");
   const [dateRange, setDateRange] = useState<"today" | "week" | "month" | "all">("all");
 
@@ -1958,15 +1957,12 @@ export default function AgentDashboard() {
           <div className="flex items-center gap-2">
             <CallAssistButton />
             <button
-              onClick={() => opsChatState === "open" ? minimizeOpsChat() : openOpsChat()}
+              onClick={() => navigate("/admin/command-chat")}
               className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
-              style={opsChatState === "open"
-                ? { background: "#0f172a", color: "#fff", borderColor: "#0f172a" }
-                : { borderColor: "#F0D8D0", color: "#E8603C", background: "transparent" }
-              }
+              style={{ borderColor: "#F0D8D0", color: "#E8603C", background: "transparent" }}
             >
               <MessageSquare className="w-3.5 h-3.5" />
-              OpsChat
+              Command Chat
             </button>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh

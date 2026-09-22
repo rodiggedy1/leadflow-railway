@@ -14,6 +14,8 @@ describe("Command Chat exact live shell", () => {
     const commandCenter = read("server/commandCenterRouter.ts");
     const allThreadsPanel = read("client/src/components/AllThreadsPanel.tsx");
     const opsChatRouter = read("server/opsChatRouter.ts");
+    const agentDashboard = read("client/src/pages/AgentDashboard.tsx");
+    const main = read("client/src/main.tsx");
 
     for (const stylesheet of [
       "command-chat-crm-review.css",
@@ -379,6 +381,14 @@ describe("Command Chat exact live shell", () => {
     expect(app).toContain('function OpsChatRedirect()');
     expect(app).toContain('navigate("/admin/command-chat");');
     expect(app).not.toContain('open();\n    navigate("/admin/leads");');
+    expect(app).not.toContain('const OpsChat = lazy(() => import("./pages/OpsChat"));');
+    expect(app).not.toContain('function GlobalOpsChat()');
+    expect(app).not.toContain('<ReviewSafeGlobalOpsChat />');
+    expect(app).not.toContain('SuperAlertWatcher');
+    expect(agentDashboard).not.toContain('useOpsChatWindow');
+    expect(agentDashboard).toContain('onClick={() => navigate("/admin/command-chat")}');
+    expect(agentDashboard).toContain('Command Chat');
+    expect(main).not.toContain('OpsChatProvider');
   });
 
   it("does not mount the legacy CommandChat or OpsChat page as the new route shell", () => {
