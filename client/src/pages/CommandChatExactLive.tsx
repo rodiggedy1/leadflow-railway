@@ -152,6 +152,14 @@ const ISSUE_TYPES = [
   ["payment_problem", "Payment problem"],
   ["other", "Other"],
 ] as const;
+
+const AWAY_STATUSES = [
+  { key: "away_sec", label: "Away for a sec", sub: "Quick break", emoji: "☕", tone: "amber" },
+  { key: "lunch", label: "Lunch break", sub: "Quick munch", emoji: "🍔", tone: "green" },
+  { key: "back15", label: "Back in 15", sub: "Short defined break", emoji: "⏰", tone: "indigo" },
+  { key: "eod", label: "Signing off", sub: "End of day", emoji: "🌙", tone: "blue" },
+] as const;
+type AwayStatus = (typeof AWAY_STATUSES)[number]["key"] | null;
 const HIDDEN_COMMAND_QUICK_ACTIONS = [
   "new_lead",
   "escalation_nudge",
@@ -529,6 +537,10 @@ export default function CommandChatExactLive() {
   }, [isAuthenticated, messageIds.join(",")]);
 
   const sendThreadMessage = trpc.opsChat.sendMessage.useMutation();
+  const sendAwayStatusMessage = trpc.opsChat.sendMessage.useMutation();
+  const setAwayStatusMutation = trpc.agents.setAwayStatus.useMutation({
+    onError: () => showNotice("Away status could not be updated. Please try again."),
+  });
   const toggleReaction = trpc.opsChat.toggleReaction.useMutation({
     onSuccess: () => {
       void utils.opsChat.listChannelMessages.invalidate({ channel });
@@ -538,6 +550,25 @@ export default function CommandChatExactLive() {
   const handleReaction = useCallback((messageId: number, emoji: string) => {
     toggleReaction.mutate({ messageId, emoji });
   }, [toggleReaction.mutate]);
+  const setAwayStatus = useCallback((status: AwayStatus) => {
+    const selectedStatus = status === null ? null : AWAY_STATUSES.find((option) => option.key === status) ?? null;
+    setAwayStatusMutation.mutate({ status }, {
+      onSuccess: () => {
+        void refetchAgent();
+        void utils.opsChat.getAgentStatusList.invalidate();
+        const body = selectedStatus
+          ? `${selectedStatus.emoji} ${profile?.name || callerName} — ${selectedStatus.label}`
+          : `✅ ${profile?.name || callerName} — I'm Back`;
+        sendAwayStatusMessage.mutate({
+          channel: "command",
+          body,
+          authorName: profile?.name || callerName,
+          authorRole: "office",
+          quickAction: `away_status:${status ?? "back"}`,
+        });
+      },
+    });
+  }, [callerName, profile?.name, refetchAgent, sendAwayStatusMessage, setAwayStatusMutation, utils]);
   const createIssue = trpc.opsChat.createIssue.useMutation({
     onSuccess: () => {
       setModal(null);
@@ -845,7 +876,7 @@ export default function CommandChatExactLive() {
           </aside>
 
           <section className="ccc-command-panel ccc-center-panel">
-            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{unreadThreadCount}</b> Threads</button><span className="ccc-header-metric-bookings"><CalendarClock /><b>{todayBookingCount}</b> Booked</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /><i aria-hidden="true" /></span>)}</div></div></div></div>
+            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{unreadThreadCount}</b> Threads</button><span className="ccc-header-metric-bookings"><CalendarClock /><b>{todayBookingCount}</b> Booked</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /><i aria-hidden="true" /></span>)}</div></div></div></div>
             <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
@@ -1088,6 +1119,53 @@ const CommandTimelineFeed = memo(function CommandTimelineFeed({ messagesLoading,
   return <>{timeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlert={superAlertMessageIdSet.has(entry.message.id)} reactions={reactionsByMessage[entry.message.id] ?? {}} onOpenPhoto={onOpenPhoto} onThread={() => onOpenThread(entry.message.id)} onReaction={(emoji) => onReaction(entry.message.id, emoji)} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) onOpenSmsConversation(conversation); }} />)}</>;
 });
 
+
+function AwayStatusControl({
+  status,
+  pending,
+  onSetStatus,
+}: {
+  status: AwayStatus;
+  pending: boolean;
+  onSetStatus: (status: AwayStatus) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const controlRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!controlRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  if (status) return <div className="ccc-live-away-control" ref={controlRef}>
+    <button type="button" className="ccc-live-away-trigger is-away" onClick={() => onSetStatus(null)} disabled={pending} aria-label="Mark yourself available">
+      {pending ? <Loader2 className="animate-spin" /> : <CircleDot />}<span>I&apos;m Back</span>
+    </button>
+  </div>;
+
+  return <div className="ccc-live-away-control" ref={controlRef}>
+    <button type="button" className="ccc-live-away-trigger" onClick={() => setOpen((current) => !current)} disabled={pending} aria-expanded={open} aria-haspopup="menu">
+      {pending ? <Loader2 className="animate-spin" /> : <CircleDot />}<span>Away</span><ChevronDown />
+    </button>
+    {open && <div className="ccc-live-away-menu" role="menu" aria-label="Set away status">
+      <p>Set status</p>
+      {AWAY_STATUSES.map((option) => <button type="button" key={option.key} role="menuitem" className={`ccc-live-away-option tone-${option.tone}`} onClick={() => { setOpen(false); onSetStatus(option.key); }}>
+        <span>{option.emoji}</span><div><strong>{option.label}</strong><small>{option.sub}</small></div>
+      </button>)}
+    </div>}
+  </div>;
+}
 
 const CommandComposer = memo(function CommandComposer({
   authorName,

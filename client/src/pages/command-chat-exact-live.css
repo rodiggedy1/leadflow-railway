@@ -101,3 +101,27 @@
 
 /* Outbound SMS keeps the real Command Chat sender instead of a generic team label. */
 .ccc-live-sms-outbound-sender{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px}.ccc-live-sms-outbound-avatar{display:grid;place-items:center;width:24px;height:24px;overflow:hidden;border:1px solid #5f738e;border-radius:50%;background:#354a5c;color:#eaf5fc;font-size:8px;font-weight:800;object-fit:cover}
+
+/* Exact Command Chat away control: existing status behavior in the compact header. */
+.ccc-widget-app .ccc-live-away-control{position:relative;flex:0 0 auto;}
+.ccc-widget-app .ccc-live-away-trigger{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 9px;border:1px solid #5a4a25;border-radius:8px;background:#302b1f;color:#e7cf8a;font-size:10px;font-weight:800;line-height:1;white-space:nowrap;transition:border-color .12s ease,background .12s ease,color .12s ease;}
+.ccc-widget-app .ccc-live-away-trigger:hover:not(:disabled){border-color:#8b7040;background:#3b3322;color:#f3dd9d;}
+.ccc-widget-app .ccc-live-away-trigger.is-away{border-color:#296a51;background:#1d372d;color:#8ee5bd;}
+.ccc-widget-app .ccc-live-away-trigger.is-away:hover:not(:disabled){border-color:#3e9b76;background:#244334;color:#c0f3d8;}
+.ccc-widget-app .ccc-live-away-trigger:disabled{cursor:wait;opacity:.72;}
+.ccc-widget-app .ccc-live-away-trigger svg{width:13px;height:13px;}
+.ccc-widget-app .ccc-live-away-trigger svg:last-child{width:11px;height:11px;margin-left:-2px;}
+.ccc-widget-app .ccc-live-away-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:80;width:218px;padding:6px;border:1px solid #48484d;border-radius:11px;background:#202022;box-shadow:0 16px 44px rgba(0,0,0,.45);}
+.ccc-widget-app .ccc-live-away-menu>p{margin:3px 6px 6px;color:#929298;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+.ccc-widget-app .ccc-live-away-option{display:flex;width:100%;align-items:center;gap:9px;margin:2px 0;padding:8px;border:1px solid transparent;border-radius:8px;text-align:left;transition:filter .12s ease;}
+.ccc-widget-app .ccc-live-away-option:hover{filter:brightness(1.12);}
+.ccc-widget-app .ccc-live-away-option>span{width:24px;text-align:center;font-size:17px;line-height:1;}
+.ccc-widget-app .ccc-live-away-option>div{min-width:0;}
+.ccc-widget-app .ccc-live-away-option strong,.ccc-widget-app .ccc-live-away-option small{display:block;}
+.ccc-widget-app .ccc-live-away-option strong{font-size:11px;line-height:1.15;}
+.ccc-widget-app .ccc-live-away-option small{margin-top:2px;color:#a7a7ae;font-size:9px;line-height:1.15;}
+.ccc-widget-app .ccc-live-away-option.tone-amber{border-color:#6d592b;background:#342e1f;color:#f0ca6a;}
+.ccc-widget-app .ccc-live-away-option.tone-green{border-color:#286a51;background:#1d352c;color:#88e2b5;}
+.ccc-widget-app .ccc-live-away-option.tone-indigo{border-color:#4d4a82;background:#292743;color:#b8b3ff;}
+.ccc-widget-app .ccc-live-away-option.tone-blue{border-color:#305e79;background:#1e3240;color:#91d4ed;}
+@media(max-width:1120px){.ccc-widget-app .ccc-live-away-trigger{height:27px;padding:0 7px;font-size:9px;}.ccc-widget-app .ccc-live-away-trigger svg{width:12px;height:12px;}.ccc-widget-app .ccc-live-away-menu{width:204px;}}

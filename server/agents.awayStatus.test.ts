@@ -28,9 +28,9 @@ describe("agents.setAwayStatus", () => {
   it("throws when no agent session cookie is present", async () => {
     const caller = appRouter.createCaller(createAnonContext());
     // Use a valid enum value so Zod validation passes and the auth check runs.
-    // The valid values are: "priority" | "new" | "active" | "resolved" | "teams"
+    // The valid values are: "away_sec" | "lunch" | "back15" | "eod"
     await expect(
-      caller.agents.setAwayStatus({ status: "priority" })
+      caller.agents.setAwayStatus({ status: "away_sec" })
     ).rejects.toThrow(/Agent not authenticated/i);
   });
 
