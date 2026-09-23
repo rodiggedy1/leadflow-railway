@@ -416,8 +416,10 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live-message-media");
     expect(styles).toContain(".ccc-live .ccc-live-lead-queue");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary");
+    expect(styles).toContain(".ccc-live .ccc-live-lead-primary{grid-template-columns:minmax(0,1fr);grid-auto-flow:row}");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary-contact");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary-contact button:disabled");
+    expect(styles).toContain(".ccc-live .ccc-live-lead-primary footer{grid-column:auto}");
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary footer button.is-claimed");
     expect(styles).toContain(".ccc-live .ccc-live-service-alerts");
     expect(styles).toContain(".ccc-live .ccc-live-service-alert-scroll");
