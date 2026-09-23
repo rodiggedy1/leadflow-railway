@@ -138,6 +138,10 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('className="ccc-context-card ccc-live-service-alerts"');
     expect(page).toContain('function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null');
     expect(page).toContain('function ConfirmationReplyCard({ alert, timestamp }');
+    expect(page).toContain('className={`ccc-group-message ccc-group-message-left ccc-live-confirmation-message');
+    expect(page).toContain('className={`ccc-group-avatar ccc-live-confirmation-avatar');
+    expect(page).toContain('className="ccc-live-confirmation-label"');
+    expect(page).toContain('className="ccc-live-confirmation-action"');
     expect(page).toContain('function callHandoffFromMessage(message: ChannelMessage): IncomingCallHandoff | null');
     expect(page).toContain('vapiCallId: string | null;');
     expect(page).toContain('callerPhone: string | null;');
@@ -424,7 +428,9 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain(".ccc-live .ccc-live-lead-primary footer button.is-claimed");
     expect(styles).toContain(".ccc-live .ccc-live-service-alerts");
     expect(styles).toContain(".ccc-live .ccc-live-service-alert-scroll");
-    expect(styles).toContain(".ccc-live .ccc-live-confirmation-reply");
+    expect(styles).toContain(".ccc-live .ccc-live-confirmation-message");
+    expect(styles).toContain(".ccc-live .ccc-live-confirmation-avatar");
+    expect(styles).toContain(".ccc-live .ccc-live-confirmation-label");
     expect(styles).toContain(".ccc-live .ccc-live-left-rail");
     expect(styles).toContain(".ccc-live .ccc-live-sms-header{flex:0 0 auto");
     expect(styles).toContain(".ccc-live .ccc-live-sms-filter-tabs");
