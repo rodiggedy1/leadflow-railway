@@ -50,6 +50,27 @@ export type SmsShadowDecision = {
   outcomeAt: string | null;
 };
 
+type SmsShadowMetrics = {
+  evaluated: number;
+  sent: number;
+  sentUnchanged: number;
+  sentEdited: number;
+  averageConfidence: number | null;
+};
+
+type SmsShadowMetricsRow = {
+  evaluationId: number;
+  sessionId: number;
+  customerName: string | null;
+  draftText: string;
+  sentText: string;
+  score: number;
+  decision: ShadowDecisionKind;
+  wouldSendIfInScope: boolean;
+  outcome: ShadowOutcome;
+  outcomeAt: string | null;
+};
+
 const HIGH_CONFIDENCE_THRESHOLD = 0.98;
 const MAX_DRAFT_CHARS = 2_000;
 
@@ -293,6 +314,18 @@ function asDecision(row: Record<string, unknown>): SmsShadowDecision {
   };
 }
 
+function asShadowMetrics(row: Record<string, unknown> | undefined): SmsShadowMetrics {
+  const number = (value: unknown) => Number(value) || 0;
+  const average = Number(row?.averageConfidence);
+  return {
+    evaluated: number(row?.evaluated),
+    sent: number(row?.sent),
+    sentUnchanged: number(row?.sentUnchanged),
+    sentEdited: number(row?.sentEdited),
+    averageConfidence: Number.isFinite(average) ? Math.round(average * 100) : null,
+  };
+}
+
 export function registerSmsShadowModeRoutes(app: Express): void {
   app.post("/api/sms-shadow-evaluations", async (req: Request, res: Response) => {
     const auth = await isAuthorizedOpsUser(req);
@@ -340,10 +373,10 @@ export function registerSmsShadowModeRoutes(app: Express): void {
       const now = new Date();
       const insertResult = await db.execute(sql`
         INSERT INTO sms_shadow_evaluations (
-          sessionId, draftHash, policyVersion, source, decision, score, confidence,
+          sessionId, draftHash, draftText, policyVersion, source, decision, score, confidence,
           reasonCode, rationale, preflight, verifierResult, createdAt, updatedAt
         ) VALUES (
-          ${sessionId}, ${draftHash}, ${SMS_SHADOW_POLICY_VERSION}, ${"sms_exact_live"},
+          ${sessionId}, ${draftHash}, ${draftText}, ${SMS_SHADOW_POLICY_VERSION}, ${"sms_exact_live"},
           ${evaluated.decision}, ${evaluated.score}, ${evaluated.confidence},
           ${evaluated.reasonCode}, ${evaluated.rationale}, ${JSON.stringify(evaluated.preflight)},
           ${JSON.stringify(evaluated.verifier)}, ${now}, ${now}
@@ -365,6 +398,64 @@ export function registerSmsShadowModeRoutes(app: Express): void {
     } catch (error) {
       console.error("[SmsShadow] evaluation failed", error);
       return void res.status(500).json({ error: "Unable to evaluate the shadow decision." });
+    }
+  });
+
+  app.get("/api/sms-shadow-evaluations/metrics", async (req: Request, res: Response) => {
+    const auth = await isAuthorizedOpsUser(req);
+    if (!auth) return void res.status(401).json({ error: "Unauthorized" });
+
+    const db = await getDb();
+    if (!db) return void res.status(503).json({ error: "Database unavailable" });
+
+    try {
+      const summary = asRows<Record<string, unknown>>(await db.execute(sql`
+        SELECT
+          COUNT(*) AS evaluated,
+          SUM(CASE WHEN sentText IS NOT NULL THEN 1 ELSE 0 END) AS sent,
+          SUM(CASE WHEN outcome = 'sent_unchanged' THEN 1 ELSE 0 END) AS sentUnchanged,
+          SUM(CASE WHEN outcome = 'sent_edited' THEN 1 ELSE 0 END) AS sentEdited,
+          AVG(score) AS averageConfidence
+        FROM sms_shadow_evaluations
+      `));
+      const rows = asRows<Record<string, unknown>>(await db.execute(sql`
+        SELECT
+          evaluation.id AS evaluationId,
+          evaluation.sessionId,
+          conversation.leadName AS customerName,
+          evaluation.draftText,
+          evaluation.sentText,
+          evaluation.score,
+          evaluation.decision,
+          evaluation.verifierResult,
+          evaluation.outcome,
+          evaluation.outcomeAt
+        FROM sms_shadow_evaluations AS evaluation
+        LEFT JOIN conversation_sessions AS conversation ON conversation.id = evaluation.sessionId
+        WHERE evaluation.sentText IS NOT NULL
+        ORDER BY evaluation.outcomeAt DESC
+        LIMIT 200
+      `)).map(row => {
+        const verifier = (() => {
+          try { return JSON.parse(String(row.verifierResult ?? "null")) as Partial<VerifierResult> | null; } catch { return null; }
+        })();
+        return {
+          evaluationId: Number(row.evaluationId),
+          sessionId: Number(row.sessionId),
+          customerName: typeof row.customerName === "string" && row.customerName.trim() ? row.customerName : null,
+          draftText: String(row.draftText ?? ""),
+          sentText: String(row.sentText ?? ""),
+          score: Number(row.score) || 0,
+          decision: row.decision === "would_send" || row.decision === "blocked" ? row.decision : "review",
+          wouldSendIfInScope: Boolean(verifier?.wouldSendIfInScope && Number(verifier.confidence) >= HIGH_CONFIDENCE_THRESHOLD && verifier.flags?.length === 0),
+          outcome: row.outcome === "sent_unchanged" ? "sent_unchanged" : "sent_edited",
+          outcomeAt: row.outcomeAt ? new Date(row.outcomeAt as string | Date).toISOString() : null,
+        } satisfies SmsShadowMetricsRow;
+      });
+      return void res.json({ metrics: asShadowMetrics(summary[0]), rows });
+    } catch (error) {
+      console.error("[SmsShadow] metrics read failed", error);
+      return void res.status(500).json({ error: "Unable to read shadow metrics." });
     }
   });
 
@@ -396,7 +487,7 @@ export function registerSmsShadowModeRoutes(app: Express): void {
       const now = new Date();
       await db.execute(sql`
         UPDATE sms_shadow_evaluations
-        SET outcome = ${outcome}, outcomeAt = ${now}, outcomeActor = ${auth.actor}, sentDraftHash = ${sentHash}, updatedAt = ${now}
+        SET outcome = ${outcome}, outcomeAt = ${now}, outcomeActor = ${auth.actor}, sentDraftHash = ${sentHash}, sentText = ${sentText}, updatedAt = ${now}
         WHERE id = ${evaluationId} AND sessionId = ${sessionId}
       `);
       return void res.json({ outcome });

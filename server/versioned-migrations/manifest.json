@@ -316,7 +316,7 @@
       "id": "0042_create_sms_shadow_evaluations",
       "mode": "create-table",
       "sqlFile": "0042_create_sms_shadow_evaluations.sql",
-      "sha256": "cc973004547127be34b9dd863ef60cfb4668f8248073a3b5b66f31009109f5fd",
+      "sha256": "a692d707beb771f67168bb6da19e3265255a967438942bacb81c417d1dab2b27",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0042_create_sms_shadow_evaluations.postconditions.json"
     }

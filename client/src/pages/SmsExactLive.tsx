@@ -82,6 +82,27 @@ type SmsShadowDecision = {
   outcomeAt: string | null;
 };
 
+type SmsShadowMetrics = {
+  evaluated: number;
+  sent: number;
+  sentUnchanged: number;
+  sentEdited: number;
+  averageConfidence: number | null;
+};
+
+type SmsShadowMetricsRow = {
+  evaluationId: number;
+  sessionId: number;
+  customerName: string | null;
+  draftText: string;
+  sentText: string;
+  score: number;
+  decision: "would_send" | "review" | "blocked";
+  wouldSendIfInScope: boolean;
+  outcome: "sent_unchanged" | "sent_edited";
+  outcomeAt: string | null;
+};
+
 type LiveConversation = {
   id: number;
   name: string;
@@ -162,6 +183,22 @@ function shadowDecisionLabel(decision: SmsShadowDecision["decision"]) {
   if (decision === "would_send") return "Would send in a future policy";
   if (decision === "blocked") return "Blocked from automation";
   return "Human review required";
+}
+
+function describeShadowEdit(draftText: string, sentText: string) {
+  const draft = draftText.trim();
+  const sent = sentText.trim();
+  if (draft === sent) return { changed: false, removed: "", added: "" };
+  let start = 0;
+  while (start < draft.length && start < sent.length && draft[start] === sent[start]) start += 1;
+  let draftEnd = draft.length - 1;
+  let sentEnd = sent.length - 1;
+  while (draftEnd >= start && sentEnd >= start && draft[draftEnd] === sent[sentEnd]) { draftEnd -= 1; sentEnd -= 1; }
+  return {
+    changed: true,
+    removed: draft.slice(start, draftEnd + 1).trim(),
+    added: sent.slice(start, sentEnd + 1).trim(),
+  };
 }
 
 function relativeTime(timestamp?: number | null) {
@@ -392,6 +429,30 @@ function LiveToolDialog({ conversation, close, setCompose, messages }: { convers
   return <div className="cic-live-tools-backdrop" role="dialog" aria-modal="true" aria-label="Conversation actions" onClick={close}><section className="cic-live-tools" onClick={event => event.stopPropagation()}><header><span>Conversation actions</span><button type="button" onClick={close}><X /></button></header><div className="cic-live-tools-content">{isTeamMember(conversation) ? <CsRightPanelTeam selected={{ id: conversation.id, name: conversation.name, initials: conversation.initials, phone: conversation.phone, queue: conversation.queue, status: conversation.csStatusTier ?? undefined, wait: conversation.wait }} /> : <CsRightPanelClient selected={{ id: conversation.id, name: conversation.name, initials: conversation.initials, phone: conversation.phone, queue: conversation.queue, status: conversation.csStatusTier ?? undefined, wait: conversation.wait, stats: { bookings: 0, complaints: 0 } }} setCompose={setCompose} messages={messages} />}</div></section></div>;
 }
 
+function ShadowMetricsPanel({ close }: { close: () => void }) {
+  const [metrics, setMetrics] = useState<SmsShadowMetrics | null>(null);
+  const [rows, setRows] = useState<SmsShadowMetricsRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = useCallback(() => {
+    setLoading(true);
+    setError("");
+    void fetch("/api/sms-shadow-evaluations/metrics", { credentials: "include" })
+      .then(async response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json() as Promise<{ metrics?: SmsShadowMetrics; rows?: SmsShadowMetricsRow[] }>;
+      })
+      .then(result => {
+        setMetrics(result.metrics ?? null);
+        setRows(Array.isArray(result.rows) ? result.rows : []);
+      })
+      .catch(() => setError("Shadow metrics are unavailable right now."))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  return <div className="cic-live-tools-backdrop cic-shadow-metrics-backdrop" role="dialog" aria-modal="true" aria-label="SMS shadow metrics" onClick={close}><section className="cic-shadow-metrics" onClick={event => event.stopPropagation()}><header><div><span><ShieldAlert />SMS Shadow Metrics</span><small>Read-only learning data · no auto-send</small></div><div><button type="button" onClick={load} disabled={loading} aria-label="Refresh shadow metrics"><RefreshCw className={loading ? "animate-spin" : ""} /></button><button type="button" onClick={close} aria-label="Close shadow metrics"><X /></button></div></header>{loading ? <p className="cic-shadow-metrics-state">Loading learning data…</p> : error ? <p className="cic-shadow-metrics-state is-error">{error}</p> : <><section className="cic-shadow-metrics-summary"><span><small>Evaluated</small><b>{metrics?.evaluated ?? 0}</b></span><span><small>Human sends</small><b>{metrics?.sent ?? 0}</b></span><span><small>Sent unchanged</small><b>{metrics?.sentUnchanged ?? 0}</b></span><span><small>Edited before send</small><b>{metrics?.sentEdited ?? 0}</b></span><span><small>Avg. confidence</small><b>{metrics?.averageConfidence ?? "—"}{metrics?.averageConfidence !== null ? "/100" : ""}</b></span></section><section className="cic-shadow-metrics-list"><header><div><b>Draft-to-send pairs</b><small>Generated draft compared with the text a human actually sent.</small></div><span>{rows.length} recorded</span></header>{rows.length ? rows.map(row => { const edit = describeShadowEdit(row.draftText, row.sentText); return <article key={row.evaluationId} className="cic-shadow-metrics-row"><header><div><b>{row.customerName ?? "Customer"}</b><small>{row.outcomeAt ? new Date(row.outcomeAt).toLocaleString() : "Sent"}</small></div><span>Confidence {row.score}/100 · {row.wouldSendIfInScope ? "would send if in scope" : "would hold if in scope"}</span></header><div className="cic-shadow-metrics-text"><section><small>AI draft</small><p>{row.draftText}</p></section><section><small>Final sent text</small><p>{row.sentText}</p></section></div>{edit.changed ? <footer><span><b>Removed</b>{edit.removed || "—"}</span><span><b>Added</b>{edit.added || "—"}</span></footer> : <footer><em>Sent unchanged</em></footer>}</article>; }) : <p className="cic-shadow-metrics-empty">No evaluated AI draft has been sent by a human yet.</p>}</section></>}</section></div>;
+}
+
 export default function SmsExactLive() {
   const utils = trpc.useUtils();
   const [selected, setSelected] = useState<LiveConversation | null>(null);
@@ -407,6 +468,7 @@ export default function SmsExactLive() {
   const [responsesOpen, setResponsesOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [showShadowMetrics, setShowShadowMetrics] = useState(false);
   const [activeMission, setActiveMission] = useState<CustomerMission | null>(null);
   const [expandedCalls, setExpandedCalls] = useState<Set<number>>(new Set());
   const [mmsLightbox, setMmsLightbox] = useState<{ urls: string[]; index: number } | null>(null);
@@ -729,5 +791,5 @@ export default function SmsExactLive() {
     </section>{showTools && <LiveToolDialog conversation={selected} close={() => setShowTools(false)} setCompose={setCompose} messages={detailMessages} />}</main></div>{mmsLightbox && mmsLightboxUrl && <div className="cic-mms-lightbox" role="dialog" aria-modal="true" aria-label="MMS photo viewer" onClick={closeMmsLightbox}><button className="cic-mms-lightbox-close" type="button" onClick={closeMmsLightbox} aria-label="Close photo"><X /></button><a className="cic-mms-lightbox-original" href={mmsLightbox.urls[mmsLightbox.index]} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()} aria-label="Open original photo"><ExternalLink /></a>{mmsLightbox.index > 0 && <button className="cic-mms-lightbox-previous" type="button" onClick={event => { event.stopPropagation(); previousMmsPhoto(); }} aria-label="Previous photo"><ChevronLeft /></button>}{mmsLightbox.index < mmsLightbox.urls.length - 1 && <button className="cic-mms-lightbox-next" type="button" onClick={event => { event.stopPropagation(); nextMmsPhoto(); }} aria-label="Next photo"><ChevronRight /></button>}{mmsLightbox.urls.length > 1 && <span className="cic-mms-lightbox-count">{mmsLightbox.index + 1} / {mmsLightbox.urls.length}</span>}<img src={mmsLightboxUrl} alt="MMS photo enlarged" onClick={event => event.stopPropagation()} /></div>}</>;
   }
 
-  return <div className="sms-review sms-exact-live"><main className="operations-crm-review cic-shell" data-live-sms="true"><CrmSidebar total={activeConversations.length} needsResponse={needsResponseCount} atRisk={atRiskCount} teams={teamCount} /><section className="cic-workspace"><header className="ocr-header"><div className="ocr-page-title"><h1>SMS</h1><span><i />Live workspace</span></div><div className="ocr-header-actions"><button type="button" onClick={() => refetchInbox()} aria-label="Refresh conversations"><Search /></button><button className="has-notification" type="button" aria-label="Notifications"><Bell /></button><button className="ocr-profile" type="button"><i>MA</i><span>Madison</span><ChevronDown size={13} /></button></div></header><nav className="cic-top-tabs"><button className="is-active" type="button">Conversations</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Email</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Next Best Action</button></nav><section className="cic-toolbar"><div><label><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search any customer, phone..." /></label><button type="button">Filter active <ChevronDown /></button><button type="button">Last 90 days <ChevronDown /></button><button type="button"><Tag />Filters</button></div><span><button type="button" onClick={() => refetchInbox()} aria-label="Refresh">↻</button><button className="cic-new" type="button" onClick={() => setShowNewMessage(true)}><Plus />New Message</button></span></section><section className="cic-board-scroll"><div className="cic-board">{columns.map(column => <section className="cic-lane" key={column.label}><header><span style={{ background: LANE_COLORS[column.label] }} /><b>{column.label}</b><small>{column.conversations.length}</small><button type="button"><ChevronDown size={15} /></button></header><div className="cic-lane-cards">{column.conversations.map(conversation => resolvingId === conversation.id ? <div className="cic-card cic-live-resolving" key={conversation.id}>Resolved</div> : <button type="button" onClick={() => selectConversation(conversation)} className="cic-card" key={conversation.id}><div className="cic-card-head"><LiveAvatar conversation={conversation} className="cic-avatar" /><strong>{conversation.name}</strong><time className={column.label === "At Risk" ? "is-risk" : ""}>{conversation.wait}</time></div>{conversation.latestInteractionType === "call" && <span className="cic-call-label"><Sparkles size={11} />AI Call · {conversation.latestCallDuration ? `${Math.floor(conversation.latestCallDuration / 60)}m ${conversation.latestCallDuration % 60}s` : "Call"}</span>}<p>{conversation.latestInteractionType === "call" ? conversation.latestCallSummary || conversation.lastMessage : conversation.lastMessage || "No messages yet"}</p><div className="cic-chips">{conversation.chips.slice(0, 2).map(chip => <span key={chip} className={/risk|urgent/i.test(chip) ? "is-warn" : ""}>{chip.replaceAll("_", " ")}</span>)}</div><footer><span>{isTeamMember(conversation) ? "Team" : "Customer"}</span><LastAgentBadge name={lastAgentNameBySessionId[conversation.id] ?? null} photoUrl={lastAgentNameBySessionId[conversation.id] ? agentPhotoMap[lastAgentNameBySessionId[conversation.id]!] ?? null : null} /></footer></button>)}{!column.conversations.length && <div className="cic-empty-card">{inboxLoading ? "Loading conversations…" : "No conversations"}</div>}<button className="cic-add-card" type="button" onClick={() => setShowNewMessage(true)}><Plus size={13} />Add Conversation</button></div></section>)}</div></section><footer className="cic-stats"><div><small>Total Conversations</small><b>{activeConversations.length}</b></div><div><small>Needs Response</small><b>{needsResponseCount}</b></div><div><small>Unanswered</small><b>{atRiskCount}</b></div><div><small>Hot Leads</small><b>{activeConversations.filter(conversation => conversation.csStatusTier === "hot_lead").length}</b></div><div><small>Teams</small><b>{teamCount}</b></div></footer></section>{showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void refetchInbox(); }} />}</main></div>;
+  return <div className="sms-review sms-exact-live"><main className="operations-crm-review cic-shell" data-live-sms="true"><CrmSidebar total={activeConversations.length} needsResponse={needsResponseCount} atRisk={atRiskCount} teams={teamCount} /><section className="cic-workspace"><header className="ocr-header"><div className="ocr-page-title"><h1>SMS</h1><span><i />Live workspace</span></div><div className="ocr-header-actions"><button type="button" onClick={() => refetchInbox()} aria-label="Refresh conversations"><Search /></button><button className="has-notification" type="button" aria-label="Notifications"><Bell /></button><button className="ocr-profile" type="button"><i>MA</i><span>Madison</span><ChevronDown size={13} /></button></div></header><nav className="cic-top-tabs"><button className="is-active" type="button">Conversations</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Email</button><button type="button" onClick={() => { window.location.href = "/admin/cs-inbox-2"; }}>Next Best Action</button></nav><section className="cic-toolbar"><div><label><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search any customer, phone..." /></label><button type="button">Filter active <ChevronDown /></button><button type="button">Last 90 days <ChevronDown /></button><button type="button"><Tag />Filters</button></div><span><button type="button" onClick={() => setShowShadowMetrics(true)}><ShieldAlert size={14} />Shadow Metrics</button><button type="button" onClick={() => refetchInbox()} aria-label="Refresh">↻</button><button className="cic-new" type="button" onClick={() => setShowNewMessage(true)}><Plus />New Message</button></span></section><section className="cic-board-scroll"><div className="cic-board">{columns.map(column => <section className="cic-lane" key={column.label}><header><span style={{ background: LANE_COLORS[column.label] }} /><b>{column.label}</b><small>{column.conversations.length}</small><button type="button"><ChevronDown size={15} /></button></header><div className="cic-lane-cards">{column.conversations.map(conversation => resolvingId === conversation.id ? <div className="cic-card cic-live-resolving" key={conversation.id}>Resolved</div> : <button type="button" onClick={() => selectConversation(conversation)} className="cic-card" key={conversation.id}><div className="cic-card-head"><LiveAvatar conversation={conversation} className="cic-avatar" /><strong>{conversation.name}</strong><time className={column.label === "At Risk" ? "is-risk" : ""}>{conversation.wait}</time></div>{conversation.latestInteractionType === "call" && <span className="cic-call-label"><Sparkles size={11} />AI Call · {conversation.latestCallDuration ? `${Math.floor(conversation.latestCallDuration / 60)}m ${conversation.latestCallDuration % 60}s` : "Call"}</span>}<p>{conversation.latestInteractionType === "call" ? conversation.latestCallSummary || conversation.lastMessage : conversation.lastMessage || "No messages yet"}</p><div className="cic-chips">{conversation.chips.slice(0, 2).map(chip => <span key={chip} className={/risk|urgent/i.test(chip) ? "is-warn" : ""}>{chip.replaceAll("_", " ")}</span>)}</div><footer><span>{isTeamMember(conversation) ? "Team" : "Customer"}</span><LastAgentBadge name={lastAgentNameBySessionId[conversation.id] ?? null} photoUrl={lastAgentNameBySessionId[conversation.id] ? agentPhotoMap[lastAgentNameBySessionId[conversation.id]!] ?? null : null} /></footer></button>)}{!column.conversations.length && <div className="cic-empty-card">{inboxLoading ? "Loading conversations…" : "No conversations"}</div>}<button className="cic-add-card" type="button" onClick={() => setShowNewMessage(true)}><Plus size={13} />Add Conversation</button></div></section>)}</div></section><footer className="cic-stats"><div><small>Total Conversations</small><b>{activeConversations.length}</b></div><div><small>Needs Response</small><b>{needsResponseCount}</b></div><div><small>Unanswered</small><b>{atRiskCount}</b></div><div><small>Hot Leads</small><b>{activeConversations.filter(conversation => conversation.csStatusTier === "hot_lead").length}</b></div><div><small>Teams</small><b>{teamCount}</b></div></footer></section>{showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void refetchInbox(); }} />}{showShadowMetrics && <ShadowMetricsPanel close={() => setShowShadowMetrics(false)} />}</main></div>;
 }

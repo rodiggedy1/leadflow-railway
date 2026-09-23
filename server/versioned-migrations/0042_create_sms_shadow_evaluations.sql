@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS `sms_shadow_evaluations` (
   `id` bigint AUTO_INCREMENT NOT NULL,
   `sessionId` bigint NOT NULL,
   `draftHash` char(64) NOT NULL,
+  `draftText` text NOT NULL,
   `policyVersion` varchar(64) NOT NULL,
   `source` varchar(32) NOT NULL,
   `decision` varchar(16) NOT NULL,
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `sms_shadow_evaluations` (
   `outcomeAt` datetime(3),
   `outcomeActor` varchar(255),
   `sentDraftHash` char(64),
+  `sentText` text,
   `createdAt` datetime(3) NOT NULL,
   `updatedAt` datetime(3) NOT NULL,
   CONSTRAINT `sms_shadow_evaluations_id` PRIMARY KEY(`id`)
