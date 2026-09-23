@@ -1119,11 +1119,13 @@ function ConfirmationReplyCard({ alert, timestamp }: { alert: ConfirmationReplyA
   const attachmentHost = alert.replyUrl ? (() => {
     try { return new URL(alert.replyUrl).hostname.replace(/^www\./, ""); } catch { return "external attachment"; }
   })() : null;
-  return <article className={`ccc-live-confirmation-reply ${isCancellation ? "is-cancellation" : "is-unclear"}`}>
-    <header><span><Phone />Confirmation reply</span><time>{formatTime(timestamp)}</time></header>
-    <div><span className="ccc-live-confirmation-reply-status">{isCancellation ? "Cancellation request" : "Needs clarification"}</span><strong>{alert.customerName}</strong>{alert.serviceDate && <small>Service date · {alert.serviceDate}</small>}
-      {alert.replyUrl ? <a className="ccc-live-confirmation-reply-link" href={alert.replyUrl} target="_blank" rel="noreferrer"><Paperclip />Media link received · {attachmentHost}</a> : <blockquote>“{alert.replyText}”</blockquote>}
-      <a className="ccc-live-confirmation-reply-action" href="/admin/confirmation-calls">Open Confirmation Calls <ChevronRight /></a>
+  const status = isCancellation ? "Cancellation request" : "Needs clarification";
+  return <article className={`ccc-group-message ccc-group-message-left ccc-live-confirmation-message ${isCancellation ? "is-cancellation" : "is-unclear"}`}>
+    <span className={`ccc-group-avatar ccc-live-confirmation-avatar ${isCancellation ? "is-cancellation" : "is-unclear"}`}><Phone /></span>
+    <div>
+      <div className="ccc-message-meta"><strong>{alert.customerName}</strong><em>{status}</em><time>{formatTime(timestamp)}</time></div>
+      <p><span className="ccc-live-confirmation-label">Confirmation reply</span>{alert.serviceDate && <span className="ccc-live-confirmation-date">Service date · {alert.serviceDate}</span>}{alert.replyUrl ? <>Media link received · {attachmentHost}</> : <>“{alert.replyText}”</>}</p>
+      <a className="ccc-live-confirmation-action" href="/admin/confirmation-calls">Open Confirmation Calls <ChevronRight /></a>
     </div>
   </article>;
 }
