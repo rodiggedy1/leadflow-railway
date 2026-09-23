@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FocusEvent, type MouseEvent } from "react";
-import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Command, CreditCard, LayoutDashboard, Mail, MessageSquareMore, PanelsTopLeft, PhoneCall, PhoneOutgoing, Receipt, ShieldAlert, SlidersHorizontal, Star, UserRound, UserRoundCheck, UsersRound, WalletCards } from "lucide-react";
+import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Command, CreditCard, LayoutDashboard, Mail, MessageSquareMore, PanelsTopLeft, PhoneCall, PhoneOutgoing, Receipt, SlidersHorizontal, Star, UserRound, UserRoundCheck, UsersRound, WalletCards } from "lucide-react";
 import { useLocation } from "wouter";
 import "./review-workspace-nav.css";
 
@@ -25,7 +25,6 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
     label: "CUSTOMER COMMUNICATION",
     items: [
       { label: "SMS", href: "/review/sms", liveHref: "/admin/sms", icon: MessageSquareMore },
-      { label: "Shadow Metrics", href: "/admin/sms-shadow-metrics", icon: ShieldAlert },
       { label: "Emails", href: "/review/emails", liveHref: "/admin/emails", icon: Mail },
       { label: "AI Calls", href: "/review/ai-calls-transcript", liveHref: "/admin/ai-calls", icon: PhoneCall },
     ],
@@ -36,7 +35,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
 
 export default function ReviewWorkspaceNav({ activePath }: { activePath?: string }) {
   const [location] = useLocation();
-  const defaultOpenRoutes = ["/review/operations-dashboard", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/admin/sms-shadow-metrics", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
+  const defaultOpenRoutes = ["/review/operations-dashboard", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
   const routeKey = activePath ?? location;
   const useLiveDestinations = activePath !== undefined;
   const settingsHref = useLiveDestinations ? "/admin/settings" : "/review/settings";

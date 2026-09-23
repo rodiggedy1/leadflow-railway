@@ -121,21 +121,6 @@
 .sms-exact-live .cic-sms-ai-draft-insert:hover { border-color: #ab96e4; background: #8067c3; }
 .sms-exact-live .cic-sms-ai-draft-regenerate { margin-left: auto; padding: 0 7px; border: 0; background: transparent; color: #b9b0d5; }
 .sms-exact-live .cic-sms-ai-draft-regenerate:hover { background: rgba(255, 255, 255, .07); color: #eeeaff; }
-.sms-exact-live .cic-sms-shadow-status { display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 3px 7px; color: #8fa8c9; font-size: 10px; font-weight: 740; }
-.sms-exact-live .cic-sms-shadow-status > svg { width: 13px; height: 13px; flex: 0 0 auto; }
-.sms-exact-live .cic-sms-shadow-card { display: grid; gap: 7px; margin: 0 0 9px; padding: 10px; border: 1px solid #475166; border-radius: 10px; background: linear-gradient(135deg, rgba(34, 47, 70, .48), rgba(29, 30, 35, .92)); box-shadow: inset 0 1px rgba(230, 236, 255, .04); }
-.sms-exact-live .cic-sms-shadow-card.is-would_send { border-color: #31795c; background: linear-gradient(135deg, rgba(26, 80, 60, .48), rgba(28, 33, 33, .92)); }
-.sms-exact-live .cic-sms-shadow-card.is-blocked { border-color: #8b505c; background: linear-gradient(135deg, rgba(79, 39, 47, .48), rgba(34, 29, 31, .92)); }
-.sms-exact-live .cic-sms-shadow-card > header { display: flex; align-items: center; gap: 7px; min-height: 0; padding: 0; border: 0; }
-.sms-exact-live .cic-sms-shadow-card > header > span { display: inline-flex; align-items: center; gap: 4px; color: #b9c9e8; font-size: 9px; font-weight: 820; letter-spacing: .38px; text-transform: uppercase; }
-.sms-exact-live .cic-sms-shadow-card.is-would_send > header > span { color: #9ee1bd; }
-.sms-exact-live .cic-sms-shadow-card.is-blocked > header > span { color: #f0a7ae; }
-.sms-exact-live .cic-sms-shadow-card > header > span svg { width: 12px; height: 12px; }
-.sms-exact-live .cic-sms-shadow-card > header > small { margin: 0; color: #afb3be; font-size: 9px; }
-.sms-exact-live .cic-sms-shadow-card > p { margin: 0; color: #d7d9df; font-size: 10px; line-height: 1.45; }
-.sms-exact-live .cic-sms-shadow-card > footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 0; padding: 0; border: 0; color: #8f95a2; font-size: 9px; }
-.sms-exact-live .cic-sms-shadow-card > footer > b { color: #9ee1bd; font-size: 9px; }
-.sms-exact-live .cic-sms-shadow-card > footer > em { color: #aeb4bf; font-style: normal; }
 .sms-exact-live .cic-live-tools-backdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .68); backdrop-filter: blur(3px); }
 .sms-exact-live .cic-live-tools { width: min(920px, 100%); height: min(760px, calc(100dvh - 48px)); overflow: hidden; border: 1px solid #444; border-radius: 13px; background: #171717; box-shadow: 0 28px 80px rgba(0, 0, 0, .6); }
 .sms-exact-live .cic-live-tools > header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #363636; color: #ededed; font-size: 13px; font-weight: 600; }

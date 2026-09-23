@@ -90,15 +90,6 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('className="cic-sms-ai-draft-card"');
     expect(page).toContain('Insert into reply');
     expect(page).toContain('onClick={regenerateAutoDraft}');
-    expect(page).toContain('const [shadowDecision, setShadowDecision] = useState<SmsShadowDecision | null>(null);');
-    expect(page).toContain('fetch("/api/sms-shadow-evaluations"');
-    expect(page).toContain('Shadow mode · no auto-send');
-    expect(page).toContain('className={`cic-sms-shadow-card is-${shadowDecision.decision}`}');
-    expect(page).toContain('recordShadowOutcome(insertedEvaluation.evaluationId, selected.id, sentText)');
-    expect(page).not.toContain('ShadowMetricsPanel');
-    expect(page).not.toContain('showShadowMetrics');
-    expect(page).not.toContain('/api/sms-shadow-evaluations/metrics');
-    expect(css).not.toContain('.cic-shadow-metrics');
     expect(page).not.toContain('<section className="cic-context">');
     expect(page).not.toContain('<strong>Madison</strong><span>{selected.lastMessage');
     expect(page).not.toContain('setCompose(accumulated);');
@@ -106,9 +97,6 @@ describe("SMS exact-live shell", () => {
     expect(css).toContain('.sms-exact-live .cic-sms-ai-draft-card');
     expect(css).toContain('.sms-exact-live .cic-sms-ai-draft-insert');
     expect(css).toContain('.sms-exact-live .cic-sms-ai-draft-regenerate');
-    expect(css).toContain('.sms-exact-live .cic-sms-shadow-card');
-    expect(css).toContain('.sms-exact-live .cic-sms-shadow-card.is-would_send');
-    expect(css).toContain('.sms-exact-live .cic-sms-shadow-card.is-blocked');
     expect(css).toContain('scrollbar-color: #4a4a51 #18181a;');
     expect(css).toContain('::-webkit-scrollbar-thumb');
     expect(css).toContain('.sms-exact-live .cic-mms-lightbox');
@@ -127,13 +115,10 @@ describe("SMS exact-live shell", () => {
     expect(objectionsPanel).toContain('cic-objections-assistant-dark');
     expect(worldClassPanel).toContain('cic-worldclass-assistant-dark');
     expect(app).toContain('const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));');
-    expect(app).toContain('const SmsShadowMetrics = lazy(() => import("./pages/SmsShadowMetrics"));');
     expect(app).toContain('function AdminSmsExactLiveRoute()');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>');
-    expect(app).toContain('function AdminSmsShadowMetricsRoute()');
     expect(app).toContain('<Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />');
-    expect(app).toContain('<Route path={"/admin/sms-shadow-metrics"} component={AdminSmsShadowMetricsRoute} />');
-    expect(app).toContain('const isSmsShadowMetricsWorkspace = location === "/admin/sms-shadow-metrics";');
+    expect(app).toContain('location === "/admin/day-board" || location === "/admin/sms"');
     expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
   });
 
