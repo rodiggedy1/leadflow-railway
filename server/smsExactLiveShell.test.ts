@@ -75,12 +75,23 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('const [autoDraftReady, setAutoDraftReady] = useState(false);');
     expect(page).toContain('const streamAutoDraft = useCallback(async () => {');
     expect(page).toContain('fetch("/api/cs-reply-stream"');
+    expect(page).toContain('const smsConversationContext = useMemo(() => detailMessages.slice(-5)');
+    expect(page).toContain('if (!selected || !detail || !smsConversationContext || autoDraftedForRef.current === selected.id) return;');
+    expect(page).toContain('const request = { conversationContext: smsConversationContext, customerName: selected.name, jobContext };');
+    expect(page).toContain('body: JSON.stringify(request)');
+    expect(page).toContain('csAutoDraft.mutate(request);');
+    expect(page).toContain('if (dataString === "[DONE]") continue;');
+    expect(page).toContain('if (event.error) throw new Error(event.error);');
+    expect(page).toContain('if (!accumulated.trim()) throw new Error("Stream returned an empty draft");');
+    expect(page).toContain('setAutoDraftLoading(true);\n        csAutoDraft.mutate(request);');
     expect(page).toContain('setAutoDraftText(accumulated);');
     expect(page).toContain('const insertAutoDraft = useCallback(() => {');
     expect(page).toContain('setCompose(autoDraftText);');
     expect(page).toContain('className="cic-sms-ai-draft-card"');
     expect(page).toContain('Insert into reply');
     expect(page).toContain('onClick={regenerateAutoDraft}');
+    expect(page).not.toContain('<section className="cic-context">');
+    expect(page).not.toContain('<strong>Madison</strong><span>{selected.lastMessage');
     expect(page).not.toContain('setCompose(accumulated);');
     expect(page).not.toContain('setCompose(result.reply);');
     expect(css).toContain('.sms-exact-live .cic-sms-ai-draft-card');
@@ -137,4 +148,5 @@ describe("SMS exact-live shell", () => {
     expect(page).not.toContain("trpc.leads.getCleanerTodayJobs.useQuery");
     expect(page).not.toContain("utils.leads.batchResolveNames.fetch");
   });
+
 });
