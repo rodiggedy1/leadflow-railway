@@ -67,6 +67,19 @@ type RawMessage = { role: string; content: string; ts?: number; senderName?: str
 type CallEntry = { id: number; outcome: string; summary: string | null; durationSeconds: number; recordingUrl: string | null; transcript: string | null; createdAt: number };
 type PaymentLinkConfirmCard = { recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string };
 type InlineClientProfile = { todayJob?: unknown | null } | null | undefined;
+type SmsShadowDecision = {
+  evaluationId: number;
+  policyVersion: string;
+  decision: "would_send" | "review" | "blocked";
+  score: number;
+  confidence: number;
+  reasonCode: string;
+  rationale: string;
+  preflight: { eligibleCourtesy: boolean; inboundQuestion: boolean; draftQuestion: boolean; hardStops: string[] };
+  verifier: { confidence: number; safeToSimulate: boolean; category: string; reasonCode: string; rationale: string; flags: string[] } | null;
+  outcome: "sent_unchanged" | "sent_edited" | null;
+  outcomeAt: string | null;
+};
 
 type LiveConversation = {
   id: number;
@@ -142,6 +155,12 @@ function imageMediaUrls(urls: string[]) {
 
 function isTeamMember(conversation: LiveConversation) {
   return conversation.queue === "Teams" || conversation.personType === "team";
+}
+
+function shadowDecisionLabel(decision: SmsShadowDecision["decision"]) {
+  if (decision === "would_send") return "Would send in a future policy";
+  if (decision === "blocked") return "Blocked from automation";
+  return "Human review required";
 }
 
 function relativeTime(timestamp?: number | null) {
@@ -394,12 +413,17 @@ export default function SmsExactLive() {
   const [autoDraftText, setAutoDraftText] = useState("");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const [autoDraftReady, setAutoDraftReady] = useState(false);
+  const [shadowDecision, setShadowDecision] = useState<SmsShadowDecision | null>(null);
+  const [shadowDecisionLoading, setShadowDecisionLoading] = useState(false);
   const selectedIdRef = useRef<number | null>(null);
   const selectedRef = useRef<LiveConversation | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const autoDraftedForRef = useRef<number | null>(null);
   const autoDraftSessionIdRef = useRef<number | null>(null);
   const autoDraftFallbackSessionIdRef = useRef<number | null>(null);
+  const shadowDraftKeyRef = useRef<string | null>(null);
+  const insertedShadowEvaluationRef = useRef<{ evaluationId: number; sessionId: number; draftText: string } | null>(null);
+  const recordedShadowOutcomeRef = useRef<number | null>(null);
   const threadRef = useRef<HTMLElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
 
@@ -506,6 +530,25 @@ export default function SmsExactLive() {
   const renderableTimeline = useMemo(() => timeline.filter(entry => entry.type === "call" || Boolean(entry.message.text.trim()) || Boolean(entry.message.media?.length)), [timeline]);
   useEffect(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight; }, [renderableTimeline, selected?.id]);
 
+  const recordShadowOutcome = useCallback((evaluationId: number, sessionId: number, sentText: string) => {
+    if (recordedShadowOutcomeRef.current === evaluationId) return;
+    recordedShadowOutcomeRef.current = evaluationId;
+    void fetch(`/api/sms-shadow-evaluations/${evaluationId}/outcome`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ sessionId, sentText }),
+    }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json() as { outcome?: SmsShadowDecision["outcome"] };
+      setShadowDecision(current => current?.evaluationId === evaluationId && result.outcome
+        ? { ...current, outcome: result.outcome, outcomeAt: new Date().toISOString() }
+        : current);
+    }).catch(() => {
+      recordedShadowOutcomeRef.current = null;
+    });
+  }, []);
+
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: (_result, variables) => {
       setCompose("");
@@ -537,7 +580,19 @@ export default function SmsExactLive() {
   const sendCurrent = () => {
     if (!selected || !compose.trim()) return;
     const fromNumberId = getCsInboxReplyPhoneNumberIdForSelectedConversation(selected, conversations);
-    sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId, source: "cs_inbox" });
+    const sentText = compose.trim();
+    const insertedEvaluation = insertedShadowEvaluationRef.current;
+    sendMessage.mutate(
+      { sessionId: selected.id, message: sentText, fromNumberId, source: "cs_inbox" },
+      {
+        onSuccess: () => {
+          if (insertedEvaluation?.sessionId === selected.id) {
+            recordShadowOutcome(insertedEvaluation.evaluationId, selected.id, sentText);
+            insertedShadowEvaluationRef.current = null;
+          }
+        },
+      },
+    );
   };
   const saveCurrentNote = () => { if (selected && compose.trim()) saveNote.mutate({ sessionId: selected.id, note: compose.trim() }); };
 
@@ -565,6 +620,10 @@ export default function SmsExactLive() {
     setAutoDraftText("");
     setAutoDraftReady(false);
     setAutoDraftLoading(true);
+    setShadowDecision(null);
+    setShadowDecisionLoading(false);
+    shadowDraftKeyRef.current = null;
+    insertedShadowEvaluationRef.current = null;
     try {
       const response = await fetch("/api/cs-reply-stream", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(request), signal: controller.signal });
       if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
@@ -610,6 +669,32 @@ export default function SmsExactLive() {
   useEffect(() => {
     void streamAutoDraft();
   }, [streamAutoDraft]);
+  useEffect(() => {
+    if (!selected || !autoDraftReady || !autoDraftText.trim()) return;
+    const draftText = autoDraftText.trim();
+    const draftKey = `${selected.id}:${draftText}`;
+    if (shadowDraftKeyRef.current === draftKey) return;
+    shadowDraftKeyRef.current = draftKey;
+    let cancelled = false;
+    setShadowDecision(null);
+    setShadowDecisionLoading(true);
+    void fetch("/api/sms-shadow-evaluations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ sessionId: selected.id, draftText }),
+    }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json() as Promise<{ evaluation?: SmsShadowDecision }>;
+    }).then(result => {
+      if (!cancelled && result.evaluation) setShadowDecision(result.evaluation);
+    }).catch(() => {
+      if (!cancelled) setShadowDecision(null);
+    }).finally(() => {
+      if (!cancelled) setShadowDecisionLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [autoDraftReady, autoDraftText, selected?.id]);
   const regenerateAutoDraft = useCallback(() => {
     autoDraftedForRef.current = null;
     void streamAutoDraft();
@@ -618,9 +703,12 @@ export default function SmsExactLive() {
     if (!autoDraftText.trim()) return;
     setCompose(autoDraftText);
     setAutoDraftReady(false);
-  }, [autoDraftText]);
+    if (selected && shadowDecision) {
+      insertedShadowEvaluationRef.current = { evaluationId: shadowDecision.evaluationId, sessionId: selected.id, draftText: autoDraftText };
+    }
+  }, [autoDraftText, selected, shadowDecision]);
 
-  const selectConversation = (conversation: LiveConversation) => { window.dispatchEvent(new Event("review-workspace-collapse")); streamAbortRef.current?.abort(); autoDraftedForRef.current = null; autoDraftSessionIdRef.current = conversation.id; autoDraftFallbackSessionIdRef.current = null; setAutoDraftText(""); setAutoDraftReady(false); setAutoDraftLoading(false); setSelected(conversation); setCompose(""); setComposeMode("reply"); setShowTools(false); setActiveMission(null); };
+  const selectConversation = (conversation: LiveConversation) => { window.dispatchEvent(new Event("review-workspace-collapse")); streamAbortRef.current?.abort(); autoDraftedForRef.current = null; autoDraftSessionIdRef.current = conversation.id; autoDraftFallbackSessionIdRef.current = null; shadowDraftKeyRef.current = null; insertedShadowEvaluationRef.current = null; setAutoDraftText(""); setAutoDraftReady(false); setAutoDraftLoading(false); setShadowDecision(null); setShadowDecisionLoading(false); setSelected(conversation); setCompose(""); setComposeMode("reply"); setShowTools(false); setActiveMission(null); };
   const openTools = () => setShowTools(true);
   const ticketConversations = useMemo(() => conversations.filter(conversation => detailFilter === "All" || detailFilter === "Teams" ? detailFilter === "All" || isTeamMember(conversation) : !isTeamMember(conversation)).filter(conversation => `${conversation.name} ${conversation.phone} ${conversation.lastMessage}`.toLowerCase().includes(detailSearch.toLowerCase())), [conversations, detailFilter, detailSearch]);
 
@@ -632,6 +720,8 @@ export default function SmsExactLive() {
         <footer className={`cic-composer ${composeMode === "note" ? "is-note" : ""}`}><FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" theme="dark" /><InsertResponseModal open={responsesOpen} onClose={() => setResponsesOpen(false)} onInsert={text => { setCompose(text); setResponsesOpen(false); }} customerFirstName={selected.name.split(" ")[0]} theme="dark" /><ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} theme="dark" /><WorldClassReplyPanel open={worldClassOpen} onClose={() => setWorldClassOpen(false)} onInsert={text => { setCompose(text); setWorldClassOpen(false); }} conversationContext={detailMessages.slice(-5).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n")} customerName={selected.name} jobContext={clientProfile?.todayJob ? `${clientProfile.todayJob.serviceType ?? "Service"}\n${clientProfile.todayJob.jobAddress ?? ""}` : ""} theme="dark" />
           {composeMode === "reply" && autoDraftLoading && <div className="cic-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
           {composeMode === "reply" && !autoDraftLoading && autoDraftReady && autoDraftText && <article className="cic-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{autoDraftText}</p><div><button type="button" className="cic-sms-ai-draft-insert" onClick={insertAutoDraft}><Pencil />Insert into reply</button><button type="button" className="cic-sms-ai-draft-regenerate" onClick={regenerateAutoDraft}><RefreshCw />Regenerate</button></div></article>}
+          {composeMode === "reply" && shadowDecisionLoading && <div className="cic-sms-shadow-status" aria-live="polite"><ShieldAlert /><span>Shadow mode is checking the draft…</span></div>}
+          {composeMode === "reply" && shadowDecision && <article className={`cic-sms-shadow-card is-${shadowDecision.decision}`} aria-label="SMS shadow-mode decision"><header><span><ShieldAlert />Shadow mode · no auto-send</span><small>{shadowDecisionLabel(shadowDecision.decision)}</small></header><p>{shadowDecision.rationale}</p><footer><span>Score {shadowDecision.score}/100 · policy {shadowDecision.policyVersion}</span>{shadowDecision.outcome ? <b>{shadowDecision.outcome === "sent_unchanged" ? "Sent unchanged" : "Sent after editing"}</b> : <em>Human approval still required</em>}</footer></article>}
           <div className="cic-compose-top"><button type="button" className={composeMode === "reply" ? "is-active" : ""} onClick={() => setComposeMode("reply")}>Reply</button><button type="button" className={composeMode === "note" ? "is-active" : ""} onClick={() => setComposeMode("note")}><Lock size={11} />Internal Note</button></div><textarea value={compose} onChange={event => setCompose(event.target.value)} placeholder={composeMode === "note" ? "Add an internal note…" : `Reply to ${selected.name.split(" ")[0]}…`} onKeyDown={event => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composeMode === "note" ? saveCurrentNote() : sendCurrent(); } }} /><div className="cic-compose-actions"><div>{composeMode === "reply" && <><button type="button" onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles />World-Class</button><button type="button" onClick={() => setFaqOpen(true)}><BookOpen />FAQ</button><button type="button" onClick={() => setResponsesOpen(true)}><FileText />Responses</button><button type="button" onClick={() => setObjectionsOpen(true)}><ShieldAlert />Objections</button><span className="cic-live-emoji" ref={emojiRef}><button type="button" onClick={() => setShowEmojiPicker(open => !open)}><Smile /></button>{showEmojiPicker && <span className="cic-live-emoji-picker"><Picker data={emojiData} onEmojiSelect={(emoji: { native: string }) => { setCompose(current => current + emoji.native); setShowEmojiPicker(false); }} theme="dark" previewPosition="none" skinTonePosition="none" /></span>}</span></>}</div><button className="cic-send" type="button" disabled={composeMode === "note" ? saveNote.isPending || !compose.trim() : sendMessage.isPending || !compose.trim()} onClick={composeMode === "note" ? saveCurrentNote : sendCurrent}>{composeMode === "note" ? saveNote.isPending ? "Saving…" : "Save note" : sendMessage.isPending ? "Sending…" : "Send"}<Send size={13} /></button></div></footer>
       </main>
       {isTeamMember(selected) ? <LiveTeamPanel conversation={selected} openTools={() => openTools()} /> : <LiveCustomerPanel conversation={selected} openTools={openTools} activeMission={activeMission} setActiveMission={setActiveMission} />}

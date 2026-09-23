@@ -311,6 +311,14 @@
       "sha256": "6483eab1117b8580bb08b84aad0c99be4dcd22f4a2d37c51f0a1ba492282a6c9",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0041_owned_confirmation_calls.postconditions.json"
+    },
+    {
+      "id": "0042_create_sms_shadow_evaluations",
+      "mode": "create-table",
+      "sqlFile": "0042_create_sms_shadow_evaluations.sql",
+      "sha256": "cc973004547127be34b9dd863ef60cfb4668f8248073a3b5b66f31009109f5fd",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0042_create_sms_shadow_evaluations.postconditions.json"
     }
   ]
 }

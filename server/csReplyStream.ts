@@ -25,6 +25,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { getDb } from "./db";
 import { sql } from "drizzle-orm";
+import { registerSmsShadowModeRoutes } from "./smsShadowMode";
 
 // ── In-memory candidate pool cache (1 hour) ──────────────────────────────────
 interface CandidateExample {
@@ -358,6 +359,8 @@ Write the exact SMS the agent should send for the scenario described.${fewShotEx
 }
 
 export function registerCsReplyStreamRoute(app: Express) {
+  registerSmsShadowModeRoutes(app);
+
   app.post("/api/cs-reply-stream", async (req: Request, res: Response) => {
     const authorized = await isAuthorizedOpsUser(req);
     if (!authorized) {

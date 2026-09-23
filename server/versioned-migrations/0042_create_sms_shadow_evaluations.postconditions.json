@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "table": "sms_shadow_evaluations",
+  "columns": [
+    { "name": "id", "columnType": "bigint", "nullable": false, "autoIncrement": true },
+    { "name": "sessionId", "columnType": "bigint", "nullable": false },
+    { "name": "draftHash", "columnType": "char(64)", "nullable": false },
+    { "name": "policyVersion", "columnType": "varchar(64)", "nullable": false },
+    { "name": "source", "columnType": "varchar(32)", "nullable": false },
+    { "name": "decision", "columnType": "varchar(16)", "nullable": false },
+    { "name": "score", "columnType": "int", "nullable": false },
+    { "name": "confidence", "columnType": "decimal(5,4)", "nullable": false },
+    { "name": "reasonCode", "columnType": "varchar(96)", "nullable": false },
+    { "name": "rationale", "columnType": "varchar(512)", "nullable": false },
+    { "name": "preflight", "columnType": "json", "nullable": false },
+    { "name": "verifierResult", "columnType": "json", "nullable": true },
+    { "name": "outcome", "columnType": "varchar(24)", "nullable": true },
+    { "name": "outcomeAt", "columnType": "datetime(3)", "nullable": true },
+    { "name": "outcomeActor", "columnType": "varchar(255)", "nullable": true },
+    { "name": "sentDraftHash", "columnType": "char(64)", "nullable": true },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "uq_sms_shadow_session_draft_policy", "unique": true, "columns": ["sessionId", "draftHash", "policyVersion"] },
+    { "name": "idx_sms_shadow_created", "unique": false, "columns": ["createdAt"] },
+    { "name": "idx_sms_shadow_decision", "unique": false, "columns": ["decision", "createdAt"] }
+  ]
+}
