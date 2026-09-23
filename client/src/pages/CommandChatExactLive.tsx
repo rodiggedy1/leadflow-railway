@@ -13,6 +13,7 @@ import {
   CircleDollarSign,
   Heart,
   Headphones,
+  MapPin,
   Loader2,
   Megaphone,
   MessageSquare,
@@ -79,6 +80,9 @@ type CommandLead = {
   name: string;
   sourceLabel: string;
   detail: string;
+  phone: string | null;
+  address: string | null;
+  claimedBy: string | null;
   priceLabel: string | null;
   ts: number;
   queue: "web" | "incoming";
@@ -314,10 +318,13 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   const rawPrice = metadata.price === undefined || metadata.price === null || metadata.price === "" ? "" : String(metadata.price);
   const priceLabel = rawPrice ? (rawPrice.startsWith("$") ? rawPrice : `$${rawPrice}`) : null;
   const detail = [getText("serviceType"), getText("size")].filter(Boolean).join(" · ") || "New inquiry";
+  const phone = getText("leadPhone").trim() || null;
+  const address = getText("serviceAddress").trim() || getText("address").trim() || null;
+  const claimedBy = getText("claimedBy").trim() || null;
   const rawSessionId = metadata.sessionId;
   const parsedSessionId = typeof rawSessionId === "number" ? rawSessionId : typeof rawSessionId === "string" && /^\d+$/.test(rawSessionId) ? Number(rawSessionId) : null;
   const sessionId = parsedSessionId !== null && Number.isSafeInteger(parsedSessionId) && parsedSessionId > 0 ? parsedSessionId : null;
-  return { id: message.id, sessionId, name, sourceLabel, detail, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
+  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
 }
 
 function leadHref(lead: CommandLead) {
@@ -342,7 +349,7 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
   return photoUrl ? <img className={className} src={photoUrl} alt={`${name} profile`} /> : <span className={className}>{initials(name)}</span>;
 }
 
-function LeadQueue({ title, description, leads }: { title: string; description: string; leads: CommandLead[] }) {
+function LeadQueue({ title, description, leads, claimPending, onClaim, onOpenSms }: { title: string; description: string; leads: CommandLead[]; claimPending: boolean; onClaim: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [primaryLead, ...remainingLeads] = orderedLeads;
   return (
@@ -350,13 +357,14 @@ function LeadQueue({ title, description, leads }: { title: string; description: 
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
       {primaryLead ? <div className="ccc-live-lead-list">
-        <a href={leadHref(primaryLead)} className="ccc-live-lead-primary">
-          <img src={customerPortraitFor(primaryLead.name)} alt={`Client portrait illustration for ${primaryLead.name}`} />
-          <span className="ccc-live-lead-primary-copy"><strong>{primaryLead.name}</strong><small>{primaryLead.queue === "web" ? `Quote requested · ${primaryLead.sourceLabel}` : `${primaryLead.sourceLabel} · ${primaryLead.detail}`}</small><em><i />New inquiry · {formatRelative(primaryLead.ts)}</em></span>
-          {primaryLead.priceLabel && <b>{primaryLead.priceLabel}</b>}
-          <footer><span>View lead <ChevronRight /></span></footer>
-        </a>
-        {remainingLeads.slice(0, 2).map((lead) => <a href={leadHref(lead)} key={lead.id} className="ccc-live-lead-row"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></a>)}
+        <section className="ccc-live-lead-primary">
+          <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(primaryLead.name)} alt={`Client portrait illustration for ${primaryLead.name}`} /><span><strong>{primaryLead.name}</strong><small>{primaryLead.queue === "web" ? `Quote requested · ${primaryLead.sourceLabel}` : `${primaryLead.sourceLabel} · ${primaryLead.detail}`}</small><em><i />New inquiry · {formatRelative(primaryLead.ts)}</em></span>{primaryLead.priceLabel && <b>{primaryLead.priceLabel}</b>}</div>
+          {primaryLead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{primaryLead.phone}</span><div><button type="button" aria-label={`Open text conversation with ${primaryLead.name}`} title={primaryLead.sessionId ? "Open text conversation" : "Text conversation is not available yet"} disabled={!primaryLead.sessionId} onClick={() => onOpenSms(primaryLead)}><MessageSquare /></button><a href={`tel:${primaryLead.phone}`} aria-label={`Call ${primaryLead.name}`}><Phone /></a></div></div>}
+          {primaryLead.address && <p className="ccc-live-lead-primary-detail"><MapPin />{primaryLead.address}</p>}
+          <p className="ccc-live-lead-primary-detail"><Sparkles />{primaryLead.detail}</p>
+          <footer><button type="button" className={primaryLead.claimedBy ? "is-claimed" : ""} disabled={Boolean(primaryLead.claimedBy) || claimPending} onClick={() => onClaim(primaryLead)}>{primaryLead.claimedBy ? <><Check />{primaryLead.claimedBy}</> : <><Users />Claim lead</>}</button><a href={leadHref(primaryLead)}>View <ChevronRight /></a></footer>
+        </section>
+        {remainingLeads.slice(0, 2).map((lead) => <a href={leadHref(lead)} key={lead.id} className="ccc-live-lead-row"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.phone || lead.detail}</small><em><i />New inquiry · {formatRelative(lead.ts)}</em></span>{lead.claimedBy ? <b>{lead.claimedBy}</b> : lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></a>)}
       </div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
     </article>
   );
@@ -676,6 +684,41 @@ export default function CommandChatExactLive() {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => setNotice(""), 3000);
   }, []);
+  const claimCommandLead = trpc.opsChat.claimLead.useMutation({
+    onSuccess: (result) => {
+      if (!result.success) {
+        showNotice(`Already claimed by ${result.alreadyClaimedBy}`);
+        return;
+      }
+      showNotice(`Lead claimed by ${result.claimedBy}`);
+      void utils.opsChat.listChannelMessages.invalidate({ channel });
+    },
+    onError: (error) => showNotice(`Lead claim failed: ${error.message}`),
+  });
+  const claimLeadFromQueue = useCallback((lead: CommandLead) => {
+    if (lead.claimedBy || claimCommandLead.isPending) return;
+    claimCommandLead.mutate({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}) });
+  }, [claimCommandLead, claimCommandLead.isPending]);
+  const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
+    if (!lead.sessionId) {
+      showNotice("A Command Chat text conversation is not available for this lead yet.");
+      return;
+    }
+    const inboxConversation = smsInbox.find((conversation) => conversation.id === lead.sessionId);
+    setSelectedSmsConversation(inboxConversation ?? {
+      id: lead.sessionId,
+      leadName: lead.name,
+      leadPhone: lead.phone,
+      lastMessageText: null,
+      lastMsgTs: null,
+      lastMessageTs: null,
+      lastSenderRole: null,
+      hasUnanswered: false,
+      aiSummary: null,
+      personType: "customer",
+      lastInboundPhoneNumberId: null,
+    });
+  }, [showNotice, smsInbox]);
 
   const addPendingOutgoingMessage = useCallback((message: ChannelMessage) => {
     scrollAfterSendRef.current = true;
@@ -904,7 +947,7 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} /><ServiceAlertPanel alerts={serviceAlerts} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /><ServiceAlertPanel alerts={serviceAlerts} /></>}
           </aside>
         </div>
       </section>
