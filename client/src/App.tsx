@@ -68,6 +68,7 @@ const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 const TeamExactLive = lazy(() => import("./pages/TeamExactLive"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
+const SmsShadowMetrics = lazy(() => import("./pages/SmsShadowMetrics"));
 const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
 const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));
 const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
@@ -134,6 +135,10 @@ function AdminSmsExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>;
 }
 
+function AdminSmsShadowMetricsRoute() {
+  return <ReviewWorkspaceFrame navActivePath="/admin/sms-shadow-metrics"><SmsShadowMetrics /></ReviewWorkspaceFrame>;
+}
+
 function AdminEmailsExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>;
 }
@@ -189,6 +194,7 @@ function Router() {
         <Route path={"/admin/leads"} component={AdminLeadsCRMExactLiveRoute} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
+        <Route path={"/admin/sms-shadow-metrics"} component={AdminSmsShadowMetricsRoute} />
         <Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />
         <Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
@@ -258,7 +264,8 @@ function isDayBoardExactLiveRoute(location: string) {
   const isTeamWorkspace = location === "/admin/team";
   const isHiringWorkspace = location === "/admin/hiring";
   const isSettingsWorkspace = location === "/admin/settings" || location === "/admin/widget-config";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace || isSettingsWorkspace;
+  const isSmsShadowMetricsWorkspace = location === "/admin/sms-shadow-metrics";
+  return location === "/admin/day-board" || location === "/admin/sms" || isSmsShadowMetricsWorkspace || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace || isSettingsWorkspace;
 }
 
 function PollingInstrumentation() {

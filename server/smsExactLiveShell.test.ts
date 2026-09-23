@@ -130,10 +130,13 @@ describe("SMS exact-live shell", () => {
     expect(objectionsPanel).toContain('cic-objections-assistant-dark');
     expect(worldClassPanel).toContain('cic-worldclass-assistant-dark');
     expect(app).toContain('const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));');
+    expect(app).toContain('const SmsShadowMetrics = lazy(() => import("./pages/SmsShadowMetrics"));');
     expect(app).toContain('function AdminSmsExactLiveRoute()');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>');
+    expect(app).toContain('function AdminSmsShadowMetricsRoute()');
     expect(app).toContain('<Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />');
-    expect(app).toContain('location === "/admin/day-board" || location === "/admin/sms"');
+    expect(app).toContain('<Route path={"/admin/sms-shadow-metrics"} component={AdminSmsShadowMetricsRoute} />');
+    expect(app).toContain('const isSmsShadowMetricsWorkspace = location === "/admin/sms-shadow-metrics";');
     expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
   });
 

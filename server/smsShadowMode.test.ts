@@ -77,7 +77,7 @@ describe("SMS shadow mode", () => {
   });
 
   it("keeps the generated and final human-sent text for read-only learning review", () => {
-    const smsPage = readFileSync(resolve(process.cwd(), "client/src/pages/SmsExactLive.tsx"), "utf8");
+    const metricsPage = readFileSync(resolve(process.cwd(), "client/src/pages/SmsShadowMetrics.tsx"), "utf8");
     const migration = readFileSync(resolve(process.cwd(), "server/versioned-migrations/0042_create_sms_shadow_evaluations.sql"), "utf8");
 
     expect(migration).toContain("`draftText` text NOT NULL");
@@ -86,9 +86,10 @@ describe("SMS shadow mode", () => {
     expect(source).toContain("evaluation.draftText");
     expect(source).toContain("evaluation.sentText");
     expect(source).toContain("sentText = ${sentText}");
-    expect(smsPage).toContain("function ShadowMetricsPanel");
-    expect(smsPage).toContain("Draft-to-send pairs");
-    expect(smsPage).toContain("Generated draft compared with the text a human actually sent.");
-    expect(smsPage).toContain("describeShadowEdit");
+    expect(metricsPage).toContain('fetch("/api/sms-shadow-evaluations/metrics"');
+    expect(metricsPage).toContain("Draft-to-send pairs");
+    expect(metricsPage).toContain("Generated draft compared with the text a human actually sent.");
+    expect(metricsPage).toContain("describeShadowEdit");
+    expect(metricsPage).not.toContain("sendMessage");
   });
 });
