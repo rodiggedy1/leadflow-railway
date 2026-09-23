@@ -95,13 +95,10 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('Shadow mode · no auto-send');
     expect(page).toContain('className={`cic-sms-shadow-card is-${shadowDecision.decision}`}');
     expect(page).toContain('recordShadowOutcome(insertedEvaluation.evaluationId, selected.id, sentText)');
-    expect(page).toContain('function ShadowMetricsPanel');
-    expect(page).toContain('fetch("/api/sms-shadow-evaluations/metrics"');
-    expect(page).toContain('Shadow Metrics');
-    expect(page).toContain('Generated draft compared with the text a human actually sent.');
-    expect(page).toContain('describeShadowEdit');
-    expect(css).toContain('.sms-exact-live .cic-shadow-metrics');
-    expect(css).toContain('.sms-exact-live .cic-shadow-metrics-text');
+    expect(page).not.toContain('ShadowMetricsPanel');
+    expect(page).not.toContain('showShadowMetrics');
+    expect(page).not.toContain('/api/sms-shadow-evaluations/metrics');
+    expect(css).not.toContain('.cic-shadow-metrics');
     expect(page).not.toContain('<section className="cic-context">');
     expect(page).not.toContain('<strong>Madison</strong><span>{selected.lastMessage');
     expect(page).not.toContain('setCompose(accumulated);');
