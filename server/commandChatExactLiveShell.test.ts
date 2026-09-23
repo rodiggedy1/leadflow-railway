@@ -12,6 +12,7 @@ describe("Command Chat exact live shell", () => {
     const headerStyles = read("client/src/pages/command-chat-header-composition.css");
     const app = read("client/src/App.tsx");
     const commandCenter = read("server/commandCenterRouter.ts");
+    const opsChatRouter = read("server/opsChatRouter.ts");
     const agentDashboard = read("client/src/pages/AgentDashboard.tsx");
     const main = read("client/src/main.tsx");
     const headerLine = page.split("\n").find((line) => line.includes('className="ccc-reference-chat-header"')) ?? "";
