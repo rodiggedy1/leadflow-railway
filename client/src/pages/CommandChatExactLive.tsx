@@ -462,6 +462,10 @@ export default function CommandChatExactLive() {
   const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
   const incomingCommandMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    if (selectedSmsConversation) setMadisonOpen(false);
+  }, [selectedSmsConversation]);
+
   const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
   const { data: photosData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
   const { data: channelMessages = [], isLoading: messagesLoading } = trpc.opsChat.listChannelMessages.useQuery(
@@ -915,7 +919,7 @@ export default function CommandChatExactLive() {
         if (modal === "booking") announceBooking.mutate({ channel: "command", personName: bookingPerson.trim(), amount: bookingAmount.trim() || undefined, note: bookingNote.trim() || undefined, authorName: profile?.name || callerName });
       }} />}
       <IssueEngineOverlay open={issueEngineOpen} onClose={() => { setIssueEngineOpen(false); setIssueEngineInitialId(null); }} callerName={callerName} agentPhotoMap={photoMap} agentList={agents.agents.map((agent) => ({ id: agent.id, name: agent.name, photoUrl: agent.photoUrl ?? null }))} initialIssueId={issueEngineInitialId} />
-      {madisonOpen && (
+      {!selectedSmsConversation && madisonOpen && (
         <div
           style={{
             position: "fixed",
@@ -941,7 +945,7 @@ export default function CommandChatExactLive() {
           />
         </div>
       )}
-      <button
+      {!selectedSmsConversation && <button
         onClick={() => setMadisonOpen(o => !o)}
         style={{
           position: "fixed",
@@ -968,7 +972,7 @@ export default function CommandChatExactLive() {
           alt="Madison"
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
-      </button>
+      </button>}
       {notice && <div className="ccc-notice" role="status"><CircleDot />{notice}</div>}
     </main>
   );
@@ -1367,6 +1371,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const [smsAutoDraftText, setSmsAutoDraftText] = useState("");
   const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const smsComposerRef = useRef<HTMLTextAreaElement>(null);
   const initialBottomScrollDone = useRef(false);
   const scrollAfterSendRef = useRef(false);
   const smsAutoDraftAbortRef = useRef<AbortController | null>(null);
@@ -1473,6 +1478,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setDraft(smsAutoDraftText);
     setSmsAutoDraftReady(false);
   }, [smsAutoDraftText]);
+  const resizeSmsComposer = useCallback((composer: HTMLTextAreaElement) => {
+    composer.style.height = "auto";
+    composer.style.height = `${Math.min(composer.scrollHeight, 240)}px`;
+  }, []);
   useEffect(() => {
     smsAutoDraftSessionIdRef.current = conversation.id;
     autoDraftedForConversationRef.current = null;
@@ -1489,6 +1498,9 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       smsAutoDraftAbortRef.current = null;
     };
   }, [conversation.id]);
+  useEffect(() => {
+    if (smsComposerRef.current) resizeSmsComposer(smsComposerRef.current);
+  }, [draft, resizeSmsComposer]);
   useEffect(() => {
     if (!detail || messages.length === 0) return;
     void streamSmsAutoDraft();
@@ -1536,7 +1548,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     <footer>
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
       {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></article>}
-      <div className="ccc-live-sms-composer"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+      <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
   </aside></div>;
 }

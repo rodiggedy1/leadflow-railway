@@ -295,6 +295,7 @@ describe("Command Chat exact live shell", () => {
     expect(smsDrawer).toContain('const [smsAutoDraftLoading, setSmsAutoDraftLoading] = useState(false);');
     expect(smsDrawer).toContain('const [smsAutoDraftText, setSmsAutoDraftText] = useState("");');
     expect(smsDrawer).toContain('const smsAutoDraftAbortRef = useRef<AbortController | null>(null);');
+    expect(smsDrawer).toContain('const smsComposerRef = useRef<HTMLTextAreaElement>(null);');
     expect(smsDrawer).toContain('const smsConversationContext = useMemo(() => messages.slice(-5)');
     expect(smsDrawer).toContain('message.role === "user" ? "Customer" : "Agent"');
     expect(smsDrawer).toContain('const smsAutoDraft = trpc.opsChat.csReply.useMutation');
@@ -312,8 +313,15 @@ describe("Command Chat exact live shell", () => {
     expect(smsDrawer).toContain('Insert into reply');
     expect(smsDrawer).toContain('onClick={insertSmsAutoDraft}');
     expect(smsDrawer).toContain('onClick={regenerateSmsDraft}');
+    expect(smsDrawer).toContain('const resizeSmsComposer = useCallback((composer: HTMLTextAreaElement) => {');
+    expect(smsDrawer).toContain('Math.min(composer.scrollHeight, 240)');
+    expect(smsDrawer).toContain('ref={smsComposerRef}');
+    expect(smsDrawer).toContain('onInput={(event) => resizeSmsComposer(event.currentTarget)}');
     expect(smsDrawer).toContain('trpc.leads.sendMessage.useMutation');
     expect(smsDrawer).toContain('const submit = () => {');
+    expect(page).toContain('if (selectedSmsConversation) setMadisonOpen(false);');
+    expect(page).toContain('{!selectedSmsConversation && madisonOpen && (');
+    expect(page).toContain('{!selectedSmsConversation && <button');
     expect(page).toContain('trpc.commandCenter.listCommandChatInbox.useQuery');
     expect(page).not.toContain('trpc.leads.listCsInbox.useQuery');
     expect(page).not.toContain('const inboundSmsInbox = useMemo(');
@@ -402,6 +410,7 @@ describe("Command Chat exact live shell", () => {
     expect(styles).toContain('.ccc-live-sms-ai-draft-card');
     expect(styles).toContain('.ccc-live-sms-ai-draft-insert');
     expect(styles).toContain('.ccc-live-sms-composer');
+    expect(styles).toContain('.ccc-live-sms-drawer textarea{min-height:96px;max-height:240px;');
     expect(styles).toContain('.ccc-live .ccc-live-team-sms-message');
     expect(styles).toContain('.ccc-live .ccc-live-new-command-message');
     expect(styles).toContain('.ccc-live .ccc-live-message-link');
