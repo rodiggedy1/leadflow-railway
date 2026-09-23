@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import {
@@ -24,7 +24,9 @@ import {
   MessageCircle,
   MoreHorizontal,
   Phone,
+  Pencil,
   Plus,
+  RefreshCw,
   Search,
   Send,
   ShieldAlert,
@@ -389,10 +391,15 @@ export default function SmsExactLive() {
   const [expandedCalls, setExpandedCalls] = useState<Set<number>>(new Set());
   const [mmsLightbox, setMmsLightbox] = useState<{ urls: string[]; index: number } | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [autoDraftText, setAutoDraftText] = useState("");
+  const [autoDraftLoading, setAutoDraftLoading] = useState(false);
+  const [autoDraftReady, setAutoDraftReady] = useState(false);
   const selectedIdRef = useRef<number | null>(null);
   const selectedRef = useRef<LiveConversation | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const autoDraftedForRef = useRef<number | null>(null);
+  const autoDraftSessionIdRef = useRef<number | null>(null);
+  const autoDraftFallbackSessionIdRef = useRef<number | null>(null);
   const threadRef = useRef<HTMLElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
 
@@ -436,7 +443,7 @@ export default function SmsExactLive() {
   }, [phoneBatches, utils]);
 
   const conversations = useMemo(() => (rawRows ?? []).map(row => toConversation(row as unknown as Record<string, unknown>, names)), [rawRows, names]);
-  useEffect(() => { selectedIdRef.current = selected?.id ?? null; selectedRef.current = selected; }, [selected]);
+  useEffect(() => { selectedIdRef.current = selected?.id ?? null; selectedRef.current = selected; autoDraftSessionIdRef.current = selected?.id ?? null; }, [selected]);
   useEffect(() => {
     if (!selected) return;
     const refreshed = conversations.find(conversation => conversation.id === selected.id);
@@ -531,36 +538,78 @@ export default function SmsExactLive() {
   };
   const saveCurrentNote = () => { if (selected && compose.trim()) saveNote.mutate({ sessionId: selected.id, note: compose.trim() }); };
 
-  const csAutoDraft = trpc.opsChat.csReply.useMutation({ onSuccess: result => { if (typeof result.reply === "string") setCompose(result.reply); } });
-  useEffect(() => {
+  const csAutoDraft = trpc.opsChat.csReply.useMutation({
+    onSuccess: result => {
+      if (!autoDraftFallbackSessionIdRef.current || autoDraftFallbackSessionIdRef.current !== autoDraftSessionIdRef.current) return;
+      const reply = typeof result.reply === "string" ? result.reply : "";
+      setAutoDraftText(reply);
+      setAutoDraftReady(Boolean(reply.trim()));
+      setAutoDraftLoading(false);
+    },
+    onError: () => {
+      if (autoDraftFallbackSessionIdRef.current === autoDraftSessionIdRef.current) setAutoDraftLoading(false);
+    },
+  });
+  const streamAutoDraft = useCallback(async () => {
     if (!selected || !detail || detail.sessionId !== selected.id || autoDraftedForRef.current === selected.id) return;
     autoDraftedForRef.current = selected.id;
     const controller = new AbortController();
-    streamAbortRef.current?.abort(); streamAbortRef.current = controller;
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = controller;
+    autoDraftFallbackSessionIdRef.current = null;
     const conversationContext = detailMessages.slice(-20).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n");
     const classifyContext = detailMessages.slice(-5).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n");
     const jobContext = clientProfile?.todayJob ? `${clientProfile.todayJob.serviceType ?? "Service"}\n${clientProfile.todayJob.jobAddress ?? ""}` : "";
-    void (async () => {
-      try {
-        const response = await fetch("/api/cs-reply-stream", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ conversationContext, classifyContext, customerName: selected.name, jobContext, sessionId: selected.id }), signal: controller.signal });
-        if (!response.ok || !response.body) throw new Error("Stream unavailable");
-        const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffered = ""; let accumulated = "";
-        while (true) {
-          const { done, value } = await reader.read(); if (done) break;
-          if (selectedRef.current?.id !== selected.id) { void reader.cancel(); return; }
-          buffered += decoder.decode(value, { stream: true }); const lines = buffered.split("\n"); buffered = lines.pop() ?? "";
-          for (const line of lines) { if (!line.trim().startsWith("data:")) continue; const token = JSON.parse(line.trim().slice(5).trim()) as { token?: string }; if (token.token) { accumulated += token.token; setCompose(accumulated); } }
+    setAutoDraftText("");
+    setAutoDraftReady(false);
+    setAutoDraftLoading(true);
+    try {
+      const response = await fetch("/api/cs-reply-stream", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ conversationContext, classifyContext, customerName: selected.name, jobContext, sessionId: selected.id }), signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error("Stream unavailable");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+      let accumulated = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (autoDraftSessionIdRef.current !== selected.id) { void reader.cancel(); return; }
+        buffered += decoder.decode(value, { stream: true });
+        const lines = buffered.split("\n");
+        buffered = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim().startsWith("data:")) continue;
+          const token = JSON.parse(line.trim().slice(5).trim()) as { token?: string };
+          if (token.token) { accumulated += token.token; setAutoDraftText(accumulated); }
         }
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") csAutoDraft.mutate({ conversationContext, customerName: selected.name, jobContext });
       }
-    })();
-    return () => controller.abort();
-  // The existing draft behavior intentionally fires once when fresh detail loads for the selected conversation.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, detail?.sessionId]);
+      if (autoDraftSessionIdRef.current === selected.id) {
+        setAutoDraftReady(Boolean(accumulated.trim()));
+        setAutoDraftLoading(false);
+      }
+    } catch (error) {
+      if ((error as Error).name !== "AbortError" && autoDraftSessionIdRef.current === selected.id) {
+        autoDraftFallbackSessionIdRef.current = selected.id;
+        csAutoDraft.mutate({ conversationContext, customerName: selected.name, jobContext });
+      }
+    } finally {
+      if (streamAbortRef.current === controller) streamAbortRef.current = null;
+    }
+  }, [clientProfile?.todayJob, csAutoDraft, detail, detailMessages, selected]);
+  useEffect(() => {
+    void streamAutoDraft();
+  }, [streamAutoDraft]);
+  const regenerateAutoDraft = useCallback(() => {
+    autoDraftedForRef.current = null;
+    void streamAutoDraft();
+  }, [streamAutoDraft]);
+  const insertAutoDraft = useCallback(() => {
+    if (!autoDraftText.trim()) return;
+    setCompose(autoDraftText);
+    setAutoDraftReady(false);
+  }, [autoDraftText]);
 
-  const selectConversation = (conversation: LiveConversation) => { window.dispatchEvent(new Event("review-workspace-collapse")); autoDraftedForRef.current = null; setSelected(conversation); setCompose(""); setComposeMode("reply"); setShowTools(false); setActiveMission(null); };
+  const selectConversation = (conversation: LiveConversation) => { window.dispatchEvent(new Event("review-workspace-collapse")); streamAbortRef.current?.abort(); autoDraftedForRef.current = null; autoDraftSessionIdRef.current = conversation.id; autoDraftFallbackSessionIdRef.current = null; setAutoDraftText(""); setAutoDraftReady(false); setAutoDraftLoading(false); setSelected(conversation); setCompose(""); setComposeMode("reply"); setShowTools(false); setActiveMission(null); };
   const openTools = () => setShowTools(true);
   const ticketConversations = useMemo(() => conversations.filter(conversation => detailFilter === "All" || detailFilter === "Teams" ? detailFilter === "All" || isTeamMember(conversation) : !isTeamMember(conversation)).filter(conversation => `${conversation.name} ${conversation.phone} ${conversation.lastMessage}`.toLowerCase().includes(detailSearch.toLowerCase())), [conversations, detailFilter, detailSearch]);
 
@@ -571,6 +620,8 @@ export default function SmsExactLive() {
         <section className="cic-context"><div><Sparkles size={14} /><strong>Madison</strong><span>{selected.lastMessage || "No recent message is available for this conversation."}</span></div><p><span>● {selected.hasUnanswered ? "Needs response" : "Waiting on customer"}</span>{selected.chips.map(chip => <i key={chip}>{chip.replaceAll("_", " ")}</i>)}</p></section>
         <section className="cic-message-thread" ref={threadRef as React.RefObject<HTMLElement>}><div className="cic-day">Conversation</div>{renderableTimeline.map((entry, index) => entry.type === "call" ? <article className="cic-ai-call cic-live-call" key={`call-${entry.call.id}`}><header><span><Sparkles size={13} />AI Call</span><em>{entry.call.outcome?.replaceAll("_", " ") || "Completed"}</em></header><div><button type="button" onClick={() => setExpandedCalls(current => { const next = new Set(current); next.has(entry.call.id) ? next.delete(entry.call.id) : next.add(entry.call.id); return next; })}><span>▶</span></button><i>{Array.from({ length: 18 }, (_, item) => <b key={item} style={{ height: `${5 + ((item * 7) % 13)}px` }} />)}</i><time>{Math.floor((entry.call.durationSeconds ?? 0) / 60)}:{String((entry.call.durationSeconds ?? 0) % 60).padStart(2, "0")}</time><ChevronDown size={14} /></div>{expandedCalls.has(entry.call.id) && <div className="cic-live-call-detail">{entry.call.recordingUrl ? <audio controls src={proxyRecordingUrl(entry.call.recordingUrl) ?? undefined} /> : <small>No recording available.</small>}{entry.call.summary && <p>{entry.call.summary}</p>}{entry.call.transcript && <pre>{entry.call.transcript}</pre>}</div>}</article> : entry.message.sender === "note" ? <article className="cic-note" key={`message-${index}`}><header><Lock size={12} />Internal note <i>{entry.message.senderName ?? "Agent"}</i><time>{entry.message.time}</time></header>{entry.message.text.trim() && <p>{entry.message.text}</p>}</article> : <article className={`cic-message ${entry.message.sender === "agent" ? "outgoing" : "incoming"}`} key={`message-${index}`}><div className="cic-message-meta"><LiveAvatar conversation={entry.message.sender === "agent" ? { ...selected, name: entry.message.senderName ?? "Agent", initials: (entry.message.senderName ?? "Agent").split(/\s+/).map(word => word[0]).join("").slice(0, 2), personType: "customer" } : selected} className="cic-message-identity" showPortrait={entry.message.sender !== "agent"} /><span>{entry.message.sender === "agent" ? entry.message.senderName ?? "Agent" : selected.name} · {entry.message.time}</span></div>{entry.message.text.trim() && <p>{entry.message.text}</p>}{entry.message.media?.length ? <div className="cic-live-media">{entry.message.media.map(url => isVideoMedia(url) ? <video controls preload="metadata" key={url} src={mediaDisplayUrl(url)}>Your browser cannot play this video.</video> : <button type="button" key={url} onClick={() => { const photos = imageMediaUrls(entry.message.media ?? []); setMmsLightbox({ urls: photos, index: photos.indexOf(url) }); }} title="Click to enlarge"><img src={mediaDisplayUrl(url)} alt="MMS photo" /></button>)}</div> : null}</article>)}{!renderableTimeline.length && <div className="cic-live-empty">No messages yet.</div>}</section>
         <footer className={`cic-composer ${composeMode === "note" ? "is-note" : ""}`}><FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" theme="dark" /><InsertResponseModal open={responsesOpen} onClose={() => setResponsesOpen(false)} onInsert={text => { setCompose(text); setResponsesOpen(false); }} customerFirstName={selected.name.split(" ")[0]} theme="dark" /><ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} theme="dark" /><WorldClassReplyPanel open={worldClassOpen} onClose={() => setWorldClassOpen(false)} onInsert={text => { setCompose(text); setWorldClassOpen(false); }} conversationContext={detailMessages.slice(-5).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n")} customerName={selected.name} jobContext={clientProfile?.todayJob ? `${clientProfile.todayJob.serviceType ?? "Service"}\n${clientProfile.todayJob.jobAddress ?? ""}` : ""} theme="dark" />
+          {composeMode === "reply" && autoDraftLoading && <div className="cic-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
+          {composeMode === "reply" && !autoDraftLoading && autoDraftReady && autoDraftText && <article className="cic-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{autoDraftText}</p><div><button type="button" className="cic-sms-ai-draft-insert" onClick={insertAutoDraft}><Pencil />Insert into reply</button><button type="button" className="cic-sms-ai-draft-regenerate" onClick={regenerateAutoDraft}><RefreshCw />Regenerate</button></div></article>}
           <div className="cic-compose-top"><button type="button" className={composeMode === "reply" ? "is-active" : ""} onClick={() => setComposeMode("reply")}>Reply</button><button type="button" className={composeMode === "note" ? "is-active" : ""} onClick={() => setComposeMode("note")}><Lock size={11} />Internal Note</button></div><textarea value={compose} onChange={event => setCompose(event.target.value)} placeholder={composeMode === "note" ? "Add an internal note…" : `Reply to ${selected.name.split(" ")[0]}…`} onKeyDown={event => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composeMode === "note" ? saveCurrentNote() : sendCurrent(); } }} /><div className="cic-compose-actions"><div>{composeMode === "reply" && <><button type="button" onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles />World-Class</button><button type="button" onClick={() => setFaqOpen(true)}><BookOpen />FAQ</button><button type="button" onClick={() => setResponsesOpen(true)}><FileText />Responses</button><button type="button" onClick={() => setObjectionsOpen(true)}><ShieldAlert />Objections</button><span className="cic-live-emoji" ref={emojiRef}><button type="button" onClick={() => setShowEmojiPicker(open => !open)}><Smile /></button>{showEmojiPicker && <span className="cic-live-emoji-picker"><Picker data={emojiData} onEmojiSelect={(emoji: { native: string }) => { setCompose(current => current + emoji.native); setShowEmojiPicker(false); }} theme="dark" previewPosition="none" skinTonePosition="none" /></span>}</span></>}</div><button className="cic-send" type="button" disabled={composeMode === "note" ? saveNote.isPending || !compose.trim() : sendMessage.isPending || !compose.trim()} onClick={composeMode === "note" ? saveCurrentNote : sendCurrent}>{composeMode === "note" ? saveNote.isPending ? "Saving…" : "Save note" : sendMessage.isPending ? "Sending…" : "Send"}<Send size={13} /></button></div></footer>
       </main>
       {isTeamMember(selected) ? <LiveTeamPanel conversation={selected} openTools={() => openTools()} /> : <LiveCustomerPanel conversation={selected} openTools={openTools} activeMission={activeMission} setActiveMission={setActiveMission} />}

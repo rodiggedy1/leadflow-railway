@@ -106,6 +106,21 @@
 .sms-exact-live .cic-live-emoji-picker { position: absolute; z-index: 120; bottom: calc(100% + 8px); left: 0; overflow: hidden; border: 1px solid #494949; border-radius: 10px; box-shadow: 0 18px 44px rgba(0, 0, 0, .55); }
 .sms-exact-live .cic-compose-actions > div .cic-live-emoji > button { width: 24px; padding: 0; justify-content: center; }
 .sms-exact-live .cic-composer { position: relative; }
+.sms-exact-live .cic-sms-ai-draft-status { display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 3px 7px; color: #bba5ff; font-size: 10px; font-weight: 740; }
+.sms-exact-live .cic-sms-ai-draft-status > svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.sms-exact-live .cic-sms-ai-draft-card { display: grid; gap: 8px; margin: 0 0 9px; padding: 10px; border: 1px solid #50417d; border-radius: 10px; background: linear-gradient(135deg, rgba(71, 52, 125, .35), rgba(35, 34, 40, .92)); box-shadow: inset 0 1px rgba(230, 220, 255, .06); }
+.sms-exact-live .cic-sms-ai-draft-card > header { display: flex; align-items: center; gap: 7px; min-height: 0; padding: 0; border: 0; }
+.sms-exact-live .cic-sms-ai-draft-card > header > span { display: inline-flex; align-items: center; gap: 4px; color: #d3c7ff; font-size: 9px; font-weight: 820; letter-spacing: .38px; text-transform: uppercase; }
+.sms-exact-live .cic-sms-ai-draft-card > header > span svg { width: 12px; height: 12px; }
+.sms-exact-live .cic-sms-ai-draft-card > header > small { margin: 0; color: #9f99b5; font-size: 9px; }
+.sms-exact-live .cic-sms-ai-draft-card > p { margin: 0; color: #e5e1ee; font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sms-exact-live .cic-sms-ai-draft-card > div { display: flex; align-items: center; gap: 6px; }
+.sms-exact-live .cic-sms-ai-draft-card > div > button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 26px; border-radius: 7px; font: inherit; font-size: 9px; font-weight: 760; cursor: pointer; }
+.sms-exact-live .cic-sms-ai-draft-card > div > button svg { width: 11px; height: 11px; }
+.sms-exact-live .cic-sms-ai-draft-insert { padding: 0 9px; border: 1px solid #846cc5; background: #6c54ab; color: #fff; }
+.sms-exact-live .cic-sms-ai-draft-insert:hover { border-color: #ab96e4; background: #8067c3; }
+.sms-exact-live .cic-sms-ai-draft-regenerate { margin-left: auto; padding: 0 7px; border: 0; background: transparent; color: #b9b0d5; }
+.sms-exact-live .cic-sms-ai-draft-regenerate:hover { background: rgba(255, 255, 255, .07); color: #eeeaff; }
 .sms-exact-live .cic-live-tools-backdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .68); backdrop-filter: blur(3px); }
 .sms-exact-live .cic-live-tools { width: min(920px, 100%); height: min(760px, calc(100dvh - 48px)); overflow: hidden; border: 1px solid #444; border-radius: 13px; background: #171717; box-shadow: 0 28px 80px rgba(0, 0, 0, .6); }
 .sms-exact-live .cic-live-tools > header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #363636; color: #ededed; font-size: 13px; font-weight: 600; }
