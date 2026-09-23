@@ -90,6 +90,12 @@ describe("SMS exact-live shell", () => {
     expect(page).toContain('className="cic-sms-ai-draft-card"');
     expect(page).toContain('Insert into reply');
     expect(page).toContain('onClick={regenerateAutoDraft}');
+    expect(page).toContain('trpc.smsConfidence.evaluate.useMutation()');
+    expect(page).toContain('const [autoDraftConfidence, setAutoDraftConfidence]');
+    expect(page).toContain('Would send if all topics were allowed');
+    expect(page).toContain('className="cic-sms-confidence-card"');
+    expect(page).toContain('setCompose(autoDraftText);');
+    expect(page).not.toContain('sms-shadow-evaluations');
     expect(page).not.toContain('<section className="cic-context">');
     expect(page).not.toContain('<strong>Madison</strong><span>{selected.lastMessage');
     expect(page).not.toContain('setCompose(accumulated);');
@@ -97,6 +103,7 @@ describe("SMS exact-live shell", () => {
     expect(css).toContain('.sms-exact-live .cic-sms-ai-draft-card');
     expect(css).toContain('.sms-exact-live .cic-sms-ai-draft-insert');
     expect(css).toContain('.sms-exact-live .cic-sms-ai-draft-regenerate');
+    expect(css).toContain('.sms-exact-live .cic-sms-confidence-card');
     expect(css).toContain('scrollbar-color: #4a4a51 #18181a;');
     expect(css).toContain('::-webkit-scrollbar-thumb');
     expect(css).toContain('.sms-exact-live .cic-mms-lightbox');

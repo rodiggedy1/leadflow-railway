@@ -67,6 +67,13 @@ type RawMessage = { role: string; content: string; ts?: number; senderName?: str
 type CallEntry = { id: number; outcome: string; summary: string | null; durationSeconds: number; recordingUrl: string | null; transcript: string | null; createdAt: number };
 type PaymentLinkConfirmCard = { recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string };
 type InlineClientProfile = { todayJob?: unknown | null } | null | undefined;
+type SmsDraftConfidence = {
+  confidence: number;
+  wouldSendIfAllTopicsAllowed: boolean;
+  category: string;
+  rationale: string;
+  flags: string[];
+};
 
 type LiveConversation = {
   id: number;
@@ -394,12 +401,14 @@ export default function SmsExactLive() {
   const [autoDraftText, setAutoDraftText] = useState("");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const [autoDraftReady, setAutoDraftReady] = useState(false);
+  const [autoDraftConfidence, setAutoDraftConfidence] = useState<SmsDraftConfidence | null>(null);
   const selectedIdRef = useRef<number | null>(null);
   const selectedRef = useRef<LiveConversation | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const autoDraftedForRef = useRef<number | null>(null);
   const autoDraftSessionIdRef = useRef<number | null>(null);
   const autoDraftFallbackSessionIdRef = useRef<number | null>(null);
+  const autoDraftConfidenceKeyRef = useRef<string | null>(null);
   const threadRef = useRef<HTMLElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
 
@@ -553,6 +562,28 @@ export default function SmsExactLive() {
       if (autoDraftFallbackSessionIdRef.current === autoDraftSessionIdRef.current) setAutoDraftLoading(false);
     },
   });
+  const scoreAutoDraft = trpc.smsConfidence.evaluate.useMutation();
+  useEffect(() => {
+    if (!selected || !autoDraftReady || !autoDraftText.trim() || !smsConversationContext) return;
+    const draftKey = `${selected.id}:${autoDraftText.trim()}`;
+    if (autoDraftConfidenceKeyRef.current === draftKey) return;
+    autoDraftConfidenceKeyRef.current = draftKey;
+    setAutoDraftConfidence(null);
+
+    scoreAutoDraft.mutate(
+      { conversationContext: smsConversationContext, draftText: autoDraftText.trim() },
+      {
+        onSuccess: result => {
+          if (autoDraftConfidenceKeyRef.current === draftKey && autoDraftSessionIdRef.current === selected.id) {
+            setAutoDraftConfidence(result);
+          }
+        },
+        onError: () => {
+          if (autoDraftConfidenceKeyRef.current === draftKey) setAutoDraftConfidence(null);
+        },
+      },
+    );
+  }, [autoDraftReady, autoDraftText, scoreAutoDraft, selected, smsConversationContext]);
   const streamAutoDraft = useCallback(async () => {
     if (!selected || !detail || !smsConversationContext || autoDraftedForRef.current === selected.id) return;
     autoDraftedForRef.current = selected.id;
@@ -562,6 +593,8 @@ export default function SmsExactLive() {
     autoDraftFallbackSessionIdRef.current = null;
     const jobContext = clientProfile?.todayJob ? `${clientProfile.todayJob.serviceType ?? "Service"}\n${clientProfile.todayJob.jobAddress ?? ""}` : "";
     const request = { conversationContext: smsConversationContext, customerName: selected.name, jobContext };
+    autoDraftConfidenceKeyRef.current = null;
+    setAutoDraftConfidence(null);
     setAutoDraftText("");
     setAutoDraftReady(false);
     setAutoDraftLoading(true);
@@ -620,7 +653,7 @@ export default function SmsExactLive() {
     setAutoDraftReady(false);
   }, [autoDraftText]);
 
-  const selectConversation = (conversation: LiveConversation) => { window.dispatchEvent(new Event("review-workspace-collapse")); streamAbortRef.current?.abort(); autoDraftedForRef.current = null; autoDraftSessionIdRef.current = conversation.id; autoDraftFallbackSessionIdRef.current = null; setAutoDraftText(""); setAutoDraftReady(false); setAutoDraftLoading(false); setSelected(conversation); setCompose(""); setComposeMode("reply"); setShowTools(false); setActiveMission(null); };
+  const selectConversation = (conversation: LiveConversation) => { window.dispatchEvent(new Event("review-workspace-collapse")); streamAbortRef.current?.abort(); autoDraftedForRef.current = null; autoDraftSessionIdRef.current = conversation.id; autoDraftFallbackSessionIdRef.current = null; autoDraftConfidenceKeyRef.current = null; setAutoDraftConfidence(null); setAutoDraftText(""); setAutoDraftReady(false); setAutoDraftLoading(false); setSelected(conversation); setCompose(""); setComposeMode("reply"); setShowTools(false); setActiveMission(null); };
   const openTools = () => setShowTools(true);
   const ticketConversations = useMemo(() => conversations.filter(conversation => detailFilter === "All" || detailFilter === "Teams" ? detailFilter === "All" || isTeamMember(conversation) : !isTeamMember(conversation)).filter(conversation => `${conversation.name} ${conversation.phone} ${conversation.lastMessage}`.toLowerCase().includes(detailSearch.toLowerCase())), [conversations, detailFilter, detailSearch]);
 
@@ -632,6 +665,7 @@ export default function SmsExactLive() {
         <footer className={`cic-composer ${composeMode === "note" ? "is-note" : ""}`}><FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" theme="dark" /><InsertResponseModal open={responsesOpen} onClose={() => setResponsesOpen(false)} onInsert={text => { setCompose(text); setResponsesOpen(false); }} customerFirstName={selected.name.split(" ")[0]} theme="dark" /><ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} theme="dark" /><WorldClassReplyPanel open={worldClassOpen} onClose={() => setWorldClassOpen(false)} onInsert={text => { setCompose(text); setWorldClassOpen(false); }} conversationContext={detailMessages.slice(-5).map(message => `${message.sender === "client" ? "Customer" : "Agent"}: ${message.text}`).join("\n")} customerName={selected.name} jobContext={clientProfile?.todayJob ? `${clientProfile.todayJob.serviceType ?? "Service"}\n${clientProfile.todayJob.jobAddress ?? ""}` : ""} theme="dark" />
           {composeMode === "reply" && autoDraftLoading && <div className="cic-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
           {composeMode === "reply" && !autoDraftLoading && autoDraftReady && autoDraftText && <article className="cic-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{autoDraftText}</p><div><button type="button" className="cic-sms-ai-draft-insert" onClick={insertAutoDraft}><Pencil />Insert into reply</button><button type="button" className="cic-sms-ai-draft-regenerate" onClick={regenerateAutoDraft}><RefreshCw />Regenerate</button></div></article>}
+          {composeMode === "reply" && !autoDraftLoading && autoDraftReady && autoDraftText && <div className="cic-sms-confidence-card" aria-live="polite">{scoreAutoDraft.isPending ? <><span>Evaluating simulated send confidence…</span><b>—</b></> : autoDraftConfidence ? <><span>{autoDraftConfidence.wouldSendIfAllTopicsAllowed ? "Would send if all topics were allowed" : "Would review if all topics were allowed"}</span><b>{autoDraftConfidence.confidence}% confidence</b><small>{autoDraftConfidence.rationale}</small>{autoDraftConfidence.flags.length > 0 && <em>Flags: {autoDraftConfidence.flags.join(", ")}</em>}</> : <><span>Confidence unavailable</span><small>The reply remains available to review and insert.</small></>}</div>}
           <div className="cic-compose-top"><button type="button" className={composeMode === "reply" ? "is-active" : ""} onClick={() => setComposeMode("reply")}>Reply</button><button type="button" className={composeMode === "note" ? "is-active" : ""} onClick={() => setComposeMode("note")}><Lock size={11} />Internal Note</button></div><textarea value={compose} onChange={event => setCompose(event.target.value)} placeholder={composeMode === "note" ? "Add an internal note…" : `Reply to ${selected.name.split(" ")[0]}…`} onKeyDown={event => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composeMode === "note" ? saveCurrentNote() : sendCurrent(); } }} /><div className="cic-compose-actions"><div>{composeMode === "reply" && <><button type="button" onClick={() => { setWorldClassOpen(true); setFaqOpen(false); setObjectionsOpen(false); }}><Sparkles />World-Class</button><button type="button" onClick={() => setFaqOpen(true)}><BookOpen />FAQ</button><button type="button" onClick={() => setResponsesOpen(true)}><FileText />Responses</button><button type="button" onClick={() => setObjectionsOpen(true)}><ShieldAlert />Objections</button><span className="cic-live-emoji" ref={emojiRef}><button type="button" onClick={() => setShowEmojiPicker(open => !open)}><Smile /></button>{showEmojiPicker && <span className="cic-live-emoji-picker"><Picker data={emojiData} onEmojiSelect={(emoji: { native: string }) => { setCompose(current => current + emoji.native); setShowEmojiPicker(false); }} theme="dark" previewPosition="none" skinTonePosition="none" /></span>}</span></>}</div><button className="cic-send" type="button" disabled={composeMode === "note" ? saveNote.isPending || !compose.trim() : sendMessage.isPending || !compose.trim()} onClick={composeMode === "note" ? saveCurrentNote : sendCurrent}>{composeMode === "note" ? saveNote.isPending ? "Saving…" : "Save note" : sendMessage.isPending ? "Sending…" : "Send"}<Send size={13} /></button></div></footer>
       </main>
       {isTeamMember(selected) ? <LiveTeamPanel conversation={selected} openTools={() => openTools()} /> : <LiveCustomerPanel conversation={selected} openTools={openTools} activeMission={activeMission} setActiveMission={setActiveMission} />}

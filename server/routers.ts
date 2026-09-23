@@ -78,6 +78,7 @@ import { computeSessionSummary } from './sessionSummary';
 import { responseTemplatesRouter } from './responseTemplatesRouter';
 import { aiConciergeRouter } from './aiConciergeRouter';
 import { csMissionsRouter } from './csMissionsRouter';
+import { smsConfidenceRouter } from './smsConfidenceRouter';
 import { deactivateOpsSmsCard, deactivateOpsEmailCard } from './opsChatRouter';
 import { madisonSmsDrafts, madisonEmailDrafts } from '../drizzle/schema';
 import { normalizePhoneLegacy as normalizePhone, isValidUSPhone, extractUSDigits } from './utils/phone';
@@ -7528,6 +7529,7 @@ Return JSON with exactly these fields:
   fieldMgmt: fieldMgmtRouter,
   aiConcierge: aiConciergeRouter,
   csMissions: csMissionsRouter,
+  smsConfidence: smsConfidenceRouter,
   scheduling: schedulingRouter,
   leadflowSchedule: leadflowScheduleRouter,
   leadflowScheduleCalls: leadflowScheduleCallsRouter,

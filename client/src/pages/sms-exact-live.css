@@ -282,3 +282,12 @@ body .cic-worldclass-assistant-dark > div:nth-child(3) { border-color: #4d416a !
 body .cic-worldclass-assistant-dark > div:nth-child(3) textarea { border-color: #5e5078 !important; color: #efedf6 !important; background: #111116 !important; }
 body .cic-worldclass-assistant-dark > div:nth-child(3) textarea::placeholder { color: #7d7788 !important; }
 body .cic-worldclass-assistant-dark > div:nth-child(3) button { background: linear-gradient(135deg, #7456d6, #9a7df0) !important; }
+
+
+/* Draft confidence is informational only; it cannot alter the existing send path. */
+.sms-exact-live .cic-sms-confidence-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 9px; margin: -2px 0 9px; padding: 8px 10px; border: 1px solid #3b3c47; border-radius: 9px; color: #aaaab5; background: #1a1a20; font-size: 9px; line-height: 1.4; }
+.sms-exact-live .cic-sms-confidence-card > span { color: #bdb8d0; font-weight: 700; }
+.sms-exact-live .cic-sms-confidence-card > b { align-self: start; color: #d7cbff; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.sms-exact-live .cic-sms-confidence-card > small,
+.sms-exact-live .cic-sms-confidence-card > em { grid-column: 1 / -1; color: #8f8e9b; font-size: 9px; font-style: normal; }
+.sms-exact-live .cic-sms-confidence-card > em { color: #d1b07a; }
