@@ -18,9 +18,11 @@ import {
   MessageSquare,
   Mic,
   Paperclip,
+  Pencil,
   Phone,
   Pin,
   Play,
+  RefreshCw,
   Send,
   Search,
   SlidersHorizontal,
@@ -1360,14 +1362,21 @@ const CommandComposer = memo(function CommandComposer({
 function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [draft, setDraft] = useState("");
+  const [smsAutoDraftLoading, setSmsAutoDraftLoading] = useState(false);
+  const [smsAutoDraftReady, setSmsAutoDraftReady] = useState(false);
+  const [smsAutoDraftText, setSmsAutoDraftText] = useState("");
   const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
   const messageListRef = useRef<HTMLDivElement>(null);
   const initialBottomScrollDone = useRef(false);
   const scrollAfterSendRef = useRef(false);
+  const smsAutoDraftAbortRef = useRef<AbortController | null>(null);
+  const autoDraftedForConversationRef = useRef<number | null>(null);
+  const smsAutoDraftSessionIdRef = useRef<number | null>(conversation.id);
   const { data: detail } = trpc.leads.getCsConversation.useQuery(
     { sessionId: conversation.id },
     { staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
   );
+  const name = smsConversationName(conversation);
   const messages = useMemo(() => {
     let parsed: SmsInboxMessage[] = [];
     try { parsed = JSON.parse(detail?.messageHistory ?? "[]") as SmsInboxMessage[]; } catch { parsed = []; }
@@ -1377,11 +1386,113 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     ));
     return [...persisted, ...notYetPersisted].sort((left, right) => (left.ts ?? 0) - (right.ts ?? 0));
   }, [confirmedOutgoing, detail?.messageHistory]);
+  const smsConversationContext = useMemo(() => messages.slice(-5)
+    .map((message) => `${message.role === "user" ? "Customer" : "Agent"}: ${message.content}`)
+    .join("\n"), [messages]);
+  const smsAutoDraft = trpc.opsChat.csReply.useMutation({
+    onSuccess: (data) => {
+      if (smsAutoDraftSessionIdRef.current !== conversation.id) return;
+      const replyText = typeof data.reply === "string" ? data.reply : "";
+      if (replyText) {
+        setSmsAutoDraftText(replyText);
+        setSmsAutoDraftReady(true);
+      }
+      setSmsAutoDraftLoading(false);
+    },
+    onError: () => {
+      if (smsAutoDraftSessionIdRef.current === conversation.id) setSmsAutoDraftLoading(false);
+    },
+  });
+  const streamSmsAutoDraft = useCallback(async () => {
+    if (!smsConversationContext || autoDraftedForConversationRef.current === conversation.id) return;
+    autoDraftedForConversationRef.current = conversation.id;
+    if (smsAutoDraftAbortRef.current) smsAutoDraftAbortRef.current.abort();
+    const controller = new AbortController();
+    smsAutoDraftAbortRef.current = controller;
+    const request = { conversationContext: smsConversationContext, customerName: name, jobContext: "" };
+    setSmsAutoDraftText("");
+    setSmsAutoDraftReady(false);
+    setSmsAutoDraftLoading(true);
+    try {
+      const response = await fetch("/api/cs-reply-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (smsAutoDraftSessionIdRef.current !== conversation.id) {
+          void reader.cancel();
+          return;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const dataString = trimmed.slice(5).trim();
+          if (dataString === "[DONE]") continue;
+          let event: { token?: string; error?: string };
+          try { event = JSON.parse(dataString); } catch { continue; }
+          if (event.error) throw new Error(event.error);
+          if (event.token) {
+            accumulated += event.token;
+            setSmsAutoDraftText(accumulated);
+          }
+        }
+      }
+      if (smsAutoDraftSessionIdRef.current === conversation.id) {
+        setSmsAutoDraftReady(Boolean(accumulated.trim()));
+        setSmsAutoDraftLoading(false);
+      }
+      if (smsAutoDraftAbortRef.current === controller) smsAutoDraftAbortRef.current = null;
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return;
+      if (smsAutoDraftSessionIdRef.current !== conversation.id) return;
+      console.warn("[command-chat sms auto-draft] falling back to tRPC:", error);
+      setSmsAutoDraftText("");
+      setSmsAutoDraftLoading(true);
+      smsAutoDraft.mutate(request);
+    }
+  }, [conversation.id, name, smsAutoDraft, smsConversationContext]);
+  const regenerateSmsDraft = useCallback(() => {
+    autoDraftedForConversationRef.current = null;
+    void streamSmsAutoDraft();
+  }, [streamSmsAutoDraft]);
+  const insertSmsAutoDraft = useCallback(() => {
+    if (!smsAutoDraftText.trim()) return;
+    setDraft(smsAutoDraftText);
+    setSmsAutoDraftReady(false);
+  }, [smsAutoDraftText]);
   useEffect(() => {
+    smsAutoDraftSessionIdRef.current = conversation.id;
+    autoDraftedForConversationRef.current = null;
+    setDraft("");
+    setSmsAutoDraftReady(false);
+    setSmsAutoDraftText("");
+    setSmsAutoDraftLoading(false);
     setConfirmedOutgoing([]);
     initialBottomScrollDone.current = false;
     scrollAfterSendRef.current = false;
+    return () => {
+      smsAutoDraftSessionIdRef.current = null;
+      smsAutoDraftAbortRef.current?.abort();
+      smsAutoDraftAbortRef.current = null;
+    };
   }, [conversation.id]);
+  useEffect(() => {
+    if (!detail || messages.length === 0) return;
+    void streamSmsAutoDraft();
+  }, [detail, messages.length, streamSmsAutoDraft]);
   useEffect(() => {
     if (!detail || (initialBottomScrollDone.current && !scrollAfterSendRef.current)) return;
     const animationFrame = requestAnimationFrame(() => {
@@ -1413,7 +1524,6 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       source: "cs_inbox",
     });
   };
-  const name = smsConversationName(conversation);
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
     <header><div>{conversation.personType === "team" ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{conversation.personType === "team" ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
@@ -1423,7 +1533,11 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       const senderPhotoUrl = photoMap[senderName] ?? (senderName === callerName ? callerPhotoUrl : null);
       return <article className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`} key={`${message.ts ?? index}-${message.content}`}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={senderName} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{senderName}</span> : conversation.personType === "team" ? name : "Customer"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{renderMessageBody(message.content)}</p></article>;
     })}</div>
-    <footer><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder="Write a text reply…" /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></footer>
+    <footer>
+      {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
+      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></article>}
+      <div className="ccc-live-sms-composer"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+    </footer>
   </aside></div>;
 }
 
