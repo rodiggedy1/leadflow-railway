@@ -27,6 +27,7 @@ type Preflight = {
 
 type VerifierResult = {
   confidence: number;
+  wouldSendIfInScope: boolean;
   safeToSimulate: boolean;
   category: string;
   reasonCode: string;
@@ -40,6 +41,7 @@ export type SmsShadowDecision = {
   decision: ShadowDecisionKind;
   score: number;
   confidence: number;
+  wouldSendIfInScope: boolean;
   reasonCode: string;
   rationale: string;
   preflight: Preflight;
@@ -102,39 +104,50 @@ export function buildShadowPreflight(inboundText: string, draftText: string): Pr
 }
 
 export function selectShadowDecision(preflight: Preflight, verifier: VerifierResult | null): Omit<SmsShadowDecision, "evaluationId" | "policyVersion" | "outcome" | "outcomeAt"> {
+  const score = verifier ? Math.round(verifier.confidence * 100) : 0;
+  const confidence = verifier?.confidence ?? 0;
+  const wouldSendIfInScope = Boolean(
+    verifier?.wouldSendIfInScope
+      && verifier.confidence >= HIGH_CONFIDENCE_THRESHOLD
+      && verifier.flags.length === 0,
+  );
+
   if (preflight.hardStops.length > 0) {
     return {
       decision: "blocked",
-      score: 0,
-      confidence: 1,
+      score,
+      confidence,
+      wouldSendIfInScope,
       reasonCode: "high_impact_topic",
       rationale: "Shadow mode blocks this category because it could change a booking, payment, access, service outcome, or safety response.",
       preflight,
-      verifier: null,
+      verifier,
     };
   }
 
   if (preflight.inboundQuestion || preflight.draftQuestion) {
     return {
       decision: "review",
-      score: 0,
-      confidence: 0,
+      score,
+      confidence,
+      wouldSendIfInScope,
       reasonCode: "question_requires_human_review",
       rationale: "A question needs a human review even when the draft sounds straightforward.",
       preflight,
-      verifier: null,
+      verifier,
     };
   }
 
   if (!preflight.eligibleCourtesy) {
     return {
       decision: "review",
-      score: 0,
-      confidence: 0,
+      score,
+      confidence,
+      wouldSendIfInScope,
       reasonCode: "outside_courtesy_allowlist",
       rationale: "The initial shadow policy only simulates low-risk courtesy acknowledgements.",
       preflight,
-      verifier: null,
+      verifier,
     };
   }
 
@@ -143,6 +156,7 @@ export function selectShadowDecision(preflight: Preflight, verifier: VerifierRes
       decision: "review",
       score: 0,
       confidence: 0,
+      wouldSendIfInScope: false,
       reasonCode: "verifier_unavailable",
       rationale: "The independent verifier did not return a usable result, so this remains human review.",
       preflight,
@@ -150,7 +164,6 @@ export function selectShadowDecision(preflight: Preflight, verifier: VerifierRes
     };
   }
 
-  const score = Math.round(verifier.confidence * 100);
   const wouldSend = verifier.safeToSimulate
     && verifier.category === "compliment_acknowledgement"
     && verifier.confidence >= HIGH_CONFIDENCE_THRESHOLD
@@ -160,6 +173,7 @@ export function selectShadowDecision(preflight: Preflight, verifier: VerifierRes
     decision: wouldSend ? "would_send" : "review",
     score,
     confidence: verifier.confidence,
+    wouldSendIfInScope,
     reasonCode: wouldSend ? "high_confidence_courtesy" : verifier.reasonCode || "verifier_requires_review",
     rationale: verifier.rationale || "The independent verifier requires a human review.",
     preflight,
@@ -196,16 +210,20 @@ function latestCustomerMessage(messageHistory: unknown): string | null {
   return null;
 }
 
-async function verifyCourtesyDraft(params: { inboundText: string; draftText: string }): Promise<VerifierResult | null> {
+async function evaluateDraftConfidence(params: { inboundText: string; draftText: string }): Promise<VerifierResult | null> {
   const response = await invokeLLM({
     messages: [
       {
         role: "system",
-        content: `You are an independent safety verifier for an SMS shadow-mode experiment. You never write or send a reply. Assess only whether a proposed response is safe to SIMULATE as an automatic send under the narrow policy below.
+        content: `You are an independent evaluator for an SMS shadow-mode experiment. You never write or send a reply. Score the proposed response's quality for the inbound customer message, even when the topic is booking, scheduling, payment, access, a complaint, damage, safety, or another high-impact subject.
 
-The sole eligible category is a compliment acknowledgement: a customer expresses a positive sentiment without asking a question or requesting any booking, service, access, payment, pricing, or operational change. The proposed response must be a simple thank-you or acknowledgement. It must not promise action, make a claim about a booking or payment, ask a follow-up question, mention a team arrival, or introduce new facts.
+confidence means confidence from 0 to 1 that the proposed response is appropriate, accurate, grounded in the supplied message, and safe for a human to review and send. It does NOT mean the system may auto-send it. Identify the message category and any concerns in flags. Be conservative: a missing fact, invented commitment, incorrect claim, or unsafe advice lowers confidence.
 
-Return JSON only. Be conservative. If any doubt exists, mark safeToSimulate false. The rationale must be one short generic sentence without names, phone numbers, addresses, or quoting the message.`,
+wouldSendIfInScope answers a hypothetical question: assuming this message category were explicitly allowed for automatic sending, would this exact proposed draft meet the automatic-send quality bar? Set it true only when confidence is at least 0.98, flags is empty, and the draft is appropriate and grounded. This is a simulated quality judgment only; it never changes the live sending policy.
+
+safeToSimulate is a separate, much narrower flag. Set it true only for a simple compliment acknowledgement: positive sentiment, no question, no request, no booking/service/access/payment/pricing/operational change, and a draft that is only a simple acknowledgement with no promise, new fact, or follow-up question. Set it false for every other category, including any high-impact topic, regardless of confidence.
+
+Return JSON only. The rationale must be one short generic sentence without names, phone numbers, addresses, or quoting the message.`,
       },
       {
         role: "user",
@@ -221,13 +239,14 @@ Return JSON only. Be conservative. If any doubt exists, mark safeToSimulate fals
           type: "object",
           properties: {
             confidence: { type: "number" },
+            wouldSendIfInScope: { type: "boolean" },
             safeToSimulate: { type: "boolean" },
             category: { type: "string" },
             reasonCode: { type: "string" },
             rationale: { type: "string" },
             flags: { type: "array", items: { type: "string" } },
           },
-          required: ["confidence", "safeToSimulate", "category", "reasonCode", "rationale", "flags"],
+          required: ["confidence", "wouldSendIfInScope", "safeToSimulate", "category", "reasonCode", "rationale", "flags"],
           additionalProperties: false,
         },
       },
@@ -240,6 +259,7 @@ Return JSON only. Be conservative. If any doubt exists, mark safeToSimulate fals
   const candidate = parsed as Partial<VerifierResult>;
   return {
     confidence: Math.max(0, Math.min(1, Number(candidate.confidence) || 0)),
+    wouldSendIfInScope: candidate.wouldSendIfInScope === true,
     safeToSimulate: candidate.safeToSimulate === true,
     category: typeof candidate.category === "string" ? candidate.category : "unknown",
     reasonCode: typeof candidate.reasonCode === "string" ? candidate.reasonCode : "verifier_requires_review",
@@ -252,16 +272,22 @@ function asDecision(row: Record<string, unknown>): SmsShadowDecision {
   const parseJson = <T>(value: unknown, fallback: T): T => {
     try { return (typeof value === "string" ? JSON.parse(value) : value) as T ?? fallback; } catch { return fallback; }
   };
+  const verifier = parseJson<VerifierResult | null>(row.verifierResult, null);
   return {
     evaluationId: Number(row.id),
     policyVersion: String(row.policyVersion),
     decision: row.decision === "would_send" || row.decision === "blocked" ? row.decision : "review",
     score: Number(row.score) || 0,
     confidence: Number(row.confidence) || 0,
+    wouldSendIfInScope: Boolean(
+      verifier?.wouldSendIfInScope
+        && verifier.confidence >= HIGH_CONFIDENCE_THRESHOLD
+        && verifier.flags.length === 0,
+    ),
     reasonCode: String(row.reasonCode ?? "verifier_requires_review"),
     rationale: String(row.rationale ?? "The independent verifier requires a human review."),
     preflight: parseJson<Preflight>(row.preflight, { eligibleCourtesy: false, inboundQuestion: false, draftQuestion: false, hardStops: [] }),
-    verifier: parseJson<VerifierResult | null>(row.verifierResult, null),
+    verifier,
     outcome: row.outcome === "sent_unchanged" || row.outcome === "sent_edited" ? row.outcome : null,
     outcomeAt: row.outcomeAt ? new Date(row.outcomeAt as string | Date).toISOString() : null,
   };
@@ -305,12 +331,10 @@ export function registerSmsShadowModeRoutes(app: Express): void {
 
       const preflight = buildShadowPreflight(inboundText, draftText);
       let verifier: VerifierResult | null = null;
-      if (preflight.hardStops.length === 0 && !preflight.inboundQuestion && !preflight.draftQuestion && preflight.eligibleCourtesy) {
-        try {
-          verifier = await verifyCourtesyDraft({ inboundText, draftText });
-        } catch (error) {
-          console.warn("[SmsShadow] verifier unavailable", error instanceof Error ? error.message : String(error));
-        }
+      try {
+        verifier = await evaluateDraftConfidence({ inboundText, draftText });
+      } catch (error) {
+        console.warn("[SmsShadow] verifier unavailable", error instanceof Error ? error.message : String(error));
       }
       const evaluated = selectShadowDecision(preflight, verifier);
       const now = new Date();

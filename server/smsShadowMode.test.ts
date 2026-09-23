@@ -7,10 +7,21 @@ const source = readFileSync(resolve(process.cwd(), "server/smsShadowMode.ts"), "
 
 const safeVerifier = {
   confidence: 0.99,
+  wouldSendIfInScope: true,
   safeToSimulate: true,
   category: "compliment_acknowledgement",
   reasonCode: "high_confidence_courtesy",
   rationale: "This is a simple acknowledgement with no operational commitment.",
+  flags: [],
+};
+
+const confidentOperationalVerifier = {
+  confidence: 0.99,
+  wouldSendIfInScope: true,
+  safeToSimulate: false,
+  category: "scheduling_request",
+  reasonCode: "operational_response_confident",
+  rationale: "The proposed response is grounded but requires the live policy to remain blocked.",
   flags: [],
 };
 
@@ -27,22 +38,26 @@ describe("SMS shadow mode", () => {
     expect(source).not.toContain('from "./openphone"');
   });
 
-  it("blocks high-impact messages before an LLM verifier can simulate an automatic send", () => {
+  it("scores a high-impact response while keeping live automation blocked", () => {
     const preflight = buildShadowPreflight("Can you reschedule my appointment?", "Absolutely, we will move your appointment.");
-    const decision = selectShadowDecision(preflight, safeVerifier);
+    const decision = selectShadowDecision(preflight, confidentOperationalVerifier);
 
     expect(preflight.hardStops).toContain("inbound:reschedule");
     expect(decision.decision).toBe("blocked");
+    expect(decision.score).toBe(99);
+    expect(decision.wouldSendIfInScope).toBe(true);
     expect(decision.reasonCode).toBe("high_impact_topic");
-    expect(decision.verifier).toBeNull();
+    expect(decision.verifier).toEqual(confidentOperationalVerifier);
   });
 
-  it("keeps questions in human review even when the verifier would otherwise approve", () => {
+  it("scores a question while keeping live automation in human review", () => {
     const preflight = buildShadowPreflight("Thank you? That was thoughtful.", "Thank you so much — we are glad you are happy!");
     const decision = selectShadowDecision(preflight, safeVerifier);
 
     expect(preflight.inboundQuestion).toBe(true);
     expect(decision.decision).toBe("review");
+    expect(decision.score).toBe(99);
+    expect(decision.wouldSendIfInScope).toBe(true);
     expect(decision.reasonCode).toBe("question_requires_human_review");
   });
 
@@ -55,5 +70,9 @@ describe("SMS shadow mode", () => {
     expect(smsPage).toContain('fetch("/api/sms-shadow-evaluations"');
     expect(smsPage).toContain('aria-label="SMS shadow-mode decision"');
     expect(smsPage).toContain("Shadow mode · no auto-send");
+    expect(smsPage).toContain("Response confidence");
+    expect(smsPage).toContain("if in scope:");
+    expect(source).toContain("wouldSendIfInScope");
+    expect(source).toContain("verifier = await evaluateDraftConfidence");
   });
 });
