@@ -59,5 +59,8 @@ describe("Command Chat SMS booking context", () => {
     expect(styles).toContain(".ccc-live-sms-job-status");
     expect(styles).toContain(".ccc-live-sms-job-status>svg");
     expect(styles).toContain(".ccc-live-sms-job-status>small");
+    expect(styles).toContain("justify-content:flex-end");
+    expect(styles).toContain("border:0;border-radius:0;background:transparent");
+    expect(styles).toContain("padding-left:0;border-left:0");
   });
 });
