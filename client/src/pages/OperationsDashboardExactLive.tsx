@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -7,15 +7,13 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
-  Clock,
   DollarSign,
   Info,
-  List,
-  Map,
   MapPin,
   Megaphone,
   MessageSquare,
   MoreHorizontal,
+  Navigation,
   Search,
   Sparkles,
   Sun,
@@ -25,11 +23,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { LeadflowScheduleMap, type LeadflowScheduleMapJob, type LeadflowScheduleMapTeam } from "@/components/LeadflowScheduleMap";
 import "./operations-dashboard-exact-live.css";
 import "./operations-dashboard-exact-live-cohesion.css";
 
-type MapView = "map" | "list" | "timeline";
 type Tone = "green" | "amber" | "blue" | "slate";
 type DashboardJob = {
   id: number;
@@ -66,9 +62,17 @@ type Overview = {
   serviceMix: Array<{ label: string; count: number }>;
 };
 type CustomerResult = { phone: string; name: string; address: string | null };
+type RouteBoardRow = {
+  id: string;
+  teamName: string;
+  jobs: DashboardJob[];
+  nextStop: DashboardJob;
+  remainingCount: number;
+  tone: Tone;
+  status: string;
+};
 
 const ASSET_ROOT = "https://leadflowqf-caerhauj.manus.space/manus-storage";
-const TEAM_PORTRAIT = `${ASSET_ROOT}/dashboard-team-portrait_ee89ad11.jpg`;
 const HOME_IMAGES = [
   `${ASSET_ROOT}/dashboard-home-living_34007149.jpg`,
   `${ASSET_ROOT}/dashboard-home-dining_02439dcf.jpg`,
@@ -109,6 +113,13 @@ function statusTone(status: string): Tone {
 function statusLabel(status: string) {
   const labels: Record<string, string> = { on_the_way: "On route", arrived: "Arrived", in_progress: "In progress", running_late: "Running late", wrapping_up: "Finishing up", finishing_up: "Finishing up", completed: "Completed", issue_at_property: "Issue", no_show: "No show", assigned: "Upcoming" };
   return labels[status] ?? "Upcoming";
+}
+function routeStatus(jobs: DashboardJob[]): Pick<RouteBoardRow, "tone" | "status"> {
+  if (jobs.some(job => ["running_late", "issue_at_property", "no_show"].includes(job.jobStatus))) return { tone: "amber", status: "Needs review" };
+  if (jobs.every(job => job.jobStatus === "completed")) return { tone: "green", status: "Completed" };
+  if (jobs.some(job => ["arrived", "in_progress", "wrapping_up", "finishing_up"].includes(job.jobStatus))) return { tone: "blue", status: "In progress" };
+  if (jobs.some(job => job.jobStatus === "on_the_way")) return { tone: "blue", status: "On route" };
+  return { tone: "slate", status: "Upcoming" };
 }
 function activityTone(eventType: string) {
   if (eventType === "booking") return "coral";
@@ -173,8 +184,7 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function OperationsDashboardExactLive() {
-  const [view, setView] = useState<MapView>("map");
-  const [activeTeam, setActiveTeam] = useState(0);
+  const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
   const [activeSchedule, setActiveSchedule] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -182,19 +192,29 @@ export default function OperationsDashboardExactLive() {
   const dashboardDate = easternToday();
   const { data: agent, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, { staleTime: 5 * 60_000, retry: false });
   const { data, isLoading, isFetching, error } = trpc.leadflowJobs.dashboardOverview.useQuery({ date: dashboardDate }, { enabled: Boolean(agent), staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false, retry: false });
-  const { data: scheduleMapData, isLoading: scheduleMapLoading, error: scheduleMapError } = trpc.leadflowSchedule.getSchedule.useQuery({ date: dashboardDate }, { enabled: Boolean(agent), staleTime: 30_000, refetchOnWindowFocus: false, retry: false });
   const { data: hiringStats } = trpc.hiring.getPipelineStats.useQuery(undefined, { enabled: Boolean(agent), staleTime: 55_000, refetchInterval: 60_000, retry: false });
   const { data: searchResults } = trpc.opsChat.searchCustomers.useQuery({ query: search.trim() }, { enabled: Boolean(agent) && search.trim().length >= 2, staleTime: 30_000, retry: false });
   const overview = data as Overview | undefined;
   const customerSearchResults = (searchResults as { customers?: CustomerResult[] } | undefined)?.customers ?? [];
   const metrics = overview?.metrics;
   const schedule = useMemo(() => (overview?.jobs ?? []).slice(0, 5), [overview?.jobs]);
-  const mapJobs = overview?.jobs ?? [];
-  const active = mapJobs[activeTeam] ?? null;
-  const selectMapJob = useCallback((jobId: number) => {
-    const nextIndex = mapJobs.findIndex(job => job.id === jobId);
-    if (nextIndex >= 0) setActiveTeam(nextIndex);
-  }, [mapJobs]);
+  const routeRows = useMemo<RouteBoardRow[]>(() => {
+    const grouped = new Map<string, DashboardJob[]>();
+    for (const job of overview?.jobs ?? []) {
+      const teamName = job.teamName?.trim() || "Unassigned";
+      const group = grouped.get(teamName);
+      if (group) group.push(job);
+      else grouped.set(teamName, [job]);
+    }
+    const toneRank: Record<Tone, number> = { amber: 0, blue: 1, slate: 2, green: 3 };
+    return Array.from(grouped.entries()).map(([teamName, jobs]) => {
+      const remainingJobs = jobs.filter(job => job.jobStatus !== "completed");
+      const nextStop = remainingJobs[0] ?? jobs[jobs.length - 1];
+      const status = routeStatus(jobs);
+      return { id: teamName, teamName, jobs, nextStop, remainingCount: remainingJobs.length, ...status };
+    }).sort((left, right) => toneRank[left.tone] - toneRank[right.tone] || new Date(left.nextStop.serviceDateTime ?? 0).getTime() - new Date(right.nextStop.serviceDateTime ?? 0).getTime());
+  }, [overview?.jobs]);
+  const activeRoute = routeRows.find(route => route.id === activeRouteId) ?? routeRows[0] ?? null;
   const chart = useMemo(() => buildChartPath(overview?.revenueTrend ?? []), [overview?.revenueTrend]);
   const sourceRows = useMemo(() => (overview?.sources ?? []).slice(0, 6).map(item => ({ ...item, color: SOURCE_COLORS[item.source] ?? SOURCE_COLORS.Other, trend: percentChange(item.count, item.previousCount) })), [overview?.sources]);
   const maxSource = Math.max(1, ...sourceRows.map(item => item.count));
@@ -228,15 +248,13 @@ export default function OperationsDashboardExactLive() {
 
       {error ? <section className="odr-live-error"><Info /><div><b>Dashboard data could not load.</b><span>{error.message}</span></div></section> : <>
         <section className="odr-primary-grid" aria-label="Live field operations overview">
-          <article className="odr-card odr-jobs-card">
-            <header className="odr-card-head odr-jobs-head"><div><span className="odr-section-kicker">Field view</span><h2>Jobs in Progress</h2><p>Live view of your teams in the field</p><div className="odr-field-meta"><span><i className="green" />{metrics?.activeTeams ?? "—"} teams in field</span><span><i className="amber" />{metrics?.routeExceptions ?? "—"} route exceptions</span></div></div><div className="odr-segmented" aria-label="Map display selector">{(["map", "list", "timeline"] as MapView[]).map(option => <button type="button" className={view === option ? "is-active" : ""} key={option} onClick={() => setView(option)}>{option === "map" ? <Map /> : option === "list" ? <List /> : <Clock />}{option[0].toUpperCase() + option.slice(1)}</button>)}</div></header>
-            <div className={`odr-map odr-map-${view}`}>
-              {view === "map" && (scheduleMapLoading ? <p className="odr-live-empty">Loading route map…</p> : scheduleMapError ? <p className="odr-live-empty">Route map unavailable.</p> : <div className="odr-live-schedule-map"><LeadflowScheduleMap jobs={(scheduleMapData?.jobs ?? []) as LeadflowScheduleMapJob[]} teams={(scheduleMapData?.teams ?? []) as LeadflowScheduleMapTeam[]} selectedJobId={active?.id ?? null} onJobSelect={selectMapJob} /></div>)}
-              {view === "map" && active && <div className="odr-team-popover"><img className="odr-team-photo" src={TEAM_PORTRAIT} alt="Team portrait"/><div><strong>{active.teamName || active.customerName}</strong><span>{active.serviceName || "Service"}</span><small>{active.address || "Address pending"}</small><b>{statusLabel(active.jobStatus)}</b><i><em style={{ width: active.jobStatus === "completed" ? "100%" : "68%" }} /></i></div></div>}
-              {view === "list" && <div className="odr-map-alt"><h3>Active team list</h3>{mapJobs.length ? mapJobs.map(job => <p key={job.id}><span className={statusTone(job.jobStatus)} /> <b>{job.teamName || job.customerName}</b><small>{statusLabel(job.jobStatus)}</small></p>) : <p><small>No cached job locations yet.</small></p>}</div>}
-              {view === "timeline" && <div className="odr-map-alt odr-mini-timeline"><h3>Team timeline</h3>{mapJobs.length ? mapJobs.map((job, index) => <p key={job.id}><b>{job.teamName || job.customerName}</b><i style={{ width: `${38 + index * 12}%` }} /></p>) : <p><small>No active team timeline yet.</small></p>}</div>}
-              <footer className="odr-map-legend"><span><i className="green" />On time <b>{metrics?.activeTeams ?? "—"}</b></span><span><i className="amber" />Running late <b>{metrics?.routeExceptions ?? "—"}</b></span><span><i className="blue" />Completed <b>{metrics?.completedJobs ?? "—"}</b></span><span><i className="slate" />Not started <b>{metrics?.remainingJobs ?? "—"}</b></span></footer>
+          <article className="odr-card odr-jobs-card odr-route-board-card">
+            <header className="odr-card-head odr-jobs-head"><div><span className="odr-section-kicker">Field view</span><h2>Today’s Route Board</h2><p>Teams, next stops, and route load</p><div className="odr-field-meta"><span><i className="green" />{routeRows.length} team route{routeRows.length === 1 ? "" : "s"}</span><span><i className="amber" />{metrics?.routeExceptions ?? "—"} route exception{metrics?.routeExceptions === 1 ? "" : "s"}</span></div></div></header>
+            <div className="odr-route-board">
+              <div className="odr-route-board-summary"><span><CalendarDays /><b>{metrics?.jobsToday ?? "—"}</b> scheduled stops</span><span><Users /><b>{routeRows.length}</b> team routes</span><span><AlertTriangle /><b>{metrics?.routeExceptions ?? "—"}</b> needs review</span></div>
+              {isLoading ? <p className="odr-live-empty">Loading team routes…</p> : routeRows.length ? <><div className="odr-route-columns"><span>Team</span><span>Next stop</span><span>Route load</span><span>Status</span><span /></div><div className="odr-route-list">{routeRows.map(route => <button type="button" className={`odr-route-row ${route.tone} ${activeRoute?.id === route.id ? "is-active" : ""}`} aria-pressed={activeRoute?.id === route.id} key={route.id} onClick={() => setActiveRouteId(route.id)}><span className="odr-route-team"><i><Users /></i><strong>{route.teamName}</strong><small>{route.jobs.length} scheduled stop{route.jobs.length === 1 ? "" : "s"}</small></span><span className="odr-route-next"><time>{formatTime(route.nextStop.serviceDateTime)}</time><b>Next: {route.nextStop.serviceName || "Service"}</b><small>{route.nextStop.address || "Address pending"}</small></span><span className="odr-route-load"><b>{route.remainingCount} of {route.jobs.length} left</b><i><em style={{ width: `${route.jobs.length ? (route.remainingCount / route.jobs.length) * 100 : 0}%` }} /></i></span><span className="odr-route-status"><i /><b>{route.status}</b></span><ArrowRight /></button>)}</div>{activeRoute && <div className={`odr-route-focus ${activeRoute.tone}`}><div><span className="odr-focus-icon"><Navigation /></span><span><small>Selected route</small><strong>{activeRoute.teamName}</strong><p>Next: <b>{activeRoute.nextStop.serviceName || "Service"}</b> at <b>{formatTime(activeRoute.nextStop.serviceDateTime)}</b> · {activeRoute.remainingCount} stop{activeRoute.remainingCount === 1 ? "" : "s"} left</p></span></div><a href="/admin/day-board">Open route <ArrowRight /></a></div>}</> : <p className="odr-live-empty">No team routes are scheduled for this date.</p>}
             </div>
+            <footer className="odr-route-board-legend"><span><i className="green" />In progress <b>{routeRows.filter(route => route.status === "In progress").length}</b></span><span><i className="blue" />On route <b>{routeRows.filter(route => route.status === "On route").length}</b></span><span><i className="slate" />Upcoming <b>{routeRows.filter(route => route.status === "Upcoming").length}</b></span><span><i className="amber" />Needs review <b>{routeRows.filter(route => route.status === "Needs review").length}</b></span></footer>
           </article>
 
           <article className="odr-card odr-schedule-card"><header className="odr-card-head"><div><span className="odr-section-kicker">Day route</span><h2>Today’s Schedule</h2><p>{metrics ? `${metrics.jobsToday} planned stop${metrics.jobsToday === 1 ? "" : "s"} across the day` : "Loading planned stops"}</p></div><a href="/admin/schedule" className="odr-text-action">View all <ArrowRight /></a></header><div className="odr-schedule-list">{isLoading ? <p className="odr-live-empty">Loading schedule…</p> : schedule.length ? schedule.map((job, index) => <a href="/admin/day-board" className={`odr-schedule-row ${activeSchedule === String(job.id) ? "is-selected" : ""}`} aria-current={activeSchedule === String(job.id) ? "true" : undefined} key={job.id} onClick={() => setActiveSchedule(String(job.id))}><span className={`odr-schedule-rail ${statusTone(job.jobStatus)}`}><i /></span><time>{formatTime(job.serviceDateTime)}<small className={statusTone(job.jobStatus)}>{statusLabel(job.jobStatus)}</small></time><img className="odr-home-thumb" src={HOME_IMAGES[index % HOME_IMAGES.length]} alt="Service home"/><div><strong>{job.address || "Address pending"}</strong><small>{[job.serviceName, job.teamName].filter(Boolean).join(" · ") || "Service pending"}</small></div><MoreHorizontal /></a>) : <p className="odr-live-empty">No active jobs are scheduled for this date.</p>}</div><a href="/admin/schedule" className="odr-outline-button">View full schedule <ArrowRight /></a></article>
