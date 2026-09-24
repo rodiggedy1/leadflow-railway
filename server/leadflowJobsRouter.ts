@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, gte, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
-import { agentPageProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
+import { activityLog, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
+import { agentPageProcedure, agentProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
@@ -65,8 +65,183 @@ function normalizedPhone(phone: string) {
   return phone.replace(/[^\d]/g, "").slice(-10);
 }
 
+function normalizeAddress(address: string): string {
+  return address.toLowerCase().replace(/[.,#-]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function easternOffsetMs(utcDate: Date): number {
+  const et = utcDate.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+  const [datePart, timePart] = et.split(", ");
+  const [month, day, year] = datePart.split("/");
+  return new Date(`${year}-${month}-${day}T${timePart}Z`).getTime() - utcDate.getTime();
+}
+
+function easternDayBounds(date: string) {
+  const startUtc = new Date(`${date}T00:00:00.000Z`);
+  const endUtc = new Date(`${date}T23:59:59.999Z`);
+  return {
+    start: new Date(startUtc.getTime() - easternOffsetMs(startUtc)),
+    end: new Date(endUtc.getTime() - easternOffsetMs(endUtc)),
+  };
+}
+
+function dateBefore(date: string, days: number) {
+  const result = new Date(`${date}T12:00:00`);
+  result.setDate(result.getDate() - days);
+  return result.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
 export const leadflowJobsRouter = router({
   callMatrix: leadflowCallMatrixRouter,
+
+  /**
+   * All-agent, read-only Operations Dashboard projection. It combines only
+   * LeadFlow-owned jobs with existing activity and lead records; it performs
+   * no mutation, notification, scheduling, or message-send work.
+   */
+  dashboardOverview: agentProcedure.input(z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+
+    const { start, end } = easternDayBounds(input.date);
+    const trendStart = dateBefore(input.date, 29);
+    const trendStartBound = easternDayBounds(trendStart).start;
+    const nonLeadSourceFilter = sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound','cs-inbound-cleaner','cs_initiated','hiring_interview','review'))`;
+    const [todayRows, trendRows, activityRows, sourceRows, newLeadRows, activeSessions] = await Promise.all([
+      db.select({
+        id: leadflowJobs.id,
+        customerName: leadflowJobs.customerName,
+        jobAddress: leadflowJobs.jobAddress,
+        serviceName: leadflowJobs.serviceName,
+        serviceDateTime: leadflowJobs.serviceDateTime,
+        bookingStatus: leadflowJobs.bookingStatus,
+        teamName: leadflowJobs.teamName,
+        jobTotalCents: leadflowJobs.jobTotalCents,
+        customerRating: leadflowJobs.customerRating,
+        progressStatus: cleanerPortalJobProgress.jobStatus,
+      }).from(leadflowJobs)
+        .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
+        .where(and(eq(leadflowJobs.jobDate, input.date), ne(leadflowJobs.bookingStatus, "missing_from_launch27")))
+        .orderBy(asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id)),
+      db.select({ jobDate: leadflowJobs.jobDate, jobTotalCents: leadflowJobs.jobTotalCents })
+        .from(leadflowJobs)
+        .where(and(
+          gte(leadflowJobs.jobDate, trendStart),
+          lte(leadflowJobs.jobDate, input.date),
+          ne(leadflowJobs.bookingStatus, "cancelled"),
+          ne(leadflowJobs.bookingStatus, "rescheduled"),
+          ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+        )),
+      db.select({
+        id: activityLog.id,
+        eventType: activityLog.eventType,
+        title: activityLog.title,
+        body: activityLog.body,
+        createdAt: activityLog.createdAt,
+      }).from(activityLog).orderBy(desc(activityLog.createdAt)).limit(5),
+      db.select({ source: conversationSessions.utmSource, count: sql<number>`count(*)` })
+        .from(conversationSessions)
+        .where(and(gte(conversationSessions.createdAt, trendStartBound), lte(conversationSessions.createdAt, end), nonLeadSourceFilter))
+        .groupBy(conversationSessions.utmSource),
+      db.select({ count: sql<number>`count(*)` })
+        .from(conversationSessions)
+        .where(and(gte(conversationSessions.createdAt, start), lte(conversationSessions.createdAt, end), nonLeadSourceFilter)),
+      db.select({
+        messageHistory: conversationSessions.messageHistory,
+        respondedAt: conversationSessions.respondedAt,
+      }).from(conversationSessions)
+        .where(and(
+          sql`${conversationSessions.stage} NOT IN ('BOOKED','COMPLETED','CLOSED','LOST','COLD')`,
+          nonLeadSourceFilter,
+        ))
+        .limit(500),
+    ]);
+
+    const addressKeys = todayRows.map(row => row.jobAddress ? normalizeAddress(row.jobAddress) : null)
+      .filter((value): value is string => Boolean(value));
+    const geoRows = addressKeys.length
+      ? await db.select({ addressKey: jobGeoCache.addressKey, lat: jobGeoCache.lat, lng: jobGeoCache.lng })
+        .from(jobGeoCache).where(inArray(jobGeoCache.addressKey, addressKeys))
+      : [];
+    const geoByAddress = new Map(geoRows.map(row => [row.addressKey, row]));
+
+    const activeJobs = todayRows.filter(row => row.bookingStatus !== "cancelled" && row.bookingStatus !== "rescheduled").map(row => {
+      const jobStatus = row.progressStatus ?? (row.bookingStatus === "completed" ? "completed" : "assigned");
+      const geo = row.jobAddress ? geoByAddress.get(normalizeAddress(row.jobAddress)) : null;
+      return {
+        id: row.id,
+        customerName: row.customerName || "Customer",
+        address: row.jobAddress,
+        serviceName: row.serviceName,
+        serviceDateTime: row.serviceDateTime,
+        bookingStatus: row.bookingStatus,
+        jobStatus,
+        teamName: row.teamName,
+        jobTotalCents: row.jobTotalCents ?? 0,
+        customerRating: row.customerRating,
+        latitude: geo?.lat ?? null,
+        longitude: geo?.lng ?? null,
+      };
+    });
+
+    let unrespondedLeads = 0;
+    const now = Date.now();
+    for (const session of activeSessions) {
+      try {
+        const history: Array<{ role: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
+        const last = history.at(-1);
+        if (!last || (last.role !== "user" && last.role !== "customer")) continue;
+        if (session.respondedAt && last.ts && last.ts <= session.respondedAt) continue;
+        if (last.ts && now - last.ts > 60 * 60 * 1000) unrespondedLeads += 1;
+      } catch {
+        // Malformed historical message history cannot be classified as unresponded.
+      }
+    }
+
+    const trendDates = Array.from({ length: 30 }, (_, index) => dateBefore(input.date, 29 - index));
+    const trendCents = new Map<string, number>();
+    for (const row of trendRows) trendCents.set(row.jobDate, (trendCents.get(row.jobDate) ?? 0) + (row.jobTotalCents ?? 0));
+    const serviceCounts = new Map<string, number>();
+    for (const job of activeJobs) {
+      const service = job.serviceName?.trim() || "Unspecified service";
+      serviceCounts.set(service, (serviceCounts.get(service) ?? 0) + 1);
+    }
+
+    const completedJobs = activeJobs.filter(job => job.jobStatus === "completed").length;
+    const reviewQueue = activeJobs.filter(job => job.jobStatus === "completed" && job.customerRating === null).length;
+    const activeTeamNames = new Set(activeJobs
+      .filter(job => ["on_the_way", "arrived", "in_progress", "running_late", "wrapping_up"].includes(job.jobStatus))
+      .map(job => job.teamName?.trim())
+      .filter((name): name is string => Boolean(name)));
+    const routeExceptions = activeJobs.filter(job => ["running_late", "issue_at_property", "no_show"].includes(job.jobStatus)).length;
+
+    return {
+      date: input.date,
+      jobs: activeJobs,
+      metrics: {
+        jobsToday: activeJobs.length,
+        completedJobs,
+        remainingJobs: activeJobs.length - completedJobs,
+        scheduledValueCents: activeJobs.reduce((total, job) => total + job.jobTotalCents, 0),
+        activeTeams: activeTeamNames.size,
+        routeExceptions,
+        reviewQueue,
+        newLeads: Number(newLeadRows[0]?.count ?? 0),
+        unrespondedLeads,
+      },
+      activities: activityRows,
+      sources: sourceRows.map(row => ({ source: row.source?.trim() || "Direct", count: Number(row.count) })).sort((a, b) => b.count - a.count),
+      revenueTrend: trendDates.map(date => ({ date, totalCents: trendCents.get(date) ?? 0 })),
+      serviceMix: Array.from(serviceCounts.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count).slice(0, 6),
+    };
+  }),
 
   /**
    * Read-only Day Board projection of LeadFlow-owned jobs and explicit Cleaner
