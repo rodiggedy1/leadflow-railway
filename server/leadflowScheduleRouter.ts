@@ -439,7 +439,11 @@ export const leadflowScheduleRouter = router({
     .query(async ({ input }) => {
       const db = await requireDb();
       const [jobRows, teams] = await Promise.all([
-        db.select({ job: leadflowJobs, jobStatus: cleanerPortalJobProgress.jobStatus })
+        db.select({
+          job: leadflowJobs,
+          jobStatus: cleanerPortalJobProgress.jobStatus,
+          etaTimestamp: cleanerPortalJobProgress.etaTimestamp,
+        })
           .from(leadflowJobs)
           .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
           .where(activeJobPredicate(input.date))
@@ -448,6 +452,7 @@ export const leadflowScheduleRouter = router({
       ]);
       const jobs = jobRows.map(row => row.job);
       const jobStatusById = new Map(jobRows.map(row => [row.job.id, row.jobStatus]));
+      const etaTimestampById = new Map(jobRows.map(row => [row.job.id, row.etaTimestamp]));
       const [assignments, availability] = await Promise.all([
         readOwnedAssignments(db, input.date, jobs.map(job => job.id)),
         loadAvailability(db, input.date, teams),
@@ -475,6 +480,7 @@ export const leadflowScheduleRouter = router({
           customerNotes: job.customerNotes,
           jobTotalCents: job.jobTotalCents,
           jobStatus: jobStatusById.get(job.id) ?? null,
+          etaTimestamp: etaTimestampById.get(job.id) ?? null,
           hasStripeCard: job.hasStripeCard,
           paymentBrand: job.paymentBrand,
           paymentLast4: job.paymentLast4,
