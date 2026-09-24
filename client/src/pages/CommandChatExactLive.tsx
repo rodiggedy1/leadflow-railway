@@ -219,6 +219,28 @@ function dateLabel(value: number) {
   return new Date(value).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function bookingDateLabel(date: string, businessDate: string) {
+  if (date === businessDate) return "Today";
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return date;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
+function scheduleTimeLabel(value: string | number | null) {
+  if (value == null) return "Time pending";
+  const time = typeof value === "number" ? value : new Date(value).getTime();
+  if (!Number.isFinite(time)) return "Time pending";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(time));
+}
+
 function mediaUrls(value: string | null) {
   if (!value) return [];
   try {
@@ -968,7 +990,7 @@ export default function CommandChatExactLive() {
           </aside>
         </div>
       </section>
-      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} onClose={() => setSelectedSmsConversation(null)} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} onClose={() => setSelectedSmsConversation(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
@@ -1472,8 +1494,10 @@ const CommandComposer = memo(function CommandComposer({
   </div>;
 });
 
-function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; onClose: () => void }) {
+function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; onClose: () => void }) {
   const utils = trpc.useUtils();
+  const isTeamConversation = conversation.personType === "team";
+  const contextPhone = conversation.leadPhone || "0000000";
   const [draft, setDraft] = useState("");
   const [smsAutoDraftLoading, setSmsAutoDraftLoading] = useState(false);
   const [smsAutoDraftReady, setSmsAutoDraftReady] = useState(false);
@@ -1490,7 +1514,29 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     { sessionId: conversation.id },
     { staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
   );
+  const { data: clientProfile } = trpc.leadflowJobs.customerProfile.useQuery(
+    { phone: contextPhone },
+    { enabled: !isTeamConversation && Boolean(conversation.leadPhone), staleTime: 30_000, refetchOnWindowFocus: false },
+  );
+  const { data: teamIdentity } = trpc.leadflowJobs.teamIdentityByPhone.useQuery(
+    { phone: contextPhone },
+    { enabled: isTeamConversation && Boolean(conversation.leadPhone), staleTime: 5 * 60_000, refetchOnWindowFocus: false },
+  );
+  const { data: teamSchedule } = trpc.leadflowSchedule.getSchedule.useQuery(
+    { date: businessDate },
+    { enabled: isTeamConversation && teamIdentity?.launch27TeamId != null, staleTime: 30_000, refetchOnWindowFocus: false },
+  );
   const name = smsConversationName(conversation);
+  const activeScheduleTeam = useMemo(() => {
+    if (!teamIdentity?.launch27TeamId) return null;
+    return teamSchedule?.teams.find((team) => team.launch27TeamId === teamIdentity.launch27TeamId) ?? null;
+  }, [teamIdentity?.launch27TeamId, teamSchedule?.teams]);
+  const teamRoute = useMemo(() => {
+    if (!activeScheduleTeam) return [];
+    return (teamSchedule?.jobs ?? [])
+      .filter((job) => job.assignment?.teamId === activeScheduleTeam.id)
+      .sort((left, right) => (left.assignment?.routeOrder ?? Number.MAX_SAFE_INTEGER) - (right.assignment?.routeOrder ?? Number.MAX_SAFE_INTEGER));
+  }, [activeScheduleTeam, teamSchedule?.jobs]);
   const messages = useMemo(() => {
     let parsed: SmsInboxMessage[] = [];
     try { parsed = JSON.parse(detail?.messageHistory ?? "[]") as SmsInboxMessage[]; } catch { parsed = []; }
@@ -1646,7 +1692,9 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     });
   };
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
-    <header><div>{conversation.personType === "team" ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{conversation.personType === "team" ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
+    <header><div>{isTeamConversation ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{isTeamConversation ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
+    {!isTeamConversation && clientProfile?.upcoming && <section className="ccc-live-sms-booking-context" aria-label="Client's next booking"><div><CalendarClock /><span><b>Next booking</b><small>{bookingDateLabel(clientProfile.upcoming.date, businessDate)}</small></span></div><strong>{clientProfile.upcoming.serviceName || "Scheduled service"}</strong><small>{clientProfile.upcoming.teamName ? `${clientProfile.upcoming.teamName} · ` : ""}{clientProfile.upcoming.address || "Address pending"}</small></section>}
+    {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => <li key={job.id}><time>{scheduleTimeLabel(job.assignment?.estimatedArrivalMs ?? job.serviceDateTime)}</time><span><strong>{job.customerName || "Customer"}</strong><small>{job.serviceType || job.jobAddress || "Scheduled service"}</small></span></li>)}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
     <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
       const outgoing = message.role !== "user";

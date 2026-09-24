@@ -664,6 +664,26 @@ export const leadflowJobsRouter = router({
     };
   }),
 
+  teamIdentityByPhone: opsChatProcedure.input(smsPhoneInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const phone = normalizedPhone(input.phone);
+    if (phone.length !== 10) return null;
+
+    const rows = await db.select({
+      id: cleanerProfiles.id,
+      name: cleanerProfiles.name,
+      launch27TeamId: cleanerProfiles.launch27TeamId,
+    }).from(cleanerProfiles)
+      .where(and(
+        eq(cleanerProfiles.isActive, 1),
+        sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${phone}`,
+      ))
+      .limit(1);
+
+    return rows[0] ?? null;
+  }),
+
   customerConversationSession: opsChatProcedure.input(z.object({ phone: z.string().trim().min(7).max(30) })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
