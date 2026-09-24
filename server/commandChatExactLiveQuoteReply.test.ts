@@ -37,4 +37,13 @@ describe("CommandChatExactLive quoted replies", () => {
     expect(pageSource).toContain("replyToBody: sentReplyTarget?.body.slice(0, 512),");
     expect(pageSource).toContain("replyToAuthor: sentReplyTarget?.author,");
   });
+
+  it("renders the persisted quote below the reply response and any attachments", () => {
+    const responseBubble = '<p>{renderMessageBody(message.body, mentionPattern)}</p>';
+    const quoteReference = 'className="ccc-live-quoted-reply"';
+    const messageTools = 'className="ccc-live-message-tools"';
+    expect(pageSource.indexOf(responseBubble)).toBeGreaterThan(-1);
+    expect(pageSource.indexOf(quoteReference)).toBeGreaterThan(pageSource.indexOf(responseBubble));
+    expect(pageSource.indexOf(messageTools)).toBeGreaterThan(pageSource.indexOf(quoteReference));
+  });
 });
