@@ -34,4 +34,30 @@ describe("Command Chat SMS booking context", () => {
     expect(teamLookup).not.toContain("cleaner" + "Jobs");
     expect(scheduleRouter).toContain("launch27TeamId: team.launch27TeamId");
   });
+
+  it("adds only owned progress status and ETA to each existing team route stop", () => {
+    const page = read("client/src/pages/CommandChatExactLive.tsx");
+    const styles = read("client/src/pages/command-chat-exact-live.css");
+    const scheduleRouter = read("server/leadflowScheduleRouter.ts");
+
+    expect(scheduleRouter).toContain("cleanerPortalJobProgress");
+    expect(scheduleRouter).toContain("leftJoin(cleanerPortalJobProgress");
+    expect(scheduleRouter).toContain("jobStatus: jobStatusById.get(job.id) ?? null");
+    expect(scheduleRouter).toContain("etaTimestamp: etaTimestampById.get(job.id) ?? null");
+    expect(scheduleRouter).not.toContain("cleaner" + "Jobs");
+
+    expect(page).toContain("function teamRouteStatusLabel");
+    expect(page).toContain("function TeamRouteStatusIcon");
+    expect(page).toContain("function teamRouteEtaLabel");
+    expect(page).toContain('case "on_the_way": return "On the way";');
+    expect(page).toContain('case "completed": return "Completed";');
+    expect(page).toContain('default: return "Scheduled";');
+    expect(page).toContain("teamRouteStatusLabel(job.jobStatus)");
+    expect(page).toContain("teamRouteEtaLabel(job.jobStatus, job.etaTimestamp)");
+    expect(page).toContain("scheduleTimeLabel(job.serviceDateTime)");
+    expect(page).toContain("refetchInterval: 60_000");
+    expect(styles).toContain(".ccc-live-sms-job-status");
+    expect(styles).toContain(".ccc-live-sms-job-status>svg");
+    expect(styles).toContain(".ccc-live-sms-job-status>small");
+  });
 });
