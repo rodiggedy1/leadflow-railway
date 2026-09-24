@@ -42,12 +42,16 @@ describe("exact live Operations Dashboard", () => {
       'Add more services.',
       'LeadflowScheduleMap',
       'scheduleMapData',
+      'isLoading: scheduleMapLoading',
+      'error: scheduleMapError',
+      'view === "map" && (scheduleMapLoading ? <p className="odr-live-empty">Loading route map…</p> : scheduleMapError ? <p className="odr-live-empty">Route map unavailable.</p> : <div className="odr-live-schedule-map"><LeadflowScheduleMap',
       '<div className="odr-live-schedule-map"><LeadflowScheduleMap jobs={(scheduleMapData?.jobs ?? []) as LeadflowScheduleMapJob[]} teams={(scheduleMapData?.teams ?? []) as LeadflowScheduleMapTeam[]}',
       'odr-team-popover',
       'odr-donut',
       'dashboard-team-portrait_ee89ad11.jpg',
     ]) expect(page).toContain(token);
     expect(page).not.toContain('view === "map" && (scheduleMapData');
+    expect(page).not.toContain('view === "map" && <div className="odr-live-schedule-map">');
     for (const token of ['.odr-dashboard{min-height:100vh', '.odr-map:before,.odr-map:after{display:none}', '.odr-live-schedule-map{width:100%;height:100%;min-height:0}', '.odr-schedule-row{grid-template-columns:15px 86px 44px', '.odr-donut', '.odr-growth']) expect(css).toContain(token);
     for (const token of ['MapView', 'google.maps.Marker', 'fitBounds(bounds', 'initialCenter={{ lat: 38.9, lng: -77.03 }}']) expect(scheduleMap).toContain(token);
     expect(mapView).toContain('mapId: "DEMO_MAP_ID"');
