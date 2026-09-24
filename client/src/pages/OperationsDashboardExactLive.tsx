@@ -190,21 +190,6 @@ export default function OperationsDashboardExactLive() {
   const metrics = overview?.metrics;
   const schedule = useMemo(() => (overview?.jobs ?? []).slice(0, 5), [overview?.jobs]);
   const mapJobs = overview?.jobs ?? [];
-  const scheduleMapJobs = useMemo<LeadflowScheduleMapJob[]>(() => (scheduleMapData?.jobs ?? []).map(job => ({
-    id: job.id,
-    customerName: job.customerName,
-    jobAddress: job.jobAddress,
-    serviceDateTime: job.serviceDateTime,
-    assignment: job.assignment ? { teamId: job.assignment.teamId, routeOrder: job.assignment.routeOrder } : null,
-  })), [scheduleMapData?.jobs]);
-  const scheduleMapTeams = useMemo<LeadflowScheduleMapTeam[]>(() => (scheduleMapData?.teams ?? []).map(team => ({
-    id: team.id,
-    name: team.name,
-    color: team.color,
-    homeLat: team.homeLat,
-    homeLng: team.homeLng,
-    isActive: team.isActive,
-  })), [scheduleMapData?.teams]);
   const active = mapJobs[activeTeam] ?? null;
   const selectMapJob = useCallback((jobId: number) => {
     const nextIndex = mapJobs.findIndex(job => job.id === jobId);
@@ -247,7 +232,7 @@ export default function OperationsDashboardExactLive() {
             <header className="odr-card-head odr-jobs-head"><div><span className="odr-section-kicker">Field view</span><h2>Jobs in Progress</h2><p>Live view of your teams in the field</p><div className="odr-field-meta"><span><i className="green" />{metrics?.activeTeams ?? "—"} teams in field</span><span><i className="amber" />{metrics?.routeExceptions ?? "—"} route exceptions</span></div></div><div className="odr-segmented" aria-label="Map display selector">{(["map", "list", "timeline"] as MapView[]).map(option => <button type="button" className={view === option ? "is-active" : ""} key={option} onClick={() => setView(option)}>{option === "map" ? <Map /> : option === "list" ? <List /> : <Clock />}{option[0].toUpperCase() + option.slice(1)}</button>)}</div></header>
             <div className={`odr-map odr-map-${view}`}>
               {view === "map" && (scheduleMapData
-                ? <LeadflowScheduleMap jobs={scheduleMapJobs} teams={scheduleMapTeams} selectedJobId={active?.id ?? null} onJobSelect={selectMapJob} darkMode maxUnassignedJobs={30} />
+                ? <LeadflowScheduleMap jobs={scheduleMapData.jobs as LeadflowScheduleMapJob[]} teams={scheduleMapData.teams as LeadflowScheduleMapTeam[]} selectedJobId={active?.id ?? null} onJobSelect={selectMapJob} />
                 : <p className="odr-live-empty">Loading route map…</p>)}
               {view === "map" && active && <div className="odr-team-popover"><img className="odr-team-photo" src={TEAM_PORTRAIT} alt="Team portrait"/><div><strong>{active.teamName || active.customerName}</strong><span>{active.serviceName || "Service"}</span><small>{active.address || "Address pending"}</small><b>{statusLabel(active.jobStatus)}</b><i><em style={{ width: active.jobStatus === "completed" ? "100%" : "68%" }} /></i></div></div>}
               {view === "list" && <div className="odr-map-alt"><h3>Active team list</h3>{mapJobs.length ? mapJobs.map(job => <p key={job.id}><span className={statusTone(job.jobStatus)} /> <b>{job.teamName || job.customerName}</b><small>{statusLabel(job.jobStatus)}</small></p>) : <p><small>No cached job locations yet.</small></p>}</div>}

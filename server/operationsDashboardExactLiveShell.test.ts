@@ -27,6 +27,7 @@ describe("exact live Operations Dashboard", () => {
     const page = read("client/src/pages/OperationsDashboardExactLive.tsx");
     const css = read("client/src/pages/operations-dashboard-exact-live.css");
     const scheduleMap = read("client/src/components/LeadflowScheduleMap.tsx");
+    const mapView = read("client/src/components/Map.tsx");
     for (const token of [
       'trpc.leadflowJobs.dashboardOverview.useQuery',
       'trpc.leadflowSchedule.getSchedule.useQuery',
@@ -40,14 +41,15 @@ describe("exact live Operations Dashboard", () => {
       'Jobs by Service',
       'Add more services.',
       'LeadflowScheduleMap',
-      'darkMode',
       'scheduleMapData',
+      'jobs={scheduleMapData.jobs as LeadflowScheduleMapJob[]} teams={scheduleMapData.teams as LeadflowScheduleMapTeam[]}',
       'odr-team-popover',
       'odr-donut',
       'dashboard-team-portrait_ee89ad11.jpg',
     ]) expect(page).toContain(token);
-    for (const token of ['.odr-dashboard{min-height:100vh', '.odr-map:before,.odr-map:after{display:none}', '.odr-schedule-row', '.odr-donut', '.odr-growth']) expect(css).toContain(token);
-    for (const token of ['MapView', 'DARK_MAP_STYLES', 'google.maps.Marker', 'fitBounds(bounds', 'darkMode = false']) expect(scheduleMap).toContain(token);
+    for (const token of ['.odr-dashboard{min-height:100vh', '.odr-map:before,.odr-map:after{display:none}', '.odr-schedule-row{grid-template-columns:15px 86px 44px', '.odr-donut', '.odr-growth']) expect(css).toContain(token);
+    for (const token of ['MapView', 'google.maps.Marker', 'fitBounds(bounds', 'initialCenter={{ lat: 38.9, lng: -77.03 }}']) expect(scheduleMap).toContain(token);
+    expect(mapView).toContain('mapId: "DEMO_MAP_ID"');
   });
 
   it("keeps the overview read-only and on LeadFlow-owned paths", () => {
