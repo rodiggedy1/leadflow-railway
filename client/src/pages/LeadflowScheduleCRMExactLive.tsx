@@ -87,6 +87,7 @@ type Job = {
     driveTimeSecs: number | null;
     estimatedArrivalMs: number | null;
     estimatedDepartureMs: number | null;
+    source?: "schedule" | "booking_default";
   } | null;
 };
 
@@ -244,7 +245,7 @@ function ClientDrawer({ job, teams, onClose, onRaiseIssue }: { job: Job | null; 
         <div className="scr-drawer-scroll">
           <section className="scr-client-stats"><div><b>{history?.totalBookings ?? "—"}</b><span>Cleanings</span></div><div><b>{history ? `$${history.lifetimeValue.toLocaleString()}` : "—"}</b><span>Lifetime</span></div><div><b>{history ? `$${history.avgPrice}` : "—"}</b><span>Avg / visit</span></div><div><b>{history?.usualTeam || job.assignment?.teamName || "—"}</b><span>Usual team</span></div></section>
           <section><h3><CalendarDays />This Job</h3><div className="scr-detail-grid"><article><label>Service</label><b>{service(job)}</b></article><article><label>Scheduled</label><b>{dateTimeLabel(job.serviceDateTime)}</b></article><article><label>Frequency</label><b>{frequency(job)}</b></article><article><label>Team</label><b>{job.assignment?.teamName || "Unassigned"}</b></article></div></section>
-          <section className="scr-assignment-section"><div className="scr-assignment-heading"><h3><Users />Assignment</h3><span>{job.assignment?.teamName || "Unassigned"}</span></div><p>Choose the team assigned to this service.</p><button className="scr-assignment-open" type="button" onClick={() => setShowReassign(true)}><Users />{job.assignment?.teamName ? "Change team" : "Assign a team"}<ChevronDown /></button></section>
+          <section className="scr-assignment-section"><div className="scr-assignment-heading"><h3><Users />Assignment</h3><span>{job.assignment?.teamName || "Unassigned"}</span></div><p>{job.assignment?.source === "booking_default" ? "Defaulted from the team assigned in Bookings. Choose a different team here to override it." : "Choose the team assigned to this service."}</p><button className="scr-assignment-open" type="button" onClick={() => setShowReassign(true)}><Users />{job.assignment?.source === "booking_default" ? "Override booking team" : job.assignment?.teamName ? "Change team" : "Assign a team"}<ChevronDown /></button></section>
           {(job.customerNotes || job.staffNotes || job.adminNotes || checklist.length > 0) && <section><h3><FileText />Notes & checklist</h3>{job.customerNotes && <div className="scr-note-card"><label>Customer notes</label><p>{job.customerNotes}</p></div>}{job.staffNotes && <div className="scr-note-card"><label>Staff notes</label><p>{job.staffNotes}</p></div>}{job.adminNotes && <div className="scr-note-card"><label>Admin notes</label><p>{job.adminNotes}</p></div>}{checklist.length > 0 && <div className="scr-checklist">{checklist.map((item, index) => <span key={`${item.text}-${index}`}>{item.checked ? "✓" : "○"} {item.text}</span>)}</div>}</section>}
           {job.recentCalls && job.recentCalls.length > 0 && <section><h3><Phone />Recent calls</h3>{job.recentCalls.map((call, index) => <div className="scr-call-card" key={`${call.step}-${index}`}><b>{call.step.replaceAll("_", " ")} <i>{call.outcome}</i></b><p>{call.transcript || call.summary || "No call summary available."}</p></div>)}</section>}
           {history?.aiMemoryBullets && history.aiMemoryBullets.length > 0 && <section><h3><Sparkles />AI memory</h3><ul className="scr-memory">{history.aiMemoryBullets.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section>}
@@ -319,7 +320,7 @@ export default function LeadflowScheduleCRMExactLive() {
 
   useEffect(() => { setSelectedJob(null); setShowAnalysis(false); }, [date]);
   const hasAssignments = Boolean(data?.hasAssignments);
-  const assignedUnlocked = activeJobs.filter(job => job.assignment?.teamId && !lockedJobIds.has(job.id));
+  const assignedUnlocked = activeJobs.filter(job => job.assignment?.source !== "booking_default" && job.assignment?.teamId && !lockedJobIds.has(job.id));
   const currentTeamCount = teams.filter(team => team.isActive === 1 && !team.isArchived).length;
 
   return <main className="ocr-shell scr-shell schedule-crm-exact-live" id="schedule">

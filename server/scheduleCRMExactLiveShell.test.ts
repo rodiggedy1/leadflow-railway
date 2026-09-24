@@ -17,6 +17,7 @@ const ownedClientFiles = [
 
 const ownedServerFiles = [
   "server/leadflowScheduleRouter.ts",
+  "server/leadflowScheduleAssignmentDefaults.ts",
   "server/leadflowScheduleCallsRouter.ts",
 ];
 
@@ -35,6 +36,7 @@ describe("LeadFlow-owned Schedule workspace", () => {
     expect(shell).toContain('trpc.leadflowSchedule.suggestSlots.useQuery({ address: suggestAddress, date }');
     expect(shell).toContain('trpc.leadflowSchedule.optimizeDay.useMutation');
     expect(shell).toContain('trpc.leadflowSchedule.manualAssign.useMutation');
+    expect(shell).toContain('job.assignment?.source === "booking_default"');
     expect(shell).toContain('<LeadflowScheduleCallLogPanel');
     expect(shell).toContain('<LeadflowScheduleIssueDialog');
     expect(shell).toContain('<LeadflowScheduleMap');
@@ -69,6 +71,10 @@ describe("LeadFlow-owned Schedule workspace", () => {
 
     expect(scheduleRouter).not.toContain("invokeLLM");
     expect(scheduleRouter).not.toContain("confirmationCalls");
+    expect(scheduleRouter).toContain("bookingTeamDefault(job, teams)");
+    expect(scheduleRouter).toContain('source: "booking_default" as const');
+    expect(scheduleRouter).toContain('source: "schedule" as const');
+    expect(scheduleRouter).not.toContain("db.insert(scheduleAssignments)");
   });
 
   it("keeps every new Schedule source file outside the legacy job boundary", () => {

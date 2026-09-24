@@ -16,6 +16,7 @@ import {
 import { agentProcedure, router } from "./_core/trpc";
 import { GeocodingResult, makeRequest } from "./_core/map";
 import { getDb } from "./db";
+import { bookingTeamDefault } from "./leadflowScheduleAssignmentDefaults";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type TeamRow = typeof schedulingTeams.$inferSelect;
@@ -447,7 +448,8 @@ export const leadflowScheduleRouter = router({
       ]);
       const assignmentByJob = new Map(assignments.map(row => [Number(row.leadflowJobId), row]));
       const projectedJobs = jobs.map(job => {
-        const assignment = assignmentByJob.get(job.id);
+        const persistedAssignment = assignmentByJob.get(job.id);
+        const bookingDefaultTeam = persistedAssignment ? null : bookingTeamDefault(job, teams);
         const serviceType = job.serviceName ?? null;
         return {
           id: job.id,
@@ -480,19 +482,33 @@ export const leadflowScheduleRouter = router({
           recentCalls: [],
           callsSummary: null,
           confirmationCall: null,
-          assignment: assignment
+          assignment: persistedAssignment
             ? {
-                leadflowJobId: Number(assignment.leadflowJobId),
-                teamId: Number(assignment.teamId),
-                teamName: assignment.teamName,
-                routeOrder: Number(assignment.routeOrder),
-                driveTimeSecs: assignment.driveTimeSecs,
-                estimatedArrivalMs: assignment.estimatedArrivalMs,
-                estimatedDepartureMs: assignment.estimatedDepartureMs,
-                isManual: assignment.isManual,
-                rationale: assignment.rationale,
+                leadflowJobId: Number(persistedAssignment.leadflowJobId),
+                teamId: Number(persistedAssignment.teamId),
+                teamName: persistedAssignment.teamName,
+                routeOrder: Number(persistedAssignment.routeOrder),
+                driveTimeSecs: persistedAssignment.driveTimeSecs,
+                estimatedArrivalMs: persistedAssignment.estimatedArrivalMs,
+                estimatedDepartureMs: persistedAssignment.estimatedDepartureMs,
+                isManual: persistedAssignment.isManual,
+                rationale: persistedAssignment.rationale,
+                source: "schedule" as const,
               }
-            : null,
+            : bookingDefaultTeam
+              ? {
+                  leadflowJobId: job.id,
+                  teamId: bookingDefaultTeam.id,
+                  teamName: bookingDefaultTeam.name,
+                  routeOrder: 999,
+                  driveTimeSecs: null,
+                  estimatedArrivalMs: null,
+                  estimatedDepartureMs: null,
+                  isManual: 0,
+                  rationale: null,
+                  source: "booking_default" as const,
+                }
+              : null,
         };
       });
       return {
