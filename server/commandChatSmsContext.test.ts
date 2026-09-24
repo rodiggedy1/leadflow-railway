@@ -79,14 +79,20 @@ describe("Command Chat SMS booking context", () => {
     expect(customerProfile).toContain("etaTimestamp: cleanerPortalJobProgress.etaTimestamp");
     expect(customerProfile).toContain("jobStatus: row.jobStatus");
     expect(customerProfile).toContain("etaTimestamp: row.etaTimestamp");
+    expect(customerProfile).toContain("serviceDateTime: leadflowJobs.serviceDateTime");
+    expect(customerProfile).toContain("serviceDateTime: row.serviceDateTime");
     expect(customerProfile).not.toContain("cleaner" + "Jobs");
 
     expect(page).toContain("clientProfile.upcoming.date === businessDate");
     expect(page).toContain("teamRouteEtaLabel(clientProfile.upcoming.jobStatus, clientProfile.upcoming.etaTimestamp)");
     expect(page).toContain("clientProfile.upcoming.teamName || \"Team pending\"");
+    expect(page).toContain('className="ccc-live-sms-booking-route"');
+    expect(page).toContain("scheduleTimeLabel(clientProfile.upcoming.serviceDateTime)");
+    expect(page).not.toContain('<strong>{clientProfile.upcoming.serviceName || "Scheduled service"}</strong>');
     expect(page).not.toContain("clientProfile.upcoming.address");
     expect(page).not.toContain("clientProfile.upcoming.bedrooms");
     expect(page).toContain("refetchInterval: 60_000");
     expect(styles).toContain(".ccc-live .ccc-live-sms-booking-status");
+    expect(styles).toContain(".ccc-live-sms-booking-route");
   });
 });
