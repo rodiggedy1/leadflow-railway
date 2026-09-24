@@ -8,6 +8,7 @@ import { lazy, Suspense, useEffect } from "react";
 import LeadAssignmentWatcher from "./components/LeadAssignmentWatcher";
 import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
 import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";
+import OriginalDashboardWorkspaceNav from "./components/OriginalDashboardWorkspaceNav";
 import "./pages/review-typography.css";
 import AdminPageGuard from "./components/AdminPageGuard";
 
@@ -77,6 +78,7 @@ const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsE
 const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));
 const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
+const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -166,6 +168,10 @@ function AdminPaymentsExactReviewRoute() {
   return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AdminOperationsDashboardExactLiveRoute() {
+  return <div className="review-nav-host odr-original-host"><OriginalDashboardWorkspaceNav /><OperationsDashboardExactLive /></div>;
+}
+
 function AdminTeamExactLiveRoute() {
   return <AdminPageGuard pageId="agents"><ReviewWorkspaceFrame navActivePath="/review/team"><TeamExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
@@ -186,6 +192,7 @@ function Router() {
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
+        <Route path={"/admin/dashboard"} component={AdminOperationsDashboardExactLiveRoute} />
         <Route path={"/admin/leads"} component={AdminLeadsCRMExactLiveRoute} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
@@ -255,10 +262,11 @@ function Router() {
 
 function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
+  const isOperationsDashboardWorkspace = location === "/admin/dashboard";
   const isTeamWorkspace = location === "/admin/team";
   const isHiringWorkspace = location === "/admin/hiring";
   const isSettingsWorkspace = location === "/admin/settings" || location === "/admin/widget-config";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace || isSettingsWorkspace;
+  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isOperationsDashboardWorkspace || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace || isSettingsWorkspace;
 }
 
 function PollingInstrumentation() {

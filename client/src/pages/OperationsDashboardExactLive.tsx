@@ -1,0 +1,268 @@
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bell,
+  Briefcase,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  Clock,
+  DollarSign,
+  Info,
+  List,
+  Map,
+  MapPin,
+  Megaphone,
+  MessageSquare,
+  Minus,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Sparkles,
+  Sun,
+  Users,
+  UserPlus,
+  Wrench,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import "./operations-dashboard-exact-live.css";
+import "./operations-dashboard-exact-live-cohesion.css";
+
+type MapView = "map" | "list" | "timeline";
+type Tone = "green" | "amber" | "blue" | "slate";
+type DashboardJob = {
+  id: number;
+  customerName: string;
+  address: string | null;
+  serviceName: string | null;
+  serviceDateTime: string | null;
+  bookingStatus: string;
+  jobStatus: string;
+  teamName: string | null;
+  jobTotalCents: number;
+  customerRating: number | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+type Overview = {
+  date: string;
+  jobs: DashboardJob[];
+  metrics: {
+    jobsToday: number;
+    completedJobs: number;
+    remainingJobs: number;
+    scheduledValueCents: number;
+    activeTeams: number;
+    routeExceptions: number;
+    reviewQueue: number;
+    newLeads: number;
+    unrespondedLeads: number;
+  };
+  activities: Array<{ id: number; eventType: string; title: string; body: string | null; createdAt: Date; readAt: Date | null }>;
+  sources: Array<{ source: string; count: number }>;
+  revenueTrend: Array<{ date: string; totalCents: number }>;
+  serviceMix: Array<{ label: string; count: number }>;
+};
+type CustomerResult = { phone: string; name: string; address: string | null };
+
+const ASSET_ROOT = "https://leadflowqf-caerhauj.manus.space/manus-storage";
+const TEAM_PORTRAIT = `${ASSET_ROOT}/dashboard-team-portrait_ee89ad11.jpg`;
+const HOME_IMAGES = [
+  `${ASSET_ROOT}/dashboard-home-living_34007149.jpg`,
+  `${ASSET_ROOT}/dashboard-home-dining_02439dcf.jpg`,
+  `${ASSET_ROOT}/dashboard-growth-home_e675ad8d.jpg`,
+] as const;
+const ET = "America/New_York";
+const SOURCE_COLORS = ["#38a8ff", "#60b8ff", "#8ac8ff", "#78ddc4", "#a286ff", "#ffab62"];
+const SERVICE_COLORS = ["#1ed69a", "#3b9bff", "#ffad45", "#8b6cff", "#ff6868", "#758391"];
+
+function easternToday() { return new Date().toLocaleDateString("en-CA", { timeZone: ET }); }
+function formatMoney(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100); }
+function formatTime(value: string | null) {
+  if (!value) return "Time pending";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Time pending" : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: ET });
+}
+function formatLongDate(value: string) { return new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: ET }); }
+function timeAgo(value: Date) {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return `${Math.floor(hours / 24)} day${Math.floor(hours / 24) === 1 ? "" : "s"} ago`;
+}
+function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "MI"; }
+function statusTone(status: string): Tone {
+  if (status === "completed") return "green";
+  if (status === "running_late" || status === "issue_at_property" || status === "no_show") return "amber";
+  if (["on_the_way", "arrived", "in_progress", "wrapping_up", "finishing_up"].includes(status)) return "blue";
+  return "slate";
+}
+function statusLabel(status: string) {
+  const labels: Record<string, string> = { on_the_way: "On route", arrived: "Arrived", in_progress: "In progress", running_late: "Running late", wrapping_up: "Finishing up", finishing_up: "Finishing up", completed: "Completed", issue_at_property: "Issue", no_show: "No show", assigned: "Upcoming" };
+  return labels[status] ?? "Upcoming";
+}
+function activityTone(eventType: string) {
+  if (eventType === "booking") return "coral";
+  if (eventType === "new_lead" || eventType === "lead_reply") return "blue";
+  if (eventType === "review_send") return "gold";
+  return "green";
+}
+function activityIcon(eventType: string): LucideIcon {
+  if (eventType === "booking") return CalendarDays;
+  if (eventType === "new_lead" || eventType === "lead_reply") return MessageSquare;
+  if (eventType === "review_send") return HeartStatusIcon;
+  return CheckCircle2;
+}
+function activityHref(eventType: string) {
+  if (eventType === "new_lead" || eventType === "lead_reply" || eventType === "booking") return "/admin/leads";
+  if (eventType === "review_send") return "/admin/quality";
+  return "/admin/command-chat";
+}
+function buildChartPath(points: Array<{ totalCents: number }>) {
+  const max = Math.max(1, ...points.map(point => point.totalCents));
+  const width = 460;
+  const height = 170;
+  const baseline = 158;
+  const coordinates = points.map((point, index) => {
+    const x = points.length <= 1 ? width / 2 : (index / (points.length - 1)) * width;
+    const y = baseline - Math.round((point.totalCents / max) * 146);
+    return [x, y] as const;
+  });
+  const line = coordinates.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ") || `M0 ${baseline} L${width} ${baseline}`;
+  return { line, area: `${line} L${width} 170 L0 170Z`, max };
+}
+function mapPosition(job: DashboardJob, jobs: DashboardJob[]) {
+  const mappable = jobs.filter(item => item.latitude !== null && item.longitude !== null);
+  if (!mappable.length || job.latitude === null || job.longitude === null) return { left: "50%", top: "50%" };
+  const lats = mappable.map(item => item.latitude!);
+  const lngs = mappable.map(item => item.longitude!);
+  const minLat = Math.min(...lats); const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs); const maxLng = Math.max(...lngs);
+  const x = minLng === maxLng ? .5 : (job.longitude - minLng) / (maxLng - minLng);
+  const y = minLat === maxLat ? .5 : 1 - ((job.latitude - minLat) / (maxLat - minLat));
+  return { left: `${16 + x * 68}%`, top: `${18 + y * 62}%` };
+}
+function donutGradient(items: Array<{ count: number; color: string }>) {
+  const total = items.reduce((sum, item) => sum + item.count, 0);
+  if (!total) return "conic-gradient(#758391 0 100%)";
+  let cursor = 0;
+  const stops = items.map(item => { const next = cursor + (item.count / total) * 100; const result = `${item.color} ${cursor}% ${next}%`; cursor = next; return result; });
+  return `conic-gradient(${stops.join(", ")})`;
+}
+
+function MetricCard({ icon: Icon, tone, value, label, change, detail, href }: { icon: LucideIcon; tone: string; value: string; label: string; change?: string; detail: string; href?: string }) {
+  const content = <><span className="odr-metric-icon" style={{ "--accent": tone } as CSSProperties}><Icon /></span><div className="odr-metric-copy"><div className="odr-metric-head"><strong>{value}</strong>{change && <em>{change}</em>}</div><b>{label}</b><small>{detail}</small></div></>;
+  return href ? <a className="odr-metric-card" href={href}>{content}</a> : <article className="odr-metric-card">{content}</article>;
+}
+
+function LoginGate({ onSuccess }: { onSuccess: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!email.trim() || !password) return;
+    setPending(true); setError("");
+    try {
+      const response = await fetch("/api/agents/login", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ email: email.trim(), password }) });
+      const result = await response.json();
+      if (!response.ok || !result.success) { setError(result.error || "Login failed. Please try again."); return; }
+      onSuccess();
+    } catch { setError("Login failed. Please try again."); } finally { setPending(false); }
+  };
+  return <main className="odr-login"><form onSubmit={submit}><span><Sparkles /></span><strong>Operations Dashboard</strong><small>Sign in to view the live operation.</small><label>Email<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required /></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required /></label>{error && <p>{error}</p>}<button type="submit" disabled={pending || !email || !password}>{pending ? "Signing in…" : "Sign in"}</button></form></main>;
+}
+
+export default function OperationsDashboardExactLive() {
+  const [view, setView] = useState<MapView>("map");
+  const [activeTeam, setActiveTeam] = useState(0);
+  const [activeSchedule, setActiveSchedule] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [activityOpen, setActivityOpen] = useState(false);
+  const { data: agent, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, { staleTime: 5 * 60_000, retry: false });
+  const { data, isLoading, isFetching, error } = trpc.leadflowJobs.dashboardOverview.useQuery({ date: easternToday() }, { enabled: Boolean(agent), staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false, retry: false });
+  const { data: hiringStats } = trpc.hiring.getPipelineStats.useQuery(undefined, { enabled: Boolean(agent), staleTime: 55_000, refetchInterval: 60_000, retry: false });
+  const { data: searchResults } = trpc.opsChat.searchCustomers.useQuery({ query: search.trim() }, { enabled: Boolean(agent) && search.trim().length >= 2, staleTime: 30_000, retry: false });
+  const overview = data as Overview | undefined;
+  const customerSearchResults = (searchResults as { customers?: CustomerResult[] } | undefined)?.customers ?? [];
+  const metrics = overview?.metrics;
+  const schedule = useMemo(() => (overview?.jobs ?? []).slice(0, 5), [overview?.jobs]);
+  const mapJobs = useMemo(() => (overview?.jobs ?? []).filter(job => job.latitude !== null && job.longitude !== null && ["on_the_way", "arrived", "in_progress", "running_late", "wrapping_up"].includes(job.jobStatus)).slice(0, 4), [overview?.jobs]);
+  const active = mapJobs[activeTeam] ?? null;
+  const chart = useMemo(() => buildChartPath(overview?.revenueTrend ?? []), [overview?.revenueTrend]);
+  const sourceRows = useMemo(() => (overview?.sources ?? []).slice(0, 6).map((item, index) => ({ ...item, color: SOURCE_COLORS[index % SOURCE_COLORS.length] })), [overview?.sources]);
+  const maxSource = Math.max(1, ...sourceRows.map(item => item.count));
+  const serviceMix = useMemo(() => (overview?.serviceMix ?? []).map((item, index) => ({ ...item, color: SERVICE_COLORS[index % SERVICE_COLORS.length] })), [overview?.serviceMix]);
+  const serviceTotal = serviceMix.reduce((sum, item) => sum + item.count, 0);
+  const unreadActivity = Boolean(overview?.activities.some(item => item.readAt === null));
+  const applicantCount = hiringStats?.candidatesInMotion ?? 0;
+
+  if (agentLoading) return <main className="odr-loading">Loading Operations Dashboard…</main>;
+  if (agentError || !agent) return <LoginGate onSuccess={() => void refetchAgent()} />;
+
+  return <main className="odr-dashboard" data-live-operations-dashboard="true">
+    <header className="odr-utility-bar">
+      <label className="odr-search"><Search /><input aria-label="Search customers" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search anything..." /><kbd>⌘ K</kbd>{search.trim().length >= 2 && <div className="odr-search-results">{customerSearchResults.length ? customerSearchResults.slice(0, 6).map(result => <a key={`${result.phone}-${result.name}`} href={`/admin/customer-profile?phone=${encodeURIComponent(result.phone)}&name=${encodeURIComponent(result.name)}`}><strong>{result.name || result.phone}</strong><small>{result.address || result.phone}</small></a>) : <p>No matching customers</p>}</div>}</label>
+      <div className="odr-utilities"><button type="button" aria-label="Dashboard appearance"><Sun /></button><button type="button" className="odr-location"><MapPin /> Washington, DC <ChevronDown /></button><button type="button" className="odr-notifications" aria-label="Recent activity" onClick={() => setActivityOpen(open => !open)}><Bell />{unreadActivity && <i />}</button><button type="button" className="odr-avatar" aria-label={`${agent.name} profile`}>{initials(agent.name)}</button></div>
+      {activityOpen && <aside className="odr-live-activity-popover"><header><strong>Recent Activity</strong><button type="button" aria-label="Close recent activity" onClick={() => setActivityOpen(false)}>×</button></header>{(overview?.activities ?? []).length ? overview!.activities.map(item => <a href={activityHref(item.eventType)} key={item.id}><b>{item.title}</b><small>{item.body || "Recorded activity"}</small><time>{timeAgo(item.createdAt)}</time></a>) : <p>No activity has been recorded yet.</p>}</aside>}
+    </header>
+
+    <div className="odr-content">
+      <section className="odr-greeting"><div><small>{formatLongDate(overview?.date ?? easternToday())} · East Coast{isFetching ? " · Updating…" : ""}</small><h1>Good morning, {agent.name.split(" ")[0] || "Operations"} <span>👋</span></h1><p>Here’s your business at a glance. Everything looks good.</p></div><aside className="odr-quote"><Sparkles /><p>“Clear priorities make a calm service day.”</p><small>— LeadFlow Operations</small></aside></section>
+
+      <section className="odr-kpis" aria-label="Live daily metrics">
+        <MetricCard icon={CalendarDays} tone="#3b9bff" value={metrics ? String(metrics.jobsToday) : "—"} label="Jobs Today" detail={metrics ? `${metrics.completedJobs} completed · ${metrics.remainingJobs} remaining` : "Loading live schedule"} href="/admin/day-board" />
+        <MetricCard icon={DollarSign} tone="#1ed69a" value={metrics ? formatMoney(metrics.scheduledValueCents) : "—"} label="Revenue Today" detail="Scheduled job value" href="/admin/schedule" />
+        <MetricCard icon={Users} tone="#4aa8ff" value={metrics ? String(metrics.activeTeams) : "—"} label="Teams Active" detail="Working teams in the field" href="/admin/day-board" />
+        <MetricCard icon={MessageSquare} tone="#ffb449" value={metrics ? String(metrics.newLeads) : "—"} label="New Leads" detail={metrics ? `${metrics.unrespondedLeads} unresponded` : "Loading lead activity"} href="/admin/leads" />
+        <MetricCard icon={HeartStatusIcon} tone="#ff7c88" value={metrics ? String(metrics.reviewQueue) : "—"} label="Review Queue" detail="Completed jobs without a rating" href="/admin/quality" />
+      </section>
+
+      {error ? <section className="odr-live-error"><Info /><div><b>Dashboard data could not load.</b><span>{error.message}</span></div></section> : <>
+        <section className="odr-primary-grid" aria-label="Live field operations overview">
+          <article className="odr-card odr-jobs-card">
+            <header className="odr-card-head odr-jobs-head"><div><span className="odr-section-kicker">Field view</span><h2>Jobs in Progress</h2><p>Live view of your teams in the field</p><div className="odr-field-meta"><span><i className="green" />{metrics?.activeTeams ?? "—"} teams in field</span><span><i className="amber" />{metrics?.routeExceptions ?? "—"} route exceptions</span></div></div><div className="odr-segmented" aria-label="Map display selector">{(["map", "list", "timeline"] as MapView[]).map(option => <button type="button" className={view === option ? "is-active" : ""} key={option} onClick={() => setView(option)}>{option === "map" ? <Map /> : option === "list" ? <List /> : <Clock />}{option[0].toUpperCase() + option.slice(1)}</button>)}</div></header>
+            <div className={`odr-map odr-map-${view}`}>
+              <span className="odr-map-label odr-map-label-a">Bethesda</span><span className="odr-map-label odr-map-label-b">Silver Spring</span><span className="odr-map-label odr-map-label-c">Washington</span><span className="odr-map-label odr-map-label-d">Arlington</span><span className="odr-map-label odr-map-label-e">College Park</span><span className="odr-map-label odr-map-label-f">Alexandria</span>
+              <div className="odr-map-district odr-map-district-a"/><div className="odr-map-district odr-map-district-b"/><div className="odr-map-district odr-map-district-c"/><div className="odr-map-river"/>
+              <svg className="odr-map-roads" viewBox="0 0 800 440" preserveAspectRatio="none" aria-hidden="true"><g className="odr-map-minor-roads"><path d="M-30 40 L210 240 L390 165 L600 315 L840 220"/><path d="M55 -20 L200 118 L320 90 L515 220 L708 145 L830 212"/><path d="M-30 355 L190 284 L355 365 L525 300 L830 410"/><path d="M132 468 L274 320 L433 368 L580 250 L762 300"/><path d="M-10 198 L170 150 L305 238 L498 166 L655 247 L830 130"/><path d="M80 15 L97 402"/><path d="M280 -10 L250 445"/><path d="M490 -10 L450 450"/><path d="M686 -10 L650 448"/></g><g className="odr-map-major-roads"><path d="M-20 290 C130 220 160 80 390 104 S630 238 830 36"/><path d="M70 430 C210 316 343 340 460 170 S730 154 824 250"/><path d="M260 -20 C364 130 406 196 646 438"/><path d="M-20 95 C158 72 280 245 454 264 S648 348 830 310"/></g><path className="odr-map-route odr-route-green" d="M78 310 C165 230 245 165 376 182 S485 248 542 192"/><path className="odr-map-route odr-route-purple" d="M408 419 C418 320 454 251 507 172 S620 104 737 80"/></svg>
+              {mapJobs.map((job, index) => <button type="button" className={`odr-map-marker ${statusTone(job.jobStatus)} ${activeTeam === index ? "is-active" : ""}`} key={job.id} onClick={() => setActiveTeam(index)} style={mapPosition(job, mapJobs)} aria-label={`Select ${job.teamName || job.customerName}`}><Circle /></button>)}
+              {view === "map" && active && <div className="odr-team-popover"><img className="odr-team-photo" src={TEAM_PORTRAIT} alt="Team portrait"/><div><strong>{active.teamName || active.customerName}</strong><span>{active.serviceName || "Service"}</span><small>{active.address || "Address pending"}</small><b>{statusLabel(active.jobStatus)}</b><i><em style={{ width: active.jobStatus === "completed" ? "100%" : "68%" }} /></i></div></div>}
+              {view === "list" && <div className="odr-map-alt"><h3>Active team list</h3>{mapJobs.length ? mapJobs.map(job => <p key={job.id}><span className={statusTone(job.jobStatus)} /> <b>{job.teamName || job.customerName}</b><small>{statusLabel(job.jobStatus)}</small></p>) : <p><small>No cached job locations yet.</small></p>}</div>}
+              {view === "timeline" && <div className="odr-map-alt odr-mini-timeline"><h3>Team timeline</h3>{mapJobs.length ? mapJobs.map((job, index) => <p key={job.id}><b>{job.teamName || job.customerName}</b><i style={{ width: `${38 + index * 12}%` }} /></p>) : <p><small>No active team timeline yet.</small></p>}</div>}
+              <div className="odr-map-zoom"><button type="button" aria-label="Zoom in"><Plus /></button><button type="button" aria-label="Zoom out"><Minus /></button></div>
+              <footer className="odr-map-legend"><span><i className="green" />On time <b>{metrics?.activeTeams ?? "—"}</b></span><span><i className="amber" />Running late <b>{metrics?.routeExceptions ?? "—"}</b></span><span><i className="blue" />Completed <b>{metrics?.completedJobs ?? "—"}</b></span><span><i className="slate" />Not started <b>{metrics?.remainingJobs ?? "—"}</b></span></footer>
+            </div>
+          </article>
+
+          <article className="odr-card odr-schedule-card"><header className="odr-card-head"><div><span className="odr-section-kicker">Day route</span><h2>Today’s Schedule</h2><p>{metrics ? `${metrics.jobsToday} planned stop${metrics.jobsToday === 1 ? "" : "s"} across the day` : "Loading planned stops"}</p></div><a href="/admin/schedule" className="odr-text-action">View all <ArrowRight /></a></header><div className="odr-schedule-list">{isLoading ? <p className="odr-live-empty">Loading schedule…</p> : schedule.length ? schedule.map((job, index) => <a href="/admin/day-board" className={`odr-schedule-row ${activeSchedule === String(job.id) ? "is-selected" : ""}`} aria-current={activeSchedule === String(job.id) ? "true" : undefined} key={job.id} onClick={() => setActiveSchedule(String(job.id))}><span className={`odr-schedule-rail ${statusTone(job.jobStatus)}`}><i /></span><time>{formatTime(job.serviceDateTime)}<small className={statusTone(job.jobStatus)}>{statusLabel(job.jobStatus)}</small></time><img className="odr-home-thumb" src={HOME_IMAGES[index % HOME_IMAGES.length]} alt="Service home"/><div><strong>{job.address || "Address pending"}</strong><small>{[job.serviceName, job.teamName].filter(Boolean).join(" · ") || "Service pending"}</small></div><MoreHorizontal /></a>) : <p className="odr-live-empty">No active jobs are scheduled for this date.</p>}</div><a href="/admin/schedule" className="odr-outline-button">View full schedule <ArrowRight /></a></article>
+
+          <aside className="odr-attention-rail"><article className="odr-card odr-activity"><header className="odr-card-head"><div><span className="odr-section-kicker">Signal feed</span><h2>Recent Activity</h2></div><button type="button" className="odr-text-action" onClick={() => setActivityOpen(true)}>View all <ArrowRight /></button></header>{(overview?.activities ?? []).length ? overview!.activities.map(item => <ActivityRow href={activityHref(item.eventType)} key={item.id} icon={activityIcon(item.eventType)} tone={activityTone(item.eventType)} title={item.title} time={timeAgo(item.createdAt)} detail={item.body || "Recorded activity"}/>) : !isLoading && <p className="odr-live-empty">No activity has been recorded yet.</p>}</article><article className="odr-card odr-actions"><header className="odr-card-head"><div><span className="odr-section-kicker">Exception queue</span><h2>Action Items</h2></div></header><ActionRow href="/admin/day-board" icon={AlertTriangle} tone="danger" title={`${metrics?.routeExceptions ?? "—"} route exception${metrics?.routeExceptions === 1 ? "" : "s"}`} detail="Review route exceptions" selected={activeAction === "route"} onClick={() => setActiveAction("route")}/><ActionRow href="/admin/leads" icon={Info} tone="blue" title={`${metrics?.unrespondedLeads ?? "—"} new lead${metrics?.unrespondedLeads === 1 ? "" : "s"} unresponded`} detail="Respond within one hour" selected={activeAction === "leads"} onClick={() => setActiveAction("leads")}/><ActionRow href="/admin/hiring" icon={UserPlus} tone="purple" title={`${applicantCount} candidate${applicantCount === 1 ? "" : "s"} in motion`} detail="Move candidates to screening" selected={activeAction === "applicants"} onClick={() => setActiveAction("applicants")}/></article></aside>
+        </section>
+
+        <section className="odr-analytics-grid"><article className="odr-card odr-lead-sources"><header className="odr-card-head"><h2>Lead Sources</h2><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header>{sourceRows.length ? sourceRows.map(item => <div className="odr-source-row" key={item.source}><span className="odr-source-logo" style={{ background: item.color }}>{item.source[0]?.toUpperCase() || "D"}</span><b>{item.source}</b><i><em style={{ width: `${(item.count / maxSource) * 100}%`, background: item.color }} /></i><strong>{item.count}</strong><small>Live</small></div>) : <p className="odr-live-empty">No lead-source records in this period.</p>}</article>
+          <article className="odr-card odr-revenue"><header className="odr-card-head"><div><h2>Revenue</h2><p><b>{formatMoney((overview?.revenueTrend ?? []).reduce((sum, point) => sum + point.totalCents, 0))}</b></p></div><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header><div className="odr-chart"><span>{formatMoney(chart.max)}</span><span>{formatMoney(Math.round(chart.max * .66))}</span><span>{formatMoney(Math.round(chart.max * .33))}</span><span>$0</span><svg viewBox="0 0 460 170" preserveAspectRatio="none" aria-label="Scheduled value trend"><defs><linearGradient id="odrRevenue" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#1ed69a" stopOpacity=".32"/><stop offset="1" stopColor="#1ed69a" stopOpacity="0"/></linearGradient></defs><path className="odr-chart-area" d={chart.area}/><path className="odr-chart-line" d={chart.line}/></svg><footer>{[0, 7, 14, 21, 29].map(offset => <span key={offset}>{overview?.revenueTrend[offset]?.date ?? ""}</span>)}</footer></div></article>
+          <article className="odr-card odr-service-mix"><header className="odr-card-head"><h2>Jobs by Service</h2></header><div className="odr-donut" style={{ background: donutGradient(serviceMix) }}><div><strong>{metrics?.jobsToday ?? "—"}</strong><small>Jobs</small></div></div><div className="odr-service-legend">{serviceMix.length ? serviceMix.map(item => <p key={item.label}><i style={{ background: item.color }} />{item.label}<b>{serviceTotal ? `${Math.round((item.count / serviceTotal) * 100)}%` : "0%"}</b></p>) : <p><span>No service mix yet.</span></p>}</div></article>
+          <article className="odr-card odr-growth"><div className="odr-growth-copy"><h2>Add more services.<br />Reach more customers.</h2><p>Expand into lawn care, junk removal, handyman, and AI-powered service growth.</p><button type="button">Explore new services <ArrowRight /></button><footer><Wrench /><Briefcase /><Megaphone /><MoreHorizontal /></footer></div><img src={`${ASSET_ROOT}/dashboard-growth-home_e675ad8d.jpg`} alt="Warm modern home interior" /></article>
+        </section>
+      </>}
+    </div>
+  </main>;
+}
+
+const HeartStatusIcon = CheckCircle2;
+
+function ActivityRow({ icon: Icon, tone, title, time, detail, href }: { icon: LucideIcon; tone: string; title: string; time: string; detail: string; href: string }) {
+  return <a href={href} className="odr-activity-row"><span className={`odr-activity-icon ${tone}`}><Icon /></span><div><strong>{title}</strong><small>{detail}</small></div><time>{time}</time></a>;
+}
+
+function ActionRow({ icon: Icon, tone, title, detail, selected, onClick, href }: { icon: LucideIcon; tone: string; title: string; detail: string; selected: boolean; onClick: () => void; href: string }) {
+  return <a href={href} className={`odr-action-row ${tone} ${selected ? "is-selected" : ""}`} aria-current={selected ? "true" : undefined} onClick={onClick}><span><Icon /></span><div><strong>{title}</strong><small>{detail}</small></div><ArrowRight /></a>;
+}
