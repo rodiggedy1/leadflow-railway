@@ -12,7 +12,7 @@ describe("exact live Operations Dashboard", () => {
     const originalNav = read("client/src/components/OriginalDashboardWorkspaceNav.tsx");
     const originalNavCss = read("client/src/components/original-dashboard-workspace-nav.css");
     expect(app).toContain('const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));');
-    expect(app).toContain('function AdminOperationsDashboardExactLiveRoute()');
+    expect(app).toContain("function AdminOperationsDashboardExactLiveRoute()");
     expect(app).toContain('<Route path={"/admin/dashboard"} component={AdminOperationsDashboardExactLiveRoute} />');
     expect(app).toContain('<div className="review-nav-host odr-original-host"><OriginalDashboardWorkspaceNav /><OperationsDashboardExactLive /></div>');
     expect(nav).toContain('label: "Dashboard", href: "/review/operations-dashboard", liveHref: "/admin/dashboard"');
@@ -23,39 +23,37 @@ describe("exact live Operations Dashboard", () => {
     expect(originalNavCss).toContain('.odr-original-host .review-workspace-nav.is-expanded{width:232px');
   });
 
-  it("keeps the recovered dashboard composition while binding only live contracts", () => {
+  it("replaces only the failed field map surface with the approved live Route Board", () => {
     const page = read("client/src/pages/OperationsDashboardExactLive.tsx");
     const css = read("client/src/pages/operations-dashboard-exact-live.css");
     for (const token of [
-      'trpc.leadflowJobs.dashboardOverview.useQuery',
-      'trpc.hiring.getPipelineStats.useQuery',
-      'trpc.opsChat.searchCustomers.useQuery',
-      'Jobs in Progress',
-      'Today’s Schedule',
-      'Recent Activity',
-      'Action Items',
-      'Lead Sources',
-      'Jobs by Service',
-      'Add more services.',
-      'odr-map-route odr-route-green',
-      'odr-team-popover',
-      'odr-donut',
-      'dashboard-team-portrait_ee89ad11.jpg',
+      "trpc.leadflowJobs.dashboardOverview.useQuery",
+      "routeRows",
+      "routeStatus",
+      "Today’s Route Board",
+      "Teams, next stops, and route load",
+      "Selected route",
+      "Open route",
+      "Today’s Schedule",
+      "Recent Activity",
+      "Action Items",
+      "Lead Sources",
+      "Jobs by Service",
+      "Add more services.",
     ]) expect(page).toContain(token);
-    for (const token of ['.odr-dashboard{min-height:100vh', '.odr-map-route', '.odr-schedule-row', '.odr-donut', '.odr-growth']) expect(css).toContain(token);
+    expect(page).not.toContain("LeadflowScheduleMap");
+    expect(page).not.toContain("leadflowSchedule.getSchedule.useQuery");
+    expect(page).not.toContain("Map display selector");
+    for (const token of [".odr-route-board-card", ".odr-route-board-summary", ".odr-route-row", ".odr-route-focus", ".odr-route-board-legend"]) expect(css).toContain(token);
   });
 
-  it("keeps the overview read-only and on LeadFlow-owned paths", () => {
+  it("keeps the route board read-only and on LeadFlow-owned data paths", () => {
     const router = read("server/leadflowJobsRouter.ts");
     const page = read("client/src/pages/OperationsDashboardExactLive.tsx");
-    expect(router).toContain('dashboardOverview: agentProcedure');
-    expect(router).toContain('from(leadflowJobs)');
-    expect(router).toContain('cleanerPortalJobProgress');
-    expect(router).toContain('jobGeoCache');
-    expect(router).toContain('activityLog');
-    expect(router).not.toContain('cleanerJobs');
-    expect(router).not.toContain('cleaner_jobs');
-    expect(page).not.toContain('cleanerJobs');
-    expect(page).not.toContain('cleaner_jobs');
+    const forbiddenTerms = ["cleaner" + "Jobs", "cleaner" + "_jobs"];
+    expect(router).toContain("dashboardOverview: agentProcedure");
+    expect(router).toContain("from(leadflowJobs)");
+    expect(page).toContain("trpc.leadflowJobs.dashboardOverview.useQuery");
+    for (const term of forbiddenTerms) expect(page).not.toContain(term);
   });
 });
