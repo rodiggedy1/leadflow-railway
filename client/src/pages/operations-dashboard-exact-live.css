@@ -29,6 +29,7 @@
 
 /* The field card uses the established Schedule map, with dashboard-specific chrome removed. */
 .odr-map:before,.odr-map:after{display:none}
+.odr-live-schedule-map{width:100%;height:100%;min-height:0}.odr-live-schedule-map>div{width:100%;height:100%}
 
 /* Reserve independent lanes for the time/status, thumbnail, and job copy in the narrow right column. */
 .odr-schedule-row{grid-template-columns:15px 86px 44px minmax(0,1fr) 14px;gap:8px}.odr-schedule-row time{min-width:0}.odr-schedule-row time small{max-width:100%}
