@@ -1,6 +1,25 @@
 import { useCallback, useRef } from "react";
 import { MapView } from "@/components/Map";
 
+const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#202125" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#202125" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#9aa0a6" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d0d2d6" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#8b9098" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1c2a25" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#77a78a" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2d2f33" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#17181b" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#b2b5ba" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3a3d43" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#25272b" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#d2d4d7" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2a2c30" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#172633" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#7394ad" }] },
+];
+
 export type LeadflowScheduleMapTeam = {
   id: number;
   name: string;
@@ -33,11 +52,15 @@ export function LeadflowScheduleMap({
   teams,
   selectedJobId,
   onJobSelect,
+  darkMode = false,
+  maxUnassignedJobs = 20,
 }: {
   jobs: LeadflowScheduleMapJob[];
   teams: LeadflowScheduleMapTeam[];
   selectedJobId: number | null;
   onJobSelect: (id: number) => void;
+  darkMode?: boolean;
+  maxUnassignedJobs?: number;
 }) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
@@ -91,7 +114,7 @@ export function LeadflowScheduleMap({
 
     const assignedJobs = Array.from(jobsByTeam.values()).flat().filter(job => Boolean(job.jobAddress));
     const unassignedJobs = jobsByTeam.size === 0
-      ? jobs.slice(0, 20).filter(job => Boolean(job.jobAddress))
+      ? jobs.slice(0, maxUnassignedJobs).filter(job => Boolean(job.jobAddress))
       : [];
     const totalGeocodes = assignedJobs.length + unassignedJobs.length;
     let completedGeocodes = 0;
@@ -205,7 +228,7 @@ export function LeadflowScheduleMap({
     if (totalGeocodes === 0 && hasPoints && mapRef.current) {
       mapRef.current.fitBounds(bounds, { top: 40, right: 60, bottom: 160, left: 60 });
     }
-  }, [jobs, onJobSelect, selectedJobId, teams]);
+  }, [jobs, maxUnassignedJobs, onJobSelect, selectedJobId, teams]);
 
   return (
     <MapView
@@ -213,6 +236,14 @@ export function LeadflowScheduleMap({
       className="w-full h-full rounded-xl overflow-hidden"
       initialCenter={{ lat: 38.9, lng: -77.03 }}
       initialZoom={11}
+      mapId={darkMode ? null : undefined}
+      mapOptions={darkMode ? {
+        styles: DARK_MAP_STYLES,
+        backgroundColor: "#17181b",
+        clickableIcons: false,
+        disableDefaultUI: true,
+        gestureHandling: "cooperative",
+      } : undefined}
     />
   );
 }

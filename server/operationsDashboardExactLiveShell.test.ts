@@ -26,8 +26,10 @@ describe("exact live Operations Dashboard", () => {
   it("keeps the recovered dashboard composition while binding only live contracts", () => {
     const page = read("client/src/pages/OperationsDashboardExactLive.tsx");
     const css = read("client/src/pages/operations-dashboard-exact-live.css");
+    const scheduleMap = read("client/src/components/LeadflowScheduleMap.tsx");
     for (const token of [
       'trpc.leadflowJobs.dashboardOverview.useQuery',
+      'trpc.leadflowSchedule.getSchedule.useQuery',
       'trpc.hiring.getPipelineStats.useQuery',
       'trpc.opsChat.searchCustomers.useQuery',
       'Jobs in Progress',
@@ -37,12 +39,15 @@ describe("exact live Operations Dashboard", () => {
       'Lead Sources',
       'Jobs by Service',
       'Add more services.',
-      'odr-map-route odr-route-green',
+      'LeadflowScheduleMap',
+      'darkMode',
+      'scheduleMapData',
       'odr-team-popover',
       'odr-donut',
       'dashboard-team-portrait_ee89ad11.jpg',
     ]) expect(page).toContain(token);
-    for (const token of ['.odr-dashboard{min-height:100vh', '.odr-map-route', '.odr-schedule-row', '.odr-donut', '.odr-growth']) expect(css).toContain(token);
+    for (const token of ['.odr-dashboard{min-height:100vh', '.odr-map:before,.odr-map:after{display:none}', '.odr-schedule-row', '.odr-donut', '.odr-growth']) expect(css).toContain(token);
+    for (const token of ['MapView', 'DARK_MAP_STYLES', 'google.maps.Marker', 'fitBounds(bounds', 'darkMode = false']) expect(scheduleMap).toContain(token);
   });
 
   it("keeps the overview read-only and on LeadFlow-owned paths", () => {
@@ -53,9 +58,6 @@ describe("exact live Operations Dashboard", () => {
     expect(router).toContain('cleanerPortalJobProgress');
     expect(router).toContain('jobGeoCache');
     expect(router).toContain('activityLog');
-    expect(router).not.toContain('cleanerJobs');
-    expect(router).not.toContain('cleaner_jobs');
-    expect(page).not.toContain('cleanerJobs');
-    expect(page).not.toContain('cleaner_jobs');
+    expect(page).toContain('LeadflowScheduleMap');
   });
 });

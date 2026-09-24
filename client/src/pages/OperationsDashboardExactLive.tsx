@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -7,7 +7,6 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
-  Circle,
   Clock,
   DollarSign,
   Info,
@@ -16,9 +15,7 @@ import {
   MapPin,
   Megaphone,
   MessageSquare,
-  Minus,
   MoreHorizontal,
-  Plus,
   Search,
   Sparkles,
   Sun,
@@ -28,6 +25,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { LeadflowScheduleMap, type LeadflowScheduleMapJob, type LeadflowScheduleMapTeam } from "@/components/LeadflowScheduleMap";
 import "./operations-dashboard-exact-live.css";
 import "./operations-dashboard-exact-live-cohesion.css";
 
@@ -142,17 +140,6 @@ function buildChartPath(points: Array<{ totalCents: number }>) {
   const line = coordinates.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ") || `M0 ${baseline} L${width} ${baseline}`;
   return { line, area: `${line} L${width} 170 L0 170Z`, max };
 }
-function mapPosition(job: DashboardJob, jobs: DashboardJob[]) {
-  const mappable = jobs.filter(item => item.latitude !== null && item.longitude !== null);
-  if (!mappable.length || job.latitude === null || job.longitude === null) return { left: "50%", top: "50%" };
-  const lats = mappable.map(item => item.latitude!);
-  const lngs = mappable.map(item => item.longitude!);
-  const minLat = Math.min(...lats); const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs); const maxLng = Math.max(...lngs);
-  const x = minLng === maxLng ? .5 : (job.longitude - minLng) / (maxLng - minLng);
-  const y = minLat === maxLat ? .5 : 1 - ((job.latitude - minLat) / (maxLat - minLat));
-  return { left: `${16 + x * 68}%`, top: `${18 + y * 62}%` };
-}
 function donutGradient(items: Array<{ count: number; color: string }>) {
   const total = items.reduce((sum, item) => sum + item.count, 0);
   if (!total) return "conic-gradient(#758391 0 100%)";
@@ -192,16 +179,37 @@ export default function OperationsDashboardExactLive() {
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activityOpen, setActivityOpen] = useState(false);
+  const dashboardDate = easternToday();
   const { data: agent, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, { staleTime: 5 * 60_000, retry: false });
-  const { data, isLoading, isFetching, error } = trpc.leadflowJobs.dashboardOverview.useQuery({ date: easternToday() }, { enabled: Boolean(agent), staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false, retry: false });
+  const { data, isLoading, isFetching, error } = trpc.leadflowJobs.dashboardOverview.useQuery({ date: dashboardDate }, { enabled: Boolean(agent), staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false, retry: false });
+  const { data: scheduleMapData } = trpc.leadflowSchedule.getSchedule.useQuery({ date: dashboardDate }, { enabled: Boolean(agent), staleTime: 30_000, refetchOnWindowFocus: false, retry: false });
   const { data: hiringStats } = trpc.hiring.getPipelineStats.useQuery(undefined, { enabled: Boolean(agent), staleTime: 55_000, refetchInterval: 60_000, retry: false });
   const { data: searchResults } = trpc.opsChat.searchCustomers.useQuery({ query: search.trim() }, { enabled: Boolean(agent) && search.trim().length >= 2, staleTime: 30_000, retry: false });
   const overview = data as Overview | undefined;
   const customerSearchResults = (searchResults as { customers?: CustomerResult[] } | undefined)?.customers ?? [];
   const metrics = overview?.metrics;
   const schedule = useMemo(() => (overview?.jobs ?? []).slice(0, 5), [overview?.jobs]);
-  const mapJobs = useMemo(() => (overview?.jobs ?? []).filter(job => job.latitude !== null && job.longitude !== null && ["on_the_way", "arrived", "in_progress", "running_late", "wrapping_up"].includes(job.jobStatus)).slice(0, 4), [overview?.jobs]);
+  const mapJobs = overview?.jobs ?? [];
+  const scheduleMapJobs = useMemo<LeadflowScheduleMapJob[]>(() => (scheduleMapData?.jobs ?? []).map(job => ({
+    id: job.id,
+    customerName: job.customerName,
+    jobAddress: job.jobAddress,
+    serviceDateTime: job.serviceDateTime,
+    assignment: job.assignment ? { teamId: job.assignment.teamId, routeOrder: job.assignment.routeOrder } : null,
+  })), [scheduleMapData?.jobs]);
+  const scheduleMapTeams = useMemo<LeadflowScheduleMapTeam[]>(() => (scheduleMapData?.teams ?? []).map(team => ({
+    id: team.id,
+    name: team.name,
+    color: team.color,
+    homeLat: team.homeLat,
+    homeLng: team.homeLng,
+    isActive: team.isActive,
+  })), [scheduleMapData?.teams]);
   const active = mapJobs[activeTeam] ?? null;
+  const selectMapJob = useCallback((jobId: number) => {
+    const nextIndex = mapJobs.findIndex(job => job.id === jobId);
+    if (nextIndex >= 0) setActiveTeam(nextIndex);
+  }, [mapJobs]);
   const chart = useMemo(() => buildChartPath(overview?.revenueTrend ?? []), [overview?.revenueTrend]);
   const sourceRows = useMemo(() => (overview?.sources ?? []).slice(0, 6).map(item => ({ ...item, color: SOURCE_COLORS[item.source] ?? SOURCE_COLORS.Other, trend: percentChange(item.count, item.previousCount) })), [overview?.sources]);
   const maxSource = Math.max(1, ...sourceRows.map(item => item.count));
@@ -238,14 +246,12 @@ export default function OperationsDashboardExactLive() {
           <article className="odr-card odr-jobs-card">
             <header className="odr-card-head odr-jobs-head"><div><span className="odr-section-kicker">Field view</span><h2>Jobs in Progress</h2><p>Live view of your teams in the field</p><div className="odr-field-meta"><span><i className="green" />{metrics?.activeTeams ?? "—"} teams in field</span><span><i className="amber" />{metrics?.routeExceptions ?? "—"} route exceptions</span></div></div><div className="odr-segmented" aria-label="Map display selector">{(["map", "list", "timeline"] as MapView[]).map(option => <button type="button" className={view === option ? "is-active" : ""} key={option} onClick={() => setView(option)}>{option === "map" ? <Map /> : option === "list" ? <List /> : <Clock />}{option[0].toUpperCase() + option.slice(1)}</button>)}</div></header>
             <div className={`odr-map odr-map-${view}`}>
-              <span className="odr-map-label odr-map-label-a">Bethesda</span><span className="odr-map-label odr-map-label-b">Silver Spring</span><span className="odr-map-label odr-map-label-c">Washington</span><span className="odr-map-label odr-map-label-d">Arlington</span><span className="odr-map-label odr-map-label-e">College Park</span><span className="odr-map-label odr-map-label-f">Alexandria</span>
-              <div className="odr-map-district odr-map-district-a"/><div className="odr-map-district odr-map-district-b"/><div className="odr-map-district odr-map-district-c"/><div className="odr-map-river"/>
-              <svg className="odr-map-roads" viewBox="0 0 800 440" preserveAspectRatio="none" aria-hidden="true"><g className="odr-map-minor-roads"><path d="M-30 40 L210 240 L390 165 L600 315 L840 220"/><path d="M55 -20 L200 118 L320 90 L515 220 L708 145 L830 212"/><path d="M-30 355 L190 284 L355 365 L525 300 L830 410"/><path d="M132 468 L274 320 L433 368 L580 250 L762 300"/><path d="M-10 198 L170 150 L305 238 L498 166 L655 247 L830 130"/><path d="M80 15 L97 402"/><path d="M280 -10 L250 445"/><path d="M490 -10 L450 450"/><path d="M686 -10 L650 448"/></g><g className="odr-map-major-roads"><path d="M-20 290 C130 220 160 80 390 104 S630 238 830 36"/><path d="M70 430 C210 316 343 340 460 170 S730 154 824 250"/><path d="M260 -20 C364 130 406 196 646 438"/><path d="M-20 95 C158 72 280 245 454 264 S648 348 830 310"/></g><path className="odr-map-route odr-route-green" d="M78 310 C165 230 245 165 376 182 S485 248 542 192"/><path className="odr-map-route odr-route-purple" d="M408 419 C418 320 454 251 507 172 S620 104 737 80"/></svg>
-              {mapJobs.map((job, index) => <button type="button" className={`odr-map-marker ${statusTone(job.jobStatus)} ${activeTeam === index ? "is-active" : ""}`} key={job.id} onClick={() => setActiveTeam(index)} style={mapPosition(job, mapJobs)} aria-label={`Select ${job.teamName || job.customerName}`}><Circle /></button>)}
+              {view === "map" && (scheduleMapData
+                ? <LeadflowScheduleMap jobs={scheduleMapJobs} teams={scheduleMapTeams} selectedJobId={active?.id ?? null} onJobSelect={selectMapJob} darkMode maxUnassignedJobs={30} />
+                : <p className="odr-live-empty">Loading route map…</p>)}
               {view === "map" && active && <div className="odr-team-popover"><img className="odr-team-photo" src={TEAM_PORTRAIT} alt="Team portrait"/><div><strong>{active.teamName || active.customerName}</strong><span>{active.serviceName || "Service"}</span><small>{active.address || "Address pending"}</small><b>{statusLabel(active.jobStatus)}</b><i><em style={{ width: active.jobStatus === "completed" ? "100%" : "68%" }} /></i></div></div>}
               {view === "list" && <div className="odr-map-alt"><h3>Active team list</h3>{mapJobs.length ? mapJobs.map(job => <p key={job.id}><span className={statusTone(job.jobStatus)} /> <b>{job.teamName || job.customerName}</b><small>{statusLabel(job.jobStatus)}</small></p>) : <p><small>No cached job locations yet.</small></p>}</div>}
               {view === "timeline" && <div className="odr-map-alt odr-mini-timeline"><h3>Team timeline</h3>{mapJobs.length ? mapJobs.map((job, index) => <p key={job.id}><b>{job.teamName || job.customerName}</b><i style={{ width: `${38 + index * 12}%` }} /></p>) : <p><small>No active team timeline yet.</small></p>}</div>}
-              <div className="odr-map-zoom"><button type="button" aria-label="Zoom in"><Plus /></button><button type="button" aria-label="Zoom out"><Minus /></button></div>
               <footer className="odr-map-legend"><span><i className="green" />On time <b>{metrics?.activeTeams ?? "—"}</b></span><span><i className="amber" />Running late <b>{metrics?.routeExceptions ?? "—"}</b></span><span><i className="blue" />Completed <b>{metrics?.completedJobs ?? "—"}</b></span><span><i className="slate" />Not started <b>{metrics?.remainingJobs ?? "—"}</b></span></footer>
             </div>
           </article>
