@@ -622,6 +622,8 @@ export const leadflowJobsRouter = router({
       jobAddress: leadflowJobs.jobAddress,
       bookingStatus: leadflowJobs.bookingStatus,
       teamName: leadflowJobs.teamName,
+      jobStatus: cleanerPortalJobProgress.jobStatus,
+      etaTimestamp: cleanerPortalJobProgress.etaTimestamp,
       jobTotalCents: leadflowJobs.jobTotalCents,
       frequency: leadflowJobs.frequency,
       bedrooms: leadflowJobs.bedrooms,
@@ -631,6 +633,7 @@ export const leadflowJobsRouter = router({
       paymentBrand: leadflowJobs.paymentBrand,
       paymentLast4: leadflowJobs.paymentLast4,
     }).from(leadflowJobs)
+      .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
       .where(sql`RIGHT(REGEXP_REPLACE(${leadflowJobs.customerPhone}, '[^0-9]', ''), 10) = ${phone}`)
       .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.id))
       .limit(50);
@@ -642,6 +645,8 @@ export const leadflowJobsRouter = router({
       address: row.jobAddress,
       status: row.bookingStatus,
       teamName: row.teamName,
+      jobStatus: row.jobStatus,
+      etaTimestamp: row.etaTimestamp,
       priceCents: row.jobTotalCents,
       frequency: row.frequency,
       bedrooms: row.bedrooms,
