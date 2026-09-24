@@ -40,3 +40,6 @@
 
 /* The expanded dashboard rail leaves less room than the browser viewport. Keep the lower analytics row inside that actual content width. */
 @media (min-width:721px) and (max-width:1600px){.odr-analytics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.odr-analytics-grid>.odr-card{height:auto;min-height:271px}}
+
+/* Keep the paired Action Items card aligned to the full Signal feed row height. */
+.odr-attention-rail{align-items:stretch}
