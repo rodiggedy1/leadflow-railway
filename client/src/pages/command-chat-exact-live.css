@@ -148,7 +148,7 @@
 /* Team route rows retain the service time while status and ETA remain compact. */
 .ccc-live-sms-team-schedule li{align-items:center}
 .ccc-live-sms-team-schedule li>strong{overflow:hidden;color:#e7f5ee;font-size:11px;white-space:nowrap;text-overflow:ellipsis}
-.ccc-live-sms-job-status{display:inline-flex;align-items:center;align-self:center;gap:4px;max-width:146px;padding:3px 6px;white-space:nowrap}
+.ccc-live .ccc-live-sms-job-status{display:inline-flex;align-items:center;justify-content:flex-end;align-self:center;gap:4px;max-width:146px;padding:0;border:0;border-radius:0;background:transparent;white-space:nowrap;text-align:right}
 .ccc-live-sms-job-status>svg{width:11px;height:11px;flex:0 0 auto;stroke-width:2.25}
 .ccc-live-sms-job-status>b{overflow:hidden;font-size:8px;text-overflow:ellipsis;white-space:nowrap}
-.ccc-live-sms-job-status>small{margin-left:1px;padding-left:4px;border-left:1px solid currentColor;color:inherit;font-size:8px;font-weight:820}
+.ccc-live-sms-job-status>small{margin-left:0;padding-left:0;border-left:0;color:inherit;font-size:8px;font-weight:820}
