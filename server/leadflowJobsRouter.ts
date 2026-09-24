@@ -7,6 +7,7 @@ import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLe
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { leadflowCallMatrixRouter } from "./leadflowCallMatrixRouter";
 import { sendSms } from "./openphone";
+import { summarizeDashboardServices, summarizeDashboardSources } from "./dashboardAnalyticsPresentation";
 
 const listInput = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -114,8 +115,12 @@ export const leadflowJobsRouter = router({
     const { start, end } = easternDayBounds(input.date);
     const trendStart = dateBefore(input.date, 29);
     const trendStartBound = easternDayBounds(trendStart).start;
+    const previousTrendStart = dateBefore(input.date, 59);
+    const previousTrendEndDate = dateBefore(input.date, 30);
+    const previousTrendStartBound = easternDayBounds(previousTrendStart).start;
+    const previousTrendEnd = new Date(trendStartBound.getTime() - 1);
     const nonLeadSourceFilter = sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound','cs-inbound-cleaner','cs_initiated','hiring_interview','review'))`;
-    const [todayRows, trendRows, activityRows, sourceRows, newLeadRows, activeSessions] = await Promise.all([
+    const [todayRows, trendRows, previousTrendRows, activityRows, sourceRows, previousSourceRows, newLeadRows, activeSessions] = await Promise.all([
       db.select({
         id: leadflowJobs.id,
         customerName: leadflowJobs.customerName,
@@ -131,11 +136,20 @@ export const leadflowJobsRouter = router({
         .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
         .where(and(eq(leadflowJobs.jobDate, input.date), ne(leadflowJobs.bookingStatus, "missing_from_launch27")))
         .orderBy(asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id)),
-      db.select({ jobDate: leadflowJobs.jobDate, jobTotalCents: leadflowJobs.jobTotalCents })
+      db.select({ jobDate: leadflowJobs.jobDate, jobTotalCents: leadflowJobs.jobTotalCents, serviceName: leadflowJobs.serviceName })
         .from(leadflowJobs)
         .where(and(
           gte(leadflowJobs.jobDate, trendStart),
           lte(leadflowJobs.jobDate, input.date),
+          ne(leadflowJobs.bookingStatus, "cancelled"),
+          ne(leadflowJobs.bookingStatus, "rescheduled"),
+          ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+        )),
+      db.select({ jobTotalCents: leadflowJobs.jobTotalCents })
+        .from(leadflowJobs)
+        .where(and(
+          gte(leadflowJobs.jobDate, previousTrendStart),
+          lte(leadflowJobs.jobDate, previousTrendEndDate),
           ne(leadflowJobs.bookingStatus, "cancelled"),
           ne(leadflowJobs.bookingStatus, "rescheduled"),
           ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
@@ -148,10 +162,24 @@ export const leadflowJobsRouter = router({
         createdAt: activityLog.createdAt,
         readAt: activityLog.readAt,
       }).from(activityLog).orderBy(desc(activityLog.createdAt)).limit(5),
-      db.select({ source: conversationSessions.utmSource, count: sql<number>`count(*)` })
+      db.select({
+        leadSource: conversationSessions.leadSource,
+        utmSource: conversationSessions.utmSource,
+        gclid: conversationSessions.gclid,
+        count: sql<number>`count(*)`,
+      })
         .from(conversationSessions)
         .where(and(gte(conversationSessions.createdAt, trendStartBound), lte(conversationSessions.createdAt, end), nonLeadSourceFilter))
-        .groupBy(conversationSessions.utmSource),
+        .groupBy(conversationSessions.leadSource, conversationSessions.utmSource, conversationSessions.gclid),
+      db.select({
+        leadSource: conversationSessions.leadSource,
+        utmSource: conversationSessions.utmSource,
+        gclid: conversationSessions.gclid,
+        count: sql<number>`count(*)`,
+      })
+        .from(conversationSessions)
+        .where(and(gte(conversationSessions.createdAt, previousTrendStartBound), lte(conversationSessions.createdAt, previousTrendEnd), nonLeadSourceFilter))
+        .groupBy(conversationSessions.leadSource, conversationSessions.utmSource, conversationSessions.gclid),
       db.select({ count: sql<number>`count(*)` })
         .from(conversationSessions)
         .where(and(gte(conversationSessions.createdAt, start), lte(conversationSessions.createdAt, end), nonLeadSourceFilter)),
@@ -209,12 +237,6 @@ export const leadflowJobsRouter = router({
     const trendDates = Array.from({ length: 30 }, (_, index) => dateBefore(input.date, 29 - index));
     const trendCents = new Map<string, number>();
     for (const row of trendRows) trendCents.set(row.jobDate, (trendCents.get(row.jobDate) ?? 0) + (row.jobTotalCents ?? 0));
-    const serviceCounts = new Map<string, number>();
-    for (const job of activeJobs) {
-      const service = job.serviceName?.trim() || "Unspecified service";
-      serviceCounts.set(service, (serviceCounts.get(service) ?? 0) + 1);
-    }
-
     const completedJobs = activeJobs.filter(job => job.jobStatus === "completed").length;
     const reviewQueue = activeJobs.filter(job => job.jobStatus === "completed" && job.customerRating === null).length;
     const activeTeamNames = new Set(activeJobs
@@ -238,9 +260,13 @@ export const leadflowJobsRouter = router({
         unrespondedLeads,
       },
       activities: activityRows,
-      sources: sourceRows.map(row => ({ source: row.source?.trim() || "Direct", count: Number(row.count) })).sort((first, second) => second.count - first.count),
+      sources: summarizeDashboardSources(
+        sourceRows.map(row => ({ ...row, count: Number(row.count) })),
+        previousSourceRows.map(row => ({ ...row, count: Number(row.count) })),
+      ),
       revenueTrend: trendDates.map(date => ({ date, totalCents: trendCents.get(date) ?? 0 })),
-      serviceMix: Array.from(serviceCounts.entries()).map(([label, count]) => ({ label, count })).sort((first, second) => second.count - first.count).slice(0, 6),
+      previousRevenueTotalCents: previousTrendRows.reduce((sum, row) => sum + (row.jobTotalCents ?? 0), 0),
+      serviceMix: summarizeDashboardServices(trendRows.map(row => ({ serviceName: row.serviceName, count: 1 }))),
     };
   }),
 
