@@ -62,8 +62,9 @@ type Overview = {
     unrespondedLeads: number;
   };
   activities: Array<{ id: number; eventType: string; title: string; body: string | null; createdAt: Date; readAt: Date | null }>;
-  sources: Array<{ source: string; count: number }>;
+  sources: Array<{ source: string; count: number; previousCount: number }>;
   revenueTrend: Array<{ date: string; totalCents: number }>;
+  previousRevenueTotalCents: number;
   serviceMix: Array<{ label: string; count: number }>;
 };
 type CustomerResult = { phone: string; name: string; address: string | null };
@@ -76,7 +77,7 @@ const HOME_IMAGES = [
   `${ASSET_ROOT}/dashboard-growth-home_e675ad8d.jpg`,
 ] as const;
 const ET = "America/New_York";
-const SOURCE_COLORS = ["#38a8ff", "#60b8ff", "#8ac8ff", "#78ddc4", "#a286ff", "#ffab62"];
+const SOURCE_COLORS: Record<string, string> = { Thumbtack: "#38a8ff", Google: "#60b8ff", Yelp: "#8ac8ff", Nextdoor: "#78ddc4", "Website / AI": "#a286ff", Angi: "#ffab62", Meta: "#60b8ff", Bark: "#758391", Phone: "#758391", Campaign: "#a286ff", Direct: "#78ddc4", Other: "#758391" };
 const SERVICE_COLORS = ["#1ed69a", "#3b9bff", "#ffad45", "#8b6cff", "#ff6868", "#758391"];
 
 function easternToday() { return new Date().toLocaleDateString("en-CA", { timeZone: ET }); }
@@ -87,6 +88,11 @@ function formatTime(value: string | null) {
   return Number.isNaN(date.getTime()) ? "Time pending" : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: ET });
 }
 function formatLongDate(value: string) { return new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: ET }); }
+function percentChange(current: number, previous: number) {
+  if (!previous) return null;
+  const change = Math.round(((current - previous) / previous) * 100);
+  return { change, label: `${change >= 0 ? "↑" : "↓"} ${Math.abs(change)}%` };
+}
 function timeAgo(value: Date) {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
   if (minutes < 1) return "just now";
@@ -197,10 +203,12 @@ export default function OperationsDashboardExactLive() {
   const mapJobs = useMemo(() => (overview?.jobs ?? []).filter(job => job.latitude !== null && job.longitude !== null && ["on_the_way", "arrived", "in_progress", "running_late", "wrapping_up"].includes(job.jobStatus)).slice(0, 4), [overview?.jobs]);
   const active = mapJobs[activeTeam] ?? null;
   const chart = useMemo(() => buildChartPath(overview?.revenueTrend ?? []), [overview?.revenueTrend]);
-  const sourceRows = useMemo(() => (overview?.sources ?? []).slice(0, 6).map((item, index) => ({ ...item, color: SOURCE_COLORS[index % SOURCE_COLORS.length] })), [overview?.sources]);
+  const sourceRows = useMemo(() => (overview?.sources ?? []).slice(0, 6).map(item => ({ ...item, color: SOURCE_COLORS[item.source] ?? SOURCE_COLORS.Other, trend: percentChange(item.count, item.previousCount) })), [overview?.sources]);
   const maxSource = Math.max(1, ...sourceRows.map(item => item.count));
   const serviceMix = useMemo(() => (overview?.serviceMix ?? []).map((item, index) => ({ ...item, color: SERVICE_COLORS[index % SERVICE_COLORS.length] })), [overview?.serviceMix]);
   const serviceTotal = serviceMix.reduce((sum, item) => sum + item.count, 0);
+  const revenueTotalCents = (overview?.revenueTrend ?? []).reduce((sum, point) => sum + point.totalCents, 0);
+  const revenueTrend = percentChange(revenueTotalCents, overview?.previousRevenueTotalCents ?? 0);
   const unreadActivity = Boolean(overview?.activities.some(item => item.readAt === null));
   const applicantCount = hiringStats?.candidatesInMotion ?? 0;
 
@@ -247,9 +255,9 @@ export default function OperationsDashboardExactLive() {
           <aside className="odr-attention-rail"><article className="odr-card odr-activity"><header className="odr-card-head"><div><span className="odr-section-kicker">Signal feed</span><h2>Recent Activity</h2></div><button type="button" className="odr-text-action" onClick={() => setActivityOpen(true)}>View all <ArrowRight /></button></header>{(overview?.activities ?? []).length ? overview!.activities.map(item => <ActivityRow href={activityHref(item.eventType)} key={item.id} icon={activityIcon(item.eventType)} tone={activityTone(item.eventType)} title={item.title} time={timeAgo(item.createdAt)} detail={item.body || "Recorded activity"}/>) : !isLoading && <p className="odr-live-empty">No activity has been recorded yet.</p>}</article><article className="odr-card odr-actions"><header className="odr-card-head"><div><span className="odr-section-kicker">Exception queue</span><h2>Action Items</h2></div></header><ActionRow href="/admin/day-board" icon={AlertTriangle} tone="danger" title={`${metrics?.routeExceptions ?? "—"} route exception${metrics?.routeExceptions === 1 ? "" : "s"}`} detail="Review route exceptions" selected={activeAction === "route"} onClick={() => setActiveAction("route")}/><ActionRow href="/admin/leads" icon={Info} tone="blue" title={`${metrics?.unrespondedLeads ?? "—"} new lead${metrics?.unrespondedLeads === 1 ? "" : "s"} unresponded`} detail="Respond within one hour" selected={activeAction === "leads"} onClick={() => setActiveAction("leads")}/><ActionRow href="/admin/hiring" icon={UserPlus} tone="purple" title={`${applicantCount} candidate${applicantCount === 1 ? "" : "s"} in motion`} detail="Move candidates to screening" selected={activeAction === "applicants"} onClick={() => setActiveAction("applicants")}/></article></aside>
         </section>
 
-        <section className="odr-analytics-grid"><article className="odr-card odr-lead-sources"><header className="odr-card-head"><h2>Lead Sources</h2><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header>{sourceRows.length ? sourceRows.map(item => <div className="odr-source-row" key={item.source}><span className="odr-source-logo" style={{ background: item.color }}>{item.source[0]?.toUpperCase() || "D"}</span><b>{item.source}</b><i><em style={{ width: `${(item.count / maxSource) * 100}%`, background: item.color }} /></i><strong>{item.count}</strong><small>Live</small></div>) : <p className="odr-live-empty">No lead-source records in this period.</p>}</article>
-          <article className="odr-card odr-revenue"><header className="odr-card-head"><div><h2>Revenue</h2><p><b>{formatMoney((overview?.revenueTrend ?? []).reduce((sum, point) => sum + point.totalCents, 0))}</b></p></div><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header><div className="odr-chart"><span>{formatMoney(chart.max)}</span><span>{formatMoney(Math.round(chart.max * .66))}</span><span>{formatMoney(Math.round(chart.max * .33))}</span><span>$0</span><svg viewBox="0 0 460 170" preserveAspectRatio="none" aria-label="Scheduled value trend"><defs><linearGradient id="odrRevenue" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#1ed69a" stopOpacity=".32"/><stop offset="1" stopColor="#1ed69a" stopOpacity="0"/></linearGradient></defs><path className="odr-chart-area" d={chart.area}/><path className="odr-chart-line" d={chart.line}/></svg><footer>{[0, 7, 14, 21, 29].map(offset => <span key={offset}>{overview?.revenueTrend[offset]?.date ?? ""}</span>)}</footer></div></article>
-          <article className="odr-card odr-service-mix"><header className="odr-card-head"><h2>Jobs by Service</h2></header><div className="odr-donut" style={{ background: donutGradient(serviceMix) }}><div><strong>{metrics?.jobsToday ?? "—"}</strong><small>Jobs</small></div></div><div className="odr-service-legend">{serviceMix.length ? serviceMix.map(item => <p key={item.label}><i style={{ background: item.color }} />{item.label}<b>{serviceTotal ? `${Math.round((item.count / serviceTotal) * 100)}%` : "0%"}</b></p>) : <p><span>No service mix yet.</span></p>}</div></article>
+        <section className="odr-analytics-grid"><article className="odr-card odr-lead-sources"><header className="odr-card-head"><h2>Lead Sources</h2><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header>{sourceRows.length ? sourceRows.map(item => <div className="odr-source-row" key={item.source}><span className="odr-source-logo" style={{ background: item.color }}>{item.source[0]?.toUpperCase() || "D"}</span><b>{item.source}</b><i><em style={{ width: `${(item.count / maxSource) * 100}%`, background: item.color }} /></i><strong>{item.count}</strong><small className={item.trend && item.trend.change < 0 ? "is-negative" : ""}>{item.trend?.label ?? "—"}</small></div>) : <p className="odr-live-empty">No lead-source records in this period.</p>}</article>
+          <article className="odr-card odr-revenue"><header className="odr-card-head"><div><h2>Revenue</h2><p><b>{formatMoney(revenueTotalCents)}</b>{revenueTrend && <em className={revenueTrend.change < 0 ? "is-negative" : ""}>{revenueTrend.label}</em>}</p></div><button type="button" className="odr-select">Last 30 days <ChevronDown /></button></header><div className="odr-chart"><span>{formatMoney(chart.max)}</span><span>{formatMoney(Math.round(chart.max * .66))}</span><span>{formatMoney(Math.round(chart.max * .33))}</span><span>$0</span><svg viewBox="0 0 460 170" preserveAspectRatio="none" aria-label="Scheduled value trend"><defs><linearGradient id="odrRevenue" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#1ed69a" stopOpacity=".32"/><stop offset="1" stopColor="#1ed69a" stopOpacity="0"/></linearGradient></defs><path className="odr-chart-area" d={chart.area}/><path className="odr-chart-line" d={chart.line}/></svg><footer>{[0, 7, 14, 21, 29].map(offset => <span key={offset}>{overview?.revenueTrend[offset]?.date ?? ""}</span>)}</footer></div></article>
+          <article className="odr-card odr-service-mix"><header className="odr-card-head"><h2>Jobs by Service</h2></header><div className="odr-donut" style={{ background: donutGradient(serviceMix) }}><div><strong>{serviceTotal || "—"}</strong><small>Jobs</small></div></div><div className="odr-service-legend">{serviceMix.length ? serviceMix.map(item => <p key={item.label}><i style={{ background: item.color }} />{item.label}<b>{serviceTotal ? `${Math.round((item.count / serviceTotal) * 100)}%` : "0%"}</b></p>) : <p><span>No service mix yet.</span></p>}</div></article>
           <article className="odr-card odr-growth"><div className="odr-growth-copy"><h2>Add more services.<br />Reach more customers.</h2><p>Expand into lawn care, junk removal, handyman, and AI-powered service growth.</p><button type="button">Explore new services <ArrowRight /></button><footer><Wrench /><Briefcase /><Megaphone /><MoreHorizontal /></footer></div><img src={`${ASSET_ROOT}/dashboard-growth-home_e675ad8d.jpg`} alt="Warm modern home interior" /></article>
         </section>
       </>}
