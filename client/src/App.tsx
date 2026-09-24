@@ -77,7 +77,6 @@ const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsE
 const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));
 const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
-const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -177,10 +176,6 @@ function AdminLeadsCRMExactLiveRoute() {
   return <AdminPageGuard pageId="leads"><ReviewWorkspaceFrame navActivePath="/review/leads-crm"><LeadsCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
-function AdminOperationsDashboardRoute() {
-  return <ReviewWorkspaceFrame navActivePath="/review/operations-dashboard"><OperationsDashboardExactLive /></ReviewWorkspaceFrame>;
-}
-
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -191,7 +186,6 @@ function Router() {
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
-        <Route path={"/admin/dashboard"} component={AdminOperationsDashboardRoute} />
         <Route path={"/admin/leads"} component={AdminLeadsCRMExactLiveRoute} />
         <Route path={"/admin/cs-inbox-2"} component={CsInbox2} />
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
