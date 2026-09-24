@@ -63,4 +63,30 @@ describe("Command Chat SMS booking context", () => {
     expect(styles).toContain("border:0;border-radius:0;background:transparent");
     expect(styles).toContain("padding-left:0;border-left:0");
   });
+
+  it("keeps customer bookings compact and shows owned progress only on today's booking", () => {
+    const page = read("client/src/pages/CommandChatExactLive.tsx");
+    const styles = read("client/src/pages/command-chat-exact-live.css");
+    const jobsRouter = read("server/leadflowJobsRouter.ts");
+    const customerProfileStart = jobsRouter.indexOf("customerProfile: opsChatProcedure");
+    const customerProfileEnd = jobsRouter.indexOf("teamIdentityByPhone: opsChatProcedure", customerProfileStart);
+    const customerProfile = jobsRouter.slice(customerProfileStart, customerProfileEnd);
+
+    expect(customerProfileStart).toBeGreaterThanOrEqual(0);
+    expect(customerProfileEnd).toBeGreaterThan(customerProfileStart);
+    expect(customerProfile).toContain("leftJoin(cleanerPortalJobProgress");
+    expect(customerProfile).toContain("jobStatus: cleanerPortalJobProgress.jobStatus");
+    expect(customerProfile).toContain("etaTimestamp: cleanerPortalJobProgress.etaTimestamp");
+    expect(customerProfile).toContain("jobStatus: row.jobStatus");
+    expect(customerProfile).toContain("etaTimestamp: row.etaTimestamp");
+    expect(customerProfile).not.toContain("cleaner" + "Jobs");
+
+    expect(page).toContain("clientProfile.upcoming.date === businessDate");
+    expect(page).toContain("teamRouteEtaLabel(clientProfile.upcoming.jobStatus, clientProfile.upcoming.etaTimestamp)");
+    expect(page).toContain("clientProfile.upcoming.teamName || \"Team pending\"");
+    expect(page).not.toContain("clientProfile.upcoming.address");
+    expect(page).not.toContain("clientProfile.upcoming.bedrooms");
+    expect(page).toContain("refetchInterval: 60_000");
+    expect(styles).toContain(".ccc-live .ccc-live-sms-booking-status");
+  });
 });
