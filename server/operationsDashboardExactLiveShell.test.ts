@@ -45,6 +45,8 @@ describe("exact live Operations Dashboard", () => {
     expect(page).not.toContain("leadflowSchedule.getSchedule.useQuery");
     expect(page).not.toContain("Map display selector");
     for (const token of [".odr-route-board-card", ".odr-route-board-summary", ".odr-route-row", ".odr-route-focus", ".odr-route-board-legend"]) expect(css).toContain(token);
+    expect(css).toContain("@media (min-width:721px) and (max-width:1600px)");
+    expect(css).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
   });
 
   it("keeps the route board read-only and on LeadFlow-owned data paths", () => {
