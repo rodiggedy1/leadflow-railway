@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  cleanerPortalJobProgress,
   jobGeoCache,
   leadflowJobs,
   scheduleAssignments,
@@ -437,12 +438,16 @@ export const leadflowScheduleRouter = router({
     .input(z.object({ date: dateInput }))
     .query(async ({ input }) => {
       const db = await requireDb();
-      const [jobs, teams] = await Promise.all([
-        db.select().from(leadflowJobs)
+      const [jobRows, teams] = await Promise.all([
+        db.select({ job: leadflowJobs, jobStatus: cleanerPortalJobProgress.jobStatus })
+          .from(leadflowJobs)
+          .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
           .where(activeJobPredicate(input.date))
           .orderBy(asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id)),
         db.select().from(schedulingTeams).orderBy(asc(schedulingTeams.name)),
       ]);
+      const jobs = jobRows.map(row => row.job);
+      const jobStatusById = new Map(jobRows.map(row => [row.job.id, row.jobStatus]));
       const [assignments, availability] = await Promise.all([
         readOwnedAssignments(db, input.date, jobs.map(job => job.id)),
         loadAvailability(db, input.date, teams),
@@ -469,6 +474,7 @@ export const leadflowScheduleRouter = router({
           bookingStatus: job.bookingStatus,
           customerNotes: job.customerNotes,
           jobTotalCents: job.jobTotalCents,
+          jobStatus: jobStatusById.get(job.id) ?? null,
           hasStripeCard: job.hasStripeCard,
           paymentBrand: job.paymentBrand,
           paymentLast4: job.paymentLast4,

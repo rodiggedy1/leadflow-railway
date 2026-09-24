@@ -241,6 +241,30 @@ function scheduleTimeLabel(value: string | number | null) {
   }).format(new Date(time));
 }
 
+function teamRouteStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "on_the_way": return "On the way";
+    case "arrived": return "Arrived";
+    case "running_late": return "Running late";
+    case "in_progress": return "In progress";
+    case "completed": return "Completed";
+    case "issue_at_property": return "Issue at property";
+    default: return "Scheduled";
+  }
+}
+
+function teamRouteStatusClass(status: string | null | undefined) {
+  switch (status) {
+    case "on_the_way": return "is-on-the-way";
+    case "arrived": return "is-arrived";
+    case "running_late": return "is-running-late";
+    case "in_progress": return "is-in-progress";
+    case "completed": return "is-completed";
+    case "issue_at_property": return "is-issue";
+    default: return "is-scheduled";
+  }
+}
+
 function mediaUrls(value: string | null) {
   if (!value) return [];
   try {
@@ -1524,7 +1548,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   );
   const { data: teamSchedule } = trpc.leadflowSchedule.getSchedule.useQuery(
     { date: businessDate },
-    { enabled: isTeamConversation && teamIdentity?.launch27TeamId != null, staleTime: 30_000, refetchOnWindowFocus: false },
+    { enabled: isTeamConversation && teamIdentity?.launch27TeamId != null, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 60_000 },
   );
   const name = smsConversationName(conversation);
   const activeScheduleTeam = useMemo(() => {
@@ -1694,7 +1718,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
     <header><div>{isTeamConversation ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{isTeamConversation ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
     {!isTeamConversation && clientProfile?.upcoming && <section className="ccc-live-sms-booking-context" aria-label="Client's next booking"><div><CalendarClock /><span><b>Next booking</b><small>{bookingDateLabel(clientProfile.upcoming.date, businessDate)}</small></span></div><strong>{clientProfile.upcoming.serviceName || "Scheduled service"}</strong><small>{clientProfile.upcoming.teamName ? `${clientProfile.upcoming.teamName} · ` : ""}{clientProfile.upcoming.address || "Address pending"}</small></section>}
-    {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => <li key={job.id}><time>{scheduleTimeLabel(job.assignment?.estimatedArrivalMs ?? job.serviceDateTime)}</time><span><strong>{job.customerName || "Customer"}</strong><small>{job.serviceType || job.jobAddress || "Scheduled service"}</small></span></li>)}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
+    {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => <li key={job.id}><time>{scheduleTimeLabel(job.assignment?.estimatedArrivalMs ?? job.serviceDateTime)}</time><span><strong>{job.customerName || "Customer"}</strong><small>{job.serviceType || job.jobAddress || "Scheduled service"}</small></span><b className={`ccc-live-sms-job-status ${teamRouteStatusClass(job.jobStatus)}`}>{teamRouteStatusLabel(job.jobStatus)}</b></li>)}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
     <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
       const outgoing = message.role !== "user";
