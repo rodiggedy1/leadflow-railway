@@ -230,6 +230,7 @@ function teamProjection(team: TeamRow, availability?: Availability) {
   return {
     id: team.id,
     name: team.name,
+    launch27TeamId: team.launch27TeamId,
     homeAddress: team.homeAddress,
     homeLat: team.homeLat,
     homeLng: team.homeLng,

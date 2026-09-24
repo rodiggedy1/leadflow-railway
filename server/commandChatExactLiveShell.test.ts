@@ -302,7 +302,7 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('<IssueEngineOverlay open={issueEngineOpen}');
     expect(page).toContain('function SmsInboxRow({ conversation, onOpen }');
     expect(page).toContain('const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";');
-    expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, onClose }');
+    expect(page).toContain('function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, onClose }');
     expect(page).toContain('getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)');
     expect(page).toContain('const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);');
     expect(page).toContain('const messageListRef = useRef<HTMLDivElement>(null);');
