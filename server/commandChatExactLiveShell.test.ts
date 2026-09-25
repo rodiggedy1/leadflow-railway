@@ -247,7 +247,7 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const [leftRailTab, setLeftRailTab] = useState<"sms" | "email">("sms");');
     expect(page).toContain('trpc.opsChat.listEmailInboxThreads.useQuery');
     expect(page).toContain('function EmailInboxRow({ thread, onOpen }');
-    expect(page).toContain('function EmailConversationDrawer({ threadId, onClose, onNotice }');
+    expect(page).toContain('function EmailConversationDrawer({ threadId, onClose }');
     expect(page).toContain('trpc.gmail.getThread.useQuery');
     expect(page).toContain('trpc.opsChat.getEmailDraftByThreadId.useQuery');
     expect(page).toContain('trpc.gmail.sendReply.useMutation');
@@ -256,6 +256,16 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('>Email</button><button type="button">Starred</button>');
     expect(page).toContain('selectedEmailThreadId && <EmailConversationDrawer');
     expect(page).not.toContain('>Needs Reply</button>');
+    const emailDrawer = page.slice(page.indexOf('function EmailConversationDrawer'), page.indexOf('function SmsConversationDrawer'));
+    expect(emailDrawer).toContain('const [confirmedOutgoing, setConfirmedOutgoing] = useState<EmailInboxMessage[]>([]);');
+    expect(emailDrawer).toContain('const [sendFeedback, setSendFeedback]');
+    expect(emailDrawer).toContain('setSendFeedback({ tone: "success", message: "Email sent." });');
+    expect(emailDrawer).toContain('onError: (error) => setSendFeedback({ tone: "error"');
+    expect(emailDrawer).toContain('role="status" aria-live="polite"');
+    expect(emailDrawer).toContain('customerPortraitFor(name)');
+    expect(emailDrawer).toContain('message.sentBy?.photoUrl ?? null');
+    expect(emailDrawer).toContain('emailThreadLoading || sendEmailReply.isPending');
+    expect(styles).toContain('.ccc-live-email-send-feedback');
     expect(page).toContain('placeholder={leftRailTab === "email" ? "Search email threads..." : "Search conversations..."}');
     expect(page).toContain('href={leftRailTab === "email" ? "/admin/emails" : "/admin/sms"}');
     expect(page).not.toContain('className="ccc-command-navigation"');

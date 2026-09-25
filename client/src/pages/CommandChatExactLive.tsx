@@ -156,6 +156,7 @@ type EmailInboxMessage = {
   bodyText: string;
   date: number;
   sentBy?: { name: string; photoUrl: string | null } | null;
+  isLocal?: boolean;
 };
 
 type EmailThreadDetail = {
@@ -1128,7 +1129,7 @@ export default function CommandChatExactLive() {
         </div>
       </section>
       {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} onClose={() => setSelectedSmsConversation(null)} />}
-      {selectedEmailThreadId && <EmailConversationDrawer threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} onNotice={showNotice} />}
+      {selectedEmailThreadId && <EmailConversationDrawer threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
@@ -1329,7 +1330,7 @@ function EmailInboxRow({ thread, onOpen }: { thread: EmailInboxThread; onOpen: (
   const time = timestamp && Date.now() - timestamp < 86_400_000 ? formatTime(timestamp) : timestamp ? dateLabel(timestamp) : "";
   const preview = [emailThreadSubject(thread.subject), thread.snippet?.trim()].filter(Boolean).join(" · ") || "No email preview available.";
   return <button type="button" className="ccc-live-sms-row ccc-live-email-row" onClick={onOpen}>
-    <span className="ccc-live-email-avatar"><Mail /></span>
+    <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />
     <span className="ccc-live-sms-row-copy"><strong>{name}</strong><small>{preview}</small></span>
     <span className="ccc-live-sms-row-meta"><time>{time}</time><i className={thread.isUnread ? "is-unread" : ""} /></span>
   </button>;
@@ -1644,10 +1645,12 @@ const CommandComposer = memo(function CommandComposer({
   </div>;
 });
 
-function EmailConversationDrawer({ threadId, onClose, onNotice }: { threadId: string; onClose: () => void; onNotice: (message: string) => void }) {
+function EmailConversationDrawer({ threadId, onClose }: { threadId: string; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [draft, setDraft] = useState("");
   const [draftDismissed, setDraftDismissed] = useState(false);
+  const [confirmedOutgoing, setConfirmedOutgoing] = useState<EmailInboxMessage[]>([]);
+  const [sendFeedback, setSendFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const initialBottomScrollDone = useRef(false);
   const scrollAfterSendRef = useRef(false);
@@ -1660,24 +1663,44 @@ function EmailConversationDrawer({ threadId, onClose, onNotice }: { threadId: st
     { staleTime: 20_000, refetchOnWindowFocus: true, refetchInterval: 15_000 },
   );
   const detail = emailThread as EmailThreadDetail | undefined;
-  const messages = detail?.messages ?? [];
+  const persistedMessages = detail?.messages ?? [];
+  const messages = useMemo(() => {
+    const notYetRefetched = confirmedOutgoing.filter((outgoing) => !persistedMessages.some((message) => message.id === outgoing.id));
+    return [...persistedMessages, ...notYetRefetched].sort((left, right) => left.date - right.date);
+  }, [confirmedOutgoing, persistedMessages]);
   const inboxEmail = detail?.inboxEmail?.toLowerCase() ?? "";
   const name = emailThreadName({ senderName: detail?.from ?? null, senderEmail: detail?.fromEmail ?? null });
   const subject = emailThreadSubject(detail?.subject);
   const replyTo = emailReplyAddress(detail);
   const sendEmailReply = trpc.gmail.sendReply.useMutation({
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
+      const sentAt = Date.now();
       setDraft("");
+      setSendFeedback({ tone: "success", message: "Email sent." });
+      setConfirmedOutgoing((current) => [...current, {
+        id: result.messageId,
+        from: "You",
+        fromEmail: inboxEmail,
+        replyToEmail: null,
+        subject: variables.subject,
+        snippet: "",
+        bodyText: variables.bodyHtml.replace(/<br\s*\/?\s*>/gi, "\n"),
+        date: sentAt,
+        sentBy: null,
+        isLocal: true,
+      }]);
       scrollAfterSendRef.current = true;
       void utils.opsChat.listEmailInboxThreads.invalidate();
       void utils.gmail.getThread.invalidate({ threadId });
     },
-    onError: (error) => onNotice(error.message || "Email could not be sent. Please try again."),
+    onError: (error) => setSendFeedback({ tone: "error", message: error.message || "Email could not be sent. Please try again." }),
   });
 
   useEffect(() => {
     setDraft("");
     setDraftDismissed(false);
+    setConfirmedOutgoing([]);
+    setSendFeedback(null);
     initialBottomScrollDone.current = false;
     scrollAfterSendRef.current = false;
   }, [threadId]);
@@ -1698,33 +1721,36 @@ function EmailConversationDrawer({ threadId, onClose, onNotice }: { threadId: st
     if (!suggestedReply) return;
     setDraft(suggestedReply);
     setDraftDismissed(true);
+    setSendFeedback(null);
   };
 
   const submit = () => {
     const body = draft.trim();
-    if (!body) return;
+    if (!body || emailThreadLoading || sendEmailReply.isPending) return;
     if (!replyTo) {
-      onNotice("No reply address is available for this email thread.");
+      setSendFeedback({ tone: "error", message: "No reply address is available for this email thread." });
       return;
     }
+    setSendFeedback(null);
     sendEmailReply.mutate({ threadId, to: replyTo, subject, bodyHtml: body.split("\n").join("<br>") });
   };
 
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer ccc-live-email-drawer" onMouseDown={(event) => event.stopPropagation()}>
-    <header><div><span className="ccc-live-email-avatar"><Mail /></span><span><strong>{name}</strong><small>{detail?.fromEmail || "Email conversation"}</small></span></div><button type="button" aria-label="Close email conversation" onClick={onClose}><X /></button></header>
+    <header><div><img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} /><span><strong>{name}</strong><small>{detail?.fromEmail || "Email conversation"}</small></span></div><button type="button" aria-label="Close email conversation" onClick={onClose}><X /></button></header>
     <div className="ccc-live-email-subject"><Mail /><span><b>Email</b><strong>{subject}</strong></span></div>
     <div className="ccc-live-sms-messages" ref={messageListRef}>{emailThreadLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading email history…</div> : messages.map((message) => {
-      const outgoing = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
+      const outgoing = Boolean(message.isLocal) || (Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail);
       const sender = outgoing ? (message.sentBy?.name || "You") : (message.from || name);
-      return <article className={`ccc-live-sms-message ccc-live-email-message ${outgoing ? "is-outgoing" : ""}`} key={message.id}><small>{sender}{message.date ? ` · ${formatTime(message.date)}` : ""}</small><p>{emailMessageText(message)}</p></article>;
+      const senderPhotoUrl = message.sentBy?.photoUrl ?? null;
+      return <article className={`ccc-live-sms-message ccc-live-email-message ${outgoing ? "is-outgoing" : ""}`} key={message.id}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={sender} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{sender}</span> : sender}{message.date ? ` · ${formatTime(message.date)}` : ""}</small><p>{emailMessageText(message)}</p></article>;
     })}{!emailThreadLoading && detail && messages.length === 0 && <div className="ccc-live-empty"><Mail />No messages in this email thread.</div>}</div>
     <footer>
+      {sendFeedback && <div className={`ccc-live-email-send-feedback is-${sendFeedback.tone}`} role="status" aria-live="polite">{sendFeedback.tone === "success" ? <CircleCheck /> : <AlertTriangle />}<span>{sendFeedback.message}</span></div>}
       {!draftDismissed && emailAiDraft?.generatedDraft && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />Madison draft</span><small>Review before sending</small></header><p>{emailAiDraft.generatedDraft}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertEmailDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setDraftDismissed(true)}>Dismiss</button></div></article>}
-      <div className="ccc-live-sms-composer"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); } }} placeholder="Write an email reply…" /><button type="button" disabled={!draft.trim() || sendEmailReply.isPending} aria-label="Send email reply" onClick={submit}>{sendEmailReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+      <div className="ccc-live-sms-composer"><textarea value={draft} onChange={(event) => { setDraft(event.target.value); if (sendFeedback?.tone === "error") setSendFeedback(null); }} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); } }} placeholder="Write an email reply…" /><button type="button" disabled={!draft.trim() || emailThreadLoading || sendEmailReply.isPending} aria-label="Send email reply" onClick={submit}>{sendEmailReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
   </aside></div>;
 }
-
 function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; onClose: () => void }) {
   const utils = trpc.useUtils();
   const isTeamConversation = conversation.personType === "team";
