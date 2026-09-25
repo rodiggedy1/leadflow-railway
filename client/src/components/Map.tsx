@@ -126,10 +126,15 @@ function loadMapScript() {
   return mapScriptPromise;
 }
 
+type MapViewOptions = Omit<google.maps.MapOptions, "center" | "zoom" | "mapId"> & {
+  mapId?: string | null;
+};
+
 interface MapViewProps {
   className?: string;
   initialCenter?: google.maps.LatLngLiteral;
   initialZoom?: number;
+  mapOptions?: MapViewOptions;
   onMapReady?: (map: google.maps.Map) => void;
 }
 
@@ -137,6 +142,7 @@ export function MapView({
   className,
   initialCenter = { lat: 37.7749, lng: -122.4194 },
   initialZoom = 12,
+  mapOptions,
   onMapReady,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -148,6 +154,7 @@ export function MapView({
       console.error("Map container not found");
       return;
     }
+    const { mapId = "DEMO_MAP_ID", ...additionalMapOptions } = mapOptions ?? {};
     map.current = new window.google.maps.Map(mapContainer.current, {
       zoom: initialZoom,
       center: initialCenter,
@@ -155,7 +162,8 @@ export function MapView({
       fullscreenControl: true,
       zoomControl: true,
       streetViewControl: true,
-      mapId: "DEMO_MAP_ID",
+      ...additionalMapOptions,
+      ...(mapId ? { mapId } : {}),
     });
     if (onMapReady) {
       onMapReady(map.current);
