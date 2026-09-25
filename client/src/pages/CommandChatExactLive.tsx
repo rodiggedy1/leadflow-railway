@@ -1616,7 +1616,7 @@ const CommandComposer = memo(function CommandComposer({
 function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; onClose: () => void }) {
   return <div className="ccc-live-email-workspace-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="ccc-live-email-workspace-modal" role="dialog" aria-modal="true" aria-label="Email conversation" onMouseDown={(event) => event.stopPropagation()}>
-      <EmailsExactLive initialThreadId={threadId} onCloseDetail={onClose} />
+      <EmailsExactLive initialThreadId={threadId} onCloseDetail={onClose} detailOnly />
     </section>
   </div>;
 }

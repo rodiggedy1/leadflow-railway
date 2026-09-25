@@ -9,10 +9,12 @@ describe("EmailsExactLive embedded detail", () => {
     expect(source).toContain('type EmailsExactLiveProps = {');
     expect(source).toContain('initialThreadId?: string | null;');
     expect(source).toContain('onCloseDetail?: () => void;');
-    expect(source).toContain('export default function EmailsExactLive({ initialThreadId = null, onCloseDetail }: EmailsExactLiveProps = {})');
+    expect(source).toContain('detailOnly?: boolean;');
+    expect(source).toContain('export default function EmailsExactLive({ initialThreadId = null, onCloseDetail, detailOnly = false }: EmailsExactLiveProps = {})');
     expect(source).toContain('const [selectedThreadId, setSelectedThreadId] = useState<string | null>(initialThreadId);');
     expect(source).toContain('if (onCloseDetail) onCloseDetail();');
-    expect(source).toContain('<EmailDetailWorkspace groups={groups} selectedId={selectedThreadId}');
+    expect(source).toContain('if (detailOnly) return <section className="email-detail-main-only"');
+    expect(source).toContain('<DetailMain detail={detail} detailUnavailable={detailUnavailable}');
     expect(source).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
   });
 });

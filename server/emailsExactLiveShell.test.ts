@@ -15,7 +15,7 @@ describe("Emails exact-live workspace", () => {
     expect(page).toContain('import "./emails-detail-simplified.css"');
     expect(page).toContain('import "./emails-detail-leads-cohesion.css"');
     expect(page).toContain('import "./emails-kanban-cohesion.css"');
-    expect(page).toContain('className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}`}');
+    expect(page).toContain('className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}${detailOnly ? " is-detail-only" : ""}`}');
     expect(page).toContain('className="email-detail-workspace emails-live-detail-workspace"');
   });
 
@@ -24,6 +24,10 @@ describe("Emails exact-live workspace", () => {
 
     expect(page).toContain("trpc.opsChat.listEmailInboxThreads.useQuery");
     expect(page).toContain("trpc.gmail.getThread.useQuery");
+    expect(page).toContain("trpc.gmail.getStoredThread.useQuery");
+    expect(page).toContain("enabled: Boolean(selectedThreadId) && emailThreadError");
+    expect(page).toContain("const detail = (emailThread ?? storedEmailThread) as LiveEmailDetail | undefined;");
+    expect(page).toContain("Saved email content is unavailable for this thread.");
     expect(page).toContain("trpc.opsChat.getEmailDraftByThreadId.useQuery");
     expect(page).toContain("trpc.gmail.sendReply.useMutation");
     expect(page).toContain("trpc.gmail.completeThread.useMutation");
