@@ -1,6 +1,25 @@
 import { useCallback, useRef } from "react";
 import { MapView } from "@/components/Map";
 
+const SCHEDULE_ROUTE_NIGHT_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#18282d" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#a7c1c8" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#18282d" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#40555b" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d1e1e4" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#22363b" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#88aeb7" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1f3b36" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#33474d" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#18282d" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#b6cbd1" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#4c626a" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#e2eef0" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2a4045" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e2c3a" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#5d98aa" }] },
+];
+
 export type LeadflowScheduleMapTeam = {
   id: number;
   name: string;
@@ -210,6 +229,7 @@ export function LeadflowScheduleMap({
   return (
     <MapView
       onMapReady={renderMap}
+      mapOptions={{ mapId: null, styles: SCHEDULE_ROUTE_NIGHT_STYLE }}
       className="w-full h-full rounded-xl overflow-hidden"
       initialCenter={{ lat: 38.9, lng: -77.03 }}
       initialZoom={11}

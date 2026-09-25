@@ -77,6 +77,20 @@ describe("LeadFlow-owned Schedule workspace", () => {
     expect(scheduleRouter).not.toContain("db.insert(scheduleAssignments)");
   });
 
+  it("applies embedded night styling only to the Schedule Route Map", () => {
+    const mapView = read("client/src/components/Map.tsx");
+    const routeMap = read("client/src/components/LeadflowScheduleMap.tsx");
+
+    expect(mapView).toContain("mapOptions?: MapViewOptions");
+    expect(mapView).toContain('const { mapId = "DEMO_MAP_ID", ...additionalMapOptions } = mapOptions ?? {};');
+    expect(mapView).toContain("...(mapId ? { mapId } : {})");
+    expect(routeMap).toContain("const SCHEDULE_ROUTE_NIGHT_STYLE");
+    expect(routeMap).toContain("mapOptions={{ mapId: null, styles: SCHEDULE_ROUTE_NIGHT_STYLE }}");
+    expect(routeMap).toContain('featureType: "road"');
+    expect(routeMap).toContain('featureType: "poi"');
+    expect(routeMap).toContain('featureType: "water"');
+  });
+
   it("keeps every new Schedule source file outside the legacy job boundary", () => {
     for (const relativePath of [...ownedClientFiles, ...ownedServerFiles]) {
       const source = read(relativePath);
