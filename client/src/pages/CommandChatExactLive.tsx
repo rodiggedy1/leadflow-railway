@@ -1654,15 +1654,21 @@ function EmailConversationDrawer({ threadId, onClose }: { threadId: string; onCl
   const messageListRef = useRef<HTMLDivElement>(null);
   const initialBottomScrollDone = useRef(false);
   const scrollAfterSendRef = useRef(false);
-  const { data: emailThread, isLoading: emailThreadLoading } = trpc.gmail.getThread.useQuery(
+  const { data: emailThread, isLoading: emailThreadLoading, isError: emailThreadError } = trpc.gmail.getThread.useQuery(
     { threadId },
     { staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
+  );
+  const { data: storedEmailThread, isLoading: storedEmailThreadLoading } = trpc.gmail.getStoredThread.useQuery(
+    { threadId },
+    { enabled: emailThreadError, staleTime: 30_000, refetchOnWindowFocus: false },
   );
   const { data: emailAiDraft } = trpc.opsChat.getEmailDraftByThreadId.useQuery(
     { threadId },
     { staleTime: 20_000, refetchOnWindowFocus: true, refetchInterval: 15_000 },
   );
-  const detail = emailThread as EmailThreadDetail | undefined;
+  const detail = (emailThread ?? storedEmailThread) as EmailThreadDetail | undefined;
+  const emailHistoryLoading = emailThreadLoading || (emailThreadError && storedEmailThreadLoading);
+  const emailHistoryUnavailable = emailThreadError && !storedEmailThreadLoading && !storedEmailThread;
   const persistedMessages = detail?.messages ?? [];
   const messages = useMemo(() => {
     const notYetRefetched = confirmedOutgoing.filter((outgoing) => !persistedMessages.some((message) => message.id === outgoing.id));
@@ -1726,7 +1732,7 @@ function EmailConversationDrawer({ threadId, onClose }: { threadId: string; onCl
 
   const submit = () => {
     const body = draft.trim();
-    if (!body || emailThreadLoading || sendEmailReply.isPending) return;
+    if (!body || emailHistoryLoading || !detail || sendEmailReply.isPending) return;
     if (!replyTo) {
       setSendFeedback({ tone: "error", message: "No reply address is available for this email thread." });
       return;
@@ -1738,16 +1744,16 @@ function EmailConversationDrawer({ threadId, onClose }: { threadId: string; onCl
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer ccc-live-email-drawer" onMouseDown={(event) => event.stopPropagation()}>
     <header><div><img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} /><span><strong>{name}</strong><small>{detail?.fromEmail || "Email conversation"}</small></span></div><button type="button" aria-label="Close email conversation" onClick={onClose}><X /></button></header>
     <div className="ccc-live-email-subject"><Mail /><span><b>Email</b><strong>{subject}</strong></span></div>
-    <div className="ccc-live-sms-messages" ref={messageListRef}>{emailThreadLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading email history…</div> : messages.map((message) => {
+    <div className="ccc-live-sms-messages" ref={messageListRef}>{emailHistoryLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading email history…</div> : emailHistoryUnavailable ? <div className="ccc-live-empty"><Mail />Email history is unavailable for this thread.</div> : messages.map((message) => {
       const outgoing = Boolean(message.isLocal) || (Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail);
       const sender = outgoing ? (message.sentBy?.name || "You") : (message.from || name);
       const senderPhotoUrl = message.sentBy?.photoUrl ?? null;
       return <article className={`ccc-live-sms-message ccc-live-email-message ${outgoing ? "is-outgoing" : ""}`} key={message.id}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={sender} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{sender}</span> : sender}{message.date ? ` · ${formatTime(message.date)}` : ""}</small><p>{emailMessageText(message)}</p></article>;
-    })}{!emailThreadLoading && detail && messages.length === 0 && <div className="ccc-live-empty"><Mail />No messages in this email thread.</div>}</div>
+    })}{!emailHistoryLoading && detail && messages.length === 0 && <div className="ccc-live-empty"><Mail />No messages in this email thread.</div>}</div>
     <footer>
       {sendFeedback && <div className={`ccc-live-email-send-feedback is-${sendFeedback.tone}`} role="status" aria-live="polite">{sendFeedback.tone === "success" ? <CircleCheck /> : <AlertTriangle />}<span>{sendFeedback.message}</span></div>}
       {!draftDismissed && emailAiDraft?.generatedDraft && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />Madison draft</span><small>Review before sending</small></header><p>{emailAiDraft.generatedDraft}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertEmailDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setDraftDismissed(true)}>Dismiss</button></div></article>}
-      <div className="ccc-live-sms-composer"><textarea value={draft} onChange={(event) => { setDraft(event.target.value); if (sendFeedback?.tone === "error") setSendFeedback(null); }} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); } }} placeholder="Write an email reply…" /><button type="button" disabled={!draft.trim() || emailThreadLoading || sendEmailReply.isPending} aria-label="Send email reply" onClick={submit}>{sendEmailReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+      <div className="ccc-live-sms-composer"><textarea value={draft} onChange={(event) => { setDraft(event.target.value); if (sendFeedback?.tone === "error") setSendFeedback(null); }} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); } }} placeholder="Write an email reply…" /><button type="button" disabled={!draft.trim() || emailHistoryLoading || !detail || sendEmailReply.isPending} aria-label="Send email reply" onClick={submit}>{sendEmailReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
   </aside></div>;
 }

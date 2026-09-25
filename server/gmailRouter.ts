@@ -282,6 +282,50 @@ export const gmailRouter = router({
       return { ...thread, messages: messagesWithAgent };
     }),
 
+  /**
+   * Read the LeadFlow-owned inbound email captured for a Madison draft.
+   * This supplies the saved email content only when live Gmail detail is unavailable.
+   */
+  getStoredThread: agentProcedure
+    .input(z.object({ threadId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [draft] = await db
+        .select({
+          threadId: madisonEmailDrafts.threadId,
+          inboundMessageId: madisonEmailDrafts.inboundMessageId,
+          fromEmail: madisonEmailDrafts.fromEmail,
+          replyToEmail: madisonEmailDrafts.replyToEmail,
+          senderName: madisonEmailDrafts.senderName,
+          subject: madisonEmailDrafts.subject,
+          originalMessage: madisonEmailDrafts.originalMessage,
+          createdAt: madisonEmailDrafts.createdAt,
+        })
+        .from(madisonEmailDrafts)
+        .where(eq(madisonEmailDrafts.threadId, input.threadId))
+        .orderBy(desc(madisonEmailDrafts.createdAt))
+        .limit(1);
+      if (!draft) return null;
+      return {
+        from: draft.senderName ?? draft.fromEmail,
+        fromEmail: draft.fromEmail,
+        subject: draft.subject ?? "(no subject)",
+        inboxEmail: null,
+        messages: [{
+          id: draft.inboundMessageId,
+          from: draft.senderName ?? draft.fromEmail,
+          fromEmail: draft.fromEmail,
+          replyToEmail: draft.replyToEmail ?? null,
+          subject: draft.subject ?? "(no subject)",
+          snippet: draft.originalMessage.slice(0, 240),
+          bodyText: draft.originalMessage,
+          date: draft.createdAt.getTime(),
+          sentBy: null,
+        }],
+      };
+    }),
+
   /** Reply to an existing thread */
   sendReply: agentProcedure
     .input(
