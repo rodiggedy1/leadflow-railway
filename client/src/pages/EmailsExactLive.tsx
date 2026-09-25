@@ -292,9 +292,14 @@ function EmailDetailWorkspace({ groups, selectedId, detail, replyMode, setReplyM
   return <section className="email-detail-workspace emails-live-detail-workspace" aria-label="Live email detail page"><DetailSidebar groups={groups} selectedId={selectedId} onPick={onPick} close={onClose} /><DetailMain detail={detail} identity={identity} lane={lane} replyMode={replyMode} setReplyMode={setReplyMode} reply={reply} setReply={setReply} draft={draft} draftDismissed={draftDismissed} onInsertDraft={onInsertDraft} onDismissDraft={onDismissDraft} onSend={onSend} onResolve={onResolve} isSending={isSending} isResolving={isResolving} /><DetailContext threadId={selectedId} identity={identity} subject={subject} lane={lane} messages={detail?.messages ?? []} lastMessageAt={lastMessage?.date} close={onClose} onResolve={onResolve} isResolving={isResolving} /></section>;
 }
 
-export default function EmailsExactLive() {
+type EmailsExactLiveProps = {
+  initialThreadId?: string | null;
+  onCloseDetail?: () => void;
+};
+
+export default function EmailsExactLive({ initialThreadId = null, onCloseDetail }: EmailsExactLiveProps = {}) {
   const [query, setQuery] = useState("");
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(initialThreadId);
   const [replyMode, setReplyMode] = useState<"Reply" | "Internal Note">("Reply");
   const [emailReply, setEmailReply] = useState("");
   const [dismissedDrafts, setDismissedDrafts] = useState<Set<string>>(new Set());
@@ -314,7 +319,8 @@ export default function EmailsExactLive() {
   const resolveEmailThread = trpc.gmail.completeThread.useMutation({
     onSuccess: () => {
       if (emailAiDraft.data?.id) dismissEmailDraft.mutate({ draftId: emailAiDraft.data.id, dismissedBy: "agent" });
-      setSelectedThreadId(null);
+      if (onCloseDetail) onCloseDetail();
+      else setSelectedThreadId(null);
       utils.opsChat.listEmailInboxThreads.invalidate();
     },
     onError: error => toast.error(error.message || "Failed to resolve thread"),
@@ -334,7 +340,10 @@ export default function EmailsExactLive() {
     setSelectedThreadId(threadId);
     setReplyMode("Reply");
   };
-  const closeThread = () => setSelectedThreadId(null);
+  const closeThread = () => {
+    if (onCloseDetail) onCloseDetail();
+    else setSelectedThreadId(null);
+  };
   const insertDraft = () => {
     const copy = emailAiDraft.data?.generatedDraft;
     if (!copy || !selectedThreadId) return;
