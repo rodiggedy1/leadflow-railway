@@ -16,6 +16,7 @@ import {
   Heart,
   Headphones,
   MapPin,
+  Mail,
   Loader2,
   Megaphone,
   MessageSquare,
@@ -132,6 +133,37 @@ type SmsInboxMessage = {
   content: string;
   ts?: number;
   senderName?: string;
+};
+
+type EmailInboxThread = {
+  threadId: string;
+  senderName: string | null;
+  senderEmail: string | null;
+  subject: string;
+  snippet: string;
+  lastMessageAt: number;
+  messageCount: number;
+  isUnread: boolean;
+};
+
+type EmailInboxMessage = {
+  id: string;
+  from: string;
+  fromEmail: string;
+  replyToEmail: string | null;
+  subject: string;
+  snippet: string;
+  bodyText: string;
+  date: number;
+  sentBy?: { name: string; photoUrl: string | null } | null;
+};
+
+type EmailThreadDetail = {
+  from?: string | null;
+  fromEmail?: string | null;
+  subject?: string | null;
+  inboxEmail?: string | null;
+  messages?: EmailInboxMessage[];
 };
 
 type TeamSmsStreamEvent = {
@@ -319,6 +351,27 @@ function smsInboxTimestamp(conversation: SmsInboxConversation) {
 
 function smsConversationName(conversation: SmsInboxConversation) {
   return conversation.leadName?.trim() || (conversation.personType === "team" ? "Team message" : "Customer conversation");
+}
+
+function emailThreadName(thread: Pick<EmailInboxThread, "senderName" | "senderEmail">) {
+  return thread.senderName?.trim() || thread.senderEmail?.trim() || "Email conversation";
+}
+
+function emailThreadSubject(subject: string | null | undefined) {
+  return (subject ?? "").replace(/^\[From:[^\]]*\]\s*/i, "").trim() || "(no subject)";
+}
+
+function emailMessageText(message: Pick<EmailInboxMessage, "bodyText" | "snippet">) {
+  return message.bodyText?.trim() || message.snippet?.trim() || "No message content.";
+}
+
+function emailReplyAddress(thread: EmailThreadDetail | undefined) {
+  const inboxEmail = thread?.inboxEmail?.toLowerCase() ?? "";
+  const inbound = [...(thread?.messages ?? [])].reverse().find((message) => {
+    const fromEmail = message.fromEmail?.toLowerCase() ?? "";
+    return !inboxEmail || fromEmail !== inboxEmail;
+  });
+  return inbound?.replyToEmail || inbound?.fromEmail || thread?.fromEmail || null;
 }
 
 function confirmationReplyFromMessage(message: ChannelMessage): ConfirmationReplyAlert | null {
@@ -510,6 +563,7 @@ export default function CommandChatExactLive() {
   const channel: ChannelKey = "command";
   const LEAD_ALERT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bMcVRxTSaTukZing.wav";
   const [smsSearch, setSmsSearch] = useState("");
+  const [leftRailTab, setLeftRailTab] = useState<"sms" | "email">("sms");
   const [issueEngineOpen, setIssueEngineOpen] = useState(false);
   const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
   const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);
@@ -529,11 +583,13 @@ export default function CommandChatExactLive() {
   const [bookingAmount, setBookingAmount] = useState("");
   const [bookingNote, setBookingNote] = useState("");
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
+  const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
   const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
   const [madisonOpen, setMadisonOpen] = useState(false);
   const [incomingCommandMessage, setIncomingCommandMessage] = useState<{ from: string } | null>(null);
+  const conversationDrawerOpen = Boolean(selectedSmsConversation || selectedEmailThreadId);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageStreamRef = useRef<HTMLDivElement>(null);
   const centerFeedInitialScrollDone = useRef(false);
@@ -543,8 +599,18 @@ export default function CommandChatExactLive() {
   const incomingCommandMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (selectedSmsConversation) setMadisonOpen(false);
+    if (selectedSmsConversation) {
+      setMadisonOpen(false);
+      setSelectedEmailThreadId(null);
+    }
   }, [selectedSmsConversation]);
+
+  useEffect(() => {
+    if (selectedEmailThreadId) {
+      setMadisonOpen(false);
+      setSelectedSmsConversation(null);
+    }
+  }, [selectedEmailThreadId]);
 
   const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
   const { data: photosData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
@@ -569,6 +635,10 @@ export default function CommandChatExactLive() {
     undefined,
     { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
   );
+  const { data: emailInboxData, isLoading: emailInboxLoading } = trpc.opsChat.listEmailInboxThreads.useQuery(
+    undefined,
+    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+  );
   const smsInbox = useMemo(() => (smsInboxRows as unknown as SmsInboxConversation[])
     .filter((conversation) => Boolean(conversation.leadPhone))
     .sort((left, right) => smsInboxTimestamp(right) - smsInboxTimestamp(left)), [smsInboxRows]);
@@ -582,6 +652,20 @@ export default function CommandChatExactLive() {
       conversation.aiSummary,
     ].some((value) => value?.toLowerCase().includes(query)));
   }, [smsInbox, smsSearch]);
+  const emailInbox = useMemo(
+    () => [...((emailInboxData?.threads ?? []) as EmailInboxThread[])].sort((left, right) => right.lastMessageAt - left.lastMessageAt),
+    [emailInboxData?.threads],
+  );
+  const visibleEmailInbox = useMemo(() => {
+    const query = smsSearch.trim().toLowerCase();
+    if (!query) return emailInbox;
+    return emailInbox.filter((thread) => [
+      emailThreadName(thread),
+      thread.senderEmail,
+      thread.subject,
+      thread.snippet,
+    ].some((value) => value?.toLowerCase().includes(query)));
+  }, [emailInbox, smsSearch]);
   const leftTeamSmsSessionIds = useMemo(
     () => smsInbox.filter((conversation) => conversation.personType === "team").map((conversation) => conversation.id),
     [smsInbox],
@@ -867,6 +951,13 @@ export default function CommandChatExactLive() {
       if (leftTeamSmsSessionIds.length) void utils.commandCenter.listInboundTeamSmsEvents.invalidate({ sessionIds: leftTeamSmsSessionIds });
       if (selectedSmsConversation) void utils.leads.getCsConversation.invalidate({ sessionId: selectedSmsConversation.id });
     },
+    onGmailNewMessages: () => {
+      void utils.opsChat.listEmailInboxThreads.invalidate();
+      if (selectedEmailThreadId) {
+        void utils.gmail.getThread.invalidate({ threadId: selectedEmailThreadId });
+        void utils.opsChat.getEmailDraftByThreadId.invalidate({ threadId: selectedEmailThreadId });
+      }
+    },
     onReactionUpdate: () => {
       if (messageIds.length) void reactionsMutation.mutateAsync({ messageIds }).then((result) => setReactionRows(result.reactions));
     },
@@ -990,17 +1081,20 @@ export default function CommandChatExactLive() {
           <aside className="ccc-command-panel ccc-left-panel">
             <div className="ccc-left-section ccc-conversations-section ccc-live-left-rail">
               <header className="ccc-live-sms-header">
-                <div className="ccc-live-sms-title"><span><strong>SMS</strong><b>{smsInbox.length}</b></span><a href="/admin/sms" aria-label="Open SMS workspace to compose a new message"><SquarePen /></a></div>
-                <div className="ccc-live-sms-filter-tabs" role="tablist" aria-label="SMS conversation views">
-                  <button type="button" className="active" aria-selected="true">All</button><button type="button">Unread</button><button type="button">Needs Reply</button><button type="button">Starred</button>
+                <div className="ccc-live-sms-title"><span><strong>{leftRailTab === "email" ? "Email" : "SMS"}</strong><b>{leftRailTab === "email" ? emailInbox.length : smsInbox.length}</b></span><a href={leftRailTab === "email" ? "/admin/emails" : "/admin/sms"} aria-label={leftRailTab === "email" ? "Open Email workspace" : "Open SMS workspace to compose a new message"}><SquarePen /></a></div>
+                <div className="ccc-live-sms-filter-tabs" role="tablist" aria-label="Command Chat conversation views">
+                  <button type="button" className={leftRailTab === "sms" ? "active" : ""} aria-selected={leftRailTab === "sms"} onClick={() => { setLeftRailTab("sms"); setSelectedEmailThreadId(null); }}>All</button><button type="button">Unread</button><button type="button" className={leftRailTab === "email" ? "active" : ""} aria-selected={leftRailTab === "email"} onClick={() => { setLeftRailTab("email"); setSelectedSmsConversation(null); }}>Email</button><button type="button">Starred</button>
                 </div>
-                <div className="ccc-live-sms-search"><label><Search /><input value={smsSearch} onChange={(event) => setSmsSearch(event.target.value)} placeholder="Search conversations..." aria-label="Search SMS conversations" /></label><button type="button" aria-label="SMS filter options"><SlidersHorizontal /></button></div>
+                <div className="ccc-live-sms-search"><label><Search /><input value={smsSearch} onChange={(event) => setSmsSearch(event.target.value)} placeholder={leftRailTab === "email" ? "Search email threads..." : "Search conversations..."} aria-label={leftRailTab === "email" ? "Search email threads" : "Search SMS conversations"} /></label><button type="button" aria-label="Conversation filter options"><SlidersHorizontal /></button></div>
               </header>
               <div className="ccc-live-left-rail-content">
-                <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
+                {leftRailTab === "email" ? <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Email conversations">
+                  {visibleEmailInbox.map((thread) => <EmailInboxRow thread={thread} key={thread.threadId} onOpen={() => setSelectedEmailThreadId(thread.threadId)} />)}
+                  {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
+                </div> : <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
                   {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => setSelectedSmsConversation(conversation)} />)}
                   {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
-                </div>
+                </div>}
               </div>
             </div>
           </aside>
@@ -1034,6 +1128,7 @@ export default function CommandChatExactLive() {
         </div>
       </section>
       {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} onClose={() => setSelectedSmsConversation(null)} />}
+      {selectedEmailThreadId && <EmailConversationDrawer threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} onNotice={showNotice} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
@@ -1044,7 +1139,7 @@ export default function CommandChatExactLive() {
         if (modal === "booking") announceBooking.mutate({ channel: "command", personName: bookingPerson.trim(), amount: bookingAmount.trim() || undefined, note: bookingNote.trim() || undefined, authorName: profile?.name || callerName });
       }} />}
       <IssueEngineOverlay open={issueEngineOpen} onClose={() => { setIssueEngineOpen(false); setIssueEngineInitialId(null); }} callerName={callerName} agentPhotoMap={photoMap} agentList={agents.agents.map((agent) => ({ id: agent.id, name: agent.name, photoUrl: agent.photoUrl ?? null }))} initialIssueId={issueEngineInitialId} />
-      {!selectedSmsConversation && madisonOpen && (
+      {!conversationDrawerOpen && madisonOpen && (
         <div
           style={{
             position: "fixed",
@@ -1070,7 +1165,7 @@ export default function CommandChatExactLive() {
           />
         </div>
       )}
-      {!selectedSmsConversation && <button
+      {!conversationDrawerOpen && <button
         onClick={() => setMadisonOpen(o => !o)}
         style={{
           position: "fixed",
@@ -1225,6 +1320,18 @@ function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversat
     {conversation.personType === "team" ? <span className="ccc-live-sms-team-avatar"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}
     <span className="ccc-live-sms-row-copy"><strong>{name}</strong><small>{preview}</small></span>
     <span className="ccc-live-sms-row-meta"><time>{time}</time><i className={conversation.hasUnanswered ? "is-unread" : ""} /></span>
+  </button>;
+}
+
+function EmailInboxRow({ thread, onOpen }: { thread: EmailInboxThread; onOpen: () => void }) {
+  const name = emailThreadName(thread);
+  const timestamp = thread.lastMessageAt;
+  const time = timestamp && Date.now() - timestamp < 86_400_000 ? formatTime(timestamp) : timestamp ? dateLabel(timestamp) : "";
+  const preview = [emailThreadSubject(thread.subject), thread.snippet?.trim()].filter(Boolean).join(" · ") || "No email preview available.";
+  return <button type="button" className="ccc-live-sms-row ccc-live-email-row" onClick={onOpen}>
+    <span className="ccc-live-email-avatar"><Mail /></span>
+    <span className="ccc-live-sms-row-copy"><strong>{name}</strong><small>{preview}</small></span>
+    <span className="ccc-live-sms-row-meta"><time>{time}</time><i className={thread.isUnread ? "is-unread" : ""} /></span>
   </button>;
 }
 
@@ -1536,6 +1643,87 @@ const CommandComposer = memo(function CommandComposer({
     <input ref={fileInputRef} type="file" accept="image/*" className="ccc-live-file-input" onChange={(event) => void stageImage(event)} />
   </div>;
 });
+
+function EmailConversationDrawer({ threadId, onClose, onNotice }: { threadId: string; onClose: () => void; onNotice: (message: string) => void }) {
+  const utils = trpc.useUtils();
+  const [draft, setDraft] = useState("");
+  const [draftDismissed, setDraftDismissed] = useState(false);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const initialBottomScrollDone = useRef(false);
+  const scrollAfterSendRef = useRef(false);
+  const { data: emailThread, isLoading: emailThreadLoading } = trpc.gmail.getThread.useQuery(
+    { threadId },
+    { staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
+  );
+  const { data: emailAiDraft } = trpc.opsChat.getEmailDraftByThreadId.useQuery(
+    { threadId },
+    { staleTime: 20_000, refetchOnWindowFocus: true, refetchInterval: 15_000 },
+  );
+  const detail = emailThread as EmailThreadDetail | undefined;
+  const messages = detail?.messages ?? [];
+  const inboxEmail = detail?.inboxEmail?.toLowerCase() ?? "";
+  const name = emailThreadName({ senderName: detail?.from ?? null, senderEmail: detail?.fromEmail ?? null });
+  const subject = emailThreadSubject(detail?.subject);
+  const replyTo = emailReplyAddress(detail);
+  const sendEmailReply = trpc.gmail.sendReply.useMutation({
+    onSuccess: () => {
+      setDraft("");
+      scrollAfterSendRef.current = true;
+      void utils.opsChat.listEmailInboxThreads.invalidate();
+      void utils.gmail.getThread.invalidate({ threadId });
+    },
+    onError: (error) => onNotice(error.message || "Email could not be sent. Please try again."),
+  });
+
+  useEffect(() => {
+    setDraft("");
+    setDraftDismissed(false);
+    initialBottomScrollDone.current = false;
+    scrollAfterSendRef.current = false;
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!detail || (initialBottomScrollDone.current && !scrollAfterSendRef.current)) return;
+    const animationFrame = requestAnimationFrame(() => {
+      if (!messageListRef.current) return;
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+      initialBottomScrollDone.current = true;
+      scrollAfterSendRef.current = false;
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [detail, messages.length, threadId]);
+
+  const insertEmailDraft = () => {
+    const suggestedReply = emailAiDraft?.generatedDraft?.trim();
+    if (!suggestedReply) return;
+    setDraft(suggestedReply);
+    setDraftDismissed(true);
+  };
+
+  const submit = () => {
+    const body = draft.trim();
+    if (!body) return;
+    if (!replyTo) {
+      onNotice("No reply address is available for this email thread.");
+      return;
+    }
+    sendEmailReply.mutate({ threadId, to: replyTo, subject, bodyHtml: body.split("\n").join("<br>") });
+  };
+
+  return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer ccc-live-email-drawer" onMouseDown={(event) => event.stopPropagation()}>
+    <header><div><span className="ccc-live-email-avatar"><Mail /></span><span><strong>{name}</strong><small>{detail?.fromEmail || "Email conversation"}</small></span></div><button type="button" aria-label="Close email conversation" onClick={onClose}><X /></button></header>
+    <div className="ccc-live-email-subject"><Mail /><span><b>Email</b><strong>{subject}</strong></span></div>
+    <div className="ccc-live-sms-messages" ref={messageListRef}>{emailThreadLoading ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading email history…</div> : messages.map((message) => {
+      const outgoing = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
+      const sender = outgoing ? (message.sentBy?.name || "You") : (message.from || name);
+      return <article className={`ccc-live-sms-message ccc-live-email-message ${outgoing ? "is-outgoing" : ""}`} key={message.id}><small>{sender}{message.date ? ` · ${formatTime(message.date)}` : ""}</small><p>{emailMessageText(message)}</p></article>;
+    })}{!emailThreadLoading && detail && messages.length === 0 && <div className="ccc-live-empty"><Mail />No messages in this email thread.</div>}</div>
+    <footer>
+      {!draftDismissed && emailAiDraft?.generatedDraft && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />Madison draft</span><small>Review before sending</small></header><p>{emailAiDraft.generatedDraft}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertEmailDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setDraftDismissed(true)}>Dismiss</button></div></article>}
+      <div className="ccc-live-sms-composer"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); } }} placeholder="Write an email reply…" /><button type="button" disabled={!draft.trim() || sendEmailReply.isPending} aria-label="Send email reply" onClick={submit}>{sendEmailReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+    </footer>
+  </aside></div>;
+}
 
 function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; onClose: () => void }) {
   const utils = trpc.useUtils();
