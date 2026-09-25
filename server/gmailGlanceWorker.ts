@@ -20,8 +20,9 @@
  */
 
 import { getDb } from "./db";
-import { gmailThreadMeta, gmailSenderPolicies } from "../drizzle/schema";
-import { eq, isNull, isNotNull, and, or } from "drizzle-orm";
+import { gmailThreadMeta, gmailSenderPolicies, madisonEmailDrafts } from "../drizzle/schema";
+import { gmailMessageHtmlCache } from "./gmailMessageHtmlCache";
+import { eq, isNull, isNotNull, and, or, sql } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { google } from "googleapis";
@@ -280,6 +281,20 @@ export async function processThread(threadId: string): Promise<void> {
 
     // messageCount: total messages in thread
     const messageCount = messages.length;
+
+    // Preserve the native Gmail HTML already present in this response. Command Chat
+    // uses this read-only cache only if its live Gmail detail request is unavailable.
+    const htmlMessages = messages.flatMap((message: any) => {
+      const bodyHtml = findHtmlBody(message.payload);
+      return bodyHtml && message.id
+        ? [{ threadId, messageId: message.id, bodyHtml, capturedAt: new Date() }]
+        : [];
+    });
+    if (htmlMessages.length > 0) {
+      await db.insert(gmailMessageHtmlCache).values(htmlMessages).onDuplicateKeyUpdate({
+        set: { bodyHtml: sql`VALUES(bodyHtml)`, capturedAt: new Date() },
+      });
+    }
 
     // senderName / senderEmail: the OTHER party (not the inbox)
     const allFromHeaders: Array<{ name: string; email: string }> = messages.map((msg: any) => {
@@ -561,6 +576,18 @@ function findTextBody(payload: any): string {
   return "";
 }
 
+function findHtmlBody(payload: any): string {
+  if (!payload) return "";
+  if (payload.mimeType === "text/html" && payload.body?.data) {
+    return Buffer.from(payload.body.data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+  }
+  for (const part of payload.parts ?? []) {
+    const found = findHtmlBody(part);
+    if (found) return found;
+  }
+  return "";
+}
+
 // ── Worker loop ───────────────────────────────────────────────────────────────
 function startWorkerLoop() {
   // Snapshot queue size at window start
@@ -739,6 +766,24 @@ export async function backfillGlanceQueue(): Promise<void> {
     } else {
       console.log(`[GlanceWorker] Repair pass: 0 rows need repair`);
     }
+
+    // Existing Madison email drafts predate rich-body storage. Re-fetch only
+    // those threads whose saved inbound message is not yet cached; processThread
+    // writes the HTML cache and leaves delivery, reply, and resolution untouched.
+    const htmlBackfillRows = await db
+      .select({ threadId: madisonEmailDrafts.threadId })
+      .from(madisonEmailDrafts)
+      .leftJoin(gmailMessageHtmlCache, eq(gmailMessageHtmlCache.messageId, madisonEmailDrafts.inboundMessageId))
+      .where(isNull(gmailMessageHtmlCache.id));
+    let htmlBackfillEnqueued = 0;
+    for (const row of htmlBackfillRows) {
+      if (!enqueuedSet.has(row.threadId)) {
+        enqueueThread(row.threadId, "backfill");
+        enqueuedSet.add(row.threadId);
+        htmlBackfillEnqueued++;
+      }
+    }
+    console.log(`[GlanceWorker] HTML cache backfill: ${htmlBackfillEnqueued} Madison email threads enqueued`);
   } catch (err) {
     console.error("[GlanceWorker] Backfill error:", err);
   }

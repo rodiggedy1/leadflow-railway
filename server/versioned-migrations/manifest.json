@@ -319,6 +319,14 @@
       "sha256": "9e0472fb37182ce70ad1b87b9b1b547fb5c498338b367195cd2666e352328f14",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0042_create_invoice_stripe_links.postconditions.json"
+    },
+    {
+      "id": "0043_create_gmail_message_html_cache",
+      "mode": "create-table",
+      "sqlFile": "0043_create_gmail_message_html_cache.sql",
+      "sha256": "12b41b403bd11eb2349a2bfdddcc3efc013de2bbeab8f978d8e5cb5796f1a887",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0043_create_gmail_message_html_cache.postconditions.json"
     }
   ]
 }

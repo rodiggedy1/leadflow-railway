@@ -1,5 +1,6 @@
 import { FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import DOMPurify from "dompurify";
 import {
   Activity,
   AlertTriangle,
@@ -153,6 +154,7 @@ type EmailInboxMessage = {
   replyToEmail: string | null;
   subject: string;
   snippet: string;
+  bodyHtml?: string | null;
   bodyText: string;
   date: number;
   sentBy?: { name: string; photoUrl: string | null } | null;
@@ -364,6 +366,13 @@ function emailThreadSubject(subject: string | null | undefined) {
 
 function emailMessageText(message: Pick<EmailInboxMessage, "bodyText" | "snippet">) {
   return message.bodyText?.trim() || message.snippet?.trim() || "No message content.";
+}
+
+function EmailMessageBody({ message }: { message: EmailInboxMessage }) {
+  const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } }) : null;
+  return sanitizedHtml
+    ? <div className="ccc-live-email-html-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
+    : <p>{emailMessageText(message)}</p>;
 }
 
 function emailReplyAddress(thread: EmailThreadDetail | undefined) {
@@ -1690,6 +1699,7 @@ function EmailConversationDrawer({ threadId, onClose }: { threadId: string; onCl
         replyToEmail: null,
         subject: variables.subject,
         snippet: "",
+        bodyHtml: variables.bodyHtml,
         bodyText: variables.bodyHtml.replace(/<br\s*\/?\s*>/gi, "\n"),
         date: sentAt,
         sentBy: null,
@@ -1748,7 +1758,7 @@ function EmailConversationDrawer({ threadId, onClose }: { threadId: string; onCl
       const outgoing = Boolean(message.isLocal) || (Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail);
       const sender = outgoing ? (message.sentBy?.name || "You") : (message.from || name);
       const senderPhotoUrl = message.sentBy?.photoUrl ?? null;
-      return <article className={`ccc-live-sms-message ccc-live-email-message ${outgoing ? "is-outgoing" : ""}`} key={message.id}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={sender} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{sender}</span> : sender}{message.date ? ` · ${formatTime(message.date)}` : ""}</small><p>{emailMessageText(message)}</p></article>;
+      return <article className={`ccc-live-sms-message ccc-live-email-message ${outgoing ? "is-outgoing" : ""}`} key={message.id}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={sender} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{sender}</span> : sender}{message.date ? ` · ${formatTime(message.date)}` : ""}</small><EmailMessageBody message={message} /></article>;
     })}{!emailHistoryLoading && detail && messages.length === 0 && <div className="ccc-live-empty"><Mail />No messages in this email thread.</div>}</div>
     <footer>
       {sendFeedback && <div className={`ccc-live-email-send-feedback is-${sendFeedback.tone}`} role="status" aria-live="polite">{sendFeedback.tone === "success" ? <CircleCheck /> : <AlertTriangle />}<span>{sendFeedback.message}</span></div>}

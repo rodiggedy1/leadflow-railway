@@ -25,6 +25,7 @@ import {
   getAttachmentData,
   getConversationsUnreadCount,
 } from "./gmailService";
+import { gmailMessageHtmlCache } from "./gmailMessageHtmlCache";
 import { ENV } from "./_core/env";
 
 async function requireGmailConnected() {
@@ -307,6 +308,11 @@ export const gmailRouter = router({
         .orderBy(desc(madisonEmailDrafts.createdAt))
         .limit(1);
       if (!draft) return null;
+      const [cachedMessage] = await db
+        .select({ bodyHtml: gmailMessageHtmlCache.bodyHtml })
+        .from(gmailMessageHtmlCache)
+        .where(eq(gmailMessageHtmlCache.messageId, draft.inboundMessageId))
+        .limit(1);
       return {
         from: draft.senderName ?? draft.fromEmail,
         fromEmail: draft.fromEmail,
@@ -319,6 +325,7 @@ export const gmailRouter = router({
           replyToEmail: draft.replyToEmail ?? null,
           subject: draft.subject ?? "(no subject)",
           snippet: draft.originalMessage.slice(0, 240),
+          bodyHtml: cachedMessage?.bodyHtml ?? null,
           bodyText: draft.originalMessage,
           date: draft.createdAt.getTime(),
           sentBy: null,

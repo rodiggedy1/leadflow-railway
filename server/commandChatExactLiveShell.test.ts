@@ -273,6 +273,10 @@ describe("Command Chat exact live shell", () => {
     expect(emailDrawer).toContain('role="status" aria-live="polite"');
     expect(emailDrawer).toContain('customerPortraitFor(name)');
     expect(emailDrawer).toContain('message.sentBy?.photoUrl ?? null');
+    expect(emailDrawer).toContain('<EmailMessageBody message={message} />');
+    expect(page).toContain('import DOMPurify from "dompurify";');
+    expect(page).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
+    expect(page).toContain('className="ccc-live-email-html-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }}');
     expect(emailDrawer).toContain('emailHistoryLoading || !detail || sendEmailReply.isPending');
     expect(styles).toContain('.ccc-live-email-send-feedback');
     expect(page).toContain('placeholder={leftRailTab === "email" ? "Search email threads..." : "Search conversations..."}');

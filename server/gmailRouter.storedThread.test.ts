@@ -12,6 +12,9 @@ describe("gmail.getStoredThread", () => {
   it("returns only saved inbound email content as a read-only fallback", () => {
     expect(storedThreadBlock).toContain("from(madisonEmailDrafts)");
     expect(storedThreadBlock).toContain("originalMessage: madisonEmailDrafts.originalMessage");
+    expect(storedThreadBlock).toContain("from(gmailMessageHtmlCache)");
+    expect(storedThreadBlock).toContain("where(eq(gmailMessageHtmlCache.messageId, draft.inboundMessageId))");
+    expect(storedThreadBlock).toContain("bodyHtml: cachedMessage?.bodyHtml ?? null");
     expect(storedThreadBlock).toContain("bodyText: draft.originalMessage");
     expect(storedThreadBlock).toContain("where(eq(madisonEmailDrafts.threadId, input.threadId))");
     expect(storedThreadBlock).not.toContain("requireGmailConnected");
