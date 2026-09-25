@@ -253,8 +253,12 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('trpc.gmail.sendReply.useMutation');
     expect(page).toContain('onGmailNewMessages: () => {');
     expect(page).toContain('setLeftRailTab("email")');
-    expect(page).toContain('>Email</button><button type="button">Starred</button>');
+    expect(page).toContain('}}>SMS</button><button type="button" className={leftRailTab === "email" ? "active" : ""}');
+    expect(page).toContain('}}>Email</button>');
     expect(page).toContain('selectedEmailThreadId && <EmailConversationDrawer');
+    expect(page).not.toContain('>All</button>');
+    expect(page).not.toContain('>Unread</button>');
+    expect(page).not.toContain('>Starred</button>');
     expect(page).not.toContain('>Needs Reply</button>');
     const emailDrawer = page.slice(page.indexOf('function EmailConversationDrawer'), page.indexOf('function SmsConversationDrawer'));
     expect(emailDrawer).toContain('const [confirmedOutgoing, setConfirmedOutgoing] = useState<EmailInboxMessage[]>([]);');
