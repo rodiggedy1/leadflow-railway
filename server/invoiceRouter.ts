@@ -17,12 +17,14 @@ import { router, adminAgentProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
 import { invoiceTemplates, invoices, completedJobs } from "../drizzle/schema";
-import { eq, desc, like, sql } from "drizzle-orm";
+import { eq, desc, inArray, like, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { MIB_LOGO_B64 } from "./invoiceLogo";
 import { storagePut } from "./storage";
 import { sendNewGmailEmailWithAttachment } from "./gmailService";
+import { getStripeClient } from "./stripeClient";
+import { invoiceStripeLinks } from "../drizzle/invoiceStripeLinks";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,125 @@ const lineItemSchema = z.object({
 });
 
 type LineItem = z.infer<typeof lineItemSchema>;
+
+type NativeStripeInvoice = {
+  stripeInvoiceId: string;
+  stripeCustomerId: string;
+  stripeInvoiceStatus: string;
+  stripeLink: string;
+};
+
+/**
+ * Creates one manual-payment Stripe invoice for the current LeadFlow invoice.
+ * This intentionally does not call Stripe's send endpoint: the existing human
+ * Madison/Gmail email action remains the sole customer notification.
+ */
+async function createNativeStripeInvoice(params: {
+  invoiceId: number;
+  invoiceNumber: number;
+  customerName: string;
+  recipientEmail: string;
+  serviceDate: string;
+  lineItems: LineItem[];
+  totalCents: number;
+}): Promise<NativeStripeInvoice> {
+  if (!Number.isInteger(params.totalCents) || params.totalCents <= 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "A Stripe payment invoice requires a positive total." });
+  }
+
+  const itemCents = params.lineItems.map((item) => Math.round(item.price * 100));
+  if (itemCents.some((amount) => !Number.isSafeInteger(amount) || amount < 0) || itemCents.reduce((sum, amount) => sum + amount, 0) !== params.totalCents) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Invoice line-item amounts do not match the invoice total." });
+  }
+
+  const stripe = getStripeClient();
+  const metadata = {
+    leadflowInvoiceId: String(params.invoiceId),
+    leadflowInvoiceNumber: String(params.invoiceNumber),
+    serviceDate: params.serviceDate,
+  };
+  const customer = await stripe.customers.create({
+    name: params.customerName,
+    email: params.recipientEmail,
+    metadata,
+  }, {
+    idempotencyKey: `leadflow-invoice-customer-${params.invoiceId}`,
+  });
+  const draft = await stripe.invoices.create({
+    customer: customer.id,
+    collection_method: "send_invoice",
+    auto_advance: false,
+    pending_invoice_items_behavior: "exclude",
+    description: `Maids In Black Invoice #${params.invoiceNumber}`,
+    metadata,
+  }, {
+    idempotencyKey: `leadflow-invoice-${params.invoiceId}`,
+  });
+
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+  await db.insert(invoiceStripeLinks).values({
+    invoiceId: params.invoiceId,
+    stripeInvoiceId: draft.id,
+    stripeCustomerId: customer.id,
+    stripeInvoiceStatus: draft.status ?? "draft",
+    hostedInvoiceUrl: null,
+    paidAt: null,
+  }).onDuplicateKeyUpdate({ set: {
+    stripeCustomerId: customer.id,
+    stripeInvoiceStatus: draft.status ?? "draft",
+  }});
+
+  for (let index = 0; index < params.lineItems.length; index += 1) {
+    const item = params.lineItems[index];
+    const amount = itemCents[index];
+    if (amount === 0) continue;
+    await stripe.invoiceItems.create({
+      customer: customer.id,
+      invoice: draft.id,
+      amount,
+      currency: "usd",
+      description: item.description || `Cleaning service on ${params.serviceDate}`,
+      metadata,
+    }, {
+      idempotencyKey: `leadflow-invoice-${params.invoiceId}-item-${index}`,
+    });
+  }
+
+  const finalized = await stripe.invoices.finalizeInvoice(draft.id, { auto_advance: false });
+  if (!finalized.hosted_invoice_url) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe did not return a hosted payment link for this invoice." });
+  }
+  const paidAt = finalized.status_transitions.paid_at
+    ? new Date(finalized.status_transitions.paid_at * 1000)
+    : null;
+  await db.update(invoiceStripeLinks).set({
+    stripeInvoiceStatus: finalized.status ?? "open",
+    hostedInvoiceUrl: finalized.hosted_invoice_url,
+    paidAt,
+  }).where(eq(invoiceStripeLinks.invoiceId, params.invoiceId));
+
+  return {
+    stripeInvoiceId: finalized.id,
+    stripeCustomerId: customer.id,
+    stripeInvoiceStatus: finalized.status ?? "open",
+    stripeLink: finalized.hosted_invoice_url,
+  };
+}
+
+async function enrichInvoicesWithStripeLinks<T extends { id: number }>(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, rows: T[]) {
+  if (rows.length === 0) return rows.map((row) => ({ ...row, stripeInvoiceId: null, stripeInvoiceStatus: null }));
+  const links = await db.select().from(invoiceStripeLinks).where(inArray(invoiceStripeLinks.invoiceId, rows.map((row) => row.id)));
+  const byInvoiceId = new Map(links.map((link) => [link.invoiceId, link]));
+  return rows.map((row) => {
+    const link = byInvoiceId.get(row.id);
+    return {
+      ...row,
+      stripeInvoiceId: link?.stripeInvoiceId ?? null,
+      stripeInvoiceStatus: link?.stripeInvoiceStatus ?? null,
+    };
+  });
+}
 
 // ─── PDF Generation ───────────────────────────────────────────────────────────
 
@@ -618,7 +739,7 @@ export const invoiceRouter = router({
         : await db.select().from(invoices)
             .orderBy(desc(invoices.createdAt))
             .limit(input.limit);
-      return rows;
+      return enrichInvoicesWithStripeLinks(db, rows);
     }),
 
   getInvoice: adminAgentProcedure
@@ -628,7 +749,8 @@ export const invoiceRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const [row] = await db.select().from(invoices).where(eq(invoices.id, input.id));
       if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
-      return row;
+      const [enriched] = await enrichInvoicesWithStripeLinks(db, [row]);
+      return enriched;
     }),
 
   deleteInvoice: adminAgentProcedure
@@ -656,10 +778,9 @@ export const invoiceRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      // Load the invoice
+      // Load the invoice. The final provider-backed payment link and PDF are prepared at the existing human send step.
       const [inv] = await db.select().from(invoices).where(eq(invoices.id, input.invoiceId));
       if (!inv) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
-      if (!inv.pdfUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Invoice has no PDF yet" });
 
       // Resolve recipient email
       let toEmail = input.toEmail ?? null;
@@ -681,22 +802,71 @@ export const invoiceRouter = router({
         });
       }
 
+      const [existingStripeLink] = await db.select().from(invoiceStripeLinks).where(eq(invoiceStripeLinks.invoiceId, inv.id)).limit(1);
+      let stripeLink = existingStripeLink?.hostedInvoiceUrl ?? null;
+      let stripeInvoiceStatus = existingStripeLink?.stripeInvoiceStatus ?? null;
+      let pdfUrl = inv.pdfUrl;
+
+      if (!stripeLink) {
+        const stripeInvoice = await createNativeStripeInvoice({
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          customerName: inv.customerName,
+          recipientEmail: toEmail,
+          serviceDate: inv.serviceDate,
+          lineItems: inv.lineItems as LineItem[],
+          totalCents: inv.totalCents,
+        });
+        stripeLink = stripeInvoice.stripeLink;
+        stripeInvoiceStatus = stripeInvoice.stripeInvoiceStatus;
+      }
+
+      // A failed prior send can have finalized the provider invoice before its replacement PDF
+      // reached storage. Rebuild whenever the stored PDF still has a different payment URL.
+      if (!pdfUrl || inv.stripeLink !== stripeLink) {
+        const [template] = await db.select().from(invoiceTemplates).where(eq(invoiceTemplates.id, inv.templateId)).limit(1);
+        if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice template not found" });
+        const pdfBytes = await generateInvoicePdf({
+          invoiceNumber: inv.invoiceNumber,
+          customerName: inv.customerName,
+          billTo: template.billTo,
+          serviceAddress: template.serviceAddress,
+          stripeLink,
+          lineItems: inv.lineItems as LineItem[],
+          totalCents: inv.totalCents,
+          serviceDate: inv.serviceDate,
+          billingDate: inv.billingDate,
+        });
+        const key = `invoices/${inv.invoiceNumber}-${inv.customerName.replace(/\s+/g, "_")}-stripe-${Date.now()}.pdf`;
+        try {
+          const uploaded = await storagePut(key, Buffer.from(pdfBytes), "application/pdf");
+          pdfUrl = uploaded.url;
+        } catch {
+          pdfUrl = `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`;
+        }
+        await db.update(invoices).set({ stripeLink, pdfUrl }).where(eq(invoices.id, inv.id));
+      }
+      if (!pdfUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Invoice PDF could not be prepared" });
+
       const totalDollars = (inv.totalCents / 100).toFixed(2);
       const subject = input.subject ?? `Your Invoice from Maids In Black`;
       let bodyHtml: string;
       if (input.bodyText) {
-        // Convert plain-text body to HTML paragraphs
+        // Preserve the human-edited message and retain the unique payment URL.
         bodyHtml = input.bodyText
           .split(/\n\n+/)
           .map(para => `<p>${para.replace(/\n/g, "<br>")}</p>`)
           .join("\n");
+        if (stripeLink && !input.bodyText.includes(stripeLink)) {
+          bodyHtml += `\n<p>You can pay securely online here: <a href="${stripeLink}">${stripeLink}</a></p>`;
+        }
       } else {
         bodyHtml = [
           `<p>Hi ${inv.customerName.split(" ")[0]},</p>`,
           `<p>Please find your invoice attached for cleaning services on <strong>${inv.serviceDate}</strong>.</p>`,
           `<p><strong>Invoice #${inv.invoiceNumber}</strong> &mdash; Total Due: <strong>$${totalDollars}</strong></p>`,
-          inv.stripeLink
-            ? `<p>You can pay securely online here: <a href="${inv.stripeLink}">${inv.stripeLink}</a></p>`
+          stripeLink
+            ? `<p>You can pay securely online here: <a href="${stripeLink}">${stripeLink}</a></p>`
             : "",
           `<p>Thank you for choosing Maids In Black!</p>`,
           `<p style="color:#888;font-size:12px">Maids In Black &bull; Support@maidsinblacksupport.com &bull; 202-888-5362 &bull; MaidsInBlack.com</p>`,
@@ -709,19 +879,28 @@ export const invoiceRouter = router({
         to: toEmail,
         subject,
         bodyHtml,
-        attachments: [{ url: inv.pdfUrl, filename, mimeType: "application/pdf" }],
+        attachments: [{ url: pdfUrl, filename, mimeType: "application/pdf" }],
       });
 
-      return { ok: true, toEmail, invoiceNumber: inv.invoiceNumber, customerName: inv.customerName };
+      return {
+        ok: true,
+        toEmail,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: inv.customerName,
+        pdfUrl,
+        stripeLink,
+        stripeInvoiceStatus,
+      };
     }),
 
   markAsPaid: adminAgentProcedure
     .input(z.object({ invoiceId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
-      await db.update(invoices)
-        .set({ paidAt: new Date() })
-        .where(eq(invoices.id, input.invoiceId));
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [stripeLink] = await db.select({ id: invoiceStripeLinks.id }).from(invoiceStripeLinks).where(eq(invoiceStripeLinks.invoiceId, input.invoiceId));
+      if (stripeLink) throw new TRPCError({ code: "BAD_REQUEST", message: "Stripe-backed invoices are marked paid only by the signed Stripe webhook." });
+      await db.update(invoices).set({ paidAt: new Date() }).where(eq(invoices.id, input.invoiceId));
       return { ok: true };
     }),
 
@@ -729,9 +908,10 @@ export const invoiceRouter = router({
     .input(z.object({ invoiceId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
-      await db.update(invoices)
-        .set({ paidAt: null })
-        .where(eq(invoices.id, input.invoiceId));
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [stripeLink] = await db.select({ id: invoiceStripeLinks.id }).from(invoiceStripeLinks).where(eq(invoiceStripeLinks.invoiceId, input.invoiceId));
+      if (stripeLink) throw new TRPCError({ code: "BAD_REQUEST", message: "Stripe-backed invoices are marked paid only by the signed Stripe webhook." });
+      await db.update(invoices).set({ paidAt: null }).where(eq(invoices.id, input.invoiceId));
       return { ok: true };
     }),
 });

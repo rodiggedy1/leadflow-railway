@@ -7,6 +7,7 @@ import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
+import { invoiceStripeLinks } from "../drizzle/invoiceStripeLinks";
 
 function isDuplicateEntry(error: unknown): boolean {
   const candidate = error as { code?: string; errno?: number; message?: string };
@@ -28,8 +29,36 @@ async function findBoundProfile(object: Stripe.SetupIntent | Stripe.PaymentInten
   return { db, profile, booking };
 }
 
+async function findBoundLeadflowInvoice(object: Stripe.Invoice) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const invoiceId = Number(object.metadata?.leadflowInvoiceId);
+  if (!Number.isInteger(invoiceId) || invoiceId < 1) return null;
+  const [link] = await db.select().from(invoiceStripeLinks).where(eq(invoiceStripeLinks.invoiceId, invoiceId)).limit(1);
+  if (!link || link.stripeInvoiceId !== object.id) return null;
+  return { db, link };
+}
+
 async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
   const object = event.data.object;
+  if (object.object === "invoice") {
+    const boundInvoice = await findBoundLeadflowInvoice(object);
+    if (!boundInvoice) return { status: "ignored" as const };
+    const now = new Date();
+    const paidAt = object.status_transitions.paid_at
+      ? new Date(object.status_transitions.paid_at * 1000)
+      : (event.type === "invoice.paid" ? now : boundInvoice.link.paidAt);
+    const stripeInvoiceStatus = event.type === "invoice.payment_failed"
+      ? "payment_failed"
+      : (object.status ?? "open");
+    await boundInvoice.db.update(invoiceStripeLinks).set({
+      stripeInvoiceStatus,
+      hostedInvoiceUrl: object.hosted_invoice_url ?? boundInvoice.link.hostedInvoiceUrl,
+      paidAt,
+    }).where(eq(invoiceStripeLinks.id, boundInvoice.link.id));
+    await boundInvoice.db.update(stripeWebhookEvents).set({ status: "processed", processedAt: now }).where(eq(stripeWebhookEvents.id, eventRecordId));
+    return { status: "processed" as const };
+  }
   if (object.object !== "setup_intent" && object.object !== "payment_intent") return { status: "ignored" as const };
   const bound = await findBoundProfile(object);
   if (!bound) return { status: "ignored" as const };
@@ -106,9 +135,11 @@ export function registerStripeWebhookRoute(app: Express) {
     }
     const db = await getDb();
     if (!db) return res.status(503).json({ error: "Database unavailable" });
+    // Every signed Stripe webhook object has an ID; Stripe's broad event union omits it for a few unrelated types.
+    const eventObjectId = (event.data.object as { id: string }).id;
     let eventId: number;
     try {
-      const result = await db.insert(stripeWebhookEvents).values({ stripeEventId: event.id, eventType: event.type, objectId: event.data.object.id, bookingPaymentProfileId: null, status: "received", errorMessage: null, receivedAt: new Date(), processedAt: null });
+      const result = await db.insert(stripeWebhookEvents).values({ stripeEventId: event.id, eventType: event.type, objectId: eventObjectId, bookingPaymentProfileId: null, status: "received", errorMessage: null, receivedAt: new Date(), processedAt: null });
       eventId = Number((result as { insertId?: number }).insertId);
     } catch (error) {
       if (isDuplicateEntry(error)) return res.status(200).json({ received: true, duplicate: true });

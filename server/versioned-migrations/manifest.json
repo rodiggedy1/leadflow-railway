@@ -311,6 +311,14 @@
       "sha256": "6483eab1117b8580bb08b84aad0c99be4dcd22f4a2d37c51f0a1ba492282a6c9",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0041_owned_confirmation_calls.postconditions.json"
+    },
+    {
+      "id": "0042_create_invoice_stripe_links",
+      "mode": "create-table",
+      "sqlFile": "0042_create_invoice_stripe_links.sql",
+      "sha256": "9e0472fb37182ce70ad1b87b9b1b547fb5c498338b367195cd2666e352328f14",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0042_create_invoice_stripe_links.postconditions.json"
     }
   ]
 }
