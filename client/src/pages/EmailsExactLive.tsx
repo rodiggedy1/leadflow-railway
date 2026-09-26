@@ -167,9 +167,8 @@ function DetailSidebar({ groups, selectedId, onPick, close }: { groups: Array<{ 
   );
 }
 
-function DetailMain({ detail, detailUnavailable, reply, setReply, draft, draftDismissed, onInsertDraft, onDismissDraft, onSend, onResolve, isSending, isResolving }: {
+function DetailMain({ detail, reply, setReply, draft, draftDismissed, onInsertDraft, onDismissDraft, onSend, onResolve, isSending, isResolving }: {
   detail: LiveEmailDetail | undefined;
-  detailUnavailable: boolean;
   reply: string;
   setReply: (value: string) => void;
   draft: { generatedDraft?: string | null; intentSummary?: string | null } | null | undefined;
@@ -225,7 +224,7 @@ function DetailMain({ detail, detailUnavailable, reply, setReply, draft, draftDi
     </header>
     <div className="em2-main-tabs"><button type="button" className="em2-main-tab active">Thread</button><button type="button" className="em2-main-tab">Headers</button><button type="button" className="em2-main-tab">Notes (0)</button><button type="button" className="em2-main-tab">Activity</button></div>
     <section className="em2-thread">
-      {!detail && <div className="emails-live-thread-state">{detailUnavailable ? "Saved email content is unavailable for this thread." : "Loading thread…"}</div>}
+      {!detail && <div className="emails-live-thread-state">Loading thread…</div>}
       {messages.map(message => {
         const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
         const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
@@ -258,11 +257,10 @@ function DetailContext({ threadId, identity, subject, lane, messages, lastMessag
   );
 }
 
-function EmailDetailWorkspace({ groups, selectedId, detail, detailUnavailable, detailOnly = false, reply, setReply, draft, draftDismissed, onPick, onClose, onInsertDraft, onDismissDraft, onSend, onResolve, isSending, isResolving }: {
+function EmailDetailWorkspace({ groups, selectedId, detail, detailOnly = false, reply, setReply, draft, draftDismissed, onPick, onClose, onInsertDraft, onDismissDraft, onSend, onResolve, isSending, isResolving }: {
   groups: Array<{ lane: Lane; threads: LiveEmailThread[] }>;
   selectedId: string;
   detail: LiveEmailDetail | undefined;
-  detailUnavailable: boolean;
   detailOnly?: boolean;
   reply: string;
   setReply: (value: string) => void;
@@ -283,7 +281,7 @@ function EmailDetailWorkspace({ groups, selectedId, detail, detailUnavailable, d
   const lastMessage = detail?.messages?.at(-1);
   const lane = listThread ? groups.find(group => group.threads.some(thread => thread.threadId === selectedId))?.lane ?? "Needs Response" : "Needs Response";
   const subject = (detail?.subject ?? listThread?.subject ?? "Email Thread").replace(/^\[From:[^\]]*\]\s*/i, "").trim() || "Email Thread";
-  const detailMain = <DetailMain detail={detail} detailUnavailable={detailUnavailable} reply={reply} setReply={setReply} draft={draft} draftDismissed={draftDismissed} onInsertDraft={onInsertDraft} onDismissDraft={onDismissDraft} onSend={onSend} onResolve={onResolve} isSending={isSending} isResolving={isResolving} />;
+  const detailMain = <DetailMain detail={detail} reply={reply} setReply={setReply} draft={draft} draftDismissed={draftDismissed} onInsertDraft={onInsertDraft} onDismissDraft={onDismissDraft} onSend={onSend} onResolve={onResolve} isSending={isSending} isResolving={isResolving} />;
   if (detailOnly) return <section className="email-detail-main-only" aria-label="Live email detail page">{detailMain}</section>;
   return <section className="email-detail-workspace emails-live-detail-workspace" aria-label="Live email detail page"><DetailSidebar groups={groups} selectedId={selectedId} onPick={onPick} close={onClose} />{detailMain}<DetailContext threadId={selectedId} identity={identity} subject={subject} lane={lane} messages={detail?.messages ?? []} lastMessageAt={lastMessage?.date} close={onClose} onResolve={onResolve} isResolving={isResolving} /></section>;
 }
@@ -301,10 +299,11 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
   const [dismissedDrafts, setDismissedDrafts] = useState<Set<string>>(new Set());
   const utils = trpc.useUtils();
   const emailInbox = trpc.opsChat.listEmailInboxThreads.useQuery(undefined, { staleTime: 30_000, refetchOnWindowFocus: true });
-  const { data: emailThread, isLoading: emailThreadLoading, isError: emailThreadError } = trpc.gmail.getThread.useQuery({ threadId: selectedThreadId ?? "" }, { enabled: Boolean(selectedThreadId), staleTime: 60_000, refetchOnWindowFocus: false });
-  const { data: storedEmailThread, isLoading: storedEmailThreadLoading } = trpc.gmail.getStoredThread.useQuery({ threadId: selectedThreadId ?? "" }, { enabled: Boolean(selectedThreadId) && emailThreadError, staleTime: 30_000, refetchOnWindowFocus: false });
-  const detail = (emailThread ?? storedEmailThread) as LiveEmailDetail | undefined;
-  const detailUnavailable = emailThreadError && !storedEmailThreadLoading && !storedEmailThread;
+  const emailThread = trpc.gmail.getThread.useQuery(
+    { threadId: selectedThreadId! },
+    { enabled: !!selectedThreadId, staleTime: 60_000, refetchOnWindowFocus: false },
+  );
+  const detail = emailThread.data as LiveEmailDetail | undefined;
   const emailAiDraft = trpc.opsChat.getEmailDraftByThreadId.useQuery({ threadId: selectedThreadId ?? "" }, { enabled: Boolean(selectedThreadId), staleTime: 20_000, refetchInterval: selectedThreadId ? 15_000 : false, refetchOnWindowFocus: true });
   const dismissEmailDraft = trpc.opsChat.dismissEmailDraft.useMutation();
   const sendEmailReply = trpc.gmail.sendReply.useMutation({
@@ -369,7 +368,7 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
 
   return <main className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}${detailOnly ? " is-detail-only" : ""}`}>
     {!selectedThreadId && <header className="emails-utility"><label><Search size={17} /><input aria-label="Search email threads" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search emails…" /><kbd>⌘ K</kbd></label><div><button type="button" className="emails-live-disabled-control" aria-label="Email notifications"><Bell size={18} /></button><span>MIB</span></div></header>}
-    {selectedThreadId ? <EmailDetailWorkspace groups={groups} selectedId={selectedThreadId} detail={detail} detailUnavailable={detailUnavailable} detailOnly={detailOnly} reply={emailReply} setReply={setEmailReply} draft={emailAiDraft.data} draftDismissed={dismissedDrafts.has(selectedThreadId)} onPick={openThread} onClose={closeThread} onInsertDraft={insertDraft} onDismissDraft={dismissDraft} onSend={sendReply} onResolve={resolveThread} isSending={sendEmailReply.isPending} isResolving={resolveEmailThread.isPending} /> : <div className="emails-content">
+    {selectedThreadId ? <EmailDetailWorkspace groups={groups} selectedId={selectedThreadId} detail={detail} detailOnly={detailOnly} reply={emailReply} setReply={setEmailReply} draft={emailAiDraft.data} draftDismissed={dismissedDrafts.has(selectedThreadId)} onPick={openThread} onClose={closeThread} onInsertDraft={insertDraft} onDismissDraft={dismissDraft} onSend={sendReply} onResolve={resolveThread} isSending={sendEmailReply.isPending} isResolving={resolveEmailThread.isPending} /> : <div className="emails-content">
       <section className="emails-head"><div><span>Customer communication · Live workspace</span><h1><Mail size={27} />Emails</h1><p>Review the live email queue, open thread context, and prepare replies without leaving the customer communication workspace.</p></div><p><Sparkles size={14} />Live threads are grouped by the existing queue rules.</p></section>
       <section className="emails-board-shell"><header><div><span>Inbox board</span><h2>Email Kanban <b>{visibleThreads.length}</b></h2></div><div><button type="button" className="emails-live-disabled-control" title="The live queue keeps its current automatic grouping">Live queue <ChevronDown size={14} /></button><button type="button" className="emails-live-disabled-control" title="Filtering is available through search">Filters</button></div></header><div className="emails-board">
         {emailInbox.isLoading && <div className="emails-live-board-state">Loading emails…</div>}

@@ -18,13 +18,16 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain('.emails-live .em2-main{');
   });
 
-  it("preserves the existing Email data, fallback, draft, send, and resolution contracts", () => {
+  it("uses the same direct Gmail detail source as CsInbox2 while preserving draft, send, and resolution contracts", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     expect(page).toContain("trpc.opsChat.listEmailInboxThreads.useQuery");
     expect(page).toContain("trpc.gmail.getThread.useQuery");
-    expect(page).toContain("trpc.gmail.getStoredThread.useQuery");
-    expect(page).toContain("enabled: Boolean(selectedThreadId) && emailThreadError");
-    expect(page).toContain("const detail = (emailThread ?? storedEmailThread) as LiveEmailDetail | undefined;");
+    expect(page).toContain("const emailThread = trpc.gmail.getThread.useQuery(");
+    expect(page).toContain("{ threadId: selectedThreadId! },");
+    expect(page).toContain("enabled: !!selectedThreadId");
+    expect(page).toContain("const detail = emailThread.data as LiveEmailDetail | undefined;");
+    expect(page).not.toContain("trpc.gmail.getStoredThread.useQuery");
+    expect(page).not.toContain("storedEmailThread");
     expect(page).toContain("trpc.opsChat.getEmailDraftByThreadId.useQuery");
     expect(page).toContain("trpc.gmail.sendReply.useMutation");
     expect(page).toContain("trpc.gmail.completeThread.useMutation");

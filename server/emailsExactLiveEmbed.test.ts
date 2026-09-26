@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const source = readFileSync(resolve(process.cwd(), "client/src/pages/EmailsExactLive.tsx"), "utf8");
 
 describe("EmailsExactLive embedded detail", () => {
-  it("uses the CsInbox2 central email treatment when Command Chat supplies a selected thread", () => {
+  it("uses the CsInbox2 direct-detail treatment when Command Chat supplies a selected thread", () => {
     expect(source).toContain('type EmailsExactLiveProps = {');
     expect(source).toContain('initialThreadId?: string | null;');
     expect(source).toContain('onCloseDetail?: () => void;');
@@ -15,5 +15,6 @@ describe("EmailsExactLive embedded detail", () => {
     expect(source).toContain('className="email-detail-main em2-main emails-csinbox2-detail-main"');
     expect(source).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
     expect(source).toContain('message.bodyText || message.snippet || "(no content)"');
+    expect(source).not.toContain("trpc.gmail.getStoredThread.useQuery");
   });
 });
