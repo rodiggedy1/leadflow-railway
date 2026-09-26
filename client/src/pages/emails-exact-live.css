@@ -62,6 +62,24 @@
 
 .emails-live.has-detail .email-detail-workspace {
   width: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.emails-live.has-detail .email-detail-main {
+  min-height: 0;
+}
+
+.emails-live.has-detail .email-detail-thread {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.emails-live.has-detail .email-detail-thread::-webkit-scrollbar {
+  display: block;
+  width: 9px;
+  height: 9px;
 }
 
 .emails-live .email-detail-list .emails-live-disabled-control,
