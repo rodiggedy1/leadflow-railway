@@ -234,6 +234,9 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
     return outbound ? latestIndex : index;
   }, -1);
   const lastMessage = messages.at(-1);
+  const popupMessages = showClose
+    ? [latestInboundMessageIndex >= 0 ? messages[latestInboundMessageIndex] : lastMessage].filter((message): message is LiveEmailMessage => Boolean(message))
+    : messages;
   const ago = (timestamp?: number | null) => {
     if (!timestamp) return "";
     const age = Date.now() - timestamp;
@@ -261,7 +264,7 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
         <div className="em2-message-age">{ago(lastMessage?.date)}</div>
       </div>
     </header>
-    <div className="em2-main-tabs"><button type="button" className="em2-main-tab active">Thread</button><button type="button" className="em2-main-tab">Headers</button><button type="button" className="em2-main-tab">Notes (0)</button><button type="button" className="em2-main-tab">Activity</button></div>
+    {!showClose && <div className="em2-main-tabs"><button type="button" className="em2-main-tab active">Thread</button><button type="button" className="em2-main-tab">Headers</button><button type="button" className="em2-main-tab">Notes (0)</button><button type="button" className="em2-main-tab">Activity</button></div>}
     <section className="em2-thread">
       {isDetailLoading && !detail && <div className="emails-live-thread-state">Loading thread…</div>}
       {detailError && !detail && <div className="emails-live-thread-error" role="alert">
@@ -271,11 +274,11 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
         <button type="button" onClick={onRetry}>Retry</button>
       </div>}
       {!isDetailLoading && !detailError && !detail && <div className="emails-live-thread-state">No live Gmail thread was returned.</div>}
-      {messages.map((message, index) => {
+      {popupMessages.map((message, index) => {
         const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
-        const isPrimaryReceived = index === latestInboundMessageIndex;
+        const isPrimaryReceived = showClose || index === latestInboundMessageIndex;
         const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
-        const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } }) : null;
+        const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true }, ...(showClose ? { FORBID_ATTR: ["style", "color", "bgcolor"] } : {}) }) : null;
         return <article key={message.id} className={`em2-email-message${outbound ? " outgoing" : ""}${isPrimaryReceived ? " is-primary-received" : ""}`}>
           <header className="em2-msg-head"><div className="em2-msg-who"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? "Y" : messageInitials}</div><div><span className="em2-msg-name">{outbound ? "You" : (message.from || senderName)}</span><span className="em2-msg-email">{message.fromEmail ? `<${message.fromEmail}>` : ""}</span></div></div><div className="em2-msg-time">{ago(message.date)}</div></header>
           <div className={`em2-msg-body${isPrimaryReceived ? " em2-msg-body-scroll-owner" : ""}`}>{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>

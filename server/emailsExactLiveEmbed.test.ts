@@ -14,7 +14,7 @@ describe("Command Chat Email popup detail", () => {
     expect(source).toContain('export default function EmailsExactLive({ initialThreadId = null, onCloseDetail, detailOnly = false }: EmailsExactLiveProps = {})');
     expect(source).toContain('if (detailOnly) return <section className="email-detail-main-only"');
     expect(source).toContain('className="email-detail-main em2-main emails-csinbox2-detail-main"');
-    expect(source).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
+    expect(source).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true }, ...(showClose ? { FORBID_ATTR: ["style", "color", "bgcolor"] } : {}) })');
     expect(source).toContain('message.bodyText || message.snippet || "(no content)"');
     expect(source).toContain('replyToEmail?: string | null;');
     expect(source).toContain('function PopupDetailContext({ identity, bookingContext, isBookingContextLoading, close, onResolve, isResolving }');
@@ -23,6 +23,11 @@ describe("Command Chat Email popup detail", () => {
     expect(source).toContain('No active LeadFlow booking is linked to this email address.');
     expect(source).toContain('showClose={detailOnly}');
     expect(source).toContain('const latestInboundMessageIndex = messages.reduce');
+    expect(source).toContain('const popupMessages = showClose');
+    expect(source).toContain('popupMessages.map((message, index) => {');
+    expect(source).not.toContain('{messages.map((message, index) => {');
+    expect(source).toContain('showClose ? { FORBID_ATTR: ["style", "color", "bgcolor"] } : {}');
+    expect(source).toContain('{!showClose && <div className="em2-main-tabs">');
     expect(source).toContain('em2-msg-body-scroll-owner');
     expect(source).not.toContain("trpc.gmail.getStoredThread.useQuery");
   });
