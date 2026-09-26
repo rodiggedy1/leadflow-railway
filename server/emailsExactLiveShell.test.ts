@@ -74,6 +74,15 @@ describe("Emails exact-live workspace", () => {
     expect(styles).not.toContain("CsInbox2");
   });
 
+  it("keeps inline-styled Gmail body text readable on the dark standalone Email page", () => {
+    const styles = read("client/src/pages/emails-exact-live.css");
+
+    expect(styles).toContain("/* Gmail HTML can carry inline black text; keep sanitized message bodies legible on the dark standalone Email page. */");
+    expect(styles).toContain(".emails-live .emails-live-message-html,.emails-live .emails-live-message-html *{color:#dbe6ef!important}");
+    expect(styles).toContain(".emails-live .emails-live-message-html a{color:#9ed9ff!important}");
+    expect(styles).toContain(".emails-live .emails-live-message-html hr{height:1px!important;margin:14px 0!important;border:0!important;background:#596979!important;color:#596979!important}");
+  });
+
   it("keeps the composer compact by collapsing Madison's draft into an editable preview", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     const styles = read("client/src/pages/emails-exact-live.css");

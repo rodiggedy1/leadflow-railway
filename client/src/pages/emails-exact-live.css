@@ -265,3 +265,9 @@
 .emails-live.has-detail .emails-live-message-direction span{width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent;color:#8bd8ff;font-size:9px;font-weight:850;letter-spacing:.075em}
 .emails-live.has-detail .emails-live-message-direction.is-sent span{border:0;background:transparent;color:#c8b7ff}
 .emails-live.has-detail .emails-live-message-html{padding:2px 10px 0 43px;color:#d7e0e7}
+
+
+/* Gmail HTML can carry inline black text; keep sanitized message bodies legible on the dark standalone Email page. */
+.emails-live .emails-live-message-html,.emails-live .emails-live-message-html *{color:#dbe6ef!important}
+.emails-live .emails-live-message-html a{color:#9ed9ff!important}
+.emails-live .emails-live-message-html hr{height:1px!important;margin:14px 0!important;border:0!important;background:#596979!important;color:#596979!important}
