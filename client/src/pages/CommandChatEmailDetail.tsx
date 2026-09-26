@@ -235,7 +235,6 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
   }, -1);
   const lastMessage = messages.at(-1);
   const popupPrimaryMessage = latestInboundMessageIndex >= 0 ? messages[latestInboundMessageIndex] : lastMessage;
-  const popupPrimaryOutbound = Boolean(inboxEmail) && popupPrimaryMessage?.fromEmail?.toLowerCase() === inboxEmail;
   const popupThreadMessages = popupPrimaryMessage
     ? [popupPrimaryMessage, ...messages.filter(message => message.id !== popupPrimaryMessage.id)]
     : [];
@@ -277,7 +276,6 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
       </div>}
       {!isDetailLoading && !detailError && !detail && <div className="emails-live-thread-state">No live Gmail thread was returned.</div>}
       {showClose && popupPrimaryMessage && <>
-        <header className="em2-msg-head"><div className="em2-msg-who"><div className={`em2-small-avatar${popupPrimaryOutbound ? " out" : ""}`}>{popupPrimaryOutbound ? "Y" : (popupPrimaryMessage.from ?? popupPrimaryMessage.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?"}</div><div><span className="em2-msg-name">{popupPrimaryOutbound ? "You" : (popupPrimaryMessage.from || senderName)}</span><span className="em2-msg-email">{popupPrimaryMessage.fromEmail ? `<${popupPrimaryMessage.fromEmail}>` : ""}</span></div></div><div className="em2-msg-time">{ago(popupPrimaryMessage.date)}</div></header>
         <div className="em2-msg-body em2-msg-body-scroll-owner">{popupThreadMessages.map((message, index) => {
           const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
           const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";

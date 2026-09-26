@@ -28,6 +28,8 @@ describe("Command Chat Email popup detail", () => {
     expect(source).toContain('popupThreadMessages.map((message, index) => {');
     expect(source).toContain('!showClose && messages.map((message, index) => {');
     expect(source).not.toContain('showClose && popupPrimaryMessage && <article');
+    expect(source).not.toContain('popupPrimaryOutbound');
+    expect(source).not.toContain('showClose && popupPrimaryMessage && <>\n        <header className="em2-msg-head">');
     expect(source).toContain('outbound ? "↗ Sent reply" : "↓ Received"');
     expect(source).toContain('em2-thread-entry-meta${outbound ? " is-sent" : " is-received"}');
     expect(source).toContain('{!showClose && <div className="em2-main-tabs">');
