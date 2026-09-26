@@ -43,7 +43,7 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live .email-detail-list,");
   });
 
-  it("uses one full-thread scrollbar while every Email card expands to its complete body", () => {
+  it("uses one full-thread scrollbar and a flat stream with full Email bodies", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     const styles = read("client/src/pages/emails-exact-live.css");
 
@@ -56,10 +56,12 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread{overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#45454b #18181a;scrollbar-width:thin}");
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread::-webkit-scrollbar{display:block;width:9px}");
     expect(styles).toContain(".emails-live.has-detail .emails-live-message-html{max-block-size:none;overflow:visible;overscroll-behavior:auto;scrollbar-gutter:auto}");
+    expect(styles).toContain("/* Flat message stream: no rounded cards, only compact received/sent separators. */");
+    expect(styles).toContain(".emails-live.has-detail .email-detail-thread article{margin:0!important;padding:0 0 22px;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible}");
     expect(page).toContain(' : <div className="emails-live-message-html">{message.bodyText || message.snippet || "(no content)"}</div>}');
   });
 
-  it("applies the approved received and sent card treatment only to the new Email page", () => {
+  it("uses compact received and sent separators only on the new Email page", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     const styles = read("client/src/pages/emails-exact-live.css");
 
@@ -67,7 +69,7 @@ describe("Emails exact-live workspace", () => {
     expect(page).toContain('outgoing ? "↗ Sent" : "✉ Received"');
     expect(page).toContain('className="emails-live-message-heading"');
     expect(styles).toContain("/* Standalone /admin/emails uses the same directional body treatment as Command Chat. */");
-    expect(styles).toContain(".emails-live.has-detail .email-detail-thread article.is-outgoing{margin-left:0;border-color:rgba(169,140,255,.56);background:#1c1928;box-shadow:inset 4px 0 0 #a98cff}");
+    expect(styles).toContain(".emails-live.has-detail .emails-live-message-direction::after");
     expect(styles).toContain(".emails-live.has-detail .emails-live-message-direction.is-sent span");
     expect(styles).not.toContain("CsInbox2");
   });

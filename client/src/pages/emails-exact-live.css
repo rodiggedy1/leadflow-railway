@@ -253,3 +253,15 @@
 .emails-live.has-detail .email-detail-thread::-webkit-scrollbar-track{background:#18181a}
 .emails-live.has-detail .email-detail-thread::-webkit-scrollbar-thumb{border:2px solid #18181a;border-radius:999px;background:#45454b}
 .emails-live.has-detail .emails-live-message-html{max-block-size:none;overflow:visible;overscroll-behavior:auto;scrollbar-gutter:auto}
+
+
+/* Flat message stream: no rounded cards, only compact received/sent separators. */
+.emails-live.has-detail .email-detail-thread article{margin:0!important;padding:0 0 22px;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible}
+.emails-live.has-detail .email-detail-thread article+article{padding-top:20px;border-top:1px solid rgba(126,142,157,.2)!important}
+.emails-live.has-detail .email-detail-thread article header{gap:7px;padding:0 0 9px;border-bottom:0}
+.emails-live.has-detail .email-detail-thread article header>.emails-live-message-direction{gap:9px}
+.emails-live.has-detail .emails-live-message-direction::after{content:"";height:1px;flex:1;background:rgba(98,188,233,.38)}
+.emails-live.has-detail .emails-live-message-direction.is-sent::after{background:rgba(169,140,255,.48)}
+.emails-live.has-detail .emails-live-message-direction span{width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent;color:#8bd8ff;font-size:9px;font-weight:850;letter-spacing:.075em}
+.emails-live.has-detail .emails-live-message-direction.is-sent span{border:0;background:transparent;color:#c8b7ff}
+.emails-live.has-detail .emails-live-message-html{padding:2px 10px 0 43px;color:#d7e0e7}
