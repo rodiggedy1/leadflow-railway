@@ -247,9 +247,9 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const [leftRailTab, setLeftRailTab] = useState<"sms" | "email">("sms");');
     expect(page).toContain('trpc.opsChat.listEmailInboxThreads.useQuery');
     expect(page).toContain('function EmailInboxRow({ thread, onOpen }');
-    expect(page).toContain('import EmailsExactLive from "./EmailsExactLive";');
+    expect(page).toContain('import CsInboxEmailThreadDetail from "@/components/CsInboxEmailThreadDetail";');
     expect(page).toContain('function ExactEmailWorkspaceOverlay({ threadId, onClose }');
-    expect(page).toContain('<EmailsExactLive initialThreadId={threadId} onCloseDetail={onClose} detailOnly />');
+    expect(page).toContain('<CsInboxEmailThreadDetail threadId={threadId} onClose={onClose} />');
     expect(page).toContain('selectedEmailThreadId && <ExactEmailWorkspaceOverlay');
     expect(page).not.toContain('function EmailConversationDrawer({ threadId, onClose }');
     expect(page).not.toContain('trpc.gmail.getStoredThread.useQuery');
