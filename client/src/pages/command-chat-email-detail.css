@@ -73,3 +73,20 @@
 .ccc-live-email-workspace-modal .email-popup-context .email-detail-profile-identity>div:last-child{display:grid;gap:3px;min-width:0}.ccc-live-email-workspace-modal .email-popup-context .email-detail-profile-tags{display:flex;gap:6px;flex-wrap:wrap}.ccc-live-email-workspace-modal .email-popup-context .email-detail-profile-tags span{width:auto}
 
 .ccc-live-email-workspace-modal .email-popup-context .email-detail-profile-identity>div:last-child>b,.ccc-live-email-workspace-modal .email-popup-context .email-detail-profile-identity>div:last-child>small{display:block}.ccc-live-email-workspace-modal .email-popup-context .email-detail-profile-tags span{display:inline-flex!important;flex:0 0 auto}
+
+
+/* Reference-matched received and sent cards remain inside the one full-thread body scroll area. */
+.ccc-live-email-workspace-modal .em2-msg-body{padding:10px 12px 12px}
+.ccc-live-email-workspace-modal .em2-thread-entry{margin:0 0 12px;padding:0;overflow:hidden;border:1px solid rgba(98,188,233,.42);border-radius:12px;background:#151c24;box-shadow:inset 4px 0 0 #62bce9}
+.ccc-live-email-workspace-modal .em2-thread-entry+.em2-thread-entry{padding:0;border-top-color:rgba(117,146,163,.24)}
+.ccc-live-email-workspace-modal .em2-thread-entry:not(.outgoing){padding-left:0;background:linear-gradient(105deg,rgba(31,59,76,.52),#151c24 72%);box-shadow:inset 4px 0 0 #62bce9}
+.ccc-live-email-workspace-modal .em2-thread-entry.outgoing{margin-left:0;padding:0;border-color:rgba(169,140,255,.56);background:#1c1928;box-shadow:inset 4px 0 0 #a98cff}
+.ccc-live-email-workspace-modal .em2-thread-entry-head{display:grid;gap:9px;padding:11px 14px 10px;border-bottom:1px solid rgba(117,146,163,.22)}
+.ccc-live-email-workspace-modal .em2-thread-entry-meta{margin:0}
+.ccc-live-email-workspace-modal .em2-thread-entry-identity{display:flex;align-items:center;gap:9px;min-width:0}
+.ccc-live-email-workspace-modal .em2-thread-entry-identity .em2-small-avatar{width:34px;height:34px;font-size:10px}
+.ccc-live-email-workspace-modal .em2-thread-entry-who{display:grid;gap:3px;min-width:0}
+.ccc-live-email-workspace-modal .em2-thread-entry-route{overflow:hidden;color:#9aa8b6;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.ccc-live-email-workspace-modal .em2-thread-entry-identity .em2-msg-time{margin-left:auto;align-self:center}
+.ccc-live-email-workspace-modal .em2-thread-entry-body{padding:13px 15px 16px;font-size:11px;line-height:1.52}
+.ccc-live-email-workspace-modal .em2-thread-entry:last-child{margin-bottom:0}

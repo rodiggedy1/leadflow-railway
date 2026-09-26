@@ -281,7 +281,10 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
           const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
           const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) : null;
           return <section className={`em2-thread-entry${outbound ? " outgoing" : ""}${index === 0 ? " is-primary" : ""}`} key={message.id}>
-            {index > 0 && <div className={`em2-thread-entry-meta${outbound ? " is-sent" : " is-received"}`}><span className="em2-thread-direction">{outbound ? "↗ Sent reply" : "↓ Received"}</span><span>{outbound ? "You" : (message.from || senderName)} · {ago(message.date)}</span></div>}
+            <header className="em2-thread-entry-head">
+              <div className={`em2-thread-entry-meta${outbound ? " is-sent" : " is-received"}`}><span className="em2-thread-direction">{outbound ? "↗ Sent" : "✉ Received"}</span></div>
+              <div className="em2-thread-entry-identity"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? "Y" : messageInitials}</div><div className="em2-thread-entry-who"><span className="em2-msg-name">{outbound ? "You" : (message.from || senderName)}</span><span className="em2-thread-entry-route">to: {outbound ? senderName : (inboxEmail || "inbox")}</span></div><time className="em2-msg-time">{ago(message.date)}</time></div>
+            </header>
             <div className="em2-thread-entry-body">{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>
           </section>;
         })}</div>

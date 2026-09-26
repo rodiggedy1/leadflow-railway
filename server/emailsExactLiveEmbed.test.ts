@@ -30,22 +30,25 @@ describe("Command Chat Email popup detail", () => {
     expect(source).not.toContain('showClose && popupPrimaryMessage && <article');
     expect(source).not.toContain('popupPrimaryOutbound');
     expect(source).not.toContain('showClose && popupPrimaryMessage && <>\n        <header className="em2-msg-head">');
-    expect(source).toContain('outbound ? "↗ Sent reply" : "↓ Received"');
+    expect(source).toContain('outbound ? "↗ Sent" : "✉ Received"');
     expect(source).toContain('em2-thread-entry-meta${outbound ? " is-sent" : " is-received"}');
+    expect(source).toContain('className="em2-thread-entry-head"');
+    expect(source).toContain('className="em2-thread-entry-identity"');
     expect(source).toContain('{!showClose && <div className="em2-main-tabs">');
     expect(source).toContain('em2-msg-body-scroll-owner');
     expect(source).not.toContain("trpc.gmail.getStoredThread.useQuery");
   });
 
-  it("gives scroll ownership only to the received email body inside the popup", () => {
+  it("keeps received and sent cards inside one full-thread body scroll", () => {
     expect(styles).toContain("grid-template-rows:minmax(0,1fr)");
     expect(styles).toContain("/* The thread viewport is intentionally not a scroll owner. */");
     expect(styles).toMatch(/\.ccc-live-email-workspace-modal \.em2-thread\s*\{[\s\S]*?overflow:\s*hidden;/);
     expect(styles).toContain("/* The received email body is the only vertical scroll owner in the left pane. */");
     expect(styles).toMatch(/\.ccc-live-email-workspace-modal \.em2-msg-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(styles).toContain('.em2-msg-body-scroll-owner{overflow-y:auto}');
-    expect(styles).toContain('.em2-thread-entry.outgoing{margin-left:18px;padding:0 0 15px 15px;background:transparent;box-shadow:inset 3px 0 0 #a98cff}');
-    expect(styles).not.toContain('background:linear-gradient(90deg,rgba(169,140,255,.16)');
+    expect(styles).toContain('/* Reference-matched received and sent cards remain inside the one full-thread body scroll area. */');
+    expect(styles).toContain('.em2-thread-entry.outgoing{margin-left:0;padding:0;border-color:rgba(169,140,255,.56);background:#1c1928;box-shadow:inset 4px 0 0 #a98cff}');
+    expect(styles).toContain('.em2-thread-entry-head{display:grid;gap:9px;padding:11px 14px 10px');
     expect(styles).toContain('.em2-thread-direction{display:inline-flex');
     expect(styles).toContain('.em2-thread-entry-meta.is-sent .em2-thread-direction');
     expect(styles).toMatch(/\.ccc-live-email-workspace-modal \.em2-composer\s*\{[\s\S]*?flex:\s*0 0 auto;/);
