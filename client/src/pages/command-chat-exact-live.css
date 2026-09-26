@@ -163,8 +163,8 @@
 
 /* Email selections mount the existing EmailsExactLive detail workspace directly.
    Command Chat supplies only the centered modal frame; it owns no duplicate email renderer. */
-.ccc-live-email-workspace-backdrop{position:fixed;z-index:10020;inset:0;display:grid;place-items:center;padding:24px;background:rgba(7,9,12,.72);backdrop-filter:blur(5px)}
-.ccc-live-email-workspace-modal{width:min(960px,calc(100vw - 48px));height:min(900px,calc(100dvh - 48px));overflow:hidden;border:1px solid #3a4851;border-radius:16px;background:#19191b;box-shadow:0 24px 74px rgba(0,0,0,.56)}
+.ccc-live-email-workspace-backdrop{position:fixed;z-index:10020;inset:0;display:grid;place-items:center;padding:56px 24px;background:radial-gradient(ellipse 58% 88% at 4% 8%,rgba(42,143,216,.78),transparent 69%),radial-gradient(ellipse 64% 88% at 98% 96%,rgba(151,93,221,.66),transparent 74%),linear-gradient(133deg,rgba(50,119,168,.76),rgba(41,59,116,.77) 47%,rgba(77,46,110,.78));backdrop-filter:blur(9px) saturate(1.12)}
+.ccc-live-email-workspace-modal{width:min(1060px,calc(100vw - 48px));height:min(680px,calc(100dvh - 112px));overflow:hidden;border:1px solid rgba(136,151,171,.42);border-radius:15px;background:#13171e;box-shadow:0 30px 100px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.025) inset}
 .ccc-live-email-workspace-modal .emails-review.has-detail.is-detail-only{width:100%;min-height:0;height:100%}
 .ccc-live-email-workspace-modal .email-detail-main-only,.ccc-live-email-workspace-modal .email-detail-main-only>.email-detail-main{width:100%;height:100%;min-height:0}
 @media(max-width:800px){.ccc-live-email-workspace-backdrop{padding:0}.ccc-live-email-workspace-modal{width:100vw;height:100dvh;border:0;border-radius:0}}

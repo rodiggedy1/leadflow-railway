@@ -257,6 +257,8 @@ describe("Command Chat exact live shell", () => {
     expect(page).not.toContain('DOMPurify.sanitize(message.bodyHtml');
     expect(page).not.toContain('ccc-live-email-html-body');
     expect(styles).toContain('.ccc-live-email-workspace-backdrop{position:fixed;z-index:10020;');
+    expect(styles).toContain('radial-gradient(ellipse 58% 88% at 4% 8%,rgba(42,143,216,.78)');
+    expect(styles).toContain('.ccc-live-email-workspace-modal{width:min(1060px,calc(100vw - 48px));height:min(680px,calc(100dvh - 112px));');
     expect(styles).toContain('.ccc-live-email-workspace-modal .emails-review.has-detail.is-detail-only{width:100%;min-height:0;height:100%}');
     expect(styles).toContain('.ccc-live-email-workspace-modal .email-detail-main-only,.ccc-live-email-workspace-modal .email-detail-main-only>.email-detail-main{width:100%;height:100%;min-height:0}');
     expect(page).toContain('placeholder={leftRailTab === "email" ? "Search email threads..." : "Search conversations..."}');

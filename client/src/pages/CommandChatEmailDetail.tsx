@@ -168,7 +168,7 @@ function DetailSidebar({ groups, selectedId, onPick, close }: { groups: Array<{ 
   );
 }
 
-function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, reply, setReply, draft, draftDismissed, onInsertDraft, onDismissDraft, onSend, onResolve, isSending, isResolving }: {
+function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, reply, setReply, draft, draftDismissed, onInsertDraft, onDismissDraft, onSend, onResolve, isSending, isResolving, onClose, showClose }: {
   detail: LiveEmailDetail | undefined;
   threadId: string;
   detailError: string | null;
@@ -184,6 +184,8 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
   onResolve: () => void;
   isSending: boolean;
   isResolving: boolean;
+  onClose: () => void;
+  showClose?: boolean;
 }) {
   // Direct visual/body treatment copied from CsInbox2 Email detail.
   const thread = detail;
@@ -199,6 +201,10 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
   const subjectRaw = thread?.subject ?? "Email Thread";
   const subject = subjectRaw.replace(/^\[From:[^\]]*\]\s*/i, "").trim() || subjectRaw;
   const messages = thread?.messages ?? [];
+  const latestInboundMessageIndex = messages.reduce((latestIndex, message, index) => {
+    const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
+    return outbound ? latestIndex : index;
+  }, -1);
   const lastMessage = messages.at(-1);
   const ago = (timestamp?: number | null) => {
     if (!timestamp) return "";
@@ -220,7 +226,7 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
     <header className="em2-main-head">
       <div className="em2-title-row">
         <div className="em2-title-wrap"><div className="em2-subject">{subject}</div><span className="em2-badge">{status}</span></div>
-        <div className="em2-head-actions"><button type="button" className="em2-btn" onClick={onResolve} disabled={isResolving}>{isResolving ? "Resolving…" : "✓ Resolve"}</button><button type="button" className="em2-btn emails-live-disabled-control" aria-label="More email actions" title="Additional actions remain in the existing Inbox route"><MoreHorizontal size={16} /></button></div>
+        <div className="em2-head-actions"><button type="button" className="em2-btn" onClick={onResolve} disabled={isResolving}>{isResolving ? "Resolving…" : "✓ Resolve"}</button><button type="button" className="em2-btn emails-live-disabled-control" aria-label="More email actions" title="Additional actions remain in the existing Inbox route"><MoreHorizontal size={16} /></button>{showClose && <button type="button" className="em2-btn em2-close" aria-label="Close email conversation" onClick={onClose}><X size={15} /></button>}</div>
       </div>
       <div className="em2-sender-row">
         <div className="em2-sender-left"><div className="em2-avatar">{initials}</div><div><div className="em2-sender-name">{senderName} {senderEmail ? <span className="em2-sender-email">&lt;{senderEmail}&gt;</span> : null}</div><div className="em2-to-line">to: {inboxEmail || "inbox"}⌄</div></div></div>
@@ -237,13 +243,14 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
         <button type="button" onClick={onRetry}>Retry</button>
       </div>}
       {!isDetailLoading && !detailError && !detail && <div className="emails-live-thread-state">No live Gmail thread was returned.</div>}
-      {messages.map(message => {
+      {messages.map((message, index) => {
         const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
+        const isPrimaryReceived = index === latestInboundMessageIndex;
         const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
         const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } }) : null;
-        return <article key={message.id} className={`em2-email-message${outbound ? " outgoing" : ""}`}>
+        return <article key={message.id} className={`em2-email-message${outbound ? " outgoing" : ""}${isPrimaryReceived ? " is-primary-received" : ""}`}>
           <header className="em2-msg-head"><div className="em2-msg-who"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? "Y" : messageInitials}</div><div><span className="em2-msg-name">{outbound ? "You" : (message.from || senderName)}</span><span className="em2-msg-email">{message.fromEmail ? `<${message.fromEmail}>` : ""}</span></div></div><div className="em2-msg-time">{ago(message.date)}</div></header>
-          <div className="em2-msg-body">{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>
+          <div className={`em2-msg-body${isPrimaryReceived ? " em2-msg-body-scroll-owner" : ""}`}>{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>
         </article>;
       })}
       {detail && messages.length === 0 && <div className="emails-live-thread-state">No messages in this thread.</div>}
@@ -265,6 +272,26 @@ function DetailContext({ threadId, identity, subject, lane, messages, lastMessag
       <section className="email-detail-profile"><div className="email-detail-profile-identity"><CustomerPortrait identity={identity} className="email-detail-portrait-profile" /><div><b>{identity.name}</b><small>{identity.email || "No email address available"}</small></div></div><div className="email-detail-profile-tags"><span>Customer</span><span>Email</span></div></section>
       <section className="email-detail-context-section email-detail-thread-details"><h3>Thread Details <ChevronDown size={14} /></h3><p><span>Thread ID</span><b>{threadId}</b></p><p><span>Subject</span><b>{subject}</b></p><p><span>Last Message</span><b>{relativeTime(lastMessageAt)}</b></p><p><span>Messages</span><b>{messages.length}</b></p><p><span>Status</span><b className={`email-detail-status status-${lane.toLowerCase().replaceAll(" ", "-")}`}>{lane}</b></p></section>
       <section className="email-detail-context-section email-detail-context-actions"><h3>Actions <ChevronDown size={14} /></h3><div><button type="button" onClick={onResolve} disabled={isResolving}><Check size={14} />{isResolving ? "Resolving…" : "Resolve Thread"}</button><button type="button" onClick={close}><ChevronLeft size={14} />Back to Inbox</button><button type="button" className="emails-live-disabled-control" title="Additional actions remain in the existing Inbox route"><MoreHorizontal size={14} />More actions</button></div></section>
+    </aside>
+  );
+}
+
+function PopupDetailContext({ identity, close, onResolve, isResolving }: { identity: EmailIdentity; close: () => void; onResolve: () => void; isResolving: boolean }) {
+  return (
+    <aside className="email-detail-context email-popup-context" aria-label="Email thread context">
+      <section className="email-detail-profile email-popup-context-card">
+        <h3>Contact</h3>
+        <div className="email-detail-profile-identity"><CustomerPortrait identity={identity} className="email-detail-portrait-profile" /><div className="email-popup-contact-copy"><b>{identity.name}</b><small>{identity.email || "No email address available"}</small></div></div>
+        <div className="email-detail-profile-tags email-popup-contact-tags"><span>Customer</span><span>Email</span></div>
+      </section>
+      <section className="email-detail-context-section email-popup-context-card email-popup-booking-context">
+        <h3>Booking context</h3>
+        <p>Booking context is not loaded in this email view.</p>
+      </section>
+      <section className="email-detail-context-section email-detail-context-actions email-popup-context-card">
+        <h3>Thread actions</h3>
+        <div><button type="button" onClick={onResolve} disabled={isResolving}><Check size={14} />{isResolving ? "Resolving…" : "Resolve thread"}</button><button type="button" onClick={close}><ChevronLeft size={14} />Back to Command Chat</button><button type="button" className="emails-live-disabled-control" title="Additional actions remain in the existing Inbox route"><MoreHorizontal size={14} />More actions</button></div>
+      </section>
     </aside>
   );
 }
@@ -296,8 +323,8 @@ function EmailDetailWorkspace({ groups, selectedId, detail, detailError, isDetai
   const lastMessage = detail?.messages?.at(-1);
   const lane = listThread ? groups.find(group => group.threads.some(thread => thread.threadId === selectedId))?.lane ?? "Needs Response" : "Needs Response";
   const subject = (detail?.subject ?? listThread?.subject ?? "Email Thread").replace(/^\[From:[^\]]*\]\s*/i, "").trim() || "Email Thread";
-  const detailMain = <DetailMain detail={detail} threadId={selectedId} detailError={detailError} isDetailLoading={isDetailLoading} onRetry={onRetry} reply={reply} setReply={setReply} draft={draft} draftDismissed={draftDismissed} onInsertDraft={onInsertDraft} onDismissDraft={onDismissDraft} onSend={onSend} onResolve={onResolve} isSending={isSending} isResolving={isResolving} />;
-  if (detailOnly) return <section className="email-detail-main-only" aria-label="Live email detail page">{detailMain}</section>;
+  const detailMain = <DetailMain detail={detail} threadId={selectedId} detailError={detailError} isDetailLoading={isDetailLoading} onRetry={onRetry} reply={reply} setReply={setReply} draft={draft} draftDismissed={draftDismissed} onInsertDraft={onInsertDraft} onDismissDraft={onDismissDraft} onSend={onSend} onResolve={onResolve} isSending={isSending} isResolving={isResolving} onClose={onClose} showClose={detailOnly} />;
+  if (detailOnly) return <section className="email-detail-main-only" aria-label="Live email detail page">{detailMain}<PopupDetailContext identity={identity} close={onClose} onResolve={onResolve} isResolving={isResolving} /></section>;
   return <section className="email-detail-workspace emails-live-detail-workspace" aria-label="Live email detail page"><DetailSidebar groups={groups} selectedId={selectedId} onPick={onPick} close={onClose} />{detailMain}<DetailContext threadId={selectedId} identity={identity} subject={subject} lane={lane} messages={detail?.messages ?? []} lastMessageAt={lastMessage?.date} close={onClose} onResolve={onResolve} isResolving={isResolving} /></section>;
 }
 
