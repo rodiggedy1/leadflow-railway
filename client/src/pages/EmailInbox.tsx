@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import DOMPurify from "dompurify";
+import { getEmailBodyContent } from "@/lib/emailBodyContent";
 import {
   Mail, Search, Paperclip, Link2, Send, RefreshCw,
   Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles, Flag, X, FileText,
@@ -547,7 +547,7 @@ function AttachmentItem({ messageId, att }: {
 }
 
 function MessageBubble({ msg }: { msg: GmailMessage }) {
-  const sanitizedHtml = msg.bodyHtml ? DOMPurify.sanitize(msg.bodyHtml, { USE_PROFILES: { html: true } }) : null;
+  const body = getEmailBodyContent(msg);
   const senderName = msg.from || msg.fromEmail || "?";
   const accentColor = senderHex(senderName);
   return (
@@ -586,16 +586,16 @@ function MessageBubble({ msg }: { msg: GmailMessage }) {
       </div>
 
       {/* Body */}
-      {sanitizedHtml ? (
+      {body.html ? (
         <div
           className="text-[16px] text-[#27364d] leading-[1.7] prose prose-sm max-w-none
             [&_blockquote]:border-l-[3px] [&_blockquote]:border-[#dbe4f0] [&_blockquote]:pl-4 [&_blockquote]:text-slate-500 [&_blockquote]:not-italic
             [&_.gmail_quote]:border-l-[3px] [&_.gmail_quote]:border-[#dbe4f0] [&_.gmail_quote]:pl-4 [&_.gmail_quote]:text-slate-400"
-          dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+          dangerouslySetInnerHTML={{ __html: body.html }}
         />
       ) : (
         <div className="text-[16px] text-[#27364d] leading-[1.7] whitespace-pre-wrap">
-          {msg.bodyText || msg.snippet}
+          {body.text}
         </div>
       )}
 

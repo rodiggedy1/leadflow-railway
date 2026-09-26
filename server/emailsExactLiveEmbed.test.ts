@@ -15,6 +15,8 @@ describe("EmailsExactLive embedded detail", () => {
     expect(source).toContain('if (onCloseDetail) onCloseDetail();');
     expect(source).toContain('if (detailOnly) return <section className="email-detail-main-only"');
     expect(source).toContain('<DetailMain detail={detail} detailUnavailable={detailUnavailable}');
-    expect(source).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
+    expect(source).toContain('import { getEmailBodyContent } from "@/lib/emailBodyContent";');
+    expect(source).toContain('const body = getEmailBodyContent(message);');
+    expect(source).toContain('dangerouslySetInnerHTML={{ __html: body.html }}');
   });
 });

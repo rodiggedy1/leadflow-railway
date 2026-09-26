@@ -5,17 +5,20 @@ import { resolve } from "node:path";
 const read = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 describe("Command Chat rich email body preservation", () => {
-  it("uses the same safe Gmail HTML rendering contract as the active Email workspace", () => {
-    const commandChat = read("client/src/pages/CommandChatExactLive.tsx");
+  it("uses one shared safe body-content contract in both Email workspaces", () => {
     const emailInbox = read("client/src/pages/EmailsExactLive.tsx");
-    const styles = read("client/src/pages/command-chat-exact-live.css");
+    const legacyInbox = read("client/src/pages/EmailInbox.tsx");
+    const bodyContent = read("client/src/lib/emailBodyContent.ts");
 
-    const sanitizer = 'DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })';
-    expect(emailInbox).toContain(sanitizer);
-    expect(commandChat).toContain(sanitizer);
-    expect(commandChat).toContain('dangerouslySetInnerHTML={{ __html: sanitizedHtml }}');
-    expect(styles).toContain('.ccc-live-email-html-body img{max-width:100%;height:auto}');
-    expect(styles).toContain('.ccc-live-email-html-body table{max-width:100%;border-collapse:collapse}');
+    expect(emailInbox).toContain('import { getEmailBodyContent } from "@/lib/emailBodyContent";');
+    expect(legacyInbox).toContain('import { getEmailBodyContent } from "@/lib/emailBodyContent";');
+    expect(emailInbox).toContain('const body = getEmailBodyContent(message);');
+    expect(legacyInbox).toContain('const body = getEmailBodyContent(msg);');
+    expect(emailInbox).toContain('dangerouslySetInnerHTML={{ __html: body.html }}');
+    expect(legacyInbox).toContain('dangerouslySetInnerHTML={{ __html: body.html }}');
+    expect(bodyContent).toContain('ADD_FORBID_CONTENTS: ["style", "head", "title", "script", "noscript"]');
+    expect(bodyContent).toContain('const htmlSource = hasHtmlMarkup(cachedHtml)');
+    expect(bodyContent).toContain('text: removeLegacyCssTail(savedText || cachedHtml || snippet?.trim() || "(no content)")');
   });
 
   it("captures Gmail HTML with the existing worker and returns it only from the read-only stored-detail fallback", () => {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import DOMPurify from "dompurify";
+import { getEmailBodyContent } from "@/lib/emailBodyContent";
 import { Bell, Check, ChevronDown, ChevronLeft, Link2, Mail, MoreHorizontal, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -174,7 +174,7 @@ function DetailSidebar({ groups, selectedId, onPick, close }: { groups: Array<{ 
 function EmailMessageCard({ message, identity, inboxEmail }: { message: LiveEmailMessage; identity: EmailIdentity; inboxEmail: string }) {
   const outgoing = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
   const sender = outgoing ? { name: "You", email: inboxEmail, initials: "M" } : resolveIdentity(message.from, message.fromEmail);
-  const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } }) : null;
+  const body = getEmailBodyContent(message);
   return (
     <article className={outgoing ? "is-outgoing" : ""}>
       <header>
@@ -184,7 +184,7 @@ function EmailMessageCard({ message, identity, inboxEmail }: { message: LiveEmai
         </div>
         <time>{relativeTime(message.date)}</time>
       </header>
-      {sanitizedHtml ? <div className="emails-live-message-html" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <p>{message.bodyText || message.snippet || "(no content)"}</p>}
+      {body.html ? <div className="emails-live-message-html" dangerouslySetInnerHTML={{ __html: body.html }} /> : <p>{body.text}</p>}
     </article>
   );
 }
