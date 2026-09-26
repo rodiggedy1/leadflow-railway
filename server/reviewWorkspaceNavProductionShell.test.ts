@@ -14,7 +14,7 @@ describe("shared workspace navigation production shell", () => {
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/day-board-crm"><DayBoardExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/schedule-crm"><LeadflowScheduleCRMExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/sms"><SmsExactLive /></ReviewWorkspaceFrame>');
-    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>');
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/emails"><CsInbox2EmailWorkspace /></ReviewWorkspaceFrame>');
   });
 
   it("retains the original rail's live destinations and suppresses the page-local rail", () => {

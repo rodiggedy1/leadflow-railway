@@ -1,6 +1,6 @@
 import { FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import EmailsExactLive from "./EmailsExactLive";
+import CsInbox2EmailWorkspace from "@/components/CsInbox2EmailWorkspace";
 import {
   Activity,
   AlertTriangle,
@@ -1616,7 +1616,7 @@ const CommandComposer = memo(function CommandComposer({
 function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; onClose: () => void }) {
   return <div className="ccc-live-email-workspace-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="ccc-live-email-workspace-modal" role="dialog" aria-modal="true" aria-label="Email conversation" onMouseDown={(event) => event.stopPropagation()}>
-      <EmailsExactLive initialThreadId={threadId} onCloseDetail={onClose} detailOnly />
+      <CsInbox2EmailWorkspace key={threadId} initialThreadId={threadId} onCloseDetail={onClose} detailOnly />
     </section>
   </div>;
 }

@@ -69,7 +69,7 @@ const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 const TeamExactLive = lazy(() => import("./pages/TeamExactLive"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
 const SmsExactLive = lazy(() => import("./pages/SmsExactLive"));
-const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));
+const CsInbox2EmailWorkspace = lazy(() => import("./components/CsInbox2EmailWorkspace"));
 const LeadflowScheduleCRMExactLive = lazy(() => import("./pages/LeadflowScheduleCRMExactLive"));
 const LeadsCRMExactLive = lazy(() => import("./pages/LeadsCRMExactLive"));
 const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));
@@ -137,7 +137,7 @@ function AdminSmsExactLiveRoute() {
 }
 
 function AdminEmailsExactLiveRoute() {
-  return <ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>;
+  return <ReviewWorkspaceFrame navActivePath="/review/emails"><CsInbox2EmailWorkspace /></ReviewWorkspaceFrame>;
 }
 
 function AdminCommandChatExactLiveRoute() {
