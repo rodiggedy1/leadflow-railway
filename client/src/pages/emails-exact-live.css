@@ -72,14 +72,7 @@
 
 .emails-live.has-detail .email-detail-thread {
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.emails-live.has-detail .email-detail-thread::-webkit-scrollbar {
-  display: block;
-  width: 9px;
-  height: 9px;
+  overflow: hidden;
 }
 
 .emails-live.has-detail .email-detail-composer {
@@ -228,7 +221,6 @@
 }
 
 .emails-live .email-detail-list,
-.emails-live .email-detail-thread,
 .emails-live .email-detail-context {
   scrollbar-color: #45454b #18181a;
   scrollbar-width: thin;

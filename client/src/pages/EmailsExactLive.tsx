@@ -184,7 +184,7 @@ function EmailMessageCard({ message, identity, inboxEmail }: { message: LiveEmai
         </div>
         <time>{relativeTime(message.date)}</time>
       </header>
-      {sanitizedHtml ? <div className="emails-live-message-html" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <p>{message.bodyText || message.snippet || "(no content)"}</p>}
+      {sanitizedHtml ? <div className="emails-live-message-html" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="emails-live-message-html">{message.bodyText || message.snippet || "(no content)"}</div>}
     </article>
   );
 }

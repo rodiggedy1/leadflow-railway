@@ -43,19 +43,22 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live .email-detail-list,");
   });
 
-  it("constrains long received messages to visible thread and body scroll regions", () => {
+  it("uses the received message body as the only Email reading scroll region", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
     const styles = read("client/src/pages/emails-exact-live.css");
 
     expect(styles).toContain(".emails-live.has-detail .email-detail-workspace {");
     expect(styles).toContain("grid-template-rows: minmax(0, 1fr);");
     expect(styles).toContain(".emails-live.has-detail .email-detail-main {");
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread {");
-    expect(styles).toContain("overflow-y: auto;");
-    expect(styles).toContain(".emails-live.has-detail .email-detail-thread::-webkit-scrollbar {");
+    expect(styles).toContain(".emails-live.has-detail .email-detail-thread {\n  min-height: 0;\n  overflow: hidden;\n}");
+    expect(styles).not.toContain(".emails-live.has-detail .email-detail-thread::-webkit-scrollbar {");
     expect(styles).toContain(".emails-live .emails-live-message-html {");
     expect(styles).toContain("max-block-size: min(44dvh, 390px);");
+    expect(styles).toContain("overflow-y: auto;");
     expect(styles).toContain("overscroll-behavior: contain;");
     expect(styles).toContain(".emails-live .emails-live-message-html::-webkit-scrollbar {");
+    expect(page).toContain(' : <div className="emails-live-message-html">{message.bodyText || message.snippet || "(no content)"}</div>}');
     expect(styles).not.toContain(".emails-live .email-detail-thread article {\n  overflow: hidden;");
   });
 
