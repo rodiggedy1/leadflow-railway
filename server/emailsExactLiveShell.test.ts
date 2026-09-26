@@ -43,7 +43,7 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live .email-detail-list,");
   });
 
-  it("constrains long received messages to the standalone thread scroll region", () => {
+  it("constrains long received messages to visible thread and body scroll regions", () => {
     const styles = read("client/src/pages/emails-exact-live.css");
 
     expect(styles).toContain(".emails-live.has-detail .email-detail-workspace {");
@@ -52,6 +52,11 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread {");
     expect(styles).toContain("overflow-y: auto;");
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread::-webkit-scrollbar {");
+    expect(styles).toContain(".emails-live .emails-live-message-html {");
+    expect(styles).toContain("max-block-size: min(44dvh, 390px);");
+    expect(styles).toContain("overscroll-behavior: contain;");
+    expect(styles).toContain(".emails-live .emails-live-message-html::-webkit-scrollbar {");
+    expect(styles).not.toContain(".emails-live .email-detail-thread article {\n  overflow: hidden;");
   });
 
   it("uses the dedicated live route inside the original shared review navigation", () => {

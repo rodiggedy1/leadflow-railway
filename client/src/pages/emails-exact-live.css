@@ -103,10 +103,6 @@
   font-size: 11px;
 }
 
-.emails-live .email-detail-thread article {
-  overflow: hidden;
-}
-
 .emails-live .emails-live-outgoing-avatar {
   width: 25px;
   height: 25px;
@@ -122,12 +118,24 @@
 }
 
 .emails-live .emails-live-message-html {
+  max-block-size: min(44dvh, 390px);
   margin-top: 11px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 10px;
   padding-left: 32px;
+  scrollbar-gutter: stable;
   overflow-wrap: anywhere;
   color: #c7c7cc;
   font-size: 11px;
   line-height: 1.6;
+}
+
+.emails-live .emails-live-message-html::-webkit-scrollbar {
+  display: block;
+  width: 9px;
 }
 
 .emails-live .emails-live-message-html p,
