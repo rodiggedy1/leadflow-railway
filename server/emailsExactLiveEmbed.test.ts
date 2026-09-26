@@ -28,6 +28,8 @@ describe("Command Chat Email popup detail", () => {
     expect(source).toContain('popupThreadMessages.map((message, index) => {');
     expect(source).toContain('!showClose && messages.map((message, index) => {');
     expect(source).not.toContain('showClose && popupPrimaryMessage && <article');
+    expect(source).toContain('outbound ? "↗ Sent reply" : "↓ Received"');
+    expect(source).toContain('em2-thread-entry-meta${outbound ? " is-sent" : " is-received"}');
     expect(source).toContain('{!showClose && <div className="em2-main-tabs">');
     expect(source).toContain('em2-msg-body-scroll-owner');
     expect(source).not.toContain("trpc.gmail.getStoredThread.useQuery");
@@ -40,6 +42,9 @@ describe("Command Chat Email popup detail", () => {
     expect(styles).toContain("/* The received email body is the only vertical scroll owner in the left pane. */");
     expect(styles).toMatch(/\.ccc-live-email-workspace-modal \.em2-msg-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(styles).toContain('.em2-msg-body-scroll-owner{overflow-y:auto}');
+    expect(styles).toContain('.em2-thread-entry.outgoing{margin-left:26px');
+    expect(styles).toContain('.em2-thread-direction{display:inline-flex');
+    expect(styles).toContain('.em2-thread-entry-meta.is-sent .em2-thread-direction');
     expect(styles).toMatch(/\.ccc-live-email-workspace-modal \.em2-composer\s*\{[\s\S]*?flex:\s*0 0 auto;/);
     expect(styles).toContain("/* Madison remains in the fixed composer; its preview is compact but the draft remains insertable in full. */");
   });
