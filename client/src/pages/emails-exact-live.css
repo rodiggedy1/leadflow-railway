@@ -230,3 +230,19 @@
   .emails-live .emails-live-lane-marker { display: none; }
   .emails-live .email-detail-thread article.is-outgoing { margin-left: 7%; }
 }
+
+
+/* Standalone /admin/emails uses the same directional body treatment as Command Chat without changing its existing reading scroll contract. */
+.emails-live.has-detail .email-detail-thread article{margin:0 0 12px;padding:0;overflow:hidden;border:1px solid rgba(98,188,233,.42);border-radius:12px;background:#151c24;box-shadow:inset 4px 0 0 #62bce9}
+.emails-live.has-detail .email-detail-thread article.is-outgoing{margin-left:0;border-color:rgba(169,140,255,.56);background:#1c1928;box-shadow:inset 4px 0 0 #a98cff}
+.emails-live.has-detail .email-detail-thread article header{display:grid;gap:9px;padding:11px 14px 10px;border-bottom:1px solid rgba(117,146,163,.22)}
+.emails-live.has-detail .email-detail-thread article header>.emails-live-message-direction{display:flex;align-items:center;min-width:0}
+.emails-live.has-detail .emails-live-message-direction span{width:auto;height:20px;display:inline-flex;align-items:center;padding:0 7px;border:1px solid rgba(98,188,233,.44);border-radius:999px;background:#162a35;color:#a8e1ff;font-size:8px;font-weight:850;letter-spacing:.05em;text-transform:uppercase}
+.emails-live.has-detail .emails-live-message-direction.is-sent span{border-color:rgba(169,140,255,.65);background:#2a2544;color:#d8cbff}
+.emails-live.has-detail .email-detail-thread article header>.emails-live-message-heading{display:flex;align-items:center;gap:9px;min-width:0}
+.emails-live.has-detail .emails-live-message-heading>div{display:flex;align-items:center;gap:9px;min-width:0}
+.emails-live.has-detail .email-detail-thread article header .email-detail-portrait-message,.emails-live.has-detail .email-detail-thread article header .emails-live-outgoing-avatar{width:34px;height:34px;flex:0 0 auto;font-size:10px}
+.emails-live.has-detail .emails-live-message-heading p{display:grid;gap:3px;min-width:0}
+.emails-live.has-detail .emails-live-message-heading p small{overflow:hidden;color:#9aa8b6;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.emails-live.has-detail .emails-live-message-heading time{margin-left:auto;white-space:nowrap}
+.emails-live.has-detail .emails-live-message-html{margin-top:0;padding:13px 15px 16px;max-block-size:min(44dvh,390px)}

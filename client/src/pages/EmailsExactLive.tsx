@@ -178,11 +178,14 @@ function EmailMessageCard({ message, identity, inboxEmail }: { message: LiveEmai
   return (
     <article className={outgoing ? "is-outgoing" : ""}>
       <header>
-        <div>
-          {outgoing ? <span className="emails-live-outgoing-avatar">M</span> : <CustomerPortrait identity={sender} className="email-detail-portrait-message" />}
-          <p><b>{sender.name} <i>{sender.email ? `<${sender.email}>` : ""}</i></b></p>
+        <div className={`emails-live-message-direction${outgoing ? " is-sent" : " is-received"}`}><span>{outgoing ? "↗ Sent" : "✉ Received"}</span></div>
+        <div className="emails-live-message-heading">
+          <div>
+            {outgoing ? <span className="emails-live-outgoing-avatar">M</span> : <CustomerPortrait identity={sender} className="email-detail-portrait-message" />}
+            <p><b>{sender.name} <i>{sender.email ? `<${sender.email}>` : ""}</i></b><small>to: {outgoing ? identity.name : (inboxEmail || "inbox")}</small></p>
+          </div>
+          <time>{relativeTime(message.date)}</time>
         </div>
-        <time>{relativeTime(message.date)}</time>
       </header>
       {sanitizedHtml ? <div className="emails-live-message-html" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="emails-live-message-html">{message.bodyText || message.snippet || "(no content)"}</div>}
     </article>

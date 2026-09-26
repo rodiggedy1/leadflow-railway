@@ -62,6 +62,19 @@ describe("Emails exact-live workspace", () => {
     expect(styles).not.toContain(".emails-live .email-detail-thread article {\n  overflow: hidden;");
   });
 
+  it("applies the approved received and sent card treatment only to the new Email page", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
+    const styles = read("client/src/pages/emails-exact-live.css");
+
+    expect(page).toContain('className={`emails-live-message-direction${outgoing ? " is-sent" : " is-received"}`}');
+    expect(page).toContain('outgoing ? "↗ Sent" : "✉ Received"');
+    expect(page).toContain('className="emails-live-message-heading"');
+    expect(styles).toContain("/* Standalone /admin/emails uses the same directional body treatment as Command Chat without changing its existing reading scroll contract. */");
+    expect(styles).toContain(".emails-live.has-detail .email-detail-thread article.is-outgoing{margin-left:0;border-color:rgba(169,140,255,.56);background:#1c1928;box-shadow:inset 4px 0 0 #a98cff}");
+    expect(styles).toContain(".emails-live.has-detail .emails-live-message-direction.is-sent span");
+    expect(styles).not.toContain("CsInbox2");
+  });
+
   it("keeps the composer compact by collapsing Madison's draft into an editable preview", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     const styles = read("client/src/pages/emails-exact-live.css");
