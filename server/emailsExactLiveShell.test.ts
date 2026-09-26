@@ -5,18 +5,44 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-describe("Admin Emails route", () => {
-  it("uses the separate one-way CsInbox2 Email copy and leaves CsInbox2 unchanged", () => {
+describe("Emails exact-live workspace", () => {
+  it("keeps the approved review shell and substitutes only the CsInbox2 central email treatment", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
+    const styles = read("client/src/pages/emails-exact-live.css");
+    expect(page).toContain('import "./emails-review.css"');
+    expect(page).toContain('import "./emails-detail-review.css"');
+    expect(page).toContain('className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}${detailOnly ? " is-detail-only" : ""}`}');
+    expect(page).toContain('className="email-detail-workspace emails-live-detail-workspace"');
+    expect(page).toContain('className="email-detail-main em2-main emails-csinbox2-detail-main"');
+    expect(page).toContain('className="em2-html-email-body"');
+    expect(styles).toContain('.emails-live .em2-main{');
+  });
+
+  it("uses the same direct Gmail detail source as CsInbox2 while preserving draft, send, and resolution contracts", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
+    expect(page).toContain("trpc.opsChat.listEmailInboxThreads.useQuery");
+    expect(page).toContain("trpc.gmail.getThread.useQuery");
+    expect(page).toContain("const emailThread = trpc.gmail.getThread.useQuery(");
+    expect(page).toContain("{ threadId: selectedThreadId! },");
+    expect(page).toContain("enabled: !!selectedThreadId");
+    expect(page).toContain("const detail = emailThread.data as LiveEmailDetail | undefined;");
+    expect(page).not.toContain("trpc.gmail.getStoredThread.useQuery");
+    expect(page).not.toContain("storedEmailThread");
+    expect(page).toContain("trpc.opsChat.getEmailDraftByThreadId.useQuery");
+    expect(page).toContain("trpc.gmail.sendReply.useMutation");
+    expect(page).toContain("trpc.gmail.completeThread.useMutation");
+    expect(page).toContain("trpc.opsChat.dismissEmailDraft.useMutation");
+    expect(page).toContain('threadId: selectedThreadId, to: identity.email, subject, bodyHtml: emailReply.split');
+    expect(page).toContain('dismissedBy: "agent"');
+  });
+
+  it("uses CsInbox2 body rendering in this UI while retaining the dedicated route", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
     const app = read("client/src/App.tsx");
-    const emailCopy = read("client/src/components/CsInbox2Email.tsx");
-    const csInbox2 = read("client/src/components/CsInbox2.tsx");
-    expect(app).toContain('const CsInbox2Email = lazy(() => import("./components/CsInbox2Email"));');
-    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/emails"><CsInbox2Email /></ReviewWorkspaceFrame>');
-    expect(emailCopy).toContain('trpc.gmail.getThread.useQuery(');
-    expect(emailCopy).toContain('trpc.opsChat.listEmailInboxThreads.useQuery');
-    expect(emailCopy).toContain('trpc.gmail.sendReply.useMutation');
-    expect(emailCopy).toContain('trpc.gmail.completeThread.useMutation');
-    expect(emailCopy).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
-    expect(csInbox2).toContain('export default function CsInbox2()');
+    expect(page).toContain('import DOMPurify from "dompurify";');
+    expect(page).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
+    expect(page).toContain('message.bodyText || message.snippet || "(no content)"');
+    expect(page).not.toContain('getEmailBodyContent(message)');
+    expect(app).toContain('<Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />');
   });
 });
