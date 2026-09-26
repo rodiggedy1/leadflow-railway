@@ -59,6 +59,19 @@ describe("Emails exact-live workspace", () => {
     expect(styles).not.toContain(".emails-live .email-detail-thread article {\n  overflow: hidden;");
   });
 
+  it("keeps the composer compact by collapsing Madison's draft into an editable preview", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
+    const styles = read("client/src/pages/emails-exact-live.css");
+
+    expect(page).toContain('onClick={onInsertDraft}>Edit draft</button>');
+    expect(page).toContain('className="emails-live-draft-summary"');
+    expect(page).toContain('className="emails-live-draft-preview"');
+    expect(styles).toContain(".emails-live.has-detail .email-detail-composer {");
+    expect(styles).toContain("flex: 0 0 auto;");
+    expect(styles).toContain(".emails-live.has-detail .emails-live-draft-preview {");
+    expect(styles).toContain("-webkit-line-clamp: 2;");
+  });
+
   it("uses the dedicated live route inside the original shared review navigation", () => {
     const app = read("client/src/App.tsx");
     expect(app).toContain('const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));');

@@ -234,9 +234,9 @@ function DetailMain({ detail, identity, lane, replyMode, setReplyMode, reply, se
         <div className="email-detail-compose-box">
           <nav>{(["Reply", "Internal Note"] as const).map(item => <button type="button" className={replyMode === item ? "is-active" : ""} key={item}>{item}</button>)}</nav>
           {replyMode === "Reply" && draft && !draftDismissed && <section className="email-detail-ai-draft">
-            <header><span><Sparkles size={13} />Madison drafted a reply</span><div><button type="button" onClick={onInsertDraft}>Insert Draft</button><button type="button" aria-label="Dismiss draft" onClick={onDismissDraft}><X size={13} /></button></div></header>
-            {draft.intentSummary && <small>{draft.intentSummary}</small>}
-            <p>{draft.generatedDraft ?? ""}</p>
+            <header><span><Sparkles size={13} />Madison drafted a reply</span><div><button type="button" onClick={onInsertDraft}>Edit draft</button><button type="button" aria-label="Dismiss draft" onClick={onDismissDraft}><X size={13} /></button></div></header>
+            {draft.intentSummary && <small className="emails-live-draft-summary">{draft.intentSummary}</small>}
+            <p className="emails-live-draft-preview">{draft.generatedDraft ?? ""}</p>
           </section>}
           <textarea value={reply} onChange={event => setReply(event.target.value)} onKeyDown={event => {
             if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && reply.trim()) {

@@ -82,6 +82,33 @@
   height: 9px;
 }
 
+.emails-live.has-detail .email-detail-composer {
+  flex: 0 0 auto;
+}
+
+.emails-live.has-detail .email-detail-ai-draft {
+  display: grid;
+  gap: 6px;
+  padding-block: 8px;
+}
+
+.emails-live.has-detail .emails-live-draft-summary,
+.emails-live.has-detail .emails-live-draft-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.emails-live.has-detail .emails-live-draft-summary {
+  color: #aa9a72;
+}
+
+.emails-live.has-detail .emails-live-draft-preview {
+  color: #dbd3bc;
+}
+
 .emails-live .email-detail-list .emails-live-disabled-control,
 .emails-live .email-detail-title-row .emails-live-disabled-control,
 .emails-live .email-detail-context .emails-live-disabled-control,
