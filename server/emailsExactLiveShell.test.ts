@@ -36,6 +36,17 @@ describe("Emails exact-live workspace", () => {
     expect(page).toContain('dismissedBy: "agent"');
   });
 
+  it("shows the actual live Gmail thread error instead of leaving a failed request as loading", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
+    const styles = read("client/src/pages/emails-exact-live.css");
+    expect(page).toContain("const threadLoadError = emailThread.error");
+    expect(page).toContain("Couldn’t load the live Gmail thread.");
+    expect(page).toContain("Thread ID: {threadId}");
+    expect(page).toContain("onClick={onRetry}>Retry</button>");
+    expect(page).toContain("emailThread.refetch()");
+    expect(styles).toContain(".emails-live .emails-live-thread-error");
+  });
+
   it("uses CsInbox2 body rendering in this UI while retaining the dedicated route", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     const app = read("client/src/App.tsx");

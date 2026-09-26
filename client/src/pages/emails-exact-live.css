@@ -85,6 +85,34 @@
   font-size: 11px;
 }
 
+.emails-live .emails-live-thread-error {
+  max-width: 520px;
+  margin: 28px auto;
+  padding: 15px;
+  border: 1px solid #7c4b40;
+  border-radius: 9px;
+  background: #2b2020;
+  color: #efc5be;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.emails-live .emails-live-thread-error strong,
+.emails-live .emails-live-thread-error p,
+.emails-live .emails-live-thread-error small { display: block; }
+.emails-live .emails-live-thread-error p { margin: 6px 0; overflow-wrap: anywhere; }
+.emails-live .emails-live-thread-error small { color: #cfa8a1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.emails-live .emails-live-thread-error button {
+  margin-top: 12px;
+  padding: 6px 10px;
+  border: 1px solid #b66b5e;
+  border-radius: 6px;
+  background: #3a2725;
+  color: #ffe1da;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .emails-live .email-detail-thread article {
   overflow: hidden;
 }
