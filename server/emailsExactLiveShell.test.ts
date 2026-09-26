@@ -43,7 +43,7 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live .email-detail-list,");
   });
 
-  it("uses the received message body as the only Email reading scroll region", () => {
+  it("uses one full-thread scrollbar while every Email card expands to its complete body", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     const styles = read("client/src/pages/emails-exact-live.css");
 
@@ -52,14 +52,11 @@ describe("Emails exact-live workspace", () => {
     expect(styles).toContain(".emails-live.has-detail .email-detail-main {");
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread {");
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread {\n  min-height: 0;\n  overflow: hidden;\n}");
-    expect(styles).not.toContain(".emails-live.has-detail .email-detail-thread::-webkit-scrollbar {");
-    expect(styles).toContain(".emails-live .emails-live-message-html {");
-    expect(styles).toContain("max-block-size: min(44dvh, 390px);");
-    expect(styles).toContain("overflow-y: auto;");
-    expect(styles).toContain("overscroll-behavior: contain;");
-    expect(styles).toContain(".emails-live .emails-live-message-html::-webkit-scrollbar {");
+    expect(styles).toContain("/* One full-thread scrollbar; every received or sent card expands to its complete email body. */");
+    expect(styles).toContain(".emails-live.has-detail .email-detail-thread{overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#45454b #18181a;scrollbar-width:thin}");
+    expect(styles).toContain(".emails-live.has-detail .email-detail-thread::-webkit-scrollbar{display:block;width:9px}");
+    expect(styles).toContain(".emails-live.has-detail .emails-live-message-html{max-block-size:none;overflow:visible;overscroll-behavior:auto;scrollbar-gutter:auto}");
     expect(page).toContain(' : <div className="emails-live-message-html">{message.bodyText || message.snippet || "(no content)"}</div>}');
-    expect(styles).not.toContain(".emails-live .email-detail-thread article {\n  overflow: hidden;");
   });
 
   it("applies the approved received and sent card treatment only to the new Email page", () => {
@@ -69,7 +66,7 @@ describe("Emails exact-live workspace", () => {
     expect(page).toContain('className={`emails-live-message-direction${outgoing ? " is-sent" : " is-received"}`}');
     expect(page).toContain('outgoing ? "↗ Sent" : "✉ Received"');
     expect(page).toContain('className="emails-live-message-heading"');
-    expect(styles).toContain("/* Standalone /admin/emails uses the same directional body treatment as Command Chat without changing its existing reading scroll contract. */");
+    expect(styles).toContain("/* Standalone /admin/emails uses the same directional body treatment as Command Chat. */");
     expect(styles).toContain(".emails-live.has-detail .email-detail-thread article.is-outgoing{margin-left:0;border-color:rgba(169,140,255,.56);background:#1c1928;box-shadow:inset 4px 0 0 #a98cff}");
     expect(styles).toContain(".emails-live.has-detail .emails-live-message-direction.is-sent span");
     expect(styles).not.toContain("CsInbox2");
