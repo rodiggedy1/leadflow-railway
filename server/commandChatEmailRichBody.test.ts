@@ -6,11 +6,11 @@ const read = (relativePath: string) => readFileSync(resolve(process.cwd(), relat
 
 describe("Email body rendering contracts", () => {
   it("uses the CsInbox2 body-rendering path in the live Emails UI", () => {
-    const emailInbox = read("client/src/components/CsInbox2EmailWorkspace.tsx");
+    const emailInbox = read("client/src/pages/EmailsExactLive.tsx");
     const csInbox = read("client/src/components/CsInbox2.tsx");
     expect(emailInbox).toContain('import DOMPurify from "dompurify";');
-    expect(emailInbox).toContain('DOMPurify.sanitize(msg.bodyHtml, { USE_PROFILES: { html: true } })');
-    expect(emailInbox).toContain('msg.bodyText || msg.snippet || "(no content)"');
+    expect(emailInbox).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
+    expect(emailInbox).toContain('message.bodyText || message.snippet || "(no content)"');
     expect(emailInbox).not.toContain('getEmailBodyContent(message)');
     expect(csInbox).toContain('DOMPurify.sanitize(msg.bodyHtml, { USE_PROFILES: { html: true } })');
   });
