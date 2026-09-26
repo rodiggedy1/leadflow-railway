@@ -27,6 +27,7 @@ type LiveEmailMessage = {
   id: string;
   from?: string | null;
   fromEmail?: string | null;
+  replyToEmail?: string | null;
   bodyHtml?: string | null;
   bodyText?: string | null;
   snippet?: string | null;
@@ -41,6 +42,16 @@ type LiveEmailDetail = {
 };
 
 type EmailIdentity = { name: string; email: string; initials: string };
+type EmailBookingContext = {
+  booking: {
+    date: string;
+    dateLabel: string;
+    time: string | null;
+    serviceName: string | null;
+    teamName: string | null;
+    status: string;
+  } | null;
+};
 
 const LANES: Lane[] = ["New", "Needs Response", "Waiting on Customer", "At Risk"];
 const LANE_COLORS: Record<Lane, string> = {
@@ -93,6 +104,23 @@ function resolveIdentity(from?: string | null, fromEmail?: string | null): Email
   const email = fromLooksLikeEmail ? rawFrom : (isRelay ? rawFrom : rawFromEmail);
   const name = fromLooksLikeEmail ? rawFrom.split("@")[0] : (rawFrom || rawFromEmail.split("@")[0] || "Unknown");
   return { name, email, initials: initialsFor(name) };
+}
+
+function validEmailOrNull(value?: string | null) {
+  const email = value?.trim() ?? "";
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
+function bookingTimeLabel(value?: string | null) {
+  if (!value) return null;
+  if (!value.includes("T")) return value;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+}
+
+function bookingStatusLabel(value: string) {
+  return value.replaceAll("_", " ");
 }
 
 function laneFor(thread: LiveEmailThread, inboxEmail: string, now: number): Lane {
@@ -276,7 +304,8 @@ function DetailContext({ threadId, identity, subject, lane, messages, lastMessag
   );
 }
 
-function PopupDetailContext({ identity, close, onResolve, isResolving }: { identity: EmailIdentity; close: () => void; onResolve: () => void; isResolving: boolean }) {
+function PopupDetailContext({ identity, bookingContext, isBookingContextLoading, close, onResolve, isResolving }: { identity: EmailIdentity; bookingContext: EmailBookingContext | undefined; isBookingContextLoading: boolean; close: () => void; onResolve: () => void; isResolving: boolean }) {
+  const booking = bookingContext?.booking;
   return (
     <aside className="email-detail-context email-popup-context" aria-label="Email thread context">
       <section className="email-detail-profile email-popup-context-card">
@@ -286,7 +315,12 @@ function PopupDetailContext({ identity, close, onResolve, isResolving }: { ident
       </section>
       <section className="email-detail-context-section email-popup-context-card email-popup-booking-context">
         <h3>Booking context</h3>
-        <p>Booking context is not loaded in this email view.</p>
+        {isBookingContextLoading ? <p>Loading matched booking…</p> : booking ? <dl>
+          <div><dt>When</dt><dd>{booking.dateLabel}{bookingTimeLabel(booking.time) ? ` · ${bookingTimeLabel(booking.time)}` : ""}</dd></div>
+          <div><dt>Service</dt><dd>{booking.serviceName || "Service details not recorded"}</dd></div>
+          <div><dt>Team</dt><dd>{booking.teamName || "No team assigned"}</dd></div>
+          <div><dt>Status</dt><dd><span className="email-popup-booking-status">{bookingStatusLabel(booking.status)}</span></dd></div>
+        </dl> : <p>No active LeadFlow booking is linked to this email address.</p>}
       </section>
       <section className="email-detail-context-section email-detail-context-actions email-popup-context-card">
         <h3>Thread actions</h3>
@@ -323,8 +357,20 @@ function EmailDetailWorkspace({ groups, selectedId, detail, detailError, isDetai
   const lastMessage = detail?.messages?.at(-1);
   const lane = listThread ? groups.find(group => group.threads.some(thread => thread.threadId === selectedId))?.lane ?? "Needs Response" : "Needs Response";
   const subject = (detail?.subject ?? listThread?.subject ?? "Email Thread").replace(/^\[From:[^\]]*\]\s*/i, "").trim() || "Email Thread";
+  const latestInbound = [...(detail?.messages ?? [])].reverse().find(message => !inboxEmail || message.fromEmail?.toLowerCase() !== inboxEmail);
+  const bookingContext = trpc.gmail.getBookingContext.useQuery(
+    {
+      replyToEmail: validEmailOrNull(latestInbound?.replyToEmail),
+      senderEmail: validEmailOrNull(latestInbound?.fromEmail ?? detail?.fromEmail),
+    },
+    {
+      enabled: detailOnly && Boolean(validEmailOrNull(latestInbound?.replyToEmail) || validEmailOrNull(latestInbound?.fromEmail ?? detail?.fromEmail)),
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    },
+  );
   const detailMain = <DetailMain detail={detail} threadId={selectedId} detailError={detailError} isDetailLoading={isDetailLoading} onRetry={onRetry} reply={reply} setReply={setReply} draft={draft} draftDismissed={draftDismissed} onInsertDraft={onInsertDraft} onDismissDraft={onDismissDraft} onSend={onSend} onResolve={onResolve} isSending={isSending} isResolving={isResolving} onClose={onClose} showClose={detailOnly} />;
-  if (detailOnly) return <section className="email-detail-main-only" aria-label="Live email detail page">{detailMain}<PopupDetailContext identity={identity} close={onClose} onResolve={onResolve} isResolving={isResolving} /></section>;
+  if (detailOnly) return <section className="email-detail-main-only" aria-label="Live email detail page">{detailMain}<PopupDetailContext identity={identity} bookingContext={bookingContext.data as EmailBookingContext | undefined} isBookingContextLoading={bookingContext.isLoading} close={onClose} onResolve={onResolve} isResolving={isResolving} /></section>;
   return <section className="email-detail-workspace emails-live-detail-workspace" aria-label="Live email detail page"><DetailSidebar groups={groups} selectedId={selectedId} onPick={onPick} close={onClose} />{detailMain}<DetailContext threadId={selectedId} identity={identity} subject={subject} lane={lane} messages={detail?.messages ?? []} lastMessageAt={lastMessage?.date} close={onClose} onResolve={onResolve} isResolving={isResolving} /></section>;
 }
 

@@ -9,7 +9,7 @@ import { router, agentProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents, gmailSenderPolicies, madisonEmailDrafts } from "../drizzle/schema";
+import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents, gmailSenderPolicies, madisonEmailDrafts, leadflowJobs, bookings } from "../drizzle/schema";
 import { eq, or, inArray, desc, isNotNull, isNull, and, like, sql } from "drizzle-orm";
 import { processThread, enqueueThread, GLANCE_CATEGORY_META, type GlanceCategory, resolveIsActionable } from "./gmailGlanceWorker";
 import {
@@ -39,6 +39,34 @@ async function requireGmailConnected() {
     });
   }
   return { db, state };
+}
+
+const bookingContextInput = z.object({
+  replyToEmail: z.string().trim().email().max(320).nullable(),
+  senderEmail: z.string().trim().email().max(320).nullable(),
+});
+
+function bookingContextEmails(input: z.infer<typeof bookingContextInput>) {
+  return [input.replyToEmail, input.senderEmail]
+    .map((email) => email?.trim().toLowerCase() ?? "")
+    .filter((email, index, values) => Boolean(email) && values.indexOf(email) === index);
+}
+
+function bookingContextDateLabel(date: string, businessDate: string) {
+  if (date === businessDate) return "Today";
+  const tomorrow = new Date(`${businessDate}T12:00:00`);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (date === tomorrow.toLocaleDateString("en-CA")) return "Tomorrow";
+  return date;
+}
+
+function easternBusinessDate() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function bookingContextRank(date: string, businessDate: string) {
+  if (date === businessDate) return 0;
+  return date > businessDate ? 1 : 2;
 }
 
 export const gmailRouter = router({
@@ -281,6 +309,82 @@ export const gmailRouter = router({
         .catch(() => {});
 
       return { ...thread, messages: messagesWithAgent };
+    }),
+
+  /**
+   * Read-only booking context for the Command Chat Email popup.
+   * It intentionally queries only LeadFlow-owned booking records and never
+   * creates, updates, resolves, or otherwise changes a booking as a side effect.
+   */
+  getBookingContext: agentProcedure
+    .input(bookingContextInput)
+    .query(async ({ input }) => {
+      const emails = bookingContextEmails(input);
+      if (emails.length === 0) return { booking: null };
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available." });
+
+      const leadflowEmailMatch = or(...emails.map((email) => sql`LOWER(${leadflowJobs.customerEmail}) = ${email}`));
+      const nativeEmailMatch = or(...emails.map((email) => sql`LOWER(${bookings.customerEmail}) = ${email}`));
+      const [leadflowRows, nativeRows] = await Promise.all([
+        db.select({
+          date: leadflowJobs.jobDate,
+          time: leadflowJobs.serviceDateTime,
+          serviceName: leadflowJobs.serviceName,
+          teamName: leadflowJobs.teamName,
+          status: leadflowJobs.bookingStatus,
+          customerEmail: leadflowJobs.customerEmail,
+        }).from(leadflowJobs).where(and(
+          leadflowEmailMatch,
+          sql`LOWER(${leadflowJobs.bookingStatus}) NOT IN ('cancelled', 'rescheduled', 'missing_from_launch27', 'completed')`,
+        )).limit(100),
+        db.select({
+          date: bookings.requestedLocalDate,
+          time: bookings.requestedLocalTime,
+          serviceName: bookings.serviceName,
+          status: bookings.status,
+          customerEmail: bookings.customerEmail,
+        }).from(bookings).where(and(
+          nativeEmailMatch,
+          sql`LOWER(${bookings.status}) NOT IN ('cancelled', 'canceled', 'completed')`,
+        )).limit(100),
+      ]);
+
+      const businessDate = easternBusinessDate();
+      const candidates = [
+        ...leadflowRows.map((row) => ({
+          ...row,
+          teamName: row.teamName ?? null,
+          matchRank: emails.indexOf((row.customerEmail ?? "").trim().toLowerCase()),
+        })),
+        ...nativeRows.map((row) => ({
+          ...row,
+          teamName: null,
+          matchRank: emails.indexOf((row.customerEmail ?? "").trim().toLowerCase()),
+        })),
+      ].filter((row) => row.matchRank >= 0);
+
+      const booking = candidates.sort((left, right) => {
+        if (left.matchRank !== right.matchRank) return left.matchRank - right.matchRank;
+        const leftDateRank = bookingContextRank(left.date, businessDate);
+        const rightDateRank = bookingContextRank(right.date, businessDate);
+        if (leftDateRank !== rightDateRank) return leftDateRank - rightDateRank;
+        if (leftDateRank === 2) return right.date.localeCompare(left.date);
+        const dateOrder = left.date.localeCompare(right.date);
+        if (dateOrder !== 0) return dateOrder;
+        return (left.time ?? "").localeCompare(right.time ?? "");
+      })[0];
+
+      return {
+        booking: booking ? {
+          date: booking.date,
+          dateLabel: bookingContextDateLabel(booking.date, businessDate),
+          time: booking.time ?? null,
+          serviceName: booking.serviceName ?? null,
+          teamName: booking.teamName,
+          status: booking.status,
+        } : null,
+      };
     }),
 
   /**
