@@ -44,7 +44,8 @@ describe("Command Chat Email popup detail", () => {
     expect(styles).toContain("/* The received email body is the only vertical scroll owner in the left pane. */");
     expect(styles).toMatch(/\.ccc-live-email-workspace-modal \.em2-msg-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(styles).toContain('.em2-msg-body-scroll-owner{overflow-y:auto}');
-    expect(styles).toContain('.em2-thread-entry.outgoing{margin-left:26px');
+    expect(styles).toContain('.em2-thread-entry.outgoing{margin-left:18px;padding:0 0 15px 15px;background:transparent;box-shadow:inset 3px 0 0 #a98cff}');
+    expect(styles).not.toContain('background:linear-gradient(90deg,rgba(169,140,255,.16)');
     expect(styles).toContain('.em2-thread-direction{display:inline-flex');
     expect(styles).toContain('.em2-thread-entry-meta.is-sent .em2-thread-direction');
     expect(styles).toMatch(/\.ccc-live-email-workspace-modal \.em2-composer\s*\{[\s\S]*?flex:\s*0 0 auto;/);
