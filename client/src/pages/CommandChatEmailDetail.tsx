@@ -234,9 +234,11 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
     return outbound ? latestIndex : index;
   }, -1);
   const lastMessage = messages.at(-1);
-  const popupMessages = showClose
-    ? [latestInboundMessageIndex >= 0 ? messages[latestInboundMessageIndex] : lastMessage].filter((message): message is LiveEmailMessage => Boolean(message))
-    : messages;
+  const popupPrimaryMessage = latestInboundMessageIndex >= 0 ? messages[latestInboundMessageIndex] : lastMessage;
+  const popupPrimaryOutbound = Boolean(inboxEmail) && popupPrimaryMessage?.fromEmail?.toLowerCase() === inboxEmail;
+  const popupThreadMessages = popupPrimaryMessage
+    ? [popupPrimaryMessage, ...messages.filter(message => message.id !== popupPrimaryMessage.id)]
+    : [];
   const ago = (timestamp?: number | null) => {
     if (!timestamp) return "";
     const age = Date.now() - timestamp;
@@ -274,11 +276,23 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
         <button type="button" onClick={onRetry}>Retry</button>
       </div>}
       {!isDetailLoading && !detailError && !detail && <div className="emails-live-thread-state">No live Gmail thread was returned.</div>}
-      {popupMessages.map((message, index) => {
+      {showClose && popupPrimaryMessage && <>
+        <header className="em2-msg-head"><div className="em2-msg-who"><div className={`em2-small-avatar${popupPrimaryOutbound ? " out" : ""}`}>{popupPrimaryOutbound ? "Y" : (popupPrimaryMessage.from ?? popupPrimaryMessage.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?"}</div><div><span className="em2-msg-name">{popupPrimaryOutbound ? "You" : (popupPrimaryMessage.from || senderName)}</span><span className="em2-msg-email">{popupPrimaryMessage.fromEmail ? `<${popupPrimaryMessage.fromEmail}>` : ""}</span></div></div><div className="em2-msg-time">{ago(popupPrimaryMessage.date)}</div></header>
+        <div className="em2-msg-body em2-msg-body-scroll-owner">{popupThreadMessages.map((message, index) => {
+          const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
+          const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
+          const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) : null;
+          return <section className={`em2-thread-entry${outbound ? " outgoing" : ""}${index === 0 ? " is-primary" : ""}`} key={message.id}>
+            {index > 0 && <div className="em2-thread-entry-meta">{outbound ? "You" : (message.from || senderName)} · {ago(message.date)}</div>}
+            <div className="em2-thread-entry-body">{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>
+          </section>;
+        })}</div>
+      </>}
+      {!showClose && messages.map((message, index) => {
         const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
-        const isPrimaryReceived = showClose || index === latestInboundMessageIndex;
+        const isPrimaryReceived = index === latestInboundMessageIndex;
         const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
-        const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true }, ...(showClose ? { FORBID_ATTR: ["style", "color", "bgcolor"] } : {}) }) : null;
+        const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } }) : null;
         return <article key={message.id} className={`em2-email-message${outbound ? " outgoing" : ""}${isPrimaryReceived ? " is-primary-received" : ""}`}>
           <header className="em2-msg-head"><div className="em2-msg-who"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? "Y" : messageInitials}</div><div><span className="em2-msg-name">{outbound ? "You" : (message.from || senderName)}</span><span className="em2-msg-email">{message.fromEmail ? `<${message.fromEmail}>` : ""}</span></div></div><div className="em2-msg-time">{ago(message.date)}</div></header>
           <div className={`em2-msg-body${isPrimaryReceived ? " em2-msg-body-scroll-owner" : ""}`}>{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>
