@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const source = readFileSync(resolve(process.cwd(), "client/src/pages/EmailsExactLive.tsx"), "utf8");
+const source = readFileSync(resolve(process.cwd(), "client/src/pages/CommandChatEmailDetail.tsx"), "utf8");
 
-describe("EmailsExactLive embedded detail", () => {
+describe("Command Chat Email popup detail", () => {
   it("uses the CsInbox2 direct-detail treatment when Command Chat supplies a selected thread", () => {
     expect(source).toContain('type EmailsExactLiveProps = {');
     expect(source).toContain('initialThreadId?: string | null;');

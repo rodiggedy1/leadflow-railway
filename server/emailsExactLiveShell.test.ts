@@ -6,54 +6,50 @@ const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 describe("Emails exact-live workspace", () => {
-  it("keeps the approved review shell and substitutes only the CsInbox2 central email treatment", () => {
+  it("copies the approved review styling layers into the live adapter", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
-    const styles = read("client/src/pages/emails-exact-live.css");
+
     expect(page).toContain('import "./emails-review.css"');
     expect(page).toContain('import "./emails-detail-review.css"');
-    expect(page).toContain('className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}${detailOnly ? " is-detail-only" : ""}`}');
+    expect(page).toContain('import "./emails-detail-compact-header.css"');
+    expect(page).toContain('import "./emails-detail-simplified.css"');
+    expect(page).toContain('import "./emails-detail-leads-cohesion.css"');
+    expect(page).toContain('import "./emails-kanban-cohesion.css"');
+    expect(page).toContain('className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}`}');
     expect(page).toContain('className="email-detail-workspace emails-live-detail-workspace"');
-    expect(page).toContain('className="email-detail-main em2-main emails-csinbox2-detail-main"');
-    expect(page).toContain('className="em2-html-email-body"');
-    expect(styles).toContain('.emails-live .em2-main{');
   });
 
-  it("uses the same direct Gmail detail source as CsInbox2 while preserving draft, send, and resolution contracts", () => {
+  it("preserves the current Email Kanban data, thread, reply, draft, and resolution contracts", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
+
     expect(page).toContain("trpc.opsChat.listEmailInboxThreads.useQuery");
     expect(page).toContain("trpc.gmail.getThread.useQuery");
-    expect(page).toContain("const emailThread = trpc.gmail.getThread.useQuery(");
-    expect(page).toContain("{ threadId: selectedThreadId! },");
-    expect(page).toContain("enabled: !!selectedThreadId");
-    expect(page).toContain("const detail = emailThread.data as LiveEmailDetail | undefined;");
-    expect(page).not.toContain("trpc.gmail.getStoredThread.useQuery");
-    expect(page).not.toContain("storedEmailThread");
     expect(page).toContain("trpc.opsChat.getEmailDraftByThreadId.useQuery");
     expect(page).toContain("trpc.gmail.sendReply.useMutation");
     expect(page).toContain("trpc.gmail.completeThread.useMutation");
     expect(page).toContain("trpc.opsChat.dismissEmailDraft.useMutation");
-    expect(page).toContain('threadId: selectedThreadId, to: identity.email, subject, bodyHtml: emailReply.split');
+    expect(page).toContain("threadId: selectedThreadId, to: identity.email, subject, bodyHtml: emailReply.split");
     expect(page).toContain('dismissedBy: "agent"');
   });
 
-  it("shows the actual live Gmail thread error instead of leaving a failed request as loading", () => {
+  it("retains dark internal scrolling and customer portrait treatment without the legacy inbox shell", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
     const styles = read("client/src/pages/emails-exact-live.css");
-    expect(page).toContain("const threadLoadError = emailThread.error");
-    expect(page).toContain("Couldn’t load the live Gmail thread.");
-    expect(page).toContain("Thread ID: {threadId}");
-    expect(page).toContain("onClick={onRetry}>Retry</button>");
-    expect(page).toContain("emailThread.refetch()");
-    expect(styles).toContain(".emails-live .emails-live-thread-error");
+
+    expect(page).toContain("customerPortraitFor");
+    expect(page).toContain("emails-live-agent-circle");
+    expect(page).not.toContain('lazy(() => import("./pages/EmailInbox"))');
+    expect(styles).toContain(".emails-live ::-webkit-scrollbar");
+    expect(styles).toContain(".emails-live .email-detail-list,");
   });
 
-  it("uses CsInbox2 body rendering in this UI while retaining the dedicated route", () => {
-    const page = read("client/src/pages/EmailsExactLive.tsx");
+  it("uses the dedicated live route inside the original shared review navigation", () => {
     const app = read("client/src/App.tsx");
-    expect(page).toContain('import DOMPurify from "dompurify";');
-    expect(page).toContain('DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } })');
-    expect(page).toContain('message.bodyText || message.snippet || "(no content)"');
-    expect(page).not.toContain('getEmailBodyContent(message)');
+    expect(app).toContain('const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));');
+    expect(app).toContain('function AdminEmailsExactLiveRoute()');
+    expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />');
+    expect(app).toContain('location === "/admin/sms" || location === "/admin/emails"');
+    expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
   });
 });
