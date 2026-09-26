@@ -6,34 +6,54 @@ const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 describe("Emails exact-live workspace", () => {
-  it("keeps the existing Emails page structure and substitutes only the shared CsInbox2 direct detail", () => {
+  it("copies the approved review styling layers into the live adapter", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
+
+    expect(page).toContain('import "./emails-review.css"');
     expect(page).toContain('import "./emails-detail-review.css"');
     expect(page).toContain('import "./emails-detail-compact-header.css"');
     expect(page).toContain('import "./emails-detail-simplified.css"');
-    expect(page).toContain('function DetailSidebar(');
-    expect(page).toContain('function DetailContext(');
+    expect(page).toContain('import "./emails-detail-leads-cohesion.css"');
+    expect(page).toContain('import "./emails-kanban-cohesion.css"');
+    expect(page).toContain('className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}${detailOnly ? " is-detail-only" : ""}`}');
     expect(page).toContain('className="email-detail-workspace emails-live-detail-workspace"');
-    expect(page).toContain('const directDetail = <CsInboxEmailThreadDetail threadId={selectedId} onClose={onClose} />;');
-    expect(page).not.toContain("getStoredThread");
-    expect(page).not.toContain("getEmailBodyContent");
   });
 
-  it("keeps the live Email Kanban and its direct Gmail context query", () => {
+  it("preserves the current Email Kanban data, thread, reply, draft, and resolution contracts", () => {
     const page = read("client/src/pages/EmailsExactLive.tsx");
+
     expect(page).toContain("trpc.opsChat.listEmailInboxThreads.useQuery");
     expect(page).toContain("trpc.gmail.getThread.useQuery");
-    expect(page).toContain('className={`emails-review emails-live ${selectedThreadId ? "has-detail" : ""}${detailOnly ? " is-detail-only" : ""}`}');
-    expect(page).toContain('className="emails-board"');
-    expect(page).toContain('<EmailCard key={thread.threadId}');
+    expect(page).toContain("trpc.gmail.getStoredThread.useQuery");
+    expect(page).toContain("enabled: Boolean(selectedThreadId) && emailThreadError");
+    expect(page).toContain("const detail = (emailThread ?? storedEmailThread) as LiveEmailDetail | undefined;");
+    expect(page).toContain("Saved email content is unavailable for this thread.");
+    expect(page).toContain("trpc.opsChat.getEmailDraftByThreadId.useQuery");
+    expect(page).toContain("trpc.gmail.sendReply.useMutation");
+    expect(page).toContain("trpc.gmail.completeThread.useMutation");
+    expect(page).toContain("trpc.opsChat.dismissEmailDraft.useMutation");
+    expect(page).toContain("threadId: selectedThreadId, to: identity.email, subject, bodyHtml: emailReply.split");
+    expect(page).toContain('dismissedBy: "agent"');
   });
 
-  it("keeps the dedicated live route inside the original shared review navigation", () => {
+  it("retains dark internal scrolling and customer portrait treatment without the legacy inbox shell", () => {
+    const page = read("client/src/pages/EmailsExactLive.tsx");
+    const styles = read("client/src/pages/emails-exact-live.css");
+
+    expect(page).toContain("customerPortraitFor");
+    expect(page).toContain("emails-live-agent-circle");
+    expect(page).not.toContain('lazy(() => import("./pages/EmailInbox"))');
+    expect(styles).toContain(".emails-live ::-webkit-scrollbar");
+    expect(styles).toContain(".emails-live .email-detail-list,");
+  });
+
+  it("uses the dedicated live route inside the original shared review navigation", () => {
     const app = read("client/src/App.tsx");
     expect(app).toContain('const EmailsExactLive = lazy(() => import("./pages/EmailsExactLive"));');
-    expect(app).toContain("function AdminEmailsExactLiveRoute()");
+    expect(app).toContain('function AdminEmailsExactLiveRoute()');
     expect(app).toContain('<ReviewWorkspaceFrame navActivePath="/review/emails"><EmailsExactLive /></ReviewWorkspaceFrame>');
     expect(app).toContain('<Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />');
     expect(app).toContain('location === "/admin/sms" || location === "/admin/emails"');
+    expect(app).toContain('import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";');
   });
 });
