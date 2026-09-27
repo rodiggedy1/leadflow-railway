@@ -90,6 +90,7 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
     time: timeForPortal(job.serviceDateTime),
     jobDate: job.jobDate,
     serviceDateTime: job.serviceDateTime ?? "",
+    bedrooms: job.bedrooms,
     bathrooms: job.bathrooms ?? 1,
     extras: extrasForPortal(job.extras),
     checklistItems: [] as Array<{ text: string; checked: boolean }>,

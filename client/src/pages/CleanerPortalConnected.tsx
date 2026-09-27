@@ -20,6 +20,7 @@ type PortalJob = {
   time: string;
   jobDate: string;
   serviceDateTime: string;
+  bedrooms: number | null;
   bathrooms: number;
   extras: string[];
   checklistItems: Array<{ text: string; checked: boolean }>;
@@ -197,6 +198,7 @@ function JobCard({ job, onOpen, onContact, onViewTomorrowDetails, tomorrowLabel 
           <p className="cp-job-card__address"><MapPin size={14} />{job.address || "Address pending"}</p>
           <div className="cp-tags">
             <JobSequenceBadge job={job} />
+            {job.bedrooms !== null && <span>{job.bedrooms} bed{job.bedrooms === 1 ? "" : "s"}</span>}
             <span>{job.bathrooms} bath{job.bathrooms === 1 ? "" : "s"}</span>
             {(job.extras ?? []).slice(0, 2).map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}
           </div>
@@ -246,7 +248,7 @@ function TomorrowJobDetailsDrawer({ job, onClose }: { job: PortalJob; onClose: (
       <header className="cp-drawer__header"><div><span className="cp-eyebrow">Tomorrow · {formatPortalDayAndDate(job.jobDate)}</span><h2>{job.customerName}</h2><p>{serviceLabel(job)} · {job.time}</p></div><button className="cp-icon-button" onClick={onClose} aria-label="Close Tomorrow job details"><X size={20} /></button></header>
       <section className="cp-detail-block cp-detail-block--address"><MapPin size={20} /><div><span>Service address</span><strong>{job.address || "Address pending"}</strong></div></section>
       <section className="cp-detail-block"><span className="cp-eyebrow">Booking status</span><div><StatusPill job={job} /></div></section>
-      <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags"><span>{job.bathrooms} bathroom{job.bathrooms === 1 ? "" : "s"}</span>{job.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
+      <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags">{job.bedrooms !== null && <span>{job.bedrooms} bedroom{job.bedrooms === 1 ? "" : "s"}</span>}<span>{job.bathrooms} bathroom{job.bathrooms === 1 ? "" : "s"}</span>{job.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
       {(job.customerNotes || job.staffNotes) && <section className="cp-detail-block"><h3>Visit notes</h3>{job.customerNotes && <p><b>Customer:</b> {job.customerNotes}</p>}{job.staffNotes && <p><b>Staff:</b> {job.staffNotes}</p>}</section>}
       <section className="cp-detail-block"><button className="cp-btn cp-btn--subtle cp-btn--wide" onClick={() => openDirections(job.address)}><Navigation size={16} />Directions</button></section>
     </aside>
@@ -355,7 +357,7 @@ function JobDrawer({ job, onClose, onProgress, onContact }: { job: PortalJob; on
           <button className="cp-btn cp-btn--primary cp-action-grid__wide" disabled={actionUnavailable || actionPending} onClick={() => startMutation.mutate({ portalJobKey: displayedJob.portalJobKey })}><CheckCircle2 size={16} />Start job</button>
         </section>
         {progressQuery.isError && <section className="cp-detail-block"><p className="cp-muted">ETA, arrival, and start are temporarily unavailable. Your job list is still available.</p></section>}
-        <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags"><span>{displayedJob.bathrooms} bathroom{displayedJob.bathrooms === 1 ? "" : "s"}</span>{displayedJob.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
+        <section className="cp-detail-block"><h3>Service scope</h3><div className="cp-tags">{displayedJob.bedrooms !== null && <span>{displayedJob.bedrooms} bedroom{displayedJob.bedrooms === 1 ? "" : "s"}</span>}<span>{displayedJob.bathrooms} bathroom{displayedJob.bathrooms === 1 ? "" : "s"}</span>{displayedJob.extras.map(extra => <span key={extra}>{extra.replaceAll("_", " ")}</span>)}</div></section>
         {(displayedJob.customerNotes || displayedJob.staffNotes) && <section className="cp-detail-block"><h3>Visit notes</h3>{displayedJob.customerNotes && <p><b>Customer:</b> {displayedJob.customerNotes}</p>}{displayedJob.staffNotes && <p><b>Staff:</b> {displayedJob.staffNotes}</p>}</section>}
         <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Cleaning checklist</h3><p>Checklist actions will be enabled after portal visibility is confirmed.</p></div></div><p className="cp-muted">No checklist has been added to this job.</p></section>
         <section className="cp-detail-block"><div className="cp-block-heading"><div><h3>Before & after photos</h3><p>Select visit-condition and finished-result images from your photo library.</p></div></div><input id={photoInputId} className="cp-hidden-input" ref={photoInputRef} type="file" accept="image/*" multiple onChange={uploadPhotos} disabled={uploading} />

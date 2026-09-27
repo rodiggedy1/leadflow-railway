@@ -9,9 +9,11 @@ describe("visible Cleaner Portal Tomorrow view", () => {
   it("uses an isolated read-only exact-tomorrow query with the authenticated cleaner's team ownership", () => {
     const router = read("server/cleanerPortalReadOnlyRouter.ts");
     const tomorrowProcedure = router.slice(router.indexOf("  getMyJobsTomorrow:"), router.indexOf("  getMyJobsWeek:"));
+    const jobProjection = router.slice(router.indexOf("function portalJob("), router.indexOf("async function listOwnedImportedJobs"));
     expect(tomorrowProcedure).toContain("const tomorrow = etDate(1)");
     expect(tomorrowProcedure).toContain("listOwnedImportedJobs(ctx.cleaner.cleanerId, tomorrow, tomorrow)");
     expect(tomorrowProcedure).toContain("portalJob(job, cleaner.payPercent, progress, index + 1, jobs.length)");
+    expect(jobProjection).toContain("bedrooms: job.bedrooms");
     expect(tomorrowProcedure).not.toMatch(/db\.(insert|update|delete)/);
   });
 
@@ -44,11 +46,21 @@ describe("visible Cleaner Portal Tomorrow view", () => {
     expect(tomorrowDrawer).toContain("Booking status");
     expect(tomorrowDrawer).toContain("<StatusPill job={job} />");
     expect(tomorrowDrawer).toContain("Service scope");
+    expect(tomorrowDrawer).toContain("job.bedrooms !== null");
+    expect(tomorrowDrawer).toContain("bedroom{job.bedrooms === 1 ? \"\" : \"s\"}");
     expect(tomorrowDrawer).toContain("Visit notes");
     expect(tomorrowDrawer).toContain("Directions");
     for (const disallowedAction of ["Contact client", "Set ETA", "I’ve arrived", "Start job", "Before & after photos", "Customer sign-off", "useMutation", "useQuery"]) {
       expect(tomorrowDrawer).not.toContain(disallowedAction);
     }
+  });
+
+  it("renders stored bedroom and bathroom counts in the actionable Today detail drawer", () => {
+    const page = read("client/src/pages/CleanerPortalConnected.tsx");
+    const todayDrawer = page.slice(page.indexOf("function JobDrawer"), page.indexOf("function AvailabilityDialog"));
+    expect(todayDrawer).toContain("displayedJob.bedrooms !== null");
+    expect(todayDrawer).toContain("bedroom{displayedJob.bedrooms === 1 ? \"\" : \"s\"}");
+    expect(todayDrawer).toContain("bathroom{displayedJob.bathrooms === 1 ? \"\" : \"s\"}");
   });
 
   it("gives completed cards a visible banner and distinct color treatment without changing their available actions", () => {
