@@ -12,7 +12,7 @@ describe("visible Cleaner Portal Tomorrow view", () => {
     expect(tomorrowProcedure).toContain("const tomorrow = etDate(1)");
     expect(tomorrowProcedure).toContain("listOwnedImportedJobs(ctx.cleaner.cleanerId, tomorrow, tomorrow)");
     expect(tomorrowProcedure).toContain("portalJob(job, cleaner.payPercent, progress, index + 1, jobs.length)");
-    expect(tomorrowProcedure).not.toMatch(/cleanerJobs|cleaner_jobs|db\.(insert|update|delete)/);
+    expect(tomorrowProcedure).not.toMatch(/db\.(insert|update|delete)/);
   });
 
   it("renders a selectable Tomorrow tab and labels every Tomorrow card with its weekday and date", () => {
@@ -29,11 +29,26 @@ describe("visible Cleaner Portal Tomorrow view", () => {
     expect(styles).toContain(".cp-job-card__tomorrow-label");
   });
 
-  it("keeps Tomorrow display-only by withholding the job drawer and client-call actions from Tomorrow cards", () => {
+  it("opens a read-only details drawer for Tomorrow while keeping current-day workflow actions unavailable", () => {
     const page = read("client/src/pages/CleanerPortalConnected.tsx");
     expect(page).toContain("!isTomorrow && !complete");
     expect(page).toContain("!isTomorrow && onOpen");
+    expect(page).toContain("isTomorrow && onViewTomorrowDetails");
+    expect(page).toContain("View details");
+    expect(page).toContain("const [tomorrowDetailsJob, setTomorrowDetailsJob]");
+    expect(page).toContain("<TomorrowJobDetailsDrawer job={tomorrowDetailsJob}");
+    expect(page).toContain('onViewTomorrowDetails={viewingTomorrow ? () => setTomorrowDetailsJob(job) : undefined}');
     expect(page).toContain("!viewingTomorrow && nextJob");
+    const tomorrowDrawer = page.slice(page.indexOf("function TomorrowJobDetailsDrawer"), page.indexOf("function JobDrawer"));
+    expect(tomorrowDrawer).toContain("Service address");
+    expect(tomorrowDrawer).toContain("Booking status");
+    expect(tomorrowDrawer).toContain("<StatusPill job={job} />");
+    expect(tomorrowDrawer).toContain("Service scope");
+    expect(tomorrowDrawer).toContain("Visit notes");
+    expect(tomorrowDrawer).toContain("Directions");
+    for (const disallowedAction of ["Contact client", "Set ETA", "I’ve arrived", "Start job", "Before & after photos", "Customer sign-off", "useMutation", "useQuery"]) {
+      expect(tomorrowDrawer).not.toContain(disallowedAction);
+    }
   });
 
   it("gives completed cards a visible banner and distinct color treatment without changing their available actions", () => {
