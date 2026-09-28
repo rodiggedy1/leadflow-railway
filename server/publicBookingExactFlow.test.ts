@@ -63,6 +63,24 @@ describe("approved eight-step public booking flow", () => {
     expect(page).not.toContain("booking-payment-security");
   });
 
+  it("moves directly to final review after Stripe confirms the card", () => {
+    expect(page).toMatch(
+      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*setStep\(8\);[\s\S]*\}\}/
+    );
+  });
+
+  it("restores the approved confirmation service picker treatment", () => {
+    expect(page).toContain("POST_BOOKING_UPSELLS");
+    expect(page).toContain('title: "Carpet Cleaning"');
+    expect(page).toContain('title: "Exterior Window Cleaning"');
+    expect(page).toContain('title: "Junk Removal"');
+    expect(page).toContain('title: "Appliance Cleaning"');
+    expect(page).toContain('title: "Pet Area Cleaning"');
+    expect(page).toContain("booking-upsell-modal");
+    expect(page).toContain("booking-upsell-estimate");
+    expect(page).not.toContain("Coming soon");
+  });
+
   it("keeps the public booking path separate from protected legacy systems", () => {
     const changed = [page, pricing, paymentRouter, checkout].join("\n");
     const protectedReferences = [
