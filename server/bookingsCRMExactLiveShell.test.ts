@@ -28,7 +28,11 @@ describe("Bookings CRM exact live shell", () => {
     expect(page).toContain('className="ocr-workspace bcr-workspace"');
     expect(page).toContain('className="bcr-booking-list"');
     expect(page).toContain('className="ocr-detail-drawer bcr-workspace-detail"');
+    expect(page).toContain('aria-label="Assign cleaning team"');
+    expect(page).toContain('active.source === "booking"');
+    expect(page).toContain("model.assignActiveBookingTeam(Number(event.target.value))");
     expect(styles).toContain(".bcr-workspace");
+    expect(styles).toContain(".bcr-team-assignment-picker");
     expect(entry).toContain('import BookingsCRMExactLive from "@/pages/BookingsCRMExactLive";');
     expect(entry).toContain("return <BookingsCRMExactLive realtimeEnabled={agentId !== null} />;");
     expect(entry).not.toContain("bookings-reference-sidebar");

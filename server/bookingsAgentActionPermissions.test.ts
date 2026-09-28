@@ -17,7 +17,7 @@ describe("Bookings page-action permission contract", () => {
     expect(trpc).toContain('export const bookingsAgentProcedure = agentPageProcedure("bookings")');
     expect(trpc).toContain("const agent = await getAgentById(session.agentId)");
     expect(trpc).toContain("!pagePermissions.includes(pageId)");
-    for (const procedure of ["list", "get", "cancel", "staffRequests", "cancelStaffRequest", "staffMagicLink"]) {
+    for (const procedure of ["list", "get", "teams", "assignTeam", "cancel", "staffRequests", "cancelStaffRequest", "staffMagicLink"]) {
       expect(nativeBookings).toContain(`${procedure}: bookingsAgentProcedure`);
     }
     for (const procedure of ["list", "get", "cancel"]) {
@@ -33,6 +33,8 @@ describe("Bookings page-action permission contract", () => {
     expect(workspace).toContain("trpc.bookings.staffRequests.useQuery");
     expect(workspace).toContain("trpc.bookings.staffMagicLink.useMutation");
     expect(workspace).toContain("trpc.bookings.cancelStaffRequest.useMutation");
+    expect(workspace).toContain("trpc.bookings.teams.useQuery");
+    expect(workspace).toContain("trpc.bookings.assignTeam.useMutation");
     expect(workspace).not.toContain("trpc.customerPortal.staffRequests");
     expect(workspace).not.toContain("trpc.customerPortal.staffMagicLink");
     expect(workspace).not.toContain("trpc.customerPortal.cancelStaffRequest");

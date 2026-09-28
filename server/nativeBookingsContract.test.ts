@@ -28,6 +28,8 @@ describe("native booking source contract", () => {
     expect(router).toContain("prepare: publicProcedure");
     expect(router).toContain("list: bookingsAgentProcedure");
     expect(router).toContain("get: bookingsAgentProcedure");
+    expect(router).toContain("teams: bookingsAgentProcedure");
+    expect(router).toContain("assignTeam: bookingsAgentProcedure");
     expect(router).toContain("cancel: bookingsAgentProcedure");
     expect(router).toContain("staffRequests: bookingsAgentProcedure");
     expect(router).toContain("cancelStaffRequest: bookingsAgentProcedure");
@@ -38,6 +40,20 @@ describe("native booking source contract", () => {
     for (const marker of ['status: "needs_attention"', 'availabilityStatus: "requested"', 'assignmentStatus: "unassigned"', 'paymentStatus: "not_started"', '"intent_pending"', "expiresAt: null"]) expect(service).toContain(marker);
     expect(service).not.toContain(prohibitedLegacySymbol);
     expect(service).not.toContain("launch27");
+  });
+
+  it("records a human-selected native team without scheduling side effects", () => {
+    for (const marker of [
+      "activeAssignmentsByBookingId",
+      'bookingAssignments.status, "assigned"',
+      "schedulingTeams.isActive, 1",
+      "schedulingTeams.isArchived, 0",
+      "assignedByAgentId: ctx.agent.agentId",
+      'assignmentStatus: "assigned"',
+    ]) expect(router).toContain(marker);
+    for (const prohibited of ["broadcastCleanerPortalJobsChanged", "importLaunch27Jobs", "sendSms"]) {
+      expect(router).not.toContain(prohibited);
+    }
   });
 
   it("uses one shared live experience for popup and full-page surfaces", () => {

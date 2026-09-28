@@ -1,9 +1,9 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { appSettings, bookingSeries, bookings, customerPortalServiceRequests } from "../drizzle/schema";
+import { appSettings, bookingAssignments, bookingSeries, bookings, customerPortalServiceRequests, schedulingTeams } from "../drizzle/schema";
 import {
   BOOKING_WIDGET_DRAFT_SETTING,
   DEFAULT_BOOKING_WIDGET_DRAFT,
@@ -130,13 +130,43 @@ async function persistPreparedBooking(db: NonNullable<Awaited<ReturnType<typeof 
   }
 }
 
-function mapAdminBooking(row: typeof bookings.$inferSelect) {
+type ActiveBookingAssignment = {
+  teamId: number | null;
+  teamName: string | null;
+};
+
+async function activeAssignmentsByBookingId(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  bookingIds: number[],
+) {
+  if (!bookingIds.length) return new Map<number, ActiveBookingAssignment>();
+  const rows = await db
+    .select({
+      bookingId: bookingAssignments.bookingId,
+      teamId: bookingAssignments.teamId,
+      teamName: bookingAssignments.teamName,
+    })
+    .from(bookingAssignments)
+    .where(and(inArray(bookingAssignments.bookingId, bookingIds), eq(bookingAssignments.status, "assigned")))
+    .orderBy(desc(bookingAssignments.assignedAt), desc(bookingAssignments.id));
+  const assignments = new Map<number, ActiveBookingAssignment>();
+  for (const row of rows) {
+    if (!assignments.has(row.bookingId)) {
+      assignments.set(row.bookingId, { teamId: row.teamId, teamName: row.teamName });
+    }
+  }
+  return assignments;
+}
+
+function mapAdminBooking(row: typeof bookings.$inferSelect, assignment?: ActiveBookingAssignment) {
   return {
     id: row.id,
     publicBookingNumber: row.publicBookingNumber,
     status: row.status,
     availabilityStatus: row.availabilityStatus,
     assignmentStatus: row.assignmentStatus,
+    assignedTeamId: assignment?.teamId ?? null,
+    assignedTeamName: assignment?.teamName ?? null,
     paymentStatus: row.paymentStatus,
     customerName: row.customerName,
     customerPhone: row.customerPhone,
@@ -212,9 +242,10 @@ export const bookingsRouter = router({
         ? await query.where(and(...conditions)).orderBy(asc(bookings.requestedLocalTime), desc(bookings.createdAt)).limit(input?.limit ?? 200)
         : await query.orderBy(asc(bookings.requestedLocalDate), asc(bookings.requestedLocalTime), desc(bookings.createdAt)).limit(input?.limit ?? 200);
       const search = input?.query?.trim().toLowerCase();
+      const assignments = await activeAssignmentsByBookingId(db, rows.map((row) => row.id));
       return rows
         .filter((row) => !search || `${row.customerName} ${row.customerPhone} ${row.customerEmail} ${row.address} ${row.publicBookingNumber}`.toLowerCase().includes(search))
-        .map(mapAdminBooking);
+        .map((row) => mapAdminBooking(row, assignments.get(row.id)));
     }),
 
   get: bookingsAgentProcedure
@@ -224,7 +255,52 @@ export const bookingsRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
       const rows = await db.select().from(bookings).where(eq(bookings.id, input.id)).limit(1);
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
-      return mapAdminBooking(rows[0]);
+      const assignments = await activeAssignmentsByBookingId(db, [rows[0].id]);
+      return mapAdminBooking(rows[0], assignments.get(rows[0].id));
+    }),
+  teams: bookingsAgentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+    return db
+      .select({ id: schedulingTeams.id, name: schedulingTeams.name })
+      .from(schedulingTeams)
+      .where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)))
+      .orderBy(asc(schedulingTeams.name));
+  }),
+  assignTeam: bookingsAgentProcedure
+    .input(z.object({ bookingId: z.number().int().positive(), teamId: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      return db.transaction(async (tx) => {
+        const bookingRows = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
+        if (!bookingRows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
+        const teamRows = await tx
+          .select({ id: schedulingTeams.id, name: schedulingTeams.name })
+          .from(schedulingTeams)
+          .where(and(eq(schedulingTeams.id, input.teamId), eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)))
+          .limit(1);
+        const team = teamRows[0];
+        if (!team) throw new TRPCError({ code: "NOT_FOUND", message: "Active team not found." });
+
+        const now = new Date();
+        await tx
+          .update(bookingAssignments)
+          .set({ status: "unassigned", unassignedAt: now, updatedAt: now })
+          .where(and(eq(bookingAssignments.bookingId, input.bookingId), eq(bookingAssignments.status, "assigned")));
+        await tx.insert(bookingAssignments).values({
+          bookingId: input.bookingId,
+          teamId: team.id,
+          teamName: team.name,
+          status: "assigned",
+          assignedByAgentId: ctx.agent.agentId,
+          assignedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await tx.update(bookings).set({ assignmentStatus: "assigned", updatedAt: now }).where(eq(bookings.id, input.bookingId));
+        return { bookingId: input.bookingId, teamId: team.id, teamName: team.name, assignmentStatus: "assigned" as const };
+      });
     }),
   cancel: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))

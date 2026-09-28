@@ -32,6 +32,7 @@ type WorkspaceRow = {
   extras: NativeExtra[];
   specialRequestNotes: string[];
   assignmentStatus: string;
+  assignedTeamId?: number | null;
   assignedTeamName: string | null;
   paymentStatus: string;
   paymentBrand: string | null;
@@ -163,6 +164,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
   const listInput = useMemo(() => ({ date, status: status === "All" ? undefined : API_STATUS[status], query: query.trim() || undefined, limit: 200 }), [date, query, status]);
   const funnelListInput = useMemo(() => ({ query: query.trim() || undefined, limit: 200 }), [query]);
   const listQuery = trpc.bookings.list.useQuery(listInput, { staleTime: 10_000 });
+  const bookingTeamsQuery = trpc.bookings.teams.useQuery(undefined, { staleTime: 60_000 });
   const funnelListQuery = trpc.bookingFunnel.list.useQuery(funnelListInput, { staleTime: 10_000 });
   const portalRequestsQuery = trpc.bookings.staffRequests.useQuery({ limit: 200 }, { staleTime: 10_000 });
   const leadflowJobsQuery = trpc.leadflowJobs.list.useQuery({ date, query: query.trim() || undefined }, { staleTime: 10_000 });
@@ -187,6 +189,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
   });
   const cancelLeadflowJob = trpc.leadflowJobs.cancel.useMutation();
   const cancelBooking = trpc.bookings.cancel.useMutation();
+  const assignBookingTeam = trpc.bookings.assignTeam.useMutation();
   const cancelFunnel = trpc.bookingFunnel.cancel.useMutation();
   const cancelPortalRequest = trpc.bookings.cancelStaffRequest.useMutation();
   const selectedBookingId = activeKey?.startsWith("booking:") ? Number(activeKey.slice("booking:".length)) : null;
@@ -224,7 +227,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
       status: booking.status, requestedLocalDate: booking.requestedLocalDate, requestedLocalTime: booking.requestedLocalTime,
       address: booking.address, serviceName: booking.serviceName, bedrooms: booking.bedrooms, bathrooms: booking.bathrooms,
       recurrence: booking.recurrence, extras: extrasFrom(booking.extras), specialRequestNotes: notesFrom(booking.specialRequestNotes),
-      assignmentStatus: booking.assignmentStatus, assignedTeamName: null, paymentStatus: booking.paymentStatus, paymentBrand: null, paymentLast4: null,
+      assignmentStatus: booking.assignmentStatus, assignedTeamId: booking.assignedTeamId, assignedTeamName: booking.assignedTeamName, paymentStatus: booking.paymentStatus, paymentBrand: null, paymentLast4: null,
       stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: booking.firstCleaningTotalCents,
     }));
     const funnelRows = funnelLeads.filter((lead) => !lead.bookingId).map((lead) => ({
@@ -276,7 +279,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
         status: booking.status, requestedLocalDate: booking.requestedLocalDate, requestedLocalTime: booking.requestedLocalTime,
         address: booking.address, serviceName: booking.serviceName, bedrooms: booking.bedrooms, bathrooms: booking.bathrooms,
         recurrence: booking.recurrence, extras: extrasFrom(booking.extras), specialRequestNotes: notesFrom(booking.specialRequestNotes),
-        assignmentStatus: booking.assignmentStatus, assignedTeamName: null, paymentStatus: booking.paymentStatus, paymentBrand: null, paymentLast4: null,
+        assignmentStatus: booking.assignmentStatus, assignedTeamId: booking.assignedTeamId, assignedTeamName: booking.assignedTeamName, paymentStatus: booking.paymentStatus, paymentBrand: null, paymentLast4: null,
         stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: booking.firstCleaningTotalCents,
       };
     }
@@ -338,6 +341,16 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
   const cards = metricRows.filter((row) => row.paymentStatus === "card_on_file" || row.paymentStatus === "captured").length;
   const portalPaymentAvailable = active?.source === "portal" && Boolean(active.stripePaymentMethodId && active.paymentLast4 && active.firstCleaningTotalCents !== null);
   const cancellationPending = cancelLeadflowJob.isPending || cancelBooking.isPending || cancelFunnel.isPending || cancelPortalRequest.isPending;
+  const assignActiveBookingTeam = (teamId: number) => {
+    if (!active || active.source !== "booking" || assignBookingTeam.isPending) return;
+    assignBookingTeam.mutate({ bookingId: active.id, teamId }, {
+      onSuccess: ({ teamName }) => {
+        setImportSummary(`${active.customerName} assigned to ${teamName}.`);
+        refreshBookingAndFunnelQueries();
+      },
+      onError: (error) => setImportSummary(`Team assignment could not be saved: ${error.message}`),
+    });
+  };
   const cancelActiveRecord = () => {
     if (!active || cancellationPending) return;
     const onSuccess = () => {
@@ -366,9 +379,13 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
     activeKey,
     activePhoto,
     activePhotoBookingKey,
+    assignActiveBookingTeam,
+    assignBookingTeam,
     afterPhotos,
     assigned,
     beforePhotos,
+    bookingTeams: bookingTeamsQuery.data ?? [],
+    bookingTeamsQuery,
     cancellationPending,
     cancelActiveRecord,
     cards,
