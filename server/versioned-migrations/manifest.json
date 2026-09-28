@@ -311,6 +311,14 @@
       "sha256": "6483eab1117b8580bb08b84aad0c99be4dcd22f4a2d37c51f0a1ba492282a6c9",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0041_owned_confirmation_calls.postconditions.json"
+    },
+    {
+      "id": "0044_create_leadflow_job_payroll_adjustments",
+      "mode": "create-table",
+      "sqlFile": "0044_create_leadflow_job_payroll_adjustments.sql",
+      "sha256": "e39226c0a7bee9501d85a3702ff9151db9e768cd05820c3af83b4eeb33ab1ebb",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0044_create_leadflow_job_payroll_adjustments.postconditions.json"
     }
   ]
 }
