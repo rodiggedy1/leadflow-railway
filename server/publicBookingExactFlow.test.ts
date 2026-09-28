@@ -54,8 +54,13 @@ describe("approved eight-step public booking flow", () => {
   it("opens Stripe card entry directly on the public payment step", () => {
     expect(page).toContain("directCardEntry");
     expect(checkout).toMatch(/if\s*\(\s*!directCardEntry\s*\|\|/);
-    expect(checkout).toContain("Preparing secure card entry…");
+    expect(checkout).toContain("PremiumCardSetupForm");
+    expect(checkout).toContain("PremiumCardReviewForm");
+    expect(checkout).toContain("booking-card-acceptance");
+    expect(checkout).not.toContain("Try secure card entry again");
     expect(checkout).toContain("authorizationCopy");
+    expect(page).not.toContain("booking-payment-timing");
+    expect(page).not.toContain("booking-payment-security");
   });
 
   it("keeps the public booking path separate from protected legacy systems", () => {

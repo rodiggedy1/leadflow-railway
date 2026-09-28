@@ -1379,16 +1379,6 @@ function Payment({
         Add a card to hold your booking. You won’t be charged until after your
         service is completed.
       </p>
-      <div className="booking-payment-timing" role="note">
-        <ShieldCheck />
-        <span>
-          <strong>Nothing is charged today.</strong>
-          <small>
-            Your card is securely saved for this booking and charged only after
-            your cleaning has been completed.
-          </small>
-        </span>
-      </div>
       {cardOnFile ? (
         <div className="booking-live-card-saved">
           <Check />
@@ -1410,14 +1400,6 @@ function Payment({
           Your booking details need to be saved before secure card entry.
         </div>
       )}
-      <div className="booking-payment-security">
-        <LockKeyhole />
-        <span>
-          <strong>Your card is secure with Stripe.</strong>
-          <small>Stripe-hosted fields protect your card details.</small>
-        </span>
-        <b>stripe</b>
-      </div>
     </>
   );
 }
