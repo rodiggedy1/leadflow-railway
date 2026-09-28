@@ -7,3 +7,7 @@
 .payroll-summary-exact-live .psr-reconcile--warning{border-color:rgba(240,124,134,.36);background:rgba(240,124,134,.08);color:#efa0a7}.payroll-summary-exact-live .psr-reconcile--warning span{color:#c6868c}.payroll-summary-exact-live .psr-detail-table--legacy{min-width:980px}
 .review-nav-host>.payroll-summary-review{width:calc(100% - var(--review-nav-width));min-width:0;min-height:100vh;margin-left:0;flex:1 1 auto}
 @media(max-width:1100px){.payroll-summary-exact-live .psr-live-integrity-results{grid-template-columns:1fr}.payroll-summary-exact-live .psr-live-integrity-results article{min-height:60px}}
+
+/* Source disclosure for the isolated LeadFlow payroll projection. */
+.payroll-summary-exact-live .psr-integrity--leadflow{align-items:center}.payroll-summary-exact-live .psr-leadflow-source-badge{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border:1px solid rgba(80,191,155,.42);border-radius:999px;background:rgba(53,174,136,.11);color:#9ae5c6;font-size:10px;font-weight:800;letter-spacing:.09em}.payroll-summary-exact-live .psr-integrity--leadflow small{max-width:570px}
+@media(max-width:720px){.payroll-summary-exact-live .psr-integrity--leadflow{align-items:flex-start}.payroll-summary-exact-live .psr-leadflow-source-badge{margin-left:38px}}

@@ -17,9 +17,12 @@ describe("dark Payroll Summary navigation", () => {
     expect(app).toContain('<Route path={"/admin/payroll-summary"} component={PayrollSummary} />');
     expect(app).toContain('<Route path={"/admin/payroll-summary-live"} component={AdminPayrollSummaryExactLiveRoute} />');
     expect(shell).toContain('className="payroll-summary-review payroll-summary-exact-live"');
-    expect(shell).toContain('trpc.teamPay.getPayrollSummary.useQuery({ weekStart })');
-    expect(shell).toContain('trpc.teamPay.getTeamDetail.useMutation');
-    expect(shell).toContain('trpc.teamPay.getIntegrityCheck.useMutation');
+    expect(shell).toContain('data-payroll-source="leadflow"');
+    expect(shell).toContain('trpc.leadflowJobs.getPayrollSummary.useQuery({ weekStart })');
+    expect(shell).toContain('trpc.leadflowJobs.getPayrollTeamDetail.useQuery');
+    expect(shell).toContain('utils.leadflowJobs.getPayrollTeamDetail.fetch');
+    expect(shell).toContain('LEADFLOW ONLY');
+    expect(shell).not.toContain('trpc.teamPay.');
   });
 
   it("points both left-navigation variants to the dark summary route", () => {
