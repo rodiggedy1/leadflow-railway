@@ -1,10 +1,13 @@
 import NativeBookingsWorkspace from "@/components/NativeBookingsWorkspace";
 import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
+import { trpc } from "@/lib/trpc";
+import { useEffect, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  CircleDollarSign,
   CircleHelp,
   ClipboardList,
   Copy,
@@ -65,6 +68,7 @@ const labelStatus = (value: string) => value === "lead" ? "Lead / In progress" :
 const labelRecurrence = (value: string) => value === "biweekly" ? "Every 2 weeks" : value === "one-time" ? "One-time" : value.charAt(0).toUpperCase() + value.slice(1);
 const photoDownloadUrl = (photo: any, index: number) => `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
 const sourceLabel = (row: any) => row.status === "missing_from_launch27" ? "No longer in Launch27" : row.source === "funnel" ? labelStatus(row.status) : row.source === "portal" ? "Service request" : row.source === "leadflow" ? "Launch27 import" : row.extras.length > 0 ? `+${row.extras.length} extra${row.extras.length > 1 ? "s" : ""}` : "Native booking";
+const formatCents = (value: number | null | undefined) => ((value ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function MibReviewLogo() {
   return <div className="bcr-logo-mark" aria-hidden="true"><span /><span /><span /><span /></div>;
@@ -94,6 +98,69 @@ function PhotoLightbox({ model }: { model: any }) {
   </div>;
 }
 
+function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
+  const [showEditor, setShowEditor] = useState(false);
+  const [finalPayout, setFinalPayout] = useState("");
+  const [reason, setReason] = useState("");
+  const summaryQuery = trpc.leadflowJobs.getPayrollPayoutSummary.useQuery(
+    { jobId: active.id },
+    { enabled: active.source === "leadflow", staleTime: 15_000 },
+  );
+  const setFinalPayoutMutation = trpc.leadflowJobs.setPayrollFinalPayout.useMutation({
+    onSuccess: async () => {
+      await Promise.all([summaryQuery.refetch(), model.leadflowJobsQuery.refetch()]);
+      setFinalPayout("");
+      setReason("");
+      setShowEditor(false);
+      model.setImportSummary("Final team payout recorded and Cleaner Portal updated.");
+    },
+    onError: (error) => model.setImportSummary(`Final payout could not be updated: ${error.message}`),
+  });
+  useEffect(() => {
+    setShowEditor(false);
+    setFinalPayout("");
+    setReason("");
+  }, [active.id]);
+  if (active.source !== "leadflow") return null;
+
+  const summary = summaryQuery.data;
+  const targetFinalPayCents = Math.round(Number(finalPayout) * 100);
+  const adjustmentCents = summary?.finalPayCents == null ? null : targetFinalPayCents - summary.finalPayCents;
+  const submit = () => {
+    if (!Number.isFinite(targetFinalPayCents) || targetFinalPayCents < 0) {
+      model.setImportSummary("Enter a final payout of zero or more.");
+      return;
+    }
+    if (reason.trim().length < 3) {
+      model.setImportSummary("Add a brief payout reason.");
+      return;
+    }
+    if (adjustmentCents === 0) {
+      model.setImportSummary("The final payout already matches that amount.");
+      return;
+    }
+    if (!window.confirm(`Set ${active.assignedTeamName || "the assigned team"}'s final payout to ${formatCents(targetFinalPayCents)}? This records a ${adjustmentCents && adjustmentCents > 0 ? "+" : ""}${formatCents(adjustmentCents)} ledger adjustment and updates Cleaner Portal immediately.`)) return;
+    setFinalPayoutMutation.mutate({ jobId: active.id, targetFinalPayCents, reason: reason.trim() });
+  };
+
+  return <section className="bcr-editor-section bcr-payroll-section">
+    <div className="bcr-payroll-heading">
+      <div><small>TEAM PAYMENT</small><h3><CircleDollarSign size={15} />Cleaner Portal payout</h3><p>Uses the team assigned to this booking.</p></div>
+      <button type="button" onClick={() => setShowEditor(value => !value)} disabled={!summary?.canAdjust || summaryQuery.isLoading}>{showEditor ? "Close" : "Set final payout"}</button>
+    </div>
+    {summaryQuery.isLoading ? <p className="bcr-payroll-muted">Loading current payout…</p> : summary?.canAdjust && summary.finalPayCents !== null ? <>
+      <div className="bcr-payroll-total"><span>Current final payout</span><b>{formatCents(summary.finalPayCents)}</b><small>{summary.assignedTeamName || active.assignedTeamName || "Assigned team"} · {formatCents(summary.basePayCents)} base{summary.adjustmentCents !== 0 ? ` · ${summary.adjustmentCents > 0 ? "+" : ""}${formatCents(summary.adjustmentCents)} ledger` : ""}</small></div>
+      {showEditor && <div className="bcr-payroll-form">
+        <label>Final payout ($)<input inputMode="decimal" type="number" step="0.01" min="0" value={finalPayout} onChange={(event) => setFinalPayout(event.target.value)} placeholder="e.g. 75.00" /></label>
+        {adjustmentCents !== null && Number.isFinite(adjustmentCents) && <p>{adjustmentCents === 0 ? "No ledger change." : `${adjustmentCents > 0 ? "+" : ""}${formatCents(adjustmentCents)} will be recorded to reach this final payout.`}</p>}
+        <label>Reason<textarea maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Internal reason required for the payout record" /></label>
+        <div><button type="button" onClick={() => { setShowEditor(false); setFinalPayout(""); setReason(""); }} disabled={setFinalPayoutMutation.isPending}>Cancel</button><button type="button" onClick={submit} disabled={setFinalPayoutMutation.isPending || !finalPayout || reason.trim().length < 3}>{setFinalPayoutMutation.isPending ? "Saving…" : "Set final payout"}</button></div>
+      </div>}
+      {summary.adjustments.length > 0 && <div className="bcr-payroll-history"><span>Adjustment history</span>{summary.adjustments.slice(0, 4).map((adjustment: any) => <article key={adjustment.id}><b className={adjustment.amountCents > 0 ? "is-positive" : "is-negative"}>{adjustment.amountCents > 0 ? "+" : ""}{formatCents(adjustment.amountCents)}</b><p>{adjustment.reason}<small>{adjustment.createdByAgentName} · {new Date(adjustment.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</small></p></article>)}</div>}
+    </> : <p className="bcr-payroll-muted">{summaryQuery.isError ? "Current payout could not be loaded." : summary?.unavailableReason || "Current payout is unavailable."}</p>}
+  </section>;
+}
+
 function BookingDetailDrawer({ model }: { model: any }) {
   const { active } = model;
   if (!active) return null;
@@ -105,6 +172,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
       <section className="bcr-editor-section"><div className="bcr-section-title"><div><small>SERVICE &amp; EXTRAS</small><h3>{active.serviceName ?? "Booking details in progress"}</h3></div><strong>{active.firstCleaningTotalCents === null ? "—" : `$${(active.firstCleaningTotalCents / 100).toFixed(0)}`}</strong></div><p className="bcr-home-line">{active.bedrooms === null || active.bathrooms === null ? "Room details not entered yet" : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}</p><div className="bcr-selected-extras">{active.extras.length ? active.extras.map((extra: any) => <button type="button" disabled key={extra.id}>{extra.label}{extra.quantity > 1 ? ` × ${extra.quantity}` : ""}</button>) : <button type="button" disabled>Nothing extra</button>}</div></section>
       <section className="bcr-editor-section"><small>RECURRING PREFERENCE</small>{active.source === "leadflow" ? <div className="bcr-choice-grid">{(["One time", "Weekly", "Bi-weekly", "Tri-weekly", "Monthly"] as const).map((frequency) => <button type="button" key={frequency} className={active.recurrence?.toLowerCase().replace(/-/g, "").startsWith(frequency.toLowerCase().replace("-", "")) ? "choice-active" : ""} disabled={model.updateLeadflowJob.isPending} onClick={() => model.updateLeadflowJob.mutate({ jobId: active.id, frequency }, { onSuccess: model.refreshBookingAndFunnelQueries })}>{frequency}</button>)}</div> : <div className="bcr-choice-grid"><button type="button" className="choice-active" disabled>{active.recurrence ? labelRecurrence(active.recurrence) : "Not selected"}</button></div>}<p className="bcr-editor-hint">{active.source === "leadflow" ? "The selected interval creates the next LeadFlow job at end of the service day." : !active.recurrence ? "Preference not entered yet." : active.recurrence === "one-time" ? "One-time request." : "No future visits were created. Confirm the recurring plan during review."}</p></section>
       <section className="bcr-editor-section"><small>ASSIGNED TEAM</small><button type="button" className="bcr-team-option active" disabled><i style={{ background: active.assignedTeamName ? avatarColorFor(active.assignedTeamName) : "#353535" }}>{active.assignedTeamName ? initialsFor(active.assignedTeamName) : "?"}</i><span><strong>{active.assignedTeamName ?? "Unassigned"}</strong><small>{active.assignedTeamName ? "Launch27 assignment" : "No team assigned"}</small></span></button></section>
+      <BookingPayrollPanel active={active} model={model} />
       <section className="bcr-editor-section"><small>PAYMENT</small>{active.source === "leadflow" ? <div className={active.paymentStatus === "card_on_file" ? "bcr-card-panel" : "bcr-card-panel missing"}><CreditCard /><div><strong>{active.paymentStatus === "card_on_file" ? `${active.paymentBrand ?? "Card"}${active.paymentLast4 ? ` •••• ${active.paymentLast4}` : " on file"}` : "No card on file"}</strong><p>Imported from Launch27. Payment actions remain unchanged.</p></div></div> : active.source === "booking" && active.firstCleaningTotalCents !== null ? <BookingPaymentActions bookingId={active.id} totalCents={active.firstCleaningTotalCents} paymentStatus={active.paymentStatus} /> : model.portalPaymentAvailable && active.firstCleaningTotalCents !== null ? <PortalRequestPaymentActions requestId={active.id} totalCents={active.firstCleaningTotalCents} onPaymentUpdated={model.refreshBookingAndFunnelQueries} /> : <div className="bcr-card-panel missing"><CreditCard /><div><strong>Payment not started</strong><p>Card collection is not connected for this in-progress lead.</p></div></div>}</section>
       <section className="bcr-editor-section"><div className="bcr-photo-review-title"><div><small>CLEANER PHOTOS</small><h3>Before &amp; after</h3><p>Uploaded from the cleaner visit portal.</p></div><ImageIcon /></div>{model.staffPhotosQuery.isLoading ? <div className="bcr-photo-review-empty"><Loader2 className="animate-spin" />Loading photos…</div> : model.staffPhotosQuery.isError ? <div className="bcr-photo-review-empty error">Photos could not be loaded for this booking.</div> : <div className="bcr-photo-groups">{([{ label: "Before", detail: "Visit condition", photos: model.beforePhotos }, { label: "After", detail: "Finished result", photos: model.afterPhotos }] as const).map((group) => <section className={`bcr-photo-group ${group.label === "After" ? "after" : ""}`} key={group.label}><header><div><strong>{group.label}</strong><span>{group.detail}</span></div><small>{group.photos.length} photo{group.photos.length === 1 ? "" : "s"}</small></header>{group.photos.length ? <div className="bcr-photo-grid">{group.photos.map((photo: any, index: number) => <button type="button" key={photo.id} className="bcr-photo-thumb" onClick={() => model.setPhotoLightbox({ label: group.label, photos: group.photos, index })} aria-label={`Open ${group.label.toLowerCase()} photo ${index + 1}`}><img src={photo.thumbnailUrl ?? photo.photoUrl} alt={`${group.label} photo ${index + 1}`} /><b>{group.label}</b><em>View</em></button>)}</div> : <div className="bcr-photo-review-empty">No {group.label.toLowerCase()} photos uploaded.</div>}</section>)}</div>}</section>
       <section className="bcr-editor-section"><div className="bcr-photo-review-title"><div><small>CUSTOMER SIGN-OFF</small><h3>Visit confirmation</h3><p>Captured by the cleaner after the visit.</p></div></div>{model.staffSignoffQuery.isLoading ? <div className="bcr-photo-review-empty"><Loader2 className="animate-spin" />Loading sign-off…</div> : model.staffSignoffQuery.isError ? <div className="bcr-photo-review-empty error">Customer sign-off could not be loaded for this booking.</div> : !signoff ? <div className="bcr-photo-review-empty">No customer sign-off recorded.</div> : signoff.customerNotHome ? <div className="bcr-signoff-not-home">Customer was not home — sign-off bypassed.</div> : <div className="bcr-signoff-summary"><div><small>SATISFACTION</small><strong className={`bcr-signoff-response ${signoff.customerResponse ?? "issue"}`}>{signoff.customerResponse === "great" ? "Everything looks great" : signoff.customerResponse === "touchup" ? "Needs one touch-up" : "Major issue"}</strong></div>{signoff.customerNotes && <div><small>CUSTOMER NOTES</small><p>{signoff.customerNotes}</p></div>}{signoff.signatureUrl && <div><small>SIGNATURE</small><img src={signoff.signatureUrl} alt="Customer signature" /></div>}</div>}</section>

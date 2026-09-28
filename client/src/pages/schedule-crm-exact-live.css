@@ -72,37 +72,6 @@
 .schedule-crm-exact-live .scr-toolbar-right button:disabled,
 .schedule-crm-exact-live .scr-slot-finder button:disabled { cursor: not-allowed; opacity: .48; }
 
-/* Append-only, human-confirmed payroll adjustment controls in the existing job drawer. */
-.schedule-crm-exact-live .scr-payroll-section { display: grid; gap: 10px; padding: 14px; border: 1px solid #4b455f; border-radius: 10px; background: linear-gradient(135deg, #24212e, #1e1d23); }
-.schedule-crm-exact-live .scr-payroll-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.schedule-crm-exact-live .scr-payroll-heading h3 { display: flex; align-items: center; gap: 7px; margin: 0; color: #f0ecff; font-size: 12px; }
-.schedule-crm-exact-live .scr-payroll-heading h3 svg { width: 15px; height: 15px; color: #b9a3ff; }
-.schedule-crm-exact-live .scr-payroll-heading p,
-.schedule-crm-exact-live .scr-payroll-muted { margin: 4px 0 0; color: #aaa3bd; font-size: 11px; line-height: 1.4; }
-.schedule-crm-exact-live .scr-payroll-heading > button { flex: 0 0 auto; min-height: 29px; padding: 0 9px; color: #f1edff; border: 1px solid #7a68bd; border-radius: 6px; background: #332c4e; font-size: 10px; font-weight: 700; }
-.schedule-crm-exact-live .scr-payroll-heading > button:disabled { cursor: not-allowed; opacity: .45; }
-.schedule-crm-exact-live .scr-payroll-total { display: grid; gap: 2px; padding: 10px 11px; border: 1px solid #423b57; border-radius: 8px; background: #1b1a20; }
-.schedule-crm-exact-live .scr-payroll-total span { color: #a8a1bb; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
-.schedule-crm-exact-live .scr-payroll-total b { color: #f9f7ff; font-size: 22px; line-height: 1.15; }
-.schedule-crm-exact-live .scr-payroll-total small { color: #c9c3da; font-size: 10px; }
-.schedule-crm-exact-live .scr-payroll-form { display: grid; gap: 8px; padding-top: 1px; }
-.schedule-crm-exact-live .scr-payroll-form label { display: grid; gap: 5px; color: #b6afc7; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.schedule-crm-exact-live .scr-payroll-form input,
-.schedule-crm-exact-live .scr-payroll-form textarea { width: 100%; box-sizing: border-box; border: 1px solid #514967; border-radius: 6px; background: #17161b; color: #f4f1fb; font: inherit; font-size: 12px; text-transform: none; }
-.schedule-crm-exact-live .scr-payroll-form input { height: 33px; padding: 0 9px; }
-.schedule-crm-exact-live .scr-payroll-form textarea { min-height: 58px; padding: 8px 9px; resize: vertical; }
-.schedule-crm-exact-live .scr-payroll-form > div { display: flex; justify-content: flex-end; gap: 7px; }
-.schedule-crm-exact-live .scr-payroll-form > div button { min-height: 29px; padding: 0 9px; color: #ddd8e9; border: 1px solid #4e495b; border-radius: 6px; background: #29272f; font-size: 10px; font-weight: 700; }
-.schedule-crm-exact-live .scr-payroll-form > div button:last-child { color: #f9f7ff; border-color: #705bc3; background: #59449b; }
-.schedule-crm-exact-live .scr-payroll-form button:disabled { cursor: not-allowed; opacity: .48; }
-.schedule-crm-exact-live .scr-payroll-history { display: grid; gap: 5px; border-top: 1px solid #40394f; padding-top: 10px; }
-.schedule-crm-exact-live .scr-payroll-history > span { color: #9f98b1; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-.schedule-crm-exact-live .scr-payroll-history article { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; }
-.schedule-crm-exact-live .scr-payroll-history article > b { padding: 3px 5px; border-radius: 4px; font-size: 10px; white-space: nowrap; }
-.schedule-crm-exact-live .scr-payroll-history article > b.is-positive { color: #a4efca; background: #1d3b2f; }
-.schedule-crm-exact-live .scr-payroll-history article > b.is-negative { color: #f3b3bd; background: #452a34; }
-.schedule-crm-exact-live .scr-payroll-history p { min-width: 0; margin: 0; color: #e1ddec; font-size: 11px; line-height: 1.35; }
-.schedule-crm-exact-live .scr-payroll-history small { display: block; overflow: hidden; margin-top: 2px; color: #918a9f; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 1000px) { .schedule-crm-exact-live .ocr-sidebar { display: none; } .schedule-crm-exact-live .scr-schedule-main { grid-template-columns: minmax(340px, 1fr) minmax(380px, 1.05fr); } }
 @media (max-width: 760px) { .schedule-crm-exact-live { height: auto; overflow: visible; } .schedule-crm-exact-live .scr-workspace { height: auto; overflow: visible; } .schedule-crm-exact-live .scr-schedule-main { display: grid; grid-template-columns: 1fr; overflow: visible; } .schedule-crm-exact-live .scr-route-stack { overflow: visible; } .schedule-crm-exact-live .scr-map-panel { min-height: 360px; } .schedule-crm-exact-live .scr-workspace-tabs a { white-space: nowrap; } }

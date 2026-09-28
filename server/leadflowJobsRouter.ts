@@ -1,12 +1,14 @@
+import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { activityLog, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
+import { activityLog, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobPayrollAdjustments, leadflowJobs } from "../drizzle/schema";
 import { agentPageProcedure, agentProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { leadflowCallMatrixRouter } from "./leadflowCallMatrixRouter";
 import { sendSms } from "./openphone";
+import { calculateEffectivePayroll } from "./payrollCalculator";
 import { summarizeDashboardServices, summarizeDashboardSources } from "./dashboardAnalyticsPresentation";
 
 const listInput = z.object({
@@ -46,6 +48,85 @@ const dayBoardMessageInput = z.object({
 const smsPhoneInput = z.object({ phone: z.string().trim().min(7).max(30) });
 const smsPhonesInput = z.object({ phones: z.array(z.string()).max(100) });
 const dayBoardProcedure = agentPageProcedure("field-management");
+
+type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+const PAYROLL_INACTIVE_BOOKING_STATUSES = new Set(["cancelled", "rescheduled", "missing_from_launch27"]);
+
+function payrollPercent(payPercent: string | null): number {
+  const parsed = Number.parseFloat(payPercent ?? "0");
+  if (!Number.isFinite(parsed)) return 0;
+  return parsed > 0 && parsed <= 1 ? parsed * 100 : parsed;
+}
+
+async function bookingPayrollPayoutSummary(db: Db, jobId: number) {
+  const rows = await db.select().from(leadflowJobs).where(eq(leadflowJobs.id, jobId)).limit(1);
+  const job = rows[0];
+  if (!job || PAYROLL_INACTIVE_BOOKING_STATUSES.has(job.bookingStatus.toLowerCase())) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Active imported booking not found." });
+  }
+  if (job.origin !== LEADFLOW_JOB_ORIGIN_LAUNCH27 || job.launch27BookingId == null) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Payroll adjustments are available only for imported bookings." });
+  }
+  if (job.teamId == null) {
+    return {
+      leadflowJobId: job.id,
+      assignedTeamName: job.teamName,
+      canAdjust: false,
+      unavailableReason: "This booking does not have an assigned cleaner team.",
+      basePayCents: null,
+      adjustmentCents: 0,
+      finalPayCents: null,
+      adjustments: [],
+    };
+  }
+
+  const cleaners = await db.select({ payPercent: cleanerProfiles.payPercent })
+    .from(cleanerProfiles)
+    .where(eq(cleanerProfiles.launch27TeamId, job.teamId))
+    .limit(1);
+  const cleaner = cleaners[0];
+  if (!cleaner) {
+    return {
+      leadflowJobId: job.id,
+      assignedTeamName: job.teamName,
+      canAdjust: false,
+      unavailableReason: "The booking-assigned team does not have a Cleaner Portal payout profile.",
+      basePayCents: null,
+      adjustmentCents: 0,
+      finalPayCents: null,
+      adjustments: [],
+    };
+  }
+
+  const adjustments = await db.select({
+    id: leadflowJobPayrollAdjustments.id,
+    amountCents: leadflowJobPayrollAdjustments.amountCents,
+    reason: leadflowJobPayrollAdjustments.reason,
+    createdByAgentName: leadflowJobPayrollAdjustments.createdByAgentName,
+    createdAt: leadflowJobPayrollAdjustments.createdAt,
+  })
+    .from(leadflowJobPayrollAdjustments)
+    .where(eq(leadflowJobPayrollAdjustments.leadflowJobId, job.id))
+    .orderBy(desc(leadflowJobPayrollAdjustments.createdAt), desc(leadflowJobPayrollAdjustments.id));
+  const adjustmentCents = adjustments.reduce((sum, adjustment) => sum + adjustment.amountCents, 0);
+  const basePayCents = Math.round(calculateEffectivePayroll({
+    jobDate: job.jobDate,
+    jobRevenue: job.jobTotalCents / 100,
+    payPercent: payrollPercent(cleaner.payPercent),
+  }).finalPay * 100);
+
+  return {
+    leadflowJobId: job.id,
+    assignedTeamName: job.teamName,
+    canAdjust: true,
+    unavailableReason: null,
+    basePayCents,
+    adjustmentCents,
+    finalPayCents: basePayCents + adjustmentCents,
+    adjustments,
+  };
+}
 
 const DAY_BOARD_STATUS_LABELS: Record<string, string> = {
   on_the_way: "On the Way",
@@ -827,6 +908,41 @@ export const leadflowJobsRouter = router({
       notificationError: leadflowBookingMessages.notificationError,
       createdAt: leadflowBookingMessages.createdAt,
     }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, sourceId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
+  }),
+
+  getPayrollPayoutSummary: agentProcedure.input(z.object({ jobId: z.number().int().positive() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    return bookingPayrollPayoutSummary(db, input.jobId);
+  }),
+
+  setPayrollFinalPayout: agentProcedure.input(z.object({
+    jobId: z.number().int().positive(),
+    targetFinalPayCents: z.number().int().min(0),
+    reason: z.string().trim().min(3).max(500),
+  })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const summary = await bookingPayrollPayoutSummary(db, input.jobId);
+    if (!summary.canAdjust || summary.finalPayCents == null) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: summary.unavailableReason ?? "This payroll adjustment is unavailable." });
+    }
+    const amountCents = input.targetFinalPayCents - summary.finalPayCents;
+    if (amountCents === 0) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "The final payout already matches that amount." });
+    }
+    if (Math.abs(amountCents) > 100_000) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "A final payout can change by at most $1,000 at a time." });
+    }
+    await db.insert(leadflowJobPayrollAdjustments).values({
+      leadflowJobId: input.jobId,
+      amountCents,
+      reason: input.reason,
+      createdByAgentId: ctx.agent.agentId,
+      createdByAgentName: ctx.agent.agentName,
+    });
+    broadcastCleanerPortalJobsChanged();
+    return bookingPayrollPayoutSummary(db, input.jobId);
   }),
 
   importNextThirtyDays: bookingsAgentProcedure.mutation(async () => {
