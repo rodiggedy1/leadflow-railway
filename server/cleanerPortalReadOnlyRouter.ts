@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobPayrollAdjustments, leadflowJobs, schedulingTeams, teamWorkSchedule } from "../drizzle/schema";
+import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs, schedulingTeams, teamWorkSchedule } from "../drizzle/schema";
+import { leadflowJobPayrollAdjustments } from "../drizzle/leadflowPayrollAdjustments";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { calculateEffectivePayroll } from "./payrollCalculator";

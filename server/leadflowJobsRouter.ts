@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { activityLog, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobPayrollAdjustments, leadflowJobs } from "../drizzle/schema";
+import { activityLog, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
+import { leadflowJobPayrollAdjustments } from "../drizzle/leadflowPayrollAdjustments";
 import { agentPageProcedure, agentProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";

@@ -10,7 +10,7 @@ const legacyJobTable = ["cleaner", "jobs"].join("_");
 
 describe("LeadFlow booking payroll adjustments", () => {
   it("uses the existing append-only LeadFlow ledger and managed Railway migration", () => {
-    const schema = read("drizzle/schema.ts");
+    const ledgerSchema = read("drizzle/leadflowPayrollAdjustments.ts");
     const migration = read("drizzle/0105_create_leadflow_job_payroll_adjustments.sql");
     const managedMigration = read("server/versioned-migrations/0044_create_leadflow_job_payroll_adjustments.sql");
     const manifest = JSON.parse(read("server/versioned-migrations/manifest.json")) as { migrations: Array<{ id: string; sqlFile: string; sha256: string }> };
@@ -23,7 +23,10 @@ describe("LeadFlow booking payroll adjustments", () => {
       'reason: varchar("reason", { length: 500 }).notNull()',
       'createdByAgentId: int("createdByAgentId").notNull()',
       'createdByAgentName: varchar("createdByAgentName", { length: 128 }).notNull()',
-    ]) expect(schema).toContain(marker);
+    ]) expect(ledgerSchema).toContain(marker);
+
+    expect(ledgerSchema).not.toContain(legacyJobSymbol);
+    expect(ledgerSchema).not.toContain(legacyJobTable);
 
     expect(migration).toBe(managedMigration);
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS `leadflow_job_payroll_adjustments`");
