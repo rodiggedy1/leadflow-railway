@@ -18,7 +18,8 @@ type BookingPaymentCheckoutProps = {
   selectedPaymentChoice?: "saved" | "new";
   onPaymentChoiceChange?: (choice: "saved" | "new") => void;
   externalSavedCardError?: string;
-  onComplete: (result: { bookingId: number; cardBrand: string; cardLast4: string; portalAccessCode?: string | null; directPortalSessionReady?: boolean }) => void;
+  deferConfirmation?: boolean;
+  onComplete: (result: { bookingId: number; cardBrand: string; cardLast4: string; portalAccessCode?: string | null; directPortalSessionReady?: boolean; finalizationRequired?: boolean }) => void;
 };
 
 type SetupFormProps = {
@@ -52,7 +53,7 @@ function ExistingCardSetupForm({ clientSecret, customerName, onConfirm }: SetupF
 }
 
 /** Booking adapter around the established Stripe Elements + confirmCardSetup collection path. */
-export function BookingPaymentCheckout({ publicFunnelNumber, mutationToken, customerName, amountCents, savedCard, footerReservesSavedCard = false, selectedPaymentChoice, onPaymentChoiceChange, externalSavedCardError = "", onComplete }: BookingPaymentCheckoutProps) {
+export function BookingPaymentCheckout({ publicFunnelNumber, mutationToken, customerName, amountCents, savedCard, footerReservesSavedCard = false, selectedPaymentChoice, onPaymentChoiceChange, externalSavedCardError = "", deferConfirmation = false, onComplete }: BookingPaymentCheckoutProps) {
   const startSetup = trpc.bookingPayments.startSetup.useMutation();
   const confirmSetup = trpc.bookingPayments.confirmSetup.useMutation();
   const reuseSavedCard = trpc.bookingPayments.reuseSavedCard.useMutation();
@@ -73,9 +74,10 @@ export function BookingPaymentCheckout({ publicFunnelNumber, mutationToken, cust
     try {
       const result = await startSetup.mutateAsync({ publicFunnelNumber, mutationToken, consentAccepted: true });
       if (result.alreadyComplete) {
-        onComplete({ bookingId: result.bookingId, cardBrand: "Card", cardLast4: "saved", portalAccessCode: result.portalAccessCode, directPortalSessionReady: result.directPortalSessionReady });
+        onComplete({ bookingId: result.bookingId, cardBrand: "Card", cardLast4: "saved", portalAccessCode: result.portalAccessCode, directPortalSessionReady: result.directPortalSessionReady, finalizationRequired: deferConfirmation });
         return;
       }
+      if (!result.clientSecret) throw new Error("We could not prepare secure card entry. Please try again.");
       setClientSecret(result.clientSecret);
     } catch (error: unknown) {
       setCheckoutError(error instanceof Error ? error.message : "We could not prepare secure card entry. Please try again.");
@@ -83,14 +85,14 @@ export function BookingPaymentCheckout({ publicFunnelNumber, mutationToken, cust
   };
 
   const completeCardCollection = async (paymentMethodId: string) => {
-    const result = await confirmSetup.mutateAsync({ publicFunnelNumber, mutationToken, paymentMethodId });
+    const result = await confirmSetup.mutateAsync({ publicFunnelNumber, mutationToken, paymentMethodId, ...(deferConfirmation ? { deferConfirmation: true } : {}) });
     onComplete(result);
   };
 
   const reserveWithSavedCard = async () => {
     setCheckoutError("");
     try {
-      const result = await reuseSavedCard.mutateAsync({ publicFunnelNumber, mutationToken });
+      const result = await reuseSavedCard.mutateAsync({ publicFunnelNumber, mutationToken, ...(deferConfirmation ? { deferConfirmation: true } : {}) });
       onComplete(result);
     } catch (error: unknown) {
       setCheckoutError(error instanceof Error ? error.message : "We could not use your saved card. Please add a new card.");
