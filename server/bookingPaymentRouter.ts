@@ -269,7 +269,7 @@ const deferredConfirmationInput = publicFunnelInput.extend({ deferConfirmation: 
 
 export const bookingPaymentRouter = router({
   startSetup: publicProcedure
-    .input(publicFunnelInput.extend({ consentAccepted: z.literal(true) }))
+    .input(publicFunnelInput)
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
@@ -320,9 +320,6 @@ export const bookingPaymentRouter = router({
         paymentStatus: "setup_pending",
         stripeCustomerId: customer.id,
         stripeSetupIntentId: setupIntent.id,
-        consentVersion: BOOKING_PAYMENT_CONSENT_VERSION,
-        consentText: BOOKING_PAYMENT_CONSENT_TEXT,
-        consentAcceptedAt: Date.now(),
         updatedAt: new Date(),
       }).where(and(eq(bookingPaymentProfiles.id, target.profile.id), eq(bookingPaymentProfiles.version, target.profile.version)));
       await db.update(bookings).set({ paymentStatus: "pending", updatedAt: new Date() }).where(eq(bookings.id, target.bookingId));
@@ -362,7 +359,7 @@ export const bookingPaymentRouter = router({
     }),
 
   confirmSetup: publicProcedure
-    .input(deferredConfirmationInput.extend({ paymentMethodId: z.string().trim().min(1).max(255) }))
+    .input(deferredConfirmationInput.extend({ paymentMethodId: z.string().trim().min(1).max(255), consentAccepted: z.literal(true) }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
@@ -396,6 +393,9 @@ export const bookingPaymentRouter = router({
           cardLast4: paymentMethod.card.last4,
           cardExpMonth: paymentMethod.card.exp_month,
           cardExpYear: paymentMethod.card.exp_year,
+          consentVersion: BOOKING_PAYMENT_CONSENT_VERSION,
+          consentText: BOOKING_PAYMENT_CONSENT_TEXT,
+          consentAcceptedAt: Date.now(),
           version: sql`${bookingPaymentProfiles.version} + 1`,
           updatedAt: now,
         }).where(and(eq(bookingPaymentProfiles.id, profile.id), eq(bookingPaymentProfiles.version, profile.version)));

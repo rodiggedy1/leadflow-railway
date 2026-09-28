@@ -1401,6 +1401,7 @@ function Payment({
           mutationToken={funnelRecord.mutationToken}
           customerName={fullName}
           amountCents={amountCents}
+          directCardEntry
           deferConfirmation
           onComplete={result => onCardReady(result.cardBrand, result.cardLast4)}
         />
