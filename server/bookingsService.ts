@@ -12,6 +12,13 @@ import {
   type PrepareBookingResult,
   type SafePreparedBookingSummary,
 } from "../shared/booking";
+import {
+  PUBLIC_BOOKING_PRICING_VERSION,
+  createPublicBookingPriceSnapshot,
+  getPublicBookingServiceName,
+  type PublicBookingPricingInput,
+  type PublicBookingPriceSnapshot,
+} from "../shared/publicBookingPricing";
 import { normalizePhone } from "./utils/phone";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 
@@ -43,10 +50,10 @@ export type PreparedNativeBooking = {
   requestedStartAt: number;
   recurrence: PrepareBookingInput["recurrence"];
   recurringIntentStatus: "intent_pending" | null;
-  pricingVersion: typeof NATIVE_BOOKING_PRICING_VERSION;
+  pricingVersion: typeof NATIVE_BOOKING_PRICING_VERSION | typeof PUBLIC_BOOKING_PRICING_VERSION;
   firstCleaningTotalCents: number;
   futureVisitTotalCents: number | null;
-  priceSnapshot: BookingPriceSnapshot;
+  priceSnapshot: BookingPriceSnapshot | PublicBookingPriceSnapshot;
   expiresAt: null;
   summary: SafePreparedBookingSummary;
 };
@@ -245,5 +252,174 @@ export async function prepareNativeBooking(
     created: persisted.created,
     replayed: !persisted.created,
     summary: built.prepared.summary,
+  };
+}
+export type PreparePublicBookingInput = Omit<
+  PrepareBookingInput,
+  "acceptedPricing"
+> & {
+  acceptedPricing: {
+    version: typeof PUBLIC_BOOKING_PRICING_VERSION;
+    totalCents: number;
+  };
+  pricing: PublicBookingPricingInput;
+};
+
+/**
+ * The approved /book screen uses its own versioned price table. Its server-side
+ * calculation is intentionally additive, leaving the existing widget and
+ * /book-now price contract unchanged.
+ */
+export function buildPreparedPublicBooking(
+  input: PreparePublicBookingInput,
+  options: { nowMs: number; timeZone: string }
+):
+  | {
+      type: "price_changed";
+      totalCents: number;
+      priceSnapshot: PublicBookingPriceSnapshot;
+    }
+  | { type: "ready"; prepared: PreparedNativeBooking } {
+  const phone = normalizePhone(input.customer.phone);
+  if (!phone)
+    throw new NativeBookingInputError("Enter a valid US phone number.");
+
+  const requestedStartAt = businessLocalDateTimeToUtcMs(
+    input.requestedSchedule.localDate,
+    input.requestedSchedule.localTime,
+    options.timeZone
+  );
+  if (requestedStartAt <= options.nowMs)
+    throw new NativeBookingInputError("Requested time must be in the future.");
+
+  if (
+    input.pricing.serviceId !== input.service.serviceId ||
+    input.pricing.bedrooms !== input.service.bedrooms ||
+    input.pricing.bathrooms !== input.service.bathrooms ||
+    input.pricing.recurrence !== input.recurrence
+  ) {
+    throw new NativeBookingInputError(
+      "Booking details no longer match the quoted price. Please review your booking."
+    );
+  }
+
+  const suppliedExtras = [...input.service.extras]
+    .map(extra => `${extra.id}:${extra.quantity}`)
+    .sort();
+  const pricedExtras = [...input.pricing.extras]
+    .map(extra => `${extra.id}:${extra.quantity}`)
+    .sort();
+  if (
+    suppliedExtras.length !== pricedExtras.length ||
+    suppliedExtras.some((value, index) => value !== pricedExtras[index])
+  ) {
+    throw new NativeBookingInputError(
+      "Booking extras no longer match the quoted price. Please review your booking."
+    );
+  }
+
+  let priceSnapshot: PublicBookingPriceSnapshot;
+  try {
+    priceSnapshot = createPublicBookingPriceSnapshot(input.pricing);
+  } catch (error) {
+    throw new NativeBookingInputError(
+      error instanceof Error ? error.message : "The quoted price is invalid."
+    );
+  }
+  const { breakdown } = priceSnapshot;
+  if (
+    input.acceptedPricing.version !== PUBLIC_BOOKING_PRICING_VERSION ||
+    input.acceptedPricing.totalCents !== breakdown.firstCleaningTotalCents
+  ) {
+    return {
+      type: "price_changed",
+      totalCents: breakdown.firstCleaningTotalCents,
+      priceSnapshot,
+    };
+  }
+
+  const customerName = normalizeText(input.customer.fullName);
+  const customerEmail = input.customer.email.trim().toLowerCase();
+  const address = normalizeText(input.address);
+  const specialRequestNotes = input.service.specialRequestNotes
+    .map(normalizeText)
+    .filter(Boolean);
+  const materialCommand = {
+    customer: { fullName: customerName, phone, email: customerEmail },
+    service: {
+      serviceId: input.service.serviceId,
+      bedrooms: input.service.bedrooms,
+      bathrooms: input.service.bathrooms,
+      extras: input.service.extras.map(({ id, quantity }) => ({
+        id,
+        quantity,
+      })),
+      specialRequestNotes,
+      publicPricing: input.pricing,
+    },
+    address,
+    requestedSchedule: {
+      localDate: input.requestedSchedule.localDate,
+      localTime: input.requestedSchedule.localTime,
+      timeZone: options.timeZone,
+      requestedStartAt,
+    },
+    recurrence: input.recurrence,
+    acceptedPricing: input.acceptedPricing,
+  };
+  const commandHash = hashJson(materialCommand);
+  const summary: SafePreparedBookingSummary = {
+    customerName,
+    serviceName: getPublicBookingServiceName(input.service.serviceId),
+    homeSummary:
+      input.pricing.pricingMode === "hourly"
+        ? `${input.pricing.maidCount} maid${input.pricing.maidCount === 1 ? "" : "s"} · ${input.pricing.hourCount} hour${input.pricing.hourCount === 1 ? "" : "s"}`
+        : input.service.bedrooms === 0
+          ? `Studio · ${input.service.bathrooms} bath${input.service.bathrooms === 1 ? "" : "s"}`
+          : `${input.service.bedrooms} bed · ${input.service.bathrooms} bath${input.service.bathrooms === 1 ? "" : "s"}`,
+    address,
+    requestedLocalDate: input.requestedSchedule.localDate,
+    requestedLocalTime: input.requestedSchedule.localTime,
+    requestedTimeZone: options.timeZone,
+    totalCents: breakdown.firstCleaningTotalCents,
+    recurrence: input.recurrence,
+    futureVisitTotalCents: breakdown.futureVisitTotalCents,
+  };
+
+  return {
+    type: "ready",
+    prepared: {
+      publicBookingNumber: publicBookingNumberFor(input.idempotencyKey),
+      idempotencyKey: input.idempotencyKey,
+      commandHash,
+      source: input.surface,
+      status: "needs_attention",
+      availabilityStatus: "requested",
+      assignmentStatus: "unassigned",
+      paymentStatus: "not_started",
+      customerName,
+      customerPhone: phone,
+      customerEmail,
+      serviceId: input.service.serviceId,
+      serviceName: getPublicBookingServiceName(input.service.serviceId),
+      bedrooms: input.service.bedrooms,
+      bathrooms: input.service.bathrooms,
+      extras: breakdown.extras,
+      specialRequestNotes,
+      address,
+      requestedLocalDate: input.requestedSchedule.localDate,
+      requestedLocalTime: input.requestedSchedule.localTime,
+      requestedTimeZone: options.timeZone,
+      requestedStartAt,
+      recurrence: input.recurrence,
+      recurringIntentStatus:
+        input.recurrence === "one-time" ? null : "intent_pending",
+      pricingVersion: PUBLIC_BOOKING_PRICING_VERSION,
+      firstCleaningTotalCents: breakdown.firstCleaningTotalCents,
+      futureVisitTotalCents: breakdown.futureVisitTotalCents,
+      priceSnapshot,
+      expiresAt: null,
+      summary,
+    },
   };
 }
