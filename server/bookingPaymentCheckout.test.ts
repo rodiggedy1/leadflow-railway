@@ -42,6 +42,18 @@ describe("shared booking Stripe checkout", () => {
     );
   });
 
+  it("records card consent only when the customer submits the card form", () => {
+    const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
+    const adapter = read("server/bookingPaymentRouter.ts");
+    expect(checkout).toContain("consentAccepted: true");
+    expect(adapter).toMatch(
+      /confirmSetup:\s*publicProcedure[\s\S]*consentAccepted:\s*z\.literal\(true\)/
+    );
+    expect(adapter).toMatch(
+      /confirmSetup:\s*publicProcedure[\s\S]*consentAcceptedAt:\s*Date\.now\(\)/
+    );
+  });
+
   it("confirms a real booking by first name without availability-review or UI-preview language", () => {
     const widget = read("client/src/components/BookingWidgetConfigPanel.tsx");
     const book = read("client/src/pages/Book.tsx");

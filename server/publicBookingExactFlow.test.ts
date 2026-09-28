@@ -51,6 +51,13 @@ describe("approved eight-step public booking flow", () => {
     expect(checkout).toContain("trpc.bookingPayments.confirmSetup.useMutation");
   });
 
+  it("opens Stripe card entry directly on the public payment step", () => {
+    expect(page).toContain("directCardEntry");
+    expect(checkout).toMatch(/if\s*\(\s*!directCardEntry\s*\|\|/);
+    expect(checkout).toContain("Preparing secure card entry…");
+    expect(checkout).toContain("authorizationCopy");
+  });
+
   it("keeps the public booking path separate from protected legacy systems", () => {
     const changed = [page, pricing, paymentRouter, checkout].join("\n");
     const protectedReferences = [
