@@ -920,6 +920,9 @@ export default function CommandChatExactLive() {
       if (leftTeamSmsSessionIds.length) void utils.commandCenter.listInboundTeamSmsEvents.invalidate({ sessionIds: leftTeamSmsSessionIds });
       if (selectedSmsConversation) void utils.leads.getCsConversation.invalidate({ sessionId: selectedSmsConversation.id });
     },
+    onJobUpdate: () => {
+      void utils.leadflowSchedule.getSchedule.invalidate({ date: todayDateStr });
+    },
     onGmailNewMessages: () => {
       void utils.opsChat.listEmailInboxThreads.invalidate();
       if (selectedEmailThreadId) {

@@ -7,6 +7,7 @@ import { getDb } from "./db";
 import "./retiredStatusProcedureBlock";
 import { sendSms } from "./openphone";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const ETA_CHOICES = [10, 20, 30, 45, 60, 75, 90, 120] as const;
 const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
@@ -106,6 +107,7 @@ async function saveProgress(input: {
     startedAt: record.startedAt,
     updatedAt: record.updatedAt,
   } });
+  broadcastOpsUpdate("job_update", { jobId: input.leadflowJobId });
   return record;
 }
 

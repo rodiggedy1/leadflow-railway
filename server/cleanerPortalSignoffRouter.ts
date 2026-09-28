@@ -8,6 +8,7 @@ import { storagePut } from "./storage";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
 const responseSchema = z.enum(["great", "touchup", "issue"]);
@@ -199,6 +200,7 @@ export const cleanerPortalSignoffRouter = router({
       startedAt: progress.startedAt,
       updatedAt: progress.updatedAt,
     } });
+    broadcastOpsUpdate("job_update", { jobId: job.id });
     sendLeadflowCompletionReviewSms(job.id).catch(error =>
       console.error("[LeadflowCompletionReviewSms] Unhandled completion-review delivery error:", error)
     );
