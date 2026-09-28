@@ -348,6 +348,18 @@ function PopupDetailContext({ identity, bookingContext, isBookingContextLoading,
   );
 }
 
+function EmailSentCelebration({ recipientName, recipientEmail, onDone, onViewMessage }: { recipientName: string; recipientEmail: string; onDone: () => void; onViewMessage: () => void }) {
+  return <div className="email-sent-celebration" role="presentation">
+    <section className="email-sent-celebration-card" role="dialog" aria-modal="true" aria-labelledby="email-sent-celebration-title">
+      <div className="email-sent-celebration-check"><Check size={25} /></div>
+      <span className="email-sent-celebration-eyebrow">EMAIL SENT</span>
+      <h2 id="email-sent-celebration-title">Your reply is on its way.</h2>
+      <p>Sent to <strong>{recipientName}</strong>{recipientEmail ? <> · {recipientEmail}</> : null}</p>
+      <div className="email-sent-celebration-actions"><button type="button" onClick={onDone}>Done</button><button type="button" onClick={onViewMessage}>View message</button></div>
+    </section>
+  </div>;
+}
+
 function EmailDetailWorkspace({ groups, selectedId, detail, detailError, isDetailLoading, onRetry, detailOnly = false, reply, setReply, draft, draftDismissed, onPick, onClose, onInsertDraft, onDismissDraft, onSend, onResolve, isSending, isResolving }: {
   groups: Array<{ lane: Lane; threads: LiveEmailThread[] }>;
   selectedId: string;
@@ -403,6 +415,8 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(initialThreadId);
   const [emailReply, setEmailReply] = useState("");
   const [dismissedDrafts, setDismissedDrafts] = useState<Set<string>>(new Set());
+  const [sentCelebrationOpen, setSentCelebrationOpen] = useState(false);
+  const [sentRecipient, setSentRecipient] = useState<EmailIdentity | null>(null);
   const utils = trpc.useUtils();
   const emailInbox = trpc.opsChat.listEmailInboxThreads.useQuery(undefined, { staleTime: 30_000, refetchOnWindowFocus: true });
   const emailThread = trpc.gmail.getThread.useQuery(
@@ -461,6 +475,11 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
     if (!selectedThreadId) return;
     setDismissedDrafts(previous => new Set(Array.from(previous).concat(selectedThreadId)));
   };
+  const scrollToLatestMessage = () => {
+    const scrollOwner = document.querySelector<HTMLElement>(".ccc-live-email-workspace-modal .em2-msg-body-scroll-owner");
+    if (!scrollOwner) return;
+    requestAnimationFrame(() => scrollOwner.scrollTo({ top: scrollOwner.scrollHeight, behavior: "smooth" }));
+  };
   const sendReply = () => {
     if (!selectedThreadId || !emailReply.trim()) return;
     const currentDetail = detail;
@@ -470,7 +489,15 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
       toast.error("No reply address is available for this thread");
       return;
     }
-    sendEmailReply.mutate({ threadId: selectedThreadId, to: identity.email, subject, bodyHtml: emailReply.split("\n").join("<br>") });
+    sendEmailReply.mutate(
+      { threadId: selectedThreadId, to: identity.email, subject, bodyHtml: emailReply.split("\n").join("<br>") },
+      {
+        onSuccess: () => {
+          setSentRecipient(identity);
+          setSentCelebrationOpen(true);
+        },
+      },
+    );
   };
   const resolveThread = () => {
     if (selectedThreadId) resolveEmailThread.mutate({ threadId: selectedThreadId });
@@ -486,5 +513,6 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
         {!emailInbox.isLoading && groups.map(group => <section className="emails-lane" key={group.lane}><header><span style={{ background: LANE_COLORS[group.lane] }} /><b>{group.lane}</b><small>{group.threads.length}</small><ChevronDown size={13} /></header><div>{group.threads.map(thread => <EmailCard key={thread.threadId} thread={thread} lane={group.lane} selected={false} onPick={() => openThread(thread.threadId)} />)}{group.threads.length === 0 && <p className="emails-lane-empty">No conversations</p>}</div></section>)}
       </div></section>
     </div>}
+    {detailOnly && sentCelebrationOpen && sentRecipient && <EmailSentCelebration recipientName={sentRecipient.name} recipientEmail={sentRecipient.email} onDone={() => setSentCelebrationOpen(false)} onViewMessage={() => { setSentCelebrationOpen(false); void emailThread.refetch().finally(scrollToLatestMessage); }} />}
   </main>;
 }
