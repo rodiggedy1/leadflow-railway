@@ -327,6 +327,14 @@
       "sha256": "12b41b403bd11eb2349a2bfdddcc3efc013de2bbeab8f978d8e5cb5796f1a887",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0043_create_gmail_message_html_cache.postconditions.json"
+    },
+    {
+      "id": "0044_create_leadflow_job_payroll_adjustments",
+      "mode": "create-table",
+      "sqlFile": "0044_create_leadflow_job_payroll_adjustments.sql",
+      "sha256": "e39226c0a7bee9501d85a3702ff9151db9e768cd05820c3af83b4eeb33ab1ebb",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0044_create_leadflow_job_payroll_adjustments.postconditions.json"
     }
   ]
 }

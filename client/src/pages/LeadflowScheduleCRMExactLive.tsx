@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  CircleDollarSign,
   FileText,
   GripVertical,
   Lock,
@@ -54,6 +55,7 @@ type Team = {
 
 type Job = {
   id: number;
+  jobDate: string;
   customerName: string | null;
   customerPhone?: string | null;
   jobAddress: string | null;
@@ -128,6 +130,10 @@ function dateTimeLabel(value: string | null) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "—";
   return parsed.toLocaleString("en-US", { weekday: "short", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: ET });
+}
+
+function formatCents(value: number | null | undefined) {
+  return ((value ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
 function driveLabel(secs?: number | null) {
@@ -226,6 +232,26 @@ function TeamRoute({ team, jobs, selectedJobId, lockedJobIds, conflictJobIds, on
 function ClientDrawer({ job, teams, onClose, onRaiseIssue }: { job: Job | null; teams: Team[]; onClose: () => void; onRaiseIssue: (job: Job) => void }) {
   const utils = trpc.useUtils();
   const [showReassign, setShowReassign] = useState(false);
+  const [showPayrollAdjustment, setShowPayrollAdjustment] = useState(false);
+  const [payrollAmount, setPayrollAmount] = useState("");
+  const [payrollReason, setPayrollReason] = useState("");
+  const payrollSummary = trpc.leadflowSchedule.getPayrollAdjustmentSummary.useQuery(
+    { date: job?.jobDate ?? todayStr(), jobId: job?.id ?? 1 },
+    { enabled: Boolean(job), staleTime: 15_000 },
+  );
+  const applyPayrollAdjustment = trpc.leadflowSchedule.applyPayrollAdjustment.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        payrollSummary.refetch(),
+        job ? utils.leadflowSchedule.getSchedule.invalidate({ date: job.jobDate }) : Promise.resolve(),
+      ]);
+      setPayrollAmount("");
+      setPayrollReason("");
+      setShowPayrollAdjustment(false);
+      toast.success("Payroll adjustment applied and Cleaner Portal updated.");
+    },
+    onError: error => toast.error(error.message),
+  });
   const manualAssign = trpc.leadflowSchedule.manualAssign.useMutation({
     onSuccess: () => {
       if (job?.serviceDateTime) utils.leadflowSchedule.getSchedule.invalidate({ date: job.serviceDateTime.slice(0, 10) });
@@ -238,6 +264,20 @@ function ClientDrawer({ job, teams, onClose, onRaiseIssue }: { job: Job | null; 
   const name = customerName(job);
   const history = job.clientHistory;
   const checklist = (() => { try { return job.checklistItems ? JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }> : []; } catch { return []; } })();
+  const submitPayrollAdjustment = () => {
+    const amountCents = Math.round(Number(payrollAmount) * 100);
+    const reason = payrollReason.trim();
+    if (!Number.isFinite(amountCents) || amountCents === 0) {
+      toast.error("Enter a non-zero dollar amount.");
+      return;
+    }
+    if (reason.length < 3) {
+      toast.error("Add a brief adjustment reason.");
+      return;
+    }
+    if (!window.confirm(`Apply ${formatCents(amountCents)} to ${name}'s team payment? This adjustment is recorded with your name and appears immediately in Cleaner Portal.`)) return;
+    applyPayrollAdjustment.mutate({ date: job.jobDate, jobId: job.id, amountCents, reason });
+  };
   return (
     <div className="scr-drawer-backdrop" onClick={onClose}>
       <aside className="scr-client-drawer" onClick={event => event.stopPropagation()} aria-label="Customer schedule profile">
@@ -246,6 +286,14 @@ function ClientDrawer({ job, teams, onClose, onRaiseIssue }: { job: Job | null; 
           <section className="scr-client-stats"><div><b>{history?.totalBookings ?? "—"}</b><span>Cleanings</span></div><div><b>{history ? `$${history.lifetimeValue.toLocaleString()}` : "—"}</b><span>Lifetime</span></div><div><b>{history ? `$${history.avgPrice}` : "—"}</b><span>Avg / visit</span></div><div><b>{history?.usualTeam || job.assignment?.teamName || "—"}</b><span>Usual team</span></div></section>
           <section><h3><CalendarDays />This Job</h3><div className="scr-detail-grid"><article><label>Service</label><b>{service(job)}</b></article><article><label>Scheduled</label><b>{dateTimeLabel(job.serviceDateTime)}</b></article><article><label>Frequency</label><b>{frequency(job)}</b></article><article><label>Team</label><b>{job.assignment?.teamName || "Unassigned"}</b></article></div></section>
           <section className="scr-assignment-section"><div className="scr-assignment-heading"><h3><Users />Assignment</h3><span>{job.assignment?.teamName || "Unassigned"}</span></div><p>{job.assignment?.source === "booking_default" ? "Defaulted from the team assigned in Bookings. Choose a different team here to override it." : "Choose the team assigned to this service."}</p><button className="scr-assignment-open" type="button" onClick={() => setShowReassign(true)}><Users />{job.assignment?.source === "booking_default" ? "Override booking team" : job.assignment?.teamName ? "Change team" : "Assign a team"}<ChevronDown /></button></section>
+          <section className="scr-payroll-section">
+            <div className="scr-payroll-heading"><div><h3><CircleDollarSign />Team payment</h3><p>Uses this booking’s existing assigned Cleaner Portal team.</p></div><button type="button" onClick={() => setShowPayrollAdjustment(value => !value)} disabled={!payrollSummary.data?.canAdjust || payrollSummary.isLoading}>{showPayrollAdjustment ? "Close" : "Adjust pay"}</button></div>
+            {payrollSummary.isLoading ? <p className="scr-payroll-muted">Loading current payout…</p> : payrollSummary.data?.canAdjust ? <>
+              <div className="scr-payroll-total"><span>Cleaner Portal payout</span><b>{formatCents(payrollSummary.data.finalPayCents)}</b>{payrollSummary.data.adjustmentCents !== 0 && <small>{formatCents(payrollSummary.data.basePayCents)} base · {payrollSummary.data.adjustmentCents > 0 ? "+" : ""}{formatCents(payrollSummary.data.adjustmentCents)} adjusted</small>}</div>
+              {showPayrollAdjustment && <div className="scr-payroll-form"><label>Adjustment ($)<input inputMode="decimal" type="number" step="0.01" min="-1000" max="1000" value={payrollAmount} onChange={event => setPayrollAmount(event.target.value)} placeholder="e.g. 15.00 or -15.00" /></label><label>Reason<textarea maxLength={500} value={payrollReason} onChange={event => setPayrollReason(event.target.value)} placeholder="Internal reason required for the payroll record" /></label><div><button type="button" onClick={() => { setShowPayrollAdjustment(false); setPayrollAmount(""); setPayrollReason(""); }} disabled={applyPayrollAdjustment.isPending}>Cancel</button><button type="button" onClick={submitPayrollAdjustment} disabled={applyPayrollAdjustment.isPending || !payrollAmount || payrollReason.trim().length < 3}>{applyPayrollAdjustment.isPending ? "Applying…" : "Apply adjustment"}</button></div></div>}
+              {payrollSummary.data.adjustments.length > 0 && <div className="scr-payroll-history"><span>Adjustment history</span>{payrollSummary.data.adjustments.slice(0, 4).map(adjustment => <article key={adjustment.id}><b className={adjustment.amountCents > 0 ? "is-positive" : "is-negative"}>{adjustment.amountCents > 0 ? "+" : ""}{formatCents(adjustment.amountCents)}</b><p>{adjustment.reason}<small>{adjustment.createdByAgentName} · {new Date(adjustment.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</small></p></article>)}</div>}
+            </> : <p className="scr-payroll-muted">{payrollSummary.data?.unavailableReason || "Current payout is unavailable."}</p>}
+          </section>
           {(job.customerNotes || job.staffNotes || job.adminNotes || checklist.length > 0) && <section><h3><FileText />Notes & checklist</h3>{job.customerNotes && <div className="scr-note-card"><label>Customer notes</label><p>{job.customerNotes}</p></div>}{job.staffNotes && <div className="scr-note-card"><label>Staff notes</label><p>{job.staffNotes}</p></div>}{job.adminNotes && <div className="scr-note-card"><label>Admin notes</label><p>{job.adminNotes}</p></div>}{checklist.length > 0 && <div className="scr-checklist">{checklist.map((item, index) => <span key={`${item.text}-${index}`}>{item.checked ? "✓" : "○"} {item.text}</span>)}</div>}</section>}
           {job.recentCalls && job.recentCalls.length > 0 && <section><h3><Phone />Recent calls</h3>{job.recentCalls.map((call, index) => <div className="scr-call-card" key={`${call.step}-${index}`}><b>{call.step.replaceAll("_", " ")} <i>{call.outcome}</i></b><p>{call.transcript || call.summary || "No call summary available."}</p></div>)}</section>}
           {history?.aiMemoryBullets && history.aiMemoryBullets.length > 0 && <section><h3><Sparkles />AI memory</h3><ul className="scr-memory">{history.aiMemoryBullets.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section>}

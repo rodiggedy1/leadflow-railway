@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "table": "leadflow_job_payroll_adjustments",
+  "columns": [
+    { "name": "id", "columnType": "int", "nullable": false, "autoIncrement": true },
+    { "name": "leadflowJobId", "columnType": "int", "nullable": false },
+    { "name": "amountCents", "columnType": "int", "nullable": false },
+    { "name": "reason", "columnType": "varchar(500)", "nullable": false },
+    { "name": "createdByAgentId", "columnType": "int", "nullable": false },
+    { "name": "createdByAgentName", "columnType": "varchar(128)", "nullable": false },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false, "default": "current_timestamp(3)" }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "unique": true, "columns": ["id"] },
+    { "name": "idx_lf_job_payroll_adjustments_job", "unique": false, "columns": ["leadflowJobId"] },
+    { "name": "idx_lf_job_payroll_adjustments_created", "unique": false, "columns": ["createdAt"] }
+  ]
+}
