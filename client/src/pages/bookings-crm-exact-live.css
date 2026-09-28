@@ -34,3 +34,36 @@
 @media (max-width: 760px) {
   .booking-crm-review .bcr-live-notice { margin-left: 10px; margin-right: 10px; }
 }
+
+/* Booking-assignment payroll controls use the imported booking team, not Schedule planning assignments. */
+.booking-crm-review .bcr-payroll-section { display: grid; gap: 10px; border: 1px solid #56466f; border-radius: 8px; background: linear-gradient(135deg, #231e2d, #1c1b22); }
+.booking-crm-review .bcr-payroll-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.booking-crm-review .bcr-payroll-heading h3 { display: flex; align-items: center; gap: 6px; margin: 3px 0 0; color: #f1ecff; font-size: 13px; }
+.booking-crm-review .bcr-payroll-heading h3 svg { color: #c1a8ff; }
+.booking-crm-review .bcr-payroll-heading p,
+.booking-crm-review .bcr-payroll-muted { margin: 4px 0 0; color: #aca4bd; font-size: 10px; line-height: 1.45; }
+.booking-crm-review .bcr-payroll-heading > button { flex: 0 0 auto; min-height: 28px; padding: 0 9px; color: #f5f1ff; border: 1px solid #8065bd; border-radius: 6px; background: #392c55; font-size: 10px; font-weight: 700; }
+.booking-crm-review .bcr-payroll-heading > button:disabled,
+.booking-crm-review .bcr-payroll-form button:disabled { cursor: not-allowed; opacity: .48; }
+.booking-crm-review .bcr-payroll-total { display: grid; gap: 3px; padding: 10px; border: 1px solid #4c415f; border-radius: 7px; background: rgba(10, 9, 13, .32); }
+.booking-crm-review .bcr-payroll-total > span,
+.booking-crm-review .bcr-payroll-history > span { color: #b4abca; font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.booking-crm-review .bcr-payroll-total b { color: #fbf9ff; font-size: 22px; line-height: 1.1; }
+.booking-crm-review .bcr-payroll-total small { color: #c9c0d9; font-size: 10px; line-height: 1.35; }
+.booking-crm-review .bcr-payroll-form { display: grid; gap: 8px; }
+.booking-crm-review .bcr-payroll-form label { display: grid; gap: 5px; color: #c5bdd3; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.booking-crm-review .bcr-payroll-form input,
+.booking-crm-review .bcr-payroll-form textarea { box-sizing: border-box; width: 100%; color: #faf8ff; border: 1px solid #5c506f; border-radius: 6px; background: #16141b; font: inherit; font-size: 11px; text-transform: none; }
+.booking-crm-review .bcr-payroll-form input { height: 32px; padding: 0 9px; }
+.booking-crm-review .bcr-payroll-form textarea { min-height: 56px; padding: 8px 9px; resize: vertical; }
+.booking-crm-review .bcr-payroll-form > p { margin: 0; color: #d5c9ee; font-size: 10px; line-height: 1.4; }
+.booking-crm-review .bcr-payroll-form > div { display: flex; justify-content: flex-end; gap: 7px; }
+.booking-crm-review .bcr-payroll-form > div button { min-height: 29px; padding: 0 9px; color: #e1dbe9; border: 1px solid #514b5f; border-radius: 6px; background: #29262f; font-size: 10px; font-weight: 700; }
+.booking-crm-review .bcr-payroll-form > div button:last-child { color: #fff; border-color: #7659bf; background: #59449a; }
+.booking-crm-review .bcr-payroll-history { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid #493f58; }
+.booking-crm-review .bcr-payroll-history article { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; }
+.booking-crm-review .bcr-payroll-history article > b { padding: 3px 5px; border-radius: 4px; font-size: 10px; white-space: nowrap; }
+.booking-crm-review .bcr-payroll-history article > b.is-positive { color: #a8efca; background: #1d3d30; }
+.booking-crm-review .bcr-payroll-history article > b.is-negative { color: #f4b7c1; background: #4a2a35; }
+.booking-crm-review .bcr-payroll-history p { min-width: 0; margin: 0; color: #e9e3f1; font-size: 10px; line-height: 1.35; }
+.booking-crm-review .bcr-payroll-history small { display: block; overflow: hidden; margin-top: 2px; color: #a198ae; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }

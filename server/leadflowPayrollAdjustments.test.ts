@@ -8,8 +8,8 @@ const read = (relativePath: string) => fs.readFileSync(path.join(root, relativeP
 const legacyJobSymbol = ["cleaner", "Jobs"].join("");
 const legacyJobTable = ["cleaner", "jobs"].join("_");
 
-describe("LeadFlow job payroll adjustments", () => {
-  it("uses an append-only LeadFlow ledger with a managed Railway migration", () => {
+describe("LeadFlow booking payroll adjustments", () => {
+  it("uses the existing append-only LeadFlow ledger and managed Railway migration", () => {
     const schema = read("drizzle/schema.ts");
     const migration = read("drizzle/0105_create_leadflow_job_payroll_adjustments.sql");
     const managedMigration = read("server/versioned-migrations/0044_create_leadflow_job_payroll_adjustments.sql");
@@ -32,15 +32,19 @@ describe("LeadFlow job payroll adjustments", () => {
     expect(entry?.sha256).toBe(createHash("sha256").update(managedMigration).digest("hex"));
   });
 
-  it("allows any authenticated agent to append a bounded, reasoned adjustment for the job’s existing portal team", () => {
-    const router = read("server/leadflowScheduleRouter.ts");
+  it("allows any authenticated agent to set an imported booking team's final payout through an audited delta", () => {
+    const router = read("server/leadflowJobsRouter.ts");
+    const mutation = router.slice(router.indexOf("setPayrollFinalPayout: agentProcedure"), router.indexOf("importNextThirtyDays: bookingsAgentProcedure"));
 
     for (const marker of [
-      "getPayrollAdjustmentSummary: agentProcedure",
-      "applyPayrollAdjustment: agentProcedure",
-      "payrollAdjustmentSummary(db, input.date, input.jobId)",
+      "getPayrollPayoutSummary: agentProcedure",
+      "setPayrollFinalPayout: agentProcedure",
+      "bookingPayrollPayoutSummary(db, input.jobId)",
       "eq(cleanerProfiles.launch27TeamId, job.teamId)",
-      "amountCents: z.number().int().min(-100_000).max(100_000)",
+      "job.origin !== LEADFLOW_JOB_ORIGIN_LAUNCH27",
+      "targetFinalPayCents: z.number().int().min(0)",
+      "const amountCents = input.targetFinalPayCents - summary.finalPayCents;",
+      "Math.abs(amountCents) > 100_000",
       "reason: z.string().trim().min(3).max(500)",
       "createdByAgentId: ctx.agent.agentId",
       "createdByAgentName: ctx.agent.agentName",
@@ -48,9 +52,9 @@ describe("LeadFlow job payroll adjustments", () => {
       "broadcastCleanerPortalJobsChanged()",
     ]) expect(router).toContain(marker);
 
-    expect(router).not.toContain("db.update(leadflowJobs)");
-    expect(router).not.toContain(legacyJobSymbol);
-    expect(router).not.toContain(legacyJobTable);
+    expect(mutation).not.toContain("db.update(leadflowJobs)");
+    expect(mutation).not.toContain(legacyJobSymbol);
+    expect(mutation).not.toContain(legacyJobTable);
   });
 
   it("projects ledger totals into the existing Cleaner Portal job, week, and earnings queries", () => {
@@ -71,22 +75,34 @@ describe("LeadFlow job payroll adjustments", () => {
     expect(portalRouter).not.toContain(legacyJobTable);
   });
 
-  it("keeps the staff control human-confirmed and the Cleaner Portal on its existing live refresh path", () => {
+  it("puts the final-payout control under the Booking assignment and removes it from Schedule", () => {
+    const bookings = read("client/src/pages/BookingsCRMExactLive.tsx");
+    const bookingStyles = read("client/src/pages/bookings-crm-exact-live.css");
     const schedule = read("client/src/pages/LeadflowScheduleCRMExactLive.tsx");
     const scheduleStyles = read("client/src/pages/schedule-crm-exact-live.css");
+    const scheduleRouter = read("server/leadflowScheduleRouter.ts");
+    const bookingRouter = read("server/leadflowJobsRouter.ts");
     const portal = read("client/src/pages/CleanerPortalConnected.tsx");
 
     for (const marker of [
-      "trpc.leadflowSchedule.getPayrollAdjustmentSummary.useQuery",
-      "trpc.leadflowSchedule.applyPayrollAdjustment.useMutation",
-      "window.confirm(`Apply ${formatCents(amountCents)}",
-      "Adjustment history",
-      "Payroll adjustment applied and Cleaner Portal updated.",
-    ]) expect(schedule).toContain(marker);
-    expect(scheduleStyles).toContain(".scr-payroll-section");
-    expect(scheduleStyles).toContain(".scr-payroll-history");
+      "trpc.leadflowJobs.getPayrollPayoutSummary.useQuery",
+      "trpc.leadflowJobs.setPayrollFinalPayout.useMutation",
+      "Final payout ($)",
+      "targetFinalPayCents",
+      "<BookingPayrollPanel active={active} model={model} />",
+      "Uses the team assigned to this booking.",
+      "Final team payout recorded and Cleaner Portal updated.",
+    ]) expect(bookings).toContain(marker);
+    for (const marker of [".bcr-payroll-section", ".bcr-payroll-form", ".bcr-payroll-history"]) expect(bookingStyles).toContain(marker);
+
+    expect(schedule).not.toContain("Payroll");
+    expect(scheduleStyles).not.toContain("scr-payroll");
+    expect(scheduleRouter).not.toContain("PayrollAdjustment");
     expect(portal).toContain("useCleanerPortalUpdates({ onJobsChanged: () => { void refreshVisibleJobQueries(); } }");
-    expect(schedule).not.toContain(legacyJobSymbol);
-    expect(schedule).not.toContain(legacyJobTable);
+
+    for (const source of [bookings, bookingStyles, schedule, scheduleStyles, bookingRouter, scheduleRouter]) {
+      expect(source).not.toContain(legacyJobSymbol);
+      expect(source).not.toContain(legacyJobTable);
+    }
   });
 });

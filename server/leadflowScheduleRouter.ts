@@ -2,10 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  cleanerProfiles,
   cleanerPortalJobProgress,
   jobGeoCache,
-  leadflowJobPayrollAdjustments,
   leadflowJobs,
   scheduleAssignments,
   scheduleJobLocks,
@@ -18,10 +16,8 @@ import {
 } from "../drizzle/schema";
 import { agentProcedure, router } from "./_core/trpc";
 import { GeocodingResult, makeRequest } from "./_core/map";
-import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { getDb } from "./db";
 import { bookingTeamDefault } from "./leadflowScheduleAssignmentDefaults";
-import { calculateEffectivePayroll } from "./payrollCalculator";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type TeamRow = typeof schedulingTeams.$inferSelect;
@@ -320,72 +316,6 @@ async function readOwnedLocks(db: Db, date: string, ids?: number[]): Promise<Job
     lockedPosition: scheduleJobLocks.lockedPosition,
     lockedAt: scheduleJobLocks.lockedAt,
   }).from(scheduleJobLocks).where(predicate) as unknown as JobLockRow[];
-}
-
-function payrollPercent(payPercent: string | null): number {
-  const parsed = Number.parseFloat(payPercent ?? "0");
-  if (!Number.isFinite(parsed)) return 0;
-  return parsed > 0 && parsed <= 1 ? parsed * 100 : parsed;
-}
-
-async function payrollAdjustmentSummary(db: Db, date: string, jobId: number) {
-  const job = await findActiveJob(db, date, jobId);
-  if (job.teamId == null) {
-    return {
-      leadflowJobId: job.id,
-      canAdjust: false,
-      unavailableReason: "This booking does not have an assigned cleaner team.",
-      basePayCents: null,
-      adjustmentCents: 0,
-      finalPayCents: null,
-      adjustments: [],
-    };
-  }
-
-  const cleaners = await db.select({ payPercent: cleanerProfiles.payPercent })
-    .from(cleanerProfiles)
-    .where(eq(cleanerProfiles.launch27TeamId, job.teamId))
-    .limit(1);
-  const cleaner = cleaners[0];
-  if (!cleaner) {
-    return {
-      leadflowJobId: job.id,
-      canAdjust: false,
-      unavailableReason: "The assigned cleaner team does not have a Cleaner Portal payout profile.",
-      basePayCents: null,
-      adjustmentCents: 0,
-      finalPayCents: null,
-      adjustments: [],
-    };
-  }
-
-  const adjustments = await db.select({
-    id: leadflowJobPayrollAdjustments.id,
-    amountCents: leadflowJobPayrollAdjustments.amountCents,
-    reason: leadflowJobPayrollAdjustments.reason,
-    createdByAgentName: leadflowJobPayrollAdjustments.createdByAgentName,
-    createdAt: leadflowJobPayrollAdjustments.createdAt,
-  })
-    .from(leadflowJobPayrollAdjustments)
-    .where(eq(leadflowJobPayrollAdjustments.leadflowJobId, job.id))
-    .orderBy(desc(leadflowJobPayrollAdjustments.createdAt), desc(leadflowJobPayrollAdjustments.id));
-  const adjustmentCents = adjustments.reduce((sum, adjustment) => sum + adjustment.amountCents, 0);
-  const basePay = calculateEffectivePayroll({
-    jobDate: job.jobDate,
-    jobRevenue: job.jobTotalCents / 100,
-    payPercent: payrollPercent(cleaner.payPercent),
-  }).finalPay;
-  const basePayCents = Math.round(basePay * 100);
-
-  return {
-    leadflowJobId: job.id,
-    canAdjust: true,
-    unavailableReason: null,
-    basePayCents,
-    adjustmentCents,
-    finalPayCents: basePayCents + adjustmentCents,
-    adjustments,
-  };
 }
 
 async function persistOwnedAssignments(db: Db, date: string, rows: PlannedAssignment[]): Promise<void> {
@@ -1220,37 +1150,6 @@ export const leadflowScheduleRouter = router({
           rationale = NULL
       `);
       return { ok: true };
-    }),
-
-  getPayrollAdjustmentSummary: agentProcedure
-    .input(z.object({ date: dateInput, jobId: z.number().int().positive() }))
-    .query(async ({ input }) => {
-      const db = await requireDb();
-      return payrollAdjustmentSummary(db, input.date, input.jobId);
-    }),
-
-  applyPayrollAdjustment: agentProcedure
-    .input(z.object({
-      date: dateInput,
-      jobId: z.number().int().positive(),
-      amountCents: z.number().int().min(-100_000).max(100_000).refine(value => value !== 0, "Enter a non-zero amount."),
-      reason: z.string().trim().min(3).max(500),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const db = await requireDb();
-      const summary = await payrollAdjustmentSummary(db, input.date, input.jobId);
-      if (!summary.canAdjust) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: summary.unavailableReason ?? "This payroll adjustment is unavailable." });
-      }
-      await db.insert(leadflowJobPayrollAdjustments).values({
-        leadflowJobId: input.jobId,
-        amountCents: input.amountCents,
-        reason: input.reason,
-        createdByAgentId: ctx.agent.agentId,
-        createdByAgentName: ctx.agent.agentName,
-      });
-      broadcastCleanerPortalJobsChanged();
-      return payrollAdjustmentSummary(db, input.date, input.jobId);
     }),
 
   unassignJob: agentProcedure
