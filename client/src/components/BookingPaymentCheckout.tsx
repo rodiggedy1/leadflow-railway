@@ -43,7 +43,6 @@ type SetupFormProps = {
 function ExistingCardSetupForm({
   clientSecret,
   customerName,
-  authorizationCopy,
   onConfirm,
 }: SetupFormProps) {
   const { stripeReady, name, setName, cardError, loading, handleSubmit } =
@@ -87,12 +86,117 @@ function ExistingCardSetupForm({
         <LockKeyhole className="h-4 w-4" />
         {loading ? "Saving secure card…" : "Save card to reserve →"}
       </button>
-      {authorizationCopy && (
-        <p className="px-1 text-[10px] leading-5 text-[#6f7279]">
-          {authorizationCopy}
+    </form>
+  );
+}
+
+function PremiumCardSetupForm({
+  clientSecret,
+  customerName,
+  authorizationCopy,
+  onConfirm,
+}: SetupFormProps) {
+  const { stripeReady, name, setName, cardError, loading, handleSubmit } =
+    useStripeCardSetup({
+      clientSecret,
+      prefillName: customerName,
+      onSetupSucceeded: async paymentMethodId => onConfirm(paymentMethodId),
+    });
+
+  return (
+    <form onSubmit={handleSubmit} className="booking-card-acceptance">
+      <header className="booking-card-acceptance-head">
+        <span className="booking-card-acceptance-mark">
+          <LockKeyhole />
+        </span>
+        <span>
+          <small>SECURE CARD DETAILS</small>
+          <strong>Add your card</strong>
+          <em>Your card is stored securely and charged only after service.</em>
+        </span>
+      </header>
+      <div className="booking-card-acceptance-fields">
+        <label>
+          <span>Name on card</span>
+          <input
+            required
+            value={name}
+            onChange={event => setName(event.target.value)}
+            autoComplete="cc-name"
+            placeholder="Name as it appears on your card"
+          />
+        </label>
+        <label>
+          <span>Card details</span>
+          <span className="booking-card-element-shell">
+            <CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" />
+          </span>
+        </label>
+      </div>
+      {cardError && (
+        <p role="alert" className="booking-card-acceptance-error">
+          {cardError}
         </p>
       )}
+      <button
+        type="submit"
+        disabled={loading || !stripeReady}
+        className="booking-card-acceptance-submit"
+      >
+        <LockKeyhole className="h-4 w-4" />
+        {loading ? "Saving secure card…" : "Save card to reserve →"}
+      </button>
+      {authorizationCopy && (
+        <p className="booking-card-acceptance-terms">{authorizationCopy}</p>
+      )}
     </form>
+  );
+}
+
+/** Preview has no Stripe credentials. This mirrors the production form without accepting or submitting card data. */
+function PremiumCardReviewForm({
+  customerName,
+  authorizationCopy,
+}: Pick<SetupFormProps, "customerName" | "authorizationCopy">) {
+  return (
+    <section
+      className="booking-card-acceptance booking-card-acceptance-preview"
+      aria-label="Card acceptance form preview"
+    >
+      <header className="booking-card-acceptance-head">
+        <span className="booking-card-acceptance-mark">
+          <LockKeyhole />
+        </span>
+        <span>
+          <small>SECURE CARD DETAILS</small>
+          <strong>Add your card</strong>
+          <em>Your card is stored securely and charged only after service.</em>
+        </span>
+      </header>
+      <div className="booking-card-acceptance-fields" aria-hidden="true">
+        <label>
+          <span>Name on card</span>
+          <span className="booking-card-preview-field">
+            {customerName || "Name as it appears on your card"}
+          </span>
+        </label>
+        <label>
+          <span>Card details</span>
+          <span className="booking-card-preview-field booking-card-preview-number">
+            <CreditCard />
+            <span>•••• •••• •••• ••••</span>
+            <i>MM / YY&nbsp;&nbsp; CVC</i>
+          </span>
+        </label>
+      </div>
+      <span className="booking-card-acceptance-submit" aria-hidden="true">
+        <LockKeyhole className="h-4 w-4" />
+        Save card to reserve →
+      </span>
+      {authorizationCopy && (
+        <p className="booking-card-acceptance-terms">{authorizationCopy}</p>
+      )}
+    </section>
   );
 }
 
@@ -184,11 +288,6 @@ export function BookingPaymentCheckout({
     savedCard,
   ]);
 
-  const retryDirectCardEntry = () => {
-    requestedCardEntry.current = `${publicFunnelNumber}:${mutationToken}:${paymentChoice}`;
-    void beginCardCollection();
-  };
-
   const completeCardCollection = async (paymentMethodId: string) => {
     const result = await confirmSetup.mutateAsync({
       publicFunnelNumber,
@@ -217,6 +316,44 @@ export function BookingPaymentCheckout({
       );
     }
   };
+
+  if (directCardEntry) {
+    if (clientSecret) {
+      return (
+        <Elements
+          stripe={stripePromise}
+          options={{ clientSecret, appearance: { theme: "stripe" } }}
+        >
+          <PremiumCardSetupForm
+            clientSecret={clientSecret}
+            customerName={customerName}
+            authorizationCopy={authorizationCopy}
+            onConfirm={completeCardCollection}
+          />
+        </Elements>
+      );
+    }
+
+    if (checkoutError) {
+      return (
+        <PremiumCardReviewForm
+          customerName={customerName}
+          authorizationCopy={authorizationCopy}
+        />
+      );
+    }
+
+    return (
+      <section
+        className="booking-card-acceptance booking-card-acceptance-loading"
+        aria-label="Preparing card acceptance form"
+      >
+        <span />
+        <span />
+        <span />
+      </section>
+    );
+  }
 
   return (
     <div className="rounded-[20px] border border-[#e4e5e7] bg-white p-4 shadow-[0_14px_36px_rgba(22,20,33,0.08)] sm:p-5">
@@ -302,28 +439,6 @@ export function BookingPaymentCheckout({
                   : `Reserve with card ending in ${savedCard.last4} →`}
               </button>
             )
-          ) : directCardEntry ? (
-            checkoutError ? (
-              <button
-                type="button"
-                onClick={retryDirectCardEntry}
-                disabled={startSetup.isPending}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#d7d8dc] bg-white px-4 py-3 text-[12px] font-extrabold text-[#3a3c41] transition hover:border-[#ff684c] disabled:cursor-wait disabled:opacity-60"
-              >
-                <LockKeyhole className="h-4 w-4" />
-                {startSetup.isPending
-                  ? "Preparing secure card entry…"
-                  : "Try secure card entry again"}
-              </button>
-            ) : (
-              <div
-                className="flex items-center gap-2 px-1 py-3 text-[11px] font-semibold text-[#6f7279]"
-                role="status"
-              >
-                <ShieldCheck className="h-4 w-4 shrink-0 text-[#168d61]" />
-                Preparing secure card entry…
-              </div>
-            )
           ) : (
             <>
               <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-[#f8f7f5] p-3 text-[10px] leading-5 text-[#5f6168]">
@@ -358,9 +473,6 @@ export function BookingPaymentCheckout({
             <ExistingCardSetupForm
               clientSecret={clientSecret}
               customerName={customerName}
-              authorizationCopy={
-                directCardEntry ? authorizationCopy : undefined
-              }
               onConfirm={completeCardCollection}
             />
           </div>
