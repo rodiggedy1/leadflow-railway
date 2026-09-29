@@ -37,11 +37,17 @@ describe("native booking operational-job parity", () => {
       bookingRouter.indexOf("cancel: bookingsAgentProcedure")
     );
     expect(commercialUpdate).toContain(
-      "jobTotalCents: input.firstCleaningTotalCents"
+      "jobTotalCents: firstCleaningTotalCents"
     );
     expect(commercialUpdate).toContain(
-      "extras: JSON.stringify(extras.map(extra => extra.id))"
+      "const nativeExtras = JSON.stringify(extras.map(extra => extra.id))"
     );
+    expect(commercialUpdate).toContain("jobDate: requestedLocalDate");
+    expect(commercialUpdate).toContain(
+      "serviceDateTime: new Date(requestedStartAt).toISOString()"
+    );
+    expect(commercialUpdate).toContain("frequency: operationalFrequency");
+    expect(commercialUpdate).toContain("futureVisitTotalCents");
     const cancellation = bookingRouter.slice(
       bookingRouter.indexOf("cancel: bookingsAgentProcedure")
     );

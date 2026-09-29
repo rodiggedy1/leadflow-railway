@@ -24,6 +24,7 @@ import {
   Sparkles,
   Star,
   UsersRound,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -238,9 +239,85 @@ const CONDITION_IMAGES = [
   trashBags,
 ] as const;
 const TIME_SLOTS = ["8:30 AM", "11:00 AM", "1:30 PM", "4:30 PM"] as const;
+const POST_BOOKING_UPSELLS = [
+  {
+    id: "moving-help",
+    title: "Moving Help",
+    copy: "Let our trusted team handle the heavy lifting.",
+    unitPriceCents: 9900,
+    quantityLabel: "hours",
+    image: livingRoom,
+  },
+  {
+    id: "carpet-cleaning",
+    title: "Carpet Cleaning",
+    copy: "Refresh your carpets with a professional deep clean.",
+    unitPriceCents: 7500,
+    quantityLabel: "rooms",
+    image: upsellCarpetCleaning,
+  },
+  {
+    id: "exterior-window-cleaning",
+    title: "Exterior Window Cleaning",
+    copy: "Streak-free exterior windows for a brighter home.",
+    unitPriceCents: 7500,
+    quantityLabel: "hours",
+    image: upsellExteriorWindowCleaning,
+  },
+  {
+    id: "junk-removal",
+    title: "Junk Removal",
+    copy: "We haul it away so you don’t have to.",
+    unitPriceCents: 9900,
+    quantityLabel: "loads",
+    image: livingRoom,
+  },
+  {
+    id: "furniture-cleaning",
+    title: "Furniture Cleaning",
+    copy: "Deep clean your sofas, mattresses, and more.",
+    unitPriceCents: 9900,
+    quantityLabel: "items",
+    image: kitchen,
+  },
+  {
+    id: "appliance-cleaning",
+    title: "Appliance Cleaning",
+    copy: "Inside your fridge, oven, and more.",
+    unitPriceCents: 4900,
+    quantityLabel: "appliances",
+    image: stillLife,
+  },
+  {
+    id: "window-cleaning",
+    title: "Window Cleaning",
+    copy: "Streak-free windows for a brighter home.",
+    unitPriceCents: 9900,
+    quantityLabel: "windows",
+    image: livingRoom,
+  },
+  {
+    id: "pet-area-cleaning",
+    title: "Pet Area Cleaning",
+    copy: "Tackle pet hair, odors, and messes.",
+    unitPriceCents: 7900,
+    quantityLabel: "areas",
+    image: kitchen,
+  },
+] as const;
+type PostBookingUpsell = (typeof POST_BOOKING_UPSELLS)[number];
 
 function money(cents: number) {
   return `$${Math.round(cents / 100)}`;
+}
+function getPostBookingUpsellUnitPrice(upsell: PostBookingUpsell) {
+  return `From ${money(upsell.unitPriceCents)}/${upsell.quantityLabel.slice(0, -1)}`;
+}
+function formatPostBookingUpsellQuantity(
+  quantity: number,
+  quantityLabel: string
+) {
+  return `${quantity} ${quantity === 1 ? quantityLabel.slice(0, -1) : quantityLabel}`;
 }
 function createBookingAttemptId(): string {
   return crypto.randomUUID();
@@ -637,6 +714,7 @@ export default function Book() {
                     setCardLabel(`${brand} ending in ${last4}`);
                     setCardOnFile(true);
                     setFormError("");
+                    setStep(8);
                   }}
                 />
               )}
@@ -1698,28 +1776,31 @@ function BookingSuccess({
   frequencyLabel: string;
   cardLabel: string;
 }) {
-  const services = [
-    [
-      "Carpet Cleaning",
-      "Refresh your carpets with a professional deep clean.",
-      upsellCarpetCleaning,
-    ],
-    [
-      "Exterior Window Cleaning",
-      "Streak-free exterior windows for a brighter home.",
-      upsellExteriorWindowCleaning,
-    ],
-    [
-      "Moving Help",
-      "Let our trusted team handle the heavy lifting.",
-      livingRoom,
-    ],
-    [
-      "Furniture Cleaning",
-      "Deep clean your sofas, mattresses, and more.",
-      kitchen,
-    ],
-  ] as const;
+  const [selectedUpsell, setSelectedUpsell] =
+    useState<PostBookingUpsell | null>(null);
+  const [draftQuantity, setDraftQuantity] = useState(1);
+  const [addedUpsells, setAddedUpsells] = useState<Record<string, number>>({});
+  const addedItems = POST_BOOKING_UPSELLS.filter(
+    upsell => (addedUpsells[upsell.id] ?? 0) > 0
+  );
+  const addedServicesTotal = addedItems.reduce(
+    (sum, upsell) =>
+      sum + upsell.unitPriceCents * (addedUpsells[upsell.id] ?? 0),
+    0
+  );
+  const updatedBookingTotal = total + addedServicesTotal;
+  const openQuantityPicker = (upsell: PostBookingUpsell) => {
+    setSelectedUpsell(upsell);
+    setDraftQuantity(addedUpsells[upsell.id] ?? 1);
+  };
+  const applyUpsell = () => {
+    if (!selectedUpsell) return;
+    setAddedUpsells(current => ({
+      ...current,
+      [selectedUpsell.id]: draftQuantity,
+    }));
+    setSelectedUpsell(null);
+  };
   return (
     <main className="booking-review-page">
       <header className="booking-review-header">
@@ -1757,25 +1838,73 @@ function BookingSuccess({
             <div>
               <small>MAKE LIFE EVEN EASIER</small>
               <h2>Need anything else?</h2>
-              <p>
-                More home services will be available to add to a future booking
-                soon.
-              </p>
+              <p>Add more services and let us take care of it all.</p>
             </div>
-            <div className="booking-upsell-grid">
-              {services.map(([title, copy, image]) => (
-                <article key={title}>
-                  <img src={image} alt="Home service visual" />
+            {addedItems.length > 0 && (
+              <section className="booking-upsell-added" aria-live="polite">
+                <strong>Added to your booking</strong>
+                <ul>
+                  {addedItems.map(upsell => {
+                    const quantity = addedUpsells[upsell.id] ?? 0;
+                    return (
+                      <li key={upsell.id}>
+                        <span>
+                          {upsell.title} ·{" "}
+                          {formatPostBookingUpsellQuantity(
+                            quantity,
+                            upsell.quantityLabel
+                          )}
+                          <small>
+                            {money(upsell.unitPriceCents * quantity)}
+                          </small>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openQuantityPicker(upsell)}
+                        >
+                          Edit
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="booking-upsell-estimate">
                   <div>
-                    <strong>{title}</strong>
-                    <p>{copy}</p>
-                    <b>From price available on request</b>
-                    <button type="button" disabled>
-                      Coming soon
-                    </button>
+                    <span>Estimated add-ons</span>
+                    <strong>{money(addedServicesTotal)}</strong>
                   </div>
-                </article>
-              ))}
+                  <div>
+                    <span>Updated booking estimate</span>
+                    <strong>{money(updatedBookingTotal)}</strong>
+                  </div>
+                </div>
+              </section>
+            )}
+            <div className="booking-upsell-grid">
+              {POST_BOOKING_UPSELLS.map(upsell => {
+                const quantity = addedUpsells[upsell.id] ?? 0;
+                return (
+                  <article key={upsell.id}>
+                    <img src={upsell.image} alt="Home service visual" />
+                    <div>
+                      <strong>{upsell.title}</strong>
+                      <p>{upsell.copy}</p>
+                      <b>{getPostBookingUpsellUnitPrice(upsell)}</b>
+                      <button
+                        type="button"
+                        onClick={() => openQuantityPicker(upsell)}
+                      >
+                        {quantity > 0
+                          ? `Added · ${formatPostBookingUpsellQuantity(
+                              quantity,
+                              upsell.quantityLabel
+                            )}`
+                          : "Add to Booking"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         </div>
@@ -1833,6 +1962,73 @@ function BookingSuccess({
           )}
         </aside>
       </section>
+      {selectedUpsell && (
+        <div
+          className="booking-upsell-modal-backdrop"
+          role="presentation"
+          onClick={() => setSelectedUpsell(null)}
+        >
+          <section
+            className="booking-upsell-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="booking-upsell-modal-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="booking-upsell-modal-close"
+              aria-label="Close service quantity picker"
+              onClick={() => setSelectedUpsell(null)}
+            >
+              <X />
+            </button>
+            <img src={selectedUpsell.image} alt="" />
+            <div>
+              <span>ADD TO BOOKING</span>
+              <h2 id="booking-upsell-modal-title">{selectedUpsell.title}</h2>
+              <p>{selectedUpsell.copy}</p>
+              <b>{getPostBookingUpsellUnitPrice(selectedUpsell)}</b>
+            </div>
+            <div className="booking-upsell-quantity">
+              <span>How many {selectedUpsell.quantityLabel}?</span>
+              <div>
+                <button
+                  type="button"
+                  aria-label={`Reduce ${selectedUpsell.title} quantity`}
+                  onClick={() =>
+                    setDraftQuantity(quantity => Math.max(1, quantity - 1))
+                  }
+                  disabled={draftQuantity === 1}
+                >
+                  <Minus />
+                </button>
+                <output aria-live="polite">{draftQuantity}</output>
+                <button
+                  type="button"
+                  aria-label={`Increase ${selectedUpsell.title} quantity`}
+                  onClick={() => setDraftQuantity(quantity => quantity + 1)}
+                >
+                  <Plus />
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="booking-upsell-modal-apply"
+              onClick={applyUpsell}
+            >
+              {addedUpsells[selectedUpsell.id]
+                ? `Update estimate · ${money(
+                    selectedUpsell.unitPriceCents * draftQuantity
+                  )}`
+                : `Add to estimate · ${money(
+                    selectedUpsell.unitPriceCents * draftQuantity
+                  )}`}
+            </button>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

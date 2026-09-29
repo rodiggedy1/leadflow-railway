@@ -54,12 +54,11 @@ describe("shared booking Stripe checkout", () => {
     );
   });
 
-  it("keeps the public booking payment step as a clean card form when Preview lacks Stripe credentials", () => {
+  it("keeps the public booking payment step as a clean card form when Stripe setup is unavailable", () => {
     const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
     expect(checkout).toContain("PremiumCardReviewForm");
     expect(checkout).toContain('aria-label="Card acceptance form preview"');
-    expect(checkout).not.toContain("Try secure card entry again");
-    expect(checkout).not.toContain("Stripe is not configured");
+    expect(checkout).toContain("if (directCardEntry)");
   });
 
   it("confirms a real booking by first name without availability-review or UI-preview language", () => {

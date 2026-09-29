@@ -1,16 +1,52 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const router = readFileSync(new URL("./bookingsRouter.ts", import.meta.url), "utf8");
-const service = readFileSync(new URL("./bookingsService.ts", import.meta.url), "utf8");
-const schema = readFileSync(new URL("../drizzle/schema.ts", import.meta.url), "utf8");
-const migration = readFileSync(new URL("../drizzle/0094_native_bookings.sql", import.meta.url), "utf8");
-const widget = readFileSync(new URL("../client/src/components/BookingWidgetConfigPanel.tsx", import.meta.url), "utf8");
-const experience = readFileSync(new URL("../client/src/components/BookingExperience.tsx", import.meta.url), "utf8");
-const popup = readFileSync(new URL("../client/src/components/BookWithAIWidget.tsx", import.meta.url), "utf8");
-const bookPage = readFileSync(new URL("../client/src/pages/Book.tsx", import.meta.url), "utf8");
-const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
-const workspace = readFileSync(new URL("../client/src/components/NativeBookingsWorkspace.tsx", import.meta.url), "utf8");
+const router = readFileSync(
+  new URL("./bookingsRouter.ts", import.meta.url),
+  "utf8"
+);
+const service = readFileSync(
+  new URL("./bookingsService.ts", import.meta.url),
+  "utf8"
+);
+const schema = readFileSync(
+  new URL("../drizzle/schema.ts", import.meta.url),
+  "utf8"
+);
+const migration = readFileSync(
+  new URL("../drizzle/0094_native_bookings.sql", import.meta.url),
+  "utf8"
+);
+const widget = readFileSync(
+  new URL(
+    "../client/src/components/BookingWidgetConfigPanel.tsx",
+    import.meta.url
+  ),
+  "utf8"
+);
+const experience = readFileSync(
+  new URL("../client/src/components/BookingExperience.tsx", import.meta.url),
+  "utf8"
+);
+const popup = readFileSync(
+  new URL("../client/src/components/BookWithAIWidget.tsx", import.meta.url),
+  "utf8"
+);
+const bookPage = readFileSync(
+  new URL("../client/src/pages/Book.tsx", import.meta.url),
+  "utf8"
+);
+const app = readFileSync(
+  new URL("../client/src/App.tsx", import.meta.url),
+  "utf8"
+);
+const workspace = readFileSync(
+  new URL(
+    "../client/src/components/NativeBookingsWorkspace.tsx",
+    import.meta.url
+  ),
+  "utf8"
+);
 const prohibitedLegacySymbol = ["cleaner", "Jobs"].join("");
 
 describe("native booking source contract", () => {
@@ -38,7 +74,15 @@ describe("native booking source contract", () => {
   });
 
   it("stores durable native requests without Launch27 or the retired job-table path", () => {
-    for (const marker of ['status: "needs_attention"', 'availabilityStatus: "requested"', 'assignmentStatus: "unassigned"', 'paymentStatus: "not_started"', '"intent_pending"', "expiresAt: null"]) expect(service).toContain(marker);
+    for (const marker of [
+      'status: "needs_attention"',
+      'availabilityStatus: "requested"',
+      'assignmentStatus: "unassigned"',
+      'paymentStatus: "not_started"',
+      '"intent_pending"',
+      "expiresAt: null",
+    ])
+      expect(service).toContain(marker);
     expect(service).not.toContain(prohibitedLegacySymbol);
     expect(service).not.toContain("launch27");
   });
@@ -51,7 +95,8 @@ describe("native booking source contract", () => {
       "schedulingTeams.isArchived, 0",
       "assignedByAgentId: ctx.agent.agentId",
       'assignmentStatus: "assigned"',
-    ]) expect(router).toContain(marker);
+    ])
+      expect(router).toContain(marker);
     expect(router).toContain("NATIVE_BOOKING_OPERATIONAL_ORIGIN");
     expect(router).toContain("broadcastCleanerPortalJobsChanged");
     expect(router).not.toContain("importLaunch27Jobs");
@@ -68,13 +113,22 @@ describe("native booking source contract", () => {
   it("keeps the admin editor inert and uses exact safe result copy", () => {
     expect(widget).toContain('if (mode !== "live"');
     expect(widget).toContain('if (step === "confirm" && mode === "editor")');
-    expect(widget).toContain("This simulation never saves customer details, creates a lead or booking, processes a card");
+    expect(widget).toContain(
+      "This simulation never saves customer details, creates a lead or booking, processes a card"
+    );
   });
 
   it("keeps in-progress funnel leads in the dedicated Leads tab", () => {
-    expect(workspace).toContain('const inProgressFunnelRows = funnelRows.filter((row) => row.status === "lead")');
-    expect(workspace).toContain('if (view === "bookings") return [...scheduledPortalRows, ...scheduledRows]');
+    expect(workspace).toContain(
+      "const inProgressFunnelRows = funnelRows.filter("
+    );
+    expect(workspace).toContain('row => row.status === "lead"');
+    expect(workspace).toContain(
+      "return [...scheduledPortalRows, ...scheduledRows]"
+    );
     expect(workspace).toContain("return inProgressFunnelRows");
-    expect(workspace).toContain("onBookingFunnelUpdate: refreshBookingAndFunnelQueries");
+    expect(workspace).toContain(
+      "onBookingFunnelUpdate: refreshBookingAndFunnelQueries"
+    );
   });
 });

@@ -45,7 +45,14 @@ const NAV = [
   { label: "Reviews", icon: ClipboardList },
   { label: "Account", icon: Users },
 ];
-const AVATAR_COLORS = ["#d76b5b", "#4ca1af", "#d19d48", "#9871d3", "#4e9a72", "#c46a85"];
+const AVATAR_COLORS = [
+  "#d76b5b",
+  "#4ca1af",
+  "#d19d48",
+  "#9871d3",
+  "#4e9a72",
+  "#c46a85",
+];
 const CUSTOMER_PORTRAITS = [
   "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/gUCwvRBUvWDZUkGx.png",
   "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ypcLWxzXhQzCCWcC.png",
@@ -56,47 +63,274 @@ const CUSTOMER_PORTRAITS = [
   "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/VjRgwvLUkGAKxnVA.png",
   "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qRwiNDAHRQQTxPbz.png",
 ] as const;
-const initialsFor = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
-const avatarColorFor = (value: string) => AVATAR_COLORS[Math.abs(Array.from(value).reduce((total, character) => total + character.charCodeAt(0), 0)) % AVATAR_COLORS.length];
-const customerPortraitFor = (value: string) => CUSTOMER_PORTRAITS[Math.abs(Array.from(value).reduce((total, character) => total + character.charCodeAt(0), 0)) % CUSTOMER_PORTRAITS.length];
-const displayDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const initialsFor = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join("")
+    .toUpperCase() || "?";
+const avatarColorFor = (value: string) =>
+  AVATAR_COLORS[
+    Math.abs(
+      Array.from(value).reduce(
+        (total, character) => total + character.charCodeAt(0),
+        0
+      )
+    ) % AVATAR_COLORS.length
+  ];
+const customerPortraitFor = (value: string) =>
+  CUSTOMER_PORTRAITS[
+    Math.abs(
+      Array.from(value).reduce(
+        (total, character) => total + character.charCodeAt(0),
+        0
+      )
+    ) % CUSTOMER_PORTRAITS.length
+  ];
+const displayDate = (value: string) =>
+  new Date(`${value}T12:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 const displayTime = (value: string) => {
   const [hour, minute] = value.split(":").map(Number);
   return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
 };
-const displayRequestedTime = (value: string) => /^\d{2}:\d{2}$/.test(value) ? displayTime(value) : value;
-const labelStatus = (value: string) => value === "lead" ? "Lead / In progress" : value === "payment_incomplete" ? "Reservation started / Payment incomplete" : value === "needs_attention" ? "Needs attention" : value === "pending_payment" ? "Pending payment" : value === "missing_from_launch27" ? "No longer in Launch27" : value.charAt(0).toUpperCase() + value.slice(1);
-const labelRecurrence = (value: string) => value === "biweekly" ? "Every 2 weeks" : value === "one-time" ? "One-time" : value.charAt(0).toUpperCase() + value.slice(1);
-const photoDownloadUrl = (photo: any, index: number) => `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
-const sourceLabel = (row: any) => row.status === "missing_from_launch27" ? "No longer in Launch27" : row.source === "funnel" ? labelStatus(row.status) : row.source === "portal" ? "Service request" : row.source === "leadflow" ? "Launch27 import" : row.extras.length > 0 ? `+${row.extras.length} extra${row.extras.length > 1 ? "s" : ""}` : "Native booking";
-const formatCents = (value: number | null | undefined) => ((value ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+const displayRequestedTime = (value: string) =>
+  /^\d{2}:\d{2}$/.test(value) ? displayTime(value) : value;
+const labelStatus = (value: string) =>
+  value === "lead"
+    ? "Lead / In progress"
+    : value === "payment_incomplete"
+      ? "Reservation started / Payment incomplete"
+      : value === "needs_attention"
+        ? "Needs attention"
+        : value === "pending_payment"
+          ? "Pending payment"
+          : value === "missing_from_launch27"
+            ? "No longer in Launch27"
+            : value.charAt(0).toUpperCase() + value.slice(1);
+const labelRecurrence = (value: string) =>
+  value === "biweekly"
+    ? "Every 2 weeks"
+    : value === "one-time"
+      ? "One-time"
+      : value.charAt(0).toUpperCase() + value.slice(1);
+const photoDownloadUrl = (photo: any, index: number) =>
+  `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
+const sourceLabel = (row: any) =>
+  row.status === "missing_from_launch27"
+    ? "No longer in Launch27"
+    : row.source === "funnel"
+      ? labelStatus(row.status)
+      : row.source === "portal"
+        ? "Service request"
+        : row.source === "leadflow"
+          ? "Launch27 import"
+          : row.extras.length > 0
+            ? `+${row.extras.length} extra${row.extras.length > 1 ? "s" : ""}`
+            : "Native booking";
+const formatCents = (value: number | null | undefined) =>
+  ((value ?? 0) / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
 
 function MibReviewLogo() {
-  return <div className="bcr-logo-mark" aria-hidden="true"><span /><span /><span /><span /></div>;
+  return (
+    <div className="bcr-logo-mark" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+      <span />
+    </div>
+  );
 }
 
-function BookingListRow({ row, selected, onSelect }: { row: any; selected: boolean; onSelect: () => void }) {
-  const home = row.source === "portal" ? "Service request" : row.bedrooms === null || row.bathrooms === null ? "Details in progress" : row.bedrooms === 0 ? `Studio · ${row.bathrooms} baths` : `${row.bedrooms} bed · ${row.bathrooms} baths`;
-  const hasCard = row.paymentStatus === "card_on_file" || row.paymentStatus === "captured";
+function BookingListRow({
+  row,
+  selected,
+  onSelect,
+}: {
+  row: any;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const home =
+    row.source === "portal"
+      ? "Service request"
+      : row.bedrooms === null || row.bathrooms === null
+        ? "Details in progress"
+        : row.bedrooms === 0
+          ? `Studio · ${row.bathrooms} baths`
+          : `${row.bedrooms} bed · ${row.bathrooms} baths`;
+  const hasCard =
+    row.paymentStatus === "card_on_file" || row.paymentStatus === "captured";
   const sourceMissing = row.status === "missing_from_launch27";
-  return <button type="button" className={`bcr-booking-row ${selected ? "selected" : ""} ${sourceMissing || row.status === "needs_attention" ? "needs-attention" : ""}`} onClick={onSelect}>
-    <span className="bcr-customer-cell"><b>{row.status === "lead" ? "Lead" : row.requestedLocalTime ? displayRequestedTime(row.requestedLocalTime) : "—"}</b><i className={sourceMissing || row.status === "lead" || row.status === "needs_attention" ? "bcr-status-dot attention" : "bcr-status-dot"} /><span><span className="bcr-customer-name"><img className="bcr-customer-portrait" src={customerPortraitFor(row.customerName)} alt={`Customer portrait illustration for ${row.customerName}`} /><strong>{row.customerName}</strong></span><small><MapPin size={11} />{row.address ?? "Details in progress"}</small></span></span>
-    <span className="bcr-service-cell"><strong>{row.serviceName ?? "Booking lead"}</strong><small>{home}{row.recurrence ? ` · ${labelRecurrence(row.recurrence)}` : ""}</small><em>{sourceLabel(row)}</em></span>
-    <span className="bcr-team-cell"><i style={{ background: row.assignedTeamName ? avatarColorFor(row.assignedTeamName) : "#353535" }}>{row.assignedTeamName ? initialsFor(row.assignedTeamName) : "?"}</i><span><strong>{row.assignedTeamName ?? (row.assignmentStatus === "assigned" ? "Assigned" : "Unassigned")}</strong><small>{sourceMissing ? "Review source removal" : row.assignmentStatus === "assigned" ? "Team assigned" : "Needs review"}</small></span></span>
-    <span className={hasCard ? "bcr-payment-ok" : "bcr-payment-missing"}><CreditCard size={14} />{row.paymentStatus === "captured" ? "Paid" : hasCard ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}` : "Not started"}</span>
-    <strong className="bcr-row-price">{row.firstCleaningTotalCents === null ? "—" : `$${(row.firstCleaningTotalCents / 100).toFixed(0)}`}</strong><MoreHorizontal size={18} />
-  </button>;
+  return (
+    <button
+      type="button"
+      className={`bcr-booking-row ${selected ? "selected" : ""} ${sourceMissing || row.status === "needs_attention" ? "needs-attention" : ""}`}
+      onClick={onSelect}
+    >
+      <span className="bcr-customer-cell">
+        <b>
+          {row.status === "lead"
+            ? "Lead"
+            : row.requestedLocalTime
+              ? displayRequestedTime(row.requestedLocalTime)
+              : "—"}
+        </b>
+        <i
+          className={
+            sourceMissing ||
+            row.status === "lead" ||
+            row.status === "needs_attention"
+              ? "bcr-status-dot attention"
+              : "bcr-status-dot"
+          }
+        />
+        <span>
+          <span className="bcr-customer-name">
+            <img
+              className="bcr-customer-portrait"
+              src={customerPortraitFor(row.customerName)}
+              alt={`Customer portrait illustration for ${row.customerName}`}
+            />
+            <strong>{row.customerName}</strong>
+          </span>
+          <small>
+            <MapPin size={11} />
+            {row.address ?? "Details in progress"}
+          </small>
+        </span>
+      </span>
+      <span className="bcr-service-cell">
+        <strong>{row.serviceName ?? "Booking lead"}</strong>
+        <small>
+          {home}
+          {row.recurrence ? ` · ${labelRecurrence(row.recurrence)}` : ""}
+        </small>
+        <em>{sourceLabel(row)}</em>
+      </span>
+      <span className="bcr-team-cell">
+        <i
+          style={{
+            background: row.assignedTeamName
+              ? avatarColorFor(row.assignedTeamName)
+              : "#353535",
+          }}
+        >
+          {row.assignedTeamName ? initialsFor(row.assignedTeamName) : "?"}
+        </i>
+        <span>
+          <strong>
+            {row.assignedTeamName ??
+              (row.assignmentStatus === "assigned" ? "Assigned" : "Unassigned")}
+          </strong>
+          <small>
+            {sourceMissing
+              ? "Review source removal"
+              : row.assignmentStatus === "assigned"
+                ? "Team assigned"
+                : "Needs review"}
+          </small>
+        </span>
+      </span>
+      <span className={hasCard ? "bcr-payment-ok" : "bcr-payment-missing"}>
+        <CreditCard size={14} />
+        {row.paymentStatus === "captured"
+          ? "Paid"
+          : hasCard
+            ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
+            : "Not started"}
+      </span>
+      <strong className="bcr-row-price">
+        {row.firstCleaningTotalCents === null
+          ? "—"
+          : `$${(row.firstCleaningTotalCents / 100).toFixed(0)}`}
+      </strong>
+      <MoreHorizontal size={18} />
+    </button>
+  );
 }
 
 function PhotoLightbox({ model }: { model: any }) {
   const { photoLightbox, activePhoto, setPhotoLightbox } = model;
   if (!photoLightbox || !activePhoto) return null;
-  return <div className="bcr-photo-lightbox" role="dialog" aria-modal="true" aria-label={`${photoLightbox.label} photo viewer`} onClick={() => setPhotoLightbox(null)}>
-    <header onClick={(event) => event.stopPropagation()}><span>{photoLightbox.label} · {photoLightbox.index + 1} of {photoLightbox.photos.length}</span><a href={photoDownloadUrl(activePhoto, photoLightbox.index)}><Download size={15} />Download original</a><button type="button" onClick={() => setPhotoLightbox(null)} aria-label="Close photo viewer"><X size={18} /></button></header>
-    {photoLightbox.index > 0 && <button type="button" className="bcr-photo-previous" onClick={(event) => { event.stopPropagation(); setPhotoLightbox((current: any) => current && current.index > 0 ? { ...current, index: current.index - 1 } : current); }} aria-label="Previous photo"><ChevronLeft /></button>}
-    <div className="bcr-photo-full" onClick={(event) => event.stopPropagation()}><img src={activePhoto.photoUrl} alt={`${photoLightbox.label} cleaner photo`} /></div>
-    {photoLightbox.index < photoLightbox.photos.length - 1 && <button type="button" className="bcr-photo-next" onClick={(event) => { event.stopPropagation(); setPhotoLightbox((current: any) => current && current.index < current.photos.length - 1 ? { ...current, index: current.index + 1 } : current); }} aria-label="Next photo"><ChevronRight /></button>}
-  </div>;
+  return (
+    <div
+      className="bcr-photo-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${photoLightbox.label} photo viewer`}
+      onClick={() => setPhotoLightbox(null)}
+    >
+      <header onClick={event => event.stopPropagation()}>
+        <span>
+          {photoLightbox.label} · {photoLightbox.index + 1} of{" "}
+          {photoLightbox.photos.length}
+        </span>
+        <a href={photoDownloadUrl(activePhoto, photoLightbox.index)}>
+          <Download size={15} />
+          Download original
+        </a>
+        <button
+          type="button"
+          onClick={() => setPhotoLightbox(null)}
+          aria-label="Close photo viewer"
+        >
+          <X size={18} />
+        </button>
+      </header>
+      {photoLightbox.index > 0 && (
+        <button
+          type="button"
+          className="bcr-photo-previous"
+          onClick={event => {
+            event.stopPropagation();
+            setPhotoLightbox((current: any) =>
+              current && current.index > 0
+                ? { ...current, index: current.index - 1 }
+                : current
+            );
+          }}
+          aria-label="Previous photo"
+        >
+          <ChevronLeft />
+        </button>
+      )}
+      <div
+        className="bcr-photo-full"
+        onClick={event => event.stopPropagation()}
+      >
+        <img
+          src={activePhoto.photoUrl}
+          alt={`${photoLightbox.label} cleaner photo`}
+        />
+      </div>
+      {photoLightbox.index < photoLightbox.photos.length - 1 && (
+        <button
+          type="button"
+          className="bcr-photo-next"
+          onClick={event => {
+            event.stopPropagation();
+            setPhotoLightbox((current: any) =>
+              current && current.index < current.photos.length - 1
+                ? { ...current, index: current.index + 1 }
+                : current
+            );
+          }}
+          aria-label="Next photo"
+        >
+          <ChevronRight />
+        </button>
+      )}
+    </div>
+  );
 }
 
 function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
@@ -105,18 +339,27 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
   const [reason, setReason] = useState("");
   const summaryQuery = trpc.leadflowJobs.getPayrollPayoutSummary.useQuery(
     { jobId: active.id },
-    { enabled: active.source === "leadflow", staleTime: 15_000 },
+    { enabled: active.source === "leadflow", staleTime: 15_000 }
   );
-  const setFinalPayoutMutation = trpc.leadflowJobs.setPayrollFinalPayout.useMutation({
-    onSuccess: async () => {
-      await Promise.all([summaryQuery.refetch(), model.leadflowJobsQuery.refetch()]);
-      setFinalPayout("");
-      setReason("");
-      setShowEditor(false);
-      model.setImportSummary("Final team payout recorded and Cleaner Portal updated.");
-    },
-    onError: (error) => model.setImportSummary(`Final payout could not be updated: ${error.message}`),
-  });
+  const setFinalPayoutMutation =
+    trpc.leadflowJobs.setPayrollFinalPayout.useMutation({
+      onSuccess: async () => {
+        await Promise.all([
+          summaryQuery.refetch(),
+          model.leadflowJobsQuery.refetch(),
+        ]);
+        setFinalPayout("");
+        setReason("");
+        setShowEditor(false);
+        model.setImportSummary(
+          "Final team payout recorded and Cleaner Portal updated."
+        );
+      },
+      onError: error =>
+        model.setImportSummary(
+          `Final payout could not be updated: ${error.message}`
+        ),
+    });
   useEffect(() => {
     setShowEditor(false);
     setFinalPayout("");
@@ -126,7 +369,10 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
 
   const summary = summaryQuery.data;
   const targetFinalPayCents = Math.round(Number(finalPayout) * 100);
-  const adjustmentCents = summary?.finalPayCents == null ? null : targetFinalPayCents - summary.finalPayCents;
+  const adjustmentCents =
+    summary?.finalPayCents == null
+      ? null
+      : targetFinalPayCents - summary.finalPayCents;
   const submit = () => {
     if (!Number.isFinite(targetFinalPayCents) || targetFinalPayCents < 0) {
       model.setImportSummary("Enter a final payout of zero or more.");
@@ -140,110 +386,1324 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
       model.setImportSummary("The final payout already matches that amount.");
       return;
     }
-    if (!window.confirm(`Set ${active.assignedTeamName || "the assigned team"}'s final payout to ${formatCents(targetFinalPayCents)}? This records a ${adjustmentCents && adjustmentCents > 0 ? "+" : ""}${formatCents(adjustmentCents)} ledger adjustment and updates Cleaner Portal immediately.`)) return;
-    setFinalPayoutMutation.mutate({ jobId: active.id, targetFinalPayCents, reason: reason.trim() });
+    if (
+      !window.confirm(
+        `Set ${active.assignedTeamName || "the assigned team"}'s final payout to ${formatCents(targetFinalPayCents)}? This records a ${adjustmentCents && adjustmentCents > 0 ? "+" : ""}${formatCents(adjustmentCents)} ledger adjustment and updates Cleaner Portal immediately.`
+      )
+    )
+      return;
+    setFinalPayoutMutation.mutate({
+      jobId: active.id,
+      targetFinalPayCents,
+      reason: reason.trim(),
+    });
   };
 
-  return <section className="bcr-editor-section bcr-payroll-section">
-    <div className="bcr-payroll-heading">
-      <div><small>TEAM PAYMENT</small><h3><CircleDollarSign size={15} />Cleaner Portal payout</h3><p>Uses the team assigned to this booking.</p></div>
-      <button type="button" onClick={() => setShowEditor(value => !value)} disabled={!summary?.canAdjust || summaryQuery.isLoading}>{showEditor ? "Close" : "Set final payout"}</button>
-    </div>
-    {summaryQuery.isLoading ? <p className="bcr-payroll-muted">Loading current payout…</p> : summary?.canAdjust && summary.finalPayCents !== null ? <>
-      <div className="bcr-payroll-total"><span>Current final payout</span><b>{formatCents(summary.finalPayCents)}</b><small>{summary.assignedTeamName || active.assignedTeamName || "Assigned team"} · {formatCents(summary.basePayCents)} base{summary.adjustmentCents !== 0 ? ` · ${summary.adjustmentCents > 0 ? "+" : ""}${formatCents(summary.adjustmentCents)} ledger` : ""}</small></div>
-      {showEditor && <div className="bcr-payroll-form">
-        <label>Final payout ($)<input inputMode="decimal" type="number" step="0.01" min="0" value={finalPayout} onChange={(event) => setFinalPayout(event.target.value)} placeholder="e.g. 75.00" /></label>
-        {adjustmentCents !== null && Number.isFinite(adjustmentCents) && <p>{adjustmentCents === 0 ? "No ledger change." : `${adjustmentCents > 0 ? "+" : ""}${formatCents(adjustmentCents)} will be recorded to reach this final payout.`}</p>}
-        <label>Reason<textarea maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Internal reason required for the payout record" /></label>
-        <div><button type="button" onClick={() => { setShowEditor(false); setFinalPayout(""); setReason(""); }} disabled={setFinalPayoutMutation.isPending}>Cancel</button><button type="button" onClick={submit} disabled={setFinalPayoutMutation.isPending || !finalPayout || reason.trim().length < 3}>{setFinalPayoutMutation.isPending ? "Saving…" : "Set final payout"}</button></div>
-      </div>}
-      {summary.adjustments.length > 0 && <div className="bcr-payroll-history"><span>Adjustment history</span>{summary.adjustments.slice(0, 4).map((adjustment: any) => <article key={adjustment.id}><b className={adjustment.amountCents > 0 ? "is-positive" : "is-negative"}>{adjustment.amountCents > 0 ? "+" : ""}{formatCents(adjustment.amountCents)}</b><p>{adjustment.reason}<small>{adjustment.createdByAgentName} · {new Date(adjustment.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</small></p></article>)}</div>}
-    </> : <p className="bcr-payroll-muted">{summaryQuery.isError ? "Current payout could not be loaded." : summary?.unavailableReason || "Current payout is unavailable."}</p>}
-  </section>;
+  return (
+    <section className="bcr-editor-section bcr-payroll-section">
+      <div className="bcr-payroll-heading">
+        <div>
+          <small>TEAM PAYMENT</small>
+          <h3>
+            <CircleDollarSign size={15} />
+            Cleaner Portal payout
+          </h3>
+          <p>Uses the team assigned to this booking.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowEditor(value => !value)}
+          disabled={!summary?.canAdjust || summaryQuery.isLoading}
+        >
+          {showEditor ? "Close" : "Set final payout"}
+        </button>
+      </div>
+      {summaryQuery.isLoading ? (
+        <p className="bcr-payroll-muted">Loading current payout…</p>
+      ) : summary?.canAdjust && summary.finalPayCents !== null ? (
+        <>
+          <div className="bcr-payroll-total">
+            <span>Current final payout</span>
+            <b>{formatCents(summary.finalPayCents)}</b>
+            <small>
+              {summary.assignedTeamName ||
+                active.assignedTeamName ||
+                "Assigned team"}{" "}
+              · {formatCents(summary.basePayCents)} base
+              {summary.adjustmentCents !== 0
+                ? ` · ${summary.adjustmentCents > 0 ? "+" : ""}${formatCents(summary.adjustmentCents)} ledger`
+                : ""}
+            </small>
+          </div>
+          {showEditor && (
+            <div className="bcr-payroll-form">
+              <label>
+                Final payout ($)
+                <input
+                  inputMode="decimal"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={finalPayout}
+                  onChange={event => setFinalPayout(event.target.value)}
+                  placeholder="e.g. 75.00"
+                />
+              </label>
+              {adjustmentCents !== null && Number.isFinite(adjustmentCents) && (
+                <p>
+                  {adjustmentCents === 0
+                    ? "No ledger change."
+                    : `${adjustmentCents > 0 ? "+" : ""}${formatCents(adjustmentCents)} will be recorded to reach this final payout.`}
+                </p>
+              )}
+              <label>
+                Reason
+                <textarea
+                  maxLength={500}
+                  value={reason}
+                  onChange={event => setReason(event.target.value)}
+                  placeholder="Internal reason required for the payout record"
+                />
+              </label>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditor(false);
+                    setFinalPayout("");
+                    setReason("");
+                  }}
+                  disabled={setFinalPayoutMutation.isPending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={
+                    setFinalPayoutMutation.isPending ||
+                    !finalPayout ||
+                    reason.trim().length < 3
+                  }
+                >
+                  {setFinalPayoutMutation.isPending
+                    ? "Saving…"
+                    : "Set final payout"}
+                </button>
+              </div>
+            </div>
+          )}
+          {summary.adjustments.length > 0 && (
+            <div className="bcr-payroll-history">
+              <span>Adjustment history</span>
+              {summary.adjustments.slice(0, 4).map((adjustment: any) => (
+                <article key={adjustment.id}>
+                  <b
+                    className={
+                      adjustment.amountCents > 0 ? "is-positive" : "is-negative"
+                    }
+                  >
+                    {adjustment.amountCents > 0 ? "+" : ""}
+                    {formatCents(adjustment.amountCents)}
+                  </b>
+                  <p>
+                    {adjustment.reason}
+                    <small>
+                      {adjustment.createdByAgentName} ·{" "}
+                      {new Date(adjustment.createdAt).toLocaleString("en-US", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </small>
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="bcr-payroll-muted">
+          {summaryQuery.isError
+            ? "Current payout could not be loaded."
+            : summary?.unavailableReason || "Current payout is unavailable."}
+        </p>
+      )}
+    </section>
+  );
 }
 
-function NativeBookingCommercialEditor({ active, model }: { active: any; model: any }) {
+function NativeBookingCommercialEditor({
+  active,
+  model,
+}: {
+  active: any;
+  model: any;
+}) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [finalPrice, setFinalPrice] = useState("");
   const [companyNotes, setCompanyNotes] = useState("");
   useEffect(() => {
-    setQuantities(Object.fromEntries(active.extras.map((extra: any) => [extra.id, extra.quantity])));
+    setQuantities(
+      Object.fromEntries(
+        active.extras.map((extra: any) => [extra.id, extra.quantity])
+      )
+    );
     setFinalPrice(((active.firstCleaningTotalCents ?? 0) / 100).toFixed(2));
     setCompanyNotes(active.companyNotes ?? "");
-  }, [active.companyNotes, active.extras, active.firstCleaningTotalCents, active.key]);
+  }, [
+    active.companyNotes,
+    active.extras,
+    active.firstCleaningTotalCents,
+    active.key,
+  ]);
   const updateQuantity = (id: string, nextQuantity: number) => {
-    setQuantities((current) => {
-      const next = { ...current };
-      const currentQuantity = current[id] ?? 0;
-      const boundedQuantity = Math.max(0, Math.min(50, nextQuantity));
-      if (boundedQuantity < 1) delete next[id]; else next[id] = boundedQuantity;
-      const priceDeltaCents = (boundedQuantity - currentQuantity) * (PUBLIC_BOOKING_PRICED_EXTRAS[id]?.unitPrice ?? 0) * 100;
-      if (priceDeltaCents) setFinalPrice((currentPrice) => {
+    const currentQuantity = quantities[id] ?? 0;
+    const boundedQuantity = Math.max(0, Math.min(50, nextQuantity));
+    const next = { ...quantities };
+    if (boundedQuantity < 1) delete next[id];
+    else next[id] = boundedQuantity;
+    const priceDeltaCents =
+      (boundedQuantity - currentQuantity) *
+      (PUBLIC_BOOKING_PRICED_EXTRAS[id]?.unitPrice ?? 0) *
+      100;
+    if (priceDeltaCents)
+      setFinalPrice(currentPrice => {
         const currentCents = Math.round(Number(currentPrice) * 100);
-        return Number.isFinite(currentCents) ? (Math.max(0, currentCents + priceDeltaCents) / 100).toFixed(2) : currentPrice;
+        return Number.isFinite(currentCents)
+          ? (Math.max(0, currentCents + priceDeltaCents) / 100).toFixed(2)
+          : currentPrice;
       });
-      return next;
-    });
+    setQuantities(next);
   };
   const parsedFinalPrice = Math.round(Number(finalPrice) * 100);
-  const finalPriceIsValid = /^\d+(?:\.\d{1,2})?$/.test(finalPrice) && Number.isSafeInteger(parsedFinalPrice) && parsedFinalPrice >= 0;
-  const extras = Object.entries(quantities).filter(([, quantity]) => Number.isInteger(quantity) && quantity > 0).map(([id, quantity]) => ({ id, quantity }));
+  const finalPriceIsValid =
+    /^\d+(?:\.\d{1,2})?$/.test(finalPrice) &&
+    Number.isSafeInteger(parsedFinalPrice) &&
+    parsedFinalPrice >= 0;
+  const extras = Object.entries(quantities)
+    .filter(([, quantity]) => Number.isInteger(quantity) && quantity > 0)
+    .map(([id, quantity]) => ({ id, quantity }));
   const isPending = model.updateBookingDetails.isPending;
-  return <section className="bcr-editor-section bcr-booking-commercial-editor">
-    <div className="bcr-section-title"><div><small>BOOKING DETAILS</small><h3>Extras, price &amp; company notes</h3></div><span>First visit</span></div>
-    <div className="bcr-extra-editor-grid" aria-label="Additional booking extras">{Object.entries(PUBLIC_BOOKING_PRICED_EXTRAS).map(([id, extra]) => {
-      const quantity = quantities[id] ?? 0;
-      return <div className={quantity ? "bcr-extra-editor-item selected" : "bcr-extra-editor-item"} key={id}><span><strong>{extra.label}</strong><small>${extra.unitPrice}{extra.quantityUnit ? ` / ${extra.quantityUnit}` : ""}</small></span><div className="bcr-extra-stepper"><button type="button" aria-label={`Remove ${extra.label}`} disabled={isPending || quantity === 0} onClick={() => updateQuantity(id, quantity - 1)}>−</button><b>{quantity}</b><button type="button" aria-label={`Add ${extra.label}`} disabled={isPending || quantity >= 50} onClick={() => updateQuantity(id, quantity + 1)}>+</button></div></div>;
-    })}</div>
-    <label className="bcr-booking-price-input">Final price ($)<input inputMode="decimal" type="text" value={finalPrice} onChange={(event) => setFinalPrice(event.target.value)} disabled={isPending} aria-describedby="booking-price-hint" /></label>
-    <p id="booking-price-hint" className="bcr-editor-hint">This changes only the first-visit amount. {active.futureVisitTotalCents === null ? "There is no recurring visit price." : `Future visits remain $${(active.futureVisitTotalCents / 100).toFixed(0)}.`}</p>
-    <label className="bcr-booking-company-notes">Company notes<textarea value={companyNotes} maxLength={4000} onChange={(event) => setCompanyNotes(event.target.value)} disabled={isPending} placeholder="Internal only — not shown to the customer" /></label>
-    <div className="bcr-commercial-actions"><span>{model.updateBookingDetails.error?.message ?? "Internal notes stay with this booking."}</span><button type="button" disabled={!finalPriceIsValid || isPending} onClick={() => model.updateActiveBookingDetails({ extras, firstCleaningTotalCents: parsedFinalPrice, companyNotes: companyNotes.trim() || null })}>{isPending ? "Saving…" : "Save booking updates"}</button></div>
-  </section>;
+  return (
+    <section className="bcr-editor-section bcr-booking-commercial-editor">
+      <div className="bcr-section-title">
+        <div>
+          <small>BOOKING DETAILS</small>
+          <h3>Extras, price &amp; company notes</h3>
+        </div>
+        <span>
+          {finalPriceIsValid
+            ? `$${(parsedFinalPrice / 100).toFixed(2)} first visit`
+            : "First visit"}
+        </span>
+      </div>
+      <div
+        className="bcr-extra-editor-grid"
+        aria-label="Additional booking extras"
+      >
+        {Object.entries(PUBLIC_BOOKING_PRICED_EXTRAS).map(([id, extra]) => {
+          const quantity = quantities[id] ?? 0;
+          return (
+            <div
+              className={
+                quantity
+                  ? "bcr-extra-editor-item selected"
+                  : "bcr-extra-editor-item"
+              }
+              key={id}
+            >
+              <span>
+                <strong>{extra.label}</strong>
+                <small>
+                  ${extra.unitPrice}
+                  {extra.quantityUnit ? ` / ${extra.quantityUnit}` : ""}
+                </small>
+              </span>
+              <div className="bcr-extra-stepper">
+                <button
+                  type="button"
+                  aria-label={`Remove ${extra.label}`}
+                  disabled={isPending || quantity === 0}
+                  onClick={() => updateQuantity(id, quantity - 1)}
+                >
+                  −
+                </button>
+                <b>{quantity}</b>
+                <button
+                  type="button"
+                  aria-label={`Add ${extra.label}`}
+                  disabled={isPending || quantity >= 50}
+                  onClick={() => updateQuantity(id, quantity + 1)}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <label className="bcr-booking-price-input">
+        Final price ($)
+        <input
+          inputMode="decimal"
+          type="text"
+          value={finalPrice}
+          onChange={event => setFinalPrice(event.target.value)}
+          disabled={isPending}
+          aria-describedby="booking-price-hint"
+        />
+      </label>
+      <p id="booking-price-hint" className="bcr-editor-hint">
+        This changes only the first-visit amount.{" "}
+        {active.futureVisitTotalCents === null
+          ? "There is no recurring visit price."
+          : `Future visits remain $${(active.futureVisitTotalCents / 100).toFixed(0)}.`}
+      </p>
+      <label className="bcr-booking-company-notes">
+        Company notes
+        <textarea
+          value={companyNotes}
+          maxLength={4000}
+          onChange={event => setCompanyNotes(event.target.value)}
+          disabled={isPending}
+          placeholder="Internal only — not shown to the customer"
+        />
+      </label>
+      <div className="bcr-commercial-actions">
+        <span>
+          {model.updateBookingDetails.error?.message ??
+            "Extra changes update the first-visit price above. Manual pricing is supported."}
+        </span>
+        <button
+          type="button"
+          disabled={!finalPriceIsValid || isPending}
+          onClick={() =>
+            model.updateActiveBookingDetails({
+              extras,
+              firstCleaningTotalCents: parsedFinalPrice,
+              companyNotes: companyNotes.trim() || null,
+            })
+          }
+        >
+          {isPending ? "Saving…" : "Save price, extras & notes"}
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function BookingDetailDrawer({ model }: { model: any }) {
   const { active } = model;
   if (!active) return null;
   const signoff = model.staffSignoffQuery.data;
-  return <><button type="button" className="ocr-drawer-backdrop" aria-label="Close booking detail" onClick={() => model.setActiveKey(null)} /><aside className="ocr-detail-drawer bcr-workspace-detail" role="dialog" aria-modal="true" aria-labelledby="bcr-detail-title">
-    <header className="bcr-workspace-detail-header"><div><small>{active.publicNumber}</small><h2 id="bcr-detail-title">{active.customerName}</h2><span className={`bcr-detail-status ${active.status === "lead" || active.status === "needs_attention" || active.status === "missing_from_launch27" ? "attention" : active.status === "payment_incomplete" ? "payment" : ""}`}>{labelStatus(active.status)}</span></div><button type="button" aria-label="Close booking detail panel" onClick={() => model.setActiveKey(null)}><X size={18} /></button></header>
-    <div className="ocr-detail-drawer-scroll bcr-workspace-detail-scroll">
-      <section className="bcr-detail-summary"><div><CalendarDays /><span><small>REQUESTED TIME</small><strong>{active.requestedLocalTime && active.requestedLocalDate ? `${displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}` : "Not selected yet"}</strong></span></div><div><MapPin /><span><small>ADDRESS</small><strong>{active.address ?? "Not entered yet"}</strong></span></div></section>
-      <section className="bcr-editor-section"><div className="bcr-section-title"><div><small>SERVICE &amp; EXTRAS</small><h3>{active.serviceName ?? "Booking details in progress"}</h3></div><strong>{active.firstCleaningTotalCents === null ? "—" : `$${(active.firstCleaningTotalCents / 100).toFixed(0)}`}</strong></div><p className="bcr-home-line">{active.bedrooms === null || active.bathrooms === null ? "Room details not entered yet" : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}</p><div className="bcr-selected-extras">{active.extras.length ? active.extras.map((extra: any) => <button type="button" disabled key={extra.id}>{extra.label}{extra.quantity > 1 ? ` × ${extra.quantity}` : ""}</button>) : <button type="button" disabled>Nothing extra</button>}</div></section>
-      {active.source === "booking" && <NativeBookingCommercialEditor active={active} model={model} />}
-      <section className="bcr-editor-section"><small>RECURRING PREFERENCE</small>{active.source === "leadflow" ? <div className="bcr-choice-grid">{(["One time", "Weekly", "Bi-weekly", "Tri-weekly", "Monthly"] as const).map((frequency) => <button type="button" key={frequency} className={active.recurrence?.toLowerCase().replace(/-/g, "").startsWith(frequency.toLowerCase().replace("-", "")) ? "choice-active" : ""} disabled={model.updateLeadflowJob.isPending} onClick={() => model.updateLeadflowJob.mutate({ jobId: active.id, frequency }, { onSuccess: model.refreshBookingAndFunnelQueries })}>{frequency}</button>)}</div> : <div className="bcr-choice-grid"><button type="button" className="choice-active" disabled>{active.recurrence ? labelRecurrence(active.recurrence) : "Not selected"}</button></div>}<p className="bcr-editor-hint">{active.source === "leadflow" ? "The selected interval creates the next LeadFlow job at end of the service day." : !active.recurrence ? "Preference not entered yet." : active.recurrence === "one-time" ? "One-time request." : "No future visits were created. Confirm the recurring plan during review."}</p></section>
-      <section className="bcr-editor-section"><small>ASSIGNED TEAM</small>{active.source === "booking" ? <label className="bcr-team-assignment-picker"><span><i style={{ background: active.assignedTeamName ? avatarColorFor(active.assignedTeamName) : "#353535" }}>{active.assignedTeamName ? initialsFor(active.assignedTeamName) : "?"}</i><strong>{active.assignedTeamName ?? "Choose a cleaning team"}</strong><small>{model.assignBookingTeam.isPending ? "Saving assignment…" : active.assignedTeamName ? "Native booking assignment" : "Select an active team"}</small></span><select aria-label="Assign cleaning team" value={active.assignedTeamId ?? ""} disabled={model.assignBookingTeam.isPending || model.bookingTeamsQuery.isLoading || model.bookingTeams.length === 0} onChange={(event) => model.assignActiveBookingTeam(Number(event.target.value))}><option value="" disabled>{model.bookingTeamsQuery.isLoading ? "Loading teams…" : model.bookingTeams.length ? "Choose a team" : "No active teams"}</option>{active.assignedTeamId && !model.bookingTeams.some((team: any) => team.id === active.assignedTeamId) && <option value={active.assignedTeamId} disabled>{active.assignedTeamName}</option>}{model.bookingTeams.map((team: any) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label> : <button type="button" className="bcr-team-option active" disabled><i style={{ background: active.assignedTeamName ? avatarColorFor(active.assignedTeamName) : "#353535" }}>{active.assignedTeamName ? initialsFor(active.assignedTeamName) : "?"}</i><span><strong>{active.assignedTeamName ?? "Unassigned"}</strong><small>{active.assignedTeamName ? "Launch27 assignment" : "No team assigned"}</small></span></button>}</section>
-      <BookingPayrollPanel active={active} model={model} />
-      <section className="bcr-editor-section"><small>PAYMENT</small>{active.source === "leadflow" ? <div className={active.paymentStatus === "card_on_file" ? "bcr-card-panel" : "bcr-card-panel missing"}><CreditCard /><div><strong>{active.paymentStatus === "card_on_file" ? `${active.paymentBrand ?? "Card"}${active.paymentLast4 ? ` •••• ${active.paymentLast4}` : " on file"}` : "No card on file"}</strong><p>Imported from Launch27. Payment actions remain unchanged.</p></div></div> : active.source === "booking" && active.firstCleaningTotalCents !== null ? <BookingPaymentActions bookingId={active.id} totalCents={active.firstCleaningTotalCents} paymentStatus={active.paymentStatus} /> : model.portalPaymentAvailable && active.firstCleaningTotalCents !== null ? <PortalRequestPaymentActions requestId={active.id} totalCents={active.firstCleaningTotalCents} onPaymentUpdated={model.refreshBookingAndFunnelQueries} /> : <div className="bcr-card-panel missing"><CreditCard /><div><strong>Payment not started</strong><p>Card collection is not connected for this in-progress lead.</p></div></div>}</section>
-      <section className="bcr-editor-section"><div className="bcr-photo-review-title"><div><small>CLEANER PHOTOS</small><h3>Before &amp; after</h3><p>Uploaded from the cleaner visit portal.</p></div><ImageIcon /></div>{model.staffPhotosQuery.isLoading ? <div className="bcr-photo-review-empty"><Loader2 className="animate-spin" />Loading photos…</div> : model.staffPhotosQuery.isError ? <div className="bcr-photo-review-empty error">Photos could not be loaded for this booking.</div> : <div className="bcr-photo-groups">{([{ label: "Before", detail: "Visit condition", photos: model.beforePhotos }, { label: "After", detail: "Finished result", photos: model.afterPhotos }] as const).map((group) => <section className={`bcr-photo-group ${group.label === "After" ? "after" : ""}`} key={group.label}><header><div><strong>{group.label}</strong><span>{group.detail}</span></div><small>{group.photos.length} photo{group.photos.length === 1 ? "" : "s"}</small></header>{group.photos.length ? <div className="bcr-photo-grid">{group.photos.map((photo: any, index: number) => <button type="button" key={photo.id} className="bcr-photo-thumb" onClick={() => model.setPhotoLightbox({ label: group.label, photos: group.photos, index })} aria-label={`Open ${group.label.toLowerCase()} photo ${index + 1}`}><img src={photo.thumbnailUrl ?? photo.photoUrl} alt={`${group.label} photo ${index + 1}`} /><b>{group.label}</b><em>View</em></button>)}</div> : <div className="bcr-photo-review-empty">No {group.label.toLowerCase()} photos uploaded.</div>}</section>)}</div>}</section>
-      <section className="bcr-editor-section"><div className="bcr-photo-review-title"><div><small>CUSTOMER SIGN-OFF</small><h3>Visit confirmation</h3><p>Captured by the cleaner after the visit.</p></div></div>{model.staffSignoffQuery.isLoading ? <div className="bcr-photo-review-empty"><Loader2 className="animate-spin" />Loading sign-off…</div> : model.staffSignoffQuery.isError ? <div className="bcr-photo-review-empty error">Customer sign-off could not be loaded for this booking.</div> : !signoff ? <div className="bcr-photo-review-empty">No customer sign-off recorded.</div> : signoff.customerNotHome ? <div className="bcr-signoff-not-home">Customer was not home — sign-off bypassed.</div> : <div className="bcr-signoff-summary"><div><small>SATISFACTION</small><strong className={`bcr-signoff-response ${signoff.customerResponse ?? "issue"}`}>{signoff.customerResponse === "great" ? "Everything looks great" : signoff.customerResponse === "touchup" ? "Needs one touch-up" : "Major issue"}</strong></div>{signoff.customerNotes && <div><small>CUSTOMER NOTES</small><p>{signoff.customerNotes}</p></div>}{signoff.signatureUrl && <div><small>SIGNATURE</small><img src={signoff.signatureUrl} alt="Customer signature" /></div>}</div>}</section>
-      <section className="bcr-editor-section"><div className="bcr-photo-review-title"><div><small>BOOKING MESSAGES</small><h3>Cleaner &amp; customer</h3><p>Saved with this booking.</p></div><MessageCircle /></div>{active.source !== "leadflow" ? <div className="bcr-photo-review-empty">Messages are available for LeadFlow bookings.</div> : model.staffMessagesQuery.isLoading ? <div className="bcr-photo-review-empty"><Loader2 className="animate-spin" />Loading messages…</div> : model.staffMessagesQuery.isError ? <div className="bcr-photo-review-empty error">Messages could not be loaded for this booking.</div> : model.staffMessages.length ? <div className="bcr-message-stack">{model.staffMessages.map((message: any) => <div className="bcr-card-panel" key={message.id}><MessageCircle /><div><strong>{message.senderRole === "customer" ? "Customer" : "Cleaning team"}</strong><p>{message.body}</p>{message.notificationStatus === "failed" && <small>Customer notification failed: {message.notificationError || "Unknown delivery error"}</small>}</div></div>)}</div> : <div className="bcr-photo-review-empty">No messages on this booking yet.</div>}</section>
-      <section className="bcr-editor-section"><small>CUSTOMER</small><p className="bcr-home-line">{active.customerPhone}<br />{active.customerEmail ?? "Email not entered yet"}</p><div className="bcr-customer-actions"><button type="button" disabled={model.customerMagicLink.isPending || !active.customerName || !active.customerPhone} onClick={model.copyCustomerMagicLink} title={active.customerName && active.customerPhone ? "Copy this customer's reusable one-year My Home link" : "Customer name and phone number are required"}>{model.customerMagicLink.isPending ? <Loader2 className="animate-spin" /> : <Copy size={14} />}{model.customerMagicLink.isPending ? "Copying…" : "Copy Customer My Home Link"}</button></div></section>
-      <section className="bcr-editor-section"><small>NOTES &amp; SPECIAL REQUESTS</small><textarea value={active.specialRequestNotes.join("\n")} readOnly placeholder="No special requests" /><div className="bcr-customer-actions bcr-request-actions"><button type="button" disabled><MessageCircle size={14} />Text customer</button>{active.source === "leadflow" ? <div><label><CalendarDays size={14} />Reschedule <input type="date" value={model.rescheduleDate} onChange={(event) => model.setRescheduleDate(event.target.value)} /></label><button type="button" disabled={!model.rescheduleDate || model.rescheduleDate === active.requestedLocalDate || model.updateLeadflowJob.isPending} onClick={() => model.updateLeadflowJob.mutate({ jobId: active.id, jobDate: model.rescheduleDate }, { onSuccess: model.refreshBookingAndFunnelQueries })}>Save date</button></div> : <button type="button" disabled><CalendarDays size={14} />Reschedule</button>}</div></section>
-    </div>
-    <footer className="bcr-workspace-detail-footer"><button type="button" className="bcr-cancel-booking" disabled={model.cancellationPending} onClick={model.cancelActiveRecord}>{model.cancellationPending ? "Cancelling…" : "Cancel booking"}</button></footer>
-  </aside></>;
+  return (
+    <>
+      <button
+        type="button"
+        className="ocr-drawer-backdrop"
+        aria-label="Close booking detail"
+        onClick={() => model.setActiveKey(null)}
+      />
+      <aside
+        className="ocr-detail-drawer bcr-workspace-detail"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bcr-detail-title"
+      >
+        <header className="bcr-workspace-detail-header">
+          <div>
+            <small>{active.publicNumber}</small>
+            <h2 id="bcr-detail-title">{active.customerName}</h2>
+            <span
+              className={`bcr-detail-status ${active.status === "lead" || active.status === "needs_attention" || active.status === "missing_from_launch27" ? "attention" : active.status === "payment_incomplete" ? "payment" : ""}`}
+            >
+              {labelStatus(active.status)}
+            </span>
+          </div>
+          <button
+            type="button"
+            aria-label="Close booking detail panel"
+            onClick={() => model.setActiveKey(null)}
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <div className="ocr-detail-drawer-scroll bcr-workspace-detail-scroll">
+          <section className="bcr-detail-summary">
+            <div>
+              <CalendarDays />
+              <span>
+                <small>REQUESTED TIME</small>
+                <strong>
+                  {active.requestedLocalTime && active.requestedLocalDate
+                    ? `${displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}`
+                    : "Not selected yet"}
+                </strong>
+              </span>
+            </div>
+            <div>
+              <MapPin />
+              <span>
+                <small>ADDRESS</small>
+                <strong>{active.address ?? "Not entered yet"}</strong>
+              </span>
+            </div>
+          </section>
+          <section className="bcr-editor-section">
+            <div className="bcr-section-title">
+              <div>
+                <small>SERVICE &amp; EXTRAS</small>
+                <h3>{active.serviceName ?? "Booking details in progress"}</h3>
+              </div>
+              <strong>
+                {active.firstCleaningTotalCents === null
+                  ? "—"
+                  : `$${(active.firstCleaningTotalCents / 100).toFixed(0)}`}
+              </strong>
+            </div>
+            <p className="bcr-home-line">
+              {active.bedrooms === null || active.bathrooms === null
+                ? "Room details not entered yet"
+                : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}
+            </p>
+            <div className="bcr-selected-extras">
+              {active.extras.length ? (
+                active.extras.map((extra: any) => (
+                  <button type="button" disabled key={extra.id}>
+                    {extra.label}
+                    {extra.quantity > 1 ? ` × ${extra.quantity}` : ""}
+                  </button>
+                ))
+              ) : (
+                <button type="button" disabled>
+                  Nothing extra
+                </button>
+              )}
+            </div>
+          </section>
+          {active.source === "booking" && (
+            <NativeBookingCommercialEditor active={active} model={model} />
+          )}
+          <section className="bcr-editor-section">
+            <small>RECURRING PREFERENCE</small>
+            {active.source === "leadflow" ? (
+              <div className="bcr-choice-grid">
+                {(
+                  [
+                    "One time",
+                    "Weekly",
+                    "Bi-weekly",
+                    "Tri-weekly",
+                    "Monthly",
+                  ] as const
+                ).map(frequency => (
+                  <button
+                    type="button"
+                    key={frequency}
+                    className={
+                      active.recurrence
+                        ?.toLowerCase()
+                        .replace(/-/g, "")
+                        .startsWith(frequency.toLowerCase().replace("-", ""))
+                        ? "choice-active"
+                        : ""
+                    }
+                    disabled={model.updateLeadflowJob.isPending}
+                    onClick={() =>
+                      model.updateLeadflowJob.mutate(
+                        { jobId: active.id, frequency },
+                        { onSuccess: model.refreshBookingAndFunnelQueries }
+                      )
+                    }
+                  >
+                    {frequency}
+                  </button>
+                ))}
+              </div>
+            ) : active.source === "booking" ? (
+              <div className="bcr-choice-grid">
+                {(["one-time", "weekly", "biweekly", "monthly"] as const).map(
+                  frequency => (
+                    <button
+                      type="button"
+                      key={frequency}
+                      className={
+                        active.recurrence === frequency ? "choice-active" : ""
+                      }
+                      disabled={model.updateBookingDetails.isPending}
+                      onClick={() =>
+                        model.updateActiveBookingSchedule({
+                          recurrence: frequency,
+                        })
+                      }
+                    >
+                      {labelRecurrence(frequency)}
+                    </button>
+                  )
+                )}
+              </div>
+            ) : (
+              <div className="bcr-choice-grid">
+                <button type="button" className="choice-active" disabled>
+                  {active.recurrence
+                    ? labelRecurrence(active.recurrence)
+                    : "Not selected"}
+                </button>
+              </div>
+            )}
+            <p className="bcr-editor-hint">
+              {active.source === "leadflow"
+                ? "The selected interval creates the next LeadFlow job at end of the service day."
+                : active.source === "booking"
+                  ? active.recurrence === "one-time"
+                    ? "One-time service. Select a cadence to begin recurring visits."
+                    : `Future visits use the ${labelRecurrence(active.recurrence)} cadence.`
+                  : !active.recurrence
+                    ? "Preference not entered yet."
+                    : active.recurrence === "one-time"
+                      ? "One-time request."
+                      : "No future visits were created. Confirm the recurring plan during review."}
+            </p>
+          </section>
+          <section className="bcr-editor-section">
+            <small>ASSIGNED TEAM</small>
+            {active.source === "booking" ? (
+              <label className="bcr-team-assignment-picker">
+                <span>
+                  <i
+                    style={{
+                      background: active.assignedTeamName
+                        ? avatarColorFor(active.assignedTeamName)
+                        : "#353535",
+                    }}
+                  >
+                    {active.assignedTeamName
+                      ? initialsFor(active.assignedTeamName)
+                      : "?"}
+                  </i>
+                  <strong>
+                    {active.assignedTeamName ?? "Choose a cleaning team"}
+                  </strong>
+                  <small>
+                    {model.assignBookingTeam.isPending
+                      ? "Saving assignment…"
+                      : active.assignedTeamName
+                        ? "Native booking assignment"
+                        : "Select an active team"}
+                  </small>
+                </span>
+                <select
+                  aria-label="Assign cleaning team"
+                  value={active.assignedTeamId ?? ""}
+                  disabled={
+                    model.assignBookingTeam.isPending ||
+                    model.bookingTeamsQuery.isLoading ||
+                    model.bookingTeams.length === 0
+                  }
+                  onChange={event =>
+                    model.assignActiveBookingTeam(Number(event.target.value))
+                  }
+                >
+                  <option value="" disabled>
+                    {model.bookingTeamsQuery.isLoading
+                      ? "Loading teams…"
+                      : model.bookingTeams.length
+                        ? "Choose a team"
+                        : "No active teams"}
+                  </option>
+                  {active.assignedTeamId &&
+                    !model.bookingTeams.some(
+                      (team: any) => team.id === active.assignedTeamId
+                    ) && (
+                      <option value={active.assignedTeamId} disabled>
+                        {active.assignedTeamName}
+                      </option>
+                    )}
+                  {model.bookingTeams.map((team: any) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <button type="button" className="bcr-team-option active" disabled>
+                <i
+                  style={{
+                    background: active.assignedTeamName
+                      ? avatarColorFor(active.assignedTeamName)
+                      : "#353535",
+                  }}
+                >
+                  {active.assignedTeamName
+                    ? initialsFor(active.assignedTeamName)
+                    : "?"}
+                </i>
+                <span>
+                  <strong>{active.assignedTeamName ?? "Unassigned"}</strong>
+                  <small>
+                    {active.assignedTeamName
+                      ? "Launch27 assignment"
+                      : "No team assigned"}
+                  </small>
+                </span>
+              </button>
+            )}
+          </section>
+          <BookingPayrollPanel active={active} model={model} />
+          <section className="bcr-editor-section">
+            <small>PAYMENT</small>
+            {active.source === "leadflow" ? (
+              <div
+                className={
+                  active.paymentStatus === "card_on_file"
+                    ? "bcr-card-panel"
+                    : "bcr-card-panel missing"
+                }
+              >
+                <CreditCard />
+                <div>
+                  <strong>
+                    {active.paymentStatus === "card_on_file"
+                      ? `${active.paymentBrand ?? "Card"}${active.paymentLast4 ? ` •••• ${active.paymentLast4}` : " on file"}`
+                      : "No card on file"}
+                  </strong>
+                  <p>
+                    Imported from Launch27. Payment actions remain unchanged.
+                  </p>
+                </div>
+              </div>
+            ) : active.source === "booking" &&
+              active.firstCleaningTotalCents !== null ? (
+              <BookingPaymentActions
+                bookingId={active.id}
+                totalCents={active.firstCleaningTotalCents}
+                paymentStatus={active.paymentStatus}
+              />
+            ) : model.portalPaymentAvailable &&
+              active.firstCleaningTotalCents !== null ? (
+              <PortalRequestPaymentActions
+                requestId={active.id}
+                totalCents={active.firstCleaningTotalCents}
+                onPaymentUpdated={model.refreshBookingAndFunnelQueries}
+              />
+            ) : (
+              <div className="bcr-card-panel missing">
+                <CreditCard />
+                <div>
+                  <strong>Payment not started</strong>
+                  <p>
+                    Card collection is not connected for this in-progress lead.
+                  </p>
+                </div>
+              </div>
+            )}
+          </section>
+          <section className="bcr-editor-section">
+            <div className="bcr-photo-review-title">
+              <div>
+                <small>CLEANER PHOTOS</small>
+                <h3>Before &amp; after</h3>
+                <p>Uploaded from the cleaner visit portal.</p>
+              </div>
+              <ImageIcon />
+            </div>
+            {model.staffPhotosQuery.isLoading ? (
+              <div className="bcr-photo-review-empty">
+                <Loader2 className="animate-spin" />
+                Loading photos…
+              </div>
+            ) : model.staffPhotosQuery.isError ? (
+              <div className="bcr-photo-review-empty error">
+                Photos could not be loaded for this booking.
+              </div>
+            ) : (
+              <div className="bcr-photo-groups">
+                {(
+                  [
+                    {
+                      label: "Before",
+                      detail: "Visit condition",
+                      photos: model.beforePhotos,
+                    },
+                    {
+                      label: "After",
+                      detail: "Finished result",
+                      photos: model.afterPhotos,
+                    },
+                  ] as const
+                ).map(group => (
+                  <section
+                    className={`bcr-photo-group ${group.label === "After" ? "after" : ""}`}
+                    key={group.label}
+                  >
+                    <header>
+                      <div>
+                        <strong>{group.label}</strong>
+                        <span>{group.detail}</span>
+                      </div>
+                      <small>
+                        {group.photos.length} photo
+                        {group.photos.length === 1 ? "" : "s"}
+                      </small>
+                    </header>
+                    {group.photos.length ? (
+                      <div className="bcr-photo-grid">
+                        {group.photos.map((photo: any, index: number) => (
+                          <button
+                            type="button"
+                            key={photo.id}
+                            className="bcr-photo-thumb"
+                            onClick={() =>
+                              model.setPhotoLightbox({
+                                label: group.label,
+                                photos: group.photos,
+                                index,
+                              })
+                            }
+                            aria-label={`Open ${group.label.toLowerCase()} photo ${index + 1}`}
+                          >
+                            <img
+                              src={photo.thumbnailUrl ?? photo.photoUrl}
+                              alt={`${group.label} photo ${index + 1}`}
+                            />
+                            <b>{group.label}</b>
+                            <em>View</em>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bcr-photo-review-empty">
+                        No {group.label.toLowerCase()} photos uploaded.
+                      </div>
+                    )}
+                  </section>
+                ))}
+              </div>
+            )}
+          </section>
+          <section className="bcr-editor-section">
+            <div className="bcr-photo-review-title">
+              <div>
+                <small>CUSTOMER SIGN-OFF</small>
+                <h3>Visit confirmation</h3>
+                <p>Captured by the cleaner after the visit.</p>
+              </div>
+            </div>
+            {model.staffSignoffQuery.isLoading ? (
+              <div className="bcr-photo-review-empty">
+                <Loader2 className="animate-spin" />
+                Loading sign-off…
+              </div>
+            ) : model.staffSignoffQuery.isError ? (
+              <div className="bcr-photo-review-empty error">
+                Customer sign-off could not be loaded for this booking.
+              </div>
+            ) : !signoff ? (
+              <div className="bcr-photo-review-empty">
+                No customer sign-off recorded.
+              </div>
+            ) : signoff.customerNotHome ? (
+              <div className="bcr-signoff-not-home">
+                Customer was not home — sign-off bypassed.
+              </div>
+            ) : (
+              <div className="bcr-signoff-summary">
+                <div>
+                  <small>SATISFACTION</small>
+                  <strong
+                    className={`bcr-signoff-response ${signoff.customerResponse ?? "issue"}`}
+                  >
+                    {signoff.customerResponse === "great"
+                      ? "Everything looks great"
+                      : signoff.customerResponse === "touchup"
+                        ? "Needs one touch-up"
+                        : "Major issue"}
+                  </strong>
+                </div>
+                {signoff.customerNotes && (
+                  <div>
+                    <small>CUSTOMER NOTES</small>
+                    <p>{signoff.customerNotes}</p>
+                  </div>
+                )}
+                {signoff.signatureUrl && (
+                  <div>
+                    <small>SIGNATURE</small>
+                    <img src={signoff.signatureUrl} alt="Customer signature" />
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+          <section className="bcr-editor-section">
+            <div className="bcr-photo-review-title">
+              <div>
+                <small>BOOKING MESSAGES</small>
+                <h3>Cleaner &amp; customer</h3>
+                <p>Saved with this booking.</p>
+              </div>
+              <MessageCircle />
+            </div>
+            {active.source !== "leadflow" ? (
+              <div className="bcr-photo-review-empty">
+                Messages are available for LeadFlow bookings.
+              </div>
+            ) : model.staffMessagesQuery.isLoading ? (
+              <div className="bcr-photo-review-empty">
+                <Loader2 className="animate-spin" />
+                Loading messages…
+              </div>
+            ) : model.staffMessagesQuery.isError ? (
+              <div className="bcr-photo-review-empty error">
+                Messages could not be loaded for this booking.
+              </div>
+            ) : model.staffMessages.length ? (
+              <div className="bcr-message-stack">
+                {model.staffMessages.map((message: any) => (
+                  <div className="bcr-card-panel" key={message.id}>
+                    <MessageCircle />
+                    <div>
+                      <strong>
+                        {message.senderRole === "customer"
+                          ? "Customer"
+                          : "Cleaning team"}
+                      </strong>
+                      <p>{message.body}</p>
+                      {message.notificationStatus === "failed" && (
+                        <small>
+                          Customer notification failed:{" "}
+                          {message.notificationError ||
+                            "Unknown delivery error"}
+                        </small>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bcr-photo-review-empty">
+                No messages on this booking yet.
+              </div>
+            )}
+          </section>
+          <section className="bcr-editor-section">
+            <small>CUSTOMER</small>
+            <p className="bcr-home-line">
+              {active.customerPhone}
+              <br />
+              {active.customerEmail ?? "Email not entered yet"}
+            </p>
+            <div className="bcr-customer-actions">
+              <button
+                type="button"
+                disabled={
+                  model.customerMagicLink.isPending ||
+                  !active.customerName ||
+                  !active.customerPhone
+                }
+                onClick={model.copyCustomerMagicLink}
+                title={
+                  active.customerName && active.customerPhone
+                    ? "Copy this customer's reusable one-year My Home link"
+                    : "Customer name and phone number are required"
+                }
+              >
+                {model.customerMagicLink.isPending ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Copy size={14} />
+                )}
+                {model.customerMagicLink.isPending
+                  ? "Copying…"
+                  : "Copy Customer My Home Link"}
+              </button>
+            </div>
+          </section>
+          <section className="bcr-editor-section">
+            <small>NOTES &amp; SPECIAL REQUESTS</small>
+            <textarea
+              value={active.specialRequestNotes.join("\n")}
+              readOnly
+              placeholder="No special requests"
+            />
+            {(active.source === "leadflow" || active.source === "booking") && (
+              <div className="bcr-customer-actions bcr-request-actions">
+                <div>
+                  <label>
+                    <CalendarDays size={14} />
+                    Reschedule{" "}
+                    <input
+                      type="date"
+                      value={model.rescheduleDate}
+                      onChange={event =>
+                        model.setRescheduleDate(event.target.value)
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={
+                      !model.rescheduleDate ||
+                      model.rescheduleDate === active.requestedLocalDate ||
+                      (active.source === "leadflow"
+                        ? model.updateLeadflowJob.isPending
+                        : model.updateBookingDetails.isPending)
+                    }
+                    onClick={() =>
+                      active.source === "leadflow"
+                        ? model.updateLeadflowJob.mutate(
+                            { jobId: active.id, jobDate: model.rescheduleDate },
+                            { onSuccess: model.refreshBookingAndFunnelQueries }
+                          )
+                        : model.updateActiveBookingSchedule({
+                            requestedLocalDate: model.rescheduleDate,
+                          })
+                    }
+                  >
+                    {active.source === "leadflow"
+                      ? model.updateLeadflowJob.isPending
+                        ? "Saving…"
+                        : "Save date"
+                      : model.updateBookingDetails.isPending
+                        ? "Saving…"
+                        : "Save date"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+        <footer className="bcr-workspace-detail-footer">
+          <button
+            type="button"
+            className="bcr-cancel-booking"
+            disabled={model.cancellationPending}
+            onClick={model.cancelActiveRecord}
+          >
+            {model.cancellationPending ? "Cancelling…" : "Cancel booking"}
+          </button>
+        </footer>
+      </aside>
+    </>
+  );
 }
 
 function ExactBookingsCRMShell({ model }: { model: any }) {
-  const { view, setView, date, setDate, dates, rows, activeKey, setActiveKey, metricRows, assigned, cards, revenueCents, query, setQuery, status, setStatus } = model;
-  return <div className="operations-crm-review booking-crm-review bcr-full-workspace" data-live-bookings="true">
-    <aside className="ocr-sidebar bcr-sidebar" aria-label="Bookings workspace navigation"><div className="ocr-brand bcr-brand"><MibReviewLogo /><div><strong>Maids in Black</strong><span>Bookings workspace</span></div></div><div className="ocr-nav-scroll"><nav className="ocr-nav-primary">{NAV.map(({ label, icon: Icon, count }) => <button type="button" key={label} className={label === "Bookings" ? "is-active" : ""} data-presentation-only="true"><Icon size={14} strokeWidth={1.4} /><span>{label}</span>{count && <b>{count}</b>}</button>)}</nav></div><div className="ocr-nav-utility"><button type="button" data-presentation-only="true"><UserPlus size={14} />Invite teammates</button><button type="button" data-presentation-only="true"><CircleHelp size={14} />Help</button></div><div className="ocr-sidebar-footer"><div className="ocr-trial"><div><strong>Bookings</strong><span>Live workspace</span></div><button type="button" data-presentation-only="true"><WalletCards size={14} />Workspace</button></div></div></aside>
-    <main className="ocr-workspace bcr-workspace">
-      <header className="ocr-header"><div className="bcr-page-intro"><p>OPERATIONS · BOOKINGS</p><h1>Bookings</h1><span>{view === "bookings" ? "Native requests and isolated Launch27 imports appear here for review." : "Phone-captured booking leads appear here while customers finish the flow."}</span></div><div className="bcr-header-actions"><button type="button" className="bcr-new-booking" disabled title="Manual booking creation is not connected in this release"><Plus size={14} />New booking</button><button type="button" className="bcr-header-button" disabled={model.refreshLeadflowJobDetails.isPending} onClick={() => model.refreshLeadflowJobDetails.mutate(undefined, { onSuccess: (result: any) => { model.setImportSummary(`Launch27 details: ${result.refreshed}/${result.checked} jobs refreshed; ${result.dateErrors} day errors.`); void model.leadflowJobsQuery.refetch(); } })}><CreditCard size={14} />{model.refreshLeadflowJobDetails.isPending ? "Refreshing…" : "Refresh team & card details"}</button><button type="button" className="bcr-header-button" disabled={model.importLeadflowJobs.isPending || model.leadflowJobsImportStatus.data?.completed === true} title={model.leadflowJobsImportStatus.data?.completed ? "The initial 30-day Launch27 import is complete." : undefined} onClick={() => model.importLeadflowJobs.mutate(undefined, { onSuccess: (result: any) => { model.setImportSummary(`30-day import: ${result.totals.active} active jobs; ${result.totals.created} added; ${result.totals.updated} refreshed; ${result.totals.errors} day errors.`); void model.leadflowJobsQuery.refetch(); void model.leadflowJobsImportStatus.refetch(); } })}><CalendarDays size={14} />{model.importLeadflowJobs.isPending ? "Importing…" : model.leadflowJobsImportStatus.data?.completed ? "Initial import completed" : "Import next 30 days"}</button></div></header>
-      <section className="bcr-workspace-toolbar"><div className="ocr-tabs bcr-view-tabs"><button type="button" className={view === "bookings" ? "is-active" : ""} onClick={() => setView("bookings")}>Bookings</button><button type="button" className={view === "leads" ? "is-active" : ""} onClick={() => setView("leads")}>Leads</button></div>{view === "bookings" && <div className="bcr-toolbar-operations"><button type="button" className="bcr-inline-action" disabled={model.syncLeadflowJobsDate.isPending} onClick={() => model.syncLeadflowJobsDate.mutate({ date }, { onSuccess: (result: any) => { model.setImportSummary(`Launch27 ${result.date}: ${result.active} active jobs; ${result.created} added; ${result.updated} updated; ${result.sourceMissing} marked no longer in Launch27; ${result.alreadyPresent} already present.`); void model.leadflowJobsQuery.refetch(); } })}><CalendarDays size={14} />{model.syncLeadflowJobsDate.isPending ? "Syncing…" : `Sync ${displayDate(date)}`}</button><button type="button" className="bcr-inline-action" disabled={!model.active || model.cancellationPending} onClick={model.cancelActiveRecord}><X size={14} />{model.cancellationPending ? "Cancelling…" : "Cancel selected booking"}</button></div>}</section>
-      {view === "bookings" && <section className="bcr-date-rail" aria-label="Select booking date">{dates.map((option: string) => { const item = new Date(`${option}T12:00:00`); return <button type="button" key={option} className={date === option ? "date-active" : ""} onClick={() => setDate(option)}><small>{item.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}</small><strong>{item.getDate()}</strong>{date === option && <i />}</button>; })}<label><CalendarDays size={14} /><input aria-label="Choose booking date" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label></section>}
-      <section className="bcr-metric-row" aria-label="Booking metrics"><article><span className="bcr-metric-icon coral"><CalendarDays size={16} /></span><div><small>{view === "bookings" ? "BOOKINGS" : "LEADS"}</small><strong>{metricRows.length}</strong><p>{view === "bookings" ? "on selected date" : "in progress"}</p></div></article><article><span className="bcr-metric-icon violet"><Users size={16} /></span><div><small>TEAMS ASSIGNED</small><strong>{assigned}<em>/{metricRows.length}</em></strong><p>{metricRows.length - assigned ? `${metricRows.length - assigned} needs a team` : "Everything covered"}</p></div></article><article><span className="bcr-metric-icon green"><CreditCard size={16} /></span><div><small>CARDS ON FILE</small><strong>{cards}<em>/{metricRows.length}</em></strong><p>{metricRows.length - cards ? `${metricRows.length - cards} not started` : "All secured"}</p></div></article><article><span className="bcr-metric-icon gold">$</span><div><small>REVENUE</small><strong>${(revenueCents / 100).toLocaleString()}</strong><p>active first-clean totals</p></div></article></section>
-      <section className="bcr-list-toolbar"><label className="bcr-search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, address, or request number" /></label><div className="bcr-status-tabs">{view === "bookings" ? (["All", "Confirmed", "Needs attention", "Completed"] as const).map((option) => <button type="button" key={option} className={status === option ? "active" : ""} onClick={() => setStatus(option)}>{option}</button>) : <button type="button" className="active">Lead / In progress</button>}</div><button type="button" className="bcr-filter-button" disabled><Filter size={14} />Filters</button></section>
-      {(model.importSummary || model.importLeadflowJobs.error || model.refreshLeadflowJobDetails.error) && <div className="bcr-live-notice" role={model.importLeadflowJobs.error || model.refreshLeadflowJobDetails.error ? "alert" : "status"}>{model.importLeadflowJobs.error ? `Import failed: ${model.importLeadflowJobs.error.message}` : model.refreshLeadflowJobDetails.error ? `Launch27 detail refresh failed: ${model.refreshLeadflowJobDetails.error.message}` : model.importSummary}</div>}
-      <section className="bcr-booking-list" aria-label={view === "bookings" ? "LeadFlow bookings list" : "Native LeadFlow leads list"}><div className="bcr-booking-list-head"><span>TIME &amp; CUSTOMER</span><span>SERVICE</span><span>TEAM</span><span>PAYMENT</span><span>TOTAL</span><span /></div>{(model.listQuery.isLoading || model.funnelListQuery.isLoading || model.leadflowJobsQuery.isLoading) ? <div className="bcr-empty-day"><Loader2 className="animate-spin" /><h3>Loading {view}</h3></div> : (model.listQuery.error || model.funnelListQuery.error || model.leadflowJobsQuery.error) ? <div className="bcr-empty-day"><X /><h3>Could not load {view}</h3><p>{model.listQuery.error?.message ?? model.funnelListQuery.error?.message ?? model.leadflowJobsQuery.error?.message}</p></div> : rows.length ? rows.map((row: any) => <BookingListRow key={row.key} row={row} selected={activeKey === row.key} onSelect={() => setActiveKey(row.key)} />) : <div className="bcr-empty-day"><CalendarDays size={22} /><h3>No {view} found</h3><p>{view === "bookings" ? "Try another date or clear your filters." : "New phone-captured leads will appear here."}</p></div>}</section>
-    </main>
-    <BookingDetailDrawer model={model} />
-    <PhotoLightbox model={model} />
-  </div>;
+  const {
+    view,
+    setView,
+    date,
+    setDate,
+    dates,
+    rows,
+    activeKey,
+    setActiveKey,
+    metricRows,
+    assigned,
+    cards,
+    revenueCents,
+    query,
+    setQuery,
+    status,
+    setStatus,
+  } = model;
+  return (
+    <div
+      className="operations-crm-review booking-crm-review bcr-full-workspace"
+      data-live-bookings="true"
+    >
+      <aside
+        className="ocr-sidebar bcr-sidebar"
+        aria-label="Bookings workspace navigation"
+      >
+        <div className="ocr-brand bcr-brand">
+          <MibReviewLogo />
+          <div>
+            <strong>Maids in Black</strong>
+            <span>Bookings workspace</span>
+          </div>
+        </div>
+        <div className="ocr-nav-scroll">
+          <nav className="ocr-nav-primary">
+            {NAV.map(({ label, icon: Icon, count }) => (
+              <button
+                type="button"
+                key={label}
+                className={label === "Bookings" ? "is-active" : ""}
+                data-presentation-only="true"
+              >
+                <Icon size={14} strokeWidth={1.4} />
+                <span>{label}</span>
+                {count && <b>{count}</b>}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div className="ocr-nav-utility">
+          <button type="button" data-presentation-only="true">
+            <UserPlus size={14} />
+            Invite teammates
+          </button>
+          <button type="button" data-presentation-only="true">
+            <CircleHelp size={14} />
+            Help
+          </button>
+        </div>
+        <div className="ocr-sidebar-footer">
+          <div className="ocr-trial">
+            <div>
+              <strong>Bookings</strong>
+              <span>Live workspace</span>
+            </div>
+            <button type="button" data-presentation-only="true">
+              <WalletCards size={14} />
+              Workspace
+            </button>
+          </div>
+        </div>
+      </aside>
+      <main className="ocr-workspace bcr-workspace">
+        <header className="ocr-header">
+          <div className="bcr-page-intro">
+            <p>OPERATIONS · BOOKINGS</p>
+            <h1>Bookings</h1>
+            <span>
+              {view === "bookings"
+                ? "Native requests and isolated Launch27 imports appear here for review."
+                : "Phone-captured booking leads appear here while customers finish the flow."}
+            </span>
+          </div>
+          <div className="bcr-header-actions">
+            <button
+              type="button"
+              className="bcr-new-booking"
+              disabled
+              title="Manual booking creation is not connected in this release"
+            >
+              <Plus size={14} />
+              New booking
+            </button>
+            <button
+              type="button"
+              className="bcr-header-button"
+              disabled={model.refreshLeadflowJobDetails.isPending}
+              onClick={() =>
+                model.refreshLeadflowJobDetails.mutate(undefined, {
+                  onSuccess: (result: any) => {
+                    model.setImportSummary(
+                      `Launch27 details: ${result.refreshed}/${result.checked} jobs refreshed; ${result.dateErrors} day errors.`
+                    );
+                    void model.leadflowJobsQuery.refetch();
+                  },
+                })
+              }
+            >
+              <CreditCard size={14} />
+              {model.refreshLeadflowJobDetails.isPending
+                ? "Refreshing…"
+                : "Refresh team & card details"}
+            </button>
+            <button
+              type="button"
+              className="bcr-header-button"
+              disabled={
+                model.importLeadflowJobs.isPending ||
+                model.leadflowJobsImportStatus.data?.completed === true
+              }
+              title={
+                model.leadflowJobsImportStatus.data?.completed
+                  ? "The initial 30-day Launch27 import is complete."
+                  : undefined
+              }
+              onClick={() =>
+                model.importLeadflowJobs.mutate(undefined, {
+                  onSuccess: (result: any) => {
+                    model.setImportSummary(
+                      `30-day import: ${result.totals.active} active jobs; ${result.totals.created} added; ${result.totals.updated} refreshed; ${result.totals.errors} day errors.`
+                    );
+                    void model.leadflowJobsQuery.refetch();
+                    void model.leadflowJobsImportStatus.refetch();
+                  },
+                })
+              }
+            >
+              <CalendarDays size={14} />
+              {model.importLeadflowJobs.isPending
+                ? "Importing…"
+                : model.leadflowJobsImportStatus.data?.completed
+                  ? "Initial import completed"
+                  : "Import next 30 days"}
+            </button>
+          </div>
+        </header>
+        <section className="bcr-workspace-toolbar">
+          <div className="ocr-tabs bcr-view-tabs">
+            <button
+              type="button"
+              className={view === "bookings" ? "is-active" : ""}
+              onClick={() => setView("bookings")}
+            >
+              Bookings
+            </button>
+            <button
+              type="button"
+              className={view === "leads" ? "is-active" : ""}
+              onClick={() => setView("leads")}
+            >
+              Leads
+            </button>
+          </div>
+          {view === "bookings" && (
+            <div className="bcr-toolbar-operations">
+              <button
+                type="button"
+                className="bcr-inline-action"
+                disabled={model.syncLeadflowJobsDate.isPending}
+                onClick={() =>
+                  model.syncLeadflowJobsDate.mutate(
+                    { date },
+                    {
+                      onSuccess: (result: any) => {
+                        model.setImportSummary(
+                          `Launch27 ${result.date}: ${result.active} active jobs; ${result.created} added; ${result.updated} updated; ${result.sourceMissing} marked no longer in Launch27; ${result.alreadyPresent} already present.`
+                        );
+                        void model.leadflowJobsQuery.refetch();
+                      },
+                    }
+                  )
+                }
+              >
+                <CalendarDays size={14} />
+                {model.syncLeadflowJobsDate.isPending
+                  ? "Syncing…"
+                  : `Sync ${displayDate(date)}`}
+              </button>
+              <button
+                type="button"
+                className="bcr-inline-action"
+                disabled={!model.active || model.cancellationPending}
+                onClick={model.cancelActiveRecord}
+              >
+                <X size={14} />
+                {model.cancellationPending
+                  ? "Cancelling…"
+                  : "Cancel selected booking"}
+              </button>
+            </div>
+          )}
+        </section>
+        {view === "bookings" && (
+          <section className="bcr-date-rail" aria-label="Select booking date">
+            {dates.map((option: string) => {
+              const item = new Date(`${option}T12:00:00`);
+              return (
+                <button
+                  type="button"
+                  key={option}
+                  className={date === option ? "date-active" : ""}
+                  onClick={() => setDate(option)}
+                >
+                  <small>
+                    {item
+                      .toLocaleDateString("en-US", { weekday: "short" })
+                      .toUpperCase()}
+                  </small>
+                  <strong>{item.getDate()}</strong>
+                  {date === option && <i />}
+                </button>
+              );
+            })}
+            <label>
+              <CalendarDays size={14} />
+              <input
+                aria-label="Choose booking date"
+                type="date"
+                value={date}
+                onChange={event => setDate(event.target.value)}
+              />
+            </label>
+          </section>
+        )}
+        <section className="bcr-metric-row" aria-label="Booking metrics">
+          <article>
+            <span className="bcr-metric-icon coral">
+              <CalendarDays size={16} />
+            </span>
+            <div>
+              <small>{view === "bookings" ? "BOOKINGS" : "LEADS"}</small>
+              <strong>{metricRows.length}</strong>
+              <p>{view === "bookings" ? "on selected date" : "in progress"}</p>
+            </div>
+          </article>
+          <article>
+            <span className="bcr-metric-icon violet">
+              <Users size={16} />
+            </span>
+            <div>
+              <small>TEAMS ASSIGNED</small>
+              <strong>
+                {assigned}
+                <em>/{metricRows.length}</em>
+              </strong>
+              <p>
+                {metricRows.length - assigned
+                  ? `${metricRows.length - assigned} needs a team`
+                  : "Everything covered"}
+              </p>
+            </div>
+          </article>
+          <article>
+            <span className="bcr-metric-icon green">
+              <CreditCard size={16} />
+            </span>
+            <div>
+              <small>CARDS ON FILE</small>
+              <strong>
+                {cards}
+                <em>/{metricRows.length}</em>
+              </strong>
+              <p>
+                {metricRows.length - cards
+                  ? `${metricRows.length - cards} not started`
+                  : "All secured"}
+              </p>
+            </div>
+          </article>
+          <article>
+            <span className="bcr-metric-icon gold">$</span>
+            <div>
+              <small>REVENUE</small>
+              <strong>${(revenueCents / 100).toLocaleString()}</strong>
+              <p>active first-clean totals</p>
+            </div>
+          </article>
+        </section>
+        <section className="bcr-list-toolbar">
+          <label className="bcr-search-box">
+            <Search size={15} />
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search customer, address, or request number"
+            />
+          </label>
+          <div className="bcr-status-tabs">
+            {view === "bookings" ? (
+              (
+                ["All", "Confirmed", "Needs attention", "Completed"] as const
+              ).map(option => (
+                <button
+                  type="button"
+                  key={option}
+                  className={status === option ? "active" : ""}
+                  onClick={() => setStatus(option)}
+                >
+                  {option}
+                </button>
+              ))
+            ) : (
+              <button type="button" className="active">
+                Lead / In progress
+              </button>
+            )}
+          </div>
+          <button type="button" className="bcr-filter-button" disabled>
+            <Filter size={14} />
+            Filters
+          </button>
+        </section>
+        {(model.importSummary ||
+          model.importLeadflowJobs.error ||
+          model.refreshLeadflowJobDetails.error) && (
+          <div
+            className="bcr-live-notice"
+            role={
+              model.importLeadflowJobs.error ||
+              model.refreshLeadflowJobDetails.error
+                ? "alert"
+                : "status"
+            }
+          >
+            {model.importLeadflowJobs.error
+              ? `Import failed: ${model.importLeadflowJobs.error.message}`
+              : model.refreshLeadflowJobDetails.error
+                ? `Launch27 detail refresh failed: ${model.refreshLeadflowJobDetails.error.message}`
+                : model.importSummary}
+          </div>
+        )}
+        <section
+          className="bcr-booking-list"
+          aria-label={
+            view === "bookings"
+              ? "LeadFlow bookings list"
+              : "Native LeadFlow leads list"
+          }
+        >
+          <div className="bcr-booking-list-head">
+            <span>TIME &amp; CUSTOMER</span>
+            <span>SERVICE</span>
+            <span>TEAM</span>
+            <span>PAYMENT</span>
+            <span>TOTAL</span>
+            <span />
+          </div>
+          {model.listQuery.isLoading ||
+          model.funnelListQuery.isLoading ||
+          model.leadflowJobsQuery.isLoading ? (
+            <div className="bcr-empty-day">
+              <Loader2 className="animate-spin" />
+              <h3>Loading {view}</h3>
+            </div>
+          ) : model.listQuery.error ||
+            model.funnelListQuery.error ||
+            model.leadflowJobsQuery.error ? (
+            <div className="bcr-empty-day">
+              <X />
+              <h3>Could not load {view}</h3>
+              <p>
+                {model.listQuery.error?.message ??
+                  model.funnelListQuery.error?.message ??
+                  model.leadflowJobsQuery.error?.message}
+              </p>
+            </div>
+          ) : rows.length ? (
+            rows.map((row: any) => (
+              <BookingListRow
+                key={row.key}
+                row={row}
+                selected={activeKey === row.key}
+                onSelect={() => setActiveKey(row.key)}
+              />
+            ))
+          ) : (
+            <div className="bcr-empty-day">
+              <CalendarDays size={22} />
+              <h3>No {view} found</h3>
+              <p>
+                {view === "bookings"
+                  ? "Try another date or clear your filters."
+                  : "New phone-captured leads will appear here."}
+              </p>
+            </div>
+          )}
+        </section>
+      </main>
+      <BookingDetailDrawer model={model} />
+      <PhotoLightbox model={model} />
+    </div>
+  );
 }
 
-export default function BookingsCRMExactLive({ realtimeEnabled }: { realtimeEnabled: boolean }) {
-  return <NativeBookingsWorkspace realtimeEnabled={realtimeEnabled} render={(model) => <ExactBookingsCRMShell model={model} />} />;
+export default function BookingsCRMExactLive({
+  realtimeEnabled,
+}: {
+  realtimeEnabled: boolean;
+}) {
+  return (
+    <NativeBookingsWorkspace
+      realtimeEnabled={realtimeEnabled}
+      render={model => <ExactBookingsCRMShell model={model} />}
+    />
+  );
 }
