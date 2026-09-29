@@ -41,8 +41,11 @@ describe("native booking drawer commercial edits", () => {
       "Company notes",
       "Save booking updates",
       "Future visits remain",
+      'active.source === "booking" && <NativeBookingCommercialEditor',
+      "(active.firstCleaningTotalCents ?? 0)",
     ])
       expect(page).toContain(marker);
+    expect(page).not.toMatch(/active\.source === "booking"\s*&&\s*active\.firstCleaningTotalCents\s*!==\s*null\s*&&\s*<NativeBookingCommercialEditor/);
     expect(workspace).toContain("trpc.bookings.updateDetails.useMutation");
     expect(workspace).toContain("updateActiveBookingDetails");
   });
