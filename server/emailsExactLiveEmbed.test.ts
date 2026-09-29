@@ -6,6 +6,15 @@ const source = readFileSync(resolve(process.cwd(), "client/src/pages/CommandChat
 const styles = readFileSync(resolve(process.cwd(), "client/src/pages/command-chat-email-detail.css"), "utf8");
 
 describe("Command Chat Email popup detail", () => {
+  it("uses a normalized latest-inbound recipient instead of a display-name header", () => {
+    expect(source).toContain("function normalizeEmailAddress(value?: string | null)");
+    expect(source).toContain("function replyRecipient(detail?: LiveEmailDetail)");
+    expect(source).toContain("normalizeEmailAddress(latestInbound?.replyToEmail)");
+    expect(source).toContain("normalizeEmailAddress(latestInbound?.fromEmail)");
+    expect(source).toContain("const recipient = replyRecipient(currentDetail);");
+    expect(source).toContain("to: recipient");
+  });
+
   it("uses the CsInbox2 direct-detail treatment when Command Chat supplies a selected thread", () => {
     expect(source).toContain('type EmailsExactLiveProps = {');
     expect(source).toContain('initialThreadId?: string | null;');
