@@ -30,6 +30,7 @@ describe("native booking source contract", () => {
     expect(router).toContain("get: bookingsAgentProcedure");
     expect(router).toContain("teams: bookingsAgentProcedure");
     expect(router).toContain("assignTeam: bookingsAgentProcedure");
+    expect(router).toContain("updateDetails: bookingsAgentProcedure");
     expect(router).toContain("cancel: bookingsAgentProcedure");
     expect(router).toContain("staffRequests: bookingsAgentProcedure");
     expect(router).toContain("cancelStaffRequest: bookingsAgentProcedure");
@@ -42,7 +43,7 @@ describe("native booking source contract", () => {
     expect(service).not.toContain("launch27");
   });
 
-  it("records a human-selected native team without scheduling side effects", () => {
+  it("records a human-selected native team as an operational portal job", () => {
     for (const marker of [
       "activeAssignmentsByBookingId",
       'bookingAssignments.status, "assigned"',
@@ -51,15 +52,16 @@ describe("native booking source contract", () => {
       "assignedByAgentId: ctx.agent.agentId",
       'assignmentStatus: "assigned"',
     ]) expect(router).toContain(marker);
-    for (const prohibited of ["broadcastCleanerPortalJobsChanged", "importLaunch27Jobs", "sendSms"]) {
-      expect(router).not.toContain(prohibited);
-    }
+    expect(router).toContain("NATIVE_BOOKING_OPERATIONAL_ORIGIN");
+    expect(router).toContain("broadcastCleanerPortalJobsChanged");
+    expect(router).not.toContain("importLaunch27Jobs");
+    expect(router).not.toContain("sendSms");
   });
 
-  it("uses one shared live experience for popup and full-page surfaces", () => {
+  it("keeps the public booking route separate from the existing popup", () => {
     expect(experience).toContain('mode="live"');
     expect(popup).toContain('<BookingExperience surface="popup" />');
-    expect(bookPage).toContain('<BookingExperience surface="full_page" />');
+    expect(bookPage).toContain("BookingPaymentCheckout");
     expect(app).toContain('<Route path={"/book"} component={Book} />');
   });
 
@@ -69,9 +71,9 @@ describe("native booking source contract", () => {
     expect(widget).toContain("This simulation never saves customer details, creates a lead or booking, processes a card");
   });
 
-  it("shows existing in-progress funnel leads in the default Booking section immediately without hiding them behind the separate Leads tab", () => {
+  it("keeps in-progress funnel leads in the dedicated Leads tab", () => {
     expect(workspace).toContain('const inProgressFunnelRows = funnelRows.filter((row) => row.status === "lead")');
-    expect(workspace).toContain('if (view === "bookings") return [...inProgressFunnelRows, ...portalRequestRows, ...scheduledRows]');
+    expect(workspace).toContain('if (view === "bookings") return [...scheduledPortalRows, ...scheduledRows]');
     expect(workspace).toContain("return inProgressFunnelRows");
     expect(workspace).toContain("onBookingFunnelUpdate: refreshBookingAndFunnelQueries");
   });

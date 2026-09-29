@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, leadflowJobs } from "../drizzle/schema";
+import { bookings, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { storagePut } from "./storage";
@@ -31,10 +31,12 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Customer sign-off is temporarily unavailable." });
   const cleanerRows = await db.select({ id: cleanerProfiles.id, teamId: cleanerProfiles.launch27TeamId }).from(cleanerProfiles).where(eq(cleanerProfiles.id, cleanerId)).limit(1);
-  const cleaner = cleanerRows[0];
-  if (!cleaner?.teamId) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
+  const cleanerProfile = cleanerRows[0];
+  const teamId = cleanerProfile?.teamId;
+  if (teamId === null || teamId === undefined) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
+  const cleaner = { id: cleanerProfile.id, teamId };
   const leadflowJobId = parseLeadflowJobId(portalJobKey);
-  const jobRows = await db.select({ id: leadflowJobs.id, customerName: leadflowJobs.customerName, customerPhone: leadflowJobs.customerPhone, customerEmail: leadflowJobs.customerEmail }).from(leadflowJobs).where(and(
+  const jobRows = await db.select({ id: leadflowJobs.id, bookingId: leadflowJobs.bookingId, customerName: leadflowJobs.customerName, customerPhone: leadflowJobs.customerPhone, customerEmail: leadflowJobs.customerEmail }).from(leadflowJobs).where(and(
     eq(leadflowJobs.id, leadflowJobId),
     eq(leadflowJobs.teamId, cleaner.teamId),
     ne(leadflowJobs.bookingStatus, "cancelled"),
@@ -200,6 +202,9 @@ export const cleanerPortalSignoffRouter = router({
       startedAt: progress.startedAt,
       updatedAt: progress.updatedAt,
     } });
+    if (job.bookingId !== null) {
+      await db.update(bookings).set({ status: "completed", updatedAt: now }).where(eq(bookings.id, job.bookingId));
+    }
     broadcastOpsUpdate("job_update", { jobId: job.id });
     sendLeadflowCompletionReviewSms(job.id).catch(error =>
       console.error("[LeadflowCompletionReviewSms] Unhandled completion-review delivery error:", error)

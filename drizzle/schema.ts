@@ -1233,6 +1233,8 @@ export const leadflowJobs = mysqlTable("leadflow_jobs", {
   launch27BookingId: int("launch27BookingId"),
   /** Reserved for future LeadFlow-native recurrence; not populated by Launch27 import. */
   bookingSeriesId: int("bookingSeriesId"),
+  /** Native booking that created this operational job; null for Launch27 imports. */
+  bookingId: int("bookingId"),
   jobDate: varchar("jobDate", { length: 10 }).notNull(),
   serviceDateTime: varchar("serviceDateTime", { length: 50 }),
   customerName: varchar("customerName", { length: 255 }).notNull(),
@@ -4438,6 +4440,7 @@ export const bookings = mysqlTable("bookings", {
   firstCleaningTotalCents: int("firstCleaningTotalCents").notNull(),
   futureVisitTotalCents: int("futureVisitTotalCents"),
   priceSnapshot: json("priceSnapshot").notNull(),
+  companyNotes: text("companyNotes"),
   expiresAt: bigint("expiresAt", { mode: "number" }),
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
   updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),

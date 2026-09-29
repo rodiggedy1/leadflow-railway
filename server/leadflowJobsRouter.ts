@@ -32,6 +32,13 @@ function parseBookingPhotoReference(bookingKey: string) {
   return { source, sourceId };
 }
 
+async function resolveOperationalJobId(db: Db, source: string, sourceId: number) {
+  if (source === "leadflow") return sourceId;
+  if (source !== "booking") return null;
+  const rows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.bookingId, sourceId)).limit(1);
+  return rows[0]?.id ?? null;
+}
+
 const dayBoardInput = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -864,10 +871,8 @@ export const leadflowJobsRouter = router({
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
-    // The Booking detail has one source-agnostic gallery. Existing isolated uploads
-    // are keyed to LeadFlow jobs; other booking sources correctly return no photos
-    // until their cleaner portal upload path is introduced.
-    if (source !== "leadflow") return [];
+    const operationalJobId = await resolveOperationalJobId(db, source, sourceId);
+    if (operationalJobId === null) return [];
     return db
       .select({
         id: cleanerPortalJobPhotos.id,
@@ -878,7 +883,7 @@ export const leadflowJobsRouter = router({
         createdAt: cleanerPortalJobPhotos.createdAt,
       })
       .from(cleanerPortalJobPhotos)
-      .where(eq(cleanerPortalJobPhotos.leadflowJobId, sourceId))
+      .where(eq(cleanerPortalJobPhotos.leadflowJobId, operationalJobId))
       .orderBy(asc(cleanerPortalJobPhotos.createdAt), asc(cleanerPortalJobPhotos.id));
   }),
 
@@ -886,14 +891,15 @@ export const leadflowJobsRouter = router({
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
-    if (source !== "leadflow") return null;
+    const operationalJobId = await resolveOperationalJobId(db, source, sourceId);
+    if (operationalJobId === null) return null;
     const rows = await db.select({
       signatureUrl: cleanerPortalJobSignoffs.signatureUrl,
       customerResponse: cleanerPortalJobSignoffs.customerResponse,
       customerNotes: cleanerPortalJobSignoffs.customerNotes,
       customerNotHome: cleanerPortalJobSignoffs.customerNotHome,
       signedOffAt: cleanerPortalJobSignoffs.signedOffAt,
-    }).from(cleanerPortalJobSignoffs).where(eq(cleanerPortalJobSignoffs.leadflowJobId, sourceId)).limit(1);
+    }).from(cleanerPortalJobSignoffs).where(eq(cleanerPortalJobSignoffs.leadflowJobId, operationalJobId)).limit(1);
     return rows[0] ?? null;
   }),
 
@@ -901,7 +907,8 @@ export const leadflowJobsRouter = router({
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
-    if (source !== "leadflow") return [];
+    const operationalJobId = await resolveOperationalJobId(db, source, sourceId);
+    if (operationalJobId === null) return [];
     return db.select({
       id: leadflowBookingMessages.id,
       senderRole: leadflowBookingMessages.senderRole,
@@ -909,7 +916,7 @@ export const leadflowJobsRouter = router({
       notificationStatus: leadflowBookingMessages.notificationStatus,
       notificationError: leadflowBookingMessages.notificationError,
       createdAt: leadflowBookingMessages.createdAt,
-    }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, sourceId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
+    }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, operationalJobId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
   }),
 
   getPayrollPayoutSummary: agentProcedure.input(z.object({ jobId: z.number().int().positive() })).query(async ({ input }) => {

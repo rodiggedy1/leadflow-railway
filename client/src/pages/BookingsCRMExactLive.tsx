@@ -2,6 +2,7 @@ import NativeBookingsWorkspace from "@/components/NativeBookingsWorkspace";
 import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { trpc } from "@/lib/trpc";
+import { PUBLIC_BOOKING_PRICED_EXTRAS } from "@shared/publicBookingPricing";
 import { useEffect, useState } from "react";
 import {
   CalendarDays,
@@ -161,6 +162,46 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
   </section>;
 }
 
+function NativeBookingCommercialEditor({ active, model }: { active: any; model: any }) {
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [finalPrice, setFinalPrice] = useState("");
+  const [companyNotes, setCompanyNotes] = useState("");
+  useEffect(() => {
+    setQuantities(Object.fromEntries(active.extras.map((extra: any) => [extra.id, extra.quantity])));
+    setFinalPrice((active.firstCleaningTotalCents / 100).toFixed(2));
+    setCompanyNotes(active.companyNotes ?? "");
+  }, [active.companyNotes, active.extras, active.firstCleaningTotalCents, active.key]);
+  const updateQuantity = (id: string, nextQuantity: number) => {
+    setQuantities((current) => {
+      const next = { ...current };
+      const currentQuantity = current[id] ?? 0;
+      const boundedQuantity = Math.max(0, Math.min(50, nextQuantity));
+      if (boundedQuantity < 1) delete next[id]; else next[id] = boundedQuantity;
+      const priceDeltaCents = (boundedQuantity - currentQuantity) * (PUBLIC_BOOKING_PRICED_EXTRAS[id]?.unitPrice ?? 0) * 100;
+      if (priceDeltaCents) setFinalPrice((currentPrice) => {
+        const currentCents = Math.round(Number(currentPrice) * 100);
+        return Number.isFinite(currentCents) ? (Math.max(0, currentCents + priceDeltaCents) / 100).toFixed(2) : currentPrice;
+      });
+      return next;
+    });
+  };
+  const parsedFinalPrice = Math.round(Number(finalPrice) * 100);
+  const finalPriceIsValid = /^\d+(?:\.\d{1,2})?$/.test(finalPrice) && Number.isSafeInteger(parsedFinalPrice) && parsedFinalPrice >= 0;
+  const extras = Object.entries(quantities).filter(([, quantity]) => Number.isInteger(quantity) && quantity > 0).map(([id, quantity]) => ({ id, quantity }));
+  const isPending = model.updateBookingDetails.isPending;
+  return <section className="bcr-editor-section bcr-booking-commercial-editor">
+    <div className="bcr-section-title"><div><small>BOOKING DETAILS</small><h3>Extras, price &amp; company notes</h3></div><span>First visit</span></div>
+    <div className="bcr-extra-editor-grid" aria-label="Additional booking extras">{Object.entries(PUBLIC_BOOKING_PRICED_EXTRAS).map(([id, extra]) => {
+      const quantity = quantities[id] ?? 0;
+      return <div className={quantity ? "bcr-extra-editor-item selected" : "bcr-extra-editor-item"} key={id}><span><strong>{extra.label}</strong><small>${extra.unitPrice}{extra.quantityUnit ? ` / ${extra.quantityUnit}` : ""}</small></span><div className="bcr-extra-stepper"><button type="button" aria-label={`Remove ${extra.label}`} disabled={isPending || quantity === 0} onClick={() => updateQuantity(id, quantity - 1)}>−</button><b>{quantity}</b><button type="button" aria-label={`Add ${extra.label}`} disabled={isPending || quantity >= 50} onClick={() => updateQuantity(id, quantity + 1)}>+</button></div></div>;
+    })}</div>
+    <label className="bcr-booking-price-input">Final price ($)<input inputMode="decimal" type="text" value={finalPrice} onChange={(event) => setFinalPrice(event.target.value)} disabled={isPending} aria-describedby="booking-price-hint" /></label>
+    <p id="booking-price-hint" className="bcr-editor-hint">This changes only the first-visit amount. {active.futureVisitTotalCents === null ? "There is no recurring visit price." : `Future visits remain $${(active.futureVisitTotalCents / 100).toFixed(0)}.`}</p>
+    <label className="bcr-booking-company-notes">Company notes<textarea value={companyNotes} maxLength={4000} onChange={(event) => setCompanyNotes(event.target.value)} disabled={isPending} placeholder="Internal only — not shown to the customer" /></label>
+    <div className="bcr-commercial-actions"><span>{model.updateBookingDetails.error?.message ?? "Internal notes stay with this booking."}</span><button type="button" disabled={!finalPriceIsValid || isPending} onClick={() => model.updateActiveBookingDetails({ extras, firstCleaningTotalCents: parsedFinalPrice, companyNotes: companyNotes.trim() || null })}>{isPending ? "Saving…" : "Save booking updates"}</button></div>
+  </section>;
+}
+
 function BookingDetailDrawer({ model }: { model: any }) {
   const { active } = model;
   if (!active) return null;
@@ -170,6 +211,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
     <div className="ocr-detail-drawer-scroll bcr-workspace-detail-scroll">
       <section className="bcr-detail-summary"><div><CalendarDays /><span><small>REQUESTED TIME</small><strong>{active.requestedLocalTime && active.requestedLocalDate ? `${displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}` : "Not selected yet"}</strong></span></div><div><MapPin /><span><small>ADDRESS</small><strong>{active.address ?? "Not entered yet"}</strong></span></div></section>
       <section className="bcr-editor-section"><div className="bcr-section-title"><div><small>SERVICE &amp; EXTRAS</small><h3>{active.serviceName ?? "Booking details in progress"}</h3></div><strong>{active.firstCleaningTotalCents === null ? "—" : `$${(active.firstCleaningTotalCents / 100).toFixed(0)}`}</strong></div><p className="bcr-home-line">{active.bedrooms === null || active.bathrooms === null ? "Room details not entered yet" : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}</p><div className="bcr-selected-extras">{active.extras.length ? active.extras.map((extra: any) => <button type="button" disabled key={extra.id}>{extra.label}{extra.quantity > 1 ? ` × ${extra.quantity}` : ""}</button>) : <button type="button" disabled>Nothing extra</button>}</div></section>
+      {active.source === "booking" && active.firstCleaningTotalCents !== null && <NativeBookingCommercialEditor active={active} model={model} />}
       <section className="bcr-editor-section"><small>RECURRING PREFERENCE</small>{active.source === "leadflow" ? <div className="bcr-choice-grid">{(["One time", "Weekly", "Bi-weekly", "Tri-weekly", "Monthly"] as const).map((frequency) => <button type="button" key={frequency} className={active.recurrence?.toLowerCase().replace(/-/g, "").startsWith(frequency.toLowerCase().replace("-", "")) ? "choice-active" : ""} disabled={model.updateLeadflowJob.isPending} onClick={() => model.updateLeadflowJob.mutate({ jobId: active.id, frequency }, { onSuccess: model.refreshBookingAndFunnelQueries })}>{frequency}</button>)}</div> : <div className="bcr-choice-grid"><button type="button" className="choice-active" disabled>{active.recurrence ? labelRecurrence(active.recurrence) : "Not selected"}</button></div>}<p className="bcr-editor-hint">{active.source === "leadflow" ? "The selected interval creates the next LeadFlow job at end of the service day." : !active.recurrence ? "Preference not entered yet." : active.recurrence === "one-time" ? "One-time request." : "No future visits were created. Confirm the recurring plan during review."}</p></section>
       <section className="bcr-editor-section"><small>ASSIGNED TEAM</small>{active.source === "booking" ? <label className="bcr-team-assignment-picker"><span><i style={{ background: active.assignedTeamName ? avatarColorFor(active.assignedTeamName) : "#353535" }}>{active.assignedTeamName ? initialsFor(active.assignedTeamName) : "?"}</i><strong>{active.assignedTeamName ?? "Choose a cleaning team"}</strong><small>{model.assignBookingTeam.isPending ? "Saving assignment…" : active.assignedTeamName ? "Native booking assignment" : "Select an active team"}</small></span><select aria-label="Assign cleaning team" value={active.assignedTeamId ?? ""} disabled={model.assignBookingTeam.isPending || model.bookingTeamsQuery.isLoading || model.bookingTeams.length === 0} onChange={(event) => model.assignActiveBookingTeam(Number(event.target.value))}><option value="" disabled>{model.bookingTeamsQuery.isLoading ? "Loading teams…" : model.bookingTeams.length ? "Choose a team" : "No active teams"}</option>{active.assignedTeamId && !model.bookingTeams.some((team: any) => team.id === active.assignedTeamId) && <option value={active.assignedTeamId} disabled>{active.assignedTeamName}</option>}{model.bookingTeams.map((team: any) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label> : <button type="button" className="bcr-team-option active" disabled><i style={{ background: active.assignedTeamName ? avatarColorFor(active.assignedTeamName) : "#353535" }}>{active.assignedTeamName ? initialsFor(active.assignedTeamName) : "?"}</i><span><strong>{active.assignedTeamName ?? "Unassigned"}</strong><small>{active.assignedTeamName ? "Launch27 assignment" : "No team assigned"}</small></span></button>}</section>
       <BookingPayrollPanel active={active} model={model} />

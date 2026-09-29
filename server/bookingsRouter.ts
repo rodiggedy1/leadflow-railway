@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { appSettings, bookingAssignments, bookingSeries, bookings, customerPortalServiceRequests, schedulingTeams } from "../drizzle/schema";
+import { appSettings, bookingAssignments, bookingSeries, bookings, customerPortalServiceRequests, leadflowJobs, schedulingTeams } from "../drizzle/schema";
 import {
   BOOKING_WIDGET_DRAFT_SETTING,
   DEFAULT_BOOKING_WIDGET_DRAFT,
@@ -22,10 +22,37 @@ import {
 } from "./bookingsService";
 import { ENV } from "./_core/env";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
+import { PUBLIC_BOOKING_PRICED_EXTRAS } from "../shared/publicBookingPricing";
+import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
+import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 
 const PREPARE_WINDOW_MS = 10 * 60_000;
 const PREPARE_LIMIT = 20;
 const prepareAttempts = new Map<string, { count: number; resetAt: number }>();
+const NATIVE_BOOKING_OPERATIONAL_ORIGIN = "native_booking";
+
+function nativeBookingFrequency(recurrence: string) {
+  if (recurrence === "weekly") return "Weekly";
+  if (recurrence === "biweekly") return "Bi-weekly";
+  if (recurrence === "monthly") return "Monthly";
+  return "One time";
+}
+
+function nativeBookingServiceDateTime(booking: typeof bookings.$inferSelect): string {
+  return new Date(businessLocalDateTimeToUtcMs(
+    booking.requestedLocalDate,
+    booking.requestedLocalTime,
+    booking.requestedTimeZone,
+  )).toISOString();
+}
+
+function nativeBookingExtras(booking: typeof bookings.$inferSelect): string {
+  return JSON.stringify(booking.extras.map(extra => extra.id));
+}
+
+function publishNativeBookingRefresh() {
+  broadcastCleanerPortalJobsChanged();
+}
 
 function requestKey(req: { headers: { [key: string]: string | string[] | undefined }; socket?: { remoteAddress?: string | null } }): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -187,6 +214,7 @@ function mapAdminBooking(row: typeof bookings.$inferSelect, assignment?: ActiveB
     pricingVersion: row.pricingVersion,
     firstCleaningTotalCents: row.firstCleaningTotalCents,
     futureVisitTotalCents: row.futureVisitTotalCents,
+    companyNotes: row.companyNotes,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -272,9 +300,10 @@ export const bookingsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
-      return db.transaction(async (tx) => {
-        const bookingRows = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
-        if (!bookingRows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
+      const assignment = await db.transaction(async (tx) => {
+        const bookingRows = await tx.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
+        const booking = bookingRows[0];
+        if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
         const teamRows = await tx
           .select({ id: schedulingTeams.id, name: schedulingTeams.name })
           .from(schedulingTeams)
@@ -299,8 +328,88 @@ export const bookingsRouter = router({
           updatedAt: now,
         });
         await tx.update(bookings).set({ assignmentStatus: "assigned", updatedAt: now }).where(eq(bookings.id, input.bookingId));
+        const operationalRows = await tx
+          .select({ id: leadflowJobs.id })
+          .from(leadflowJobs)
+          .where(and(eq(leadflowJobs.bookingId, booking.id), eq(leadflowJobs.jobDate, booking.requestedLocalDate)))
+          .limit(1);
+        const operationalJob = {
+          bookingId: booking.id,
+          jobDate: booking.requestedLocalDate,
+          serviceDateTime: nativeBookingServiceDateTime(booking),
+          customerName: booking.customerName,
+          customerPhone: booking.customerPhone,
+          customerEmail: booking.customerEmail,
+          jobAddress: booking.address,
+          serviceName: booking.serviceName,
+          bedrooms: booking.bedrooms,
+          bathrooms: booking.bathrooms,
+          extras: nativeBookingExtras(booking),
+          frequency: nativeBookingFrequency(booking.recurrence),
+          teamName: team.name,
+          teamId: team.id,
+          customerNotes: booking.specialRequestNotes.join("\n") || null,
+          jobTotalCents: booking.firstCleaningTotalCents,
+          hasStripeCard: booking.paymentStatus === "card_on_file" || booking.paymentStatus === "captured" ? 1 : 0,
+          paymentBrand: null,
+          paymentLast4: null,
+        };
+        if (operationalRows[0]) {
+          await tx.update(leadflowJobs).set({ ...operationalJob, updatedAt: now }).where(eq(leadflowJobs.id, operationalRows[0].id));
+        } else {
+          await tx.insert(leadflowJobs).values({
+            origin: NATIVE_BOOKING_OPERATIONAL_ORIGIN,
+            launch27BookingId: null,
+            bookingSeriesId: null,
+            bookingStatus: "assigned",
+            ...operationalJob,
+          });
+        }
         return { bookingId: input.bookingId, teamId: team.id, teamName: team.name, assignmentStatus: "assigned" as const };
       });
+      publishNativeBookingRefresh();
+      return assignment;
+    }),
+  updateDetails: bookingsAgentProcedure
+    .input(z.object({
+      bookingId: z.number().int().positive(),
+      extras: z.array(z.object({ id: z.string().trim().min(1).max(80), quantity: z.number().int().min(1).max(50) })).max(50),
+      firstCleaningTotalCents: z.number().int().min(0).max(10_000_000),
+      companyNotes: z.string().trim().max(4_000).nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const updatedBooking = await db.transaction(async (tx) => {
+        const rows = await tx.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
+        const booking = rows[0];
+        if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
+        const existingExtrasById = new Map(booking.extras.map(extra => [extra.id, extra]));
+        const seenExtras = new Set<string>();
+        const extras = input.extras.map(selection => {
+          if (seenExtras.has(selection.id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Each extra can only be selected once." });
+          seenExtras.add(selection.id);
+          const catalogExtra = PUBLIC_BOOKING_PRICED_EXTRAS[selection.id];
+          const existingExtra = existingExtrasById.get(selection.id);
+          if (!catalogExtra && !existingExtra) throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported booking extra." });
+          const unitPriceCents = catalogExtra ? catalogExtra.unitPrice * 100 : existingExtra!.unitPriceCents;
+          return {
+            id: selection.id,
+            label: catalogExtra?.label ?? existingExtra!.label,
+            quantity: selection.quantity,
+            unitPriceCents,
+            totalCents: unitPriceCents * selection.quantity,
+          };
+        }).sort((left, right) => left.id.localeCompare(right.id));
+        const companyNotes = input.companyNotes?.trim() || null;
+        const now = new Date();
+        await tx.update(bookings).set({ extras, firstCleaningTotalCents: input.firstCleaningTotalCents, companyNotes, updatedAt: now }).where(eq(bookings.id, booking.id));
+        await tx.update(leadflowJobs).set({ extras: JSON.stringify(extras.map(extra => extra.id)), customerNotes: booking.specialRequestNotes.join("\n") || null, updatedAt: now }).where(eq(leadflowJobs.bookingId, booking.id));
+        await tx.update(leadflowJobs).set({ jobTotalCents: input.firstCleaningTotalCents, updatedAt: now }).where(and(eq(leadflowJobs.bookingId, booking.id), eq(leadflowJobs.jobDate, booking.requestedLocalDate)));
+        return { bookingId: booking.id, extras, firstCleaningTotalCents: input.firstCleaningTotalCents, companyNotes };
+      });
+      publishNativeBookingRefresh();
+      return updatedBooking;
     }),
   cancel: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))
@@ -310,6 +419,8 @@ export const bookingsRouter = router({
       const rows = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, input.id)).limit(1);
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
       await db.update(bookings).set({ status: "cancelled", updatedAt: new Date() }).where(eq(bookings.id, input.id));
+      await db.update(leadflowJobs).set({ bookingStatus: "cancelled", updatedAt: new Date() }).where(eq(leadflowJobs.bookingId, input.id));
+      publishNativeBookingRefresh();
       return { id: input.id, status: "cancelled" as const };
     }),
   staffRequests: bookingsAgentProcedure

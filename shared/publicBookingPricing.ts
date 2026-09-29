@@ -97,15 +97,15 @@ export type PublicBookingPriceSnapshot = {
   breakdown: PublicBookingPriceBreakdown;
 };
 
-const EXTRAS: Readonly<Record<string, { label: string; unitPrice: number }>> = {
+export const PUBLIC_BOOKING_PRICED_EXTRAS: Readonly<Record<string, { label: string; unitPrice: number; quantityUnit?: string }>> = {
   "inside-cabinets": { label: "Inside Cabinets", unitPrice: 50 },
   "inside-fridge": { label: "Inside Fridge", unitPrice: 45 },
   "inside-oven": { label: "Inside Oven", unitPrice: 45 },
-  "interior-windows": { label: "Interior Windows", unitPrice: 10 },
+  "interior-windows": { label: "Interior Windows", unitPrice: 10, quantityUnit: "window" },
   basement: { label: "Basement", unitPrice: 60 },
-  "organizing-hour": { label: "One Hour of Organizing", unitPrice: 70 },
-  "laundry-load": { label: "Laundry", unitPrice: 25 },
-  "wipe-walls-room": { label: "Wipe Walls", unitPrice: 20 },
+  "organizing-hour": { label: "One Hour of Organizing", unitPrice: 70, quantityUnit: "hour" },
+  "laundry-load": { label: "Laundry", unitPrice: 25, quantityUnit: "load" },
+  "wipe-walls-room": { label: "Wipe Walls", unitPrice: 20, quantityUnit: "room" },
   "sweep-garage": { label: "Sweep Garage", unitPrice: 30 },
 };
 
@@ -180,7 +180,7 @@ export function calculatePublicBookingPrice(
         1,
         50
       );
-      const extra = EXTRAS[selection.id];
+      const extra = PUBLIC_BOOKING_PRICED_EXTRAS[selection.id];
       if (!extra) throw new Error(`Unsupported extra: ${selection.id}`);
       return {
         id: selection.id,

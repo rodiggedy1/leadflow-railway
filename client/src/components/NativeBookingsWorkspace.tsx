@@ -40,6 +40,8 @@ type WorkspaceRow = {
   stripePaymentMethodId: string | null;
   paymentChargedAt: number | null;
   firstCleaningTotalCents: number | null;
+  futureVisitTotalCents: number | null;
+  companyNotes: string | null;
 };
 
 const ACTIVE_BOOKING_SOURCES: WorkspaceRow["source"][] = ["booking", "funnel", "leadflow"];
@@ -190,6 +192,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
   const cancelLeadflowJob = trpc.leadflowJobs.cancel.useMutation();
   const cancelBooking = trpc.bookings.cancel.useMutation();
   const assignBookingTeam = trpc.bookings.assignTeam.useMutation();
+  const updateBookingDetails = trpc.bookings.updateDetails.useMutation();
   const cancelFunnel = trpc.bookingFunnel.cancel.useMutation();
   const cancelPortalRequest = trpc.bookings.cancelStaffRequest.useMutation();
   const selectedBookingId = activeKey?.startsWith("booking:") ? Number(activeKey.slice("booking:".length)) : null;
@@ -228,7 +231,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
       address: booking.address, serviceName: booking.serviceName, bedrooms: booking.bedrooms, bathrooms: booking.bathrooms,
       recurrence: booking.recurrence, extras: extrasFrom(booking.extras), specialRequestNotes: notesFrom(booking.specialRequestNotes),
       assignmentStatus: booking.assignmentStatus, assignedTeamId: booking.assignedTeamId, assignedTeamName: booking.assignedTeamName, paymentStatus: booking.paymentStatus, paymentBrand: null, paymentLast4: null,
-      stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: booking.firstCleaningTotalCents,
+      stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: booking.firstCleaningTotalCents, futureVisitTotalCents: booking.futureVisitTotalCents, companyNotes: booking.companyNotes,
     }));
     const funnelRows = funnelLeads.filter((lead) => !lead.bookingId).map((lead) => ({
       key: `funnel:${lead.id}`, source: "funnel" as const, id: lead.id, publicNumber: lead.publicFunnelNumber,
@@ -237,7 +240,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
       address: lead.address, serviceName: lead.serviceName, bedrooms: lead.bedrooms, bathrooms: lead.bathrooms,
       recurrence: lead.recurrence, extras: funnelExtrasFrom(lead.extras), specialRequestNotes: notesFrom(lead.specialRequestNotes),
       assignmentStatus: "unassigned", assignedTeamName: null, paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started", paymentBrand: null,
-      paymentLast4: lead.paymentLast4, stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: lead.firstCleaningTotalCents,
+      paymentLast4: lead.paymentLast4, stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: lead.firstCleaningTotalCents, futureVisitTotalCents: lead.futureVisitTotalCents, companyNotes: null,
     }));
     const inProgressFunnelRows = funnelRows.filter((row) => row.status === "lead");
     const portalRequestRows = portalRequests.filter((request) => !isCancelledBookingStatus(request.status)).map((request) => ({
@@ -248,9 +251,9 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
       extras: [], specialRequestNotes: request.customerRequest ? [request.customerRequest] : [], assignmentStatus: "unassigned", assignedTeamName: null,
       paymentStatus: request.paymentChargedAt ? "captured" : request.stripePaymentMethodId && request.paymentLast4 ? "card_on_file" : "not_started",
       paymentBrand: request.paymentBrand, paymentLast4: request.paymentLast4, stripePaymentMethodId: request.stripePaymentMethodId,
-      paymentChargedAt: request.paymentChargedAt, firstCleaningTotalCents: request.estimatedTotalCents,
+      paymentChargedAt: request.paymentChargedAt, firstCleaningTotalCents: request.estimatedTotalCents, futureVisitTotalCents: null, companyNotes: null,
     }));
-    const importedRows = (leadflowJobsQuery.data ?? []).filter((job) => !isCancelledBookingStatus(job.bookingStatus)).map((job) => {
+    const importedRows = (leadflowJobsQuery.data ?? []).filter((job) => job.bookingId === null && !isCancelledBookingStatus(job.bookingStatus)).map((job) => {
       const isRealLaunch27Import = job.origin === LEADFLOW_JOB_ORIGIN_LAUNCH27 && job.launch27BookingId !== null;
       const sourceReviewStatus = !isRealLaunch27Import && job.bookingStatus !== "rescheduled";
       return {
@@ -260,7 +263,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
       address: job.jobAddress, serviceName: job.serviceName, bedrooms: job.bedrooms, bathrooms: job.bathrooms,
       recurrence: job.frequency, extras: importedExtrasFrom(job.extras), specialRequestNotes: job.customerNotes ? [job.customerNotes] : [],
       assignmentStatus: job.teamName ? "assigned" : "unassigned", assignedTeamName: job.teamName, paymentStatus: job.hasStripeCard ? "card_on_file" : "not_started", paymentBrand: job.paymentBrand,
-      paymentLast4: job.paymentLast4, stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: job.jobTotalCents,
+      paymentLast4: job.paymentLast4, stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: job.jobTotalCents, futureVisitTotalCents: null, companyNotes: null,
     }});
     const scheduledRows = [...funnelRows.filter((row) => row.status !== "lead" && !isCancelledBookingStatus(row.status)), ...bookingRows, ...importedRows]
       .filter((row) => row.requestedLocalDate === date)
@@ -280,7 +283,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
         address: booking.address, serviceName: booking.serviceName, bedrooms: booking.bedrooms, bathrooms: booking.bathrooms,
         recurrence: booking.recurrence, extras: extrasFrom(booking.extras), specialRequestNotes: notesFrom(booking.specialRequestNotes),
         assignmentStatus: booking.assignmentStatus, assignedTeamId: booking.assignedTeamId, assignedTeamName: booking.assignedTeamName, paymentStatus: booking.paymentStatus, paymentBrand: null, paymentLast4: null,
-        stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: booking.firstCleaningTotalCents,
+        stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: booking.firstCleaningTotalCents, futureVisitTotalCents: booking.futureVisitTotalCents, companyNotes: booking.companyNotes,
       };
     }
     if (selectedFunnelId !== null && funnelDetailQuery.data) {
@@ -292,7 +295,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
         address: lead.address, serviceName: lead.serviceName, bedrooms: lead.bedrooms, bathrooms: lead.bathrooms,
         recurrence: lead.recurrence, extras: funnelExtrasFrom(lead.extras), specialRequestNotes: notesFrom(lead.specialRequestNotes),
         assignmentStatus: "unassigned", assignedTeamName: null, paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started", paymentBrand: null,
-        paymentLast4: lead.paymentLast4, stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: lead.firstCleaningTotalCents,
+        paymentLast4: lead.paymentLast4, stripePaymentMethodId: null, paymentChargedAt: null, firstCleaningTotalCents: lead.firstCleaningTotalCents, futureVisitTotalCents: lead.futureVisitTotalCents, companyNotes: null,
       };
     }
     return rows.find((row) => row.key === activeKey) ?? null;
@@ -312,7 +315,7 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
   const staffPhotosQuery = trpc.leadflowJobs.staffPhotos.useQuery({ bookingKey: activePhotoBookingKey }, { enabled: active !== null, staleTime: 10_000 });
   const staffSignoffQuery = trpc.leadflowJobs.staffSignoff.useQuery({ bookingKey: activePhotoBookingKey }, { enabled: active !== null, staleTime: 10_000 });
   const staffPhotos = staffPhotosQuery.data ?? [];
-  const staffMessagesQuery = trpc.leadflowJobs.staffMessages.useQuery({ bookingKey: activePhotoBookingKey }, { enabled: active?.source === "leadflow", staleTime: 10_000 });
+  const staffMessagesQuery = trpc.leadflowJobs.staffMessages.useQuery({ bookingKey: activePhotoBookingKey }, { enabled: active?.source === "leadflow" || active?.source === "booking", staleTime: 10_000 });
   const staffMessages = (staffMessagesQuery.data ?? []) as StaffBookingMessage[];
   const beforePhotos = staffPhotos.filter(photo => photo.photoType === "before");
   const afterPhotos = staffPhotos.filter(photo => photo.photoType === "after" || photo.photoType === "general");
@@ -349,6 +352,16 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
         refreshBookingAndFunnelQueries();
       },
       onError: (error) => setImportSummary(`Team assignment could not be saved: ${error.message}`),
+    });
+  };
+  const updateActiveBookingDetails = (input: { extras: Array<{ id: string; quantity: number }>; firstCleaningTotalCents: number; companyNotes: string | null }) => {
+    if (!active || active.source !== "booking" || updateBookingDetails.isPending) return;
+    updateBookingDetails.mutate({ bookingId: active.id, ...input }, {
+      onSuccess: () => {
+        setImportSummary(`${active.customerName}'s booking updates were saved.`);
+        refreshBookingAndFunnelQueries();
+      },
+      onError: (error) => setImportSummary(`Booking updates could not be saved: ${error.message}`),
     });
   };
   const cancelActiveRecord = () => {
@@ -423,6 +436,8 @@ export default function NativeBookingsWorkspace({ realtimeEnabled, render }: { r
     status,
     syncLeadflowJobsDate,
     updateLeadflowJob,
+    updateActiveBookingDetails,
+    updateBookingDetails,
     view,
     query,
     copyCustomerMagicLink,
