@@ -95,20 +95,38 @@ function relativeTime(timestamp?: number | null) {
   return `${Math.floor(age / 86_400_000)}d ago`;
 }
 
+function normalizeEmailAddress(value?: string | null) {
+  const raw = value?.trim() ?? "";
+  if (!raw) return null;
+  const angleAddress = raw.match(/<\s*([^<>]+?)\s*>/)?.[1];
+  const unwrapped = (angleAddress ?? raw).replace(/^['"]|['"]$/g, "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(unwrapped) ? unwrapped : null;
+}
+
 function resolveIdentity(from?: string | null, fromEmail?: string | null): EmailIdentity {
-  const relayDomains = ["launch27mail.com", "maidsinblacksupport.com"];
   const rawFrom = from ?? "";
   const rawFromEmail = fromEmail ?? "";
-  const fromLooksLikeEmail = /\S+@\S+/.test(rawFrom);
-  const isRelay = relayDomains.some(domain => rawFromEmail.toLowerCase().includes(domain));
-  const email = fromLooksLikeEmail ? rawFrom : (isRelay ? rawFrom : rawFromEmail);
-  const name = fromLooksLikeEmail ? rawFrom.split("@")[0] : (rawFrom || rawFromEmail.split("@")[0] || "Unknown");
+  const email = normalizeEmailAddress(rawFromEmail) ?? normalizeEmailAddress(rawFrom) ?? "";
+  const fromLooksLikeEmail = Boolean(normalizeEmailAddress(rawFrom));
+  const name = fromLooksLikeEmail
+    ? rawFrom.replace(/<[^<>]+>/, "").replace(/^['"]|['"]$/g, "").trim() || email.split("@")[0]
+    : (rawFrom || email.split("@")[0] || "Unknown");
   return { name, email, initials: initialsFor(name) };
 }
 
 function validEmailOrNull(value?: string | null) {
-  const email = value?.trim() ?? "";
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+  return normalizeEmailAddress(value);
+}
+
+function replyRecipient(detail?: LiveEmailDetail) {
+  const inboxEmail = detail?.inboxEmail?.toLowerCase() ?? "";
+  const latestInbound = [...(detail?.messages ?? [])]
+    .reverse()
+    .find(message => !inboxEmail || message.fromEmail?.toLowerCase() !== inboxEmail);
+  return normalizeEmailAddress(latestInbound?.replyToEmail)
+    ?? normalizeEmailAddress(latestInbound?.fromEmail)
+    ?? normalizeEmailAddress(detail?.fromEmail)
+    ?? normalizeEmailAddress(detail?.from);
 }
 
 function bookingTimeLabel(value?: string | null) {
@@ -218,14 +236,11 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
   // Direct visual/body treatment copied from CsInbox2 Email detail.
   const thread = detail;
   const inboxEmail = (thread?.inboxEmail ?? "").toLowerCase();
-  const relayDomains = ["launch27mail.com", "maidsinblacksupport.com"];
   const rawFrom = thread?.from ?? "";
-  const rawFromEmail = thread?.fromEmail ?? "";
-  const isRelay = relayDomains.some(domain => rawFromEmail.toLowerCase().includes(domain));
-  const fromLooksLikeEmail = /\S+@\S+/.test(rawFrom);
-  const senderEmail = fromLooksLikeEmail ? rawFrom : (isRelay ? rawFrom : rawFromEmail);
-  const senderName = fromLooksLikeEmail ? rawFrom.split("@")[0] : (rawFrom || rawFromEmail.split("@")[0] || "Unknown");
-  const initials = senderName.replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map(word => word[0]?.toUpperCase()).join("") || "?";
+  const senderEmail = replyRecipient(detail);
+  const senderIdentity = resolveIdentity(rawFrom, senderEmail);
+  const senderName = senderIdentity.name;
+  const initials = senderIdentity.initials;
   const subjectRaw = thread?.subject ?? "Email Thread";
   const subject = subjectRaw.replace(/^\[From:[^\]]*\]\s*/i, "").trim() || subjectRaw;
   const messages = thread?.messages ?? [];
@@ -483,14 +498,15 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
   const sendReply = () => {
     if (!selectedThreadId || !emailReply.trim()) return;
     const currentDetail = detail;
-    const identity = resolveIdentity(currentDetail?.from, currentDetail?.fromEmail);
+    const identity = resolveIdentity(currentDetail?.from, replyRecipient(currentDetail));
     const subject = (currentDetail?.subject ?? "Email Thread").replace(/^\[From:[^\]]*\]\s*/i, "").trim() || "Email Thread";
-    if (!identity.email) {
+    const recipient = replyRecipient(currentDetail);
+    if (!recipient) {
       toast.error("No reply address is available for this thread");
       return;
     }
     sendEmailReply.mutate(
-      { threadId: selectedThreadId, to: identity.email, subject, bodyHtml: emailReply.split("\n").join("<br>") },
+      { threadId: selectedThreadId, to: recipient, subject, bodyHtml: emailReply.split("\n").join("<br>") },
       {
         onSuccess: () => {
           setSentRecipient(identity);

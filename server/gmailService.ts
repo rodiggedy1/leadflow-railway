@@ -199,16 +199,22 @@ function extractBody(payload: any): { html: string; text: string } {
   return { html, text };
 }
 
+function normalizeEmailAddress(value?: string | null): string | null {
+  const raw = value?.trim() ?? "";
+  if (!raw) return null;
+  const angleAddress = raw.match(/<\s*([^<>]+?)\s*>/)?.[1];
+  const unwrapped = (angleAddress ?? raw).replace(/^['"]|['"]$/g, "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(unwrapped) ? unwrapped : null;
+}
+
 function parseMessage(msg: any): GmailMessage {
   const headers: Record<string, string> = {};
   (msg.payload?.headers ?? []).forEach((h: any) => { headers[h.name.toLowerCase()] = h.value; });
   const from = headers["from"] ?? "";
-  const fromEmailMatch = from.match(/<(.+?)>/) ?? from.match(/(\S+@\S+)/);
-  const fromEmail = fromEmailMatch?.[1] ?? from;
-  const fromName = from.replace(/<.+?>/, "").trim() || fromEmail;
+  const fromEmail = normalizeEmailAddress(from);
+  const fromName = from.replace(/<.+?>/, "").trim() || fromEmail || "Unknown sender";
   const replyToRaw = headers["reply-to"] ?? "";
-  const replyToMatch = replyToRaw.match(/<(.+?)>/) ?? replyToRaw.match(/(\S+@\S+)/);
-  const replyToEmail: string | null = replyToMatch?.[1] ?? (replyToRaw.includes("@") ? replyToRaw.trim() : null);
+  const replyToEmail = normalizeEmailAddress(replyToRaw);
   const { html, text } = extractBody(msg.payload);
   const attachments: GmailMessage["attachments"] = [];
   function findAttachments(part: any) {
@@ -220,7 +226,7 @@ function parseMessage(msg: any): GmailMessage {
   }
   findAttachments(msg.payload);
   return {
-    id: msg.id, threadId: msg.threadId, from: fromName, fromEmail, replyToEmail,
+    id: msg.id, threadId: msg.threadId, from: fromName, fromEmail: fromEmail ?? "", replyToEmail,
     to: headers["to"] ?? "", subject: headers["subject"] ?? "(no subject)",
     snippet: msg.snippet ?? "", bodyHtml: html, bodyText: text,
     date: parseInt(msg.internalDate ?? "0"),
