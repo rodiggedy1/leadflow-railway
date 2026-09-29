@@ -65,6 +65,7 @@ import { missedCallsRouter } from "./missedCallsRouter";
 import { gmailRouter } from "./gmailRouter";
 import { callMatrixRouter } from "./callMatrixRouter";
 import { stripeRouter } from "./stripeRouter";
+import { cashAppRouter } from "./cashAppRouter";
 import { tasksRouter } from "./tasksRouter";
 import { bookingsRouter } from "./bookingsRouter";
 import { bookingFunnelRouter } from "./bookingFunnelRouter";
@@ -126,6 +127,7 @@ export const appRouter = router({
   gmail: gmailRouter,
   callMatrix: callMatrixRouter,
   stripe: stripeRouter,
+  cashApp: cashAppRouter,
   tasks: tasksRouter,
   bookings: bookingsRouter,
   bookingFunnel: bookingFunnelRouter,

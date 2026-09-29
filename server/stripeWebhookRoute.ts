@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import express from "express";
 import Stripe from "stripe";
 import { and, eq } from "drizzle-orm";
-import { bookingPaymentProfiles, bookings, paymentAuthorizations, stripeCustomers, stripeWebhookEvents } from "../drizzle/schema";
+import { bookingPaymentProfiles, bookings, cashAppPaymentTokens, paymentAuthorizations, stripeCustomers, stripeWebhookEvents } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
@@ -31,6 +31,25 @@ async function findBoundProfile(object: Stripe.SetupIntent | Stripe.PaymentInten
 async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
   const object = event.data.object;
   if (object.object !== "setup_intent" && object.object !== "payment_intent") return { status: "ignored" as const };
+  if (object.object === "payment_intent" && typeof object.metadata?.cashAppPaymentToken === "string") {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+    const token = object.metadata.cashAppPaymentToken;
+    const [payment] = await db.select().from(cashAppPaymentTokens).where(eq(cashAppPaymentTokens.token, token)).limit(1);
+    if (!payment || payment.stripePaymentIntentId !== object.id) return { status: "ignored" as const };
+    const now = Date.now();
+    if (event.type === "payment_intent.succeeded") {
+      await db.update(cashAppPaymentTokens).set({ status: "paid", paidAt: now }).where(eq(cashAppPaymentTokens.id, payment.id));
+    } else if (event.type === "payment_intent.payment_failed") {
+      await db.update(cashAppPaymentTokens).set({ status: "failed" }).where(eq(cashAppPaymentTokens.id, payment.id));
+    } else if (event.type === "payment_intent.canceled") {
+      await db.update(cashAppPaymentTokens).set({ status: "cancelled" }).where(eq(cashAppPaymentTokens.id, payment.id));
+    } else {
+      return { status: "ignored" as const };
+    }
+    await db.update(stripeWebhookEvents).set({ status: "processed", processedAt: new Date() }).where(eq(stripeWebhookEvents.id, eventRecordId));
+    return { status: "processed" as const };
+  }
   const bound = await findBoundProfile(object);
   if (!bound) return { status: "ignored" as const };
   const now = new Date();

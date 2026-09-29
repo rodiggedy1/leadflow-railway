@@ -57,6 +57,8 @@ const EmailInbox = lazy(() => import("./pages/EmailInbox"));
 const SenderPoliciesPage = lazy(() => import("./pages/SenderPoliciesPage"));
 const CleanerCalls = lazy(() => import("./pages/CleanerCalls"));
 const CardAuth = lazy(() => import("./pages/CardAuth"));
+const CashAppPay = lazy(() => import("./pages/CashAppPay"));
+const CashAppPayments = lazy(() => import("./pages/CashAppPayments"));
 const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalConnected"));
 const SmsCampaigns = lazy(() => import("./pages/SmsCampaigns"));
 const IconPicker = lazy(() => import("./pages/IconPicker"));
@@ -249,6 +251,8 @@ function Router() {
         <Route path={"/admin/ai-calls"} component={AdminAiCallsExactReviewRoute} />
         <Route path={"/admin/cleaner-calls"} component={CleanerCalls} />
         <Route path={"/pay/:token"} component={CardAuth} />
+        <Route path={"/cashapp-pay/:token"} component={CashAppPay} />
+        <Route path={"/admin/cashapp-pay"} component={() => <AdminPageGuard pageId="payments"><CashAppPayments /></AdminPageGuard>} />
         <Route path={"/admin/payments"} component={AdminPaymentsExactReviewRoute} />
         <Route path={"/admin/sms-campaigns"} component={SmsCampaigns} />
         <Route path={"/admin/readiness"} component={ReadinessDashboard} />
