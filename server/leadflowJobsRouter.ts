@@ -1,8 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { activityLog, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
-import { leadflowJobPayrollAdjustments } from "../drizzle/leadflowPayrollAdjustments";
+import { activityLog, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobPayrollAdjustments, leadflowJobs } from "../drizzle/schema";
 import { agentPageProcedure, agentProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
@@ -31,6 +30,13 @@ function parseBookingPhotoReference(bookingKey: string) {
   const sourceId = Number.parseInt(idValue, 10);
   if (!source || !Number.isSafeInteger(sourceId) || sourceId < 1) throw new Error("Invalid booking reference.");
   return { source, sourceId };
+}
+
+async function resolveOperationalJobId(db: Db, source: string, sourceId: number) {
+  if (source === "leadflow") return sourceId;
+  if (source !== "booking") return null;
+  const rows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.bookingId, sourceId)).limit(1);
+  return rows[0]?.id ?? null;
 }
 
 const dayBoardInput = z.object({
@@ -127,111 +133,6 @@ async function bookingPayrollPayoutSummary(db: Db, jobId: number) {
     finalPayCents: basePayCents + adjustmentCents,
     adjustments,
   };
-}
-
-function payrollWeekEnd(weekStart: string) {
-  const end = new Date(`${weekStart}T12:00:00`);
-  end.setDate(end.getDate() + 6);
-  return end.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
-
-function payrollServiceTime(value: string | null) {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "America/New_York",
-    });
-  }
-  return value;
-}
-
-function payrollServiceLabel(job: typeof leadflowJobs.$inferSelect) {
-  return [
-    job.serviceName,
-    job.bedrooms === null ? null : job.bedrooms === 0 ? "Studio" : `${job.bedrooms} bed`,
-    job.bathrooms === null ? null : `${job.bathrooms} bath`,
-  ].filter(Boolean).join(" • ");
-}
-
-/**
- * Read-only payroll projection for the dark Payroll Summary. It deliberately
- * follows the same LeadFlow job, team-profile, and adjustment-ledger inputs as
- * the Cleaner Portal; no legacy payroll source is consulted.
- */
-async function leadflowPayrollProjection(db: Db, weekStart: string, requestedTeamId?: number) {
-  const weekEnd = payrollWeekEnd(weekStart);
-  const activeBookingFilter = and(
-    gte(leadflowJobs.jobDate, weekStart),
-    lte(leadflowJobs.jobDate, weekEnd),
-    ne(leadflowJobs.bookingStatus, "cancelled"),
-    ne(leadflowJobs.bookingStatus, "rescheduled"),
-    ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
-  );
-  const whereClause = requestedTeamId === undefined
-    ? activeBookingFilter
-    : and(activeBookingFilter, eq(leadflowJobs.teamId, requestedTeamId));
-
-  const rows = await db.select({
-    job: leadflowJobs,
-    cleanerProfileId: cleanerProfiles.id,
-    payPercent: cleanerProfiles.payPercent,
-  }).from(leadflowJobs)
-    .leftJoin(cleanerProfiles, eq(cleanerProfiles.launch27TeamId, leadflowJobs.teamId))
-    .where(whereClause)
-    .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
-
-  const jobIds = rows.map((row) => row.job.id);
-  const adjustments = jobIds.length
-    ? await db.select({
-      leadflowJobId: leadflowJobPayrollAdjustments.leadflowJobId,
-      amountCents: leadflowJobPayrollAdjustments.amountCents,
-    }).from(leadflowJobPayrollAdjustments)
-      .where(inArray(leadflowJobPayrollAdjustments.leadflowJobId, jobIds))
-    : [];
-  const adjustmentCentsByJob = new Map<number, number>();
-  for (const adjustment of adjustments) {
-    adjustmentCentsByJob.set(
-      adjustment.leadflowJobId,
-      (adjustmentCentsByJob.get(adjustment.leadflowJobId) ?? 0) + adjustment.amountCents,
-    );
-  }
-
-  const payableRows = rows.filter((row) => row.job.teamId !== null && row.cleanerProfileId !== null);
-  const jobs = payableRows.map((row) => {
-    const adjustmentCents = adjustmentCentsByJob.get(row.job.id) ?? 0;
-    const payroll = calculateEffectivePayroll({
-      jobDate: row.job.jobDate,
-      jobRevenue: row.job.jobTotalCents / 100,
-      payPercent: payrollPercent(row.payPercent),
-      manualAdjustment: adjustmentCents / 100,
-    });
-    return {
-      id: row.job.id,
-      teamId: row.job.teamId!,
-      teamName: row.job.teamName?.trim() || `Team ${row.job.teamId}`,
-      jobDate: row.job.jobDate,
-      time: payrollServiceTime(row.job.serviceDateTime),
-      customer: row.job.customerName || "Customer",
-      address: row.job.jobAddress ?? "",
-      service: payrollServiceLabel(row.job),
-      status: row.job.bookingStatus,
-      payrollMode: payroll.payrollMode,
-      jobRevenue: payroll.jobRevenue,
-      operationalCost: payroll.operationalCost,
-      netJobAmount: payroll.netJobAmount,
-      payoutPct: payroll.payPercent,
-      basePay: payroll.basePay,
-      manualAdj: payroll.manualAdjustment,
-      finalPay: payroll.finalPay,
-    };
-  });
-
-  return { jobs, weekStart, weekEnd };
 }
 
 const DAY_BOARD_STATUS_LABELS: Record<string, string> = {
@@ -806,6 +707,7 @@ export const leadflowJobsRouter = router({
       customerName: leadflowJobs.customerName,
       customerEmail: leadflowJobs.customerEmail,
       serviceName: leadflowJobs.serviceName,
+      serviceDateTime: leadflowJobs.serviceDateTime,
       jobAddress: leadflowJobs.jobAddress,
       bookingStatus: leadflowJobs.bookingStatus,
       teamName: leadflowJobs.teamName,
@@ -829,6 +731,7 @@ export const leadflowJobsRouter = router({
       id: row.id,
       date: row.jobDate,
       serviceName: row.serviceName,
+      serviceDateTime: row.serviceDateTime,
       address: row.jobAddress,
       status: row.bookingStatus,
       teamName: row.teamName,
@@ -968,10 +871,8 @@ export const leadflowJobsRouter = router({
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
-    // The Booking detail has one source-agnostic gallery. Existing isolated uploads
-    // are keyed to LeadFlow jobs; other booking sources correctly return no photos
-    // until their cleaner portal upload path is introduced.
-    if (source !== "leadflow") return [];
+    const operationalJobId = await resolveOperationalJobId(db, source, sourceId);
+    if (operationalJobId === null) return [];
     return db
       .select({
         id: cleanerPortalJobPhotos.id,
@@ -982,7 +883,7 @@ export const leadflowJobsRouter = router({
         createdAt: cleanerPortalJobPhotos.createdAt,
       })
       .from(cleanerPortalJobPhotos)
-      .where(eq(cleanerPortalJobPhotos.leadflowJobId, sourceId))
+      .where(eq(cleanerPortalJobPhotos.leadflowJobId, operationalJobId))
       .orderBy(asc(cleanerPortalJobPhotos.createdAt), asc(cleanerPortalJobPhotos.id));
   }),
 
@@ -990,14 +891,15 @@ export const leadflowJobsRouter = router({
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
-    if (source !== "leadflow") return null;
+    const operationalJobId = await resolveOperationalJobId(db, source, sourceId);
+    if (operationalJobId === null) return null;
     const rows = await db.select({
       signatureUrl: cleanerPortalJobSignoffs.signatureUrl,
       customerResponse: cleanerPortalJobSignoffs.customerResponse,
       customerNotes: cleanerPortalJobSignoffs.customerNotes,
       customerNotHome: cleanerPortalJobSignoffs.customerNotHome,
       signedOffAt: cleanerPortalJobSignoffs.signedOffAt,
-    }).from(cleanerPortalJobSignoffs).where(eq(cleanerPortalJobSignoffs.leadflowJobId, sourceId)).limit(1);
+    }).from(cleanerPortalJobSignoffs).where(eq(cleanerPortalJobSignoffs.leadflowJobId, operationalJobId)).limit(1);
     return rows[0] ?? null;
   }),
 
@@ -1005,7 +907,8 @@ export const leadflowJobsRouter = router({
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
     const { source, sourceId } = parseBookingPhotoReference(input.bookingKey);
-    if (source !== "leadflow") return [];
+    const operationalJobId = await resolveOperationalJobId(db, source, sourceId);
+    if (operationalJobId === null) return [];
     return db.select({
       id: leadflowBookingMessages.id,
       senderRole: leadflowBookingMessages.senderRole,
@@ -1013,68 +916,7 @@ export const leadflowJobsRouter = router({
       notificationStatus: leadflowBookingMessages.notificationStatus,
       notificationError: leadflowBookingMessages.notificationError,
       createdAt: leadflowBookingMessages.createdAt,
-    }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, sourceId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
-  }),
-
-  /**
-   * Dark Payroll Summary's read-only LeadFlow payroll projection. The rows are
-   * grouped only by the booking-assigned team with a Cleaner Portal profile, so
-   * every displayed final pay exactly matches that team's Cleaner Portal payout.
-   */
-  getPayrollSummary: agentProcedure.input(z.object({
-    weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  })).query(async ({ input }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const projection = await leadflowPayrollProjection(db, input.weekStart);
-    const grouped = new Map<number, typeof projection.jobs>();
-    for (const job of projection.jobs) {
-      grouped.set(job.teamId, [...(grouped.get(job.teamId) ?? []), job]);
-    }
-    const rows = Array.from(grouped.values()).map((jobs) => {
-      const first = jobs[0]!;
-      return {
-        teamId: first.teamId,
-        teamName: first.teamName,
-        jobs: jobs.length,
-        payrollMode: first.payrollMode,
-        jobRevenue: Math.round(jobs.reduce((sum, job) => sum + job.jobRevenue, 0) * 100) / 100,
-        operationalCost: Math.round(jobs.reduce((sum, job) => sum + job.operationalCost, 0) * 100) / 100,
-        netJobAmount: Math.round(jobs.reduce((sum, job) => sum + job.netJobAmount, 0) * 100) / 100,
-        basePay: Math.round(jobs.reduce((sum, job) => sum + job.basePay, 0) * 100) / 100,
-        manualAdj: Math.round(jobs.reduce((sum, job) => sum + job.manualAdj, 0) * 100) / 100,
-        payoutPct: first.payoutPct,
-        finalPay: Math.round(jobs.reduce((sum, job) => sum + job.finalPay, 0) * 100) / 100,
-      };
-    }).sort((left, right) => left.teamName.localeCompare(right.teamName));
-    return {
-      source: "leadflow" as const,
-      rows,
-      weekStart: projection.weekStart,
-      weekEnd: projection.weekEnd,
-    };
-  }),
-
-  /** Read-only job-level detail for one row in the LeadFlow dark Payroll Summary. */
-  getPayrollTeamDetail: agentProcedure.input(z.object({
-    weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    teamId: z.number().int().positive(),
-  })).query(async ({ input }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const projection = await leadflowPayrollProjection(db, input.weekStart, input.teamId);
-    const jobs = projection.jobs;
-    const teamName = jobs[0]?.teamName;
-    if (!teamName) throw new TRPCError({ code: "NOT_FOUND", message: "No payable LeadFlow bookings were found for this team and pay week." });
-    return {
-      source: "leadflow" as const,
-      teamId: input.teamId,
-      teamName,
-      weekStart: projection.weekStart,
-      weekEnd: projection.weekEnd,
-      jobs,
-      totalFinalPay: Math.round(jobs.reduce((sum, job) => sum + job.finalPay, 0) * 100) / 100,
-    };
+    }).from(leadflowBookingMessages).where(eq(leadflowBookingMessages.leadflowJobId, operationalJobId)).orderBy(asc(leadflowBookingMessages.createdAt), asc(leadflowBookingMessages.id));
   }),
 
   getPayrollPayoutSummary: agentProcedure.input(z.object({ jobId: z.number().int().positive() })).query(async ({ input }) => {

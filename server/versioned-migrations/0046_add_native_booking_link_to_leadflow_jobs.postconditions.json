@@ -1,0 +1,1 @@
+{"format":1,"table":"leadflow_jobs","columns":[{"name":"bookingId","columnType":"int","nullable":true}],"indexes":[{"name":"idx_leadflow_jobs_booking_date","unique":false,"columns":["bookingId","jobDate"]}]}

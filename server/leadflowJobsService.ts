@@ -1,5 +1,5 @@
 import { and, eq, isNull, lte, ne } from "drizzle-orm";
-import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs, type LeadflowJob } from "../drizzle/schema";
+import { bookings, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, leadflowBookingMessages, leadflowJobs, type LeadflowJob } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getCompletedBookingsForDate, type Launch27Booking } from "./launch27";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
@@ -412,14 +412,19 @@ export async function runEndOfDayLeadflowJobRecurrence(now = new Date()): Promis
 
     try {
       const jobsOnNextDate = await db.select().from(leadflowJobs).where(eq(leadflowJobs.jobDate, nextDate));
-      if (jobsOnNextDate.some((candidate) => isSameLeadflowJobIdentity(job, candidate))) {
+      if (jobsOnNextDate.some((candidate) => job.bookingId !== null ? candidate.bookingId === job.bookingId : isSameLeadflowJobIdentity(job, candidate))) {
         skipped++;
         continue;
       }
+      const nativeBookingRows = job.bookingId === null
+        ? []
+        : await db.select({ futureVisitTotalCents: bookings.futureVisitTotalCents }).from(bookings).where(eq(bookings.id, job.bookingId)).limit(1);
+      const recurringJobTotalCents = nativeBookingRows[0]?.futureVisitTotalCents ?? job.jobTotalCents;
       await db.insert(leadflowJobs).values({
         origin: LEADFLOW_JOB_ORIGIN_RECURRENCE,
         launch27BookingId: null,
         bookingSeriesId: null,
+        bookingId: job.bookingId,
         jobDate: nextDate,
         serviceDateTime: moveServiceDateTimeToBusinessDate(job.serviceDateTime, nextDate),
         customerName: job.customerName,
@@ -436,7 +441,7 @@ export async function runEndOfDayLeadflowJobRecurrence(now = new Date()): Promis
         teamId: job.teamId,
         customerNotes: job.customerNotes,
         staffNotes: job.staffNotes,
-        jobTotalCents: job.jobTotalCents,
+        jobTotalCents: recurringJobTotalCents,
         hasStripeCard: job.hasStripeCard,
         paymentBrand: job.paymentBrand,
         paymentLast4: job.paymentLast4,
