@@ -49,6 +49,9 @@ describe("native booking drawer commercial edits", () => {
       'active.source === "booking" ? (',
       "updateActiveBookingSchedule",
       "(active.firstCleaningTotalCents ?? 0)",
+      "onPreviewChange",
+      "displayedFirstCleaningTotalCents",
+      "displayedExtras",
     ])
       expect(page).toContain(marker);
     expect(page).not.toMatch(
@@ -56,6 +59,9 @@ describe("native booking drawer commercial edits", () => {
     );
     expect(workspace).toContain("trpc.bookings.updateDetails.useMutation");
     expect(workspace).toContain("updateActiveBookingDetails");
+    expect(page).not.toContain(
+      "disabled={model.updateBookingDetails.isPending}\n                      onClick={() =>\n                        model.updateActiveBookingSchedule"
+    );
   });
 
   it("uses an additive company-notes migration for the native booking table", () => {

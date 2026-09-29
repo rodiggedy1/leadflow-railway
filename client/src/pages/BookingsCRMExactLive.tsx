@@ -535,9 +535,15 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
 function NativeBookingCommercialEditor({
   active,
   model,
+  onPreviewChange,
 }: {
   active: any;
   model: any;
+  onPreviewChange: (preview: {
+    bookingKey: string;
+    firstCleaningTotalCents: number | null;
+    extras: Array<{ id: string; label: string; quantity: number }>;
+  }) => void;
 }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [finalPrice, setFinalPrice] = useState("");
@@ -583,6 +589,31 @@ function NativeBookingCommercialEditor({
   const extras = Object.entries(quantities)
     .filter(([, quantity]) => Number.isInteger(quantity) && quantity > 0)
     .map(([id, quantity]) => ({ id, quantity }));
+  const extrasKey = JSON.stringify(extras);
+  useEffect(() => {
+    onPreviewChange({
+      bookingKey: active.key,
+      firstCleaningTotalCents: finalPriceIsValid
+        ? parsedFinalPrice
+        : active.firstCleaningTotalCents,
+      extras: extras.map(extra => ({
+        ...extra,
+        label:
+          PUBLIC_BOOKING_PRICED_EXTRAS[extra.id]?.label ??
+          active.extras.find((current: any) => current.id === extra.id)
+            ?.label ??
+          extra.id,
+      })),
+    });
+  }, [
+    active.extras,
+    active.firstCleaningTotalCents,
+    active.key,
+    extrasKey,
+    finalPriceIsValid,
+    onPreviewChange,
+    parsedFinalPrice,
+  ]);
   const isPending = model.updateBookingDetails.isPending;
   return (
     <section className="bcr-editor-section bcr-booking-commercial-editor">
@@ -694,7 +725,23 @@ function NativeBookingCommercialEditor({
 
 function BookingDetailDrawer({ model }: { model: any }) {
   const { active } = model;
+  const [commercialPreview, setCommercialPreview] = useState<{
+    bookingKey: string;
+    firstCleaningTotalCents: number | null;
+    extras: Array<{ id: string; label: string; quantity: number }>;
+  } | null>(null);
+  useEffect(() => {
+    setCommercialPreview(null);
+  }, [active?.key]);
   if (!active) return null;
+  const draftMatchesActiveBooking =
+    active.source === "booking" && commercialPreview?.bookingKey === active.key;
+  const displayedFirstCleaningTotalCents = draftMatchesActiveBooking
+    ? commercialPreview.firstCleaningTotalCents
+    : active.firstCleaningTotalCents;
+  const displayedExtras = draftMatchesActiveBooking
+    ? commercialPreview.extras
+    : active.extras;
   const signoff = model.staffSignoffQuery.data;
   return (
     <>
@@ -756,9 +803,9 @@ function BookingDetailDrawer({ model }: { model: any }) {
                 <h3>{active.serviceName ?? "Booking details in progress"}</h3>
               </div>
               <strong>
-                {active.firstCleaningTotalCents === null
+                {displayedFirstCleaningTotalCents === null
                   ? "—"
-                  : `$${(active.firstCleaningTotalCents / 100).toFixed(0)}`}
+                  : `$${(displayedFirstCleaningTotalCents / 100).toFixed(0)}`}
               </strong>
             </div>
             <p className="bcr-home-line">
@@ -767,8 +814,8 @@ function BookingDetailDrawer({ model }: { model: any }) {
                 : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}
             </p>
             <div className="bcr-selected-extras">
-              {active.extras.length ? (
-                active.extras.map((extra: any) => (
+              {displayedExtras.length ? (
+                displayedExtras.map((extra: any) => (
                   <button type="button" disabled key={extra.id}>
                     {extra.label}
                     {extra.quantity > 1 ? ` × ${extra.quantity}` : ""}
@@ -782,7 +829,11 @@ function BookingDetailDrawer({ model }: { model: any }) {
             </div>
           </section>
           {active.source === "booking" && (
-            <NativeBookingCommercialEditor active={active} model={model} />
+            <NativeBookingCommercialEditor
+              active={active}
+              model={model}
+              onPreviewChange={setCommercialPreview}
+            />
           )}
           <section className="bcr-editor-section">
             <small>RECURRING PREFERENCE</small>
@@ -830,7 +881,6 @@ function BookingDetailDrawer({ model }: { model: any }) {
                       className={
                         active.recurrence === frequency ? "choice-active" : ""
                       }
-                      disabled={model.updateBookingDetails.isPending}
                       onClick={() =>
                         model.updateActiveBookingSchedule({
                           recurrence: frequency,
