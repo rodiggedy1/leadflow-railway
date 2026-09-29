@@ -3378,6 +3378,27 @@ export type CardAuthToken = typeof cardAuthTokens.$inferSelect;
 export type InsertCardAuthToken = typeof cardAuthTokens.$inferInsert;
 
 /**
+ * cash_app_payment_tokens — expiring, single-purpose links for customer-initiated
+ * Cash App Pay charges. This is intentionally separate from card_auth_tokens:
+ * card-auth links save a card, while these links collect an immediate payment.
+ */
+export const cashAppPaymentTokens = mysqlTable("cash_app_payment_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  customerPhone: varchar("customerPhone", { length: 30 }).notNull(),
+  customerName: varchar("customerName", { length: 255 }),
+  amountCents: int("amountCents").notNull(),
+  description: varchar("description", { length: 255 }).notNull(),
+  status: varchar("status", { length: 24 }).notNull().default("open"),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }),
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  paidAt: bigint("paidAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CashAppPaymentToken = typeof cashAppPaymentTokens.$inferSelect;
+export type InsertCashAppPaymentToken = typeof cashAppPaymentTokens.$inferInsert;
+
+/**
  * stripe_customers — one row per customer phone number.
  */
 export const stripeCustomers = mysqlTable("stripe_customers", {

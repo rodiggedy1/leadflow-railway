@@ -351,6 +351,14 @@
       "sha256": "9140fcbb8a0cb2ef9cbedd69f777c991be650a21e175203b2a894e74ec623e14",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0046_add_native_booking_link_to_leadflow_jobs.postconditions.json"
+    },
+    {
+      "id": "0047_create_cash_app_payment_tokens",
+      "mode": "create-table",
+      "sqlFile": "0047_create_cash_app_payment_tokens.sql",
+      "sha256": "e18dba30407c1bd10e1b73286f81218e8cec91f4cc56e0ebf636975c1e6b5e75",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0047_create_cash_app_payment_tokens.postconditions.json"
     }
   ]
 }
