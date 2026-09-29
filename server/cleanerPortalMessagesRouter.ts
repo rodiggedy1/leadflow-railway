@@ -1,11 +1,12 @@
 import { and, asc, eq, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { cleanerProfiles, leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
+import { leadflowBookingMessages, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 import { sendSms } from "./openphone";
+import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
 const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
 const messageInput = z.object({ portalJobKey: portalKeySchema, body: z.string().trim().min(1).max(1_000) });
@@ -49,12 +50,12 @@ function messagePortalUrl(portalUrl: string, messageId: number) {
 async function ownedActiveLeadflowJob(cleanerId: number, portalJobKey: string) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Messages are temporarily unavailable." });
-  const cleaners = await db.select({ id: cleanerProfiles.id, teamId: cleanerProfiles.launch27TeamId }).from(cleanerProfiles).where(eq(cleanerProfiles.id, cleanerId)).limit(1);
-  const cleaner = cleaners[0];
-  if (!cleaner?.teamId) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
+  const team = await findCleanerPortalTeam(db, cleanerId);
+  if (!team) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
+  const cleaner = { id: team.cleanerProfileId, teamId: team.launch27TeamId };
   const jobId = parseLeadflowJobId(portalJobKey);
   const jobs = await db.select({ id: leadflowJobs.id, customerName: leadflowJobs.customerName, customerPhone: leadflowJobs.customerPhone, customerEmail: leadflowJobs.customerEmail, jobAddress: leadflowJobs.jobAddress, serviceDateTime: leadflowJobs.serviceDateTime, extras: leadflowJobs.extras }).from(leadflowJobs).where(and(
-    eq(leadflowJobs.id, jobId), eq(leadflowJobs.teamId, cleaner.teamId),
+    eq(leadflowJobs.id, jobId), cleanerPortalJobOwnership(team),
     ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"), ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
   )).limit(1);
   const job = jobs[0];

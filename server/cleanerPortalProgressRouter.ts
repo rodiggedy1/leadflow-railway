@@ -1,13 +1,14 @@
 import { TRPCError } from "@trpc/server";
 import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobProgress, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import "./retiredStatusProcedureBlock";
 import { sendSms } from "./openphone";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
 const ETA_CHOICES = [10, 20, 30, 45, 60, 75, 90, 120] as const;
 const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
@@ -44,9 +45,8 @@ export function canUpdatePortalProgress(jobDate: string, now = new Date()) {
 async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Portal progress is temporarily unavailable." });
-  const cleanerRows = await db.select({ id: cleanerProfiles.id, teamId: cleanerProfiles.launch27TeamId }).from(cleanerProfiles).where(eq(cleanerProfiles.id, cleanerId)).limit(1);
-  const cleaner = cleanerRows[0];
-  if (!cleaner?.teamId) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
+  const team = await findCleanerPortalTeam(db, cleanerId);
+  if (!team) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
   const leadflowJobId = parseLeadflowJobId(portalJobKey);
   const jobRows = await db.select({
     id: leadflowJobs.id,
@@ -57,7 +57,7 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
     jobDate: leadflowJobs.jobDate,
   }).from(leadflowJobs).where(and(
     eq(leadflowJobs.id, leadflowJobId),
-    eq(leadflowJobs.teamId, cleaner.teamId),
+    cleanerPortalJobOwnership(team),
     ne(leadflowJobs.bookingStatus, "cancelled"),
     ne(leadflowJobs.bookingStatus, "rescheduled"),
     ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
@@ -67,7 +67,7 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
   if (!canUpdatePortalProgress(job.jobDate)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Job progress can only be updated on the scheduled service date." });
   }
-  return { db, cleaner, job };
+  return { db, cleaner: { id: team.cleanerProfileId, teamId: team.launch27TeamId }, job };
 }
 
 async function saveProgress(input: {

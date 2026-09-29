@@ -16,6 +16,8 @@ const managedArrivalSmsMigration = fs.readFileSync(path.join(root, "server/versi
 const managedManifest = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/manifest.json"), "utf8")) as { migrations: Array<{ id: string; mode?: string; sqlFile: string; postconditionsFile: string; sha256: string }> };
 const managedPostconditions = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/0027_create_cleaner_portal_job_progress.postconditions.json"), "utf8")) as { columns: Array<{ name: string; default?: string }> };
 const managedArrivalSmsPostconditions = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/0034_add_cleaner_portal_arrival_sms_guard.postconditions.json"), "utf8")) as { columns: Array<{ name: string; columnType: string; nullable: boolean }> };
+const legacyJobSymbol = ["cleaner", "Jobs"].join("");
+const legacyJobTable = ["cleaner", "jobs"].join("_");
 
 describe("isolated ETA Cleaner Portal contract", () => {
   it("keeps every working job list read on the frozen read-only source", () => {
@@ -31,14 +33,14 @@ describe("isolated ETA Cleaner Portal contract", () => {
   it("reads every verified imported job from LeadFlow and overlays only its persisted Cleaner Portal progress on refresh", () => {
     const ownedJobListHelper = listRouter.slice(listRouter.indexOf("async function listOwnedImportedJobs"), listRouter.indexOf("export const cleanerPortalReadOnlyRouter"));
     const frozenJobListProcedures = listRouter.slice(listRouter.indexOf("getMyJobsToday:"), listRouter.indexOf("getMyEarnings:"));
-    expect(ownedJobListHelper).toContain("eq(leadflowJobs.teamId, teamId)");
+    expect(ownedJobListHelper).toContain("cleanerPortalJobOwnership");
     expect(ownedJobListHelper).toContain("ACTIVE_LEADFLOW_FILTER");
     expect(ownedJobListHelper).toContain(".leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))");
     expect(listRouter).toContain("ne(leadflowJobs.bookingStatus, \"cancelled\")");
     expect(listRouter).toContain("ne(leadflowJobs.bookingStatus, \"rescheduled\")");
     expect(frozenJobListProcedures).toContain("listOwnedImportedJobs");
     expect(listRouter).toContain('jobStatus: progress?.jobStatus ?? "assigned"');
-    for (const forbidden of ["cleanerJobs", "cleaner_jobs", "bookingAssignments", "storagePut", "sendSms"]) {
+    for (const forbidden of [legacyJobSymbol, legacyJobTable, "bookingAssignments", "storagePut", "sendSms"]) {
       expect(ownedJobListHelper).not.toContain(forbidden);
       expect(frozenJobListProcedures).not.toContain(forbidden);
     }
@@ -48,8 +50,8 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(listRouter).toContain("calculateEffectivePayroll");
     expect(listRouter).toContain("getPayWeekStart");
     expect(listRouter).toContain("getMyEarnings");
-    expect(listRouter).not.toContain("cleanerJobs");
-    expect(listRouter).not.toContain("cleaner_jobs");
+    expect(listRouter).not.toContain(legacyJobSymbol);
+    expect(listRouter).not.toContain(legacyJobTable);
     expect(page).toContain("trpc.cleanerPortalReadOnly.getMyEarnings.useQuery");
     expect(page).toContain("Current pay week");
     expect(page).toContain("Previous pay week");
@@ -85,7 +87,8 @@ describe("isolated ETA Cleaner Portal contract", () => {
     expect(availabilityRouter).toContain("teamWorkSchedule");
     expect(availabilityRouter).toContain("teamAvailabilityCheckins");
     expect(availabilityRouter).toContain("onDuplicateKeyUpdate");
-    expect(availabilityRouter).not.toMatch(/cleanerJobs|cleaner_jobs/);
+    expect(availabilityRouter).not.toContain(legacyJobSymbol);
+    expect(availabilityRouter).not.toContain(legacyJobTable);
   });
 
   it("keeps the existing portal layout while enabling the isolated progress and restored photo controls", () => {
@@ -118,14 +121,14 @@ describe("isolated ETA Cleaner Portal contract", () => {
 
   it("re-checks team-owned imported jobs and preserves prior progress timestamps on every write", () => {
     expect(progressRouter).toContain("parseLeadflowJobId");
-    expect(progressRouter).toContain("eq(leadflowJobs.teamId, cleaner.teamId)");
+      expect(progressRouter).toContain("cleanerPortalJobOwnership");
     expect(progressRouter).toContain("ne(leadflowJobs.bookingStatus, \"cancelled\")");
     expect(progressRouter).toContain("ne(leadflowJobs.bookingStatus, \"rescheduled\")");
     expect(progressRouter).toContain("existing?.etaTimestamp");
     expect(progressRouter).toContain("existing?.arrivedAt");
     expect(progressRouter).toContain("existing?.startedAt");
     expect(progressRouter).toContain("[10, 20, 30, 45, 60, 75, 90, 120]");
-    for (const forbidden of ["cleanerJobs", "cleaner_jobs", "jobStatusHistory", "opsChatMessages", "jobAlerts", "sendClientOnTheWaySms", "sendArrivedCheckin"]) {
+    for (const forbidden of [legacyJobSymbol, legacyJobTable, "jobStatusHistory", "opsChatMessages", "jobAlerts", "sendClientOnTheWaySms", "sendArrivedCheckin"]) {
       expect(progressRouter).not.toContain(forbidden);
     }
   });

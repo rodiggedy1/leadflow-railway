@@ -16,7 +16,7 @@ describe("cleaner customer-message magic-link handoff", () => {
     expect(customerRouter).toContain('cleanerPortalLink = `${cleanerMagicLink}&job=${encodeURIComponent(`leadflow:${job.id}`)}`');
     expect(callback).toContain('const messageJobQuery = /^leadflow:\\d+$/.test(requestedJob)');
     expect(callback).toContain('window.location.replace(`/portal-v2${messageJobQuery}`)');
-    expect(cleanerRouter).toContain("eq(leadflowJobs.teamId, cleaner.teamId)");
+    expect(cleanerRouter).toContain("cleanerPortalJobOwnership");
     expect(cleanerRouter).toContain("job: { portalJobKey: input.portalJobKey");
     expect(cleanerRouter).toContain("messages,");
     expect(cleanerPortal).toContain('new URLSearchParams(window.location.search).get("job")');

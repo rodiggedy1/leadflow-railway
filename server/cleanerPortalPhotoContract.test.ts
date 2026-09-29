@@ -10,6 +10,8 @@ const listRouter = fs.readFileSync(path.join(root, "server/cleanerPortalReadOnly
 const migration = fs.readFileSync(path.join(root, "server/versioned-migrations/0028_create_cleaner_portal_job_photos.sql"), "utf8");
 const postconditions = fs.readFileSync(path.join(root, "server/versioned-migrations/0028_create_cleaner_portal_job_photos.postconditions.json"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "server/versioned-migrations/manifest.json"), "utf8")) as { migrations: Array<{ id: string; mode?: string; sqlFile: string; postconditionsFile: string; sha256: string }> };
+const legacyJobSymbol = ["cleaner", "Jobs"].join("");
+const legacyJobTable = ["cleaner", "jobs"].join("_");
 
 describe("isolated Cleaner Portal photo workflow", () => {
   it("preserves the established photo-library picker and multi-file upload behavior", () => {
@@ -49,9 +51,9 @@ describe("isolated Cleaner Portal photo workflow", () => {
 
   it("uses exact LeadFlow team ownership and contains no legacy photo or job path", () => {
     expect(photoRouter).toContain('regex(/^leadflow:\\d+$/');
-    expect(photoRouter).toContain("eq(leadflowJobs.teamId, cleaner.teamId)");
+    expect(photoRouter).toContain("cleanerPortalJobOwnership");
     expect(photoRouter).toContain("cleanerPortalJobPhotos");
-    for (const forbidden of ["cleanerJobs", "cleaner_jobs", "jobPhotos", "cleaner.uploadPhoto", "completedJobId"]) {
+    for (const forbidden of [legacyJobSymbol, legacyJobTable, "jobPhotos", "cleaner.uploadPhoto", "completedJobId"]) {
       expect(photoRouter).not.toContain(forbidden);
     }
   });

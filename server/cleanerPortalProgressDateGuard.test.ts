@@ -19,7 +19,7 @@ describe("Cleaner Portal scheduled-date notification guard", () => {
   it("enforces team ownership, active booking state, and scheduled-date eligibility before any progress save or notification", () => {
     const progressRouter = read("server/cleanerPortalProgressRouter.ts");
     const ownershipCheck = progressRouter.slice(progressRouter.indexOf("async function ownedImportedJob"), progressRouter.indexOf("async function saveProgress"));
-    expect(ownershipCheck).toContain("eq(leadflowJobs.teamId, cleaner.teamId)");
+    expect(ownershipCheck).toContain("cleanerPortalJobOwnership");
     expect(ownershipCheck).toContain('ne(leadflowJobs.bookingStatus, "cancelled")');
     expect(ownershipCheck).toContain("canUpdatePortalProgress(job.jobDate)");
     expect(ownershipCheck).toContain("Job progress can only be updated on the scheduled service date.");

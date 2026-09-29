@@ -2,10 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, eq, ne } from "drizzle-orm";
 import heicConvert from "heic-convert";
 import { z } from "zod";
-import { cleanerPortalJobPhotos, cleanerProfiles, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobPhotos, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { generateThumbnail, storagePut } from "./storage";
+import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
 const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
 
@@ -20,13 +21,8 @@ function parseLeadflowJobId(portalJobKey: string) {
 async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Photos are temporarily unavailable." });
-  const cleanerRows = await db
-    .select({ id: cleanerProfiles.id, teamId: cleanerProfiles.launch27TeamId })
-    .from(cleanerProfiles)
-    .where(eq(cleanerProfiles.id, cleanerId))
-    .limit(1);
-  const cleaner = cleanerRows[0];
-  if (!cleaner?.teamId) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
+  const cleaner = await findCleanerPortalTeam(db, cleanerId);
+  if (!cleaner) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
 
   const leadflowJobId = parseLeadflowJobId(portalJobKey);
   const jobRows = await db
@@ -34,7 +30,7 @@ async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
     .from(leadflowJobs)
     .where(and(
       eq(leadflowJobs.id, leadflowJobId),
-      eq(leadflowJobs.teamId, cleaner.teamId),
+      cleanerPortalJobOwnership(cleaner),
       ne(leadflowJobs.bookingStatus, "cancelled"),
       ne(leadflowJobs.bookingStatus, "rescheduled"),
       ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
