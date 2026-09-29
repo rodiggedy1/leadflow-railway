@@ -40,8 +40,8 @@ describe("Bookings CRM exact live shell", () => {
     expect(page).toContain(
       "model.assignActiveBookingTeam(Number(event.target.value))"
     );
-    expect(page).not.toContain('className="bcr-save-changes"');
-    expect(page).not.toContain(">Save changes</button>");
+    expect(page).toContain('className="bcr-save-changes"');
+    expect(page).toContain("Save booking updates");
     expect(styles).toContain(".bcr-workspace");
     expect(styles).toContain(".bcr-team-assignment-picker");
     expect(entry).toContain(

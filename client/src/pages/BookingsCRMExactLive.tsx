@@ -535,14 +535,16 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
 function NativeBookingCommercialEditor({
   active,
   model,
-  onPreviewChange,
+  onDraftChange,
 }: {
   active: any;
   model: any;
-  onPreviewChange: (preview: {
+  onDraftChange: (draft: {
     bookingKey: string;
     firstCleaningTotalCents: number | null;
     extras: Array<{ id: string; label: string; quantity: number }>;
+    companyNotes: string | null;
+    isSaveable: boolean;
   }) => void;
 }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -591,7 +593,7 @@ function NativeBookingCommercialEditor({
     .map(([id, quantity]) => ({ id, quantity }));
   const extrasKey = JSON.stringify(extras);
   useEffect(() => {
-    onPreviewChange({
+    onDraftChange({
       bookingKey: active.key,
       firstCleaningTotalCents: finalPriceIsValid
         ? parsedFinalPrice
@@ -604,14 +606,17 @@ function NativeBookingCommercialEditor({
             ?.label ??
           extra.id,
       })),
+      companyNotes: companyNotes.trim() || null,
+      isSaveable: finalPriceIsValid,
     });
   }, [
     active.extras,
     active.firstCleaningTotalCents,
     active.key,
+    companyNotes,
     extrasKey,
     finalPriceIsValid,
-    onPreviewChange,
+    onDraftChange,
     parsedFinalPrice,
   ]);
   const isPending = model.updateBookingDetails.isPending;
@@ -700,47 +705,38 @@ function NativeBookingCommercialEditor({
           placeholder="Internal only — not shown to the customer"
         />
       </label>
-      <div className="bcr-commercial-actions">
-        <span>
-          {model.updateBookingDetails.error?.message ??
-            "Extra changes update the first-visit price above. Manual pricing is supported."}
-        </span>
-        <button
-          type="button"
-          disabled={!finalPriceIsValid || isPending}
-          onClick={() =>
-            model.updateActiveBookingDetails({
-              extras,
-              firstCleaningTotalCents: parsedFinalPrice,
-              companyNotes: companyNotes.trim() || null,
-            })
-          }
-        >
-          {isPending ? "Saving…" : "Save price, extras & notes"}
-        </button>
-      </div>
     </section>
   );
 }
 
 function BookingDetailDrawer({ model }: { model: any }) {
   const { active } = model;
-  const [commercialPreview, setCommercialPreview] = useState<{
+  const [commercialDraft, setCommercialDraft] = useState<{
     bookingKey: string;
     firstCleaningTotalCents: number | null;
     extras: Array<{ id: string; label: string; quantity: number }>;
+    companyNotes: string | null;
+    isSaveable: boolean;
   } | null>(null);
-  useEffect(() => {
-    setCommercialPreview(null);
-  }, [active?.key]);
   if (!active) return null;
   const draftMatchesActiveBooking =
-    active.source === "booking" && commercialPreview?.bookingKey === active.key;
+    active.source === "booking" && commercialDraft?.bookingKey === active.key;
+  const activeCommercialDraft = draftMatchesActiveBooking
+    ? commercialDraft
+    : active.source === "booking"
+      ? {
+          bookingKey: active.key,
+          firstCleaningTotalCents: active.firstCleaningTotalCents,
+          extras: active.extras,
+          companyNotes: active.companyNotes ?? null,
+          isSaveable: true,
+        }
+      : null;
   const displayedFirstCleaningTotalCents = draftMatchesActiveBooking
-    ? commercialPreview.firstCleaningTotalCents
+    ? commercialDraft.firstCleaningTotalCents
     : active.firstCleaningTotalCents;
   const displayedExtras = draftMatchesActiveBooking
-    ? commercialPreview.extras
+    ? commercialDraft.extras
     : active.extras;
   const signoff = model.staffSignoffQuery.data;
   return (
@@ -832,7 +828,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
             <NativeBookingCommercialEditor
               active={active}
               model={model}
-              onPreviewChange={setCommercialPreview}
+              onDraftChange={setCommercialDraft}
             />
           )}
           <section className="bcr-editor-section">
@@ -1325,6 +1321,31 @@ function BookingDetailDrawer({ model }: { model: any }) {
           </section>
         </div>
         <footer className="bcr-workspace-detail-footer">
+          {active.source === "booking" && activeCommercialDraft && (
+            <button
+              type="button"
+              className="bcr-save-changes"
+              disabled={
+                !activeCommercialDraft.isSaveable ||
+                model.updateBookingDetails.isPending
+              }
+              onClick={() =>
+                model.updateActiveBookingDetails({
+                  extras: activeCommercialDraft.extras.map(extra => ({
+                    id: extra.id,
+                    quantity: extra.quantity,
+                  })),
+                  firstCleaningTotalCents:
+                    activeCommercialDraft.firstCleaningTotalCents ?? 0,
+                  companyNotes: activeCommercialDraft.companyNotes,
+                })
+              }
+            >
+              {model.updateBookingDetails.isPending
+                ? "Saving…"
+                : "Save booking updates"}
+            </button>
+          )}
           <button
             type="button"
             className="bcr-cancel-booking"

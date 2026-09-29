@@ -43,15 +43,15 @@ describe("native booking drawer commercial edits", () => {
       "Extras, price &amp; company notes",
       "Final price ($)",
       "Company notes",
-      "Save price, extras & notes",
       "Future visits remain",
       'active.source === "booking" && (',
       'active.source === "booking" ? (',
       "updateActiveBookingSchedule",
       "(active.firstCleaningTotalCents ?? 0)",
-      "onPreviewChange",
+      "onDraftChange",
       "displayedFirstCleaningTotalCents",
       "displayedExtras",
+      "Save booking updates",
     ])
       expect(page).toContain(marker);
     expect(page).not.toMatch(
@@ -59,6 +59,19 @@ describe("native booking drawer commercial edits", () => {
     );
     expect(workspace).toContain("trpc.bookings.updateDetails.useMutation");
     expect(workspace).toContain("updateActiveBookingDetails");
+    expect(page).not.toContain('className="bcr-commercial-actions"');
+    const footer = page.slice(
+      page.indexOf('<footer className="bcr-workspace-detail-footer">'),
+      page.indexOf(
+        "</footer>",
+        page.indexOf('<footer className="bcr-workspace-detail-footer">')
+      )
+    );
+    expect(footer).toContain('className="bcr-save-changes"');
+    expect(footer).toContain('className="bcr-cancel-booking"');
+    expect(footer.indexOf("bcr-save-changes")).toBeLessThan(
+      footer.indexOf("bcr-cancel-booking")
+    );
     expect(page).not.toContain(
       "disabled={model.updateBookingDetails.isPending}\n                      onClick={() =>\n                        model.updateActiveBookingSchedule"
     );
