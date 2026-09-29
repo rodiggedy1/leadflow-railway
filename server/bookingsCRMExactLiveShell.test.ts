@@ -31,6 +31,8 @@ describe("Bookings CRM exact live shell", () => {
     expect(page).toContain('aria-label="Assign cleaning team"');
     expect(page).toContain('active.source === "booking"');
     expect(page).toContain("model.assignActiveBookingTeam(Number(event.target.value))");
+    expect(page).not.toContain('className="bcr-save-changes"');
+    expect(page).not.toContain(">Save changes</button>");
     expect(styles).toContain(".bcr-workspace");
     expect(styles).toContain(".bcr-team-assignment-picker");
     expect(entry).toContain('import BookingsCRMExactLive from "@/pages/BookingsCRMExactLive";');
