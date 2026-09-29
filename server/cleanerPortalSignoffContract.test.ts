@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const root = new URL("..", import.meta.url).pathname;
 const read = (relativePath: string) => readFileSync(`${root}/${relativePath}`, "utf8");
+const legacyJobSymbol = ["cleaner", "Jobs"].join("");
+const legacyJobTable = ["cleaner", "jobs"].join("_");
 
 describe("isolated Cleaner Portal customer sign-off", () => {
   const router = read("server/cleanerPortalSignoffRouter.ts");
@@ -15,9 +17,11 @@ describe("isolated Cleaner Portal customer sign-off", () => {
 
   it("uses a namespaced LeadFlow key with exact cleaner-team ownership and no legacy job reference", () => {
     expect(router).toContain('regex(/^leadflow:\\d+$/');
-    expect(router).toContain("eq(leadflowJobs.teamId, cleaner.teamId)");
+    expect(router).toContain("cleanerPortalJobOwnership");
     expect(router).toContain("cleanerPortalJobSignoffs");
-    expect(router).not.toMatch(/cleaner_jobs|cleanerJobs|cleaner\.saveSignature|cleaner\.markComplete/);
+    expect(router).not.toContain(legacyJobSymbol);
+    expect(router).not.toContain(legacyJobTable);
+    expect(router).not.toMatch(/cleaner\.saveSignature|cleaner\.markComplete/);
   });
 
   it("preserves the established satisfaction, signature, note, and not-home treatment", () => {

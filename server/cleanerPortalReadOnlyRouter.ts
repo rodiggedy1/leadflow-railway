@@ -6,6 +6,7 @@ import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { calculateEffectivePayroll } from "./payrollCalculator";
 import { getPayWeekStart } from "./teamPayRouter";
+import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
 const ACTIVE_LEADFLOW_FILTER = and(ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"), ne(leadflowJobs.bookingStatus, "missing_from_launch27"));
 
@@ -71,9 +72,8 @@ export function cleanerPortalPayWeeks(now = new Date()) {
 async function cleanerTeam(cleanerId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  const rows = await db.select({ id: cleanerProfiles.id, launch27TeamId: cleanerProfiles.launch27TeamId, payPercent: cleanerProfiles.payPercent }).from(cleanerProfiles).where(eq(cleanerProfiles.id, cleanerId)).limit(1);
-  const cleaner = rows[0];
-  if (!cleaner?.launch27TeamId) throw new Error("Your cleaner account has no assigned team.");
+  const cleaner = await findCleanerPortalTeam(db, cleanerId);
+  if (!cleaner) throw new Error("Your cleaner account has no assigned team.");
   return { db, cleaner, teamId: cleaner.launch27TeamId };
 }
 
@@ -125,7 +125,7 @@ async function listOwnedImportedJobs(cleanerId: number, startDate: string, endDa
     .select({ job: leadflowJobs, progress: cleanerPortalJobProgress })
     .from(leadflowJobs)
     .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
-    .where(and(eq(leadflowJobs.teamId, teamId), gte(leadflowJobs.jobDate, startDate), lte(leadflowJobs.jobDate, endDate), ACTIVE_LEADFLOW_FILTER))
+    .where(and(cleanerPortalJobOwnership({ ...cleaner, launch27TeamId: teamId }), gte(leadflowJobs.jobDate, startDate), lte(leadflowJobs.jobDate, endDate), ACTIVE_LEADFLOW_FILTER))
     .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
   const adjustmentCents = await adjustmentCentsByJob(db, jobs.map(({ job }) => job.id));
   return { cleaner, jobs, adjustmentCents };
@@ -163,7 +163,7 @@ export const cleanerPortalReadOnlyRouter = router({
       .from(leadflowJobs)
       .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
       .where(and(
-        eq(leadflowJobs.teamId, teamId),
+        cleanerPortalJobOwnership({ ...cleaner, launch27TeamId: teamId }),
         gte(leadflowJobs.jobDate, payWeeks.previousStart),
         lte(leadflowJobs.jobDate, payWeeks.currentEnd),
         ACTIVE_LEADFLOW_FILTER,
