@@ -566,6 +566,7 @@ export default function Book() {
         futureTotal={priceBreakdown.futureVisitTotalCents}
         frequencyLabel={selectedFrequency.label}
         cardLabel={cardLabel}
+        funnelRecord={funnelRecord}
       />
     );
 
@@ -1764,6 +1765,7 @@ function BookingSuccess({
   futureTotal,
   frequencyLabel,
   cardLabel,
+  funnelRecord,
 }: {
   name: string;
   service: string;
@@ -1775,11 +1777,15 @@ function BookingSuccess({
   futureTotal: number | null;
   frequencyLabel: string;
   cardLabel: string;
+  funnelRecord: BookingFunnelPublicResult | null;
 }) {
   const [selectedUpsell, setSelectedUpsell] =
     useState<PostBookingUpsell | null>(null);
   const [draftQuantity, setDraftQuantity] = useState(1);
   const [addedUpsells, setAddedUpsells] = useState<Record<string, number>>({});
+  const [upsellError, setUpsellError] = useState("");
+  const addPostBookingUpsellsMutation =
+    trpc.bookingPayments.addPostBookingUpsells.useMutation();
   const addedItems = POST_BOOKING_UPSELLS.filter(
     upsell => (addedUpsells[upsell.id] ?? 0) > 0
   );
@@ -1793,13 +1799,32 @@ function BookingSuccess({
     setSelectedUpsell(upsell);
     setDraftQuantity(addedUpsells[upsell.id] ?? 1);
   };
-  const applyUpsell = () => {
+  const applyUpsell = async () => {
     if (!selectedUpsell) return;
-    setAddedUpsells(current => ({
-      ...current,
+    if (!funnelRecord) {
+      setUpsellError("Your booking session expired. Please contact us to add this service.");
+      return;
+    }
+    const nextUpsells = {
+      ...addedUpsells,
       [selectedUpsell.id]: draftQuantity,
-    }));
-    setSelectedUpsell(null);
+    };
+    setUpsellError("");
+    try {
+      await addPostBookingUpsellsMutation.mutateAsync({
+        publicFunnelNumber: funnelRecord.publicFunnelNumber,
+        mutationToken: funnelRecord.mutationToken,
+        upsells: Object.entries(nextUpsells).map(([id, quantity]) => ({ id, quantity })),
+      });
+      setAddedUpsells(nextUpsells);
+      setSelectedUpsell(null);
+    } catch (error) {
+      setUpsellError(
+        error instanceof Error
+          ? error.message
+          : "We could not add that service. Please try again."
+      );
+    }
   };
   return (
     <main className="booking-review-page">
@@ -1906,6 +1931,11 @@ function BookingSuccess({
                 );
               })}
             </div>
+            {upsellError && (
+              <div className="booking-live-error" role="alert">
+                {upsellError}
+              </div>
+            )}
           </section>
         </div>
         <aside className="booking-success-summary">
@@ -1946,7 +1976,7 @@ function BookingSuccess({
           </dl>
           <div className="booking-success-total">
             <span>First cleaning</span>
-            <strong>{money(total)}</strong>
+            <strong>{money(updatedBookingTotal)}</strong>
           </div>
           {futureTotal !== null && (
             <div className="booking-success-recurring">
@@ -2017,8 +2047,11 @@ function BookingSuccess({
               type="button"
               className="booking-upsell-modal-apply"
               onClick={applyUpsell}
+              disabled={addPostBookingUpsellsMutation.isPending}
             >
-              {addedUpsells[selectedUpsell.id]
+              {addPostBookingUpsellsMutation.isPending
+                ? "Saving…"
+                : addedUpsells[selectedUpsell.id]
                 ? `Update estimate · ${money(
                     selectedUpsell.unitPriceCents * draftQuantity
                   )}`

@@ -81,6 +81,16 @@ describe("approved eight-step public booking flow", () => {
     expect(page).not.toContain("Coming soon");
   });
 
+  it("persists confirmation add-ons through the booking and current operational job", () => {
+    expect(page).toContain("trpc.bookingPayments.addPostBookingUpsells.useMutation");
+    expect(page).toContain("mutationToken: funnelRecord.mutationToken");
+    expect(paymentRouter).toContain("addPostBookingUpsells: publicProcedure");
+    expect(paymentRouter).toContain("PUBLIC_BOOKING_POST_BOOKING_UPSELLS");
+    expect(paymentRouter).toContain("booking.firstCleaningTotalCents - existingUpsellTotal");
+    expect(paymentRouter).toContain("eq(leadflowJobs.bookingId, booking.id)");
+    expect(paymentRouter).toContain("broadcastCleanerPortalJobsChanged");
+  });
+
   it("keeps the public booking path separate from protected legacy systems", () => {
     const changed = [page, pricing, paymentRouter, checkout].join("\n");
     const protectedReferences = [

@@ -109,6 +109,18 @@ export const PUBLIC_BOOKING_PRICED_EXTRAS: Readonly<Record<string, { label: stri
   "sweep-garage": { label: "Sweep Garage", unitPrice: 30 },
 };
 
+/** Server-validated add-ons offered after a public booking is confirmed. */
+export const PUBLIC_BOOKING_POST_BOOKING_UPSELLS: Readonly<Record<string, { label: string; unitPriceCents: number; quantityUnit: string }>> = {
+  "moving-help": { label: "Moving Help", unitPriceCents: 9900, quantityUnit: "hour" },
+  "carpet-cleaning": { label: "Carpet Cleaning", unitPriceCents: 7500, quantityUnit: "room" },
+  "exterior-window-cleaning": { label: "Exterior Window Cleaning", unitPriceCents: 7500, quantityUnit: "hour" },
+  "junk-removal": { label: "Junk Removal", unitPriceCents: 9900, quantityUnit: "load" },
+  "furniture-cleaning": { label: "Furniture Cleaning", unitPriceCents: 9900, quantityUnit: "item" },
+  "appliance-cleaning": { label: "Appliance Cleaning", unitPriceCents: 4900, quantityUnit: "appliance" },
+  "window-cleaning": { label: "Window Cleaning", unitPriceCents: 9900, quantityUnit: "window" },
+  "pet-area-cleaning": { label: "Pet Area Cleaning", unitPriceCents: 7900, quantityUnit: "area" },
+};
+
 function assertIntegerRange(
   value: number,
   label: string,
