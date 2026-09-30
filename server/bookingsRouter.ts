@@ -450,7 +450,7 @@ export const bookingsRouter = router({
 	        const [existingFunnel] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.bookingId, persisted.booking.id)).limit(1);
 	        if (!existingFunnel) {
 	          const now = new Date();
-	          const [funnel] = await db.insert(bookingFunnelRecords).values({
+          const funnelInsert = await db.insert(bookingFunnelRecords).values({
 	            publicFunnelNumber: `${persisted.booking.publicBookingNumber}-F`,
 	            idempotencyKey: input.idempotencyKey,
 	            commandHash: built.prepared.commandHash,
@@ -478,8 +478,12 @@ export const bookingsRouter = router({
 	            version: 1,
 	            createdAt: now,
 	            updatedAt: now,
-	          }).$returningId();
-          await db.insert(bookingPaymentProfiles).values({ bookingId: persisted.booking.id, funnelRecordId: funnel.id, paymentStatus: "not_started", version: 1, createdAt: now, updatedAt: now });
+          });
+          const funnelRecordId = Number((funnelInsert as { insertId?: number }).insertId);
+          if (!Number.isInteger(funnelRecordId) || funnelRecordId <= 0) {
+            throw new Error("Internal booking funnel record was not created.");
+          }
+          await db.insert(bookingPaymentProfiles).values({ bookingId: persisted.booking.id, funnelRecordId, paymentStatus: "not_started", version: 1, createdAt: now, updatedAt: now });
         }
 	        publishNativeBookingRefresh();
 	        return {

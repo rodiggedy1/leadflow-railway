@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, CreditCard, Heart, Home, Minus, Plus, ShieldCheck, Sparkles, UserRound, UsersRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, CreditCard, Heart, Home, LockKeyhole, Minus, Plus, ShieldCheck, Sparkles, UserRound, UsersRound } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { CARD_ELEMENT_OPTIONS } from "@/components/useStripeCardSetup";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@shared/publicBookingPricing";
 import type { BookingWidgetServiceId, BookingWidgetRecurringFrequency } from "@shared/bookingWidgetConfig";
 import "./internal-booking.css";
+import "./booking-flow-review.css";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
 const SERVICES: BookingWidgetServiceId[] = ["standard", "deep", "moveout"];
@@ -53,7 +54,18 @@ function InternalCardForm({ customerName, clientSecret, onConfirmed }: { custome
     if (result.error || !result.setupIntent?.payment_method) { setError(result.error?.message ?? "Card verification failed. Please try again."); setPending(false); return; }
     try { await onConfirmed(result.setupIntent.payment_method as string); } catch (cause) { setError(cause instanceof Error ? cause.message : "Card verification failed. Please try again."); setPending(false); }
   };
-  return <form className="internal-booking-card-form" onSubmit={submit}><div className="internal-card-heading"><strong>Secure card on file</strong><span>Stripe secure · no charge today</span></div><label>Name on card<input required value={name} onChange={event => setName(event.target.value)} autoComplete="cc-name" /></label><label>Card details<span className="internal-card-element"><CardElement options={CARD_ELEMENT_OPTIONS} /></span></label>{error && <p className="form-error">{error}</p>}<button type="submit" disabled={pending || !stripe}>{pending ? "Saving secure card…" : "Save card and finish booking"}</button></form>;
+  return <form onSubmit={submit} className="booking-card-acceptance">
+    <header className="booking-card-acceptance-head">
+      <span className="booking-card-acceptance-mark"><LockKeyhole /></span>
+      <span><small>SECURE CARD DETAILS</small><strong>Add your card</strong><em>Your card is stored securely and charged only after service.</em></span>
+    </header>
+    <div className="booking-card-acceptance-fields">
+      <label><span>Name on card</span><input required value={name} onChange={event => setName(event.target.value)} autoComplete="cc-name" placeholder="Name as it appears on your card" /></label>
+      <label><span>Card details</span><span className="booking-card-element-shell"><CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" /></span></label>
+    </div>
+    {error && <p role="alert" className="booking-card-acceptance-error">{error}</p>}
+    <button type="submit" disabled={pending || !stripe} className="booking-card-acceptance-submit"><LockKeyhole className="h-4 w-4" />{pending ? "Saving secure card…" : "Save card to reserve →"}</button>
+  </form>;
 }
 
 function ChoiceCard({ selected, onClick, icon: Icon, title, description }: { selected: boolean; onClick: () => void; icon: typeof Sparkles; title: string; description: string }) {
