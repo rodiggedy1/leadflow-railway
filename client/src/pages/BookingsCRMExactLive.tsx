@@ -130,9 +130,11 @@ const sourceLabel = (row: any) =>
         ? "Service request"
         : row.source === "leadflow"
           ? "Launch27 import"
-          : row.extras.length > 0
-            ? `+${row.extras.length} extra${row.extras.length > 1 ? "s" : ""}`
-            : "Native booking";
+          : `Native booking${
+              row.extras.length > 0
+                ? ` · +${row.extras.length} extra${row.extras.length > 1 ? "s" : ""}`
+                : ""
+            }`;
 const formatCents = (value: number | null | undefined) =>
   ((value ?? 0) / 100).toLocaleString("en-US", {
     style: "currency",
