@@ -5,6 +5,7 @@ import {
   bookingPaymentProfiles,
   bookingSeries,
   bookings,
+  leadflowJobs,
   stripeCustomers,
 } from "../drizzle/schema";
 import {
@@ -12,12 +13,17 @@ import {
   BOOKING_PAYMENT_CONSENT_VERSION,
 } from "../shared/bookingPayment";
 import { NATIVE_BOOKING_PRICING_VERSION, type PrepareBookingInput } from "../shared/booking";
-import { PUBLIC_BOOKING_PRICING_VERSION, isPublicBookingPriceSnapshot } from "../shared/publicBookingPricing";
+import {
+  PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
+  PUBLIC_BOOKING_PRICING_VERSION,
+  isPublicBookingPriceSnapshot,
+} from "../shared/publicBookingPricing";
 import { router, publicProcedure } from "./_core/trpc";
 import type { TrpcContext } from "./_core/context";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { createBookingFunnelMutationToken, verifyBookingFunnelMutationToken } from "./bookingFunnelService";
 import { buildPreparedNativeBooking, buildPreparedPublicBooking, NativeBookingInputError, type PreparePublicBookingInput } from "./bookingsService";
 import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingPaymentService";
@@ -266,6 +272,12 @@ const publicFunnelInput = z.object({
   mutationToken: z.string().trim().min(1).max(512),
 });
 const deferredConfirmationInput = publicFunnelInput.extend({ deferConfirmation: z.boolean().optional() });
+const postBookingUpsellsInput = publicFunnelInput.extend({
+  upsells: z.array(z.object({
+    id: z.string().trim().min(1).max(80),
+    quantity: z.number().int().min(1).max(50),
+  })).min(1).max(20),
+});
 
 export const bookingPaymentRouter = router({
   startSetup: publicProcedure
@@ -477,5 +489,61 @@ export const bookingPaymentRouter = router({
       void sendBookingCompletionNotifications(record.bookingId).catch(error => console.error("[BookingPaymentRouter] Booking completion notifications failed:", error));
       const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
       return { bookingId: record.bookingId, paymentStatus: "card_on_file" as const, cardBrand: profile.cardBrand ?? "Card", cardLast4: profile.cardLast4 ?? "saved", directPortalSessionReady };
+    }),
+
+  addPostBookingUpsells: publicProcedure
+    .input(postBookingUpsellsInput)
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const result = await db.transaction(async tx => {
+        const [record] = await tx.select().from(bookingFunnelRecords)
+          .where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
+        if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
+        verifiedFunnelTokenOrThrow(record, input.mutationToken);
+        if (record.stage !== "booked" || !record.bookingId) {
+          throw new TRPCError({ code: "CONFLICT", message: "Confirm your booking before adding services." });
+        }
+
+        const [booking] = await tx.select().from(bookings).where(eq(bookings.id, record.bookingId)).limit(1);
+        if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
+        const upsellIds = new Set(Object.keys(PUBLIC_BOOKING_POST_BOOKING_UPSELLS));
+        const seen = new Set<string>();
+        const submittedUpsells = input.upsells.map(selection => {
+          if (seen.has(selection.id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Each add-on can only be selected once." });
+          seen.add(selection.id);
+          const catalog = PUBLIC_BOOKING_POST_BOOKING_UPSELLS[selection.id];
+          if (!catalog) throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported add-on service." });
+          return {
+            id: selection.id,
+            label: catalog.label,
+            quantity: selection.quantity,
+            unitPriceCents: catalog.unitPriceCents,
+            totalCents: catalog.unitPriceCents * selection.quantity,
+          };
+        });
+        const existingUpsellTotal = booking.extras
+          .filter(extra => upsellIds.has(extra.id))
+          .reduce((total, extra) => total + extra.totalCents, 0);
+        const retainedExtras = booking.extras.filter(extra => !upsellIds.has(extra.id));
+        const extras = [...retainedExtras, ...submittedUpsells].sort((left, right) => left.id.localeCompare(right.id));
+        const firstCleaningTotalCents = booking.firstCleaningTotalCents - existingUpsellTotal + submittedUpsells.reduce((total, extra) => total + extra.totalCents, 0);
+        const now = new Date();
+        await tx.update(bookings).set({ extras, firstCleaningTotalCents, updatedAt: now }).where(eq(bookings.id, booking.id));
+        const operationalRows = await tx.select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
+          .from(leadflowJobs).where(eq(leadflowJobs.bookingId, booking.id));
+        const currentJob = operationalRows.find(job => job.jobDate === booking.requestedLocalDate) ?? operationalRows[0];
+        if (currentJob) {
+          await tx.update(leadflowJobs).set({
+            extras: JSON.stringify(extras.map(extra => extra.id)),
+            jobTotalCents: firstCleaningTotalCents,
+            updatedAt: now,
+          }).where(eq(leadflowJobs.id, currentJob.id));
+        }
+        return { bookingId: booking.id, firstCleaningTotalCents, upsells: submittedUpsells };
+      });
+      broadcastCleanerPortalJobsChanged();
+      broadcastOpsUpdate("booking_funnel_update");
+      return result;
     }),
 });
