@@ -9,6 +9,7 @@ import {
   bookingSeries,
   bookings,
   customerPortalServiceRequests,
+  cleanerProfiles,
   leadflowJobs,
   schedulingTeams,
 } from "../drizzle/schema";
@@ -432,6 +433,13 @@ export const bookingsRouter = router({
     return db
       .select({ id: schedulingTeams.id, name: schedulingTeams.name })
       .from(schedulingTeams)
+      .innerJoin(
+        cleanerProfiles,
+        and(
+          eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId),
+          eq(cleanerProfiles.isActive, 1)
+        )
+      )
       .where(
         and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0))
       )
@@ -466,6 +474,13 @@ export const bookingsRouter = router({
         const teamRows = await tx
           .select({ id: schedulingTeams.id, name: schedulingTeams.name })
           .from(schedulingTeams)
+          .innerJoin(
+            cleanerProfiles,
+            and(
+              eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId),
+              eq(cleanerProfiles.isActive, 1)
+            )
+          )
           .where(
             and(
               eq(schedulingTeams.id, input.teamId),
