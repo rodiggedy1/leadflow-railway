@@ -756,6 +756,11 @@ export default function Book() {
                     quantities={extras}
                     dateLabel={dateLabel}
                     time={selectedTime}
+                    pricingMode={pricingMode}
+                    homeServiceBaseTotalCents={priceBreakdown.homeServiceBaseTotalCents}
+                    hourlyServiceTotalCents={priceBreakdown.hourlyServiceTotalCents}
+                    conditionAdjustmentCents={priceBreakdown.conditionAdjustmentCents}
+                    conditionMultiplier={priceBreakdown.conditionMultiplier}
                     total={priceBreakdown.firstCleaningTotalCents}
                     futureTotal={priceBreakdown.futureVisitTotalCents}
                     frequencyLabel={selectedFrequency.label}
@@ -1112,8 +1117,8 @@ function HomeCondition({
     <>
       <h1>How much love does your home need?</h1>
       <p className="booking-review-lede">
-        No judgment — this just helps us send the right team and allow enough
-        time.
+        No judgment — this just helps us allow enough time and give fairer
+        pricing.
       </p>
       <section className="booking-condition-canvas">
         <div className="booking-condition-choices">
@@ -1666,6 +1671,11 @@ function BookingSummary({
   quantities,
   dateLabel,
   time,
+  pricingMode,
+  homeServiceBaseTotalCents,
+  hourlyServiceTotalCents,
+  conditionAdjustmentCents,
+  conditionMultiplier,
   total,
   futureTotal,
   frequencyLabel,
@@ -1679,6 +1689,11 @@ function BookingSummary({
   quantities: Record<string, number>;
   dateLabel: string;
   time: string;
+  pricingMode: PublicBookingPricingMode;
+  homeServiceBaseTotalCents: number;
+  hourlyServiceTotalCents: number;
+  conditionAdjustmentCents: number;
+  conditionMultiplier: number;
   total: number;
   futureTotal: number | null;
   frequencyLabel: string;
@@ -1705,6 +1720,31 @@ function BookingSummary({
             {condition} · {CONDITION_COPY[condition - 1]}
           </dd>
         </div>
+        <div>
+          <dt>{pricingMode === "hourly" ? "Hourly service" : "Base cleaning"}</dt>
+          <dd>
+            {money(
+              pricingMode === "hourly"
+                ? hourlyServiceTotalCents
+                : homeServiceBaseTotalCents
+            )}
+          </dd>
+        </div>
+        {pricingMode === "home" && (
+          <div>
+            <dt>
+              Home condition adjustment
+              {conditionAdjustmentCents > 0
+                ? ` (+${Math.round((conditionMultiplier - 1) * 100)}%)`
+                : ""}
+            </dt>
+            <dd>
+              {conditionAdjustmentCents > 0
+                ? `+${money(conditionAdjustmentCents)}`
+                : money(0)}
+            </dd>
+          </div>
+        )}
         {extras.map(extra => (
           <div key={extra.id}>
             <dt>
