@@ -4,9 +4,11 @@ import { z } from "zod";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import {
-  appSettings,
-  bookingAssignments,
-  bookingSeries,
+	  appSettings,
+	  bookingAssignments,
+	  bookingFunnelRecords,
+	  bookingPaymentProfiles,
+	  bookingSeries,
   bookings,
   customerPortalServiceRequests,
   cleanerProfiles,
@@ -445,8 +447,43 @@ export const bookingsRouter = router({
             updatedAt: new Date(),
           })
 	          .where(eq(bookings.idempotencyKey, input.idempotencyKey));
+	        const [existingFunnel] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.bookingId, persisted.booking.id)).limit(1);
+	        if (!existingFunnel) {
+	          const now = new Date();
+	          const [funnel] = await db.insert(bookingFunnelRecords).values({
+	            publicFunnelNumber: `${persisted.booking.publicBookingNumber}-F`,
+	            idempotencyKey: input.idempotencyKey,
+	            commandHash: built.prepared.commandHash,
+	            source: "internal",
+	            stage: "booked",
+	            bookingId: persisted.booking.id,
+	            customerName: built.prepared.customerName,
+	            customerPhone: built.prepared.customerPhone,
+	            customerEmail: built.prepared.customerEmail,
+	            serviceId: built.prepared.serviceId,
+	            serviceName: built.prepared.serviceName,
+	            bedrooms: built.prepared.bedrooms,
+	            bathrooms: built.prepared.bathrooms,
+	            extras: built.prepared.extras,
+	            specialRequestNotes: built.prepared.specialRequestNotes,
+	            address: built.prepared.address,
+	            requestedLocalDate: built.prepared.requestedLocalDate,
+	            requestedLocalTime: built.prepared.requestedLocalTime,
+	            requestedTimeZone: built.prepared.requestedTimeZone,
+	            recurrence: built.prepared.recurrence,
+	            pricingVersion: built.prepared.pricingVersion,
+	            firstCleaningTotalCents: built.prepared.firstCleaningTotalCents,
+	            futureVisitTotalCents: built.prepared.futureVisitTotalCents,
+	            priceSnapshot: built.prepared.priceSnapshot,
+	            version: 1,
+	            createdAt: now,
+	            updatedAt: now,
+	          }).$returningId();
+          await db.insert(bookingPaymentProfiles).values({ bookingId: persisted.booking.id, funnelRecordId: funnel.id, paymentStatus: "not_started", version: 1, createdAt: now, updatedAt: now });
+        }
 	        publishNativeBookingRefresh();
 	        return {
+	          bookingId: persisted.booking.id,
 	          publicBookingNumber: persisted.booking.publicBookingNumber,
 	          created: persisted.created,
 	          paymentMethod: input.paymentMethod,

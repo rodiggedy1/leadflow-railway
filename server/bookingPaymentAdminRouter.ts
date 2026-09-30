@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { bookingPaymentProfiles, bookings, customerPortalServiceRequests, paymentAuthorizations } from "../drizzle/schema";
+import { bookingPaymentProfiles, bookings, customerPortalServiceRequests, paymentAuthorizations, stripeCustomers } from "../drizzle/schema";
 import { agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
@@ -54,6 +54,51 @@ async function activePortalRequestHold(db: NonNullable<Awaited<ReturnType<typeof
 }
 
 export const bookingPaymentAdminRouter = router({
+  startInternalCardSetup: agentProcedure
+    .input(z.object({ bookingId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [booking] = await db.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
+      if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+      const [profile] = await db.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.bookingId, booking.id)).limit(1);
+      if (!profile) throw new TRPCError({ code: "CONFLICT", message: "This booking is missing its payment profile." });
+      const stripe = getStripeClient();
+      const [existing] = await db.select().from(stripeCustomers).where(eq(stripeCustomers.phone, booking.customerPhone)).limit(1);
+      let stripeCustomerId = existing?.stripeCustomerId;
+      if (!stripeCustomerId) {
+        const customer = await stripe.customers.create({ phone: booking.customerPhone, name: booking.customerName, email: booking.customerEmail ?? undefined, metadata: { source: "leadflow_internal_booking", bookingId: String(booking.id) } });
+        stripeCustomerId = customer.id;
+        if (existing) await db.update(stripeCustomers).set({ stripeCustomerId, name: booking.customerName, updatedAt: new Date() }).where(eq(stripeCustomers.id, existing.id));
+        else await db.insert(stripeCustomers).values({ phone: booking.customerPhone, name: booking.customerName, stripeCustomerId, stripePaymentMethodId: null, cardBrand: null, cardLast4: null, cardExpMonth: null, cardExpYear: null, cardSavedAt: null });
+      }
+      const setupIntent = await stripe.setupIntents.create({ customer: stripeCustomerId, usage: "off_session", payment_method_types: ["card"], metadata: { source: "leadflow_internal_booking", bookingId: String(booking.id), bookingPaymentProfileId: String(profile.id) } });
+      await db.update(bookingPaymentProfiles).set({ paymentStatus: "setup_pending", stripeCustomerId, stripeSetupIntentId: setupIntent.id, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
+      return { clientSecret: setupIntent.client_secret!, setupIntentId: setupIntent.id };
+    }),
+
+  confirmInternalCardSetup: agentProcedure
+    .input(z.object({ bookingId: z.number().int().positive(), setupIntentId: z.string().min(1), paymentMethodId: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [booking] = await db.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
+      if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+      const [profile] = await db.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.bookingId, booking.id)).limit(1);
+      if (!profile) throw new TRPCError({ code: "CONFLICT", message: "This booking is missing its payment profile." });
+      const stripe = getStripeClient();
+      const setupIntent = await stripe.setupIntents.retrieve(input.setupIntentId);
+      if (setupIntent.status !== "succeeded" || setupIntent.payment_method !== input.paymentMethodId || setupIntent.metadata.bookingId !== String(booking.id) || setupIntent.metadata.bookingPaymentProfileId !== String(profile.id) || setupIntent.customer !== profile.stripeCustomerId) throw new TRPCError({ code: "CONFLICT", message: "Stripe did not verify this card for the current booking." });
+      const paymentMethod = await stripe.paymentMethods.retrieve(input.paymentMethodId);
+      if (paymentMethod.type !== "card" || !paymentMethod.card || !setupIntent.customer || paymentMethod.customer !== setupIntent.customer) throw new TRPCError({ code: "CONFLICT", message: "Stripe card does not belong to this booking." });
+      const now = new Date();
+      await db.transaction(async tx => {
+        await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripePaymentMethodId: input.paymentMethodId, cardBrand: paymentMethod.card!.brand, cardLast4: paymentMethod.card!.last4, cardExpMonth: paymentMethod.card!.exp_month, cardExpYear: paymentMethod.card!.exp_year, updatedAt: now }).where(eq(bookingPaymentProfiles.id, profile.id));
+        await tx.update(bookings).set({ status: "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, booking.id));
+      });
+      return { cardBrand: paymentMethod.card.brand, cardLast4: paymentMethod.card.last4 };
+    }),
+
   getForBooking: agentProcedure
     .input(z.object({ bookingId: z.number().int().positive() }))
     .query(async ({ input }) => {
