@@ -352,13 +352,21 @@
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0046_add_native_booking_link_to_leadflow_jobs.postconditions.json"
     },
-    {
-      "id": "0047_create_cash_app_payment_tokens",
-      "mode": "create-table",
-      "sqlFile": "0047_create_cash_app_payment_tokens.sql",
-      "sha256": "e18dba30407c1bd10e1b73286f81218e8cec91f4cc56e0ebf636975c1e6b5e75",
-      "replayMode": "verified-idempotent",
-      "postconditionsFile": "0047_create_cash_app_payment_tokens.postconditions.json"
-    }
+	    {
+	      "id": "0047_create_cash_app_payment_tokens",
+	      "mode": "create-table",
+	      "sqlFile": "0047_create_cash_app_payment_tokens.sql",
+	      "sha256": "e18dba30407c1bd10e1b73286f81218e8cec91f4cc56e0ebf636975c1e6b5e75",
+	      "replayMode": "verified-idempotent",
+	      "postconditionsFile": "0047_create_cash_app_payment_tokens.postconditions.json"
+	    },
+	    {
+	      "id": "0048_add_booking_payment_method",
+	      "mode": "additive-columns-existing-table",
+	      "sqlFile": "0048_add_booking_payment_method.sql",
+	      "sha256": "5ff5be6d5cd94c6c97e4b24a1a8e0b37b9c65681f7b13355b95f890a5c7a8c71",
+	      "replayMode": "verified-idempotent",
+	      "postconditionsFile": "0048_add_booking_payment_method.postconditions.json"
+	    }
   ]
 }

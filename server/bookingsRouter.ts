@@ -21,12 +21,16 @@ import {
 import {
   bookingGetInputSchema,
   bookingListInputSchema,
+  bookingRecurringFrequencySchema,
+  bookingServiceIdSchema,
   prepareBookingInputSchema,
 } from "../shared/booking";
 import {
   NativeBookingIdempotencyConflictError,
   NativeBookingInputError,
+  buildPreparedPublicBooking,
   prepareNativeBooking,
+  type PreparePublicBookingInput,
   type PreparedNativeBooking,
 } from "./bookingsService";
 import { ENV } from "./_core/env";
@@ -49,6 +53,55 @@ const NATIVE_BOOKING_RECURRENCES = [
   "biweekly",
   "monthly",
 ] as const;
+
+const internalPublicBookingInputSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  paymentMethod: z.enum(["card", "cashapp", "invoice"]),
+  companyNotes: z.string().trim().max(4_000).nullable(),
+  booking: z.object({
+    surface: z.literal("full_page"),
+    customer: z.object({
+      fullName: z.string().trim().min(2).max(255),
+      phone: z.string().trim().min(7).max(40),
+      email: z.string().trim().email().max(320),
+    }),
+    service: z.object({
+      serviceId: bookingServiceIdSchema,
+      bedrooms: z.number().int().min(0).max(7),
+      bathrooms: z.number().int().min(1).max(20),
+      extras: z.array(z.object({
+        id: z.string().trim().min(1).max(64),
+        quantity: z.number().int().min(1).max(50),
+      })).max(20),
+      specialRequestNotes: z.array(z.string().trim().min(1).max(1_000)).max(20),
+    }),
+    address: z.string().trim().min(5).max(500),
+    requestedSchedule: z.object({
+      localDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      localTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    }),
+    recurrence: bookingRecurringFrequencySchema,
+    acceptedPricing: z.object({
+      version: z.string().trim().min(1).max(64),
+      totalCents: z.number().int().min(0).max(10_000_000),
+    }),
+    pricing: z.object({
+      pricingMode: z.enum(["home", "hourly"]),
+      serviceId: bookingServiceIdSchema,
+      bedrooms: z.number().int().min(0).max(7),
+      bathrooms: z.number().int().min(1).max(5),
+      homeType: z.enum(["House", "Apartment", "Townhome", "Condo"]),
+      condition: z.number().int().min(1).max(10),
+      maidCount: z.number().int().min(1).max(4),
+      hourCount: z.number().int().min(1).max(8),
+      extras: z.array(z.object({
+        id: z.string().trim().min(1).max(80),
+        quantity: z.number().int().min(1).max(50),
+      })).max(50),
+      recurrence: bookingRecurringFrequencySchema,
+    }),
+  }),
+});
 
 function nativeBookingFrequency(recurrence: string) {
   if (recurrence === "weekly") return "Weekly";
@@ -288,6 +341,7 @@ function mapAdminBooking(
     assignedTeamId: assignment?.teamId ?? null,
     assignedTeamName: assignment?.teamName ?? null,
     paymentStatus: row.paymentStatus,
+    paymentMethod: row.paymentMethod,
     customerName: row.customerName,
     customerPhone: row.customerPhone,
     customerEmail: row.customerEmail,
@@ -357,9 +411,57 @@ export const bookingsRouter = router({
         }
         throw error;
       }
-    }),
+	    }),
 
-  list: bookingsAgentProcedure
+	  createInternal: bookingsAgentProcedure
+	    .input(internalPublicBookingInputSchema)
+	    .mutation(async ({ input }) => {
+	      const db = await getDb();
+	      if (!db)
+	        throw new TRPCError({
+	          code: "INTERNAL_SERVER_ERROR",
+	          message: "Booking service unavailable.",
+	        });
+	      try {
+	        const preparedInput: PreparePublicBookingInput = {
+	          ...input.booking,
+	          idempotencyKey: input.idempotencyKey,
+	        };
+	        const built = buildPreparedPublicBooking(preparedInput, {
+	          nowMs: Date.now(),
+	          timeZone: ENV.businessTimezone,
+	        });
+	        if (built.type === "price_changed") {
+	          throw new NativeBookingInputError(
+	            `The booking price changed. Current total is $${(built.totalCents / 100).toFixed(2)}.`
+	          );
+	        }
+	        const persisted = await persistPreparedBooking(db, built.prepared);
+	        await db
+	          .update(bookings)
+          .set({
+            paymentMethod: input.paymentMethod,
+            companyNotes: input.companyNotes,
+            updatedAt: new Date(),
+          })
+	          .where(eq(bookings.idempotencyKey, input.idempotencyKey));
+	        publishNativeBookingRefresh();
+	        return {
+	          publicBookingNumber: persisted.booking.publicBookingNumber,
+	          created: persisted.created,
+	          paymentMethod: input.paymentMethod,
+	          totalCents: built.prepared.firstCleaningTotalCents,
+	        };
+	      } catch (error) {
+	        if (error instanceof NativeBookingIdempotencyConflictError)
+	          throw new TRPCError({ code: "CONFLICT", message: "IDEMPOTENCY_CONFLICT" });
+	        if (error instanceof NativeBookingInputError || error instanceof RangeError)
+	          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+	        throw error;
+	      }
+	    }),
+
+	  list: bookingsAgentProcedure
     .input(bookingListInputSchema.optional())
     .query(async ({ input }) => {
       const db = await getDb();

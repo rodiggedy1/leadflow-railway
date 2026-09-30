@@ -67,6 +67,7 @@ const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
+const InternalBooking = lazy(() => import("./pages/InternalBooking"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 const TeamExactLive = lazy(() => import("./pages/TeamExactLive"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
@@ -216,6 +217,7 @@ function Router() {
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
+        <Route path={"/admin/bookings/new"} component={() => <AdminPageGuard pageId="bookings"><InternalBooking /></AdminPageGuard>} />
         <Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />
         <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/command-center"} component={CommandCenter} />

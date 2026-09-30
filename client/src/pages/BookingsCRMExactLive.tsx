@@ -1451,8 +1451,9 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
             <button
               type="button"
               className="bcr-new-booking"
-              disabled
-              title="Manual booking creation is not connected in this release"
+              onClick={() => {
+                window.location.href = "/admin/bookings/new";
+              }}
             >
               <Plus size={14} />
               New booking
