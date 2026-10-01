@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
+import { InternalBooking } from "@/pages/InternalBooking";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import {
   CalendarDays,
@@ -525,6 +526,7 @@ export default function NativeBookingsWorkspace({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("All");
   const [importSummary, setImportSummary] = useState<string | null>(null);
+  const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [photoLightbox, setPhotoLightbox] = useState<{
     label: "Before" | "After";
@@ -1195,8 +1197,7 @@ export default function NativeBookingsWorkspace({
           <button
             type="button"
             className="bookings-new-booking"
-            disabled
-            title="Manual booking creation is not connected in this release"
+            onClick={() => setNewBookingOpen(true)}
           >
             <Plus />
             New booking
@@ -1945,6 +1946,9 @@ export default function NativeBookingsWorkspace({
             onClick={event => event.stopPropagation()}
           />
         </div>
+      )}
+      {newBookingOpen && (
+        <InternalBooking onClose={() => setNewBookingOpen(false)} />
       )}
     </main>
   );
