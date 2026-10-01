@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import {
-  CardElement,
-  Elements,
-  useElements,
-  useStripe,
-} from "@stripe/react-stripe-js";
+import { CardElement, Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   ArrowLeft,
@@ -27,7 +22,10 @@ import {
   UsersRound,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { CARD_ELEMENT_OPTIONS } from "@/components/useStripeCardSetup";
+import {
+  CARD_ELEMENT_OPTIONS,
+  useStripeCardSetup,
+} from "@/components/useStripeCardSetup";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -206,45 +204,14 @@ function InternalCardForm({
   clientSecret: string;
   onConfirmed: (paymentMethodId: string) => Promise<void>;
 }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [name, setName] = useState(customerName);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!stripe || !elements) return;
-    setPending(true);
-    setError(null);
-    const card = elements.getElement(CardElement);
-    if (!card) {
-      setError("Card field is not ready yet.");
-      setPending(false);
-      return;
-    }
-    const result = await stripe.confirmCardSetup(clientSecret, {
-      payment_method: { card, billing_details: { name } },
+  const { stripeReady, name, setName, cardError, loading, handleSubmit } =
+    useStripeCardSetup({
+      clientSecret,
+      prefillName: customerName,
+      onSetupSucceeded: async paymentMethodId => onConfirmed(paymentMethodId),
     });
-    if (result.error || !result.setupIntent?.payment_method) {
-      setError(
-        result.error?.message ?? "Card verification failed. Please try again."
-      );
-      setPending(false);
-      return;
-    }
-    try {
-      await onConfirmed(result.setupIntent.payment_method as string);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Card verification failed. Please try again."
-      );
-      setPending(false);
-    }
-  };
   return (
-    <form onSubmit={submit} className="booking-card-acceptance">
+    <form onSubmit={handleSubmit} className="booking-card-acceptance">
       <header className="booking-card-acceptance-head">
         <span className="booking-card-acceptance-mark">
           <LockKeyhole />
@@ -273,18 +240,18 @@ function InternalCardForm({
           </span>
         </label>
       </div>
-      {error && (
+      {cardError && (
         <p role="alert" className="booking-card-acceptance-error">
-          {error}
+          {cardError}
         </p>
       )}
       <button
         type="submit"
-        disabled={pending || !stripe}
+        disabled={loading || !stripeReady}
         className="booking-card-acceptance-submit"
       >
         <LockKeyhole className="h-4 w-4" />
-        {pending ? "Saving secure card…" : "Save card to reserve →"}
+        {loading ? "Saving secure card…" : "Save card to reserve →"}
       </button>
     </form>
   );
@@ -1236,7 +1203,8 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           <div className="eyebrow">STEP 7 OF 9</div>
           <h2>How would the customer like to pay?</h2>
           <p className="subtitle">
-            Choose a payment method and collect the details.
+            Choose a payment method. Card details are collected securely after
+            the booking is created.
           </p>
         </div>
         <div className="payment-methods">
@@ -1278,40 +1246,11 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 <strong>Card details</strong>
                 <span>♧ &nbsp; Secure payment powered by Stripe</span>
               </div>
-              <label>
-                Card number
-                <div className="fake-input">
-                  ▣ &nbsp;{" "}
-                  <span>
-                    Card entry opens securely after booking details are
-                    confirmed
-                  </span>
-                </div>
-              </label>
-              <div className="card-row">
-                <label>
-                  <span>Expiration date</span>
-                  <div className="fake-input">
-                    <span>MM / YY</span>
-                  </div>
-                </label>
-                <label>
-                  <span>CVC</span>
-                  <div className="fake-input">
-                    <span>123</span>
-                    <b>▣</b>
-                  </div>
-                </label>
-              </div>
-              <label>
-                Name on card
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={event => setCustomerName(event.target.value)}
-                  placeholder="Name on card"
-                />
-              </label>
+              <p className="card-details-after-booking">
+                After you create the booking, the established secure Stripe card
+                form will open to save the card on file. Nothing is charged
+                today.
+              </p>
               <label className="save-card">
                 <input type="checkbox" checked readOnly />
                 <strong>Save card for future bookings</strong>
