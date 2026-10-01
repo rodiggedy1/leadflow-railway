@@ -4035,3 +4035,66 @@
     font-size: 28px;
   }
 }
+
+
+/* Internal CRM payment treatment: keep the card entry inside the dark booking surface. */
+.internal-booking-shell .booking-card-acceptance,
+.internal-booking-modal-shell .booking-card-acceptance {
+  max-width: none;
+  margin-top: 20px;
+  border-color: #302e2a;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(232, 187, 133, 0.1), transparent 31%),
+    #191a18;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.2);
+}
+.internal-booking-shell .booking-card-acceptance-head strong,
+.internal-booking-modal-shell .booking-card-acceptance-head strong {
+  color: #f5f3ef;
+}
+.internal-booking-shell .booking-card-acceptance-head em,
+.internal-booking-modal-shell .booking-card-acceptance-head em {
+  color: #aaa49b;
+}
+.internal-booking-shell .booking-card-acceptance-fields label,
+.internal-booking-modal-shell .booking-card-acceptance-fields label {
+  color: #eee8df;
+}
+.internal-booking-shell .booking-card-acceptance-fields input,
+.internal-booking-shell .booking-card-element-shell,
+.internal-booking-modal-shell .booking-card-acceptance-fields input,
+.internal-booking-modal-shell .booking-card-element-shell {
+  border-color: #49443d;
+  background: #151614;
+  color: #f5f3ef;
+}
+.internal-booking-shell .booking-card-acceptance-fields input::placeholder,
+.internal-booking-modal-shell .booking-card-acceptance-fields input::placeholder {
+  color: #8e897f;
+}
+.internal-booking-shell .booking-card-acceptance-fields input:focus,
+.internal-booking-shell .booking-card-element-shell:focus-within,
+.internal-booking-modal-shell .booking-card-acceptance-fields input:focus,
+.internal-booking-modal-shell .booking-card-element-shell:focus-within {
+  border-color: #e8bb85;
+  box-shadow: 0 0 0 4px rgba(232, 187, 133, 0.13);
+}
+.internal-booking-shell .booking-card-acceptance-terms,
+.internal-booking-modal-shell .booking-card-acceptance-terms {
+  color: #aaa49b;
+}
+.internal-booking-shell .booking-card-acceptance-error,
+.internal-booking-modal-shell .booking-card-acceptance-error {
+  border-color: #70433b;
+  background: rgba(112, 67, 59, 0.22);
+  color: #ffc0b8;
+}
+.internal-booking-shell .booking-card-acceptance-loading > span,
+.internal-booking-modal-shell .booking-card-acceptance-loading > span {
+  background: linear-gradient(90deg, #24231f 25%, #302e29 50%, #24231f 75%);
+  background-size: 220% 100%;
+}
+.internal-booking-shell .booking-card-acceptance-loading > span:last-child,
+.internal-booking-modal-shell .booking-card-acceptance-loading > span:last-child {
+  background: #302e29;
+}
