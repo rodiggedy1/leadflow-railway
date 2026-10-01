@@ -1368,62 +1368,66 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       </>
     ) : (
       <>
-        <h1>Need anything else?</h1>
+        <h1>Would you like to add anything else?</h1>
         <p className="internal-lede">
-          Add additional services to this booking while you are on the call.
+          Offer helpful add-on services before you complete the booking.
         </p>
-        <div className="internal-additional-services-grid">
-          {ADDITIONAL_SERVICES.map(service => {
+        <div className="additional-services-intro">
+          <span>✦</span>
+          <div>
+            <strong>Additional services</strong>
+            <p>
+              These services can be added to the booking now. Choose a quantity
+              or leave everything at zero.
+            </p>
+          </div>
+        </div>
+        <div className="additional-services-grid">
+          {ADDITIONAL_SERVICES.map((service, index) => {
             const quantity = additionalServices[service.id] ?? 0;
+            const symbols = ["↔", "▦", "⊞", "⌂", "▰", "▤", "▥", "♣"];
             return (
               <article
-                className={`internal-additional-service-card${quantity ? " selected" : ""}`}
+                className={`additional-service-card${quantity ? " selected" : ""}`}
                 key={service.id}
               >
-                <img src={service.image} alt="" />
-                <div className="internal-additional-service-copy">
+                <span className="service-symbol">{symbols[index]}</span>
+                <div>
                   <strong>{service.title}</strong>
-                  <p>{service.copy}</p>
-                  <b>
-                    From {money(service.unitPriceCents)}/
+                  <small>{service.copy}</small>
+                  <em>
+                    From {money(service.unitPriceCents)} /{" "}
                     {service.quantityLabel.slice(0, -1)}
-                  </b>
+                  </em>
                 </div>
-                <div className="internal-quantity">
+                <div className="quantity">
                   <button
                     type="button"
                     aria-label={`Decrease ${service.title}`}
                     disabled={!quantity}
                     onClick={() => setAdditionalService(service.id, -1)}
                   >
-                    <Minus />
+                    −
                   </button>
-                  <output>{quantity}</output>
+                  <b>{quantity}</b>
                   <button
                     type="button"
                     aria-label={`Increase ${service.title}`}
                     onClick={() => setAdditionalService(service.id, 1)}
                   >
-                    <Plus />
+                    ＋
                   </button>
                 </div>
               </article>
             );
           })}
         </div>
-        <div className="internal-additional-total">
-          <span>
-            Additional services
-            <strong>{money(additionalServicesTotalCents)}</strong>
-          </span>
-          <span>
-            Updated first cleaning
-            <strong>
-              {money(
-                pricing.firstCleaningTotalCents + additionalServicesTotalCents
-              )}
-            </strong>
-          </span>
+        <div className="additional-services-note">
+          <span>ⓘ</span>
+          <p>
+            Selected services will appear in the booking summary and final
+            total.
+          </p>
         </div>
       </>
     );
