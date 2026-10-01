@@ -24,6 +24,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
+import { easternCalendarWeekday, easternDateIso, easternDateLabel, easternMonthDate, easternMonthLabel, parseEasternDate } from "@shared/easternTime";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -108,13 +109,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(CANONICAL_POST_B
 }));
 
 function tomorrowIso() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
+  return easternDateIso(new Date(), 1);
 }
 function money(cents: number) {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -126,12 +121,7 @@ function label(value: string) {
 }
 function dateLabel(value: string) {
   if (!value) return "Choose a date";
-  const date = new Date(`${value}T12:00:00`);
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return easternDateLabel(value);
 }
 
 function ChoiceCard({
@@ -859,10 +849,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             <div className="schedule-card-head">
               <strong>Select a date</strong>
               <span>
-                {new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
-                  month: "long",
-                  year: "numeric",
-                })}
+                {easternMonthLabel(parseEasternDate(date))}
                 <button type="button" aria-label="Previous month">
                   ‹
                 </button>
@@ -880,31 +867,17 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               {Array.from(
                 {
                   length:
-                    new Date(
-                      new Date(`${date}T12:00:00`).getFullYear(),
-                      new Date(`${date}T12:00:00`).getMonth(),
-                      1
-                    ).getDay() +
-                    new Date(
-                      new Date(`${date}T12:00:00`).getFullYear(),
-                      new Date(`${date}T12:00:00`).getMonth() + 1,
-                      0
-                    ).getDate(),
+                    easternCalendarWeekday(parseEasternDate(date).getUTCFullYear(), parseEasternDate(date).getUTCMonth()) +
+                    new Date(Date.UTC(parseEasternDate(date).getUTCFullYear(), parseEasternDate(date).getUTCMonth() + 1, 0, 12)).getUTCDate(),
                 },
                 (_, index) => index
               ).map(index => {
-                const monthDate = new Date(`${date}T12:00:00`);
-                const firstDay = new Date(
-                  monthDate.getFullYear(),
-                  monthDate.getMonth(),
-                  1
-                ).getDay();
+                const monthDate = parseEasternDate(date);
+                const firstDay = easternCalendarWeekday(monthDate.getUTCFullYear(), monthDate.getUTCMonth());
                 const day = index - firstDay + 1;
                 if (day < 1)
                   return <span className="muted" key={`empty-${index}`} />;
-                const value = `${monthDate.getFullYear()}-${String(
-                  monthDate.getMonth() + 1
-                ).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const value = `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                 return (
                   <button
                     className={`day${value === date ? " selected" : ""}`}

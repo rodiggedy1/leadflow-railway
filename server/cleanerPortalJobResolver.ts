@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobProgress, leadflowJobs } from "../drizzle/schema";
+import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs, schedulingTeams } from "../drizzle/schema";
 import { getDb } from "./db";
 import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
@@ -60,5 +60,25 @@ export async function listOwnedLeadflowJobs(cleanerId: number, startDate: string
       ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
     ))
     .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
-  return { db, team, jobs };
+  const teamIds = Array.from(new Set(jobs.map(({ job }) => job.teamId).filter((id): id is number => id !== null)));
+  const teamRows = teamIds.length
+    ? await db.select({ id: schedulingTeams.id, launch27TeamId: schedulingTeams.launch27TeamId })
+      .from(schedulingTeams)
+      .where(or(inArray(schedulingTeams.id, teamIds), inArray(schedulingTeams.launch27TeamId, teamIds)))
+    : [];
+  const launch27Ids = Array.from(new Set(teamRows.map(row => row.launch27TeamId).filter((id): id is number => id !== null)));
+  const profileRows = launch27Ids.length
+    ? await db.select({ launch27TeamId: cleanerProfiles.launch27TeamId, payPercent: cleanerProfiles.payPercent })
+      .from(cleanerProfiles)
+      .where(inArray(cleanerProfiles.launch27TeamId, launch27Ids))
+    : [];
+  const payByLaunch27Id = new Map(profileRows.map(row => [row.launch27TeamId, row.payPercent]));
+  const launch27BySchedulingId = new Map(teamRows.filter(row => row.launch27TeamId !== null).map(row => [row.id, row.launch27TeamId!]));
+  const jobsWithPay = jobs.map(row => ({
+    ...row,
+    payPercent: row.job.teamId === null
+      ? team.payPercent
+      : payByLaunch27Id.get(launch27BySchedulingId.get(row.job.teamId) ?? row.job.teamId) ?? team.payPercent,
+  }));
+  return { db, team, jobs: jobsWithPay };
 }

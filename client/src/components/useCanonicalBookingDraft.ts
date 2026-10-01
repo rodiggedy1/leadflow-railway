@@ -11,15 +11,10 @@ import type {
   CanonicalBookingDraft,
   CanonicalExtraQuantities,
 } from "@shared/canonicalBooking";
+import { easternDateIso } from "@shared/easternTime";
 
 function tomorrowIso(): string {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
+  return easternDateIso(new Date(), 1);
 }
 
 export type CanonicalBookingDraftState = CanonicalBookingDraft;
