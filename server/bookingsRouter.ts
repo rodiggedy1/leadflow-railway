@@ -577,7 +577,8 @@ export const bookingsRouter = router({
             updatedAt: now,
           });
           const funnelRecordId = Number(
-            (funnelInsert as { insertId?: number }).insertId
+            (funnelInsert as { insertId?: number }).insertId ??
+              (funnelInsert as Array<{ insertId?: number }>)[0]?.insertId
           );
           if (!Number.isInteger(funnelRecordId) || funnelRecordId <= 0) {
             throw new Error("Internal booking funnel record was not created.");
