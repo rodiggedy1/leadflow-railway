@@ -87,7 +87,7 @@ const STEPS = [
   "Home condition",
   "Extras",
   "Date & time",
-  "Your information",
+  "Customer",
   "Payment method",
   "Final review",
   "Additional services",
@@ -312,36 +312,41 @@ function ChoiceCard({
   say?: string;
 }) {
   return (
-    <button
+    <article
       type="button"
-      className={`internal-choice-card${image ? " service-choice-card" : ""}${selected ? " selected" : ""}`}
+      className={`service-card${selected ? " selected" : ""}`}
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={event => {
+        if (event.key === "Enter" || event.key === " ") onClick();
+      }}
     >
-      {image && (
-        <span className="internal-choice-image">
-          <img src={image} alt="" />
-          <span className="internal-choice-radio" />
-        </span>
-      )}
-      <span className="internal-choice-icon">
-        <Icon />
-      </span>
-      <span>
-        <strong>{title}</strong>
-        <small>{description}</small>
-        {price && <em className="internal-choice-price">From {price}</em>}
-        {meta && <em className="internal-choice-meta">{meta}</em>}
-        {say && (
-          <span className="internal-choice-say">
-            <strong>◌ &nbsp; What to say to the customer</strong>
-            <small>{say}</small>
-          </span>
+      <div className="image-wrap">
+        <img src={image} alt={title} />
+        <span className="radio" />
+      </div>
+      <div className="card-body">
+        <div className="title-row">
+          <h3>{title}</h3>
+          <span className="help">?</span>
+        </div>
+        <p>{description}</p>
+        {price && (
+          <div className="price-row">
+            <span>From</span>
+            <strong>{price}</strong>
+          </div>
         )}
-      </span>
-      <span className="internal-choice-check">
-        {selected ? <Check /> : <ChevronRight />}
-      </span>
-    </button>
+        {meta && <div className="meta">{meta}</div>}
+        {say && (
+          <div className="say-box">
+            <strong>◌ &nbsp; What to say to the customer</strong>
+            <p>“{say}”</p>
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -361,9 +366,15 @@ function StepperCard({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="internal-stepper-card">
-      <span>{title}</span>
-      <output>{display}</output>
+    <article className="counter-card">
+      <div className="counter-head">
+        <span>
+          {title === "Bedrooms" ? "▣" : title === "Bathrooms" ? "♧" : "♙"}{" "}
+          &nbsp; {title}
+        </span>
+        <span className="help">?</span>
+      </div>
+      <strong>{display}</strong>
       <div>
         <button
           type="button"
@@ -371,7 +382,7 @@ function StepperCard({
           disabled={value <= min}
           onClick={() => onChange(Math.max(min, value - 1))}
         >
-          <Minus />
+          −
         </button>
         <button
           type="button"
@@ -379,10 +390,10 @@ function StepperCard({
           disabled={value >= max}
           onClick={() => onChange(Math.min(max, value + 1))}
         >
-          <Plus />
+          ＋
         </button>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -690,11 +701,33 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const stepContent =
     step === 1 ? (
       <>
-        <h1>What kind of cleaning do they need?</h1>
-        <p className="internal-lede">
-          Choose the service that best matches the customer&apos;s request.
-        </p>
-        <div className="internal-choice-grid">
+        <div className="content-top">
+          <div className="eyebrow">STEP 1 OF 9</div>
+          <h2>Select service type</h2>
+          <p className="subtitle">
+            Choose the cleaning service that best fits what the customer needs.
+          </p>
+        </div>
+        <div className="suggestion">
+          <div className="suggestion-icon">✦</div>
+          <div>
+            <strong>AI suggestion</strong>
+            <span>
+              Based on what you’ve shared, Deep Cleaning is likely the best fit.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="outline-btn"
+            onClick={() => setServiceId("deep")}
+          >
+            Use suggestion
+          </button>
+          <button type="button" className="icon-btn" aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+        <div className="service-grid">
           {SERVICES.map(value => (
             <ChoiceCard
               key={value}
@@ -726,24 +759,24 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               )}
               meta={
                 value === "standard"
-                  ? "~ 2.5 hours"
+                  ? "~ 2.5 hours • Team payout ~$93"
                   : value === "deep"
-                    ? "~ 3.5 hours"
-                    : "~ 4 hours"
+                    ? "~ 3.5 hours • Team payout ~$137"
+                    : "~ 4 hours • Team payout ~$164"
               }
               say={
                 value === "standard"
-                  ? "This is our most popular option. It keeps the home clean and fresh with all the essential cleaning tasks."
+                  ? "This is our most popular option. It keeps your home clean and fresh with all the essential cleaning tasks."
                   : value === "deep"
-                    ? "This is a more detailed clean. We focus on the areas that build up over time, so the home feels like a fresh start."
-                    : "This is a top-to-bottom clean that gets the home ready for a new tenant or homeowner."
+                    ? "This is a more detailed clean. We focus on the areas that build up over time, so your home feels like a fresh start."
+                    : "This is a top-to-bottom clean that gets the home ready for a new tenant or homeowner. We clean inside cabinets, appliances, and more."
               }
               title={getPublicBookingServiceName(value)}
               description={
                 value === "standard"
-                  ? "A reliable reset for a well-kept home."
+                  ? "Routine cleaning for a regular, well-maintained home."
                   : value === "deep"
-                    ? "Extra detail for a home needing more attention."
+                    ? "A more detailed clean for homes that need extra attention."
                     : "A thorough clean before a move or handoff."
               }
             />
@@ -752,22 +785,25 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       </>
     ) : step === 2 ? (
       <>
-        <h1>Tell us about the home</h1>
-        <p className="internal-lede">
-          Use the same bedroom, bathroom, hourly, and recurring options as the
-          public form.
-        </p>
-        <div className="internal-mode-toggle">
+        <div className="content-top">
+          <div className="eyebrow">STEP 2 OF 9</div>
+          <h2>Tell us about the home</h2>
+          <p className="subtitle">
+            Use the same bedroom, bathroom, hourly, and recurring options as the
+            public form.
+          </p>
+        </div>
+        <div className="mode-toggle">
           <button
             type="button"
-            className={pricingMode === "home" ? "selected" : ""}
+            className={`mode${pricingMode === "home" ? " selected" : ""}`}
             onClick={() => setPricingMode("home")}
           >
             Bedrooms &amp; bathrooms
           </button>
           <button
             type="button"
-            className={pricingMode === "hourly" ? "selected" : ""}
+            className={`mode${pricingMode === "hourly" ? " selected" : ""}`}
             onClick={() => setPricingMode("hourly")}
           >
             Book hourly instead
@@ -775,7 +811,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         </div>
         {pricingMode === "home" ? (
           <>
-            <div className="internal-stepper-grid">
+            <div className="counter-grid">
               <StepperCard
                 title="Bedrooms"
                 value={bedrooms}
@@ -793,22 +829,32 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 onChange={setBathrooms}
               />
             </div>
-            <div className="internal-card-label">Home type</div>
-            <div className="internal-pill-grid">
+            <div className="field-label">Home type</div>
+            <div className="home-type-grid">
               {HOME_TYPES.map(value => (
                 <button
                   type="button"
                   key={value}
-                  className={homeType === value ? "selected" : ""}
+                  className={`choice${homeType === value ? " selected" : ""}`}
                   onClick={() => setHomeType(value)}
                 >
-                  {value}
+                  <span>
+                    {value === "House"
+                      ? "⌂"
+                      : value === "Apartment"
+                        ? "▥"
+                        : value === "Townhome"
+                          ? "♧"
+                          : "▥"}
+                  </span>
+                  <strong>{value}</strong>
+                  <i />
                 </button>
               ))}
             </div>
           </>
         ) : (
-          <div className="internal-stepper-grid">
+          <div className="counter-grid">
             <StepperCard
               title="Maids"
               value={maidCount}
@@ -827,102 +873,169 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             />
           </div>
         )}
-        <div className="internal-frequency-block">
-          <div className="internal-card-label">Recurring frequency</div>
-          <div className="internal-frequency-grid">
-            {FREQUENCIES.map(value => (
-              <button
-                type="button"
-                key={value}
-                className={frequency === value ? "selected" : ""}
-                onClick={() => setFrequency(value)}
-              >
-                <strong>{label(value)}</strong>
-                <small>
-                  {value === "weekly"
-                    ? "Save 20% after visit one"
-                    : value === "biweekly"
-                      ? "Save 15% after visit one"
-                      : value === "monthly"
-                        ? "Save 10% after visit one"
-                        : "Single visit"}
-                </small>
-              </button>
-            ))}
+        <div className="divider" />
+        <div className="field-label">Recurring frequency</div>
+        <div className="frequency-grid">
+          {FREQUENCIES.map(value => (
+            <button
+              type="button"
+              key={value}
+              className={`frequency${frequency === value ? " selected" : ""}`}
+              onClick={() => setFrequency(value)}
+            >
+              <span>▦</span>
+              <strong>{label(value)}</strong>
+              <small>
+                {value === "weekly"
+                  ? "Save 20% after visit one"
+                  : value === "biweekly"
+                    ? "Save 15% after visit one"
+                    : value === "monthly"
+                      ? "Save 10% after visit one"
+                      : "Single visit"}
+              </small>
+              <i />
+            </button>
+          ))}
+        </div>
+        <div className="guidance page2-guidance">
+          <div className="guidance-icon">✦</div>
+          <div>
+            <strong>AI guidance</strong>
+            <p>
+              A 2 bed / 2 bath house with bi-weekly service is a common setup.
+              Consider mentioning any pets or specific areas in the notes if
+              relevant.
+            </p>
           </div>
+          <button type="button" className="outline-btn">
+            Add to notes
+          </button>
         </div>
       </>
     ) : step === 3 ? (
       <>
-        <h1>How is the home currently maintained?</h1>
-        <p className="internal-lede">
-          This helps set a fair estimate and enough time for the team.
-        </p>
-        <div className="internal-condition-grid">
+        <div className="content-top">
+          <div className="eyebrow">STEP 3 OF 9</div>
+          <h2>How is the home currently maintained?</h2>
+          <p className="subtitle">
+            This helps set a fair estimate and enough time for the team.
+          </p>
+        </div>
+        <div className="condition-grid">
           {CONDITION_COPY.map((copy, index) => (
             <button
               type="button"
               key={copy}
-              className={condition === index + 1 ? "selected" : ""}
+              className={`condition${condition === index + 1 ? " selected" : ""}`}
               onClick={() => setCondition(index + 1)}
             >
-              <span>{index + 1}</span>
+              <b>{index + 1}</b>
+              <span className="condition-icon">
+                {["✦", "♡", "⌂", "▰", "♣", "!", "♢", "↻", "✧", "⌂"][index]}
+              </span>
               <strong>{copy}</strong>
+              <small>
+                {copy === "Bring the good gloves"
+                  ? "Pets in the home or extra care needed."
+                  : "Normal day-to-day condition."}
+              </small>
+              <i />
             </button>
           ))}
         </div>
-        <input
-          className="internal-condition-range"
-          type="range"
-          min="1"
-          max="10"
-          value={condition}
-          onChange={event => setCondition(Number(event.target.value))}
-        />
-        <div className="internal-condition-selected">
-          <strong>{condition}</strong>
-          <span>{CONDITION_COPY[condition - 1]}</span>
+        <div className="guidance page3-guidance">
+          <div className="guidance-icon">✦</div>
+          <div>
+            <strong>AI guidance</strong>
+            <p>
+              You mentioned a pet in the home. Selecting “Bring the good gloves”
+              makes sense. This option includes extra time and the right
+              supplies for pet hair and care.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="outline-btn"
+            onClick={() => setCondition(5)}
+          >
+            Use this
+          </button>
         </div>
       </>
     ) : step === 4 ? (
       <>
-        <h1>Need anything else?</h1>
-        <p className="internal-lede">
-          Add services and quantities while you are on the call.
-        </p>
-        <div className="internal-extras-grid">
-          {EXTRA_OPTIONS.map(([id, extra]) => (
-            <article className="internal-extra-card" key={id}>
-              <div>
-                <strong>{extra.label}</strong>
-                <small>
-                  ${extra.unitPrice}
-                  {extra.quantityUnit ? ` / ${extra.quantityUnit}` : ""}
-                </small>
-              </div>
-              <div className="internal-quantity">
+        <div className="content-top">
+          <div className="eyebrow">STEP 4 OF 9</div>
+          <h2>Need anything else?</h2>
+          <p className="subtitle">
+            Add services and quantities while you are on the call.
+          </p>
+        </div>
+        <div className="extras-grid">
+          {EXTRA_OPTIONS.map(([id, extra], index) => {
+            const quantity = extras[id] ?? 0;
+            const icons = ["▣", "▤", "▥", "⊞", "▥", "▱", "▤", "✦", "⌂"];
+            const descriptions = [
+              "Clean inside kitchen cabinets.",
+              "Clean inside refrigerator.",
+              "Deep clean oven interior.",
+              "Clean interior windows.",
+              "Includes living areas and floors.",
+              "General organizing help.",
+              "Wash, dry and fold.",
+              "Spot clean walls and doors.",
+              "Sweep and tidy garage.",
+            ];
+            return (
+              <article
+                className={`extra-card${quantity ? " selected" : ""}`}
+                key={id}
+              >
                 <button
+                  className="extra-check"
                   type="button"
-                  onClick={() => setExtra(id, -1)}
-                  disabled={!extras[id]}
+                  aria-label={`Select ${extra.label}`}
+                  onClick={() => setExtra(id, quantity ? -quantity : 1)}
                 >
-                  <Minus />
+                  {quantity ? "✓" : "□"}
                 </button>
-                <output>{extras[id] ?? 0}</output>
-                <button type="button" onClick={() => setExtra(id, 1)}>
-                  <Plus />
-                </button>
-              </div>
-            </article>
-          ))}
+                <span className="extra-icon">{icons[index]}</span>
+                <div>
+                  <strong>{extra.label}</strong>
+                  <small>{descriptions[index]}</small>
+                  <em>
+                    ${extra.unitPrice}
+                    {extra.quantityUnit ? ` / ${extra.quantityUnit}` : ""}
+                  </em>
+                </div>
+                <div className="quantity">
+                  <button
+                    type="button"
+                    onClick={() => setExtra(id, -1)}
+                    disabled={!quantity}
+                  >
+                    −
+                  </button>
+                  <b>{quantity}</b>
+                  <button type="button" onClick={() => setExtra(id, 1)}>
+                    ＋
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </>
     ) : step === 5 ? (
       <>
-        <h1>When should the cleaning happen?</h1>
-        <p className="internal-lede">
-          Choose the date and arrival window that works best for the customer.
-        </p>
+        <div className="content-top">
+          <div className="eyebrow">STEP 5 OF 9</div>
+          <h2>When should the cleaning happen?</h2>
+          <p className="subtitle">
+            Choose the date and arrival window that works best for the customer.
+          </p>
+        </div>
         <div className="schedule-layout">
           <section className="calendar-card">
             <div className="schedule-card-head">
@@ -1038,10 +1151,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       </>
     ) : step === 6 ? (
       <>
-        <h1>Who are we booking for?</h1>
-        <p className="internal-lede">
-          Capture the customer details and anything the team should know.
-        </p>
+        <div className="content-top">
+          <div className="eyebrow">STEP 6 OF 9</div>
+          <h2>Who are we booking for?</h2>
+          <p className="subtitle">
+            Capture the customer details and anything the team should know.
+          </p>
+        </div>
         <div className="customer-form">
           <label>
             Full name
@@ -1116,10 +1232,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       </>
     ) : step === 7 ? (
       <>
-        <h1>How would the customer like to pay?</h1>
-        <p className="internal-lede">
-          Choose a payment method and collect the details.
-        </p>
+        <div className="content-top">
+          <div className="eyebrow">STEP 7 OF 9</div>
+          <h2>How would the customer like to pay?</h2>
+          <p className="subtitle">
+            Choose a payment method and collect the details.
+          </p>
+        </div>
         <div className="payment-methods">
           {(["card", "cashapp", "invoice"] as PaymentMethod[]).map(value => (
             <button
@@ -1217,10 +1336,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       </>
     ) : step === 8 ? (
       <>
-        <h1>Review and book</h1>
-        <p className="internal-lede">
-          Please confirm all details before we complete your booking.
-        </p>
+        <div className="content-top">
+          <div className="eyebrow">STEP 8 OF 9</div>
+          <h2>Review and book</h2>
+          <p className="subtitle">
+            Please confirm all details before we complete your booking.
+          </p>
+        </div>
         <div className="final-review-layout">
           <div className="review-cards">
             <article className="review-card">
@@ -1368,10 +1490,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       </>
     ) : (
       <>
-        <h1>Would you like to add anything else?</h1>
-        <p className="internal-lede">
-          Offer helpful add-on services before you complete the booking.
-        </p>
+        <div className="content-top">
+          <div className="eyebrow">STEP 9 OF 9</div>
+          <h2>Would you like to add anything else?</h2>
+          <p className="subtitle">
+            Offer helpful add-on services before you complete the booking.
+          </p>
+        </div>
         <div className="additional-services-intro">
           <span>✦</span>
           <div>
@@ -1444,57 +1569,51 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ×
         </button>
       )}
-      <section className="internal-booking-frame">
-        <aside className="internal-booking-progress">
+      <section className="internal-booking-frame app-shell">
+        <aside className="internal-booking-progress sidebar panel">
+          <button
+            type="button"
+            className="back-link"
+            onClick={() => (onClose ? onClose() : navigate("/admin/bookings"))}
+          >
+            <span>←</span> Back to bookings
+          </button>
           <p className="eyebrow">INTERNAL BOOKING</p>
-          <h2>New booking</h2>
-          <p>Same options as the public form, streamlined for a phone call.</p>
-          <ol>
+          <h2>New Booking</h2>
+          <p>
+            Create a booking while on the phone or in chat with the customer.
+          </p>
+          <nav className="steps" aria-label="Booking steps">
             {STEPS.map((title, index) => {
               const number = index + 1;
+              const reviewTitle =
+                number === 6
+                  ? "Customer"
+                  : number === 8
+                    ? "Final review"
+                    : title;
               return (
-                <li
+                <button
+                  type="button"
                   key={title}
-                  className={
-                    number === step ? "current" : number < step ? "done" : ""
-                  }
+                  className={`step${number === step ? " active" : ""}`}
+                  onClick={() => number <= step && setStep(number as Step)}
                 >
-                  <span>{number < step ? <Check /> : number}</span>
-                  <div>
-                    <strong>{title}</strong>
-                    {number < step && (
-                      <small>
-                        {number === 1
-                          ? serviceName
-                          : number === 2
-                            ? homeDetail
-                            : number === 5
-                              ? dateLabel(date)
-                              : number === 6
-                                ? customerName || "Contact details"
-                                : number === 7
-                                  ? label(paymentMethod)
-                                  : number === 9
-                                    ? selectedAdditionalServices.length
-                                      ? `${selectedAdditionalServices.length} selected`
-                                      : "None selected"
-                                    : "Complete"}
-                      </small>
-                    )}
-                  </div>
-                </li>
+                  <b>{number}</b>
+                  <span>{reviewTitle}</span>
+                </button>
               );
             })}
-          </ol>
-          <div className="internal-progress-secure">
-            <ShieldCheck />
-            <span>
-              <strong>Secure booking</strong>
-              <small>Information stays protected.</small>
-            </span>
+          </nav>
+          <div className="autosave">
+            <span className="spark">✦</span>
+            <div>
+              <strong>Auto-save enabled</strong>
+              <small>Draft saved just now</small>
+            </div>
           </div>
         </aside>
-        <section className="internal-booking-stage">
+        <section className="internal-booking-stage content panel">
           <div className="internal-step-overline">STEP {step} OF 9</div>
           <div className="internal-step-content">{stepContent}</div>
           {error && (
@@ -1534,7 +1653,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </button>
           </footer>
         </section>
-        <aside className="internal-booking-right-rail">
+        <aside className="internal-booking-right-rail right-rail">
           <section className="internal-booking-summary-card">
             <div className="internal-summary-head">
               <div>
