@@ -137,24 +137,28 @@ const displayTime = (value: string) => {
 };
 const displayRequestedTime = (value: string) =>
   /^\d{2}:\d{2}$/.test(value) ? displayTime(value) : value;
-const labelStatus = (value: string) =>
-  value === "lead"
+const labelStatus = (value: string | null | undefined) => {
+  const normalized = typeof value === "string" && value.trim() ? value : "unknown";
+  return normalized === "lead"
     ? "Lead / In progress"
-    : value === "payment_incomplete"
+    : normalized === "payment_incomplete"
       ? "Reservation started / Payment incomplete"
-      : value === "needs_attention"
+      : normalized === "needs_attention"
         ? "Needs attention"
-        : value === "pending_payment"
+        : normalized === "pending_payment"
           ? "Pending payment"
-          : value === "missing_from_launch27"
+          : normalized === "missing_from_launch27"
             ? "No longer in Launch27"
-            : value.charAt(0).toUpperCase() + value.slice(1);
-const labelRecurrence = (value: string) =>
-  value === "biweekly"
+            : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+const labelRecurrence = (value: string | null | undefined) => {
+  const normalized = typeof value === "string" && value.trim() ? value : "one-time";
+  return normalized === "biweekly"
     ? "Every 2 weeks"
-    : value === "one-time"
+    : normalized === "one-time"
       ? "One-time"
-      : value.charAt(0).toUpperCase() + value.slice(1);
+      : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
 const extrasFrom = (value: unknown): NativeExtra[] =>
   Array.isArray(value)
     ? value.filter((item): item is NativeExtra =>
