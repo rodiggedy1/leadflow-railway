@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
@@ -44,6 +44,7 @@ import {
   PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
 } from "../shared/publicBookingPricing";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 
 const PREPARE_WINDOW_MS = 10 * 60_000;
@@ -128,7 +129,6 @@ async function applyInternalAdditionalServices(
   bookingId: number,
   selections: Array<{ id: string; quantity: number }>
 ) {
-  if (selections.length === 0) return null;
   const seen = new Set<string>();
   const submitted = selections.map(selection => {
     if (seen.has(selection.id))
@@ -159,16 +159,28 @@ async function applyInternalAdditionalServices(
     const extras = [...retained, ...submitted].sort((left, right) =>
       left.id.localeCompare(right.id)
     );
-    const totalCents =
-      booking.firstCleaningTotalCents -
-      booking.extras
-        .filter(extra => upsellIds.has(extra.id))
-        .reduce((total, extra) => total + extra.totalCents, 0) +
-      submitted.reduce((total, extra) => total + extra.totalCents, 0);
+    const existingUpsellTotal = booking.extras
+      .filter(extra => upsellIds.has(extra.id))
+      .reduce((total, extra) => total + extra.totalCents, 0);
+    const submittedUpsellTotal = submitted.reduce(
+      (total, extra) => total + extra.totalCents,
+      0
+    );
+    const futureDelta = submittedUpsellTotal - existingUpsellTotal;
+    const totalCents = booking.firstCleaningTotalCents + futureDelta;
+    const futureVisitTotalCents =
+      booking.futureVisitTotalCents === null
+        ? null
+        : booking.futureVisitTotalCents + futureDelta;
     const now = new Date();
     await tx
       .update(bookings)
-      .set({ extras, firstCleaningTotalCents: totalCents, updatedAt: now })
+      .set({
+        extras,
+        firstCleaningTotalCents: totalCents,
+        futureVisitTotalCents,
+        updatedAt: now,
+      })
       .where(eq(bookings.id, bookingId));
     const operationalRows = await tx
       .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
@@ -187,9 +199,25 @@ async function applyInternalAdditionalServices(
         })
         .where(eq(leadflowJobs.id, currentJob.id));
     }
-    return { totalCents, extras: submitted };
+    if (futureVisitTotalCents !== null) {
+      await tx
+        .update(leadflowJobs)
+        .set({
+          extras: JSON.stringify(extras.map(extra => extra.id)),
+          jobTotalCents: sql`${leadflowJobs.jobTotalCents} + ${futureDelta}`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(leadflowJobs.bookingId, bookingId),
+            gt(leadflowJobs.jobDate, booking.requestedLocalDate)
+          )
+        );
+    }
+    return { totalCents, futureVisitTotalCents, extras: submitted };
   });
   broadcastCleanerPortalJobsChanged();
+  broadcastOpsUpdate("booking_funnel_update");
   return result;
 }
 
@@ -228,6 +256,17 @@ function nativeBookingServiceDateTime(
 
 function nativeBookingExtras(booking: typeof bookings.$inferSelect): string {
   return JSON.stringify(booking.extras.map(extra => extra.id));
+}
+
+function nativeBookingCustomerNotes(
+  booking: typeof bookings.$inferSelect,
+  companyNotes = booking.companyNotes
+): string | null {
+  const notes = [
+    ...booking.specialRequestNotes,
+    companyNotes?.trim() ?? "",
+  ].filter(Boolean);
+  return notes.length ? notes.join("\n") : null;
 }
 
 function publishNativeBookingRefresh() {
@@ -291,6 +330,7 @@ async function findBookingByIdempotencyKey(
   if (!db) return undefined;
   const rows = await db
     .select({
+      id: bookings.id,
       publicBookingNumber: bookings.publicBookingNumber,
       commandHash: bookings.commandHash,
     })
@@ -302,8 +342,15 @@ async function findBookingByIdempotencyKey(
 
 async function persistPreparedBooking(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  prepared: PreparedNativeBooking
+  prepared: PreparedNativeBooking,
+  options: {
+    createAtomicPaymentProfile?: boolean;
+    paymentMethod?: "card" | "cashapp" | "invoice";
+    companyNotes?: string | null;
+  } = {}
 ) {
+  const createAtomicPaymentProfile =
+    options.createAtomicPaymentProfile ?? false;
   try {
     const booking = await db.transaction(async tx => {
       const now = new Date();
@@ -316,6 +363,7 @@ async function persistPreparedBooking(
         availabilityStatus: prepared.availabilityStatus,
         assignmentStatus: prepared.assignmentStatus,
         paymentStatus: prepared.paymentStatus,
+        paymentMethod: options.paymentMethod ?? "card",
         customerName: prepared.customerName,
         customerPhone: prepared.customerPhone,
         customerEmail: prepared.customerEmail,
@@ -336,6 +384,7 @@ async function persistPreparedBooking(
         firstCleaningTotalCents: prepared.firstCleaningTotalCents,
         futureVisitTotalCents: prepared.futureVisitTotalCents,
         priceSnapshot: prepared.priceSnapshot,
+        companyNotes: options.companyNotes ?? null,
         expiresAt: null,
         createdAt: now,
         updatedAt: now,
@@ -365,7 +414,56 @@ async function persistPreparedBooking(
         });
       }
 
+      if (createAtomicPaymentProfile) {
+        const funnelResult = await tx.insert(bookingFunnelRecords).values({
+          publicFunnelNumber: `${prepared.publicBookingNumber}-F`,
+          idempotencyKey: prepared.idempotencyKey,
+          commandHash: prepared.commandHash,
+          source: "internal",
+          stage: "booked",
+          bookingId,
+          customerName: prepared.customerName,
+          customerPhone: prepared.customerPhone,
+          customerEmail: prepared.customerEmail,
+          serviceId: prepared.serviceId,
+          serviceName: prepared.serviceName,
+          bedrooms: prepared.bedrooms,
+          bathrooms: prepared.bathrooms,
+          extras: prepared.extras,
+          specialRequestNotes: prepared.specialRequestNotes,
+          address: prepared.address,
+          requestedLocalDate: prepared.requestedLocalDate,
+          requestedLocalTime: prepared.requestedLocalTime,
+          requestedTimeZone: prepared.requestedTimeZone,
+          recurrence: prepared.recurrence,
+          pricingVersion: prepared.pricingVersion,
+          firstCleaningTotalCents: prepared.firstCleaningTotalCents,
+          futureVisitTotalCents: prepared.futureVisitTotalCents,
+          priceSnapshot: prepared.priceSnapshot,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const funnelRecordId = Number(
+          (funnelResult as { insertId?: number }).insertId ??
+            (funnelResult as Array<{ insertId?: number }>)[0]?.insertId
+        );
+        if (!Number.isInteger(funnelRecordId) || funnelRecordId < 1)
+          throw new Error(
+            "Internal booking funnel record did not return an ID."
+          );
+        await tx.insert(bookingPaymentProfiles).values({
+          bookingId,
+          funnelRecordId,
+          paymentStatus: "not_started",
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
       return {
+        id: bookingId,
         publicBookingNumber: prepared.publicBookingNumber,
         commandHash: prepared.commandHash,
       };
@@ -526,72 +624,16 @@ export const bookingsRouter = router({
             `The booking price changed. Current total is $${(built.totalCents / 100).toFixed(2)}.`
           );
         }
-        const persisted = await persistPreparedBooking(db, built.prepared);
+        const persisted = await persistPreparedBooking(db, built.prepared, {
+          createAtomicPaymentProfile: true,
+          paymentMethod: input.paymentMethod,
+          companyNotes: input.companyNotes,
+        });
         const additionalServices = await applyInternalAdditionalServices(
           db,
           persisted.booking.id,
           input.additionalServices
         );
-        await db
-          .update(bookings)
-          .set({
-            paymentMethod: input.paymentMethod,
-            companyNotes: input.companyNotes,
-            updatedAt: new Date(),
-          })
-          .where(eq(bookings.idempotencyKey, input.idempotencyKey));
-        const [existingFunnel] = await db
-          .select()
-          .from(bookingFunnelRecords)
-          .where(eq(bookingFunnelRecords.bookingId, persisted.booking.id))
-          .limit(1);
-        if (!existingFunnel) {
-          const now = new Date();
-          const funnelInsert = await db.insert(bookingFunnelRecords).values({
-            publicFunnelNumber: `${persisted.booking.publicBookingNumber}-F`,
-            idempotencyKey: input.idempotencyKey,
-            commandHash: built.prepared.commandHash,
-            source: "internal",
-            stage: "booked",
-            bookingId: persisted.booking.id,
-            customerName: built.prepared.customerName,
-            customerPhone: built.prepared.customerPhone,
-            customerEmail: built.prepared.customerEmail,
-            serviceId: built.prepared.serviceId,
-            serviceName: built.prepared.serviceName,
-            bedrooms: built.prepared.bedrooms,
-            bathrooms: built.prepared.bathrooms,
-            extras: built.prepared.extras,
-            specialRequestNotes: built.prepared.specialRequestNotes,
-            address: built.prepared.address,
-            requestedLocalDate: built.prepared.requestedLocalDate,
-            requestedLocalTime: built.prepared.requestedLocalTime,
-            requestedTimeZone: built.prepared.requestedTimeZone,
-            recurrence: built.prepared.recurrence,
-            pricingVersion: built.prepared.pricingVersion,
-            firstCleaningTotalCents: built.prepared.firstCleaningTotalCents,
-            futureVisitTotalCents: built.prepared.futureVisitTotalCents,
-            priceSnapshot: built.prepared.priceSnapshot,
-            version: 1,
-            createdAt: now,
-            updatedAt: now,
-          });
-          const funnelRecordId = Number(
-            (funnelInsert as { insertId?: number }).insertId ??
-              (funnelInsert as Array<{ insertId?: number }>)[0]?.insertId
-          );
-          if (!Number.isInteger(funnelRecordId) || funnelRecordId <= 0) {
-            throw new Error("Internal booking funnel record was not created.");
-          }
-          await db.insert(bookingPaymentProfiles).values({
-            bookingId: persisted.booking.id,
-            funnelRecordId,
-            paymentStatus: "not_started",
-            version: 1,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
         publishNativeBookingRefresh();
         return {
           bookingId: persisted.booking.id,
@@ -806,7 +848,7 @@ export const bookingsRouter = router({
           frequency: nativeBookingFrequency(booking.recurrence),
           teamName: team.name,
           teamId: team.id,
-          customerNotes: booking.specialRequestNotes.join("\n") || null,
+          customerNotes: nativeBookingCustomerNotes(booking),
           jobTotalCents: booking.firstCleaningTotalCents,
           hasStripeCard:
             booking.paymentStatus === "card_on_file" ||
@@ -829,6 +871,17 @@ export const bookingsRouter = router({
             bookingStatus: "assigned",
             ...operationalJob,
           });
+        }
+        if (booking.futureVisitTotalCents !== null) {
+          await tx
+            .update(leadflowJobs)
+            .set({ teamName: team.name, teamId: team.id, updatedAt: now })
+            .where(
+              and(
+                eq(leadflowJobs.bookingId, booking.id),
+                gt(leadflowJobs.jobDate, booking.requestedLocalDate)
+              )
+            );
         }
         return {
           bookingId: input.bookingId,
@@ -1062,7 +1115,7 @@ export const bookingsRouter = router({
               serviceDateTime: new Date(requestedStartAt).toISOString(),
               extras: nativeExtras,
               frequency: operationalFrequency,
-              customerNotes: booking.specialRequestNotes.join("\n") || null,
+              customerNotes: nativeBookingCustomerNotes(booking, companyNotes),
               jobTotalCents: firstCleaningTotalCents,
               nextOccurrenceCreatedAt: null,
               updatedAt: now,
@@ -1075,9 +1128,20 @@ export const bookingsRouter = router({
             .set({
               extras: nativeExtras,
               frequency: operationalFrequency,
+              customerNotes: nativeBookingCustomerNotes(booking, companyNotes),
               jobTotalCents: futureVisitTotalCents,
               updatedAt: now,
             })
+            .where(
+              and(
+                eq(leadflowJobs.bookingId, booking.id),
+                gt(leadflowJobs.jobDate, requestedLocalDate)
+              )
+            );
+        } else {
+          await tx
+            .update(leadflowJobs)
+            .set({ bookingStatus: "cancelled", updatedAt: now })
             .where(
               and(
                 eq(leadflowJobs.bookingId, booking.id),

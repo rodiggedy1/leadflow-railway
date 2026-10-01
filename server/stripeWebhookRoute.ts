@@ -123,19 +123,25 @@ async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
     await bound.db.transaction(async (tx) => {
       await tx.update(bookingPaymentProfiles).set({ paymentStatus: "authorized", stripePaymentIntentId: object.id, updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
       await tx.update(paymentAuthorizations).set({ status: "authorized", stripePaymentIntentId: object.id }).where(and(eq(paymentAuthorizations.bookingPaymentProfileId, bound.profile.id), eq(paymentAuthorizations.stripePaymentIntentId, object.id)));
+      await tx.update(bookings).set({ paymentStatus: "authorized", updatedAt: now }).where(eq(bookings.id, bound.booking.id));
     });
   } else if (object.object === "payment_intent" && event.type === "payment_intent.succeeded") {
     await bound.db.transaction(async (tx) => {
       await tx.update(bookingPaymentProfiles).set({ paymentStatus: "captured", stripePaymentIntentId: object.id, capturedAt: Date.now(), updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
       await tx.update(paymentAuthorizations).set({ status: "captured", capturedAt: Date.now() }).where(and(eq(paymentAuthorizations.bookingPaymentProfileId, bound.profile.id), eq(paymentAuthorizations.stripePaymentIntentId, object.id)));
+      await tx.update(bookings).set({ paymentStatus: "captured", updatedAt: now }).where(eq(bookings.id, bound.booking.id));
     });
   } else if (object.object === "payment_intent" && event.type === "payment_intent.canceled") {
     await bound.db.transaction(async (tx) => {
       await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripePaymentIntentId: null, authorizationExpiresAt: null, updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
       await tx.update(paymentAuthorizations).set({ status: "cancelled", cancelledAt: Date.now() }).where(and(eq(paymentAuthorizations.bookingPaymentProfileId, bound.profile.id), eq(paymentAuthorizations.stripePaymentIntentId, object.id)));
+      await tx.update(bookings).set({ paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, bound.booking.id));
     });
   } else if (object.object === "payment_intent" && event.type === "payment_intent.payment_failed") {
-    await bound.db.update(bookingPaymentProfiles).set({ paymentStatus: "failed", stripePaymentIntentId: object.id, failureCode: object.last_payment_error?.code ?? event.type, failureMessage: object.last_payment_error?.message ?? null, updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
+    await bound.db.transaction(async (tx) => {
+      await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", stripePaymentIntentId: object.id, failureCode: object.last_payment_error?.code ?? event.type, failureMessage: object.last_payment_error?.message ?? null, updatedAt: now }).where(eq(bookingPaymentProfiles.id, bound.profile.id));
+      await tx.update(bookings).set({ paymentStatus: "failed", updatedAt: now }).where(eq(bookings.id, bound.booking.id));
+    });
   }
   await bound.db.update(stripeWebhookEvents).set({ status: "processed", processedAt: now }).where(eq(stripeWebhookEvents.id, eventRecordId));
   return { status: "processed" as const };

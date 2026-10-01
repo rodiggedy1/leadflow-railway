@@ -25,6 +25,16 @@ describe("manual booking payment actions", () => {
     expect(source).not.toMatch(/where\(eq\([^\n]*customerPhone/);
   });
 
+  it("keeps the native booking payment status aligned with the payment profile lifecycle", () => {
+    const source = read("server/bookingPaymentAdminRouter.ts");
+    expect(source).toContain('paymentStatus: "authorized"');
+    expect(source).toContain('paymentStatus: "captured"');
+    expect(source).toContain('paymentStatus: "card_on_file"');
+    expect(source).toContain('paymentStatus: "failed"');
+    expect(source).toContain("amount_to_capture: authorization.amountCents");
+    expect(source).toContain('paymentStatus: "captured", updatedAt: new Date()');
+  });
+
   it("adds no automatic timing or eligibility rule and requires a local confirm before every action", () => {
     const source = read("server/bookingPaymentAdminRouter.ts");
     const ui = read("client/src/components/BookingPaymentActions.tsx");

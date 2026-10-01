@@ -366,6 +366,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const [cardSetupIntentId, setCardSetupIntentId] = useState<string | null>(
     null
   );
+  const [cardSaved, setCardSaved] = useState(false);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [step, success, createdBooking]);
@@ -421,6 +422,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const startCardSetup =
     trpc.bookingPaymentAdmin.startInternalCardSetup.useMutation({
       onSuccess: result => {
+        if (result.alreadyComplete) {
+          setCardSaved(true);
+          setCardClientSecret(null);
+          setCardSetupIntentId(null);
+          setStep(8);
+          return;
+        }
         setCardClientSecret(result.clientSecret);
         setCardSetupIntentId(result.setupIntentId);
       },
@@ -429,6 +437,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const confirmCardSetup =
     trpc.bookingPaymentAdmin.confirmInternalCardSetup.useMutation({
       onSuccess: () => {
+        setCardSaved(true);
         setCardClientSecret(null);
         setCardSetupIntentId(null);
         setStep(8);
@@ -536,6 +545,15 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     }
     if (step === 7 && paymentMethod === "card" && !createdBooking) {
       submit();
+      return;
+    }
+    if (
+      step === 7 &&
+      paymentMethod === "card" &&
+      createdBooking &&
+      !cardSaved
+    ) {
+      setError("Save the card before continuing.");
       return;
     }
     if (step === 9) {
