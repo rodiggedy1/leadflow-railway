@@ -37,8 +37,21 @@ type SetupFormProps = {
   clientSecret: string;
   customerName: string;
   authorizationCopy?: string;
+  dark?: boolean;
   onConfirm: (paymentMethodId: string) => Promise<void>;
 };
+const DARK_CARD_ELEMENT_OPTIONS = {
+  ...CARD_ELEMENT_OPTIONS,
+  style: {
+    ...CARD_ELEMENT_OPTIONS.style,
+    base: {
+      ...CARD_ELEMENT_OPTIONS.style.base,
+      color: "#f5f3ef",
+      "::placeholder": { color: "#8e897f" },
+      iconColor: "#e8bb85",
+    },
+  },
+} as const;
 
 function ExistingCardSetupForm({
   clientSecret,
@@ -94,6 +107,7 @@ export function PremiumCardSetupForm({
   clientSecret,
   customerName,
   authorizationCopy,
+  dark = false,
   onConfirm,
 }: SetupFormProps) {
   const { stripeReady, name, setName, cardError, loading, handleSubmit } =
@@ -104,7 +118,10 @@ export function PremiumCardSetupForm({
     });
 
   return (
-    <form onSubmit={handleSubmit} className="booking-card-acceptance">
+    <form
+      onSubmit={handleSubmit}
+      className={`booking-card-acceptance${dark ? " booking-card-acceptance-dark" : ""}`}
+    >
       <header className="booking-card-acceptance-head">
         <span className="booking-card-acceptance-mark">
           <LockKeyhole />
@@ -129,7 +146,10 @@ export function PremiumCardSetupForm({
         <label>
           <span>Card details</span>
           <span className="booking-card-element-shell">
-            <CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" />
+            <CardElement
+              options={dark ? DARK_CARD_ELEMENT_OPTIONS : CARD_ELEMENT_OPTIONS}
+              className="w-full"
+            />
           </span>
         </label>
       </div>

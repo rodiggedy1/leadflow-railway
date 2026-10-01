@@ -49,8 +49,8 @@ import {
   createCanonicalPricingInput,
 } from "@shared/canonicalBooking";
 import { CANONICAL_POST_BOOKING_UPSELLS } from "@shared/canonicalBookingCatalog";
-import "./internal-booking.css";
 import "./booking-flow-review.css";
+import "./internal-booking.css";
 
 const stripePromise = loadStripe(
   import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string
@@ -446,6 +446,11 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         !address.trim())
     ) {
       setError("Complete the customer information before continuing.");
+      return;
+    }
+    if (step === 6 && paymentMethod === "card" && !createdBooking) {
+      setStep(7);
+      submit();
       return;
     }
     if (step === 7 && paymentMethod === "card" && !createdBooking) {
@@ -1100,6 +1105,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             <PremiumCardSetupForm
               customerName={customerName}
               clientSecret={cardClientSecret}
+              dark
               onConfirm={paymentMethodId =>
                 confirmCardSetup
                   .mutateAsync({
