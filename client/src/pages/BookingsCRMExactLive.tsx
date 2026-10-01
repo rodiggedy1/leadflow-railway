@@ -1,4 +1,5 @@
 import NativeBookingsWorkspace from "@/components/NativeBookingsWorkspace";
+import { InternalBooking } from "@/pages/InternalBooking";
 import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { trpc } from "@/lib/trpc";
@@ -1363,6 +1364,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
 }
 
 function ExactBookingsCRMShell({ model }: { model: any }) {
+  const [newBookingOpen, setNewBookingOpen] = useState(false);
   const {
     view,
     setView,
@@ -1451,8 +1453,7 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
             <button
               type="button"
               className="bcr-new-booking"
-              disabled
-              title="Manual booking creation is not connected in this release"
+              onClick={() => setNewBookingOpen(true)}
             >
               <Plus size={14} />
               New booking
@@ -1764,6 +1765,7 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
       </main>
       <BookingDetailDrawer model={model} />
       <PhotoLightbox model={model} />
+      {newBookingOpen && <InternalBooking onClose={() => setNewBookingOpen(false)} />}
     </div>
   );
 }

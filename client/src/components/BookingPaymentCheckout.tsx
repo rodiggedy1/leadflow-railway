@@ -90,7 +90,7 @@ function ExistingCardSetupForm({
   );
 }
 
-function PremiumCardSetupForm({
+export function PremiumCardSetupForm({
   clientSecret,
   customerName,
   authorizationCopy,
