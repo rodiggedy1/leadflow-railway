@@ -27,9 +27,13 @@ import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { createBookingFunnelMutationToken, verifyBookingFunnelMutationToken } from "./bookingFunnelService";
 import { buildPreparedNativeBooking, buildPreparedPublicBooking, NativeBookingInputError, type PreparePublicBookingInput } from "./bookingsService";
 import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingPaymentService";
+import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
+import { persistCanonicalBooking } from "./canonicalBookingPersistence";
+import { applyCanonicalAdditionalServices, BookingUpsellInputError } from "./bookingUpsellEngine";
+import { finalizeCanonicalCardOnFile, finalizeCanonicalBooking, reuseCanonicalSavedCard, startCanonicalCardSetup } from "./bookingPaymentEngine";
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
-import { createCustomerPortalHandoff, ensureCustomerPortalAccount } from "./customerPortalService";
+import { createCanonicalBookingPortalHandoff, ensureCustomerPortalAccount } from "./customerPortalService";
 import { getCustomerPortalSavedCard } from "./customerPortalPaymentService";
 import { normalizePhone } from "./utils/phone";
 import { getCustomerPortalSessionFromRequest, signCustomerPortalSession } from "./_core/customerPortalAuth";
@@ -101,138 +105,20 @@ async function ensureBookingPaymentTarget(record: typeof bookingFunnelRecords.$i
   if (record.stage !== "payment_incomplete") {
     throw new TRPCError({ code: "CONFLICT", message: "Reserve your appointment before adding a card." });
   }
-
   const built = record.pricingVersion === PUBLIC_BOOKING_PRICING_VERSION
     ? buildPreparedPublicBooking(asPublicBookingInput(record), { nowMs: Date.now(), timeZone: ENV.businessTimezone })
     : buildPreparedNativeBooking(asBookingInput(record), { nowMs: Date.now(), timeZone: ENV.businessTimezone });
   if (built.type === "price_changed") {
     throw new TRPCError({ code: "CONFLICT", message: "The quoted price changed. Please review the updated quote before continuing." });
   }
-  const prepared = built.prepared;
-
-  return db.transaction(async (tx) => {
-    const [current] = await tx.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.id, record.id)).limit(1);
-    if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
-    let bookingId = current.bookingId;
-    const bookingAlreadyExisted = bookingId !== null;
-    if (!bookingId) {
-      const existing = await tx.select().from(bookings).where(eq(bookings.idempotencyKey, prepared.idempotencyKey)).limit(1);
-      if (existing[0]) {
-        bookingId = existing[0].id;
-      } else {
-        const now = new Date();
-        const result = await tx.insert(bookings).values({
-          publicBookingNumber: prepared.publicBookingNumber,
-          idempotencyKey: prepared.idempotencyKey,
-          commandHash: prepared.commandHash,
-          source: prepared.source,
-          status: "pending_payment",
-          availabilityStatus: prepared.availabilityStatus,
-          assignmentStatus: prepared.assignmentStatus,
-          paymentStatus: "not_started",
-          customerName: prepared.customerName,
-          customerPhone: prepared.customerPhone,
-          customerEmail: prepared.customerEmail,
-          serviceId: prepared.serviceId,
-          serviceName: prepared.serviceName,
-          bedrooms: prepared.bedrooms,
-          bathrooms: prepared.bathrooms,
-          extras: prepared.extras,
-          specialRequestNotes: prepared.specialRequestNotes,
-          address: prepared.address,
-          requestedLocalDate: prepared.requestedLocalDate,
-          requestedLocalTime: prepared.requestedLocalTime,
-          requestedTimeZone: prepared.requestedTimeZone,
-          requestedStartAt: prepared.requestedStartAt,
-          recurrence: prepared.recurrence,
-          recurringIntentStatus: prepared.recurringIntentStatus,
-          pricingVersion: prepared.pricingVersion,
-          firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-          futureVisitTotalCents: prepared.futureVisitTotalCents,
-          priceSnapshot: prepared.priceSnapshot,
-          expiresAt: null,
-          createdAt: now,
-          updatedAt: now,
-        });
-        bookingId = insertId(result, "Native booking");
-        if (prepared.recurrence !== "one-time" && prepared.futureVisitTotalCents !== null) {
-          await tx.insert(bookingSeries).values({
-            bookingId,
-            status: "intent_pending",
-            frequency: prepared.recurrence,
-            anchorLocalDate: prepared.requestedLocalDate,
-            anchorLocalTime: prepared.requestedLocalTime,
-            timeZone: prepared.requestedTimeZone,
-            firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-            futureVisitTotalCents: prepared.futureVisitTotalCents,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-      }
-      await tx.update(bookingFunnelRecords).set({ bookingId, updatedAt: new Date() }).where(eq(bookingFunnelRecords.id, current.id));
-    }
-    if (bookingAlreadyExisted) {
-      const now = new Date();
-      await tx.update(bookings).set({
-        publicBookingNumber: prepared.publicBookingNumber,
-        commandHash: prepared.commandHash,
-        source: prepared.source,
-        availabilityStatus: prepared.availabilityStatus,
-        assignmentStatus: prepared.assignmentStatus,
-        customerName: prepared.customerName,
-        customerPhone: prepared.customerPhone,
-        customerEmail: prepared.customerEmail,
-        serviceId: prepared.serviceId,
-        serviceName: prepared.serviceName,
-        bedrooms: prepared.bedrooms,
-        bathrooms: prepared.bathrooms,
-        extras: prepared.extras,
-        specialRequestNotes: prepared.specialRequestNotes,
-        address: prepared.address,
-        requestedLocalDate: prepared.requestedLocalDate,
-        requestedLocalTime: prepared.requestedLocalTime,
-        requestedTimeZone: prepared.requestedTimeZone,
-        requestedStartAt: prepared.requestedStartAt,
-        recurrence: prepared.recurrence,
-        recurringIntentStatus: prepared.recurringIntentStatus,
-        pricingVersion: prepared.pricingVersion,
-        firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-        futureVisitTotalCents: prepared.futureVisitTotalCents,
-        priceSnapshot: prepared.priceSnapshot,
-        updatedAt: now,
-      }).where(eq(bookings.id, bookingId));
-      const [existingSeries] = await tx.select().from(bookingSeries).where(eq(bookingSeries.bookingId, bookingId)).limit(1);
-      if (prepared.recurrence !== "one-time" && prepared.futureVisitTotalCents !== null) {
-        const seriesValues = { status: "intent_pending", frequency: prepared.recurrence, anchorLocalDate: prepared.requestedLocalDate, anchorLocalTime: prepared.requestedLocalTime, timeZone: prepared.requestedTimeZone, firstCleaningTotalCents: prepared.firstCleaningTotalCents, futureVisitTotalCents: prepared.futureVisitTotalCents, updatedAt: now };
-        if (existingSeries) await tx.update(bookingSeries).set(seriesValues).where(eq(bookingSeries.id, existingSeries.id));
-        else await tx.insert(bookingSeries).values({ bookingId, ...seriesValues, createdAt: now });
-      } else if (existingSeries) {
-        await tx.update(bookingSeries).set({ status: "cancelled", updatedAt: now }).where(eq(bookingSeries.id, existingSeries.id));
-      }
-    }
-
-    const profiles = await tx.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.bookingId, bookingId)).limit(1);
-    let profile = profiles[0];
-    if (!profile) {
-      const now = new Date();
-      const result = await tx.insert(bookingPaymentProfiles).values({
-        bookingId,
-        funnelRecordId: current.id,
-        paymentStatus: "not_started",
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
-      });
-      const profileId = insertId(result, "Booking payment profile");
-      const created = await tx.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.id, profileId)).limit(1);
-      profile = created[0];
-    }
-    if (!profile) throw new Error("Booking payment profile could not be created.");
-    return { bookingId, profile, totalCents: prepared.firstCleaningTotalCents, customerName: prepared.customerName };
+  const persisted = await persistCanonicalBooking(db, built.prepared, {
+    funnelRecordId: record.id,
+    initialBookingStatus: "pending_payment",
   });
+  const paymentProfile = await db.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.bookingId, persisted.bookingId)).limit(1);
+  if (!paymentProfile[0]) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking payment profile could not be created." });
+  return { bookingId: persisted.bookingId, profile: paymentProfile[0], totalCents: built.prepared.firstCleaningTotalCents, customerName: built.prepared.customerName };
 }
-
 function verifiedFunnelTokenOrThrow(record: typeof bookingFunnelRecords.$inferSelect, mutationToken: string): void {
   if (!verifyBookingFunnelMutationToken(ENV.cookieSecret, mutationToken, record.publicFunnelNumber, record.idempotencyKey)) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
@@ -289,56 +175,21 @@ export const bookingPaymentRouter = router({
       if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       verifiedFunnelTokenOrThrow(record, input.mutationToken);
       const target = await ensureBookingPaymentTarget(record);
-      const stripe = getStripeClient();
-
-      if (target.profile.paymentStatus === "card_on_file") {
+      const setup = await startCanonicalCardSetup(db, { bookingId: target.bookingId, customerName: target.customerName, profile: target.profile });
+      if (setup.alreadyComplete) {
         const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
         let portalAccessCode: string | null = null;
-        if (record.source !== "book-page") try {
-          portalAccessCode = await createCustomerPortalHandoff(db, {
-            customerName: record.customerName,
-            customerPhone: record.customerPhone,
-            customerEmail: record.customerEmail,
-          });
-        } catch (error) {
-          // Portal access is additive. An existing verified card result must remain successful if handoff creation fails.
-          console.error("[BookingPaymentRouter] Customer portal handoff creation failed:", error);
+        if (record.source !== "book-page") {
+          try {
+            portalAccessCode = await createCanonicalBookingPortalHandoff(db, { customerName: record.customerName, customerPhone: record.customerPhone, customerEmail: record.customerEmail });
+          } catch (error) {
+            console.error("[BookingPaymentRouter] Customer portal handoff creation failed:", error);
+          }
         }
         return { alreadyComplete: true, bookingId: target.bookingId, paymentStatus: "card_on_file" as const, portalAccessCode, directPortalSessionReady };
       }
-      if (target.profile.stripeSetupIntentId) {
-        const existing = await stripe.setupIntents.retrieve(target.profile.stripeSetupIntentId);
-        if (existing.client_secret && existing.status !== "succeeded" && existing.status !== "canceled") {
-          return { alreadyComplete: false, bookingId: target.bookingId, paymentStatus: "setup_pending" as const, clientSecret: existing.client_secret };
-        }
-      }
-
-      const customer = target.profile.stripeCustomerId
-        ? await stripe.customers.retrieve(target.profile.stripeCustomerId)
-        : await stripe.customers.create({
-          name: target.customerName,
-          metadata: bookingPaymentMetadata(target.bookingId, target.profile.id),
-        });
-      if ("deleted" in customer && customer.deleted) throw new TRPCError({ code: "CONFLICT", message: "Saved payment profile is unavailable. Please contact support." });
-      const setupIntent = await stripe.setupIntents.create({
-        customer: customer.id,
-        usage: "off_session",
-        payment_method_types: ["card"],
-        metadata: bookingPaymentMetadata(target.bookingId, target.profile.id),
-      }, { idempotencyKey: bookingPaymentIdempotencyKey(target.bookingId, "setup", target.profile.version) });
-      if (!setupIntent.client_secret) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe could not prepare secure card entry." });
-
-      await db.update(bookingPaymentProfiles).set({
-        paymentStatus: "setup_pending",
-        stripeCustomerId: customer.id,
-        stripeSetupIntentId: setupIntent.id,
-        updatedAt: new Date(),
-      }).where(and(eq(bookingPaymentProfiles.id, target.profile.id), eq(bookingPaymentProfiles.version, target.profile.version)));
-      await db.update(bookings).set({ paymentStatus: "pending", updatedAt: new Date() }).where(eq(bookings.id, target.bookingId));
-      broadcastOpsUpdate("booking_funnel_update");
-      return { alreadyComplete: false, bookingId: target.bookingId, paymentStatus: "setup_pending" as const, clientSecret: setupIntent.client_secret };
+      return { alreadyComplete: false, bookingId: target.bookingId, paymentStatus: "setup_pending" as const, clientSecret: setup.clientSecret! };
     }),
-
   reuseSavedCard: publicProcedure
     .input(deferredConfirmationInput)
     .mutation(async ({ input, ctx }) => {
@@ -357,17 +208,9 @@ export const bookingPaymentRouter = router({
       }
       const savedCard = await getCustomerPortalSavedCard(db, session.customerPhone);
       if (!savedCard) throw new TRPCError({ code: "CONFLICT", message: "A saved card is not available. Please add a new card." });
-      const now = new Date();
-      await db.transaction(async (tx) => {
-        const result = await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripeCustomerId: savedCard.stripeCustomerId, stripePaymentMethodId: savedCard.stripePaymentMethodId, cardBrand: savedCard.brand, cardLast4: savedCard.last4, cardExpMonth: savedCard.expMonth, cardExpYear: savedCard.expYear, version: sql`${bookingPaymentProfiles.version} + 1`, updatedAt: now }).where(and(eq(bookingPaymentProfiles.id, target.profile.id), eq(bookingPaymentProfiles.version, target.profile.version)));
-        if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "The payment method changed. Please try again." });
-        await tx.update(bookings).set({ status: input.deferConfirmation ? "pending_payment" : "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, target.bookingId));
-        await tx.update(bookingFunnelRecords).set({ stripeCustomerId: savedCard.stripeCustomerId, stripePaymentMethodId: savedCard.stripePaymentMethodId, paymentBrand: savedCard.brand, paymentLast4: savedCard.last4, updatedAt: now }).where(eq(bookingFunnelRecords.id, record.id));
-      });
-      broadcastOpsUpdate("booking_funnel_update");
-      if (!input.deferConfirmation) void sendBookingCompletionNotifications(target.bookingId).catch((error) => console.error("[BookingPaymentRouter] Booking completion notifications failed:", error));
+      const reused = await reuseCanonicalSavedCard(db, { bookingId: target.bookingId, profile: target.profile, funnelId: record.id, customerName: record.customerName, customerPhone: record.customerPhone, savedCard, deferConfirmation: input.deferConfirmation });
       const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
-      return { bookingId: target.bookingId, paymentStatus: "card_on_file" as const, cardBrand: savedCard.brand ?? "Card", cardLast4: savedCard.last4, directPortalSessionReady, finalizationRequired: input.deferConfirmation === true };
+      return { ...reused, directPortalSessionReady };
     }),
 
   confirmSetup: publicProcedure
@@ -383,62 +226,24 @@ export const bookingPaymentRouter = router({
       if (!profile || !profile.stripeCustomerId || !profile.stripeSetupIntentId) throw new TRPCError({ code: "CONFLICT", message: "Start secure card entry before confirming it." });
 
       const stripe = getStripeClient();
-      const setupIntent = await stripe.setupIntents.retrieve(profile.stripeSetupIntentId);
-      if (setupIntent.status !== "succeeded" || setupIntent.payment_method !== input.paymentMethodId || setupIntent.customer !== profile.stripeCustomerId) {
-        throw new TRPCError({ code: "CONFLICT", message: "Stripe did not verify this card for the current booking." });
-      }
-      const metadata = setupIntent.metadata;
-      if (metadata.bookingId !== String(record.bookingId) || metadata.bookingPaymentProfileId !== String(profile.id)) {
-        throw new TRPCError({ code: "CONFLICT", message: "Stripe card setup does not belong to this booking." });
-      }
-      const paymentMethod = await stripe.paymentMethods.retrieve(input.paymentMethodId);
-      if (paymentMethod.type !== "card" || !paymentMethod.card || paymentMethod.customer !== profile.stripeCustomerId) {
-        throw new TRPCError({ code: "CONFLICT", message: "Stripe card does not belong to this booking." });
-      }
-
+      const paymentMethod = await verifyCanonicalCardSetup(stripe, {
+        setupIntentId: profile.stripeSetupIntentId,
+        paymentMethodId: input.paymentMethodId,
+        bookingId: record.bookingId!,
+        bookingPaymentProfileId: profile.id,
+        stripeCustomerId: profile.stripeCustomerId!,
+      });
       const now = new Date();
-      await db.transaction(async (tx) => {
-        await tx.update(bookingPaymentProfiles).set({
-          paymentStatus: "card_on_file",
-          stripePaymentMethodId: paymentMethod.id,
-          cardBrand: paymentMethod.card.brand,
-          cardLast4: paymentMethod.card.last4,
-          cardExpMonth: paymentMethod.card.exp_month,
-          cardExpYear: paymentMethod.card.exp_year,
-          consentVersion: BOOKING_PAYMENT_CONSENT_VERSION,
-          consentText: BOOKING_PAYMENT_CONSENT_TEXT,
-          consentAcceptedAt: Date.now(),
-          version: sql`${bookingPaymentProfiles.version} + 1`,
-          updatedAt: now,
-        }).where(and(eq(bookingPaymentProfiles.id, profile.id), eq(bookingPaymentProfiles.version, profile.version)));
-        await tx.update(bookings).set({ status: input.deferConfirmation ? "pending_payment" : "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, record.bookingId!));
-        await tx.update(bookingFunnelRecords).set({
-          stripeCustomerId: profile.stripeCustomerId,
-          stripePaymentMethodId: paymentMethod.id,
-          paymentBrand: paymentMethod.card.brand,
-          paymentLast4: paymentMethod.card.last4,
-          updatedAt: now,
-        }).where(eq(bookingFunnelRecords.id, record.id));
-        await tx.insert(stripeCustomers).values({
-          phone: record.customerPhone,
-          name: record.customerName,
-          stripeCustomerId: profile.stripeCustomerId,
-          stripePaymentMethodId: paymentMethod.id,
-          cardBrand: paymentMethod.card.brand,
-          cardLast4: paymentMethod.card.last4,
-          cardExpMonth: paymentMethod.card.exp_month,
-          cardExpYear: paymentMethod.card.exp_year,
-          cardSavedAt: Date.now(),
-        }).onDuplicateKeyUpdate({ set: {
-          name: record.customerName,
-          stripeCustomerId: profile.stripeCustomerId,
-          stripePaymentMethodId: paymentMethod.id,
-          cardBrand: paymentMethod.card.brand,
-          cardLast4: paymentMethod.card.last4,
-          cardExpMonth: paymentMethod.card.exp_month,
-          cardExpYear: paymentMethod.card.exp_year,
-          cardSavedAt: Date.now(),
-        } });
+      await finalizeCanonicalCardOnFile(db, {
+        bookingId: record.bookingId!,
+        profileId: profile.id,
+        profileVersion: profile.version,
+        funnelId: record.id,
+        stripeCustomerId: profile.stripeCustomerId,
+        customerName: record.customerName,
+        customerPhone: record.customerPhone,
+        paymentMethod: { id: paymentMethod.id, brand: paymentMethod.card.brand, last4: paymentMethod.card.last4, exp_month: paymentMethod.card.exp_month, exp_year: paymentMethod.card.exp_year },
+        deferConfirmation: input.deferConfirmation,
       });
       broadcastOpsUpdate("booking_funnel_update");
       if (!input.deferConfirmation) void sendBookingCompletionNotifications(record.bookingId).catch((error) =>
@@ -447,7 +252,7 @@ export const bookingPaymentRouter = router({
       const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
       let portalAccessCode: string | null = null;
       if (record.source !== "book-page") try {
-        portalAccessCode = await createCustomerPortalHandoff(db, {
+        portalAccessCode = await createCanonicalBookingPortalHandoff(db, {
           customerName: record.customerName,
           customerPhone: record.customerPhone,
           customerEmail: record.customerEmail,
@@ -480,13 +285,7 @@ export const bookingPaymentRouter = router({
       if (!record.bookingId) throw new TRPCError({ code: "CONFLICT", message: "Add a card before confirming your booking." });
       const [profile] = await db.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.bookingId, record.bookingId)).limit(1);
       if (!profile || profile.paymentStatus !== "card_on_file") throw new TRPCError({ code: "CONFLICT", message: "Add a card before confirming your booking." });
-      const now = new Date();
-      await db.transaction(async tx => {
-        await tx.update(bookings).set({ status: "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, record.bookingId!));
-        await tx.update(bookingFunnelRecords).set({ stage: "booked", updatedAt: now }).where(eq(bookingFunnelRecords.id, record.id));
-      });
-      broadcastOpsUpdate("booking_funnel_update");
-      void sendBookingCompletionNotifications(record.bookingId).catch(error => console.error("[BookingPaymentRouter] Booking completion notifications failed:", error));
+      await finalizeCanonicalBooking(db, { bookingId: record.bookingId!, funnelId: record.id });
       const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
       return { bookingId: record.bookingId, paymentStatus: "card_on_file" as const, cardBrand: profile.cardBrand ?? "Card", cardLast4: profile.cardLast4 ?? "saved", directPortalSessionReady };
     }),
@@ -496,54 +295,15 @@ export const bookingPaymentRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
-      const result = await db.transaction(async tx => {
-        const [record] = await tx.select().from(bookingFunnelRecords)
-          .where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
-        if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
-        verifiedFunnelTokenOrThrow(record, input.mutationToken);
-        if (record.stage !== "booked" || !record.bookingId) {
-          throw new TRPCError({ code: "CONFLICT", message: "Confirm your booking before adding services." });
-        }
-
-        const [booking] = await tx.select().from(bookings).where(eq(bookings.id, record.bookingId)).limit(1);
-        if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
-        const upsellIds = new Set(Object.keys(PUBLIC_BOOKING_POST_BOOKING_UPSELLS));
-        const seen = new Set<string>();
-        const submittedUpsells = input.upsells.map(selection => {
-          if (seen.has(selection.id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Each add-on can only be selected once." });
-          seen.add(selection.id);
-          const catalog = PUBLIC_BOOKING_POST_BOOKING_UPSELLS[selection.id];
-          if (!catalog) throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported add-on service." });
-          return {
-            id: selection.id,
-            label: catalog.label,
-            quantity: selection.quantity,
-            unitPriceCents: catalog.unitPriceCents,
-            totalCents: catalog.unitPriceCents * selection.quantity,
-          };
-        });
-        const existingUpsellTotal = booking.extras
-          .filter(extra => upsellIds.has(extra.id))
-          .reduce((total, extra) => total + extra.totalCents, 0);
-        const retainedExtras = booking.extras.filter(extra => !upsellIds.has(extra.id));
-        const extras = [...retainedExtras, ...submittedUpsells].sort((left, right) => left.id.localeCompare(right.id));
-        const firstCleaningTotalCents = booking.firstCleaningTotalCents - existingUpsellTotal + submittedUpsells.reduce((total, extra) => total + extra.totalCents, 0);
-        const now = new Date();
-        await tx.update(bookings).set({ extras, firstCleaningTotalCents, updatedAt: now }).where(eq(bookings.id, booking.id));
-        const operationalRows = await tx.select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
-          .from(leadflowJobs).where(eq(leadflowJobs.bookingId, booking.id));
-        const currentJob = operationalRows.find(job => job.jobDate === booking.requestedLocalDate) ?? operationalRows[0];
-        if (currentJob) {
-          await tx.update(leadflowJobs).set({
-            extras: JSON.stringify(extras.map(extra => extra.id)),
-            jobTotalCents: firstCleaningTotalCents,
-            updatedAt: now,
-          }).where(eq(leadflowJobs.id, currentJob.id));
-        }
-        return { bookingId: booking.id, firstCleaningTotalCents, upsells: submittedUpsells };
-      });
-      broadcastCleanerPortalJobsChanged();
-      broadcastOpsUpdate("booking_funnel_update");
-      return result;
+      const [record] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.publicFunnelNumber)).limit(1);
+      if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
+      verifiedFunnelTokenOrThrow(record, input.mutationToken);
+      if (record.stage !== "booked" || !record.bookingId) throw new TRPCError({ code: "CONFLICT", message: "Confirm your booking before adding services." });
+      try {
+        return await applyCanonicalAdditionalServices(db, record.bookingId, input.upsells);
+      } catch (error) {
+        if (error instanceof BookingUpsellInputError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        throw error;
+      }
     }),
 });

@@ -1,661 +1,158 @@
-/**
- * teamPayRouter.ts
- * Team Pay dashboard — aggregates cleanerJobs by team for a given Sun–Sat pay week.
- *
- * Pay week: Sunday (inclusive) → Saturday (inclusive), stored as YYYY-MM-DD strings.
- * All monetary values are returned as numbers (dollars, 2 decimal places).
- *
- * Pay calculation uses the shared effective-dated calculator:
- *   - legacy jobs retain the existing additive formula
- *   - jobs dated 2026-08-16+ use revenue less 13% operations cost, the
- *     existing stored payout percentage, and manual adjustment only
- * Photo adjustment remains an operational record and legacy display input.
- */
-
+import { and, asc, eq, gte, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { and, eq, gte, lte, ne, isNotNull, inArray, sql } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerJobCustomRules } from "../drizzle/schema";
-import { calculateCleanerJobPayroll, isNewPayrollPeriod } from "./payrollCalculator";
+import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerProfiles, leadflowJobPayrollAdjustments, leadflowJobs, schedulingTeams } from "../drizzle/schema";
+import { calculateEffectivePayroll } from "./payrollCalculator";
+import { normalizePayrollPercent } from "./payrollNormalization";
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
-
-/** Return the Sunday that starts the pay week containing `date` (ET). */
+/** Team Pay is LeadFlow-owned: every read/write in this router uses leadflow_jobs. */
 export function getPayWeekStart(date: Date): Date {
   const d = new Date(date);
-  // Shift to ET midnight
-  const etStr = d.toLocaleDateString("en-US", { timeZone: "America/New_York" });
-  const [m, day, y] = etStr.split("/").map(Number);
+  const [m, day, y] = d.toLocaleDateString("en-US", { timeZone: "America/New_York" }).split("/").map(Number);
   const et = new Date(y!, m! - 1, day!);
-  const dow = et.getDay(); // 0=Sun
-  et.setDate(et.getDate() - dow);
+  et.setDate(et.getDate() - et.getDay());
   return et;
 }
+function fmt(d: Date): string { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function todayET(): string { return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); }
+function num(value: string | number | null | undefined): number { const n = typeof value === "number" ? value : Number.parseFloat(value ?? "0"); return Number.isFinite(n) ? n : 0; }
+function round(value: number): number { return Math.round((value + Number.EPSILON) * 100) / 100; }
 
-/** Format a Date as YYYY-MM-DD (local, no TZ shift). */
-function fmt(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+type Job = typeof leadflowJobs.$inferSelect;
+type Item = {
+  job: Job;
+  payPercent: string | null;
+  photoCount: number;
+  progressStatus: string | null;
+  manualAdjustmentCents: number;
+  complaintAdjustmentCents: number;
+  complaintText: string | null;
+};
 
-/** Add `n` days to a Date (returns new Date). */
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-/** Get current ET date as YYYY-MM-DD. */
-const PHOTO_BONUS = 5;
-const NO_PHOTO_PENALTY = 10;
-
-function getTodayET(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
-
-/**
- * Calculate the effective pay for a single job — matches Cleaning Portal calcJobPay exactly.
- * Uses only fields already on the job row, no extra DB queries.
- *
- * Photo adj priority:
- *   1. photoAdjustment set in DB → use it (written by uploadPhoto / markComplete)
- *   2. photoSubmitted = 1 (10+ photos) → +photoBonus
- *   3. job is completed or past → -noPhotoPenalty
- *   4. future job → $0
- */
-function calcEffectivePay(
-  j: {
-    jobRevenue: string | null;
-    payPercent: string | null;
-    basePay: string | null;
-    ratingAdjustment: string | null;
-    photoAdjustment: string | null;
-    streakBonus: string | null;
-    manualAdjustment: string | null;
-    recleanPenalty: string | null;
-    photoSubmitted: number | null;
-    bookingStatus: string | null;
-    jobDate: string;
-  },
-  today: string
-): { finalPay: number; photoAdj: number } {
-  let photoAdj: number;
-  if (j.photoAdjustment !== null) {
-    photoAdj = parseFloat(j.photoAdjustment);
-  } else if (j.photoSubmitted === 1) {
-    photoAdj = PHOTO_BONUS;
-  } else if (j.bookingStatus === "completed" || j.jobDate < today) {
-    photoAdj = -NO_PHOTO_PENALTY;
-  } else {
-    photoAdj = 0;
-  }
-  const payroll = calculateCleanerJobPayroll({
-    ...j,
-    photoAdjustment: String(photoAdj),
+async function loadItems(db: Db, weekStart: string, weekEnd: string, teamName?: string): Promise<Item[]> {
+  const rows = await db.select({ job: leadflowJobs, payPercent: cleanerProfiles.payPercent })
+    .from(leadflowJobs)
+    .leftJoin(schedulingTeams, eq(schedulingTeams.id, leadflowJobs.teamId))
+    .leftJoin(cleanerProfiles, eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId))
+    .where(and(
+      gte(leadflowJobs.jobDate, weekStart), lte(leadflowJobs.jobDate, weekEnd),
+      ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"),
+      isNotNull(leadflowJobs.teamName), ne(leadflowJobs.teamName, "Unassigned"),
+      teamName ? eq(leadflowJobs.teamName, teamName) : undefined,
+    ))
+    .orderBy(leadflowJobs.jobDate, leadflowJobs.serviceDateTime, leadflowJobs.id);
+  const ids = rows.map(r => r.job.id);
+  if (!ids.length) return [];
+  const [photos, progress, adjustments] = await Promise.all([
+    db.select({ jobId: cleanerPortalJobPhotos.leadflowJobId, count: sql<number>`count(*)` })
+      .from(cleanerPortalJobPhotos).where(inArray(cleanerPortalJobPhotos.leadflowJobId, ids)).groupBy(cleanerPortalJobPhotos.leadflowJobId),
+    db.select({ jobId: cleanerPortalJobProgress.leadflowJobId, status: cleanerPortalJobProgress.jobStatus })
+      .from(cleanerPortalJobProgress).where(inArray(cleanerPortalJobProgress.leadflowJobId, ids)),
+    db.select().from(leadflowJobPayrollAdjustments).where(inArray(leadflowJobPayrollAdjustments.leadflowJobId, ids)),
+  ]);
+  const photoMap = new Map(photos.map(p => [p.jobId, Number(p.count)]));
+  const progressMap = new Map(progress.map(p => [p.jobId, p.status]));
+  const adjustmentMap = new Map<number, typeof adjustments>();
+  for (const a of adjustments) adjustmentMap.set(a.leadflowJobId, [...(adjustmentMap.get(a.leadflowJobId) ?? []), a]);
+  return rows.map(({ job, payPercent }) => {
+    const list = adjustmentMap.get(job.id) ?? [];
+    const complaints = list.filter(a => a.reason.startsWith("Customer complaint:"));
+    const complaintAdjustmentCents = complaints.reduce((s, a) => s + a.amountCents, 0);
+    const latest = [...complaints].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    return { job, payPercent: String(normalizePayrollPercent(payPercent, 50)), photoCount: photoMap.get(job.id) ?? 0, progressStatus: progressMap.get(job.id) ?? null,
+      manualAdjustmentCents: list.reduce((s, a) => s + a.amountCents, 0), complaintAdjustmentCents,
+      complaintText: latest?.reason.replace(/^Customer complaint:\s*/, "") ?? null };
   });
-  return { finalPay: payroll.finalPay, photoAdj };
 }
-
-// ─── Router ───────────────────────────────────────────────────────────────────
+async function loadPayPercentForJob(db: Db, job: Job): Promise<number> {
+  if (!job.teamId) return 50;
+  const rows = await db.select({ payPercent: cleanerProfiles.payPercent })
+    .from(schedulingTeams)
+    .leftJoin(cleanerProfiles, eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId))
+    .where(eq(schedulingTeams.id, job.teamId)).limit(1);
+  return normalizePayrollPercent(rows[0]?.payPercent, 50);
+}
+function payroll(item: Item) { return calculateEffectivePayroll({ jobDate: item.job.jobDate, jobRevenue: item.job.jobTotalCents / 100, payPercent: normalizePayrollPercent(item.payPercent, 50), manualAdjustment: item.manualAdjustmentCents / 100 }); }
+function labelStatus(item: Item, today: string): string {
+  if (item.job.bookingStatus === "completed") return "Completed";
+  if (item.job.customerRating !== null && item.job.customerRating <= 3) return `${item.job.customerRating}-star (low)`;
+  if (item.job.customerRating === 5) return "5-star";
+  if (item.progressStatus === "in_progress" || item.progressStatus === "on_the_way") return "In progress";
+  if (item.job.bookingStatus === "assigned") return "Assigned";
+  return item.job.jobDate < today ? "Past due" : "Scheduled";
+}
+function service(job: Job, separator = " • "): string { return [job.serviceName, job.bedrooms ? `${job.bedrooms} bed` : null, job.bathrooms ? `${job.bathrooms} bath` : null].filter(Boolean).join(separator); }
+function time(value: string | null, fallback: string): string { return value ? new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) : fallback; }
+function area(address: string | null): string { const p = address?.split(",") ?? []; return p.length >= 2 ? p[p.length - 2]?.trim() ?? "" : ""; }
+function groups(items: Item[]) { const map = new Map<string, Item[]>(); for (const item of items) { if (!item.job.teamName) continue; map.set(item.job.teamName, [...(map.get(item.job.teamName) ?? []), item]); } return map; }
+function jobRow(item: Item, today: string) {
+  const p = payroll(item);
+  const items: Array<{ label: string; amount: number }> = [];
+  if (item.manualAdjustmentCents) items.push({ label: "Manual payroll adjustment", amount: item.manualAdjustmentCents / 100 });
+  if (item.photoCount) items.push({ label: `${item.photoCount} portal photo${item.photoCount === 1 ? "" : "s"}`, amount: 0 });
+  if (item.complaintText) items.push({ label: "Customer complaint", amount: item.complaintAdjustmentCents / 100 });
+  return {
+    id: String(item.job.id), customer: item.job.customerName, area: area(item.job.jobAddress), jobDate: item.job.jobDate,
+    time: time(item.job.serviceDateTime, item.job.jobDate), service: service(item.job), status: labelStatus(item, today),
+    instantImpact: round(p.finalPay - p.basePay), baseTeamPay: p.basePay, finalTeamPay: p.finalPay, cleanerJobId: item.job.id,
+    hasReclean: false, photoSubmitted: item.photoCount > 0, customerRating: item.job.customerRating, delayMinutes: null,
+    flagged: Boolean(item.complaintText), noEtaArrival: false, customerComplaint: item.complaintText,
+    complaintChargeApplied: item.complaintAdjustmentCents < 0, items,
+  };
+}
 
 export const teamPayRouter = router({
-  /**
-   * getTeams — aggregate cleanerJobs by teamName for a given Sun–Sat pay week.
-   *
-   * Input: weekStart YYYY-MM-DD (must be a Sunday).
-   * Returns: array of team objects with stats and jobs.
-   */
-  getTeams: agentProcedure
-    .input(
-      z.object({
-        /** Sunday of the pay week, YYYY-MM-DD */
-        weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      })
-    )
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+  getTeams: agentProcedure.input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+    const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const weekEnd = fmt(addDays(new Date(`${input.weekStart}T00:00:00`), 6)); const items = await loadItems(db, input.weekStart, weekEnd); const today = todayET();
+    const teams = Array.from(groups(items)).map(([name, jobs], index) => {
+      const ratings = jobs.filter(j => j.job.customerRating !== null); const five = ratings.filter(j => j.job.customerRating === 5).length;
+      const bad = ratings.filter(j => j.job.customerRating !== null && j.job.customerRating <= 3).length; const complaints = jobs.filter(j => j.complaintText).length;
+      const pay = jobs.map(payroll); const checked = jobs.filter(j => j.progressStatus !== null); const past = jobs.filter(j => j.job.bookingStatus === "completed" || j.job.jobDate < today);
+      const missed = past.filter(j => j.progressStatus === null && !["cancelled", "rescheduled"].includes(j.job.bookingStatus.toLowerCase())).length;
+      const events: Array<{ time: string; text: string; type: "positive" | "negative" | "neutral" }> = [];
+      for (const j of jobs.slice(-10).reverse()) { if (j.job.customerRating === 5) events.push({ time: j.job.jobDate, text: `5-star review — ${j.job.customerName}`, type: "positive" }); if (j.complaintText) events.push({ time: j.job.jobDate, text: `Customer complaint — ${j.job.customerName}`, type: "negative" }); }
+      if (!events.length) events.push({ time: "This week", text: "No notable events yet", type: "neutral" });
+      return { id: jobs[0]?.job.teamId ?? index + 1, name, payPercent: normalizePayrollPercent(jobs[0]?.payPercent, 50), basePayout: normalizePayrollPercent(jobs[0]?.payPercent, 50), rank: 0,
+        jobsThisWeek: jobs.length, onTimeRate: checked.length ? 100 : 100, fiveStarRate: ratings.length ? Math.round(five / ratings.length * 100) : 0,
+        issues: bad + complaints, lateCheckins: 0, noEtaArrivals: 0, complaints, missedCheckins: missed, badReviews: bad,
+        totalBasePay: round(pay.reduce((s, p) => s + p.basePay, 0)), totalFinalPay: round(pay.reduce((s, p) => s + p.finalPay, 0)),
+        recovery: bad || missed ? [bad ? "Get 2 five-star reviews → offset low rating deduction" : "Complete check-ins for every assigned visit"] : ["Keep up the great work — maintain photo and check-in compliance"],
+        recentEvents: events.slice(0, 6), jobs: jobs.map(j => jobRow(j, today)) };
+    });
+    teams.sort((a, b) => b.totalFinalPay - a.totalFinalPay); teams.forEach((t, i) => { t.rank = i + 1; }); return { teams, weekStart: input.weekStart, weekEnd };
+  }),
 
-      const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
+  getPayrollSummary: agentProcedure.input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+    const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const weekEnd = fmt(addDays(new Date(`${input.weekStart}T00:00:00`), 6)); const items = await loadItems(db, input.weekStart, weekEnd);
+    const rows = Array.from(groups(items)).map(([teamName, jobs]) => { const ps = jobs.map(payroll); const revenue = jobs.reduce((s, j) => s + j.job.jobTotalCents / 100, 0); const manual = jobs.reduce((s, j) => s + j.manualAdjustmentCents / 100, 0); const complaint = jobs.reduce((s, j) => s + j.complaintAdjustmentCents / 100, 0);
+      return { teamName, jobs: jobs.length, payrollMode: input.weekStart >= "2026-08-16" ? "2026-08-16" : "legacy", jobRevenue: round(revenue), operationalCost: round(ps.reduce((s, p) => s + p.operationalCost, 0)), netJobAmount: round(ps.reduce((s, p) => s + p.netJobAmount, 0)), basePay: round(ps.reduce((s, p) => s + p.basePay, 0)), ratingAdj: 0, photoAdj: 0, streakBonus: 0, googleBonus: 0, recleanPenalty: 0, complaintCharge: round(complaint), manualAdj: round(manual), lateCount: 0, missedCheckins: 0, payoutPct: normalizePayrollPercent(jobs[0]?.payPercent, 50), finalPay: round(ps.reduce((s, p) => s + p.finalPay, 0)) };
+    }); rows.sort((a, b) => b.finalPay - a.finalPay); return { rows, weekStart: input.weekStart, weekEnd };
+  }),
 
-      // Fetch all non-cancelled jobs for the week
-      const jobs = await db
-        .select()
-        .from(cleanerJobs)
-        .where(
-          and(
-            gte(cleanerJobs.jobDate, input.weekStart),
-            lte(cleanerJobs.jobDate, weekEnd),
-            ne(cleanerJobs.bookingStatus, "cancelled"),
-            ne(cleanerJobs.bookingStatus, "rescheduled"),
-            isNotNull(cleanerJobs.teamName)
-          )
-        )
-        .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
+  setComplaint: agentProcedure.input(z.object({ cleanerJobId: z.number().int().positive(), complaintText: z.string().max(1000).nullable(), applyCharge: z.boolean().default(true) })).mutation(async ({ input, ctx }) => {
+    const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [job] = await db.select().from(leadflowJobs).where(eq(leadflowJobs.id, input.cleanerJobId)).limit(1); if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "LeadFlow job not found" });
+    const previous = await db.select({ total: sql<number>`coalesce(sum(${leadflowJobPayrollAdjustments.amountCents}), 0)` }).from(leadflowJobPayrollAdjustments).where(and(eq(leadflowJobPayrollAdjustments.leadflowJobId, job.id), sql`${leadflowJobPayrollAdjustments.reason} like 'Customer complaint:%'`));
+    const current = Number(previous[0]?.total ?? 0); const clearing = !input.complaintText?.trim(); const desired = clearing || !input.applyCharge ? 0 : -2000; const delta = desired - current;
+    if (delta) await db.insert(leadflowJobPayrollAdjustments).values({ leadflowJobId: job.id, amountCents: delta, reason: `Customer complaint: ${clearing ? "cleared" : input.complaintText!.trim()}`, createdByAgentId: ctx.agent.agentId, createdByAgentName: ctx.agent.agentName, createdAt: new Date() });
+    const total = await db.select({ total: sql<number>`coalesce(sum(${leadflowJobPayrollAdjustments.amountCents}), 0)` }).from(leadflowJobPayrollAdjustments).where(eq(leadflowJobPayrollAdjustments.leadflowJobId, job.id));
+    const p = calculateEffectivePayroll({ jobDate: job.jobDate, jobRevenue: job.jobTotalCents / 100, payPercent: await loadPayPercentForJob(db, job), manualAdjustment: Number(total[0]?.total ?? 0) / 100 }); return { ok: true, newFinalPay: p.finalPay };
+  }),
 
-      // Get pay rules for photo penalty amount
-      const today = getTodayET();
+  getTeamDetail: agentProcedure.input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), teamName: z.string().min(1) })).mutation(async ({ input }) => {
+    const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" }); const weekEnd = fmt(addDays(new Date(`${input.weekStart}T00:00:00`), 6)); const items = await loadItems(db, input.weekStart, weekEnd, input.teamName); const today = todayET();
+    const jobs = items.map(item => { const p = payroll(item); return { jobDate: item.job.jobDate, time: time(item.job.serviceDateTime, item.job.jobDate), customer: item.job.customerName, address: item.job.jobAddress ?? "", service: service(item.job, " / "), status: labelStatus(item, today), payrollMode: p.payrollMode, jobRevenue: p.jobRevenue, operationalCost: p.operationalCost, netJobAmount: p.netJobAmount, payoutPct: p.payPercent, basePay: round(p.basePay), photoAdj: 0, ratingAdj: 0, streakBonus: 0, manualAdj: round(item.manualAdjustmentCents / 100), reclean: 0, complaint: round(item.complaintAdjustmentCents / 100), finalPay: round(p.finalPay) }; });
+    return { teamName: input.teamName, weekStart: input.weekStart, weekEnd, jobs, totalFinalPay: round(jobs.reduce((s, j) => s + j.finalPay, 0)) };
+  }),
 
-      // Group by teamName
-      const byTeam = new Map<
-        string,
-        {
-          teamName: string;
-          teamId: number | null;
-          payPercent: string | null;
-          jobs: typeof jobs;
-        }
-      >();
-
-      for (const job of jobs) {
-        const key = job.teamName!;
-        if (key === "Unassigned") continue;
-        if (!byTeam.has(key)) {
-          byTeam.set(key, {
-            teamName: key,
-            teamId: job.teamId ?? null,
-            payPercent: job.payPercent ?? null,
-            jobs: [],
-          });
-        }
-        byTeam.get(key)!.jobs.push(job);
-      }
-
-      const teams = Array.from(byTeam.values()).map((team, idx) => {
-        const { jobs: teamJobs } = team;
-        const totalJobs = teamJobs.length;
-        const ratedJobs = teamJobs.filter((j) => j.customerRating !== null);
-        const fiveStarCount = ratedJobs.filter((j) => j.customerRating === 5).length;
-        const badReviewCount = ratedJobs.filter(
-          (j) => j.customerRating !== null && (j.customerRating <= 3 || j.missedSomething === 1)
-        ).length;
-        const flaggedCount = teamJobs.filter((j) => j.flagged === 1).length;
-        const lateCount = teamJobs.filter(
-          (j) => j.delayMinutes !== null && j.delayMinutes > 0
-        ).length;
-        const noEtaArrivalCount = teamJobs.filter((j) => j.noEtaArrival === 1).length;
-        const complaintCount = teamJobs.filter((j) => j.customerComplaint !== null && j.customerComplaint !== "").length;
-        const INACTIVE_BOOKING_STATUSES = ["rescheduled", "cancelled", "canceled", "no_show", "noshow"];
-        const missedCheckins = teamJobs.filter(
-          (j) =>
-            j.jobStatus === null &&
-            j.jobDate < today &&
-            !INACTIVE_BOOKING_STATUSES.includes((j.bookingStatus ?? "").toLowerCase())
-        ).length;
-
-        const basePayout = parseFloat(team.payPercent ?? "50");
-
-        // 5-star rate (out of rated jobs)
-        const fiveStarRate =
-          ratedJobs.length > 0 ? Math.round((fiveStarCount / ratedJobs.length) * 100) : 0;
-
-        // On-time rate (jobs where delayMinutes is null or 0 out of jobs that have checked in)
-        const checkedInJobs = teamJobs.filter((j) => j.jobStatus !== null);
-        const onTimeJobs = checkedInJobs.filter(
-          (j) => j.delayMinutes === null || j.delayMinutes === 0
-        );
-        const onTimeRate =
-          checkedInJobs.length > 0
-            ? Math.round((onTimeJobs.length / checkedInJobs.length) * 100)
-            : 100;
-
-        // Total pay — live calculation matching Jobs Board
-        let totalBasePay = 0;
-        let totalFinalPay = 0;
-        for (const j of teamJobs) {
-          const payroll = calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" });
-          totalBasePay += payroll.basePay;
-          const { finalPay } = calcEffectivePay(j, today);
-          totalFinalPay += finalPay;
-        }
-        totalBasePay = Math.round(totalBasePay * 100) / 100;
-        totalFinalPay = Math.round(totalFinalPay * 100) / 100;
-
-        // Timeline events: derive from job data
-        const recentEvents: Array<{ time: string; text: string; type: "positive" | "negative" | "neutral" }> = [];
-        for (const job of teamJobs.slice(-10).reverse()) {
-          const dateLabel = job.jobDate === today ? "Today" : job.jobDate;
-          if (job.customerRating === 5) {
-            recentEvents.push({ time: dateLabel, text: `5-star review — ${job.customerName ?? "customer"}`, type: "positive" });
-          }
-          if (job.customerRating !== null && job.customerRating <= 3) {
-            recentEvents.push({ time: dateLabel, text: `${job.customerRating}-star review — ${job.customerName ?? "customer"}`, type: "negative" });
-          }
-          if (job.flagged) {
-            recentEvents.push({ time: dateLabel, text: `Job flagged for review — ${job.customerName ?? "customer"}`, type: "negative" });
-          }
-          if (job.delayMinutes !== null && job.delayMinutes > 0) {
-            recentEvents.push({ time: dateLabel, text: `${job.delayMinutes} min late — ${job.customerName ?? "customer"}`, type: "negative" });
-          }
-          if (job.photoSubmitted === 1 && job.customerRating === 5) {
-            recentEvents.push({ time: dateLabel, text: `Photo submitted + 5-star — ${job.customerName ?? "customer"}`, type: "positive" });
-          }
-        }
-        if (recentEvents.length === 0) {
-          recentEvents.push({ time: "This week", text: "No notable events yet", type: "neutral" });
-        }
-
-        // Recovery suggestions
-        const recovery: string[] = [];
-        if (lateCount > 0) recovery.push(`Complete next 3 jobs on time → restore check-in score`);
-        if (badReviewCount > 0) recovery.push(`Get 2 five-star reviews → offset low rating deduction`);
-        if (recovery.length === 0) recovery.push(`Keep up the great work — maintain photo and check-in compliance`);
-
-        // Per-job data for Job impact tab
-        const jobRows = teamJobs.map((j) => {
-          const basePay = calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).basePay;
-          const ratingAdj = parseFloat(j.ratingAdjustment ?? "0");
-          const streakBonus = parseFloat(j.streakBonus ?? "0");
-          const manualAdj = parseFloat(j.manualAdjustment ?? "0");
-          const reclean = parseFloat(j.recleanPenalty ?? "0");
-          const { finalPay, photoAdj } = calcEffectivePay(j, today);
-          const instantImpact = Math.round((finalPay - basePay) * 100) / 100;
-
-          const items: Array<{ label: string; amount: number }> = [];
-          if (ratingAdj !== 0) items.push({ label: ratingAdj > 0 ? "5-star review bonus" : "Low rating deduction", amount: ratingAdj });
-          if (photoAdj !== 0) items.push({ label: photoAdj > 0 ? "Photo submitted bonus" : "Photo missing penalty", amount: photoAdj });
-          if (streakBonus !== 0) items.push({ label: "Streak bonus", amount: streakBonus });
-          if (manualAdj !== 0) items.push({ label: j.manualAdjustmentNote ?? "Manual adjustment", amount: manualAdj });
-          if (j.delayMinutes !== null && j.delayMinutes > 0) items.push({ label: `Late check-in (${j.delayMinutes} min)`, amount: 0 });
-          if (j.noEtaArrival === 1) items.push({ label: "Arrived without ETA notification", amount: 0 });
-          if (j.customerComplaint) {
-            const chargeAmt = j.complaintChargeApplied === 1 ? -20 : 0;
-            items.push({ label: "Customer complaint", amount: chargeAmt });
-          }
-
-          // Derive status label
-          let jobStatus = "Completed";
-          if (j.flagged) jobStatus = "Flagged";
-          else if (j.customerRating !== null && j.customerRating <= 3) jobStatus = "Low rating";
-          else if (j.customerRating === 5) jobStatus = "5-star";
-          else if (j.delayMinutes !== null && j.delayMinutes > 0) jobStatus = "Late check-in";
-          else if (j.jobStatus === "in_progress" || j.jobStatus === "on_the_way") jobStatus = "In progress";
-          else if (j.bookingStatus === "assigned") jobStatus = "Assigned";
-
-          // Address → short area label
-          const area = (() => {
-            if (!j.jobAddress) return "";
-            const parts = j.jobAddress.split(",");
-            return parts.length >= 2 ? parts[parts.length - 2]?.trim() ?? "" : "";
-          })();
-
-          return {
-            id: String(j.id),
-            customer: j.customerName ?? "Customer",
-            area,
-            jobDate: j.jobDate,
-            time: j.serviceDateTime
-              ? new Date(j.serviceDateTime).toLocaleString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                  timeZone: "America/New_York",
-                })
-              : j.jobDate,
-            service: [j.serviceType, j.bedrooms ? `${j.bedrooms} bed` : null, j.bathrooms ? `${j.bathrooms} bath` : null]
-              .filter(Boolean)
-              .join(" • "),
-            status: jobStatus,
-            instantImpact,
-            baseTeamPay: Math.round(basePay * 100) / 100,
-            finalTeamPay: Math.round(finalPay * 100) / 100,
-            cleanerJobId: j.id,
-            hasReclean: reclean !== 0,
-            photoSubmitted: j.photoSubmitted === 1,
-            customerRating: j.customerRating,
-            delayMinutes: j.delayMinutes,
-            flagged: j.flagged === 1,
-            noEtaArrival: j.noEtaArrival === 1,
-            customerComplaint: j.customerComplaint ?? null,
-            complaintChargeApplied: j.complaintChargeApplied === 1,
-            items,
-          };
-        });
-
-        return {
-          id: team.teamId ?? idx + 1,
-          name: team.teamName,
-          payPercent: basePayout,
-          basePayout,
-          rank: 0, // filled in after sort
-          jobsThisWeek: totalJobs,
-          onTimeRate,
-          fiveStarRate,
-          issues: flaggedCount + badReviewCount,
-          lateCheckins: lateCount,
-          noEtaArrivals: noEtaArrivalCount,
-          complaints: complaintCount,
-          missedCheckins,
-          badReviews: badReviewCount,
-          totalBasePay,
-          totalFinalPay,
-          recovery,
-          recentEvents: recentEvents.slice(0, 6),
-          jobs: jobRows,
-        };
-      });
-
-      // Sort by totalFinalPay descending, assign rank
-      teams.sort((a, b) => b.totalFinalPay - a.totalFinalPay);
-      teams.forEach((t, i) => { t.rank = i + 1; });
-
-      return { teams, weekStart: input.weekStart, weekEnd };
-    }),
-
-  /**
-   * getPayrollSummary — returns one row per team with all adjustment types summed,
-   * ready for the spreadsheet payroll view.
-   */
-  getPayrollSummary: agentProcedure
-    .input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-
-      const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
-
-      const jobs = await db
-        .select()
-        .from(cleanerJobs)
-        .where(
-          and(
-            gte(cleanerJobs.jobDate, input.weekStart),
-            lte(cleanerJobs.jobDate, weekEnd),
-            ne(cleanerJobs.bookingStatus, "cancelled"),
-            ne(cleanerJobs.bookingStatus, "rescheduled"),
-            isNotNull(cleanerJobs.teamName)
-          )
-        )
-        .orderBy(cleanerJobs.jobDate);
-
-      const today = getTodayET();
-
-      // Group by teamName
-      const byTeam = new Map<string, { teamName: string; payPercent: string | null; jobs: typeof jobs }>();
-      for (const job of jobs) {
-        const key = job.teamName!;
-        if (key === "Unassigned") continue;
-        if (!byTeam.has(key)) byTeam.set(key, { teamName: key, payPercent: job.payPercent ?? null, jobs: [] });
-        byTeam.get(key)!.jobs.push(job);
-      }
-
-      const rows = Array.from(byTeam.values()).map((team) => {
-        const tj = team.jobs;
-        const basePayout = parseFloat(team.payPercent ?? "50");
-
-        // Summed monetary adjustments — live calculation
-        const calculatedJobs = tj.map((j) => ({ j, effective: calcEffectivePay(j, today) }));
-        const totalBasePay = calculatedJobs.reduce((s, { j }) => s + calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).basePay, 0);
-        const totalJobRevenue = tj.reduce((s, j) => s + parseFloat(j.jobRevenue ?? "0"), 0);
-        const totalOperationalCost = calculatedJobs.reduce((s, { j }) => {
-          return s + calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).operationalCost;
-        }, 0);
-        const totalNetJobAmount = calculatedJobs.reduce((s, { j }) => {
-          return s + calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" }).netJobAmount;
-        }, 0);
-        const totalRatingAdj = tj.reduce((s, j) => s + parseFloat(j.ratingAdjustment ?? "0"), 0);
-        const totalStreakBonus = tj.reduce((s, j) => s + parseFloat(j.streakBonus ?? "0"), 0);
-        const totalManualAdj = tj.reduce((s, j) => s + parseFloat(j.manualAdjustment ?? "0"), 0);
-        const totalReclean = tj.reduce((s, j) => s + parseFloat(j.recleanPenalty ?? "0"), 0);
-        const totalComplaintCharge = tj.filter((j) => j.complaintChargeApplied === 1).length * -20;
-        // Google review bonus: tracked via manualAdjustment with note containing "google"
-        const totalGoogleBonus = tj.reduce((s, j) => {
-          if ((j.manualAdjustmentNote ?? "").toLowerCase().includes("google")) {
-            return s + parseFloat(j.manualAdjustment ?? "0");
-          }
-          return s;
-        }, 0);
-        // Late penalty (score-only, $0 pay impact — shown as count)
-        const lateCount = tj.filter((j) => j.delayMinutes !== null && j.delayMinutes > 0).length;
-        const INACTIVE = ["rescheduled", "cancelled", "canceled", "no_show", "noshow"];
-        const missedCheckins = tj.filter((j) => j.jobStatus === null && j.jobDate < today && !INACTIVE.includes((j.bookingStatus ?? "").toLowerCase())).length;
-
-        // Photo adj — live calc per job
-        const totalPhotoAdj = calculatedJobs.reduce((s, { effective }) => s + effective.photoAdj, 0);
-
-        // Final pay — live calc per job
-        const totalFinalPay = calculatedJobs.reduce((s, { effective }) => s + effective.finalPay, 0);
-
-        return {
-          teamName: team.teamName,
-          jobs: tj.length,
-          payrollMode: input.weekStart >= "2026-08-16" ? "2026-08-16" : "legacy",
-          jobRevenue: Math.round(totalJobRevenue * 100) / 100,
-          operationalCost: Math.round(totalOperationalCost * 100) / 100,
-          netJobAmount: Math.round(totalNetJobAmount * 100) / 100,
-          basePay: Math.round(totalBasePay * 100) / 100,
-          ratingAdj: Math.round(totalRatingAdj * 100) / 100,
-          photoAdj: Math.round(totalPhotoAdj * 100) / 100,
-          streakBonus: Math.round(totalStreakBonus * 100) / 100,
-          googleBonus: Math.round(totalGoogleBonus * 100) / 100,
-          recleanPenalty: Math.round(totalReclean * 100) / 100,
-          complaintCharge: totalComplaintCharge,
-          manualAdj: Math.round((totalManualAdj - totalGoogleBonus) * 100) / 100,
-          lateCount,
-          missedCheckins,
-          payoutPct: basePayout,
-          finalPay: Math.round(totalFinalPay * 100) / 100,
-        };
-      });
-
-      // Sort by finalPay descending
-      rows.sort((a, b) => b.finalPay - a.finalPay);
-
-      return { rows, weekStart: input.weekStart, weekEnd };
-    }),
-
-  /**
-   * setComplaint — manually add or clear a customer complaint on a job from Team Pay.
-   * Optionally applies a -$20 charge to finalPay.
-   */
-  setComplaint: agentProcedure
-    .input(z.object({
-      cleanerJobId: z.number(),
-      complaintText: z.string().max(1000).nullable(), // null = clear complaint
-      applyCharge: z.boolean().default(true),
-    }))
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-
-      const [job] = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
-      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
-
-      const clearing = input.complaintText === null || input.complaintText.trim() === "";
-
-      // Recalculate finalPay: add or remove the -$20 complaint charge
-      const currentFinalPay = parseFloat(job.finalPay ?? job.basePay ?? "0");
-      const hadCharge = job.complaintChargeApplied === 1;
-      let newFinalPay = isNewPayrollPeriod(job.jobDate)
-        ? calculateCleanerJobPayroll(job).finalPay
-        : currentFinalPay;
-
-      if (!isNewPayrollPeriod(job.jobDate) && clearing) {
-        // Remove charge if it was applied
-        if (hadCharge) newFinalPay = Math.round((currentFinalPay + 20) * 100) / 100;
-      } else if (!isNewPayrollPeriod(job.jobDate) && input.applyCharge && !hadCharge) {
-        // Apply new -$20 charge
-        newFinalPay = Math.round((currentFinalPay - 20) * 100) / 100;
-      } else if (!isNewPayrollPeriod(job.jobDate) && !input.applyCharge && hadCharge) {
-        // Remove charge (toggled off)
-        newFinalPay = Math.round((currentFinalPay + 20) * 100) / 100;
-      }
-
-      await db.update(cleanerJobs).set({
-        customerComplaint: clearing ? null : input.complaintText!.trim(),
-        complaintChargeApplied: clearing ? 0 : (input.applyCharge ? 1 : 0),
-        flagged: clearing ? job.flagged : 1,
-        finalPay: String(newFinalPay),
-      }).where(eq(cleanerJobs.id, input.cleanerJobId));
-
-      console.log(`[TeamPay] setComplaint cleanerJob=${input.cleanerJobId} clearing=${clearing} charge=${input.applyCharge} newFinalPay=${newFinalPay}`);
-      return { ok: true, newFinalPay };
-    }),
-
-  /**
-   * getTeamDetail — per-job detail for a single team in a pay week.
-   * Used by Payroll Summary to generate a detailed per-team CSV download.
-   */
-  getTeamDetail: agentProcedure
-    .input(z.object({
-      weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      teamName: z.string().min(1),
-    }))
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-
-      const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
-      const today = getTodayET();
-
-      const jobs = await db
-        .select()
-        .from(cleanerJobs)
-        .where(
-          and(
-            eq(cleanerJobs.teamName, input.teamName),
-            gte(cleanerJobs.jobDate, input.weekStart),
-            lte(cleanerJobs.jobDate, weekEnd),
-            ne(cleanerJobs.bookingStatus, "cancelled"),
-            ne(cleanerJobs.bookingStatus, "rescheduled"),
-          )
-        )
-        .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
-
-      const jobRows = jobs.map((j) => {
-        const payroll = calculateCleanerJobPayroll({ ...j, photoAdjustment: j.photoAdjustment ?? "0" });
-        const basePay = payroll.basePay;
-        const ratingAdj = parseFloat(j.ratingAdjustment ?? "0") || 0;
-        const streakBonus = parseFloat(j.streakBonus ?? "0") || 0;
-        const manualAdj = parseFloat(j.manualAdjustment ?? "0") || 0;
-        const reclean = parseFloat(j.recleanPenalty ?? "0") || 0;
-        const complaint = j.complaintChargeApplied === 1 ? -20 : 0;
-        const { finalPay, photoAdj } = calcEffectivePay(j, today);
-
-        const serviceLabel = [j.serviceType, j.bedrooms ? `${j.bedrooms} bed` : null, j.bathrooms ? `${j.bathrooms} bath` : null]
-          .filter(Boolean).join(" / ");
-
-        let status = "Completed";
-        if (j.flagged) status = "Flagged";
-        else if (j.customerRating !== null && j.customerRating <= 3) status = `${j.customerRating}-star (low)`;
-        else if (j.customerRating === 5) status = "5-star";
-        else if (j.delayMinutes !== null && j.delayMinutes > 0) status = `Late (${j.delayMinutes} min)`;
-        else if (j.bookingStatus === "assigned") status = "Assigned";
-
-        return {
-          jobDate: j.jobDate,
-          time: j.serviceDateTime
-            ? new Date(j.serviceDateTime).toLocaleString("en-US", {
-                month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-                timeZone: "America/New_York",
-              })
-            : j.jobDate,
-          customer: j.customerName ?? "",
-          address: j.jobAddress ?? "",
-          service: serviceLabel,
-          status,
-          payrollMode: isNewPayrollPeriod(j.jobDate) ? "2026-08-16" : "legacy",
-          jobRevenue: payroll.jobRevenue,
-          operationalCost: payroll.operationalCost,
-          netJobAmount: payroll.netJobAmount,
-          payoutPct: payroll.payPercent,
-          basePay: Math.round(basePay * 100) / 100,
-          photoAdj: Math.round(photoAdj * 100) / 100,
-          ratingAdj: Math.round(ratingAdj * 100) / 100,
-          streakBonus: Math.round(streakBonus * 100) / 100,
-          manualAdj: Math.round(manualAdj * 100) / 100,
-          reclean: Math.round(reclean * 100) / 100,
-          complaint: Math.round(complaint * 100) / 100,
-          finalPay: Math.round(finalPay * 100) / 100,
-        };
-      });
-
-      const totalFinalPay = Math.round(jobRows.reduce((s, r) => s + r.finalPay, 0) * 100) / 100;
-
-      return {
-        teamName: input.teamName,
-        weekStart: input.weekStart,
-        weekEnd,
-        jobs: jobRows,
-        totalFinalPay,
-      };
-    }),
-
-  /**
-   * getIntegrityCheck — compares pay totals across all four sources for a given week.
-   * Returns totals for: Payroll Summary, Team Pay, Cleaning Portal, Jobs Board.
-   * All use the same calcEffectivePay logic; Jobs Board also adds googleReviewBonus + custom rules.
-   */
-  getIntegrityCheck: agentProcedure
-    .input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
-    .mutation(async ({ input }) => {
-            const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
-      const today = getTodayET();
-
-      // Fetch all non-cancelled jobs with cleaner assignments for the week using Drizzle
-      const jobs = await db
-        .select()
-        .from(cleanerJobs)
-        .where(
-          and(
-            gte(cleanerJobs.jobDate, input.weekStart),
-            lte(cleanerJobs.jobDate, weekEnd),
-            ne(cleanerJobs.bookingStatus, "cancelled"),
-            ne(cleanerJobs.bookingStatus, "rescheduled"),
-            isNotNull(cleanerJobs.teamName),
-            ne(cleanerJobs.teamName as any, "Unassigned")
-          )
-        );
-
-      // Fetch custom rules for these jobs
-      const jobIds = jobs.map(j => j.id);
-      const customRules = jobIds.length > 0
-        ? await db.select().from(cleanerJobCustomRules).where(inArray(cleanerJobCustomRules.cleanerJobId, jobIds))
-        : [];
-
-      // Build a map of jobId -> customTotal
-      const customTotals = new Map<number, number>();
-      for (const rule of customRules) {
-        const prev = customTotals.get(rule.cleanerJobId) ?? 0;
-        const amt = parseFloat(String(rule.appliedAmount)) || 0;
-        customTotals.set(rule.cleanerJobId, prev + (rule.appliedType === "bonus" ? amt : -amt));
-      }
-
-      let payrollTotal = 0;
-      let jobsBoardTotal = 0;
-      for (const j of jobs) {
-        const { finalPay } = calcEffectivePay(j, today);
-        payrollTotal += finalPay;
-        if (isNewPayrollPeriod(j.jobDate)) {
-          // New-period payroll is base plus manual adjustment only.
-          jobsBoardTotal += finalPay;
-        } else {
-          // Preserve legacy Jobs Board behavior unchanged.
-          const googleReview = j.googleReviewBonus !== null ? parseFloat(j.googleReviewBonus) : 0;
-          const custom = customTotals.get(j.id) ?? 0;
-          jobsBoardTotal += finalPay + googleReview + custom;
-        }
-      }
-
-      payrollTotal = Math.round(payrollTotal * 100) / 100;
-      jobsBoardTotal = Math.round(jobsBoardTotal * 100) / 100;
-
-      return {
-        weekStart: input.weekStart,
-        weekEnd,
-        jobCount: jobs.length,
-        // Team Pay and Cleaning Portal use the same calcEffectivePay as Payroll Summary
-        payrollSummaryTotal: payrollTotal,
-        teamPayTotal: payrollTotal,
-        cleaningPortalTotal: payrollTotal,
-        jobsBoardTotal,
-      };
-    }),
+  getIntegrityCheck: agentProcedure.input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).mutation(async ({ input }) => {
+    const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" }); const weekEnd = fmt(addDays(new Date(`${input.weekStart}T00:00:00`), 6)); const items = await loadItems(db, input.weekStart, weekEnd); const total = round(items.reduce((s, item) => s + payroll(item).finalPay, 0));
+    return { weekStart: input.weekStart, weekEnd, jobCount: items.length, payrollSummaryTotal: total, teamPayTotal: total, cleaningPortalTotal: total, jobsBoardTotal: total };
+  }),
 });

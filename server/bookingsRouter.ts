@@ -1,11 +1,13 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import {
   appSettings,
   bookingAssignments,
+  bookingFunnelRecords,
+  bookingPaymentProfiles,
   bookingSeries,
   bookings,
   customerPortalServiceRequests,
@@ -21,12 +23,16 @@ import {
 import {
   bookingGetInputSchema,
   bookingListInputSchema,
+  bookingRecurringFrequencySchema,
+  bookingServiceIdSchema,
   prepareBookingInputSchema,
 } from "../shared/booking";
 import {
   NativeBookingIdempotencyConflictError,
   NativeBookingInputError,
+  buildPreparedCanonicalBooking,
   prepareNativeBooking,
+  type PreparePublicBookingInput,
   type PreparedNativeBooking,
 } from "./bookingsService";
 import { ENV } from "./_core/env";
@@ -35,14 +41,27 @@ import {
   calculatePublicBookingPrice,
   isPublicBookingPriceSnapshot,
   PUBLIC_BOOKING_PRICED_EXTRAS,
+  PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
+  PUBLIC_BOOKING_PRICING_VERSION,
 } from "../shared/publicBookingPricing";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
+import { persistCanonicalBooking } from "./canonicalBookingPersistence";
+import { cancelCanonicalBooking } from "./bookingCancellationService";
+import { applyCanonicalAdditionalServices, BookingUpsellInputError } from "./bookingUpsellEngine";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import {
+  NATIVE_BOOKING_OPERATIONAL_ORIGIN,
+  nativeBookingCustomerNotes,
+  nativeBookingExtras,
+  nativeBookingFrequency,
+  nativeBookingServiceDateTime,
+  syncNativeBookingOperationalProjection,
+} from "./bookingLifecycleService";
 
 const PREPARE_WINDOW_MS = 10 * 60_000;
 const PREPARE_LIMIT = 20;
 const prepareAttempts = new Map<string, { count: number; resetAt: number }>();
-const NATIVE_BOOKING_OPERATIONAL_ORIGIN = "native_booking";
 const NATIVE_BOOKING_RECURRENCES = [
   "one-time",
   "weekly",
@@ -50,13 +69,84 @@ const NATIVE_BOOKING_RECURRENCES = [
   "monthly",
 ] as const;
 
-function nativeBookingFrequency(recurrence: string) {
-  if (recurrence === "weekly") return "Weekly";
-  if (recurrence === "biweekly") return "Bi-weekly";
-  if (recurrence === "monthly") return "Monthly";
-  return "One time";
-}
+const internalPublicBookingInputSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  paymentMethod: z.enum(["card", "cashapp", "invoice"]),
+  companyNotes: z.string().trim().max(4_000).nullable(),
+  additionalServices: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(80),
+        quantity: z.number().int().min(1).max(50),
+      })
+    )
+    .max(20)
+    .default([]),
+  booking: z.object({
+    surface: z.literal("popup"),
+    customer: z.object({
+      fullName: z.string().trim().min(2).max(255),
+      phone: z.string().trim().min(7).max(40),
+      email: z.string().trim().email().max(320),
+    }),
+    service: z.object({
+      serviceId: bookingServiceIdSchema,
+      bedrooms: z.number().int().min(0).max(7),
+      bathrooms: z.number().int().min(1).max(20),
+      extras: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(64),
+            quantity: z.number().int().min(1).max(50),
+          })
+        )
+        .max(20),
+      specialRequestNotes: z.array(z.string().trim().min(1).max(1_000)).max(20),
+    }),
+    address: z.string().trim().min(5).max(500),
+    requestedSchedule: z.object({
+      localDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      localTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    }),
+    recurrence: bookingRecurringFrequencySchema,
+    acceptedPricing: z.object({
+      version: z.literal(PUBLIC_BOOKING_PRICING_VERSION),
+      totalCents: z.number().int().min(0).max(10_000_000),
+    }),
+    pricing: z.object({
+      pricingMode: z.enum(["home", "hourly"]),
+      serviceId: bookingServiceIdSchema,
+      bedrooms: z.number().int().min(0).max(7),
+      bathrooms: z.number().int().min(1).max(5),
+      homeType: z.enum(["House", "Apartment", "Townhome", "Condo"]),
+      condition: z.number().int().min(1).max(10),
+      maidCount: z.number().int().min(1).max(4),
+      hourCount: z.number().int().min(1).max(8),
+      extras: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(80),
+            quantity: z.number().int().min(1).max(50),
+          })
+        )
+        .max(50),
+      recurrence: bookingRecurringFrequencySchema,
+    }),
+  }),
+});
 
+async function applyInternalAdditionalServices(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  bookingId: number,
+  selections: Array<{ id: string; quantity: number }>,
+) {
+  try {
+    return await applyCanonicalAdditionalServices(db, bookingId, selections);
+  } catch (error) {
+    if (error instanceof BookingUpsellInputError) throw new NativeBookingInputError(error.message);
+    throw error;
+  }
+}
 function nativeBookingFutureVisitTotalCents(
   booking: typeof bookings.$inferSelect,
   recurrence: (typeof NATIVE_BOOKING_RECURRENCES)[number]
@@ -69,22 +159,6 @@ function nativeBookingFutureVisitTotalCents(
     }).futureVisitTotalCents;
   }
   return booking.futureVisitTotalCents;
-}
-
-function nativeBookingServiceDateTime(
-  booking: typeof bookings.$inferSelect
-): string {
-  return new Date(
-    businessLocalDateTimeToUtcMs(
-      booking.requestedLocalDate,
-      booking.requestedLocalTime,
-      booking.requestedTimeZone
-    )
-  ).toISOString();
-}
-
-function nativeBookingExtras(booking: typeof bookings.$inferSelect): string {
-  return JSON.stringify(booking.extras.map(extra => extra.id));
 }
 
 function publishNativeBookingRefresh() {
@@ -148,6 +222,7 @@ async function findBookingByIdempotencyKey(
   if (!db) return undefined;
   const rows = await db
     .select({
+      id: bookings.id,
       publicBookingNumber: bookings.publicBookingNumber,
       commandHash: bookings.commandHash,
     })
@@ -159,84 +234,28 @@ async function findBookingByIdempotencyKey(
 
 async function persistPreparedBooking(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  prepared: PreparedNativeBooking
+  prepared: PreparedNativeBooking,
+  options: {
+    createAtomicPaymentProfile?: boolean;
+    paymentMethod?: "card" | "cashapp" | "invoice";
+    companyNotes?: string | null;
+  } = {}
 ) {
-  try {
-    const booking = await db.transaction(async tx => {
-      const now = new Date();
-      const result = await tx.insert(bookings).values({
-        publicBookingNumber: prepared.publicBookingNumber,
-        idempotencyKey: prepared.idempotencyKey,
-        commandHash: prepared.commandHash,
-        source: prepared.source,
-        status: prepared.status,
-        availabilityStatus: prepared.availabilityStatus,
-        assignmentStatus: prepared.assignmentStatus,
-        paymentStatus: prepared.paymentStatus,
-        customerName: prepared.customerName,
-        customerPhone: prepared.customerPhone,
-        customerEmail: prepared.customerEmail,
-        serviceId: prepared.serviceId,
-        serviceName: prepared.serviceName,
-        bedrooms: prepared.bedrooms,
-        bathrooms: prepared.bathrooms,
-        extras: prepared.extras,
-        specialRequestNotes: prepared.specialRequestNotes,
-        address: prepared.address,
-        requestedLocalDate: prepared.requestedLocalDate,
-        requestedLocalTime: prepared.requestedLocalTime,
-        requestedTimeZone: prepared.requestedTimeZone,
-        requestedStartAt: prepared.requestedStartAt,
-        recurrence: prepared.recurrence,
-        recurringIntentStatus: prepared.recurringIntentStatus,
-        pricingVersion: prepared.pricingVersion,
-        firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-        futureVisitTotalCents: prepared.futureVisitTotalCents,
-        priceSnapshot: prepared.priceSnapshot,
-        expiresAt: null,
-        createdAt: now,
-        updatedAt: now,
-      });
-      const bookingId = Number(
-        (result as unknown as { insertId?: number })?.insertId ??
-          (result as unknown as Array<{ insertId?: number }>)[0]?.insertId
-      );
-      if (!Number.isInteger(bookingId) || bookingId < 1)
-        throw new Error("Native booking insert did not return an ID.");
-
-      if (
-        prepared.recurrence !== "one-time" &&
-        prepared.futureVisitTotalCents !== null
-      ) {
-        await tx.insert(bookingSeries).values({
-          bookingId,
-          status: "intent_pending",
-          frequency: prepared.recurrence,
-          anchorLocalDate: prepared.requestedLocalDate,
-          anchorLocalTime: prepared.requestedLocalTime,
-          timeZone: prepared.requestedTimeZone,
-          firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-          futureVisitTotalCents: prepared.futureVisitTotalCents,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-
-      return {
-        publicBookingNumber: prepared.publicBookingNumber,
-        commandHash: prepared.commandHash,
-      };
-    });
-    return { booking, created: true };
-  } catch (error) {
-    if (!isDuplicateEntry(error)) throw error;
-    const existing = await findBookingByIdempotencyKey(
-      db,
-      prepared.idempotencyKey
-    );
-    if (!existing) throw error;
-    return { booking: existing, created: false };
-  }
+  const result = await persistCanonicalBooking(db, prepared, {
+    paymentMethod: options.paymentMethod,
+    companyNotes: options.companyNotes,
+    initialBookingStatus: options.paymentMethod === "card"
+      ? "pending_payment"
+      : "needs_attention",
+  });
+  return {
+    booking: {
+      id: result.bookingId,
+      publicBookingNumber: result.publicBookingNumber,
+      commandHash: result.commandHash,
+    },
+    created: result.created,
+  };
 }
 
 type ActiveBookingAssignment = {
@@ -288,6 +307,7 @@ function mapAdminBooking(
     assignedTeamId: assignment?.teamId ?? null,
     assignedTeamName: assignment?.teamName ?? null,
     paymentStatus: row.paymentStatus,
+    paymentMethod: row.paymentMethod,
     customerName: row.customerName,
     customerPhone: row.customerPhone,
     customerEmail: row.customerEmail,
@@ -355,6 +375,64 @@ export const bookingsRouter = router({
         ) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
         }
+        throw error;
+      }
+    }),
+
+  createInternal: bookingsAgentProcedure
+    .input(internalPublicBookingInputSchema)
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Booking service unavailable.",
+        });
+      try {
+        const preparedInput: PreparePublicBookingInput = {
+          ...input.booking,
+          idempotencyKey: input.idempotencyKey,
+        };
+        const built = buildPreparedCanonicalBooking(preparedInput, {
+          nowMs: Date.now(),
+          timeZone: ENV.businessTimezone,
+        });
+        if (built.type === "price_changed") {
+          throw new NativeBookingInputError(
+            `The booking price changed. Current total is $${(built.totalCents / 100).toFixed(2)}.`
+          );
+        }
+        const persisted = await persistPreparedBooking(db, built.prepared, {
+          createAtomicPaymentProfile: true,
+          paymentMethod: input.paymentMethod,
+          companyNotes: input.companyNotes,
+        });
+        const additionalServices = await applyInternalAdditionalServices(
+          db,
+          persisted.booking.id,
+          input.additionalServices
+        );
+        publishNativeBookingRefresh();
+        return {
+          bookingId: persisted.booking.id,
+          publicBookingNumber: persisted.booking.publicBookingNumber,
+          created: persisted.created,
+          paymentMethod: input.paymentMethod,
+          totalCents:
+            additionalServices?.totalCents ??
+            built.prepared.firstCleaningTotalCents,
+        };
+      } catch (error) {
+        if (error instanceof NativeBookingIdempotencyConflictError)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "IDEMPOTENCY_CONFLICT",
+          });
+        if (
+          error instanceof NativeBookingInputError ||
+          error instanceof RangeError
+        )
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
         throw error;
       }
     }),
@@ -477,7 +555,10 @@ export const bookingsRouter = router({
           .innerJoin(
             cleanerProfiles,
             and(
-              eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId),
+              eq(
+                cleanerProfiles.launch27TeamId,
+                schedulingTeams.launch27TeamId
+              ),
               eq(cleanerProfiles.isActive, 1)
             )
           )
@@ -520,55 +601,10 @@ export const bookingsRouter = router({
           .update(bookings)
           .set({ assignmentStatus: "assigned", updatedAt: now })
           .where(eq(bookings.id, input.bookingId));
-        const operationalRows = await tx
-          .select({ id: leadflowJobs.id })
-          .from(leadflowJobs)
-          .where(
-            and(
-              eq(leadflowJobs.bookingId, booking.id),
-              eq(leadflowJobs.jobDate, booking.requestedLocalDate)
-            )
-          )
-          .limit(1);
-        const operationalJob = {
-          bookingId: booking.id,
-          jobDate: booking.requestedLocalDate,
-          serviceDateTime: nativeBookingServiceDateTime(booking),
-          customerName: booking.customerName,
-          customerPhone: booking.customerPhone,
-          customerEmail: booking.customerEmail,
-          jobAddress: booking.address,
-          serviceName: booking.serviceName,
-          bedrooms: booking.bedrooms,
-          bathrooms: booking.bathrooms,
-          extras: nativeBookingExtras(booking),
-          frequency: nativeBookingFrequency(booking.recurrence),
-          teamName: team.name,
+        await syncNativeBookingOperationalProjection(tx, booking, {
           teamId: team.id,
-          customerNotes: booking.specialRequestNotes.join("\n") || null,
-          jobTotalCents: booking.firstCleaningTotalCents,
-          hasStripeCard:
-            booking.paymentStatus === "card_on_file" ||
-            booking.paymentStatus === "captured"
-              ? 1
-              : 0,
-          paymentBrand: null,
-          paymentLast4: null,
-        };
-        if (operationalRows[0]) {
-          await tx
-            .update(leadflowJobs)
-            .set({ ...operationalJob, updatedAt: now })
-            .where(eq(leadflowJobs.id, operationalRows[0].id));
-        } else {
-          await tx.insert(leadflowJobs).values({
-            origin: NATIVE_BOOKING_OPERATIONAL_ORIGIN,
-            launch27BookingId: null,
-            bookingSeriesId: null,
-            bookingStatus: "assigned",
-            ...operationalJob,
-          });
-        }
+          teamName: team.name,
+        });
         return {
           bookingId: input.bookingId,
           teamId: team.id,
@@ -579,6 +615,42 @@ export const bookingsRouter = router({
       publishNativeBookingRefresh();
       return assignment;
     }),
+  updateAdditionalServices: bookingsAgentProcedure
+    .input(
+      z.object({
+        bookingId: z.number().int().positive(),
+        additionalServices: z
+          .array(
+            z.object({
+              id: z.string().trim().min(1).max(80),
+              quantity: z.number().int().min(1).max(50),
+            })
+          )
+          .max(20),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Booking service unavailable.",
+        });
+      try {
+        return (
+          (await applyInternalAdditionalServices(
+            db,
+            input.bookingId,
+            input.additionalServices
+          )) ?? { totalCents: 0, extras: [] }
+        );
+      } catch (error) {
+        if (error instanceof NativeBookingInputError)
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        throw error;
+      }
+    }),
+
   updateDetails: bookingsAgentProcedure
     .input(
       z
@@ -712,6 +784,18 @@ export const bookingsRouter = router({
           })
           .where(eq(bookings.id, booking.id));
 
+        const [activeAssignment] = await tx
+          .select({ teamId: bookingAssignments.teamId, teamName: bookingAssignments.teamName })
+          .from(bookingAssignments)
+          .where(
+            and(
+              eq(bookingAssignments.bookingId, booking.id),
+              eq(bookingAssignments.status, "assigned"),
+            ),
+          )
+          .orderBy(desc(bookingAssignments.assignedAt), desc(bookingAssignments.id))
+          .limit(1);
+
         const [series] = await tx
           .select()
           .from(bookingSeries)
@@ -746,48 +830,23 @@ export const bookingsRouter = router({
             .where(eq(bookingSeries.id, series.id));
         }
 
-        const operationalRows = await tx
-          .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
-          .from(leadflowJobs)
-          .where(eq(leadflowJobs.bookingId, booking.id))
-          .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.id));
-        const currentOperationalJob =
-          operationalRows.find(
-            job => job.jobDate === booking.requestedLocalDate
-          ) ?? operationalRows[0];
-        const nativeExtras = JSON.stringify(extras.map(extra => extra.id));
-        const operationalFrequency = nativeBookingFrequency(recurrence);
-        if (currentOperationalJob) {
-          await tx
-            .update(leadflowJobs)
-            .set({
-              jobDate: requestedLocalDate,
-              serviceDateTime: new Date(requestedStartAt).toISOString(),
-              extras: nativeExtras,
-              frequency: operationalFrequency,
-              customerNotes: booking.specialRequestNotes.join("\n") || null,
-              jobTotalCents: firstCleaningTotalCents,
-              nextOccurrenceCreatedAt: null,
-              updatedAt: now,
-            })
-            .where(eq(leadflowJobs.id, currentOperationalJob.id));
-        }
-        if (futureVisitTotalCents !== null) {
-          await tx
-            .update(leadflowJobs)
-            .set({
-              extras: nativeExtras,
-              frequency: operationalFrequency,
-              jobTotalCents: futureVisitTotalCents,
-              updatedAt: now,
-            })
-            .where(
-              and(
-                eq(leadflowJobs.bookingId, booking.id),
-                gt(leadflowJobs.jobDate, requestedLocalDate)
-              )
-            );
-        }
+        const nextBooking = {
+          ...booking,
+          extras,
+          firstCleaningTotalCents,
+          companyNotes,
+          requestedLocalDate,
+          requestedStartAt,
+          recurrence,
+          futureVisitTotalCents,
+        };
+        await syncNativeBookingOperationalProjection(
+          tx,
+          nextBooking,
+          activeAssignment && activeAssignment.teamId !== null && activeAssignment.teamName !== null
+            ? { teamId: activeAssignment.teamId, teamName: activeAssignment.teamName }
+            : null,
+        );
 
         return {
           bookingId: booking.id,
@@ -821,16 +880,11 @@ export const bookingsRouter = router({
           code: "NOT_FOUND",
           message: "Booking not found.",
         });
-      await db
-        .update(bookings)
-        .set({ status: "cancelled", updatedAt: new Date() })
-        .where(eq(bookings.id, input.id));
-      await db
-        .update(leadflowJobs)
-        .set({ bookingStatus: "cancelled", updatedAt: new Date() })
-        .where(eq(leadflowJobs.bookingId, input.id));
+      const cancelled = await cancelCanonicalBooking(db, input.id);
+      if (!cancelled)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
       publishNativeBookingRefresh();
-      return { id: input.id, status: "cancelled" as const };
+      return cancelled;
     }),
   staffRequests: bookingsAgentProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).default(200) }))

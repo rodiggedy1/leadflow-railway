@@ -423,3 +423,15 @@ export function buildPreparedPublicBooking(
     },
   };
 }
+
+/**
+ * Canonical booking preparation entry point. The public /book implementation
+ * remains the source of truth; surface adapters call this boundary rather than
+ * maintaining separate pricing or payload preparation logic.
+ */
+export function buildPreparedCanonicalBooking(
+  input: PreparePublicBookingInput,
+  options: { nowMs: number; timeZone: string },
+) {
+  return buildPreparedPublicBooking(input, options);
+}

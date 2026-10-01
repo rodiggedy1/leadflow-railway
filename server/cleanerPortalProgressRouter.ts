@@ -4,19 +4,14 @@ import { z } from "zod";
 import { cleanerPortalJobProgress, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { portalJobKeySchema, resolveOwnedLeadflowJob } from "./cleanerPortalJobResolver";
 import "./retiredStatusProcedureBlock";
 import { sendSms } from "./openphone";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
-import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const ETA_CHOICES = [10, 20, 30, 45, 60, 75, 90, 120] as const;
-const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
 
-function parseLeadflowJobId(portalJobKey: string) {
-  const value = Number.parseInt(portalJobKey.slice("leadflow:".length), 10);
-  if (!Number.isSafeInteger(value) || value < 1) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid portal job reference." });
-  return value;
-}
 
 function firstName(value: string) {
   return value.trim().split(/\s+/)[0] || "there";
@@ -39,34 +34,6 @@ export function currentEasternDate(now = new Date()) {
 
 export function canUpdatePortalProgress(jobDate: string, now = new Date()) {
   return jobDate === currentEasternDate(now);
-}
-
-async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
-  const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Portal progress is temporarily unavailable." });
-  const team = await findCleanerPortalTeam(db, cleanerId);
-  if (!team) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
-  const leadflowJobId = parseLeadflowJobId(portalJobKey);
-  const jobRows = await db.select({
-    id: leadflowJobs.id,
-    customerName: leadflowJobs.customerName,
-    customerPhone: leadflowJobs.customerPhone,
-    customerEmail: leadflowJobs.customerEmail,
-    jobAddress: leadflowJobs.jobAddress,
-    jobDate: leadflowJobs.jobDate,
-  }).from(leadflowJobs).where(and(
-    eq(leadflowJobs.id, leadflowJobId),
-    cleanerPortalJobOwnership(team),
-    ne(leadflowJobs.bookingStatus, "cancelled"),
-    ne(leadflowJobs.bookingStatus, "rescheduled"),
-    ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
-  )).limit(1);
-  const job = jobRows[0];
-  if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "This job is not assigned to your team." });
-  if (!canUpdatePortalProgress(job.jobDate)) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Job progress can only be updated on the scheduled service date." });
-  }
-  return { db, cleaner: { id: team.cleanerProfileId, teamId: team.launch27TeamId }, job };
 }
 
 async function saveProgress(input: {
@@ -106,6 +73,7 @@ async function saveProgress(input: {
     startedAt: record.startedAt,
     updatedAt: record.updatedAt,
   } });
+  broadcastOpsUpdate("job_update", { jobId: input.leadflowJobId });
   return record;
 }
 
@@ -191,13 +159,13 @@ async function recordEtaSmsResult(input: {
 }
 
 export const cleanerPortalProgressRouter = router({
-  getForJob: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).query(async ({ ctx, input }) => {
-    const { db, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+  getForJob: cleanerProcedure.input(z.object({ portalJobKey: portalJobKeySchema })).query(async ({ ctx, input }) => {
+    const { db, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Portal progress is temporarily unavailable.");
     const rows = await db.select({ jobStatus: cleanerPortalJobProgress.jobStatus, etaTimestamp: cleanerPortalJobProgress.etaTimestamp, etaTimeStr: cleanerPortalJobProgress.etaTimeStr, arrivedAt: cleanerPortalJobProgress.arrivedAt, startedAt: cleanerPortalJobProgress.startedAt }).from(cleanerPortalJobProgress).where(eq(cleanerPortalJobProgress.leadflowJobId, job.id)).limit(1);
     return rows[0] ?? null;
   }),
-  setEta: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema, minutes: z.union(ETA_CHOICES.map(value => z.literal(value)) as [z.ZodLiteral<10>, z.ZodLiteral<20>, z.ZodLiteral<30>, z.ZodLiteral<45>, z.ZodLiteral<60>, z.ZodLiteral<75>, z.ZodLiteral<90>, z.ZodLiteral<120>]) })).mutation(async ({ ctx, input }) => {
-    const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+  setEta: cleanerProcedure.input(z.object({ portalJobKey: portalJobKeySchema, minutes: z.union(ETA_CHOICES.map(value => z.literal(value)) as [z.ZodLiteral<10>, z.ZodLiteral<20>, z.ZodLiteral<30>, z.ZodLiteral<45>, z.ZodLiteral<60>, z.ZodLiteral<75>, z.ZodLiteral<90>, z.ZodLiteral<120>]) })).mutation(async ({ ctx, input }) => {
+    const { db, cleaner, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Portal progress is temporarily unavailable.");
     const etaTimestamp = Date.now() + input.minutes * 60_000;
     const etaTimeStr = formatEtaTime(etaTimestamp);
     const progress = await saveProgress({ cleanerId: cleaner.id, teamId: cleaner.teamId!, leadflowJobId: job.id, jobStatus: "on_the_way", etaTimestamp, etaTimeStr });
@@ -215,8 +183,8 @@ export const cleanerPortalProgressRouter = router({
     });
     return { ...progress, customerNotified: notification.customerNotified, notificationError: notification.notificationError, notificationAlreadySent: false };
   }),
-  markArrived: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {
-    const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+  markArrived: cleanerProcedure.input(z.object({ portalJobKey: portalJobKeySchema })).mutation(async ({ ctx, input }) => {
+    const { db, cleaner, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Portal progress is temporarily unavailable.");
     const progress = await saveProgress({ cleanerId: cleaner.id, teamId: cleaner.teamId!, leadflowJobId: job.id, jobStatus: "arrived", arrivedAt: new Date() });
     if (!job.customerPhone) return { ...progress, customerNotified: false, notificationError: null as string | null, notificationAlreadySent: false };
     const claimed = await claimArrivalSms({ db, leadflowJobId: job.id });
@@ -231,8 +199,8 @@ export const cleanerPortalProgressRouter = router({
     });
     return { ...progress, customerNotified: notification.customerNotified, notificationError: notification.notificationError, notificationAlreadySent: false };
   }),
-  startJob: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {
-    const { cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+  startJob: cleanerProcedure.input(z.object({ portalJobKey: portalJobKeySchema })).mutation(async ({ ctx, input }) => {
+    const { cleaner, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Portal progress is temporarily unavailable.");
     const progress = await saveProgress({ cleanerId: cleaner.id, teamId: cleaner.teamId!, leadflowJobId: job.id, jobStatus: "in_progress", startedAt: new Date() });
     return { ...progress, customerNotified: false, notificationError: null as string | null };
   }),

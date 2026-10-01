@@ -9,6 +9,7 @@ const legacyJobTable = ["cleaner", "jobs"].join("_");
 
 describe("isolated Cleaner Portal customer sign-off", () => {
   const router = read("server/cleanerPortalSignoffRouter.ts");
+  const resolver = read("server/cleanerPortalJobResolver.ts");
   const portal = read("client/src/pages/CleanerPortalConnected.tsx");
   const bookingDetail = read("client/src/components/NativeBookingsWorkspace.tsx");
   const staffRouter = read("server/leadflowJobsRouter.ts");
@@ -16,8 +17,8 @@ describe("isolated Cleaner Portal customer sign-off", () => {
   const manifest = JSON.parse(read("server/versioned-migrations/manifest.json")) as { migrations: Array<{ id: string; sha256: string }> };
 
   it("uses a namespaced LeadFlow key with exact cleaner-team ownership and no legacy job reference", () => {
-    expect(router).toContain('regex(/^leadflow:\\d+$/');
-    expect(router).toContain("cleanerPortalJobOwnership");
+    expect(resolver).toContain('regex(/^leadflow:\\d+$/');
+    expect(resolver).toContain("cleanerPortalJobOwnership");
     expect(router).toContain("cleanerPortalJobSignoffs");
     expect(router).not.toContain(legacyJobSymbol);
     expect(router).not.toContain(legacyJobTable);

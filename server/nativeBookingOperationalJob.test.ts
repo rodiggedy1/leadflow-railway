@@ -9,8 +9,11 @@ const read = (relativePath: string) =>
 describe("native booking operational-job parity", () => {
   const bookingRouter = read("server/bookingsRouter.ts");
   const jobsService = read("server/leadflowJobsService.ts");
-  const jobsRouter = read("server/leadflowJobsRouter.ts");
-  const signoffRouter = read("server/cleanerPortalSignoffRouter.ts");
+    const jobsRouter = read("server/leadflowJobsRouter.ts");
+    const signoffRouter = read("server/cleanerPortalSignoffRouter.ts");
+    const portalResolver = read("server/cleanerPortalJobResolver.ts");
+  const lifecycleService = read("server/bookingLifecycleService.ts");
+  const cancellationService = read("server/bookingCancellationService.ts");
   const workspace = read("client/src/components/NativeBookingsWorkspace.tsx");
   const schema = read("drizzle/schema.ts");
 
@@ -19,16 +22,13 @@ describe("native booking operational-job parity", () => {
       bookingRouter.indexOf("assignTeam: bookingsAgentProcedure"),
       bookingRouter.indexOf("updateDetails: bookingsAgentProcedure")
     );
-    for (const marker of [
-      "NATIVE_BOOKING_OPERATIONAL_ORIGIN",
-      "leadflowJobs.bookingId",
-      "nativeBookingServiceDateTime(booking)",
-      "nativeBookingExtras(booking)",
-      'bookingStatus: "assigned"',
-      "teamId: team.id",
-    ]) {
-      expect(assignment).toContain(marker);
-    }
+    expect(assignment).toContain("syncNativeBookingOperationalProjection");
+    expect(lifecycleService).toContain('NATIVE_BOOKING_OPERATIONAL_ORIGIN = "native_booking"');
+    expect(lifecycleService).toContain("leadflowJobs.bookingId");
+    expect(lifecycleService).toContain("nativeBookingServiceDateTime(booking)");
+    expect(lifecycleService).toContain("nativeBookingExtras(booking)");
+    expect(lifecycleService).toContain('bookingStatus: "assigned"');
+    expect(assignment).toContain("teamId: team.id");
   });
 
   it("synchronizes native booking scope, value, cancellation, and recurrence through the operational job path", () => {
@@ -36,22 +36,16 @@ describe("native booking operational-job parity", () => {
       bookingRouter.indexOf("updateDetails: bookingsAgentProcedure"),
       bookingRouter.indexOf("cancel: bookingsAgentProcedure")
     );
-    expect(commercialUpdate).toContain(
-      "jobTotalCents: firstCleaningTotalCents"
-    );
-    expect(commercialUpdate).toContain(
-      "const nativeExtras = JSON.stringify(extras.map(extra => extra.id))"
-    );
-    expect(commercialUpdate).toContain("jobDate: requestedLocalDate");
-    expect(commercialUpdate).toContain(
-      "serviceDateTime: new Date(requestedStartAt).toISOString()"
-    );
-    expect(commercialUpdate).toContain("frequency: operationalFrequency");
+    expect(commercialUpdate).toContain("syncNativeBookingOperationalProjection");
+    expect(lifecycleService).toContain("jobTotalCents: booking.firstCleaningTotalCents");
+    expect(lifecycleService).toContain("jobDate: booking.requestedLocalDate");
+    expect(lifecycleService).toContain("serviceDateTime: nativeBookingServiceDateTime(booking)");
+    expect(lifecycleService).toContain("frequency: nativeBookingFrequency(booking.recurrence)");
     expect(commercialUpdate).toContain("futureVisitTotalCents");
     const cancellation = bookingRouter.slice(
       bookingRouter.indexOf("cancel: bookingsAgentProcedure")
     );
-    expect(cancellation).toContain('bookingStatus: "cancelled"');
+    expect(cancellationService).toContain('bookingStatus: "cancelled"');
     expect(jobsService).toContain("bookingId: job.bookingId");
     expect(jobsService).toContain("candidate.bookingId === job.bookingId");
     expect(jobsService).toContain("futureVisitTotalCents");
@@ -65,7 +59,8 @@ describe("native booking operational-job parity", () => {
     expect(workspace).toContain(
       'active?.source === "leadflow" || active?.source === "booking"'
     );
-    expect(signoffRouter).toContain("bookingId: leadflowJobs.bookingId");
+    expect(portalResolver).toContain("from(leadflowJobs)");
+    expect(portalResolver).toContain("cleanerPortalJobOwnership(team)");
     expect(signoffRouter).toContain('status: "completed"');
   });
 

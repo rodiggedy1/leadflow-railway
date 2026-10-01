@@ -1,17 +1,16 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { bookings, cleanerPortalJobProgress, cleanerPortalJobSignoffs, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { portalJobKeySchema, resolveOwnedLeadflowJob } from "./cleanerPortalJobResolver";
 import { storagePut } from "./storage";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
-import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
-const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
 const responseSchema = z.enum(["great", "touchup", "issue"]);
 
 function firstName(value: string) {
@@ -22,30 +21,6 @@ function reviewPortalUrl(portalUrl: string) {
   return `${portalUrl}${portalUrl.includes("?") ? "&" : "?"}view=review`;
 }
 
-function parseLeadflowJobId(portalJobKey: string) {
-  const value = Number.parseInt(portalJobKey.slice("leadflow:".length), 10);
-  if (!Number.isSafeInteger(value) || value < 1) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid portal job reference." });
-  return value;
-}
-
-async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
-  const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Customer sign-off is temporarily unavailable." });
-  const team = await findCleanerPortalTeam(db, cleanerId);
-  if (!team) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
-  const cleaner = { id: team.cleanerProfileId, teamId: team.launch27TeamId };
-  const leadflowJobId = parseLeadflowJobId(portalJobKey);
-  const jobRows = await db.select({ id: leadflowJobs.id, bookingId: leadflowJobs.bookingId, customerName: leadflowJobs.customerName, customerPhone: leadflowJobs.customerPhone, customerEmail: leadflowJobs.customerEmail }).from(leadflowJobs).where(and(
-    eq(leadflowJobs.id, leadflowJobId),
-    cleanerPortalJobOwnership(team),
-    ne(leadflowJobs.bookingStatus, "cancelled"),
-    ne(leadflowJobs.bookingStatus, "rescheduled"),
-    ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
-  )).limit(1);
-  const job = jobRows[0];
-  if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "This job is not assigned to your team." });
-  return { db, cleaner, job };
-}
 
 /**
  * Mirrors the prior completion-review delivery treatment: after completion is
@@ -94,8 +69,8 @@ async function sendLeadflowCompletionReviewSms(leadflowJobId: number): Promise<v
 }
 
 export const cleanerPortalSignoffRouter = router({
-  getForJob: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).query(async ({ ctx, input }) => {
-    const { db, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+  getForJob: cleanerProcedure.input(z.object({ portalJobKey: portalJobKeySchema })).query(async ({ ctx, input }) => {
+    const { db, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Customer sign-off is temporarily unavailable.");
     const rows = await db.select({
       signatureUrl: cleanerPortalJobSignoffs.signatureUrl,
       customerResponse: cleanerPortalJobSignoffs.customerResponse,
@@ -107,12 +82,12 @@ export const cleanerPortalSignoffRouter = router({
   }),
 
   saveSignature: cleanerProcedure.input(z.object({
-    portalJobKey: portalKeySchema,
+    portalJobKey: portalJobKeySchema,
     signatureBase64: z.string().min(1).max(2 * 1024 * 1024),
     customerResponse: responseSchema,
     customerNotes: z.string().trim().max(2000).optional(),
   })).mutation(async ({ ctx, input }) => {
-    const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+    const { db, cleaner, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Customer sign-off is temporarily unavailable.");
     const buffer = Buffer.from(input.signatureBase64, "base64");
     if (!buffer.length) throw new TRPCError({ code: "BAD_REQUEST", message: "The signature could not be read. Please sign again." });
     const suffix = Math.random().toString(36).slice(2, 10);
@@ -143,8 +118,8 @@ export const cleanerPortalSignoffRouter = router({
     return { signatureUrl, customerResponse: input.customerResponse, customerNotes: input.customerNotes || null, customerNotHome: false, signedOffAt: now };
   }),
 
-  saveNotHome: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {
-    const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+  saveNotHome: cleanerProcedure.input(z.object({ portalJobKey: portalJobKeySchema })).mutation(async ({ ctx, input }) => {
+    const { db, cleaner, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Customer sign-off is temporarily unavailable.");
     const now = new Date();
     await db.insert(cleanerPortalJobSignoffs).values({
       leadflowJobId: job.id,
@@ -170,8 +145,8 @@ export const cleanerPortalSignoffRouter = router({
     return { signatureUrl: null, customerResponse: null, customerNotes: null, customerNotHome: true, signedOffAt: now };
   }),
 
-  completeAfterSignoff: cleanerProcedure.input(z.object({ portalJobKey: portalKeySchema })).mutation(async ({ ctx, input }) => {
-    const { db, cleaner, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+  completeAfterSignoff: cleanerProcedure.input(z.object({ portalJobKey: portalJobKeySchema })).mutation(async ({ ctx, input }) => {
+    const { db, cleaner, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Customer sign-off is temporarily unavailable.");
     const signoffRows = await db.select({ signatureUrl: cleanerPortalJobSignoffs.signatureUrl, customerNotHome: cleanerPortalJobSignoffs.customerNotHome }).from(cleanerPortalJobSignoffs).where(eq(cleanerPortalJobSignoffs.leadflowJobId, job.id)).limit(1);
     const signoff = signoffRows[0];
     if (!signoff || (!signoff.signatureUrl && !signoff.customerNotHome)) throw new TRPCError({ code: "BAD_REQUEST", message: "Customer sign-off or not-home confirmation is required before completing this job." });

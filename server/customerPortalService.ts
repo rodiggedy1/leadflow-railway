@@ -77,6 +77,13 @@ export async function createCustomerPortalHandoff(db: DbClient, input: { custome
   return code;
 }
 
+export async function createCanonicalBookingPortalHandoff(
+  db: DbClient,
+  input: { customerName: string; customerPhone: string; customerEmail?: string | null },
+) {
+  return createCustomerPortalHandoff(db, input);
+}
+
 /**
  * Returns the customer counterpart to the established reusable Cleaner Portal link.
  * It intentionally uses the existing customer handoff route and portal session,

@@ -1,51 +1,20 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, ne } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import heicConvert from "heic-convert";
 import { z } from "zod";
 import { cleanerPortalJobPhotos, leadflowJobs } from "../drizzle/schema";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { portalJobKeySchema, resolveOwnedLeadflowJob } from "./cleanerPortalJobResolver";
 import { generateThumbnail, storagePut } from "./storage";
-import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
-const portalKeySchema = z.string().regex(/^leadflow:\d+$/, "Invalid portal job reference.");
 
-function parseLeadflowJobId(portalJobKey: string) {
-  const value = Number.parseInt(portalJobKey.slice("leadflow:".length), 10);
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid portal job reference." });
-  }
-  return value;
-}
-
-async function ownedImportedJob(cleanerId: number, portalJobKey: string) {
-  const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Photos are temporarily unavailable." });
-  const cleaner = await findCleanerPortalTeam(db, cleanerId);
-  if (!cleaner) throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no assigned team." });
-
-  const leadflowJobId = parseLeadflowJobId(portalJobKey);
-  const jobRows = await db
-    .select({ id: leadflowJobs.id })
-    .from(leadflowJobs)
-    .where(and(
-      eq(leadflowJobs.id, leadflowJobId),
-      cleanerPortalJobOwnership(cleaner),
-      ne(leadflowJobs.bookingStatus, "cancelled"),
-      ne(leadflowJobs.bookingStatus, "rescheduled"),
-      ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
-    ))
-    .limit(1);
-  const job = jobRows[0];
-  if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "This job is not assigned to your team." });
-  return { db, job };
-}
 
 export const cleanerPortalPhotoRouter = router({
   getForJob: cleanerProcedure
-    .input(z.object({ portalJobKey: portalKeySchema }))
+    .input(z.object({ portalJobKey: portalJobKeySchema }))
     .query(async ({ ctx, input }) => {
-      const { db, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+      const { db, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Photos are temporarily unavailable.");
       return db
         .select({
           id: cleanerPortalJobPhotos.id,
@@ -62,14 +31,14 @@ export const cleanerPortalPhotoRouter = router({
 
   uploadPhoto: cleanerProcedure
     .input(z.object({
-      portalJobKey: portalKeySchema,
+      portalJobKey: portalJobKeySchema,
       filename: z.string().max(255),
       mimeType: z.string().max(50),
       dataBase64: z.string().max(10 * 1024 * 1024),
       photoType: z.enum(["before", "after", "general"]).default("general"),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { db, job } = await ownedImportedJob(ctx.cleaner.cleanerId, input.portalJobKey);
+      const { db, job } = await resolveOwnedLeadflowJob(ctx.cleaner.cleanerId, input.portalJobKey, "Photos are temporarily unavailable.");
       const rawBuffer = Buffer.from(input.dataBase64, "base64");
       const rawMimeType = input.mimeType.toLowerCase();
       const isHeic = rawMimeType === "image/heic" || rawMimeType === "image/heif";

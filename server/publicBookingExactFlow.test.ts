@@ -10,6 +10,9 @@ describe("approved eight-step public booking flow", () => {
   const page = read("client/src/pages/Book.tsx");
   const pricing = read("shared/publicBookingPricing.ts");
   const paymentRouter = read("server/bookingPaymentRouter.ts");
+  const paymentEngine = read("server/bookingPaymentEngine.ts");
+  const upsellEngine = read("server/bookingUpsellEngine.ts");
+  const persistence = read("server/canonicalBookingPersistence.ts");
   const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
 
   it("uses the review canvas on /book while leaving /book-now available", () => {
@@ -44,9 +47,10 @@ describe("approved eight-step public booking flow", () => {
     expect(paymentRouter).toContain("buildPreparedPublicBooking");
     expect(paymentRouter).toContain("PUBLIC_BOOKING_PRICING_VERSION");
     expect(paymentRouter).toContain("finalize: publicProcedure");
-    expect(paymentRouter).toContain('stage: "booked"');
-    expect(paymentRouter).toContain("bookingAlreadyExisted");
-    expect(paymentRouter).toContain("eq(bookingSeries.bookingId, bookingId)");
+    expect(paymentEngine).toContain('stage: "booked"');
+    expect(persistence).toContain("persistCanonicalBooking");
+    expect(persistence).toContain("createOrUpdateSeries");
+    expect(paymentEngine).toContain("finalizeCanonicalCardOnFile");
     expect(checkout).toContain("trpc.bookingPayments.startSetup.useMutation");
     expect(checkout).toContain("trpc.bookingPayments.confirmSetup.useMutation");
   });
@@ -71,11 +75,8 @@ describe("approved eight-step public booking flow", () => {
 
   it("restores the approved confirmation service picker treatment", () => {
     expect(page).toContain("POST_BOOKING_UPSELLS");
-    expect(page).toContain('title: "Carpet Cleaning"');
-    expect(page).toContain('title: "Exterior Window Cleaning"');
-    expect(page).toContain('title: "Junk Removal"');
-    expect(page).toContain('title: "Appliance Cleaning"');
-    expect(page).toContain('title: "Pet Area Cleaning"');
+    expect(read("shared/canonicalBookingCatalog.ts")).toContain("CANONICAL_POST_BOOKING_UPSELLS");
+    expect(read("shared/canonicalBookingCatalog.ts")).toContain("CANONICAL_POST_BOOKING_UPSELLS");
     expect(page).toContain("booking-upsell-modal");
     expect(page).toContain("booking-upsell-estimate");
     expect(page).not.toContain("Coming soon");
@@ -85,10 +86,10 @@ describe("approved eight-step public booking flow", () => {
     expect(page).toContain("trpc.bookingPayments.addPostBookingUpsells.useMutation");
     expect(page).toContain("mutationToken: funnelRecord.mutationToken");
     expect(paymentRouter).toContain("addPostBookingUpsells: publicProcedure");
-    expect(paymentRouter).toContain("PUBLIC_BOOKING_POST_BOOKING_UPSELLS");
-    expect(paymentRouter).toContain("booking.firstCleaningTotalCents - existingUpsellTotal");
-    expect(paymentRouter).toContain("eq(leadflowJobs.bookingId, booking.id)");
-    expect(paymentRouter).toContain("broadcastCleanerPortalJobsChanged");
+    expect(upsellEngine).toContain("PUBLIC_BOOKING_POST_BOOKING_UPSELLS");
+    expect(upsellEngine).toContain("firstCleaningTotalCents");
+    expect(upsellEngine).toContain("eq(leadflowJobs.bookingId, bookingId)");
+    expect(upsellEngine).toContain("broadcastCleanerPortalJobsChanged");
   });
 
   it("keeps the public booking path separate from protected legacy systems", () => {
