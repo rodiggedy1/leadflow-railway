@@ -45,13 +45,23 @@ import {
   PUBLIC_BOOKING_PRICING_VERSION,
 } from "../shared/publicBookingPricing";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
+import { persistCanonicalBooking } from "./canonicalBookingPersistence";
+import { cancelCanonicalBooking } from "./bookingCancellationService";
+import { applyCanonicalAdditionalServices, BookingUpsellInputError } from "./bookingUpsellEngine";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import {
+  NATIVE_BOOKING_OPERATIONAL_ORIGIN,
+  nativeBookingCustomerNotes,
+  nativeBookingExtras,
+  nativeBookingFrequency,
+  nativeBookingServiceDateTime,
+  syncNativeBookingOperationalProjection,
+} from "./bookingLifecycleService";
 
 const PREPARE_WINDOW_MS = 10 * 60_000;
 const PREPARE_LIMIT = 20;
 const prepareAttempts = new Map<string, { count: number; resetAt: number }>();
-const NATIVE_BOOKING_OPERATIONAL_ORIGIN = "native_booking";
 const NATIVE_BOOKING_RECURRENCES = [
   "one-time",
   "weekly",
@@ -128,107 +138,15 @@ const internalPublicBookingInputSchema = z.object({
 async function applyInternalAdditionalServices(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   bookingId: number,
-  selections: Array<{ id: string; quantity: number }>
+  selections: Array<{ id: string; quantity: number }>,
 ) {
-  const seen = new Set<string>();
-  const submitted = selections.map(selection => {
-    if (seen.has(selection.id))
-      throw new NativeBookingInputError(
-        "Each additional service can only be selected once."
-      );
-    seen.add(selection.id);
-    const catalog = PUBLIC_BOOKING_POST_BOOKING_UPSELLS[selection.id];
-    if (!catalog)
-      throw new NativeBookingInputError("Unsupported additional service.");
-    return {
-      id: selection.id,
-      label: catalog.label,
-      quantity: selection.quantity,
-      unitPriceCents: catalog.unitPriceCents,
-      totalCents: catalog.unitPriceCents * selection.quantity,
-    };
-  });
-  const result = await db.transaction(async tx => {
-    const [booking] = await tx
-      .select()
-      .from(bookings)
-      .where(eq(bookings.id, bookingId))
-      .limit(1);
-    if (!booking) throw new NativeBookingInputError("Booking not found.");
-    const upsellIds = new Set(Object.keys(PUBLIC_BOOKING_POST_BOOKING_UPSELLS));
-    const retained = booking.extras.filter(extra => !upsellIds.has(extra.id));
-    const extras = [...retained, ...submitted].sort((left, right) =>
-      left.id.localeCompare(right.id)
-    );
-    const existingUpsellTotal = booking.extras
-      .filter(extra => upsellIds.has(extra.id))
-      .reduce((total, extra) => total + extra.totalCents, 0);
-    const submittedUpsellTotal = submitted.reduce(
-      (total, extra) => total + extra.totalCents,
-      0
-    );
-    const futureDelta = submittedUpsellTotal - existingUpsellTotal;
-    const totalCents = booking.firstCleaningTotalCents + futureDelta;
-    const futureVisitTotalCents =
-      booking.futureVisitTotalCents === null
-        ? null
-        : booking.futureVisitTotalCents + futureDelta;
-    const now = new Date();
-    await tx
-      .update(bookings)
-      .set({
-        extras,
-        firstCleaningTotalCents: totalCents,
-        futureVisitTotalCents,
-        updatedAt: now,
-      })
-      .where(eq(bookings.id, bookingId));
-    const operationalRows = await tx
-      .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
-      .from(leadflowJobs)
-      .where(eq(leadflowJobs.bookingId, bookingId));
-    const currentJob =
-      operationalRows.find(job => job.jobDate === booking.requestedLocalDate) ??
-      operationalRows[0];
-    if (currentJob) {
-      await tx
-        .update(leadflowJobs)
-        .set({
-          extras: JSON.stringify(extras.map(extra => extra.id)),
-          jobTotalCents: totalCents,
-          updatedAt: now,
-        })
-        .where(eq(leadflowJobs.id, currentJob.id));
-    }
-    if (futureVisitTotalCents !== null) {
-      await tx
-        .update(leadflowJobs)
-        .set({
-          extras: JSON.stringify(extras.map(extra => extra.id)),
-          jobTotalCents: sql`${leadflowJobs.jobTotalCents} + ${futureDelta}`,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(leadflowJobs.bookingId, bookingId),
-            gt(leadflowJobs.jobDate, booking.requestedLocalDate)
-          )
-        );
-    }
-    return { totalCents, futureVisitTotalCents, extras: submitted };
-  });
-  broadcastCleanerPortalJobsChanged();
-  broadcastOpsUpdate("booking_funnel_update");
-  return result;
+  try {
+    return await applyCanonicalAdditionalServices(db, bookingId, selections);
+  } catch (error) {
+    if (error instanceof BookingUpsellInputError) throw new NativeBookingInputError(error.message);
+    throw error;
+  }
 }
-
-function nativeBookingFrequency(recurrence: string) {
-  if (recurrence === "weekly") return "Weekly";
-  if (recurrence === "biweekly") return "Bi-weekly";
-  if (recurrence === "monthly") return "Monthly";
-  return "One time";
-}
-
 function nativeBookingFutureVisitTotalCents(
   booking: typeof bookings.$inferSelect,
   recurrence: (typeof NATIVE_BOOKING_RECURRENCES)[number]
@@ -241,33 +159,6 @@ function nativeBookingFutureVisitTotalCents(
     }).futureVisitTotalCents;
   }
   return booking.futureVisitTotalCents;
-}
-
-function nativeBookingServiceDateTime(
-  booking: typeof bookings.$inferSelect
-): string {
-  return new Date(
-    businessLocalDateTimeToUtcMs(
-      booking.requestedLocalDate,
-      booking.requestedLocalTime,
-      booking.requestedTimeZone
-    )
-  ).toISOString();
-}
-
-function nativeBookingExtras(booking: typeof bookings.$inferSelect): string {
-  return JSON.stringify(booking.extras.map(extra => extra.id));
-}
-
-function nativeBookingCustomerNotes(
-  booking: typeof bookings.$inferSelect,
-  companyNotes = booking.companyNotes
-): string | null {
-  const notes = [
-    ...booking.specialRequestNotes,
-    companyNotes?.trim() ?? "",
-  ].filter(Boolean);
-  return notes.length ? notes.join("\n") : null;
 }
 
 function publishNativeBookingRefresh() {
@@ -350,135 +241,21 @@ async function persistPreparedBooking(
     companyNotes?: string | null;
   } = {}
 ) {
-  const createAtomicPaymentProfile =
-    options.createAtomicPaymentProfile ?? false;
-  try {
-    const booking = await db.transaction(async tx => {
-      const now = new Date();
-      const result = await tx.insert(bookings).values({
-        publicBookingNumber: prepared.publicBookingNumber,
-        idempotencyKey: prepared.idempotencyKey,
-        commandHash: prepared.commandHash,
-        source: prepared.source,
-        status: prepared.status,
-        availabilityStatus: prepared.availabilityStatus,
-        assignmentStatus: prepared.assignmentStatus,
-        paymentStatus: prepared.paymentStatus,
-        paymentMethod: options.paymentMethod ?? "card",
-        customerName: prepared.customerName,
-        customerPhone: prepared.customerPhone,
-        customerEmail: prepared.customerEmail,
-        serviceId: prepared.serviceId,
-        serviceName: prepared.serviceName,
-        bedrooms: prepared.bedrooms,
-        bathrooms: prepared.bathrooms,
-        extras: prepared.extras,
-        specialRequestNotes: prepared.specialRequestNotes,
-        address: prepared.address,
-        requestedLocalDate: prepared.requestedLocalDate,
-        requestedLocalTime: prepared.requestedLocalTime,
-        requestedTimeZone: prepared.requestedTimeZone,
-        requestedStartAt: prepared.requestedStartAt,
-        recurrence: prepared.recurrence,
-        recurringIntentStatus: prepared.recurringIntentStatus,
-        pricingVersion: prepared.pricingVersion,
-        firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-        futureVisitTotalCents: prepared.futureVisitTotalCents,
-        priceSnapshot: prepared.priceSnapshot,
-        companyNotes: options.companyNotes ?? null,
-        expiresAt: null,
-        createdAt: now,
-        updatedAt: now,
-      });
-      const bookingId = Number(
-        (result as unknown as { insertId?: number })?.insertId ??
-          (result as unknown as Array<{ insertId?: number }>)[0]?.insertId
-      );
-      if (!Number.isInteger(bookingId) || bookingId < 1)
-        throw new Error("Native booking insert did not return an ID.");
-
-      if (
-        prepared.recurrence !== "one-time" &&
-        prepared.futureVisitTotalCents !== null
-      ) {
-        await tx.insert(bookingSeries).values({
-          bookingId,
-          status: "intent_pending",
-          frequency: prepared.recurrence,
-          anchorLocalDate: prepared.requestedLocalDate,
-          anchorLocalTime: prepared.requestedLocalTime,
-          timeZone: prepared.requestedTimeZone,
-          firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-          futureVisitTotalCents: prepared.futureVisitTotalCents,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-
-      if (createAtomicPaymentProfile) {
-        const funnelResult = await tx.insert(bookingFunnelRecords).values({
-          publicFunnelNumber: `${prepared.publicBookingNumber}-F`,
-          idempotencyKey: prepared.idempotencyKey,
-          commandHash: prepared.commandHash,
-          source: "internal",
-          stage: "booked",
-          bookingId,
-          customerName: prepared.customerName,
-          customerPhone: prepared.customerPhone,
-          customerEmail: prepared.customerEmail,
-          serviceId: prepared.serviceId,
-          serviceName: prepared.serviceName,
-          bedrooms: prepared.bedrooms,
-          bathrooms: prepared.bathrooms,
-          extras: prepared.extras,
-          specialRequestNotes: prepared.specialRequestNotes,
-          address: prepared.address,
-          requestedLocalDate: prepared.requestedLocalDate,
-          requestedLocalTime: prepared.requestedLocalTime,
-          requestedTimeZone: prepared.requestedTimeZone,
-          recurrence: prepared.recurrence,
-          pricingVersion: prepared.pricingVersion,
-          firstCleaningTotalCents: prepared.firstCleaningTotalCents,
-          futureVisitTotalCents: prepared.futureVisitTotalCents,
-          priceSnapshot: prepared.priceSnapshot,
-          version: 1,
-          createdAt: now,
-          updatedAt: now,
-        });
-        const funnelRecordId = Number(
-          (funnelResult as { insertId?: number }).insertId ??
-            (funnelResult as Array<{ insertId?: number }>)[0]?.insertId
-        );
-        if (!Number.isInteger(funnelRecordId) || funnelRecordId < 1)
-          throw new Error(
-            "Internal booking funnel record did not return an ID."
-          );
-        await tx.insert(bookingPaymentProfiles).values({
-          bookingId,
-          funnelRecordId,
-          paymentStatus: "not_started",
-          version: 1,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-
-      return {
-        id: bookingId,
-        publicBookingNumber: prepared.publicBookingNumber,
-        commandHash: prepared.commandHash,
-      };
-    });
-    return { booking, created: true };
-  } catch (error) {
-    if (!isDuplicateEntry(error)) throw error;
-    const existing = await findBookingByIdempotencyKey(
-      db,
-      prepared.idempotencyKey
-    );
-    if (!existing) throw error;
-    return { booking: existing, created: false };
-  }
+  const result = await persistCanonicalBooking(db, prepared, {
+    paymentMethod: options.paymentMethod,
+    companyNotes: options.companyNotes,
+    initialBookingStatus: options.paymentMethod === "card"
+      ? "pending_payment"
+      : "needs_attention",
+  });
+  return {
+    booking: {
+      id: result.bookingId,
+      publicBookingNumber: result.publicBookingNumber,
+      commandHash: result.commandHash,
+    },
+    created: result.created,
+  };
 }
 
 type ActiveBookingAssignment = {
@@ -824,66 +601,10 @@ export const bookingsRouter = router({
           .update(bookings)
           .set({ assignmentStatus: "assigned", updatedAt: now })
           .where(eq(bookings.id, input.bookingId));
-        const operationalRows = await tx
-          .select({ id: leadflowJobs.id })
-          .from(leadflowJobs)
-          .where(
-            and(
-              eq(leadflowJobs.bookingId, booking.id),
-              eq(leadflowJobs.jobDate, booking.requestedLocalDate)
-            )
-          )
-          .limit(1);
-        const operationalJob = {
-          bookingId: booking.id,
-          jobDate: booking.requestedLocalDate,
-          serviceDateTime: nativeBookingServiceDateTime(booking),
-          customerName: booking.customerName,
-          customerPhone: booking.customerPhone,
-          customerEmail: booking.customerEmail,
-          jobAddress: booking.address,
-          serviceName: booking.serviceName,
-          bedrooms: booking.bedrooms,
-          bathrooms: booking.bathrooms,
-          extras: nativeBookingExtras(booking),
-          frequency: nativeBookingFrequency(booking.recurrence),
-          teamName: team.name,
+        await syncNativeBookingOperationalProjection(tx, booking, {
           teamId: team.id,
-          customerNotes: nativeBookingCustomerNotes(booking),
-          jobTotalCents: booking.firstCleaningTotalCents,
-          hasStripeCard:
-            booking.paymentStatus === "card_on_file" ||
-            booking.paymentStatus === "captured"
-              ? 1
-              : 0,
-          paymentBrand: null,
-          paymentLast4: null,
-        };
-        if (operationalRows[0]) {
-          await tx
-            .update(leadflowJobs)
-            .set({ ...operationalJob, updatedAt: now })
-            .where(eq(leadflowJobs.id, operationalRows[0].id));
-        } else {
-          await tx.insert(leadflowJobs).values({
-            origin: NATIVE_BOOKING_OPERATIONAL_ORIGIN,
-            launch27BookingId: null,
-            bookingSeriesId: null,
-            bookingStatus: "assigned",
-            ...operationalJob,
-          });
-        }
-        if (booking.futureVisitTotalCents !== null) {
-          await tx
-            .update(leadflowJobs)
-            .set({ teamName: team.name, teamId: team.id, updatedAt: now })
-            .where(
-              and(
-                eq(leadflowJobs.bookingId, booking.id),
-                gt(leadflowJobs.jobDate, booking.requestedLocalDate)
-              )
-            );
-        }
+          teamName: team.name,
+        });
         return {
           bookingId: input.bookingId,
           teamId: team.id,
@@ -1063,6 +784,18 @@ export const bookingsRouter = router({
           })
           .where(eq(bookings.id, booking.id));
 
+        const [activeAssignment] = await tx
+          .select({ teamId: bookingAssignments.teamId, teamName: bookingAssignments.teamName })
+          .from(bookingAssignments)
+          .where(
+            and(
+              eq(bookingAssignments.bookingId, booking.id),
+              eq(bookingAssignments.status, "assigned"),
+            ),
+          )
+          .orderBy(desc(bookingAssignments.assignedAt), desc(bookingAssignments.id))
+          .limit(1);
+
         const [series] = await tx
           .select()
           .from(bookingSeries)
@@ -1097,59 +830,23 @@ export const bookingsRouter = router({
             .where(eq(bookingSeries.id, series.id));
         }
 
-        const operationalRows = await tx
-          .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
-          .from(leadflowJobs)
-          .where(eq(leadflowJobs.bookingId, booking.id))
-          .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.id));
-        const currentOperationalJob =
-          operationalRows.find(
-            job => job.jobDate === booking.requestedLocalDate
-          ) ?? operationalRows[0];
-        const nativeExtras = JSON.stringify(extras.map(extra => extra.id));
-        const operationalFrequency = nativeBookingFrequency(recurrence);
-        if (currentOperationalJob) {
-          await tx
-            .update(leadflowJobs)
-            .set({
-              jobDate: requestedLocalDate,
-              serviceDateTime: new Date(requestedStartAt).toISOString(),
-              extras: nativeExtras,
-              frequency: operationalFrequency,
-              customerNotes: nativeBookingCustomerNotes(booking, companyNotes),
-              jobTotalCents: firstCleaningTotalCents,
-              nextOccurrenceCreatedAt: null,
-              updatedAt: now,
-            })
-            .where(eq(leadflowJobs.id, currentOperationalJob.id));
-        }
-        if (futureVisitTotalCents !== null) {
-          await tx
-            .update(leadflowJobs)
-            .set({
-              extras: nativeExtras,
-              frequency: operationalFrequency,
-              customerNotes: nativeBookingCustomerNotes(booking, companyNotes),
-              jobTotalCents: futureVisitTotalCents,
-              updatedAt: now,
-            })
-            .where(
-              and(
-                eq(leadflowJobs.bookingId, booking.id),
-                gt(leadflowJobs.jobDate, requestedLocalDate)
-              )
-            );
-        } else {
-          await tx
-            .update(leadflowJobs)
-            .set({ bookingStatus: "cancelled", updatedAt: now })
-            .where(
-              and(
-                eq(leadflowJobs.bookingId, booking.id),
-                gt(leadflowJobs.jobDate, requestedLocalDate)
-              )
-            );
-        }
+        const nextBooking = {
+          ...booking,
+          extras,
+          firstCleaningTotalCents,
+          companyNotes,
+          requestedLocalDate,
+          requestedStartAt,
+          recurrence,
+          futureVisitTotalCents,
+        };
+        await syncNativeBookingOperationalProjection(
+          tx,
+          nextBooking,
+          activeAssignment && activeAssignment.teamId !== null && activeAssignment.teamName !== null
+            ? { teamId: activeAssignment.teamId, teamName: activeAssignment.teamName }
+            : null,
+        );
 
         return {
           bookingId: booking.id,
@@ -1183,16 +880,11 @@ export const bookingsRouter = router({
           code: "NOT_FOUND",
           message: "Booking not found.",
         });
-      await db
-        .update(bookings)
-        .set({ status: "cancelled", updatedAt: new Date() })
-        .where(eq(bookings.id, input.id));
-      await db
-        .update(leadflowJobs)
-        .set({ bookingStatus: "cancelled", updatedAt: new Date() })
-        .where(eq(leadflowJobs.bookingId, input.id));
+      const cancelled = await cancelCanonicalBooking(db, input.id);
+      if (!cancelled)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
       publishNativeBookingRefresh();
-      return { id: input.id, status: "cancelled" as const };
+      return cancelled;
     }),
   staffRequests: bookingsAgentProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).default(200) }))

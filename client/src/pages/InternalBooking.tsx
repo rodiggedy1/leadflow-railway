@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
-import { useCanonicalBookingDraft } from "@/components/useCanonicalBookingDraft";
+import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -48,6 +48,7 @@ import {
   createCanonicalBookingInput,
   createCanonicalPricingInput,
 } from "@shared/canonicalBooking";
+import { CANONICAL_POST_BOOKING_UPSELLS } from "@shared/canonicalBookingCatalog";
 import "./internal-booking.css";
 import "./booking-flow-review.css";
 
@@ -87,72 +88,24 @@ type AdditionalService = {
   quantityLabel: string;
   image: string;
 };
-const ADDITIONAL_SERVICES: AdditionalService[] = [
-  {
-    id: "moving-help",
-    title: "Moving Help",
-    copy: "Let our trusted team handle the heavy lifting.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["moving-help"].unitPriceCents,
-    quantityLabel: "hours",
-    image: livingRoom,
-  },
-  {
-    id: "carpet-cleaning",
-    title: "Carpet Cleaning",
-    copy: "Refresh your carpets with a professional deep clean.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["carpet-cleaning"].unitPriceCents,
-    quantityLabel: "rooms",
-    image: upsellCarpetCleaning,
-  },
-  {
-    id: "exterior-window-cleaning",
-    title: "Exterior Window Cleaning",
-    copy: "Streak-free exterior windows for a brighter home.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["exterior-window-cleaning"].unitPriceCents,
-    quantityLabel: "hours",
-    image: upsellExteriorWindowCleaning,
-  },
-  {
-    id: "junk-removal",
-    title: "Junk Removal",
-    copy: "We haul it away so you don’t have to.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["junk-removal"].unitPriceCents,
-    quantityLabel: "loads",
-    image: livingRoom,
-  },
-  {
-    id: "furniture-cleaning",
-    title: "Furniture Cleaning",
-    copy: "Deep clean your sofas, mattresses, and more.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["furniture-cleaning"].unitPriceCents,
-    quantityLabel: "items",
-    image: kitchen,
-  },
-  {
-    id: "appliance-cleaning",
-    title: "Appliance Cleaning",
-    copy: "Inside your fridge, oven, and more.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["appliance-cleaning"].unitPriceCents,
-    quantityLabel: "appliances",
-    image: stillLife,
-  },
-  {
-    id: "window-cleaning",
-    title: "Window Cleaning",
-    copy: "Streak-free windows for a brighter home.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["window-cleaning"].unitPriceCents,
-    quantityLabel: "windows",
-    image: livingRoom,
-  },
-  {
-    id: "pet-area-cleaning",
-    title: "Pet Area Cleaning",
-    copy: "Tackle pet hair, odors, and messes.",
-    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["pet-area-cleaning"].unitPriceCents,
-    quantityLabel: "areas",
-    image: kitchen,
-  },
-];
+const ADDITIONAL_SERVICE_IMAGES = {
+  "moving-help": livingRoom,
+  "carpet-cleaning": upsellCarpetCleaning,
+  "exterior-window-cleaning": upsellExteriorWindowCleaning,
+  "junk-removal": livingRoom,
+  "furniture-cleaning": kitchen,
+  "appliance-cleaning": stillLife,
+  "window-cleaning": livingRoom,
+  "pet-area-cleaning": kitchen,
+} as const;
+const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(CANONICAL_POST_BOOKING_UPSELLS).map(([id, value]) => ({
+  id,
+  title: value.title,
+  copy: value.copy,
+  unitPriceCents: value.unitPriceCents,
+  quantityLabel: value.quantityLabel,
+  image: ADDITIONAL_SERVICE_IMAGES[id as keyof typeof ADDITIONAL_SERVICE_IMAGES],
+}));
 
 function tomorrowIso() {
   const date = new Date();
@@ -320,9 +273,12 @@ function ReviewCard({
 
 export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const [, navigate] = useLocation();
-  const [step, setStep] = useState<Step>(1);
   const {
     draft: canonicalDraft,
+    step,
+    setStep,
+    pricingInput,
+    pricing,
     serviceId,
     setServiceId,
     pricingMode,
@@ -355,7 +311,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     setAddress,
     extras,
     setExtra,
-  } = useCanonicalBookingDraft();
+  } = useCanonicalBookingFlow({ stepCount: 9 });
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [additionalServices, setAdditionalServices] = useState<
@@ -376,14 +332,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [step, success, createdBooking]);
 
-  const pricingInput = useMemo(
-    () => createCanonicalPricingInput(canonicalDraft),
-    [canonicalDraft]
-  );
-  const pricing = useMemo(
-    () => calculatePublicBookingPrice(pricingInput),
-    [pricingInput]
-  );
   const selectedExtras = EXTRA_OPTIONS.filter(([id]) => (extras[id] ?? 0) > 0);
   const selectedAdditionalServices = ADDITIONAL_SERVICES.filter(
     service => (additionalServices[service.id] ?? 0) > 0
@@ -469,9 +417,11 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       idempotencyKey,
       paymentMethod,
       companyNotes: notes.trim() || null,
-      additionalServices: Object.entries(additionalServices)
-        .filter(([, quantity]) => quantity > 0)
-        .map(([id, quantity]) => ({ id, quantity })),
+      additionalServices: paymentMethod === "card"
+        ? []
+        : Object.entries(additionalServices)
+            .filter(([, quantity]) => quantity > 0)
+            .map(([id, quantity]) => ({ id, quantity })),
       booking: {
         ...createCanonicalBookingInput(canonicalDraft, {
           idempotencyKey,
