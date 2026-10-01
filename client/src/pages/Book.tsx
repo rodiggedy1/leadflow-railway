@@ -43,6 +43,12 @@ import {
   type PublicBookingHomeType,
   type PublicBookingPricingMode,
 } from "@shared/publicBookingPricing";
+import {
+  CANONICAL_CONDITION_COPY,
+  CANONICAL_TIME_SLOT_LABELS,
+  createCanonicalPricingInput,
+  selectedCanonicalExtras,
+} from "@shared/canonicalBooking";
 import livingRoom from "@/assets/book-now-review/living-room.jpg";
 import kitchen from "@/assets/book-now-review/kitchen.jpg";
 import stillLife from "@/assets/book-now-review/still-life.jpg";
@@ -214,18 +220,7 @@ const FREQUENCY_OPTIONS: ReadonlyArray<{
   { id: "monthly", label: "Monthly", savings: "Save 10%", discountPercent: 10 },
 ];
 
-const CONDITION_COPY = [
-  "Basically spotless",
-  "Just needs a refresh",
-  "Normal everyday mess",
-  "Definitely lived-in",
-  "Pretty lived-in",
-  "It’s been a minute",
-  "Bring the good gloves",
-  "We need the A-team",
-  "Send reinforcements",
-  "Don’t ask. Just come.",
-];
+const CONDITION_COPY = CANONICAL_CONDITION_COPY;
 const CONDITION_IMAGES = [
   spotlessHouse,
   refreshedHouse,
@@ -238,7 +233,7 @@ const CONDITION_IMAGES = [
   reinforcementsBoxes,
   trashBags,
 ] as const;
-const TIME_SLOTS = ["8:30 AM", "11:00 AM", "1:30 PM", "4:30 PM"] as const;
+const TIME_SLOTS = CANONICAL_TIME_SLOT_LABELS;
 const POST_BOOKING_UPSELLS = [
   {
     id: "moving-help",
@@ -394,21 +389,19 @@ export default function Book() {
     SERVICES.find(item => item.id === service) ?? SERVICES[0];
   const selectedExtras = EXTRAS.filter(extra => (extras[extra.id] ?? 0) > 0);
   const pricingInput = useMemo(
-    () => ({
-      pricingMode,
-      serviceId: service,
-      bedrooms,
-      bathrooms,
-      homeType,
-      condition,
-      maidCount,
-      hourCount,
-      extras: selectedExtras.map(extra => ({
-        id: extra.id,
-        quantity: extras[extra.id] ?? 0,
-      })),
-      recurrence: frequency,
-    }),
+    () =>
+      createCanonicalPricingInput({
+        pricingMode,
+        serviceId: service,
+        bedrooms,
+        bathrooms,
+        homeType,
+        condition,
+        maidCount,
+        hourCount,
+        extras,
+        frequency,
+      }),
     [
       bathrooms,
       bedrooms,
@@ -454,10 +447,7 @@ export default function Book() {
     serviceName: getPublicBookingServiceName(service),
     bedrooms,
     bathrooms,
-    extras: selectedExtras.map(extra => ({
-      id: extra.id,
-      quantity: extras[extra.id] ?? 0,
-    })),
+    extras: selectedCanonicalExtras(extras),
     specialRequestNotes: notes.trim() ? [notes.trim()] : [],
     address,
     requestedLocalDate: dateIso,

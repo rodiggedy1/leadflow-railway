@@ -30,7 +30,7 @@ import {
 import {
   NativeBookingIdempotencyConflictError,
   NativeBookingInputError,
-  buildPreparedPublicBooking,
+  buildPreparedCanonicalBooking,
   prepareNativeBooking,
   type PreparePublicBookingInput,
   type PreparedNativeBooking,
@@ -42,6 +42,7 @@ import {
   isPublicBookingPriceSnapshot,
   PUBLIC_BOOKING_PRICED_EXTRAS,
   PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
+  PUBLIC_BOOKING_PRICING_VERSION,
 } from "../shared/publicBookingPricing";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -72,7 +73,7 @@ const internalPublicBookingInputSchema = z.object({
     .max(20)
     .default([]),
   booking: z.object({
-    surface: z.literal("full_page"),
+    surface: z.literal("popup"),
     customer: z.object({
       fullName: z.string().trim().min(2).max(255),
       phone: z.string().trim().min(7).max(40),
@@ -99,7 +100,7 @@ const internalPublicBookingInputSchema = z.object({
     }),
     recurrence: bookingRecurringFrequencySchema,
     acceptedPricing: z.object({
-      version: z.string().trim().min(1).max(64),
+      version: z.literal(PUBLIC_BOOKING_PRICING_VERSION),
       totalCents: z.number().int().min(0).max(10_000_000),
     }),
     pricing: z.object({
@@ -615,7 +616,7 @@ export const bookingsRouter = router({
           ...input.booking,
           idempotencyKey: input.idempotencyKey,
         };
-        const built = buildPreparedPublicBooking(preparedInput, {
+        const built = buildPreparedCanonicalBooking(preparedInput, {
           nowMs: Date.now(),
           timeZone: ENV.businessTimezone,
         });

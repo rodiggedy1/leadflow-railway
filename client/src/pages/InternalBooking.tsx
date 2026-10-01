@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
+import { useCanonicalBookingDraft } from "@/components/useCanonicalBookingDraft";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -35,47 +36,35 @@ import {
   calculatePublicBookingPrice,
   getPublicBookingServiceName,
   PUBLIC_BOOKING_PRICED_EXTRAS,
+  PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
   PUBLIC_BOOKING_PRICING_VERSION,
   type PublicBookingHomeType,
-  type PublicBookingPricingMode,
 } from "@shared/publicBookingPricing";
-import type {
-  BookingWidgetServiceId,
-  BookingWidgetRecurringFrequency,
-} from "@shared/bookingWidgetConfig";
+import {
+  CANONICAL_CONDITION_COPY,
+  CANONICAL_FREQUENCIES,
+  CANONICAL_SERVICE_IDS,
+  CANONICAL_TIME_SLOTS,
+  createCanonicalBookingInput,
+  createCanonicalPricingInput,
+} from "@shared/canonicalBooking";
 import "./internal-booking.css";
 import "./booking-flow-review.css";
 
 const stripePromise = loadStripe(
   import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string
 );
-const SERVICES: BookingWidgetServiceId[] = ["standard", "deep", "moveout"];
-const FREQUENCIES: BookingWidgetRecurringFrequency[] = [
-  "one-time",
-  "weekly",
-  "biweekly",
-  "monthly",
-];
+const SERVICES = CANONICAL_SERVICE_IDS;
+const FREQUENCIES = CANONICAL_FREQUENCIES;
 const HOME_TYPES: PublicBookingHomeType[] = [
   "House",
   "Apartment",
   "Townhome",
   "Condo",
 ];
-const TIMES = ["08:30", "11:00", "13:30", "16:30"];
+const TIMES = CANONICAL_TIME_SLOTS;
 const EXTRA_OPTIONS = Object.entries(PUBLIC_BOOKING_PRICED_EXTRAS);
-const CONDITION_COPY = [
-  "Light touch-up",
-  "Well cared for",
-  "Typical home",
-  "A little lived-in",
-  "Bring the good gloves",
-  "Needs extra attention",
-  "Heavy-duty clean",
-  "A serious reset",
-  "Major cleanup",
-  "Full transformation",
-];
+const CONDITION_COPY = CANONICAL_CONDITION_COPY;
 const STEPS = [
   "Cleaning type",
   "Home details",
@@ -103,7 +92,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "moving-help",
     title: "Moving Help",
     copy: "Let our trusted team handle the heavy lifting.",
-    unitPriceCents: 9900,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["moving-help"].unitPriceCents,
     quantityLabel: "hours",
     image: livingRoom,
   },
@@ -111,7 +100,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "carpet-cleaning",
     title: "Carpet Cleaning",
     copy: "Refresh your carpets with a professional deep clean.",
-    unitPriceCents: 7500,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["carpet-cleaning"].unitPriceCents,
     quantityLabel: "rooms",
     image: upsellCarpetCleaning,
   },
@@ -119,7 +108,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "exterior-window-cleaning",
     title: "Exterior Window Cleaning",
     copy: "Streak-free exterior windows for a brighter home.",
-    unitPriceCents: 7500,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["exterior-window-cleaning"].unitPriceCents,
     quantityLabel: "hours",
     image: upsellExteriorWindowCleaning,
   },
@@ -127,7 +116,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "junk-removal",
     title: "Junk Removal",
     copy: "We haul it away so you don’t have to.",
-    unitPriceCents: 9900,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["junk-removal"].unitPriceCents,
     quantityLabel: "loads",
     image: livingRoom,
   },
@@ -135,7 +124,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "furniture-cleaning",
     title: "Furniture Cleaning",
     copy: "Deep clean your sofas, mattresses, and more.",
-    unitPriceCents: 9900,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["furniture-cleaning"].unitPriceCents,
     quantityLabel: "items",
     image: kitchen,
   },
@@ -143,7 +132,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "appliance-cleaning",
     title: "Appliance Cleaning",
     copy: "Inside your fridge, oven, and more.",
-    unitPriceCents: 4900,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["appliance-cleaning"].unitPriceCents,
     quantityLabel: "appliances",
     image: stillLife,
   },
@@ -151,7 +140,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "window-cleaning",
     title: "Window Cleaning",
     copy: "Streak-free windows for a brighter home.",
-    unitPriceCents: 9900,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["window-cleaning"].unitPriceCents,
     quantityLabel: "windows",
     image: livingRoom,
   },
@@ -159,7 +148,7 @@ const ADDITIONAL_SERVICES: AdditionalService[] = [
     id: "pet-area-cleaning",
     title: "Pet Area Cleaning",
     copy: "Tackle pet hair, odors, and messes.",
-    unitPriceCents: 7900,
+    unitPriceCents: PUBLIC_BOOKING_POST_BOOKING_UPSELLS["pet-area-cleaning"].unitPriceCents,
     quantityLabel: "areas",
     image: kitchen,
   },
@@ -332,27 +321,43 @@ function ReviewCard({
 export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const [, navigate] = useLocation();
   const [step, setStep] = useState<Step>(1);
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [address, setAddress] = useState("");
-  const [serviceId, setServiceId] =
-    useState<BookingWidgetServiceId>("standard");
-  const [pricingMode, setPricingMode] =
-    useState<PublicBookingPricingMode>("home");
-  const [bedrooms, setBedrooms] = useState(1);
-  const [bathrooms, setBathrooms] = useState(1);
-  const [homeType, setHomeType] = useState<PublicBookingHomeType>("House");
-  const [maidCount, setMaidCount] = useState(2);
-  const [hourCount, setHourCount] = useState(2);
-  const [condition, setCondition] = useState(5);
-  const [frequency, setFrequency] =
-    useState<BookingWidgetRecurringFrequency>("biweekly");
-  const [date, setDate] = useState(tomorrowIso);
-  const [time, setTime] = useState("11:00");
+  const {
+    draft: canonicalDraft,
+    serviceId,
+    setServiceId,
+    pricingMode,
+    setPricingMode,
+    bedrooms,
+    setBedrooms,
+    bathrooms,
+    setBathrooms,
+    homeType,
+    setHomeType,
+    maidCount,
+    setMaidCount,
+    hourCount,
+    setHourCount,
+    condition,
+    setCondition,
+    frequency,
+    setFrequency,
+    date,
+    setDate,
+    time,
+    setTime,
+    customerName,
+    setCustomerName,
+    customerPhone,
+    setCustomerPhone,
+    customerEmail,
+    setCustomerEmail,
+    address,
+    setAddress,
+    extras,
+    setExtra,
+  } = useCanonicalBookingDraft();
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
-  const [extras, setExtras] = useState<Record<string, number>>({});
   const [additionalServices, setAdditionalServices] = useState<
     Record<string, number>
   >({});
@@ -371,34 +376,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [step, success, createdBooking]);
 
+  const pricingInput = useMemo(
+    () => createCanonicalPricingInput(canonicalDraft),
+    [canonicalDraft]
+  );
   const pricing = useMemo(
-    () =>
-      calculatePublicBookingPrice({
-        pricingMode,
-        serviceId,
-        bedrooms,
-        bathrooms,
-        homeType,
-        condition,
-        maidCount,
-        hourCount,
-        extras: Object.entries(extras)
-          .filter(([, quantity]) => quantity > 0)
-          .map(([id, quantity]) => ({ id, quantity })),
-        recurrence: frequency,
-      }),
-    [
-      pricingMode,
-      serviceId,
-      bedrooms,
-      bathrooms,
-      homeType,
-      condition,
-      maidCount,
-      hourCount,
-      extras,
-      frequency,
-    ]
+    () => calculatePublicBookingPrice(pricingInput),
+    [pricingInput]
   );
   const selectedExtras = EXTRA_OPTIONS.filter(([id]) => (extras[id] ?? 0) > 0);
   const selectedAdditionalServices = ADDITIONAL_SERVICES.filter(
@@ -411,11 +395,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   );
   const setAdditionalService = (id: string, delta: number) =>
     setAdditionalServices(current => ({
-      ...current,
-      [id]: Math.max(0, (current[id] ?? 0) + delta),
-    }));
-  const setExtra = (id: string, delta: number) =>
-    setExtras(current => ({
       ...current,
       [id]: Math.max(0, (current[id] ?? 0) + delta),
     }));
@@ -476,20 +455,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
 
   const submit = () => {
     setError(null);
-    const pricingInput = {
-      pricingMode,
-      serviceId,
-      bedrooms,
-      bathrooms,
-      homeType,
-      condition,
-      maidCount,
-      hourCount,
-      extras: Object.entries(extras)
-        .filter(([, quantity]) => quantity > 0)
-        .map(([id, quantity]) => ({ id, quantity })),
-      recurrence: frequency,
-    };
     if (createdBooking) {
       updateAdditionalServices.mutate({
         bookingId: createdBooking.bookingId,
@@ -499,35 +464,25 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       });
       return;
     }
+    const idempotencyKey = crypto.randomUUID();
     createBooking.mutate({
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey,
       paymentMethod,
       companyNotes: notes.trim() || null,
       additionalServices: Object.entries(additionalServices)
         .filter(([, quantity]) => quantity > 0)
         .map(([id, quantity]) => ({ id, quantity })),
       booking: {
-        surface: "full_page",
-        customer: {
-          fullName: customerName.trim(),
-          phone: customerPhone.trim(),
-          email: customerEmail.trim(),
+        ...createCanonicalBookingInput(canonicalDraft, {
+          idempotencyKey,
+          surface: "popup",
+          acceptedPricingVersion: PUBLIC_BOOKING_PRICING_VERSION,
+          acceptedTotalCents: pricing.firstCleaningTotalCents,
+        }),
+        pricing: {
+          ...pricingInput,
+          extras: [...pricingInput.extras],
         },
-        service: {
-          serviceId,
-          bedrooms,
-          bathrooms,
-          extras: pricingInput.extras,
-          specialRequestNotes: [],
-        },
-        address: address.trim(),
-        requestedSchedule: { localDate: date, localTime: time },
-        recurrence: frequency,
-        acceptedPricing: {
-          version: PUBLIC_BOOKING_PRICING_VERSION,
-          totalCents: pricing.firstCleaningTotalCents,
-        },
-        pricing: pricingInput,
       },
     });
   };
