@@ -1569,7 +1569,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ×
         </button>
       )}
-      <div className="review-status-pill">
+      <div className="review-badge">
         REVIEW ONLY · SAMPLE DATA · PAGE {step} OF 9
       </div>
       <section className="internal-booking-frame app-shell">
@@ -1581,11 +1581,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           >
             <span>←</span> Back to bookings
           </button>
-          <p className="eyebrow">INTERNAL BOOKING</p>
-          <h2>New Booking</h2>
-          <p>
-            Create a booking while on the phone or in chat with the customer.
-          </p>
+          <div className="brand-block">
+            <div className="eyebrow">INTERNAL BOOKING</div>
+            <h1>New Booking</h1>
+            <p>
+              Create a booking while on the phone or in chat with the customer.
+            </p>
+          </div>
           <nav className="steps" aria-label="Booking steps">
             {STEPS.map((title, index) => {
               const number = index + 1;
@@ -1612,7 +1614,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             <span className="spark">✦</span>
             <div>
               <strong>Auto-save enabled</strong>
-              <small>Draft saved just now</small>
+              <small>Draft saved 12s ago</small>
             </div>
           </div>
         </aside>
@@ -1623,10 +1625,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               {error}
             </div>
           )}
-          <footer className="internal-step-actions">
+          <footer className="internal-step-actions actions">
             <button
               type="button"
-              className="internal-back-button"
+              className="internal-back-button back-button"
               onClick={back}
               disabled={step === 1 || createBooking.isPending}
             >
@@ -1637,7 +1639,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </span>
             <button
               type="button"
-              className="internal-next-button"
+              className="internal-next-button continue-button"
               onClick={next}
               disabled={createBooking.isPending || startCardSetup.isPending}
             >
@@ -1656,8 +1658,8 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           </footer>
         </section>
         <aside className="internal-booking-right-rail right-rail">
-          <section className="internal-booking-summary-card">
-            <div className="internal-summary-head">
+          <section className="internal-booking-summary-card summary">
+            <div className="internal-summary-head summary-head">
               <div>
                 <h2>Booking summary</h2>
                 <span>Estimated first cleaning</span>
@@ -1668,7 +1670,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 )}
               </strong>
             </div>
-            <div className="internal-summary-list">
+            <div className="internal-summary-list summary-list">
               <div>
                 <span>Cleaning</span>
                 <b>{serviceName}</b>
@@ -1708,7 +1710,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               )}
             </div>
             {pricing.futureVisitTotalCents !== null && (
-              <button className="internal-breakdown-button" type="button">
+              <button
+                className="internal-breakdown-button breakdown"
+                type="button"
+              >
                 <span>{label(frequency)} after visit one</span>
                 <b>
                   {money(
@@ -1719,7 +1724,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </button>
             )}
           </section>
-          <section className="internal-booking-notes-card">
+          <section className="internal-booking-notes-card notes">
             <h3>✦ AI Booking Notes</h3>
             <textarea
               id="internal-company-notes"
@@ -1729,7 +1734,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             />
             <button
               type="button"
-              className="internal-add-note-button"
+              className="internal-add-note-button add-note"
               onClick={() =>
                 document.getElementById("internal-company-notes")?.focus()
               }
@@ -1740,7 +1745,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               These notes stay with the booking and are visible to the team.
             </p>
           </section>
-          <section className="internal-booking-tips-card">
+          <section className="internal-booking-tips-card tips">
             <h3>Booking tips</h3>
             <ul>
               <li>Confirm the arrival window with the customer.</li>

@@ -3924,7 +3924,7 @@
 }
 
 /* UI-only goal alignment: preserve all pricing and booking state while matching the supplied Step 1 composition. */
-.internal-booking-modal-shell .review-status-pill {
+.internal-booking-modal-shell .review-badge {
   position: absolute;
   top: 3px;
   left: 50%;
@@ -3975,6 +3975,23 @@
 }
 .internal-booking-modal-shell .internal-booking-progress h2 {
   font-size: 30px;
+}
+.internal-booking-modal-shell .brand-block {
+  padding: 0 4px 18px;
+  border-bottom: 1px solid #302d29;
+}
+.internal-booking-modal-shell .brand-block h1 {
+  margin: 14px 0 5px;
+  font:
+    700 28px/1 "Space Grotesk",
+    sans-serif;
+  letter-spacing: -0.04em;
+}
+.internal-booking-modal-shell .brand-block p {
+  margin: 0;
+  color: #aaa49b;
+  font-size: 14px;
+  line-height: 1.45;
 }
 .internal-booking-modal-shell .internal-booking-progress > p:not(.eyebrow) {
   font-size: 15px;
