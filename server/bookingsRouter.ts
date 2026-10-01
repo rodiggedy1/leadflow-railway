@@ -4,11 +4,11 @@ import { z } from "zod";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import {
-	  appSettings,
-	  bookingAssignments,
-	  bookingFunnelRecords,
-	  bookingPaymentProfiles,
-	  bookingSeries,
+  appSettings,
+  bookingAssignments,
+  bookingFunnelRecords,
+  bookingPaymentProfiles,
+  bookingSeries,
   bookings,
   customerPortalServiceRequests,
   cleanerProfiles,
@@ -41,6 +41,7 @@ import {
   calculatePublicBookingPrice,
   isPublicBookingPriceSnapshot,
   PUBLIC_BOOKING_PRICED_EXTRAS,
+  PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
 } from "../shared/publicBookingPricing";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
@@ -60,6 +61,15 @@ const internalPublicBookingInputSchema = z.object({
   idempotencyKey: z.string().uuid(),
   paymentMethod: z.enum(["card", "cashapp", "invoice"]),
   companyNotes: z.string().trim().max(4_000).nullable(),
+  additionalServices: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(80),
+        quantity: z.number().int().min(1).max(50),
+      })
+    )
+    .max(20)
+    .default([]),
   booking: z.object({
     surface: z.literal("full_page"),
     customer: z.object({
@@ -71,10 +81,14 @@ const internalPublicBookingInputSchema = z.object({
       serviceId: bookingServiceIdSchema,
       bedrooms: z.number().int().min(0).max(7),
       bathrooms: z.number().int().min(1).max(20),
-      extras: z.array(z.object({
-        id: z.string().trim().min(1).max(64),
-        quantity: z.number().int().min(1).max(50),
-      })).max(20),
+      extras: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(64),
+            quantity: z.number().int().min(1).max(50),
+          })
+        )
+        .max(20),
       specialRequestNotes: z.array(z.string().trim().min(1).max(1_000)).max(20),
     }),
     address: z.string().trim().min(5).max(500),
@@ -96,14 +110,88 @@ const internalPublicBookingInputSchema = z.object({
       condition: z.number().int().min(1).max(10),
       maidCount: z.number().int().min(1).max(4),
       hourCount: z.number().int().min(1).max(8),
-      extras: z.array(z.object({
-        id: z.string().trim().min(1).max(80),
-        quantity: z.number().int().min(1).max(50),
-      })).max(50),
+      extras: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(80),
+            quantity: z.number().int().min(1).max(50),
+          })
+        )
+        .max(50),
       recurrence: bookingRecurringFrequencySchema,
     }),
   }),
 });
+
+async function applyInternalAdditionalServices(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  bookingId: number,
+  selections: Array<{ id: string; quantity: number }>
+) {
+  if (selections.length === 0) return null;
+  const seen = new Set<string>();
+  const submitted = selections.map(selection => {
+    if (seen.has(selection.id))
+      throw new NativeBookingInputError(
+        "Each additional service can only be selected once."
+      );
+    seen.add(selection.id);
+    const catalog = PUBLIC_BOOKING_POST_BOOKING_UPSELLS[selection.id];
+    if (!catalog)
+      throw new NativeBookingInputError("Unsupported additional service.");
+    return {
+      id: selection.id,
+      label: catalog.label,
+      quantity: selection.quantity,
+      unitPriceCents: catalog.unitPriceCents,
+      totalCents: catalog.unitPriceCents * selection.quantity,
+    };
+  });
+  const result = await db.transaction(async tx => {
+    const [booking] = await tx
+      .select()
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+    if (!booking) throw new NativeBookingInputError("Booking not found.");
+    const upsellIds = new Set(Object.keys(PUBLIC_BOOKING_POST_BOOKING_UPSELLS));
+    const retained = booking.extras.filter(extra => !upsellIds.has(extra.id));
+    const extras = [...retained, ...submitted].sort((left, right) =>
+      left.id.localeCompare(right.id)
+    );
+    const totalCents =
+      booking.firstCleaningTotalCents -
+      booking.extras
+        .filter(extra => upsellIds.has(extra.id))
+        .reduce((total, extra) => total + extra.totalCents, 0) +
+      submitted.reduce((total, extra) => total + extra.totalCents, 0);
+    const now = new Date();
+    await tx
+      .update(bookings)
+      .set({ extras, firstCleaningTotalCents: totalCents, updatedAt: now })
+      .where(eq(bookings.id, bookingId));
+    const operationalRows = await tx
+      .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
+      .from(leadflowJobs)
+      .where(eq(leadflowJobs.bookingId, bookingId));
+    const currentJob =
+      operationalRows.find(job => job.jobDate === booking.requestedLocalDate) ??
+      operationalRows[0];
+    if (currentJob) {
+      await tx
+        .update(leadflowJobs)
+        .set({
+          extras: JSON.stringify(extras.map(extra => extra.id)),
+          jobTotalCents: totalCents,
+          updatedAt: now,
+        })
+        .where(eq(leadflowJobs.id, currentJob.id));
+    }
+    return { totalCents, extras: submitted };
+  });
+  broadcastCleanerPortalJobsChanged();
+  return result;
+}
 
 function nativeBookingFrequency(recurrence: string) {
   if (recurrence === "weekly") return "Weekly";
@@ -413,96 +501,122 @@ export const bookingsRouter = router({
         }
         throw error;
       }
-	    }),
+    }),
 
-	  createInternal: bookingsAgentProcedure
-	    .input(internalPublicBookingInputSchema)
-	    .mutation(async ({ input }) => {
-	      const db = await getDb();
-	      if (!db)
-	        throw new TRPCError({
-	          code: "INTERNAL_SERVER_ERROR",
-	          message: "Booking service unavailable.",
-	        });
-	      try {
-	        const preparedInput: PreparePublicBookingInput = {
-	          ...input.booking,
-	          idempotencyKey: input.idempotencyKey,
-	        };
-	        const built = buildPreparedPublicBooking(preparedInput, {
-	          nowMs: Date.now(),
-	          timeZone: ENV.businessTimezone,
-	        });
-	        if (built.type === "price_changed") {
-	          throw new NativeBookingInputError(
-	            `The booking price changed. Current total is $${(built.totalCents / 100).toFixed(2)}.`
-	          );
-	        }
-	        const persisted = await persistPreparedBooking(db, built.prepared);
-	        await db
-	          .update(bookings)
+  createInternal: bookingsAgentProcedure
+    .input(internalPublicBookingInputSchema)
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Booking service unavailable.",
+        });
+      try {
+        const preparedInput: PreparePublicBookingInput = {
+          ...input.booking,
+          idempotencyKey: input.idempotencyKey,
+        };
+        const built = buildPreparedPublicBooking(preparedInput, {
+          nowMs: Date.now(),
+          timeZone: ENV.businessTimezone,
+        });
+        if (built.type === "price_changed") {
+          throw new NativeBookingInputError(
+            `The booking price changed. Current total is $${(built.totalCents / 100).toFixed(2)}.`
+          );
+        }
+        const persisted = await persistPreparedBooking(db, built.prepared);
+        const additionalServices = await applyInternalAdditionalServices(
+          db,
+          persisted.booking.id,
+          input.additionalServices
+        );
+        await db
+          .update(bookings)
           .set({
             paymentMethod: input.paymentMethod,
             companyNotes: input.companyNotes,
             updatedAt: new Date(),
           })
-	          .where(eq(bookings.idempotencyKey, input.idempotencyKey));
-	        const [existingFunnel] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.bookingId, persisted.booking.id)).limit(1);
-	        if (!existingFunnel) {
-	          const now = new Date();
+          .where(eq(bookings.idempotencyKey, input.idempotencyKey));
+        const [existingFunnel] = await db
+          .select()
+          .from(bookingFunnelRecords)
+          .where(eq(bookingFunnelRecords.bookingId, persisted.booking.id))
+          .limit(1);
+        if (!existingFunnel) {
+          const now = new Date();
           const funnelInsert = await db.insert(bookingFunnelRecords).values({
-	            publicFunnelNumber: `${persisted.booking.publicBookingNumber}-F`,
-	            idempotencyKey: input.idempotencyKey,
-	            commandHash: built.prepared.commandHash,
-	            source: "internal",
-	            stage: "booked",
-	            bookingId: persisted.booking.id,
-	            customerName: built.prepared.customerName,
-	            customerPhone: built.prepared.customerPhone,
-	            customerEmail: built.prepared.customerEmail,
-	            serviceId: built.prepared.serviceId,
-	            serviceName: built.prepared.serviceName,
-	            bedrooms: built.prepared.bedrooms,
-	            bathrooms: built.prepared.bathrooms,
-	            extras: built.prepared.extras,
-	            specialRequestNotes: built.prepared.specialRequestNotes,
-	            address: built.prepared.address,
-	            requestedLocalDate: built.prepared.requestedLocalDate,
-	            requestedLocalTime: built.prepared.requestedLocalTime,
-	            requestedTimeZone: built.prepared.requestedTimeZone,
-	            recurrence: built.prepared.recurrence,
-	            pricingVersion: built.prepared.pricingVersion,
-	            firstCleaningTotalCents: built.prepared.firstCleaningTotalCents,
-	            futureVisitTotalCents: built.prepared.futureVisitTotalCents,
-	            priceSnapshot: built.prepared.priceSnapshot,
-	            version: 1,
-	            createdAt: now,
-	            updatedAt: now,
+            publicFunnelNumber: `${persisted.booking.publicBookingNumber}-F`,
+            idempotencyKey: input.idempotencyKey,
+            commandHash: built.prepared.commandHash,
+            source: "internal",
+            stage: "booked",
+            bookingId: persisted.booking.id,
+            customerName: built.prepared.customerName,
+            customerPhone: built.prepared.customerPhone,
+            customerEmail: built.prepared.customerEmail,
+            serviceId: built.prepared.serviceId,
+            serviceName: built.prepared.serviceName,
+            bedrooms: built.prepared.bedrooms,
+            bathrooms: built.prepared.bathrooms,
+            extras: built.prepared.extras,
+            specialRequestNotes: built.prepared.specialRequestNotes,
+            address: built.prepared.address,
+            requestedLocalDate: built.prepared.requestedLocalDate,
+            requestedLocalTime: built.prepared.requestedLocalTime,
+            requestedTimeZone: built.prepared.requestedTimeZone,
+            recurrence: built.prepared.recurrence,
+            pricingVersion: built.prepared.pricingVersion,
+            firstCleaningTotalCents: built.prepared.firstCleaningTotalCents,
+            futureVisitTotalCents: built.prepared.futureVisitTotalCents,
+            priceSnapshot: built.prepared.priceSnapshot,
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
           });
-          const funnelRecordId = Number((funnelInsert as { insertId?: number }).insertId);
+          const funnelRecordId = Number(
+            (funnelInsert as { insertId?: number }).insertId
+          );
           if (!Number.isInteger(funnelRecordId) || funnelRecordId <= 0) {
             throw new Error("Internal booking funnel record was not created.");
           }
-          await db.insert(bookingPaymentProfiles).values({ bookingId: persisted.booking.id, funnelRecordId, paymentStatus: "not_started", version: 1, createdAt: now, updatedAt: now });
+          await db.insert(bookingPaymentProfiles).values({
+            bookingId: persisted.booking.id,
+            funnelRecordId,
+            paymentStatus: "not_started",
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
+          });
         }
-	        publishNativeBookingRefresh();
-	        return {
-	          bookingId: persisted.booking.id,
-	          publicBookingNumber: persisted.booking.publicBookingNumber,
-	          created: persisted.created,
-	          paymentMethod: input.paymentMethod,
-	          totalCents: built.prepared.firstCleaningTotalCents,
-	        };
-	      } catch (error) {
-	        if (error instanceof NativeBookingIdempotencyConflictError)
-	          throw new TRPCError({ code: "CONFLICT", message: "IDEMPOTENCY_CONFLICT" });
-	        if (error instanceof NativeBookingInputError || error instanceof RangeError)
-	          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
-	        throw error;
-	      }
-	    }),
+        publishNativeBookingRefresh();
+        return {
+          bookingId: persisted.booking.id,
+          publicBookingNumber: persisted.booking.publicBookingNumber,
+          created: persisted.created,
+          paymentMethod: input.paymentMethod,
+          totalCents:
+            additionalServices?.totalCents ??
+            built.prepared.firstCleaningTotalCents,
+        };
+      } catch (error) {
+        if (error instanceof NativeBookingIdempotencyConflictError)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "IDEMPOTENCY_CONFLICT",
+          });
+        if (
+          error instanceof NativeBookingInputError ||
+          error instanceof RangeError
+        )
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        throw error;
+      }
+    }),
 
-	  list: bookingsAgentProcedure
+  list: bookingsAgentProcedure
     .input(bookingListInputSchema.optional())
     .query(async ({ input }) => {
       const db = await getDb();
@@ -620,7 +734,10 @@ export const bookingsRouter = router({
           .innerJoin(
             cleanerProfiles,
             and(
-              eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId),
+              eq(
+                cleanerProfiles.launch27TeamId,
+                schedulingTeams.launch27TeamId
+              ),
               eq(cleanerProfiles.isActive, 1)
             )
           )
