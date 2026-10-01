@@ -839,6 +839,42 @@ export const bookingsRouter = router({
       publishNativeBookingRefresh();
       return assignment;
     }),
+  updateAdditionalServices: bookingsAgentProcedure
+    .input(
+      z.object({
+        bookingId: z.number().int().positive(),
+        additionalServices: z
+          .array(
+            z.object({
+              id: z.string().trim().min(1).max(80),
+              quantity: z.number().int().min(1).max(50),
+            })
+          )
+          .max(20),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Booking service unavailable.",
+        });
+      try {
+        return (
+          (await applyInternalAdditionalServices(
+            db,
+            input.bookingId,
+            input.additionalServices
+          )) ?? { totalCents: 0, extras: [] }
+        );
+      } catch (error) {
+        if (error instanceof NativeBookingInputError)
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        throw error;
+      }
+    }),
+
   updateDetails: bookingsAgentProcedure
     .input(
       z

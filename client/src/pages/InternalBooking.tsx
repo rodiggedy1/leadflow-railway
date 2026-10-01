@@ -429,9 +429,18 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const confirmCardSetup =
     trpc.bookingPaymentAdmin.confirmInternalCardSetup.useMutation({
       onSuccess: () => {
+        setCardClientSecret(null);
+        setCardSetupIntentId(null);
+        setStep(8);
+      },
+      onError: mutationError => setError(mutationError.message),
+    });
+  const updateAdditionalServices =
+    trpc.bookings.updateAdditionalServices.useMutation({
+      onSuccess: () => {
         if (createdBooking)
           setSuccess(
-            `${createdBooking.publicBookingNumber} created with card on file. It is now in Bookings for assignment and follow-up.`
+            `${createdBooking.publicBookingNumber} created with card saved. It is now in Bookings for assignment and follow-up.`
           );
       },
       onError: mutationError => setError(mutationError.message),
@@ -472,6 +481,15 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         .map(([id, quantity]) => ({ id, quantity })),
       recurrence: frequency,
     };
+    if (createdBooking) {
+      updateAdditionalServices.mutate({
+        bookingId: createdBooking.bookingId,
+        additionalServices: Object.entries(additionalServices)
+          .filter(([, quantity]) => quantity > 0)
+          .map(([id, quantity]) => ({ id, quantity })),
+      });
+      return;
+    }
     createBooking.mutate({
       idempotencyKey: crypto.randomUUID(),
       paymentMethod,
@@ -516,6 +534,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       setError("Complete the customer information before continuing.");
       return;
     }
+    if (step === 7 && paymentMethod === "card" && !createdBooking) {
+      submit();
+      return;
+    }
     if (step === 9) {
       submit();
       return;
@@ -530,37 +552,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     ? "internal-booking-modal-shell"
     : "internal-booking-shell";
 
-  if (createdBooking && cardClientSecret && cardSetupIntentId && !success)
-    return (
-      <main className={shellClass}>
-        <section className="internal-booking-card-stage">
-          <p className="eyebrow">PAYMENT METHOD</p>
-          <h1>Add the card</h1>
-          <p>
-            The card is saved securely to this booking. Nothing is charged
-            today.
-          </p>
-          <Elements
-            stripe={stripePromise}
-            options={{ clientSecret: cardClientSecret }}
-          >
-            <PremiumCardSetupForm
-              customerName={customerName}
-              clientSecret={cardClientSecret}
-              onConfirm={paymentMethodId =>
-                confirmCardSetup
-                  .mutateAsync({
-                    bookingId: createdBooking.bookingId,
-                    setupIntentId: cardSetupIntentId,
-                    paymentMethodId,
-                  })
-                  .then(() => undefined)
-              }
-            />
-          </Elements>
-        </section>
-      </main>
-    );
   if (success)
     return (
       <main className={shellClass}>
@@ -1145,6 +1136,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               key={value}
               className={`payment-method${paymentMethod === value ? " selected" : ""}`}
               type="button"
+              disabled={!!createdBooking}
               onClick={() => setPaymentMethod(value)}
             >
               <i />
@@ -1171,12 +1163,36 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </button>
           ))}
         </div>
-        {paymentMethod === "card" && (
-          <p className="booking-review-lede">
-            The secure card-entry form opens after the booking details are
-            saved, using the same Stripe flow as the public booking form.
-          </p>
-        )}
+        {paymentMethod === "card" &&
+        createdBooking &&
+        cardClientSecret &&
+        cardSetupIntentId ? (
+          <Elements
+            stripe={stripePromise}
+            options={{
+              clientSecret: cardClientSecret,
+              appearance: { theme: "stripe" },
+            }}
+          >
+            <PremiumCardSetupForm
+              customerName={customerName}
+              clientSecret={cardClientSecret}
+              onConfirm={paymentMethodId =>
+                confirmCardSetup
+                  .mutateAsync({
+                    bookingId: createdBooking.bookingId,
+                    setupIntentId: cardSetupIntentId,
+                    paymentMethodId,
+                  })
+                  .then(() => undefined)
+              }
+            />
+          </Elements>
+        ) : paymentMethod === "card" && createdBooking ? (
+          <div className="booking-card-acceptance booking-card-acceptance-loading">
+            Preparing secure card entry…
+          </div>
+        ) : null}
       </>
     ) : step === 8 ? (
       <>
@@ -1485,10 +1501,20 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               type="button"
               className="internal-next-button continue-button"
               onClick={next}
-              disabled={createBooking.isPending || startCardSetup.isPending}
+              disabled={
+                createBooking.isPending ||
+                startCardSetup.isPending ||
+                confirmCardSetup.isPending ||
+                updateAdditionalServices.isPending ||
+                (step === 7 && paymentMethod === "card" && !!createdBooking)
+              }
             >
               {createBooking.isPending || startCardSetup.isPending ? (
-                "Creating…"
+                "Preparing card…"
+              ) : confirmCardSetup.isPending ? (
+                "Saving card…"
+              ) : updateAdditionalServices.isPending ? (
+                "Updating booking…"
               ) : step === 9 ? (
                 <>
                   <Check /> Create booking
