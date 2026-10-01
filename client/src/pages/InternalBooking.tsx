@@ -708,19 +708,28 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                     ? deepKitchen
                     : moveoutBoxes
               }
-              price={
-                value === "standard"
-                  ? "$169"
-                  : value === "deep"
-                    ? "$249"
-                    : "$299"
-              }
+              price={money(
+                calculatePublicBookingPrice({
+                  pricingMode,
+                  serviceId: value,
+                  bedrooms,
+                  bathrooms,
+                  homeType,
+                  condition,
+                  maidCount,
+                  hourCount,
+                  extras: Object.entries(extras)
+                    .filter(([, quantity]) => quantity > 0)
+                    .map(([id, quantity]) => ({ id, quantity })),
+                  recurrence: frequency,
+                }).firstCleaningTotalCents
+              )}
               meta={
                 value === "standard"
-                  ? "~ 2.5 hours • Team payout ~$93"
+                  ? "~ 2.5 hours"
                   : value === "deep"
-                    ? "~ 3.5 hours • Team payout ~$137"
-                    : "~ 4 hours • Team payout ~$164"
+                    ? "~ 3.5 hours"
+                    : "~ 4 hours"
               }
               say={
                 value === "standard"
@@ -912,34 +921,119 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       <>
         <h1>When should the cleaning happen?</h1>
         <p className="internal-lede">
-          Choose the requested date and arrival window.
+          Choose the date and arrival window that works best for the customer.
         </p>
-        <div className="internal-date-card">
-          <CalendarDays />
-          <label>
-            Date
-            <input
-              type="date"
-              min={tomorrowIso()}
-              value={date}
-              onChange={event => setDate(event.target.value)}
-            />
-            <strong>{dateLabel(date)}</strong>
-          </label>
-        </div>
-        <div className="internal-card-label">Arrival time</div>
-        <div className="internal-time-grid">
-          {TIMES.map(value => (
-            <button
-              type="button"
-              key={value}
-              className={time === value ? "selected" : ""}
-              onClick={() => setTime(value)}
-            >
-              <Clock3 />
-              {value}
-            </button>
-          ))}
+        <div className="schedule-layout">
+          <section className="calendar-card">
+            <div className="schedule-card-head">
+              <strong>Select a date</strong>
+              <span>
+                {new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
+                  month: "long",
+                  year: "numeric",
+                })}
+                <button type="button" aria-label="Previous month">
+                  ‹
+                </button>
+                <button type="button" aria-label="Next month">
+                  ›
+                </button>
+              </span>
+            </div>
+            <div className="weekdays">
+              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(day => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+            <div className="calendar-grid">
+              {Array.from(
+                {
+                  length:
+                    new Date(
+                      new Date(`${date}T12:00:00`).getFullYear(),
+                      new Date(`${date}T12:00:00`).getMonth(),
+                      1
+                    ).getDay() +
+                    new Date(
+                      new Date(`${date}T12:00:00`).getFullYear(),
+                      new Date(`${date}T12:00:00`).getMonth() + 1,
+                      0
+                    ).getDate(),
+                },
+                (_, index) => index
+              ).map(index => {
+                const monthDate = new Date(`${date}T12:00:00`);
+                const firstDay = new Date(
+                  monthDate.getFullYear(),
+                  monthDate.getMonth(),
+                  1
+                ).getDay();
+                const day = index - firstDay + 1;
+                if (day < 1)
+                  return <span className="muted" key={`empty-${index}`} />;
+                const value = `${monthDate.getFullYear()}-${String(
+                  monthDate.getMonth() + 1
+                ).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                return (
+                  <button
+                    className={`day${value === date ? " selected" : ""}`}
+                    disabled={value < tomorrowIso()}
+                    key={value}
+                    type="button"
+                    onClick={() => setDate(value)}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+          <section className="arrival-card">
+            <strong>Select an arrival window</strong>
+            <p>We&apos;ll send your team within a 2-hour window.</p>
+            <div className="arrival-list">
+              {TIMES.map((value, index) => {
+                const end = ["10:30", "13:00", "15:30", "18:00"][index];
+                const formatTime = (raw: string) => {
+                  const [hour, minute] = raw.split(":").map(Number);
+                  const suffix = hour >= 12 ? "PM" : "AM";
+                  const displayHour = hour % 12 || 12;
+                  return `${displayHour}:${String(minute).padStart(2, "0")} ${suffix}`;
+                };
+                return (
+                  <button
+                    className={`arrival${time === value ? " selected" : ""}`}
+                    key={value}
+                    type="button"
+                    onClick={() => setTime(value)}
+                  >
+                    <i />
+                    <span>◷</span>
+                    <b>
+                      {formatTime(value)} – {formatTime(end)}
+                    </b>
+                    {index === 0 && <em>Most popular</em>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+          <aside className="window-info">
+            <h3>
+              <span>ⓘ</span> About the 2-hour window
+            </h3>
+            <p>
+              We&apos;ll send your cleaning team within the selected 2-hour
+              window. You&apos;ll get a text when they&apos;re on the way with a
+              more exact ETA (usually 30–60 minutes before arrival).
+            </p>
+            <hr />
+            <h3>Need a specific time?</h3>
+            <p>
+              If it&apos;s urgent or you have a preference, add a note and
+              we&apos;ll do our best to accommodate.
+            </p>
+          </aside>
         </div>
       </>
     ) : step === 6 ? (
@@ -948,27 +1042,27 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         <p className="internal-lede">
           Capture the customer details and anything the team should know.
         </p>
-        <div className="internal-contact-grid">
+        <div className="customer-form">
           <label>
             Full name
             <input
               required
               value={customerName}
               onChange={event => setCustomerName(event.target.value)}
-              placeholder="Customer name"
+              placeholder="Rohan Gilkes"
             />
           </label>
           <label>
-            Phone
+            Phone number
             <input
               required
               value={customerPhone}
               onChange={event => setCustomerPhone(event.target.value)}
-              placeholder="202-555-0123"
+              placeholder="(302) 981-6192"
             />
           </label>
           <label>
-            Email
+            Email <span>(for receipt and updates)</span>
             <input
               required
               type="email"
@@ -978,123 +1072,298 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             />
           </label>
           <label>
-            Address
-            <input
-              required
-              value={address}
-              onChange={event => setAddress(event.target.value)}
-              placeholder="Street, city, state, ZIP"
-            />
+            Service address{" "}
+            <button
+              className="apt-prompt"
+              type="button"
+              onClick={() =>
+                document.getElementById("internal-service-address")?.focus()
+              }
+            >
+              Apt / Unit number?
+            </button>
+            <div className="address-field">
+              <input
+                id="internal-service-address"
+                required
+                value={address}
+                onChange={event => setAddress(event.target.value)}
+                placeholder="Street, city, state, ZIP"
+              />
+            </div>
           </label>
-          <label className="wide">
-            Company notes
+          <label className="notes-field">
+            Access details / notes <span>(optional)</span>
             <textarea
               value={notes}
               onChange={event => setNotes(event.target.value)}
+              maxLength={500}
               placeholder="Gate code, parking, pets, or anything the team should know"
             />
+            <small className="char-count">{notes.length}/500</small>
           </label>
+        </div>
+        <div className="guidance customer-guidance">
+          <div className="guidance-icon">▤</div>
+          <div>
+            <strong>AI guidance</strong>
+            <p>
+              Collect any important access details (gate codes, lockbox,
+              parking, pets) and share customer preferences with the team.
+            </p>
+          </div>
         </div>
       </>
     ) : step === 7 ? (
       <>
-        <h1>How will this booking be collected?</h1>
+        <h1>How would the customer like to pay?</h1>
         <p className="internal-lede">
-          Card is selected by default. Nothing is charged today.
+          Choose a payment method and collect the details.
         </p>
-        <div className="internal-choice-grid">
+        <div className="payment-methods">
           {(["card", "cashapp", "invoice"] as PaymentMethod[]).map(value => (
-            <ChoiceCard
+            <button
               key={value}
-              selected={paymentMethod === value}
+              className={`payment-method${paymentMethod === value ? " selected" : ""}`}
+              type="button"
               onClick={() => setPaymentMethod(value)}
-              icon={CreditCard}
-              title={value === "cashapp" ? "Cash App" : label(value)}
-              description={
-                value === "card"
-                  ? "Save a card securely for payment after service."
+            >
+              <i />
+              <span
+                className={`payment-icon${value === "cashapp" ? " cash" : ""}`}
+              >
+                {value === "cashapp" ? "$" : value === "invoice" ? "▤" : "▣"}
+              </span>
+              <strong>
+                {value === "cashapp"
+                  ? "Cash App"
+                  : value === "invoice"
+                    ? "Invoice"
+                    : "Credit card"}
+                {value === "card" && <small>Recommended</small>}
+              </strong>
+              <em>
+                {value === "card"
+                  ? "Most common"
                   : value === "cashapp"
-                    ? "Collect through the separate Cash App flow."
-                    : "Mark the booking for invoice collection."
-              }
-            />
+                    ? "Send payment request\nafter booking"
+                    : "Mark as pay later\nCollect on service day"}
+              </em>
+            </button>
           ))}
         </div>
+        {paymentMethod === "card" && (
+          <>
+            <section className="card-details">
+              <div className="card-details-head">
+                <strong>Card details</strong>
+                <span>♧ &nbsp; Secure payment powered by Stripe</span>
+              </div>
+              <label>
+                Card number
+                <div className="fake-input">
+                  ▣ &nbsp;{" "}
+                  <span>
+                    Card entry opens securely after booking details are
+                    confirmed
+                  </span>
+                </div>
+              </label>
+              <div className="card-row">
+                <label>
+                  <span>Expiration date</span>
+                  <div className="fake-input">
+                    <span>MM / YY</span>
+                  </div>
+                </label>
+                <label>
+                  <span>CVC</span>
+                  <div className="fake-input">
+                    <span>123</span>
+                    <b>▣</b>
+                  </div>
+                </label>
+              </div>
+              <label>
+                Name on card
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={event => setCustomerName(event.target.value)}
+                  placeholder="Name on card"
+                />
+              </label>
+              <label className="save-card">
+                <input type="checkbox" checked readOnly />
+                <strong>Save card for future bookings</strong>
+                <small>Speeds up booking and recurring services.</small>
+              </label>
+            </section>
+            <div className="card-on-file">
+              <span>▣</span>
+              <div>
+                <strong>Card on file</strong>
+                <p>
+                  We keep your card on file for easier scheduling, recurring
+                  cleanings, and any additional services.
+                  <br />
+                  You&apos;ll only be charged for confirmed services.
+                </p>
+              </div>
+              <b>ⓘ</b>
+            </div>
+          </>
+        )}
       </>
     ) : step === 8 ? (
       <>
-        <h1>Take a final look</h1>
+        <h1>Review and book</h1>
         <p className="internal-lede">
-          Confirm the details before creating this native booking.
+          Please confirm all details before we complete your booking.
         </p>
-        <div className="internal-review-grid">
-          <ReviewCard
-            number={1}
-            title="Cleaning type"
-            detail={serviceName}
-            icon={Sparkles}
-            onEdit={() => setStep(1)}
-          />
-          <ReviewCard
-            number={2}
-            title="Home details"
-            detail={homeDetail}
-            icon={Home}
-            onEdit={() => setStep(2)}
-          />
-          <ReviewCard
-            number={3}
-            title="Home condition"
-            detail={`${condition} · ${CONDITION_COPY[condition - 1]}`}
-            icon={ShieldCheck}
-            onEdit={() => setStep(3)}
-          />
-          <ReviewCard
-            number={4}
-            title="Extras"
-            detail={
-              selectedExtras.length
-                ? `${selectedExtras.length} selected`
-                : "No extras selected"
-            }
-            icon={Plus}
-            onEdit={() => setStep(4)}
-          />
-          <ReviewCard
-            number={5}
-            title="Schedule"
-            detail={`${dateLabel(date)} · ${time}`}
-            icon={CalendarDays}
-            onEdit={() => setStep(5)}
-          />
-          <ReviewCard
-            number={6}
-            title="Customer"
-            detail={customerName || "Customer details"}
-            icon={UserRound}
-            onEdit={() => setStep(6)}
-          />
-          <ReviewCard
-            number={7}
-            title="Collection"
-            detail={
-              paymentMethod === "cashapp" ? "Cash App" : label(paymentMethod)
-            }
-            icon={CreditCard}
-            onEdit={() => setStep(7)}
-          />
-        </div>
-        <div className="internal-review-total">
-          <span>
-            First cleaning
-            <strong>{money(pricing.firstCleaningTotalCents)}</strong>
-          </span>
-          {pricing.futureVisitTotalCents !== null && (
-            <span>
-              {label(frequency)} after visit one
-              <strong>{money(pricing.futureVisitTotalCents)} / visit</strong>
-            </span>
-          )}
+        <div className="final-review-layout">
+          <div className="review-cards">
+            <article className="review-card">
+              <span>⌂</span>
+              <div>
+                <strong>Service &amp; home details</strong>
+                <p>
+                  {serviceName}
+                  <br />
+                  {homeDetail}
+                </p>
+              </div>
+              <button type="button" onClick={() => setStep(1)}>
+                Edit
+              </button>
+            </article>
+            <article className="review-card">
+              <span>✦</span>
+              <div>
+                <strong>Home condition</strong>
+                <p>
+                  {CONDITION_COPY[condition - 1]}
+                  <br />
+                  Condition {condition}/10.
+                </p>
+              </div>
+              <button type="button" onClick={() => setStep(3)}>
+                Edit
+              </button>
+            </article>
+            <article className="review-card">
+              <span>⊕</span>
+              <div>
+                <strong>Extras</strong>
+                <p>
+                  {selectedExtras.length
+                    ? selectedExtras.map(([id, extra]) => (
+                        <span key={id}>
+                          {extra.label} <b>${extra.unitPrice}</b>
+                          <br />
+                        </span>
+                      ))
+                    : "No extras selected"}
+                </p>
+              </div>
+              <button type="button" onClick={() => setStep(4)}>
+                Edit
+              </button>
+            </article>
+            <article className="review-card">
+              <span>▦</span>
+              <div>
+                <strong>Date &amp; time</strong>
+                <p>
+                  {dateLabel(date)}
+                  <br />
+                  {time}
+                  <br />
+                  <small>
+                    ⓘ We&apos;ll send your team within a 2-hour window.
+                  </small>
+                </p>
+              </div>
+              <button type="button" onClick={() => setStep(5)}>
+                Edit
+              </button>
+            </article>
+            <article className="review-card">
+              <span>♙</span>
+              <div>
+                <strong>Your information</strong>
+                <p>
+                  {customerName || "Customer name"}
+                  <br />
+                  {customerPhone || "Phone number"}
+                  <br />
+                  {customerEmail || "Email"}
+                  <br />
+                  {address || "Service address"}
+                </p>
+              </div>
+              <button type="button" onClick={() => setStep(6)}>
+                Edit
+              </button>
+            </article>
+            <article className="review-card">
+              <span>▣</span>
+              <div>
+                <strong>Payment method</strong>
+                <p>
+                  {paymentMethod === "card"
+                    ? "Card on file"
+                    : paymentMethod === "cashapp"
+                      ? "Cash App"
+                      : "Invoice"}
+                  <br />
+                  {paymentMethod === "card"
+                    ? "Securely saved after booking"
+                    : "Collection selected"}
+                </p>
+              </div>
+              <button type="button" onClick={() => setStep(7)}>
+                Edit
+              </button>
+            </article>
+          </div>
+          <div className="confirmation-panel">
+            <img src={deepKitchen} alt="Clean home interior" />
+            <h3>You&apos;re almost all set!</h3>
+            <p>
+              Review your details and confirm your booking.
+              <br />
+              You&apos;ll receive a confirmation text shortly after booking.
+            </p>
+            <div className="confirmation-benefits">
+              <p>
+                <b>♢</b>
+                <strong>
+                  Secure payment
+                  <small>Your information is encrypted and safe.</small>
+                </strong>
+              </p>
+              <p>
+                <b>◷</b>
+                <strong>
+                  Flexible arrival window
+                  <small>
+                    We&apos;ll send your team within 2 hours of your selected
+                    time.
+                  </small>
+                </strong>
+              </p>
+              <p>
+                <b>▦</b>
+                <strong>
+                  Easy changes
+                  <small>
+                    Need to reschedule? Just reply to your confirmation text.
+                  </small>
+                </strong>
+              </p>
+            </div>
+          </div>
         </div>
       </>
     ) : (

@@ -1428,3 +1428,6 @@
     padding: 22px 16px 14px;
   }
 }
+
+/* Review cards use real buttons so edits remain functional while preserving the approved link treatment. */
+.internal-booking-stage .review-card > button { border: 0; padding: 0; background: transparent; color: #f1c86c; text-decoration: underline; font: 11px "DM Sans", sans-serif; cursor: pointer; }
