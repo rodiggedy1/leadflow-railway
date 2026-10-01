@@ -51,6 +51,7 @@ import {
   selectedCanonicalExtras,
 } from "@shared/canonicalBooking";
 import { CANONICAL_POST_BOOKING_UPSELLS } from "@shared/canonicalBookingCatalog";
+import { easternCalendarWeekday, easternDateIso, easternDateIsoFromDate, easternDateLabel, easternMonthDate, easternMonthLabel, parseEasternDate } from "@shared/easternTime";
 import livingRoom from "@/assets/book-now-review/living-room.jpg";
 import kitchen from "@/assets/book-now-review/kitchen.jpg";
 import stillLife from "@/assets/book-now-review/still-life.jpg";
@@ -276,20 +277,13 @@ function timeLabelTo24Hour(time: string): string {
   return `${String(hour).padStart(2, "0")}:${match[2]}`;
 }
 function isoDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return easternDateIsoFromDate(date);
 }
 function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return easternDateLabel(isoDate(date));
 }
 function firstBookableDate(): Date {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + 1);
-  return date;
+  return parseEasternDate(easternDateIso(new Date(), 1));
 }
 
 export default function Book() {
@@ -340,9 +334,9 @@ export default function Book() {
   } = useCanonicalBookingFlow({ stepCount: 8 });
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const firstDate = firstBookableDate();
-    return new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+    return easternMonthDate(firstDate.getUTCFullYear(), firstDate.getUTCMonth(), 1);
   });
-  const selectedDate = useMemo(() => new Date(`${requestedLocalDate}T12:00:00`), [requestedLocalDate]);
+  const selectedDate = useMemo(() => parseEasternDate(requestedLocalDate), [requestedLocalDate]);
   const setSelectedDate = (date: Date) => setRequestedLocalDate(isoDate(date));
   const selectedTime = (TIME_SLOTS.find(slot => timeLabelTo24Hour(slot) === requestedLocalTime) ?? TIME_SLOTS[0]);
   const setSelectedTime = (slot: (typeof TIME_SLOTS)[number]) => setRequestedLocalTime(timeLabelTo24Hour(slot));
@@ -614,7 +608,7 @@ export default function Book() {
                   onSelectDate={date => {
                     setSelectedDate(date);
                     setVisibleMonth(
-                      new Date(date.getFullYear(), date.getMonth(), 1)
+                      easternMonthDate(date.getUTCFullYear(), date.getUTCMonth(), 1)
                     );
                   }}
                   onVisibleMonthChange={setVisibleMonth}
@@ -1173,37 +1167,15 @@ function DateTime({
   onVisibleMonthChange: (value: Date) => void;
   onSelectTime: (value: (typeof TIME_SLOTS)[number]) => void;
 }) {
-  const monthLabel = visibleMonth.toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
-  const first = new Date(
-    visibleMonth.getFullYear(),
-    visibleMonth.getMonth(),
-    1
-  );
-  const leading = first.getDay();
-  const days = new Date(
-    visibleMonth.getFullYear(),
-    visibleMonth.getMonth() + 1,
-    0
-  ).getDate();
+  const monthLabel = easternMonthLabel(visibleMonth);
+  const year = visibleMonth.getUTCFullYear();
+  const month = visibleMonth.getUTCMonth();
+  const leading = easternCalendarWeekday(year, month);
+  const days = new Date(Date.UTC(year, month + 1, 0, 12)).getUTCDate();
   const earliest = firstBookableDate();
-  const earliestMonth = new Date(
-    earliest.getFullYear(),
-    earliest.getMonth(),
-    1
-  );
-  const previousMonth = new Date(
-    visibleMonth.getFullYear(),
-    visibleMonth.getMonth() - 1,
-    1
-  );
-  const nextMonth = new Date(
-    visibleMonth.getFullYear(),
-    visibleMonth.getMonth() + 1,
-    1
-  );
+  const earliestMonth = easternMonthDate(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1);
+  const previousMonth = easternMonthDate(year, month - 1, 1);
+  const nextMonth = easternMonthDate(year, month + 1, 1);
   return (
     <>
       <h1>When works for you?</h1>
@@ -1239,12 +1211,7 @@ function DateTime({
             {Array.from({ length: leading + days }, (_, index) => {
               const day = index - leading + 1;
               if (index < leading) return <span key={`empty-${index}`} />;
-              const date = new Date(
-                visibleMonth.getFullYear(),
-                visibleMonth.getMonth(),
-                day,
-                12
-              );
+              const date = easternMonthDate(year, month, day);
               const unavailable = date < earliest;
               return (
                 <button
