@@ -1569,6 +1569,9 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ×
         </button>
       )}
+      <div className="review-status-pill">
+        REVIEW ONLY · SAMPLE DATA · PAGE {step} OF 9
+      </div>
       <section className="internal-booking-frame app-shell">
         <aside className="internal-booking-progress sidebar panel">
           <button
@@ -1614,7 +1617,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           </div>
         </aside>
         <section className="internal-booking-stage content panel">
-          <div className="internal-step-overline">STEP {step} OF 9</div>
           <div className="internal-step-content">{stepContent}</div>
           {error && (
             <div className="form-error" role="alert">
@@ -1658,7 +1660,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             <div className="internal-summary-head">
               <div>
                 <h2>Booking summary</h2>
-                <span>Live estimate</span>
+                <span>Estimated first cleaning</span>
               </div>
               <strong>
                 {money(
@@ -1718,14 +1720,22 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             )}
           </section>
           <section className="internal-booking-notes-card">
-            <h3>
-              Company notes <span>· internal</span>
-            </h3>
+            <h3>✦ AI Booking Notes</h3>
             <textarea
+              id="internal-company-notes"
               value={notes}
               onChange={event => setNotes(event.target.value)}
-              placeholder="Gate code, parking, pets, or anything the team should know"
+              placeholder="Type notes from the customer call... (e.g. pets, specific areas, access requests)"
             />
+            <button
+              type="button"
+              className="internal-add-note-button"
+              onClick={() =>
+                document.getElementById("internal-company-notes")?.focus()
+              }
+            >
+              + Add note
+            </button>
             <p>
               These notes stay with the booking and are visible to the team.
             </p>

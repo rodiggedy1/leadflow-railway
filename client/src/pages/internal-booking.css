@@ -3922,3 +3922,99 @@
     border-radius: 0;
   }
 }
+
+/* UI-only goal alignment: preserve all pricing and booking state while matching the supplied Step 1 composition. */
+.internal-booking-modal-shell .review-status-pill {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border: 1px solid #725939;
+  border-radius: 999px;
+  background: #1b1916;
+  color: #e8bb85;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+.internal-booking-modal-shell .internal-booking-stage.content {
+  padding: 25px 22px 16px;
+}
+.internal-booking-modal-shell .internal-step-content {
+  width: 100%;
+  max-width: none;
+  flex: 1;
+  padding: 0;
+}
+.internal-booking-modal-shell .content-top {
+  padding: 0 2px 18px;
+}
+.internal-booking-modal-shell .content h2 {
+  margin: 13px 0 5px;
+  font:
+    700 30px/1 "Space Grotesk",
+    sans-serif;
+  letter-spacing: -0.04em;
+}
+.internal-booking-modal-shell .content-top .subtitle {
+  margin: 0;
+  color: #aaa59c;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.internal-booking-modal-shell .service-grid {
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+.internal-booking-modal-shell .service-card {
+  min-width: 0;
+}
+.internal-booking-modal-shell .internal-booking-progress h2 {
+  font-size: 30px;
+}
+.internal-booking-modal-shell .internal-booking-progress > p:not(.eyebrow) {
+  font-size: 15px;
+  line-height: 1.45;
+}
+.internal-booking-modal-shell .internal-booking-summary-card {
+  padding: 15px;
+}
+.internal-booking-modal-shell .internal-summary-head h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.internal-booking-modal-shell .internal-summary-head > strong {
+  font-size: 38px;
+}
+.internal-booking-modal-shell .internal-booking-notes-card {
+  padding: 15px;
+  min-height: 290px;
+}
+.internal-booking-modal-shell .internal-booking-notes-card h3 {
+  font-size: 14px;
+}
+.internal-booking-modal-shell .internal-booking-notes-card textarea {
+  height: 78px;
+}
+.internal-booking-modal-shell .internal-add-note-button {
+  margin-top: 8px;
+  padding: 8px 11px;
+  border: 1px solid #49443d;
+  border-radius: 7px;
+  background: #292722;
+  color: #eee6db;
+  font-size: 11px;
+  cursor: pointer;
+}
+.internal-booking-modal-shell .internal-booking-tips-card {
+  display: none;
+}
+@media (max-width: 1250px) {
+  .internal-booking-modal-shell .content h2 {
+    font-size: 28px;
+  }
+}
