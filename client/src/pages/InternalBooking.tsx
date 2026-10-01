@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { CardElement, Elements } from "@stripe/react-stripe-js";
+import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   ArrowLeft,
@@ -22,10 +22,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import {
-  CARD_ELEMENT_OPTIONS,
-  useStripeCardSetup,
-} from "@/components/useStripeCardSetup";
+import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -193,68 +190,6 @@ function dateLabel(value: string) {
     month: "long",
     day: "numeric",
   });
-}
-
-function InternalCardForm({
-  customerName,
-  clientSecret,
-  onConfirmed,
-}: {
-  customerName: string;
-  clientSecret: string;
-  onConfirmed: (paymentMethodId: string) => Promise<void>;
-}) {
-  const { stripeReady, name, setName, cardError, loading, handleSubmit } =
-    useStripeCardSetup({
-      clientSecret,
-      prefillName: customerName,
-      onSetupSucceeded: async paymentMethodId => onConfirmed(paymentMethodId),
-    });
-  return (
-    <form onSubmit={handleSubmit} className="booking-card-acceptance">
-      <header className="booking-card-acceptance-head">
-        <span className="booking-card-acceptance-mark">
-          <LockKeyhole />
-        </span>
-        <span>
-          <small>SECURE CARD DETAILS</small>
-          <strong>Add your card</strong>
-          <em>Your card is stored securely and charged only after service.</em>
-        </span>
-      </header>
-      <div className="booking-card-acceptance-fields">
-        <label>
-          <span>Name on card</span>
-          <input
-            required
-            value={name}
-            onChange={event => setName(event.target.value)}
-            autoComplete="cc-name"
-            placeholder="Name as it appears on your card"
-          />
-        </label>
-        <label>
-          <span>Card details</span>
-          <span className="booking-card-element-shell">
-            <CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" />
-          </span>
-        </label>
-      </div>
-      {cardError && (
-        <p role="alert" className="booking-card-acceptance-error">
-          {cardError}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={loading || !stripeReady}
-        className="booking-card-acceptance-submit"
-      >
-        <LockKeyhole className="h-4 w-4" />
-        {loading ? "Saving secure card…" : "Save card to reserve →"}
-      </button>
-    </form>
-  );
 }
 
 function ChoiceCard({
@@ -607,15 +542,12 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           </p>
           <Elements
             stripe={stripePromise}
-            options={{
-              clientSecret: cardClientSecret,
-              appearance: { theme: "stripe" },
-            }}
+            options={{ clientSecret: cardClientSecret }}
           >
-            <InternalCardForm
+            <PremiumCardSetupForm
               customerName={customerName}
               clientSecret={cardClientSecret}
-              onConfirmed={paymentMethodId =>
+              onConfirm={paymentMethodId =>
                 confirmCardSetup
                   .mutateAsync({
                     bookingId: createdBooking.bookingId,
@@ -1201,10 +1133,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       <>
         <div className="content-top">
           <div className="eyebrow">STEP 7 OF 9</div>
-          <h2>How would the customer like to pay?</h2>
+          <h2>Payment</h2>
           <p className="subtitle">
-            Choose a payment method. Card details are collected securely after
-            the booking is created.
+            Add a card to hold the booking. You won’t be charged until after the
+            service is completed.
           </p>
         </div>
         <div className="payment-methods">
@@ -1240,37 +1172,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ))}
         </div>
         {paymentMethod === "card" && (
-          <>
-            <section className="card-details">
-              <div className="card-details-head">
-                <strong>Card details</strong>
-                <span>♧ &nbsp; Secure payment powered by Stripe</span>
-              </div>
-              <p className="card-details-after-booking">
-                After you create the booking, the established secure Stripe card
-                form will open to save the card on file. Nothing is charged
-                today.
-              </p>
-              <label className="save-card">
-                <input type="checkbox" checked readOnly />
-                <strong>Save card for future bookings</strong>
-                <small>Speeds up booking and recurring services.</small>
-              </label>
-            </section>
-            <div className="card-on-file">
-              <span>▣</span>
-              <div>
-                <strong>Card on file</strong>
-                <p>
-                  We keep your card on file for easier scheduling, recurring
-                  cleanings, and any additional services.
-                  <br />
-                  You&apos;ll only be charged for confirmed services.
-                </p>
-              </div>
-              <b>ⓘ</b>
-            </div>
-          </>
+          <p className="booking-review-lede">
+            The secure card-entry form opens after the booking details are
+            saved, using the same Stripe flow as the public booking form.
+          </p>
         )}
       </>
     ) : step === 8 ? (
