@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { CARD_ELEMENT_OPTIONS } from "@/components/useStripeCardSetup";
+import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
+import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
+import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
 import livingRoom from "@/assets/book-now-review/living-room.jpg";
 import kitchen from "@/assets/book-now-review/kitchen.jpg";
 import stillLife from "@/assets/book-now-review/still-life.jpg";
@@ -293,25 +296,47 @@ function ChoiceCard({
   icon: Icon,
   title,
   description,
+  image,
+  price,
+  meta,
+  say,
 }: {
   selected: boolean;
   onClick: () => void;
   icon: typeof Sparkles;
   title: string;
   description: string;
+  image?: string;
+  price?: string;
+  meta?: string;
+  say?: string;
 }) {
   return (
     <button
       type="button"
-      className={`internal-choice-card${selected ? " selected" : ""}`}
+      className={`internal-choice-card${image ? " service-choice-card" : ""}${selected ? " selected" : ""}`}
       onClick={onClick}
     >
+      {image && (
+        <span className="internal-choice-image">
+          <img src={image} alt="" />
+          <span className="internal-choice-radio" />
+        </span>
+      )}
       <span className="internal-choice-icon">
         <Icon />
       </span>
       <span>
         <strong>{title}</strong>
         <small>{description}</small>
+        {price && <em className="internal-choice-price">From {price}</em>}
+        {meta && <em className="internal-choice-meta">{meta}</em>}
+        {say && (
+          <span className="internal-choice-say">
+            <strong>◌ &nbsp; What to say to the customer</strong>
+            <small>{say}</small>
+          </span>
+        )}
       </span>
       <span className="internal-choice-check">
         {selected ? <Check /> : <ChevronRight />}
@@ -676,6 +701,34 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               selected={serviceId === value}
               onClick={() => setServiceId(value)}
               icon={Sparkles}
+              image={
+                value === "standard"
+                  ? standardBedroom
+                  : value === "deep"
+                    ? deepKitchen
+                    : moveoutBoxes
+              }
+              price={
+                value === "standard"
+                  ? "$169"
+                  : value === "deep"
+                    ? "$249"
+                    : "$299"
+              }
+              meta={
+                value === "standard"
+                  ? "~ 2.5 hours • Team payout ~$93"
+                  : value === "deep"
+                    ? "~ 3.5 hours • Team payout ~$137"
+                    : "~ 4 hours • Team payout ~$164"
+              }
+              say={
+                value === "standard"
+                  ? "This is our most popular option. It keeps the home clean and fresh with all the essential cleaning tasks."
+                  : value === "deep"
+                    ? "This is a more detailed clean. We focus on the areas that build up over time, so the home feels like a fresh start."
+                    : "This is a top-to-bottom clean that gets the home ready for a new tenant or homeowner."
+              }
               title={getPublicBookingServiceName(value)}
               description={
                 value === "standard"
@@ -1208,6 +1261,94 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </button>
           </footer>
         </section>
+        <aside className="internal-booking-right-rail">
+          <section className="internal-booking-summary-card">
+            <div className="internal-summary-head">
+              <div>
+                <h2>Booking summary</h2>
+                <span>Live estimate</span>
+              </div>
+              <strong>
+                {money(
+                  pricing.firstCleaningTotalCents + additionalServicesTotalCents
+                )}
+              </strong>
+            </div>
+            <div className="internal-summary-list">
+              <div>
+                <span>Cleaning</span>
+                <b>{serviceName}</b>
+                <button type="button" onClick={() => setStep(1)}>
+                  Edit
+                </button>
+              </div>
+              <div>
+                <span>Home</span>
+                <b>{homeDetail}</b>
+                <button type="button" onClick={() => setStep(2)}>
+                  Edit
+                </button>
+              </div>
+              <div>
+                <span>Condition</span>
+                <b>{condition}/10</b>
+                <button type="button" onClick={() => setStep(3)}>
+                  Edit
+                </button>
+              </div>
+              <div>
+                <span>Frequency</span>
+                <b>{label(frequency)}</b>
+                <button type="button" onClick={() => setStep(2)}>
+                  Edit
+                </button>
+              </div>
+              {additionalServicesTotalCents > 0 && (
+                <div>
+                  <span>Additional services</span>
+                  <b>{money(additionalServicesTotalCents)}</b>
+                  <button type="button" onClick={() => setStep(9)}>
+                    Edit
+                  </button>
+                </div>
+              )}
+            </div>
+            {pricing.futureVisitTotalCents !== null && (
+              <button className="internal-breakdown-button" type="button">
+                <span>{label(frequency)} after visit one</span>
+                <b>
+                  {money(
+                    pricing.futureVisitTotalCents + additionalServicesTotalCents
+                  )}{" "}
+                  / visit
+                </b>
+              </button>
+            )}
+          </section>
+          <section className="internal-booking-notes-card">
+            <h3>
+              Company notes <span>· internal</span>
+            </h3>
+            <textarea
+              value={notes}
+              onChange={event => setNotes(event.target.value)}
+              placeholder="Gate code, parking, pets, or anything the team should know"
+            />
+            <p>
+              These notes stay with the booking and are visible to the team.
+            </p>
+          </section>
+          <section className="internal-booking-tips-card">
+            <h3>Booking tips</h3>
+            <ul>
+              <li>Confirm the arrival window with the customer.</li>
+              <li>Ask about pets, parking, and access before booking.</li>
+              <li>
+                Card payments are saved securely and charged after service.
+              </li>
+            </ul>
+          </section>
+        </aside>
       </section>
     </main>
   );
