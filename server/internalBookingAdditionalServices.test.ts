@@ -27,87 +27,89 @@ describe("internal booking additional services", () => {
 
   it("validates and persists add-ons on LeadFlow-owned booking and job rows", () => {
     const router = read("server/bookingsRouter.ts");
+    const engine = read("server/bookingUpsellEngine.ts");
     expect(router).toContain("PUBLIC_BOOKING_POST_BOOKING_UPSELLS");
     expect(router).toContain("additionalServices");
     expect(router).toContain("applyInternalAdditionalServices");
-    expect(router).toContain("booking.firstCleaningTotalCents");
-    expect(router).toContain("leadflowJobs");
+    expect(engine).toContain("booking.firstCleaningTotalCents");
+    expect(engine).toContain("leadflowJobs");
     expect(router).not.toMatch(legacySymbols);
   });
 
   it("returns booking identity on both insert and idempotent retry paths", () => {
     const router = read("server/bookingsRouter.ts");
-    expect(router).toContain("id: bookings.id");
-    expect(router).toContain("id: bookingId");
-    expect(router).toContain("persisted.booking.id");
+    const persistence = read("server/canonicalBookingPersistence.ts");
+    expect(router).toContain("persistCanonicalBooking");
+    expect(persistence).toContain("bookingId");
+    expect(persistence).toContain("created: false");
   });
 
   it("clears all additional services and refreshes both operational surfaces", () => {
-    const router = read("server/bookingsRouter.ts");
+    const router = read("server/bookingUpsellEngine.ts");
     expect(router).not.toContain("if (selections.length === 0) return null;");
     expect(router).toContain('broadcastOpsUpdate("booking_funnel_update")');
-    expect(router).toContain("existingUpsellTotal");
-    expect(router).toContain("submittedUpsellTotal");
+    expect(router).toContain("existingTotal");
+    expect(router).toContain("submittedTotal");
   });
 
   it("creates or reuses the payment profile only when internal card setup begins", () => {
     const bookingsRouter = read("server/bookingsRouter.ts");
     const paymentAdminRouter = read("server/bookingPaymentAdminRouter.ts");
+    const paymentEngine = read("server/bookingPaymentEngine.ts");
     expect(bookingsRouter).not.toContain("db.insert(bookingPaymentProfiles)");
     expect(paymentAdminRouter).toContain("bookingFunnelRecords");
     expect(paymentAdminRouter).toContain("let [profile]");
     expect(paymentAdminRouter).toContain('paymentStatus: "not_started"');
     expect(paymentAdminRouter).toContain("Duplicate entry");
-    expect(paymentAdminRouter).toContain("stripe.setupIntents.retrieve");
-    expect(paymentAdminRouter).toContain("bookingPaymentIdempotencyKey");
-    expect(paymentAdminRouter).toContain(
+    expect(paymentEngine).toContain("stripe.setupIntents.retrieve");
+    expect(paymentEngine).toContain("bookingPaymentIdempotencyKey");
+    expect(paymentEngine).toContain(
       'profile.paymentStatus === "card_on_file"'
     );
-    expect(paymentAdminRouter).toContain(
-      "bookingPaymentMetadata(booking.id, profile.id)"
+    expect(paymentEngine).toContain(
+      "bookingPaymentMetadata(bookingId, profile.id)"
     );
-    expect(paymentAdminRouter).toContain('paymentStatus: "pending"');
-    expect(paymentAdminRouter).toContain(
-      'broadcastOpsUpdate("booking_funnel_update")'
-    );
-    expect(paymentAdminRouter).toContain(
+    expect(paymentEngine).toContain('paymentStatus: "pending"');
+    expect(paymentAdminRouter).toContain("finalizeCanonicalBooking");
+    expect(read("server/bookingPaymentEngine.ts")).toContain(
       "version: sql`${bookingPaymentProfiles.version} + 1`"
     );
     expect(paymentAdminRouter).toContain("bookingFunnelRecords");
-    expect(paymentAdminRouter).toContain("onDuplicateKeyUpdate");
-    expect(paymentAdminRouter).toContain("sendBookingCompletionNotifications");
-    expect(paymentAdminRouter).toContain("createCustomerPortalHandoff");
-    expect(paymentAdminRouter).toContain(
+    expect(read("server/bookingPaymentEngine.ts")).toContain("onDuplicateKeyUpdate");
+    expect(paymentAdminRouter).toContain("finalizeCanonicalBooking");
+    expect(paymentAdminRouter).toContain("createCanonicalBookingPortalHandoff");
+    expect(paymentEngine).toContain(
       "The payment method changed. Please try again."
     );
     expect(paymentAdminRouter).not.toMatch(legacySymbols);
   });
+  it("defers card-booking add-ons until the canonical card completion step", () => {
+    const page = read("client/src/pages/InternalBooking.tsx");
+    expect(page).toContain('paymentMethod === "card"');
+    expect(page).toContain('additionalServices: paymentMethod === "card"');
+    expect(page).toContain("updateAdditionalServices.mutate");
+  });
 
   it("propagates recurring add-ons, assignments, one-time cancellation, and notes", () => {
     const router = read("server/bookingsRouter.ts");
-    expect(router).toContain("futureVisitTotalCents + futureDelta");
-    expect(router).toContain(
-      "jobTotalCents: sql`${leadflowJobs.jobTotalCents} + ${futureDelta}`"
+    const engine = read("server/bookingUpsellEngine.ts");
+    expect(engine).toContain("futureVisitTotalCents + delta");
+    expect(engine).toContain(
+      "jobTotalCents: sql`${leadflowJobs.jobTotalCents} + ${delta}`"
     );
-    expect(router).toContain(
+    expect(engine).toContain(
       "gt(leadflowJobs.jobDate, booking.requestedLocalDate)"
     );
-    expect(router).toContain(
-      "set({ teamName: team.name, teamId: team.id, updatedAt: now })"
-    );
-    expect(router).toContain(
-      'set({ bookingStatus: "cancelled", updatedAt: now })'
-    );
-    expect(router).toContain(
-      "nativeBookingCustomerNotes(booking, companyNotes)"
-    );
+    expect(router).toContain("syncNativeBookingOperationalProjection");
+    expect(read("server/bookingCancellationService.ts")).toContain('bookingStatus: "cancelled"');
+    expect(router).toContain("companyNotes");
   });
   it("projects card metadata and native ownership into operational surfaces", () => {
     const payment = read("server/bookingPaymentAdminRouter.ts");
+    const paymentEngine = read("server/bookingPaymentEngine.ts");
     const jobs = read("server/leadflowJobsRouter.ts");
-    expect(payment).toContain("paymentBrand: paymentMethod.card!.brand");
-    expect(payment).toContain("paymentBrand: profile.cardBrand");
-    expect(payment).toContain("eq(leadflowJobs.bookingId, booking.id)");
+    expect(paymentEngine).toContain("paymentBrand: input.paymentMethod.brand");
+    expect(payment).toContain("finalizeCanonicalCardOnFile");
     expect(jobs).toContain("schedulingTeamId");
     expect(jobs).toContain("active_assignment");
     expect(jobs).toContain("COALESCE");

@@ -1,5 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { BookingPaymentCheckout } from "@/components/BookingPaymentCheckout";
+import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import {
   ArrowLeft,
   ArrowRight,
@@ -43,6 +44,13 @@ import {
   type PublicBookingHomeType,
   type PublicBookingPricingMode,
 } from "@shared/publicBookingPricing";
+import {
+  CANONICAL_CONDITION_COPY,
+  CANONICAL_TIME_SLOT_LABELS,
+  createCanonicalPricingInput,
+  selectedCanonicalExtras,
+} from "@shared/canonicalBooking";
+import { CANONICAL_POST_BOOKING_UPSELLS } from "@shared/canonicalBookingCatalog";
 import livingRoom from "@/assets/book-now-review/living-room.jpg";
 import kitchen from "@/assets/book-now-review/kitchen.jpg";
 import stillLife from "@/assets/book-now-review/still-life.jpg";
@@ -214,18 +222,7 @@ const FREQUENCY_OPTIONS: ReadonlyArray<{
   { id: "monthly", label: "Monthly", savings: "Save 10%", discountPercent: 10 },
 ];
 
-const CONDITION_COPY = [
-  "Basically spotless",
-  "Just needs a refresh",
-  "Normal everyday mess",
-  "Definitely lived-in",
-  "Pretty lived-in",
-  "It’s been a minute",
-  "Bring the good gloves",
-  "We need the A-team",
-  "Send reinforcements",
-  "Don’t ask. Just come.",
-];
+const CONDITION_COPY = CANONICAL_CONDITION_COPY;
 const CONDITION_IMAGES = [
   spotlessHouse,
   refreshedHouse,
@@ -238,73 +235,22 @@ const CONDITION_IMAGES = [
   reinforcementsBoxes,
   trashBags,
 ] as const;
-const TIME_SLOTS = ["8:30 AM", "11:00 AM", "1:30 PM", "4:30 PM"] as const;
-const POST_BOOKING_UPSELLS = [
-  {
-    id: "moving-help",
-    title: "Moving Help",
-    copy: "Let our trusted team handle the heavy lifting.",
-    unitPriceCents: 9900,
-    quantityLabel: "hours",
-    image: livingRoom,
-  },
-  {
-    id: "carpet-cleaning",
-    title: "Carpet Cleaning",
-    copy: "Refresh your carpets with a professional deep clean.",
-    unitPriceCents: 7500,
-    quantityLabel: "rooms",
-    image: upsellCarpetCleaning,
-  },
-  {
-    id: "exterior-window-cleaning",
-    title: "Exterior Window Cleaning",
-    copy: "Streak-free exterior windows for a brighter home.",
-    unitPriceCents: 7500,
-    quantityLabel: "hours",
-    image: upsellExteriorWindowCleaning,
-  },
-  {
-    id: "junk-removal",
-    title: "Junk Removal",
-    copy: "We haul it away so you don’t have to.",
-    unitPriceCents: 9900,
-    quantityLabel: "loads",
-    image: livingRoom,
-  },
-  {
-    id: "furniture-cleaning",
-    title: "Furniture Cleaning",
-    copy: "Deep clean your sofas, mattresses, and more.",
-    unitPriceCents: 9900,
-    quantityLabel: "items",
-    image: kitchen,
-  },
-  {
-    id: "appliance-cleaning",
-    title: "Appliance Cleaning",
-    copy: "Inside your fridge, oven, and more.",
-    unitPriceCents: 4900,
-    quantityLabel: "appliances",
-    image: stillLife,
-  },
-  {
-    id: "window-cleaning",
-    title: "Window Cleaning",
-    copy: "Streak-free windows for a brighter home.",
-    unitPriceCents: 9900,
-    quantityLabel: "windows",
-    image: livingRoom,
-  },
-  {
-    id: "pet-area-cleaning",
-    title: "Pet Area Cleaning",
-    copy: "Tackle pet hair, odors, and messes.",
-    unitPriceCents: 7900,
-    quantityLabel: "areas",
-    image: kitchen,
-  },
-] as const;
+const TIME_SLOTS = CANONICAL_TIME_SLOT_LABELS;
+const POST_BOOKING_UPSELL_IMAGES = {
+  "moving-help": livingRoom,
+  "carpet-cleaning": upsellCarpetCleaning,
+  "exterior-window-cleaning": upsellExteriorWindowCleaning,
+  "junk-removal": livingRoom,
+  "furniture-cleaning": kitchen,
+  "appliance-cleaning": stillLife,
+  "window-cleaning": livingRoom,
+  "pet-area-cleaning": kitchen,
+} as const;
+const POST_BOOKING_UPSELLS = Object.entries(CANONICAL_POST_BOOKING_UPSELLS).map(([id, value]) => ({
+  ...value,
+  id,
+  image: POST_BOOKING_UPSELL_IMAGES[id as keyof typeof POST_BOOKING_UPSELL_IMAGES],
+}));
 type PostBookingUpsell = (typeof POST_BOOKING_UPSELLS)[number];
 
 function money(cents: number) {
@@ -347,32 +293,59 @@ function firstBookableDate(): Date {
 }
 
 export default function Book() {
-  const [step, setStep] = useState(1);
-  const [complete, setComplete] = useState(false);
-  const [service, setService] = useState<Service>("standard");
-  const [bedrooms, setBedrooms] = useState(1);
-  const [bathrooms, setBathrooms] = useState(1);
-  const [homeType, setHomeType] = useState<PublicBookingHomeType>("House");
-  const [frequency, setFrequency] = useState<Frequency>("biweekly");
-  const [pricingMode, setPricingMode] =
-    useState<PublicBookingPricingMode>("home");
-  const [maidCount, setMaidCount] = useState(2);
-  const [hourCount, setHourCount] = useState(2);
-  const [condition, setCondition] = useState(5);
-  const [extras, setExtras] = useState<Record<string, number>>({});
-  const [selectedDate, setSelectedDate] = useState<Date>(firstBookableDate);
+  const {
+    step,
+    setStep,
+    complete,
+    setComplete,
+    service,
+    setService,
+    bedrooms,
+    setBedrooms,
+    bathrooms,
+    setBathrooms,
+    homeType,
+    setHomeType,
+    frequency,
+    setFrequency,
+    pricingMode,
+    setPricingMode,
+    maidCount,
+    setMaidCount,
+    hourCount,
+    setHourCount,
+    condition,
+    setCondition,
+    extras,
+    setExtras,
+    pricingInput,
+    pricing: priceBreakdown,
+    snapshot,
+    firstName,
+    lastName,
+    setFirstName,
+    setLastName,
+    customerPhone: phone,
+    setCustomerPhone: setPhone,
+    customerEmail: email,
+    setCustomerEmail: setEmail,
+    address,
+    setAddress,
+    notes,
+    setNotes,
+    requestedLocalDate,
+    setRequestedLocalDate,
+    requestedLocalTime,
+    setRequestedLocalTime,
+  } = useCanonicalBookingFlow({ stepCount: 8 });
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const firstDate = firstBookableDate();
     return new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
   });
-  const [selectedTime, setSelectedTime] =
-    useState<(typeof TIME_SLOTS)[number]>("11:00 AM");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
-  const [notes, setNotes] = useState("");
+  const selectedDate = useMemo(() => new Date(`${requestedLocalDate}T12:00:00`), [requestedLocalDate]);
+  const setSelectedDate = (date: Date) => setRequestedLocalDate(isoDate(date));
+  const selectedTime = (TIME_SLOTS.find(slot => timeLabelTo24Hour(slot) === requestedLocalTime) ?? TIME_SLOTS[0]);
+  const setSelectedTime = (slot: (typeof TIME_SLOTS)[number]) => setRequestedLocalTime(timeLabelTo24Hour(slot));
   const [formError, setFormError] = useState("");
   const [cardOnFile, setCardOnFile] = useState(false);
   const [cardLabel, setCardLabel] = useState("");
@@ -393,44 +366,6 @@ export default function Book() {
   const selectedService =
     SERVICES.find(item => item.id === service) ?? SERVICES[0];
   const selectedExtras = EXTRAS.filter(extra => (extras[extra.id] ?? 0) > 0);
-  const pricingInput = useMemo(
-    () => ({
-      pricingMode,
-      serviceId: service,
-      bedrooms,
-      bathrooms,
-      homeType,
-      condition,
-      maidCount,
-      hourCount,
-      extras: selectedExtras.map(extra => ({
-        id: extra.id,
-        quantity: extras[extra.id] ?? 0,
-      })),
-      recurrence: frequency,
-    }),
-    [
-      bathrooms,
-      bedrooms,
-      condition,
-      extras,
-      frequency,
-      homeType,
-      hourCount,
-      maidCount,
-      pricingMode,
-      selectedExtras,
-      service,
-    ]
-  );
-  const priceBreakdown = useMemo(
-    () => calculatePublicBookingPrice(pricingInput),
-    [pricingInput]
-  );
-  const snapshot = useMemo(
-    () => createPublicBookingPriceSnapshot(pricingInput),
-    [pricingInput]
-  );
   const selectedFrequency =
     FREQUENCY_OPTIONS.find(option => option.id === frequency) ??
     FREQUENCY_OPTIONS[0];
@@ -454,10 +389,7 @@ export default function Book() {
     serviceName: getPublicBookingServiceName(service),
     bedrooms,
     bathrooms,
-    extras: selectedExtras.map(extra => ({
-      id: extra.id,
-      quantity: extras[extra.id] ?? 0,
-    })),
+    extras: selectedCanonicalExtras(extras),
     specialRequestNotes: notes.trim() ? [notes.trim()] : [],
     address,
     requestedLocalDate: dateIso,

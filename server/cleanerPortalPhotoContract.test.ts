@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const photoRouter = fs.readFileSync(path.join(root, "server/cleanerPortalPhotoRouter.ts"), "utf8");
+const resolver = fs.readFileSync(path.join(root, "server/cleanerPortalJobResolver.ts"), "utf8");
 const portal = fs.readFileSync(path.join(root, "client/src/pages/CleanerPortalConnected.tsx"), "utf8");
 const listRouter = fs.readFileSync(path.join(root, "server/cleanerPortalReadOnlyRouter.ts"), "utf8");
 const migration = fs.readFileSync(path.join(root, "server/versioned-migrations/0028_create_cleaner_portal_job_photos.sql"), "utf8");
@@ -50,8 +51,8 @@ describe("isolated Cleaner Portal photo workflow", () => {
   });
 
   it("uses exact LeadFlow team ownership and contains no legacy photo or job path", () => {
-    expect(photoRouter).toContain('regex(/^leadflow:\\d+$/');
-    expect(photoRouter).toContain("cleanerPortalJobOwnership");
+    expect(resolver).toContain('regex(/^leadflow:\\d+$/');
+    expect(resolver).toContain("cleanerPortalJobOwnership");
     expect(photoRouter).toContain("cleanerPortalJobPhotos");
     for (const forbidden of [legacyJobSymbol, legacyJobTable, "jobPhotos", "cleaner.uploadPhoto", "completedJobId"]) {
       expect(photoRouter).not.toContain(forbidden);

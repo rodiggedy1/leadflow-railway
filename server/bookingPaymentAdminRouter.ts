@@ -5,7 +5,6 @@ import {
   bookingFunnelRecords,
   bookingPaymentProfiles,
   bookings,
-  leadflowJobs,
   customerPortalServiceRequests,
   paymentAuthorizations,
   stripeCustomers,
@@ -21,10 +20,12 @@ import {
   BOOKING_PAYMENT_CONSENT_TEXT,
   BOOKING_PAYMENT_CONSENT_VERSION,
 } from "../shared/bookingPayment";
-import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
-import { createCustomerPortalHandoff } from "./customerPortalService";
+import { createCanonicalBookingPortalHandoff } from "./customerPortalService";
 import { TRPCError } from "@trpc/server";
-import { broadcastOpsUpdate } from "./sseBroadcast";
+import { syncNativeBookingPaymentState } from "./bookingLifecycleService";
+import { finalizeCanonicalBooking, finalizeCanonicalCardOnFile, startCanonicalCardSetup } from "./bookingPaymentEngine";
+import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
+import { authorizeCanonicalBookingHold, captureCanonicalPaymentIntent, cancelCanonicalPaymentIntent, chargeCanonicalSavedCard } from "./bookingPaymentActionsEngine";
 
 const confirmedBookingInput = z.object({
   bookingId: z.number().int().positive(),
@@ -213,112 +214,19 @@ export const bookingPaymentAdminRouter = router({
           code: "CONFLICT",
           message: "This booking is missing its payment profile.",
         });
-      if (profile.paymentStatus === "card_on_file") {
-        if (profile.cardBrand && profile.cardLast4) {
-          await db
-            .update(leadflowJobs)
-            .set({
-              hasStripeCard: 1,
-              paymentBrand: profile.cardBrand,
-              paymentLast4: profile.cardLast4,
-              updatedAt: new Date(),
-            })
-            .where(eq(leadflowJobs.bookingId, booking.id));
-        }
-        return {
-          alreadyComplete: true as const,
-          clientSecret: null,
-          setupIntentId: null,
-        };
+      const setup = await startCanonicalCardSetup(db, {
+        bookingId: booking.id,
+        customerName: booking.customerName,
+        profile,
+      });
+      if (setup.alreadyComplete) {
+        await finalizeCanonicalBooking(db, {
+          bookingId: booking.id,
+          funnelId: funnel.id,
+        });
       }
-      const stripe = getStripeClient();
-      const customer = profile.stripeCustomerId
-        ? await stripe.customers.retrieve(profile.stripeCustomerId)
-        : await stripe.customers.create({
-            name: booking.customerName,
-            metadata: bookingPaymentMetadata(booking.id, profile.id),
-          });
-      if ("deleted" in customer && customer.deleted)
-        throw new TRPCError({
-          code: "CONFLICT",
-          message:
-            "Saved payment profile is unavailable. Please contact support.",
-        });
-      const stripeCustomerId = customer.id;
-      if (profile.stripeSetupIntentId) {
-        const existingSetupIntent = await stripe.setupIntents.retrieve(
-          profile.stripeSetupIntentId
-        );
-        if (
-          existingSetupIntent.client_secret &&
-          existingSetupIntent.status !== "succeeded" &&
-          existingSetupIntent.status !== "canceled"
-        ) {
-          const now = new Date();
-          await db
-            .update(bookings)
-            .set({ paymentStatus: "pending", updatedAt: now })
-            .where(eq(bookings.id, booking.id));
-          broadcastOpsUpdate("booking_funnel_update");
-          return {
-            alreadyComplete: false as const,
-            clientSecret: existingSetupIntent.client_secret,
-            setupIntentId: existingSetupIntent.id,
-          };
-        }
-      }
-      const setupIntent = await stripe.setupIntents.create(
-        {
-          customer: stripeCustomerId,
-          usage: "off_session",
-          payment_method_types: ["card"],
-          metadata: bookingPaymentMetadata(booking.id, profile.id),
-        },
-        {
-          idempotencyKey: bookingPaymentIdempotencyKey(
-            booking.id,
-            "setup",
-            profile.version
-          ),
-        }
-      );
-      if (!setupIntent.client_secret)
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Stripe could not prepare secure card entry.",
-        });
-      const now = new Date();
-      const profileUpdate = await db
-        .update(bookingPaymentProfiles)
-        .set({
-          paymentStatus: "setup_pending",
-          stripeCustomerId,
-          stripeSetupIntentId: setupIntent.id,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(bookingPaymentProfiles.id, profile.id),
-            eq(bookingPaymentProfiles.version, profile.version)
-          )
-        );
-      const affected = affectedRows(profileUpdate);
-      if (affected !== 1)
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "The payment method changed. Please try again.",
-        });
-      await db
-        .update(bookings)
-        .set({ paymentStatus: "pending", updatedAt: now })
-        .where(eq(bookings.id, booking.id));
-      broadcastOpsUpdate("booking_funnel_update");
-      return {
-        clientSecret: setupIntent.client_secret,
-        setupIntentId: setupIntent.id,
-      };
+      return setup;
     }),
-
   confirmInternalCardSetup: agentProcedure
     .input(
       z.object({
@@ -365,124 +273,27 @@ export const bookingPaymentAdminRouter = router({
           message: "This booking is missing its payment funnel.",
         });
       const stripe = getStripeClient();
-      const setupIntent = await stripe.setupIntents.retrieve(
-        input.setupIntentId
-      );
-      if (
-        setupIntent.status !== "succeeded" ||
-        setupIntent.payment_method !== input.paymentMethodId ||
-        setupIntent.metadata.bookingId !== String(booking.id) ||
-        setupIntent.metadata.bookingPaymentProfileId !== String(profile.id) ||
-        setupIntent.customer !== profile.stripeCustomerId
-      )
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Stripe did not verify this card for the current booking.",
-        });
-      const paymentMethod = await stripe.paymentMethods.retrieve(
-        input.paymentMethodId
-      );
-      if (
-        paymentMethod.type !== "card" ||
-        !paymentMethod.card ||
-        !setupIntent.customer ||
-        paymentMethod.customer !== setupIntent.customer
-      )
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Stripe card does not belong to this booking.",
-        });
-      const now = new Date();
-      await db.transaction(async tx => {
-        const profileUpdate = await tx
-          .update(bookingPaymentProfiles)
-          .set({
-            paymentStatus: "card_on_file",
-            stripePaymentMethodId: input.paymentMethodId,
-            cardBrand: paymentMethod.card!.brand,
-            cardLast4: paymentMethod.card!.last4,
-            cardExpMonth: paymentMethod.card!.exp_month,
-            cardExpYear: paymentMethod.card!.exp_year,
-            consentVersion: BOOKING_PAYMENT_CONSENT_VERSION,
-            consentText: BOOKING_PAYMENT_CONSENT_TEXT,
-            consentAcceptedAt: Date.now(),
-            version: sql`${bookingPaymentProfiles.version} + 1`,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(bookingPaymentProfiles.id, profile.id),
-              eq(bookingPaymentProfiles.version, profile.version)
-            )
-          );
-        if (affectedRows(profileUpdate) !== 1)
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "The payment method changed. Please try again.",
-          });
-        await tx
-          .update(bookings)
-          .set({
-            status: "needs_attention",
-            paymentStatus: "card_on_file",
-            updatedAt: now,
-          })
-          .where(eq(bookings.id, booking.id));
-        await tx
-          .update(leadflowJobs)
-          .set({
-            hasStripeCard: 1,
-            paymentBrand: paymentMethod.card!.brand,
-            paymentLast4: paymentMethod.card!.last4,
-            updatedAt: now,
-          })
-          .where(eq(leadflowJobs.bookingId, booking.id));
-        await tx
-          .update(bookingFunnelRecords)
-          .set({
-            stripeCustomerId: profile.stripeCustomerId,
-            stripePaymentMethodId: input.paymentMethodId,
-            paymentBrand: paymentMethod.card!.brand,
-            paymentLast4: paymentMethod.card!.last4,
-            updatedAt: now,
-          })
-          .where(eq(bookingFunnelRecords.id, funnel.id));
-        await tx
-          .insert(stripeCustomers)
-          .values({
-            phone: booking.customerPhone,
-            name: booking.customerName,
-            stripeCustomerId: profile.stripeCustomerId!,
-            stripePaymentMethodId: input.paymentMethodId,
-            cardBrand: paymentMethod.card!.brand,
-            cardLast4: paymentMethod.card!.last4,
-            cardExpMonth: paymentMethod.card!.exp_month,
-            cardExpYear: paymentMethod.card!.exp_year,
-            cardSavedAt: Date.now(),
-          })
-          .onDuplicateKeyUpdate({
-            set: {
-              name: booking.customerName,
-              stripeCustomerId: profile.stripeCustomerId!,
-              stripePaymentMethodId: input.paymentMethodId,
-              cardBrand: paymentMethod.card!.brand,
-              cardLast4: paymentMethod.card!.last4,
-              cardExpMonth: paymentMethod.card!.exp_month,
-              cardExpYear: paymentMethod.card!.exp_year,
-              cardSavedAt: Date.now(),
-            },
-          });
+      const paymentMethod = await verifyCanonicalCardSetup(stripe, {
+        setupIntentId: input.setupIntentId,
+        paymentMethodId: input.paymentMethodId,
+        bookingId: booking.id,
+        bookingPaymentProfileId: profile.id,
+        stripeCustomerId: profile.stripeCustomerId!,
       });
-      broadcastOpsUpdate("booking_funnel_update");
-      void sendBookingCompletionNotifications(booking.id).catch(error =>
-        console.error(
-          "[BookingPaymentAdminRouter] Booking completion notifications failed:",
-          error
-        )
-      );
+      await finalizeCanonicalCardOnFile(db, {
+        bookingId: booking.id,
+        profileId: profile.id,
+        profileVersion: profile.version,
+        funnelId: funnel.id,
+        stripeCustomerId: profile.stripeCustomerId!,
+        customerName: booking.customerName,
+        customerPhone: booking.customerPhone,
+        paymentMethod: { id: paymentMethod.id, brand: paymentMethod.card.brand, last4: paymentMethod.card.last4, exp_month: paymentMethod.card.exp_month, exp_year: paymentMethod.card.exp_year },
+      });
+      await finalizeCanonicalBooking(db, { bookingId: booking.id, funnelId: funnel.id });
       let portalAccessCode: string | null = null;
       try {
-        portalAccessCode = await createCustomerPortalHandoff(db, {
+        portalAccessCode = await createCanonicalBookingPortalHandoff(db, {
           customerName: booking.customerName,
           customerPhone: booking.customerPhone,
           customerEmail: booking.customerEmail,
@@ -582,35 +393,21 @@ export const bookingPaymentAdminRouter = router({
       const agentName = ctx.agent?.agentName ?? "admin";
       let intent: Stripe.PaymentIntent;
       try {
-        intent = await stripe.paymentIntents.create(
-          {
-            amount: booking.firstCleaningTotalCents,
-            currency: "usd",
-            customer: profile.stripeCustomerId,
-            payment_method: profile.stripePaymentMethodId,
-            capture_method: "manual",
-            confirm: true,
-            off_session: true,
-            description: `LeadFlow booking ${booking.publicBookingNumber}`,
-            metadata: {
-              ...bookingPaymentMetadata(booking.id, profile.id),
-              operation: "authorization",
-              createdBy: agentName,
-            },
-          },
-          {
-            idempotencyKey: bookingPaymentIdempotencyKey(
-              booking.id,
-              "authorization",
-              profile.version
-            ),
-          }
-        );
+        intent = await authorizeCanonicalBookingHold(stripe, {
+          bookingId: booking.id,
+          profileId: profile.id,
+          customerId: profile.stripeCustomerId,
+          paymentMethodId: profile.stripePaymentMethodId,
+          amountCents: booking.firstCleaningTotalCents,
+          publicBookingNumber: booking.publicBookingNumber,
+          agentName,
+          attempt: profile.version,
+        });
       } catch (error) {
         const message = stripeFailureMessage(error, "Stripe hold failed");
         await db.transaction(async tx => {
           await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: message, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
-          await tx.update(bookings).set({ paymentStatus: "failed", updatedAt: new Date() }).where(eq(bookings.id, booking.id));
+          await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
         });
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -620,7 +417,7 @@ export const bookingPaymentAdminRouter = router({
       if (intent.status !== "requires_capture") {
         await db.transaction(async tx => {
           await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: "PaymentIntent did not reach requires_capture", updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
-          await tx.update(bookings).set({ paymentStatus: "failed", updatedAt: new Date() }).where(eq(bookings.id, booking.id));
+          await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
         });
         throw new TRPCError({
           code: "CONFLICT",
@@ -662,10 +459,13 @@ export const bookingPaymentAdminRouter = router({
           updatedAt: new Date(),
         })
         .where(eq(bookingPaymentProfiles.id, profile.id));
-      await db
-        .update(bookings)
-        .set({ paymentStatus: "authorized", updatedAt: new Date() })
-        .where(eq(bookings.id, booking.id));
+      await db.transaction(async tx => {
+        await syncNativeBookingPaymentState(tx, {
+          bookingId: booking.id,
+          paymentStatus: "authorized",
+          stripePaymentIntentId: intent.id,
+        });
+      });
       return {
         authorizationId: Number((result as { insertId?: number }).insertId),
         paymentStatus: "authorized" as const,
@@ -698,16 +498,13 @@ export const bookingPaymentAdminRouter = router({
       const stripe = getStripeClient();
       const agentName = ctx.agent?.agentName ?? "admin";
       try {
-        await stripe.paymentIntents.capture(
-          authorization.stripePaymentIntentId,
-          { amount_to_capture: authorization.amountCents }
-        );
+        await captureCanonicalPaymentIntent(stripe, authorization.stripePaymentIntentId, authorization.amountCents);
       } catch (error) {
         const message = stripeFailureMessage(error, "Stripe capture failed");
         await db.transaction(async tx => {
           await tx.update(paymentAuthorizations).set({ status: "failed", errorMessage: message, actionBy: agentName }).where(eq(paymentAuthorizations.id, authorization.id));
           await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: message, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
-          await tx.update(bookings).set({ paymentStatus: "failed", updatedAt: new Date() }).where(eq(bookings.id, booking.id));
+          await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
         });
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -734,10 +531,11 @@ export const bookingPaymentAdminRouter = router({
             updatedAt: new Date(),
           })
           .where(eq(bookingPaymentProfiles.id, profile.id));
-        await tx
-          .update(bookings)
-          .set({ paymentStatus: "captured", updatedAt: new Date() })
-          .where(eq(bookings.id, booking.id));
+        await syncNativeBookingPaymentState(tx, {
+          bookingId: booking.id,
+          paymentStatus: "captured",
+          stripePaymentIntentId: authorization.stripePaymentIntentId,
+        });
       });
       return { success: true, paymentStatus: "captured" as const };
     }),
@@ -765,7 +563,7 @@ export const bookingPaymentAdminRouter = router({
       const stripe = getStripeClient();
       const agentName = ctx.agent?.agentName ?? "admin";
       try {
-        await stripe.paymentIntents.cancel(authorization.stripePaymentIntentId);
+        await cancelCanonicalPaymentIntent(stripe, authorization.stripePaymentIntentId);
       } catch (error) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -787,10 +585,10 @@ export const bookingPaymentAdminRouter = router({
             updatedAt: new Date(),
           })
           .where(eq(bookingPaymentProfiles.id, profile.id));
-        await tx
-          .update(bookings)
-          .set({ paymentStatus: "card_on_file", updatedAt: new Date() })
-          .where(eq(bookings.id, input.bookingId));
+        await syncNativeBookingPaymentState(tx, {
+          bookingId: input.bookingId,
+          paymentStatus: "card_on_file",
+        });
       });
       return { success: true, paymentStatus: "card_on_file" as const };
     }),
@@ -810,34 +608,21 @@ export const bookingPaymentAdminRouter = router({
       const agentName = ctx.agent?.agentName ?? "admin";
       let intent: Stripe.PaymentIntent;
       try {
-        intent = await stripe.paymentIntents.create(
-          {
-            amount: booking.firstCleaningTotalCents,
-            currency: "usd",
-            customer: profile.stripeCustomerId,
-            payment_method: profile.stripePaymentMethodId,
-            confirm: true,
-            off_session: true,
-            description: `LeadFlow booking ${booking.publicBookingNumber}`,
-            metadata: {
-              ...bookingPaymentMetadata(booking.id, profile.id),
-              operation: "direct_charge",
-              createdBy: agentName,
-            },
-          },
-          {
-            idempotencyKey: bookingPaymentIdempotencyKey(
-              booking.id,
-              "direct_charge",
-              profile.version
-            ),
-          }
-        );
+        intent = await chargeCanonicalSavedCard(stripe, {
+          bookingId: booking.id,
+          profileId: profile.id,
+          customerId: profile.stripeCustomerId,
+          paymentMethodId: profile.stripePaymentMethodId,
+          amountCents: booking.firstCleaningTotalCents,
+          publicBookingNumber: booking.publicBookingNumber,
+          agentName,
+          profileVersion: profile.version,
+        });
       } catch (error) {
         const message = stripeFailureMessage(error, "Stripe charge failed");
         await db.transaction(async tx => {
           await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: message, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
-          await tx.update(bookings).set({ paymentStatus: "failed", updatedAt: new Date() }).where(eq(bookings.id, booking.id));
+          await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
         });
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -882,10 +667,11 @@ export const bookingPaymentAdminRouter = router({
             updatedAt: new Date(),
           })
           .where(eq(bookingPaymentProfiles.id, profile.id));
-        await tx
-          .update(bookings)
-          .set({ paymentStatus: "captured", updatedAt: new Date() })
-          .where(eq(bookings.id, booking.id));
+        await syncNativeBookingPaymentState(tx, {
+          bookingId: booking.id,
+          paymentStatus: "captured",
+          stripePaymentIntentId: intent.id,
+        });
       });
       return { success: true, paymentStatus: "captured" as const };
     }),
@@ -1049,7 +835,7 @@ export const bookingPaymentAdminRouter = router({
       const stripe = getStripeClient();
       const agentName = ctx.agent?.agentName ?? "admin";
       try {
-        await stripe.paymentIntents.cancel(authorization.stripePaymentIntentId);
+        await cancelCanonicalPaymentIntent(stripe, authorization.stripePaymentIntentId);
       } catch (error) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",

@@ -4,10 +4,10 @@ import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobPayrollAdjustment
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { calculateEffectivePayroll } from "./payrollCalculator";
+import { normalizePayrollPercent } from "./payrollNormalization";
 import { getPayWeekStart } from "./teamPayRouter";
-import { cleanerPortalJobOwnership, findCleanerPortalTeam } from "./cleanerPortalOwnership";
-
-const ACTIVE_LEADFLOW_FILTER = and(ne(leadflowJobs.bookingStatus, "cancelled"), ne(leadflowJobs.bookingStatus, "rescheduled"), ne(leadflowJobs.bookingStatus, "missing_from_launch27"));
+import { listOwnedLeadflowJobs } from "./cleanerPortalJobResolver";
+import { findCleanerPortalTeam } from "./cleanerPortalOwnership";
 
 function etDate(offsetDays = 0) {
   const raw = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + offsetDays * 86_400_000));
@@ -53,11 +53,8 @@ function addDays(date: Date, days: number) {
 
 /** Cleaner profiles store 0.45 as 45%; the established calculator receives 45. */
 export function payrollPercentFromCleanerProfile(value: string | null) {
-  const parsed = Number.parseFloat(value ?? "0");
-  if (!Number.isFinite(parsed)) return 0;
-  return parsed > 0 && parsed <= 1 ? parsed * 100 : parsed;
+  return normalizePayrollPercent(value, 0);
 }
-
 /** Uses Team Pay's established ET Sunday-to-Saturday pay-week boundary. */
 export function cleanerPortalPayWeeks(now = new Date()) {
   const currentStartDate = getPayWeekStart(now);
@@ -101,7 +98,7 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
     totalJobsToday,
     basePay: payroll.finalPay,
     customerNotes: job.customerNotes ?? null,
-    staffNotes: job.staffNotes ?? null,
+    staffNotes: null,
   };
 }
 
@@ -119,15 +116,9 @@ async function adjustmentCentsByJob(db: NonNullable<Awaited<ReturnType<typeof ge
 }
 
 async function listOwnedImportedJobs(cleanerId: number, startDate: string, endDate: string) {
-  const { db, cleaner, teamId } = await cleanerTeam(cleanerId);
-  const jobs = await db
-    .select({ job: leadflowJobs, progress: cleanerPortalJobProgress })
-    .from(leadflowJobs)
-    .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
-    .where(and(cleanerPortalJobOwnership({ ...cleaner, launch27TeamId: teamId }), gte(leadflowJobs.jobDate, startDate), lte(leadflowJobs.jobDate, endDate), ACTIVE_LEADFLOW_FILTER))
-    .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
+  const { db, team, jobs } = await listOwnedLeadflowJobs(cleanerId, startDate, endDate, "Cleaner Portal is temporarily unavailable.");
   const adjustmentCents = await adjustmentCentsByJob(db, jobs.map(({ job }) => job.id));
-  return { cleaner, jobs, adjustmentCents };
+  return { cleaner: team, jobs, adjustmentCents };
 }
 
 export const cleanerPortalReadOnlyRouter = router({
@@ -155,19 +146,8 @@ export const cleanerPortalReadOnlyRouter = router({
     });
   }),
   getMyEarnings: cleanerProcedure.query(async ({ ctx }) => {
-    const { db, cleaner, teamId } = await cleanerTeam(ctx.cleaner.cleanerId);
     const payWeeks = cleanerPortalPayWeeks();
-    const rows = await db
-      .select({ job: leadflowJobs, progress: cleanerPortalJobProgress })
-      .from(leadflowJobs)
-      .leftJoin(cleanerPortalJobProgress, eq(cleanerPortalJobProgress.leadflowJobId, leadflowJobs.id))
-      .where(and(
-        cleanerPortalJobOwnership({ ...cleaner, launch27TeamId: teamId }),
-        gte(leadflowJobs.jobDate, payWeeks.previousStart),
-        lte(leadflowJobs.jobDate, payWeeks.currentEnd),
-        ACTIVE_LEADFLOW_FILTER,
-      ))
-      .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
+    const { db, team: cleaner, jobs: rows } = await listOwnedLeadflowJobs(ctx.cleaner.cleanerId, payWeeks.previousStart, payWeeks.currentEnd, "Cleaner Portal earnings are temporarily unavailable.");
 
     const adjustmentCents = await adjustmentCentsByJob(db, rows.map(({ job }) => job.id));
     const projectJob = ({ job, progress }: (typeof rows)[number]) => {
