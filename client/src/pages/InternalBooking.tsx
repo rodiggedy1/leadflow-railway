@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  Clipboard,
   ChevronRight,
   Clock3,
   CreditCard,
@@ -24,7 +25,14 @@ import {
 import { trpc } from "@/lib/trpc";
 import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
-import { easternCalendarWeekday, easternDateIso, easternDateLabel, easternMonthDate, easternMonthLabel, parseEasternDate } from "@shared/easternTime";
+import {
+  easternCalendarWeekday,
+  easternDateIso,
+  easternDateLabel,
+  easternMonthDate,
+  easternMonthLabel,
+  parseEasternDate,
+} from "@shared/easternTime";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -99,13 +107,16 @@ const ADDITIONAL_SERVICE_IMAGES = {
   "window-cleaning": livingRoom,
   "pet-area-cleaning": kitchen,
 } as const;
-const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(CANONICAL_POST_BOOKING_UPSELLS).map(([id, value]) => ({
+const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(
+  CANONICAL_POST_BOOKING_UPSELLS
+).map(([id, value]) => ({
   id,
   title: value.title,
   copy: value.copy,
   unitPriceCents: value.unitPriceCents,
   quantityLabel: value.quantityLabel,
-  image: ADDITIONAL_SERVICE_IMAGES[id as keyof typeof ADDITIONAL_SERVICE_IMAGES],
+  image:
+    ADDITIONAL_SERVICE_IMAGES[id as keyof typeof ADDITIONAL_SERVICE_IMAGES],
 }));
 
 function tomorrowIso() {
@@ -114,15 +125,242 @@ function tomorrowIso() {
 function money(cents: number) {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-function label(value: string | null | undefined) {
-  const normalized = typeof value === "string" && value.trim() ? value : "one-time";
-  if (normalized === "one-time") return "One-time";
-  if (normalized === "biweekly") return "Bi-weekly";
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+function label(value: string) {
+  if (value === "one-time") return "One-time";
+  if (value === "biweekly") return "Bi-weekly";
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 function dateLabel(value: string) {
   if (!value) return "Choose a date";
   return easternDateLabel(value);
+}
+
+function BookingTeleprompter() {
+  const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
+  const [line, setLine] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(18);
+  const [questionOpen, setQuestionOpen] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const animationRef = useRef<number | null>(null);
+  const lastFrameRef = useRef<number | null>(null);
+  const scrollPositionRef = useRef(0);
+  const faq = trpc.bookingFunnel.answerFaq.useMutation();
+  const lines = [
+    "Absolutely — I can help you get that set up. Let me first make sure we choose the right cleaning.",
+    "Is this more of a routine cleaning, does the home need a deeper reset, or are you moving in or out?",
+    "Perfect. Thanks for describing that. Let’s make sure we choose the right cleaning for the home.",
+  ];
+
+  const stopAutoPlay = () => {
+    setPlaying(false);
+    lastFrameRef.current = null;
+    if (animationRef.current !== null) {
+      window.cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+  };
+
+  useEffect(() => () => stopAutoPlay(), []);
+
+  const autoFrame = (now: number) => {
+    if (!playing || mode !== "auto" || !scrollRef.current) return;
+    if (lastFrameRef.current === null) {
+      lastFrameRef.current = now;
+      scrollPositionRef.current = scrollRef.current.scrollTop;
+    }
+    const elapsed = Math.min((now - lastFrameRef.current) / 1000, 0.05);
+    lastFrameRef.current = now;
+    scrollPositionRef.current += speed * elapsed;
+    const maxScroll = Math.max(
+      0,
+      scrollRef.current.scrollHeight - scrollRef.current.clientHeight
+    );
+    if (scrollPositionRef.current >= maxScroll) {
+      scrollPositionRef.current = maxScroll;
+      scrollRef.current.scrollTop = maxScroll;
+      stopAutoPlay();
+      return;
+    }
+    scrollRef.current.scrollTop = scrollPositionRef.current;
+    animationRef.current = window.requestAnimationFrame(autoFrame);
+  };
+
+  const toggleAutoPlay = () => {
+    if (playing) {
+      stopAutoPlay();
+      return;
+    }
+    if (!scrollRef.current) return;
+    const maxScroll = Math.max(
+      0,
+      scrollRef.current.scrollHeight - scrollRef.current.clientHeight
+    );
+    if (scrollRef.current.scrollTop >= maxScroll - 2) {
+      scrollRef.current.scrollTop = 0;
+      scrollPositionRef.current = 0;
+    }
+    setPlaying(true);
+    lastFrameRef.current = null;
+    animationRef.current = window.requestAnimationFrame(autoFrame);
+  };
+
+  const setTeleMode = (nextMode: "full" | "manual" | "auto") => {
+    stopAutoPlay();
+    setMode(nextMode);
+    setLine(0);
+    window.requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    });
+  };
+
+  const askFaq = async () => {
+    const trimmed = question.trim();
+    if (trimmed.length < 2 || faq.isPending) return;
+    const result = await faq.mutateAsync({ question: trimmed });
+    setAnswer(result.answer);
+  };
+
+  return (
+    <section className="booking-teleprompter" aria-label="Live call script">
+      <header className="booking-teleprompter-head">
+        <div className="booking-teleprompter-title">
+          <span className="booking-teleprompter-dot" />
+          <div>
+            <strong>LIVE CALL · CLEANING TYPE</strong>
+            <span>Conversation follows the booking</span>
+          </div>
+        </div>
+        <div className="booking-teleprompter-controls">
+          <div className="booking-teleprompter-mode-toggle">
+            {(["full", "manual", "auto"] as const).map(option => (
+              <button
+                key={option}
+                type="button"
+                className={mode === option ? "active" : ""}
+                onClick={() => setTeleMode(option)}
+              >
+                {option[0].toUpperCase() + option.slice(1)}
+              </button>
+            ))}
+          </div>
+          {mode === "auto" && (
+            <>
+              <button
+                type="button"
+                className="booking-teleprompter-small-control"
+                onClick={() => setTeleMode("manual")}
+              >
+                ← Manual
+              </button>
+              <button
+                type="button"
+                className="booking-teleprompter-small-control"
+                onClick={toggleAutoPlay}
+              >
+                {playing ? "Ⅱ Pause" : "▶ Play"}
+              </button>
+              <label className="booking-teleprompter-speed">
+                Speed
+                <input
+                  type="range"
+                  min="5"
+                  max="45"
+                  value={speed}
+                  onChange={event => setSpeed(Number(event.target.value))}
+                />
+                <output>{speed}</output>
+              </label>
+            </>
+          )}
+          <button
+            type="button"
+            className="booking-teleprompter-question-button"
+            onClick={() => setQuestionOpen(open => !open)}
+          >
+            <Sparkles /> Customer asked a question
+          </button>
+        </div>
+      </header>
+      <div
+        ref={scrollRef}
+        className={`booking-teleprompter-body booking-teleprompter-body--${mode}`}
+      >
+        {mode === "full" ? (
+          <>
+            <div className="booking-teleprompter-label">
+              ✦ CALL SCRIPT · CLEANING TYPE
+            </div>
+            <p>
+              “{lines[0]} {lines.slice(1).join(" ")}”
+            </p>
+          </>
+        ) : mode === "auto" ? (
+          <div className="booking-teleprompter-auto-script">
+            {lines.map(scriptLine => (
+              <p key={scriptLine}>{scriptLine}</p>
+            ))}
+          </div>
+        ) : (
+          <p>{lines[line] ?? lines[0]}</p>
+        )}
+      </div>
+      {mode === "manual" && (
+        <footer className="booking-teleprompter-footer">
+          <button
+            type="button"
+            onClick={() => setLine(current => Math.max(0, current - 1))}
+            disabled={line === 0}
+          >
+            ↑ Previous
+          </button>
+          <span>
+            {line + 1} of {lines.length}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setLine(current => Math.min(lines.length - 1, current + 1))
+            }
+            disabled={line === lines.length - 1}
+          >
+            Next ↓
+          </button>
+          <button type="button" onClick={() => setLine(lines.length - 1)}>
+            Skip this
+          </button>
+        </footer>
+      )}
+      {questionOpen && (
+        <div className="booking-teleprompter-faq">
+          <label htmlFor="booking-customer-question">
+            Ask the FAQ assistant
+          </label>
+          <div>
+            <input
+              id="booking-customer-question"
+              value={question}
+              onChange={event => setQuestion(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") void askFaq();
+              }}
+              placeholder="Type the customer’s question"
+            />
+            <button
+              type="button"
+              onClick={() => void askFaq()}
+              disabled={faq.isPending || question.trim().length < 2}
+            >
+              {faq.isPending ? "Thinking…" : "Ask"}
+            </button>
+          </div>
+          {answer && <p>{answer}</p>}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function ChoiceCard({
@@ -310,6 +548,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   >({});
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scriptCopied, setScriptCopied] = useState(false);
   const [createdBooking, setCreatedBooking] = useState<{
     bookingId: number;
     publicBookingNumber: string;
@@ -408,11 +647,12 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       idempotencyKey,
       paymentMethod,
       companyNotes: notes.trim() || null,
-      additionalServices: paymentMethod === "card"
-        ? []
-        : Object.entries(additionalServices)
-            .filter(([, quantity]) => quantity > 0)
-            .map(([id, quantity]) => ({ id, quantity })),
+      additionalServices:
+        paymentMethod === "card"
+          ? []
+          : Object.entries(additionalServices)
+              .filter(([, quantity]) => quantity > 0)
+              .map(([id, quantity]) => ({ id, quantity })),
       booking: {
         ...createCanonicalBookingInput(canonicalDraft, {
           idempotencyKey,
@@ -467,9 +707,9 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     setError(null);
     setStep(Math.max(1, step - 1) as Step);
   };
-  const shellClass = onClose
-    ? "internal-booking-modal-shell"
-    : "internal-booking-shell";
+  const shellClass = `${
+    onClose ? "internal-booking-modal-shell" : "internal-booking-shell"
+  }${step === 1 ? " page1-review-surface" : ""}`;
 
   if (success)
     return (
@@ -507,89 +747,82 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     pricingMode === "hourly"
       ? `${maidCount} maids · ${hourCount} hours`
       : `${bedrooms === 0 ? "Studio" : `${bedrooms} bed`} · ${bathrooms} bath · ${homeType}`;
+  const customerFirstName =
+    customerName.trim().split(/\s+/).filter(Boolean)[0] || "there";
+  const selectedTimeLabel =
+    TIMES.find(value => value === time) === "08:30"
+      ? "8:30 AM"
+      : TIMES.find(value => value === time) === "11:00"
+        ? "11:00 AM"
+        : TIMES.find(value => value === time) === "13:30"
+          ? "1:30 PM"
+          : TIMES.find(value => value === time) === "16:30"
+            ? "4:30 PM"
+            : time || "your selected time";
+  const selectedExtrasScript = selectedExtras
+    .map(([, extra]) => extra.label)
+    .join(", ");
+  const homeScript =
+    pricingMode === "hourly"
+      ? `${maidCount}-maid, ${hourCount}-hour cleaning`
+      : `${bedrooms === 0 ? "studio" : `${bedrooms}-bedroom`}, ${bathrooms}-bathroom ${homeType.toLowerCase()} home`;
+  const recurrenceScript = label(frequency);
+  const customerScript = [
+    `Alright ${customerFirstName}, let me make sure I have everything right.`,
+    `You're scheduled for a ${serviceName} for your ${homeScript} on ${dateLabel(date)}.`,
+    `Your arrival window is ${selectedTimeLabel} to ${selectedTimeLabel === "8:30 AM" ? "10:30 AM" : selectedTimeLabel === "11:00 AM" ? "1:00 PM" : selectedTimeLabel === "1:30 PM" ? "3:30 PM" : selectedTimeLabel === "4:30 PM" ? "6:30 PM" : "the end of the arrival window"}.`,
+    selectedExtrasScript ? `We're also adding ${selectedExtrasScript}.` : "",
+    frequency === "one-time"
+      ? `Your cleaning total is ${money(pricing.firstCleaningTotalCents)}.`
+      : `Your first cleaning is ${money(pricing.firstCleaningTotalCents)}, and your ${recurrenceScript.toLowerCase()} cleanings after that will be ${money(pricing.futureVisitTotalCents ?? pricing.firstCleaningTotalCents)}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const stepContent =
     step === 1 ? (
       <>
-        <div className="content-top">
+        <BookingTeleprompter />
+        <div className="review-page1-header">
           <div className="eyebrow">STEP 1 OF 9</div>
-          <h2>Select service type</h2>
+          <h2>What kind of cleaning do they need?</h2>
           <p className="subtitle">
-            Choose the cleaning service that best fits what the customer needs.
+            Choose the service that best matches what the customer describes.
           </p>
         </div>
-        <div className="suggestion">
-          <div className="suggestion-icon">✦</div>
-          <div>
-            <strong>AI suggestion</strong>
-            <span>
-              Based on what you’ve shared, Deep Cleaning is likely the best fit.
-            </span>
-          </div>
-          <button
-            type="button"
-            className="outline-btn"
-            onClick={() => setServiceId("deep")}
-          >
-            Use suggestion
-          </button>
-          <button type="button" className="icon-btn" aria-label="Dismiss">
-            ×
-          </button>
-        </div>
-        <div className="service-grid">
-          {SERVICES.map(value => (
-            <ChoiceCard
-              key={value}
-              selected={serviceId === value}
-              onClick={() => setServiceId(value)}
-              icon={Sparkles}
-              image={
-                value === "standard"
-                  ? standardBedroom
-                  : value === "deep"
-                    ? deepKitchen
-                    : moveoutBoxes
-              }
-              price={money(
-                calculatePublicBookingPrice({
-                  pricingMode,
-                  serviceId: value,
-                  bedrooms,
-                  bathrooms,
-                  homeType,
-                  condition,
-                  maidCount,
-                  hourCount,
-                  extras: Object.entries(extras)
-                    .filter(([, quantity]) => quantity > 0)
-                    .map(([id, quantity]) => ({ id, quantity })),
-                  recurrence: frequency,
-                }).firstCleaningTotalCents
-              )}
-              meta={
-                value === "standard"
-                  ? "~ 2.5 hours • Team payout ~$93"
-                  : value === "deep"
-                    ? "~ 3.5 hours • Team payout ~$137"
-                    : "~ 4 hours • Team payout ~$164"
-              }
-              say={
-                value === "standard"
-                  ? "This is our most popular option. It keeps your home clean and fresh with all the essential cleaning tasks."
-                  : value === "deep"
-                    ? "This is a more detailed clean. We focus on the areas that build up over time, so your home feels like a fresh start."
-                    : "This is a top-to-bottom clean that gets the home ready for a new tenant or homeowner. We clean inside cabinets, appliances, and more."
-              }
-              title={getPublicBookingServiceName(value)}
-              description={
-                value === "standard"
-                  ? "Routine cleaning for a regular, well-maintained home."
-                  : value === "deep"
-                    ? "A more detailed clean for homes that need extra attention."
-                    : "A thorough clean before a move or handoff."
-              }
-            />
-          ))}
+        <div
+          className="review-page1-choice-list"
+          role="group"
+          aria-label="Cleaning type"
+        >
+          {SERVICES.map(value => {
+            const title =
+              value === "moveout"
+                ? "Move-out Cleaning"
+                : getPublicBookingServiceName(value);
+            const description =
+              value === "standard"
+                ? "Routine cleaning for a regular, well-maintained home."
+                : value === "deep"
+                  ? "A more detailed clean for homes that need extra attention."
+                  : "A thorough clean before a move or handoff.";
+            return (
+              <button
+                key={value}
+                type="button"
+                className={`review-page1-choice${serviceId === value ? " selected" : ""}`}
+                onClick={() => setServiceId(value)}
+                aria-pressed={serviceId === value}
+              >
+                <span>
+                  <strong>{title}</strong>
+                  <small>{description}</small>
+                </span>
+                <span className="review-page1-choice-check" aria-hidden="true">
+                  {serviceId === value ? "✓" : ""}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </>
     ) : step === 2 ? (
@@ -868,13 +1101,26 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               {Array.from(
                 {
                   length:
-                    easternCalendarWeekday(parseEasternDate(date).getUTCFullYear(), parseEasternDate(date).getUTCMonth()) +
-                    new Date(Date.UTC(parseEasternDate(date).getUTCFullYear(), parseEasternDate(date).getUTCMonth() + 1, 0, 12)).getUTCDate(),
+                    easternCalendarWeekday(
+                      parseEasternDate(date).getUTCFullYear(),
+                      parseEasternDate(date).getUTCMonth()
+                    ) +
+                    new Date(
+                      Date.UTC(
+                        parseEasternDate(date).getUTCFullYear(),
+                        parseEasternDate(date).getUTCMonth() + 1,
+                        0,
+                        12
+                      )
+                    ).getUTCDate(),
                 },
                 (_, index) => index
               ).map(index => {
                 const monthDate = parseEasternDate(date);
-                const firstDay = easternCalendarWeekday(monthDate.getUTCFullYear(), monthDate.getUTCMonth());
+                const firstDay = easternCalendarWeekday(
+                  monthDate.getUTCFullYear(),
+                  monthDate.getUTCMonth()
+                );
                 const day = index - firstDay + 1;
                 if (day < 1)
                   return <span className="muted" key={`empty-${index}`} />;
@@ -1212,6 +1458,34 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </button>
             </article>
           </div>
+          <section
+            className="customer-script-card"
+            aria-label="Customer script"
+          >
+            <div className="customer-script-heading">
+              <div>
+                <span className="eyebrow">CUSTOMER SCRIPT</span>
+                <h3>Ready to read or text</h3>
+              </div>
+              <button
+                type="button"
+                className="customer-script-copy"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(customerScript);
+                  setScriptCopied(true);
+                  window.setTimeout(() => setScriptCopied(false), 1800);
+                }}
+              >
+                <Clipboard size={14} />{" "}
+                {scriptCopied ? "Copied" : "Copy script"}
+              </button>
+            </div>
+            <p>{customerScript}</p>
+            <small>
+              Uses the current booking details, arrival window, extras, and live
+              pricing.
+            </small>
+          </section>
           <div className="confirmation-panel">
             <img src={deepKitchen} alt="Clean home interior" />
             <h3>You&apos;re almost all set!</h3>
@@ -1285,9 +1559,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   <small>{service.copy}</small>
                   <em>
                     From {money(service.unitPriceCents)} /{" "}
-                    {(typeof service.quantityLabel === "string"
-                      ? service.quantityLabel
-                      : "visit").slice(0, -1)}
+                    {service.quantityLabel.slice(0, -1)}
                   </em>
                 </div>
                 <div className="quantity">
@@ -1457,6 +1729,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 <span>Home</span>
                 <b>{homeDetail}</b>
                 <button type="button" onClick={() => setStep(2)}>
+                  Edit
+                </button>
+              </div>
+              <div>
+                <span>Date</span>
+                <b>{dateLabel(date)}</b>
+                <button type="button" onClick={() => setStep(5)}>
                   Edit
                 </button>
               </div>
