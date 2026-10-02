@@ -4318,3 +4318,346 @@
     display: none;
   }
 }
+
+.page1-review-surface .booking-teleprompter-mode-toggle {
+  display: flex;
+  border: 1px solid #4b4b43;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.page1-review-surface .booking-teleprompter-mode-toggle button {
+  min-height: 40px;
+  min-width: 70px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 0;
+  background: #1b1c18;
+  color: #efede6;
+  font: inherit;
+  cursor: pointer;
+}
+.page1-review-surface .booking-teleprompter-mode-toggle button.active {
+  background: #d9b66e;
+  color: #17140e;
+}
+.page1-review-surface .booking-teleprompter-small-control,
+.page1-review-surface .booking-teleprompter-speed {
+  min-height: 40px;
+  margin-left: 8px;
+  padding: 0 11px;
+  border: 1px solid #4b4b43;
+  border-radius: 8px;
+  background: #1b1c18;
+  color: #efede6;
+  font: inherit;
+}
+.page1-review-surface .booking-teleprompter-small-control {
+  cursor: pointer;
+}
+.page1-review-surface .booking-teleprompter-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #aaa;
+  font-size: 11px;
+}
+.page1-review-surface .booking-teleprompter-speed input {
+  width: 105px;
+  accent-color: #d9b66e;
+}
+.page1-review-surface .booking-teleprompter-speed output {
+  min-width: 22px;
+  color: #f1d596;
+  text-align: right;
+}
+.page1-review-surface .booking-teleprompter-body {
+  max-height: 205px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.page1-review-surface .booking-teleprompter-body::-webkit-scrollbar {
+  display: none;
+}
+.page1-review-surface .booking-teleprompter-body--full {
+  min-height: 175px;
+  overflow: hidden;
+}
+.page1-review-surface .booking-teleprompter-body--manual,
+.page1-review-surface .booking-teleprompter-body--auto {
+  min-height: 205px;
+  display: flex;
+  align-items: center;
+}
+.page1-review-surface .booking-teleprompter-body p {
+  font-weight: 500;
+}
+.page1-review-surface .booking-teleprompter-auto-script {
+  padding: 20px 0;
+}
+.page1-review-surface .booking-teleprompter-auto-script p {
+  margin: 0 0 24px;
+}
+.page1-review-surface .booking-teleprompter-auto-script p:last-child {
+  margin-bottom: 0;
+}
+.page1-review-surface .booking-teleprompter-footer {
+  gap: 8px;
+}
+@media (max-width: 900px) {
+  .page1-review-surface .booking-teleprompter-controls {
+    justify-content: flex-start;
+  }
+  .page1-review-surface .booking-teleprompter-speed {
+    margin-left: 0;
+  }
+}
+
+/* Page 1 uses the review prototype shell literally; booking logic remains in the existing handlers. */
+.page1-review-surface {
+  width: 100%;
+  max-width: 1540px;
+  height: 100vh;
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  background: #0b0c0a;
+  color: #f4f0e7;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+.page1-review-surface .internal-booking-frame {
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  min-height: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 235px minmax(600px, 1fr) 310px;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: #0f100e;
+  box-shadow: none;
+}
+.page1-review-surface .internal-booking-progress {
+  min-height: 0;
+  overflow: auto;
+  padding: 27px 19px;
+  border: 0;
+  border-right: 1px solid #34352f;
+  border-radius: 0;
+  background: #121310;
+}
+.page1-review-surface .internal-booking-progress .back-link,
+.page1-review-surface .internal-booking-progress .autosave {
+  display: none;
+}
+.page1-review-surface .internal-booking-progress .brand-block {
+  margin: 0;
+  padding: 0;
+}
+.page1-review-surface .internal-booking-progress .brand-block .eyebrow {
+  color: #d9b66e;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  font-weight: 850;
+}
+.page1-review-surface .internal-booking-progress .brand-block h1 {
+  margin: 7px 0 4px;
+  font-size: 19px;
+  text-transform: lowercase;
+}
+.page1-review-surface .internal-booking-progress .brand-block p {
+  color: #9d9e95;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.page1-review-surface .internal-booking-progress .steps {
+  margin-top: 25px;
+}
+.page1-review-surface .internal-booking-progress .step {
+  min-height: 44px;
+  margin: 4px 0;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #777970;
+  background: transparent;
+  font-size: 13px;
+}
+.page1-review-surface .internal-booking-progress .step:hover {
+  background: #1b1c18;
+}
+.page1-review-surface .internal-booking-progress .step.active {
+  border-color: #403d33;
+  color: #fff;
+  background: #24231e;
+}
+.page1-review-surface .internal-booking-progress .step b {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+  place-items: center;
+  border: 1px solid #4b4d45;
+  border-radius: 50%;
+}
+.page1-review-surface .internal-booking-progress .step.active b {
+  border-color: #d9b66e;
+  color: #16140e;
+  background: #d9b66e;
+}
+.page1-review-surface .internal-booking-stage {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 27px 38px 92px;
+  border: 0;
+  border-radius: 0;
+  background: #0f100e;
+  scrollbar-width: none;
+}
+.page1-review-surface .internal-booking-stage::-webkit-scrollbar {
+  display: none;
+}
+.page1-review-surface .internal-step-content {
+  display: block;
+  min-height: 0;
+}
+.page1-review-surface .review-page1-header {
+  margin: 0 0 18px;
+}
+.page1-review-surface .review-page1-header .eyebrow {
+  color: #d9b66e;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  font-weight: 850;
+}
+.page1-review-surface .review-page1-header h2 {
+  margin: 5px 0;
+  color: #f4f0e7;
+  font-size: 27px;
+  line-height: 1.15;
+}
+.page1-review-surface .review-page1-header .subtitle {
+  margin: 0;
+  color: #9d9e95;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.page1-review-surface .internal-step-actions {
+  position: absolute;
+  right: 38px;
+  bottom: 17px;
+  left: 38px;
+  z-index: 3;
+  margin: 0;
+  padding-top: 13px;
+  border-top: 1px solid #30312c;
+  background: #0f100e;
+}
+.page1-review-surface .internal-step-actions > span {
+  display: none;
+}
+.page1-review-surface .internal-step-actions button {
+  min-height: 40px;
+  border-radius: 9px;
+}
+.page1-review-surface .internal-booking-right-rail {
+  min-height: 0;
+  overflow: auto;
+  padding: 25px 18px;
+  border: 0;
+  border-left: 1px solid #34352f;
+  border-radius: 0;
+  background: #141512;
+}
+.page1-review-surface .internal-booking-summary-card,
+.page1-review-surface .internal-booking-notes-card {
+  margin-bottom: 13px;
+  padding: 15px;
+  border: 1px solid #34352f;
+  border-radius: 11px;
+  background: #191a17;
+}
+.page1-review-surface .internal-booking-summary-card h2 {
+  margin: 0;
+  color: #d9b66e;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.page1-review-surface .internal-booking-summary-card .summary-head span {
+  color: #9d9e95;
+  font-size: 13px;
+}
+.page1-review-surface .internal-booking-summary-card .summary-head > strong {
+  color: #f4f0e7;
+  font-size: 32px;
+}
+.page1-review-surface .internal-booking-summary-card .summary-list > div {
+  padding: 7px 0;
+  border-bottom: 1px solid #292a26;
+}
+.page1-review-surface .internal-booking-summary-card .summary-list span {
+  color: #b8b9b0;
+  font-size: 12px;
+}
+.page1-review-surface .internal-booking-summary-card .summary-list b {
+  color: #f4f0e7;
+  font-size: 12px;
+}
+.page1-review-surface .internal-booking-summary-card .summary-list button,
+.page1-review-surface .internal-breakdown-button {
+  color: #d9b66e;
+  font-size: 11px;
+}
+.page1-review-surface .internal-booking-notes-card h3 {
+  margin: 0;
+  color: #d9b66e;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.page1-review-surface .internal-booking-notes-card textarea {
+  min-height: 205px;
+  margin-top: 7px;
+  padding: 12px;
+  border: 1px solid #41423b;
+  border-radius: 8px;
+  background: #151613;
+  color: #fff;
+}
+.page1-review-surface .internal-add-note-button,
+.page1-review-surface .internal-booking-tips-card {
+  display: none;
+}
+.page1-review-surface .internal-booking-notes-card p {
+  margin-top: 8px;
+  color: #9d9e95;
+  font-size: 13px;
+}
+@media (max-width: 1050px) {
+  .page1-review-surface .internal-booking-frame {
+    grid-template-columns: 205px minmax(0, 1fr);
+  }
+  .page1-review-surface .internal-booking-right-rail {
+    display: none;
+  }
+}
+
+.page1-review-surface
+  .internal-booking-summary-card
+  .summary-list
+  > div:nth-child(4),
+.page1-review-surface
+  .internal-booking-summary-card
+  .summary-list
+  > div:nth-child(5) {
+  display: none;
+}

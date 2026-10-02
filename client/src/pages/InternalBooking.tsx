@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
@@ -138,22 +138,83 @@ function dateLabel(value: string) {
 function BookingTeleprompter() {
   const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
   const [line, setLine] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(18);
   const [questionOpen, setQuestionOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const animationRef = useRef<number | null>(null);
+  const lastFrameRef = useRef<number | null>(null);
+  const scrollPositionRef = useRef(0);
   const faq = trpc.bookingFunnel.answerFaq.useMutation();
   const lines = [
     "Absolutely — I can help you get that set up. Let me first make sure we choose the right cleaning.",
     "Is this more of a routine cleaning, does the home need a deeper reset, or are you moving in or out?",
+    "Perfect. Thanks for describing that. Let’s make sure we choose the right cleaning for the home.",
   ];
 
-  useEffect(() => {
-    if (mode !== "auto") return;
-    const timer = window.setInterval(() => {
-      setLine(current => (current + 1) % lines.length);
-    }, 5200);
-    return () => window.clearInterval(timer);
-  }, [mode, lines.length]);
+  const stopAutoPlay = () => {
+    setPlaying(false);
+    lastFrameRef.current = null;
+    if (animationRef.current !== null) {
+      window.cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+  };
+
+  useEffect(() => () => stopAutoPlay(), []);
+
+  const autoFrame = (now: number) => {
+    if (!playing || mode !== "auto" || !scrollRef.current) return;
+    if (lastFrameRef.current === null) {
+      lastFrameRef.current = now;
+      scrollPositionRef.current = scrollRef.current.scrollTop;
+    }
+    const elapsed = Math.min((now - lastFrameRef.current) / 1000, 0.05);
+    lastFrameRef.current = now;
+    scrollPositionRef.current += speed * elapsed;
+    const maxScroll = Math.max(
+      0,
+      scrollRef.current.scrollHeight - scrollRef.current.clientHeight
+    );
+    if (scrollPositionRef.current >= maxScroll) {
+      scrollPositionRef.current = maxScroll;
+      scrollRef.current.scrollTop = maxScroll;
+      stopAutoPlay();
+      return;
+    }
+    scrollRef.current.scrollTop = scrollPositionRef.current;
+    animationRef.current = window.requestAnimationFrame(autoFrame);
+  };
+
+  const toggleAutoPlay = () => {
+    if (playing) {
+      stopAutoPlay();
+      return;
+    }
+    if (!scrollRef.current) return;
+    const maxScroll = Math.max(
+      0,
+      scrollRef.current.scrollHeight - scrollRef.current.clientHeight
+    );
+    if (scrollRef.current.scrollTop >= maxScroll - 2) {
+      scrollRef.current.scrollTop = 0;
+      scrollPositionRef.current = 0;
+    }
+    setPlaying(true);
+    lastFrameRef.current = null;
+    animationRef.current = window.requestAnimationFrame(autoFrame);
+  };
+
+  const setTeleMode = (nextMode: "full" | "manual" | "auto") => {
+    stopAutoPlay();
+    setMode(nextMode);
+    setLine(0);
+    window.requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    });
+  };
 
   const askFaq = async () => {
     const trimmed = question.trim();
@@ -173,19 +234,47 @@ function BookingTeleprompter() {
           </div>
         </div>
         <div className="booking-teleprompter-controls">
-          {(["full", "manual", "auto"] as const).map(option => (
-            <button
-              key={option}
-              type="button"
-              className={mode === option ? "active" : ""}
-              onClick={() => {
-                setMode(option);
-                setLine(0);
-              }}
-            >
-              {option[0].toUpperCase() + option.slice(1)}
-            </button>
-          ))}
+          <div className="booking-teleprompter-mode-toggle">
+            {(["full", "manual", "auto"] as const).map(option => (
+              <button
+                key={option}
+                type="button"
+                className={mode === option ? "active" : ""}
+                onClick={() => setTeleMode(option)}
+              >
+                {option[0].toUpperCase() + option.slice(1)}
+              </button>
+            ))}
+          </div>
+          {mode === "auto" && (
+            <>
+              <button
+                type="button"
+                className="booking-teleprompter-small-control"
+                onClick={() => setTeleMode("manual")}
+              >
+                ← Manual
+              </button>
+              <button
+                type="button"
+                className="booking-teleprompter-small-control"
+                onClick={toggleAutoPlay}
+              >
+                {playing ? "Ⅱ Pause" : "▶ Play"}
+              </button>
+              <label className="booking-teleprompter-speed">
+                Speed
+                <input
+                  type="range"
+                  min="5"
+                  max="45"
+                  value={speed}
+                  onChange={event => setSpeed(Number(event.target.value))}
+                />
+                <output>{speed}</output>
+              </label>
+            </>
+          )}
           <button
             type="button"
             className="booking-teleprompter-question-button"
@@ -196,6 +285,7 @@ function BookingTeleprompter() {
         </div>
       </header>
       <div
+        ref={scrollRef}
         className={`booking-teleprompter-body booking-teleprompter-body--${mode}`}
       >
         {mode === "full" ? (
@@ -204,17 +294,17 @@ function BookingTeleprompter() {
               ✦ CALL SCRIPT · CLEANING TYPE
             </div>
             <p>
-              “Absolutely — I can help you get that set up. Let me first make
-              sure we choose the right cleaning.{" "}
-              <strong>
-                Is this more of a routine cleaning, does the home need a deeper
-                reset, or are you moving in or out?
-              </strong>
-              ”
+              “{lines[0]} {lines.slice(1).join(" ")}”
             </p>
           </>
+        ) : mode === "auto" ? (
+          <div className="booking-teleprompter-auto-script">
+            {lines.map(scriptLine => (
+              <p key={scriptLine}>{scriptLine}</p>
+            ))}
+          </div>
         ) : (
-          <p>{lines[line]}</p>
+          <p>{lines[line] ?? lines[0]}</p>
         )}
       </div>
       {mode === "manual" && (
@@ -224,27 +314,29 @@ function BookingTeleprompter() {
             onClick={() => setLine(current => Math.max(0, current - 1))}
             disabled={line === 0}
           >
-            Previous
+            ↑ Previous
           </button>
           <span>
             {line + 1} of {lines.length}
           </span>
           <button
             type="button"
-            onClick={() =>
-              setLine(current => Math.min(lines.length - 1, current + 1))
-            }
+            onClick={() => setLine(current => Math.min(lines.length - 1, current + 1))}
             disabled={line === lines.length - 1}
           >
-            Next
+            Next ↓
+          </button>
+          <button
+            type="button"
+            onClick={() => setLine(lines.length - 1)}
+          >
+            Skip this
           </button>
         </footer>
       )}
       {questionOpen && (
         <div className="booking-teleprompter-faq">
-          <label htmlFor="booking-customer-question">
-            Ask the FAQ assistant
-          </label>
+          <label htmlFor="booking-customer-question">Ask the FAQ assistant</label>
           <div>
             <input
               id="booking-customer-question"
@@ -1635,6 +1727,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 <span>Home</span>
                 <b>{homeDetail}</b>
                 <button type="button" onClick={() => setStep(2)}>
+                  Edit
+                </button>
+              </div>
+              <div>
+                <span>Date</span>
+                <b>{dateLabel(date)}</b>
+                <button type="button" onClick={() => setStep(5)}>
                   Edit
                 </button>
               </div>
