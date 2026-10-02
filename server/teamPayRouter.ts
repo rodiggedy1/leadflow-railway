@@ -6,8 +6,9 @@ import { getDb } from "./db";
 import { cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerProfiles, leadflowJobPayrollAdjustments, leadflowJobs, schedulingTeams } from "../drizzle/schema";
 import { calculateEffectivePayroll } from "./payrollCalculator";
 import { normalizePayrollPercent } from "./payrollNormalization";
+import { legacyPayrollProcedures } from "./legacyPayrollProcedures";
 
-/** Team Pay is LeadFlow-owned: every read/write in this router uses leadflow_jobs. */
+/** Existing Team Pay procedures stay LeadFlow-owned; legacy payroll reads are isolated. */
 export function getPayWeekStart(date: Date): Date {
   const d = new Date(date);
   const [m, day, y] = d.toLocaleDateString("en-US", { timeZone: "America/New_York" }).split("/").map(Number);
@@ -106,6 +107,8 @@ function jobRow(item: Item, today: string) {
 }
 
 export const teamPayRouter = router({
+  ...legacyPayrollProcedures,
+
   getTeams: agentProcedure.input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const weekEnd = fmt(addDays(new Date(`${input.weekStart}T00:00:00`), 6)); const items = await loadItems(db, input.weekStart, weekEnd); const today = todayET();
