@@ -22,7 +22,7 @@ export const ENV = {
   zapierWebhookSecret: process.env.ZAPIER_WEBHOOK_SECRET ?? "",
   quoteAppSecret: process.env.QUOTE_APP_SECRET ?? "",
   quoteAppUrl: process.env.QUOTE_APP_URL ?? "https://quote.maidinblack.com",
-  businessTimezone: process.env.BUSINESS_TIMEZONE ?? "America/Los_Angeles",
+  businessTimezone: process.env.BUSINESS_TIMEZONE ?? "America/New_York",
   isPreviewMode: process.env.PREVIEW_MODE === "true",
   gmailClientId: process.env.GMAIL_CLIENT_ID ?? "",
   gmailClientSecret: process.env.GMAIL_CLIENT_SECRET ?? "",
