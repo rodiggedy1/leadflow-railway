@@ -114,10 +114,11 @@ function tomorrowIso() {
 function money(cents: number) {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-function label(value: string) {
-  if (value === "one-time") return "One-time";
-  if (value === "biweekly") return "Bi-weekly";
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function label(value: string | null | undefined) {
+  const normalized = typeof value === "string" && value.trim() ? value : "one-time";
+  if (normalized === "one-time") return "One-time";
+  if (normalized === "biweekly") return "Bi-weekly";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 function dateLabel(value: string) {
   if (!value) return "Choose a date";
@@ -1284,7 +1285,9 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   <small>{service.copy}</small>
                   <em>
                     From {money(service.unitPriceCents)} /{" "}
-                    {service.quantityLabel.slice(0, -1)}
+                    {(typeof service.quantityLabel === "string"
+                      ? service.quantityLabel
+                      : "visit").slice(0, -1)}
                   </em>
                 </div>
                 <div className="quantity">

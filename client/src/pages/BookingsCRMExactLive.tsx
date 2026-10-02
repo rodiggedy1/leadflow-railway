@@ -102,24 +102,28 @@ const displayTime = (value: string) => {
 };
 const displayRequestedTime = (value: string) =>
   /^\d{2}:\d{2}$/.test(value) ? displayTime(value) : value;
-const labelStatus = (value: string) =>
-  value === "lead"
+const labelStatus = (value: string | null | undefined) => {
+  const normalized = typeof value === "string" && value.trim() ? value : "unknown";
+  return normalized === "lead"
     ? "Lead / In progress"
-    : value === "payment_incomplete"
+    : normalized === "payment_incomplete"
       ? "Reservation started / Payment incomplete"
-      : value === "needs_attention"
+      : normalized === "needs_attention"
         ? "Needs attention"
-        : value === "pending_payment"
+        : normalized === "pending_payment"
           ? "Pending payment"
-          : value === "missing_from_launch27"
+          : normalized === "missing_from_launch27"
             ? "No longer in Launch27"
-            : value.charAt(0).toUpperCase() + value.slice(1);
-const labelRecurrence = (value: string) =>
-  value === "biweekly"
+            : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+const labelRecurrence = (value: string | null | undefined) => {
+  const normalized = typeof value === "string" && value.trim() ? value : "one-time";
+  return normalized === "biweekly"
     ? "Every 2 weeks"
-    : value === "one-time"
+    : normalized === "one-time"
       ? "One-time"
-      : value.charAt(0).toUpperCase() + value.slice(1);
+      : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
 const photoDownloadUrl = (photo: any, index: number) =>
   `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
 const sourceLabel = (row: any) =>
@@ -371,6 +375,9 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
   if (active.source !== "leadflow") return null;
 
   const summary = summaryQuery.data;
+  const adjustments = Array.isArray(summary?.adjustments)
+    ? summary.adjustments
+    : [];
   const targetFinalPayCents = Math.round(Number(finalPayout) * 100);
   const adjustmentCents =
     summary?.finalPayCents == null
@@ -496,10 +503,10 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
               </div>
             </div>
           )}
-          {summary.adjustments.length > 0 && (
+          {adjustments.length > 0 && (
             <div className="bcr-payroll-history">
               <span>Adjustment history</span>
-              {summary.adjustments.slice(0, 4).map((adjustment: any) => (
+              {adjustments.slice(0, 4).map((adjustment: any) => (
                 <article key={adjustment.id}>
                   <b
                     className={
