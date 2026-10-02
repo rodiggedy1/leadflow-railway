@@ -5,7 +5,7 @@ import {
   desc,
   eq,
   gte,
-  inArray,
+  inArray, isNotNull, isNull,
   lte,
   ne,
   or,
@@ -228,6 +228,132 @@ async function bookingPayrollPayoutSummary(db: Db, jobId: number) {
     finalPayCents: basePayCents + adjustmentCents,
     adjustments,
   };
+}
+
+function payrollWeekEnd(weekStart: string) {
+  const end = new Date(`${weekStart}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 6);
+  return end.toISOString().slice(0, 10);
+}
+
+function payrollServiceTime(value: string | null) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/New_York",
+    });
+  }
+  return value;
+}
+
+function payrollServiceLabel(job: typeof leadflowJobs.$inferSelect) {
+  return [
+    job.serviceName,
+    job.bedrooms === null ? null : job.bedrooms === 0 ? "Studio" : `${job.bedrooms} bed`,
+    job.bathrooms === null ? null : `${job.bathrooms} bath`,
+  ].filter(Boolean).join(" • ");
+}
+
+/**
+ * Read-only payroll projection for the dark Payroll Summary. It deliberately
+ * follows the same LeadFlow job, team-profile, and adjustment-ledger inputs as
+ * the Cleaner Portal; no legacy payroll source is consulted.
+ */
+async function leadflowPayrollProjection(db: Db, weekStart: string, requestedTeamId?: number) {
+  const weekEnd = payrollWeekEnd(weekStart);
+  const activeBookingFilter = and(
+    gte(leadflowJobs.jobDate, weekStart),
+    lte(leadflowJobs.jobDate, weekEnd),
+    ne(leadflowJobs.bookingStatus, "cancelled"),
+    ne(leadflowJobs.bookingStatus, "rescheduled"),
+    ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+  );
+  // Imported jobs store a Launch27 team ID; native jobs store scheduling_teams.id.
+  // Native visits must still have an active assignment to the stored team.
+  const assignmentFilter = or(
+    isNull(leadflowJobs.bookingId),
+    sql`EXISTS (
+      SELECT 1 FROM ${bookingAssignments} AS active_assignment
+      WHERE active_assignment.bookingId = ${leadflowJobs.bookingId}
+        AND active_assignment.teamId = ${leadflowJobs.teamId}
+        AND active_assignment.status = 'assigned'
+    )`,
+  );
+  const whereClause = and(
+    activeBookingFilter,
+    assignmentFilter,
+    requestedTeamId === undefined ? undefined : eq(cleanerProfiles.launch27TeamId, requestedTeamId),
+  );
+
+  const rows = await db.select({
+    job: leadflowJobs,
+    cleanerProfileId: cleanerProfiles.id,
+    payrollTeamId: cleanerProfiles.launch27TeamId,
+    payPercent: cleanerProfiles.payPercent,
+  }).from(leadflowJobs)
+    .leftJoin(schedulingTeams, and(
+      isNotNull(leadflowJobs.bookingId), eq(schedulingTeams.id, leadflowJobs.teamId),
+    ))
+    .leftJoin(cleanerProfiles, or(
+      and(isNull(leadflowJobs.bookingId), eq(cleanerProfiles.launch27TeamId, leadflowJobs.teamId)),
+      and(isNotNull(leadflowJobs.bookingId), eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId)),
+    ))
+    .where(whereClause)
+    .orderBy(asc(leadflowJobs.jobDate), asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
+
+  const jobIds = rows.map((row) => row.job.id);
+  const adjustments = jobIds.length
+    ? await db.select({
+      leadflowJobId: leadflowJobPayrollAdjustments.leadflowJobId,
+      amountCents: leadflowJobPayrollAdjustments.amountCents,
+    }).from(leadflowJobPayrollAdjustments)
+      .where(inArray(leadflowJobPayrollAdjustments.leadflowJobId, jobIds))
+    : [];
+  const adjustmentCentsByJob = new Map<number, number>();
+  for (const adjustment of adjustments) {
+    adjustmentCentsByJob.set(
+      adjustment.leadflowJobId,
+      (adjustmentCentsByJob.get(adjustment.leadflowJobId) ?? 0) + adjustment.amountCents,
+    );
+  }
+
+  const payableRows = rows.filter((row) => row.job.teamId !== null && row.cleanerProfileId !== null && row.payrollTeamId !== null);
+  const jobs = payableRows.map((row) => {
+    const adjustmentCents = adjustmentCentsByJob.get(row.job.id) ?? 0;
+    const payroll = calculateEffectivePayroll({
+      jobDate: row.job.jobDate,
+      jobRevenue: row.job.jobTotalCents / 100,
+      payPercent: payrollPercent(row.payPercent),
+      manualAdjustment: adjustmentCents / 100,
+    });
+    return {
+      id: row.job.id,
+      // Canonical Portal/Launch27 team identity groups imported and native visits together.
+      teamId: row.payrollTeamId!,
+      teamName: row.job.teamName?.trim() || `Team ${row.job.teamId}`,
+      jobDate: row.job.jobDate,
+      time: payrollServiceTime(row.job.serviceDateTime),
+      customer: row.job.customerName || "Customer",
+      address: row.job.jobAddress ?? "",
+      service: payrollServiceLabel(row.job),
+      status: row.job.bookingStatus,
+      payrollMode: payroll.payrollMode,
+      jobRevenue: payroll.jobRevenue,
+      operationalCost: payroll.operationalCost,
+      netJobAmount: payroll.netJobAmount,
+      payoutPct: payroll.payPercent,
+      basePay: payroll.basePay,
+      manualAdj: payroll.manualAdjustment,
+      finalPay: payroll.finalPay,
+    };
+  });
+
+  return { jobs, weekStart, weekEnd };
 }
 
 const DAY_BOARD_STATUS_LABELS: Record<string, string> = {
@@ -1408,6 +1534,67 @@ export const leadflowJobsRouter = router({
           asc(leadflowBookingMessages.id)
         );
     }),
+
+  /**
+   * Dark Payroll Summary's read-only LeadFlow payroll projection. The rows are
+   * grouped only by the booking-assigned team with a Cleaner Portal profile, so
+   * every displayed final pay exactly matches that team's Cleaner Portal payout.
+   */
+  getPayrollSummary: agentProcedure.input(z.object({
+    weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const projection = await leadflowPayrollProjection(db, input.weekStart);
+    const grouped = new Map<number, typeof projection.jobs>();
+    for (const job of projection.jobs) {
+      grouped.set(job.teamId, [...(grouped.get(job.teamId) ?? []), job]);
+    }
+    const rows = Array.from(grouped.values()).map((jobs) => {
+      const first = jobs[0]!;
+      return {
+        teamId: first.teamId,
+        teamName: first.teamName,
+        jobs: jobs.length,
+        payrollMode: first.payrollMode,
+        jobRevenue: Math.round(jobs.reduce((sum, job) => sum + job.jobRevenue, 0) * 100) / 100,
+        operationalCost: Math.round(jobs.reduce((sum, job) => sum + job.operationalCost, 0) * 100) / 100,
+        netJobAmount: Math.round(jobs.reduce((sum, job) => sum + job.netJobAmount, 0) * 100) / 100,
+        basePay: Math.round(jobs.reduce((sum, job) => sum + job.basePay, 0) * 100) / 100,
+        manualAdj: Math.round(jobs.reduce((sum, job) => sum + job.manualAdj, 0) * 100) / 100,
+        payoutPct: first.payoutPct,
+        finalPay: Math.round(jobs.reduce((sum, job) => sum + job.finalPay, 0) * 100) / 100,
+      };
+    }).sort((left, right) => left.teamName.localeCompare(right.teamName));
+    return {
+      source: "leadflow" as const,
+      rows,
+      weekStart: projection.weekStart,
+      weekEnd: projection.weekEnd,
+    };
+  }),
+
+  /** Read-only job-level detail for one row in the LeadFlow dark Payroll Summary. */
+  getPayrollTeamDetail: agentProcedure.input(z.object({
+    weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    teamId: z.number().int().positive(),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const projection = await leadflowPayrollProjection(db, input.weekStart, input.teamId);
+    const jobs = projection.jobs;
+    const teamName = jobs[0]?.teamName;
+    if (!teamName) throw new TRPCError({ code: "NOT_FOUND", message: "No payable LeadFlow bookings were found for this team and pay week." });
+    return {
+      source: "leadflow" as const,
+      teamId: input.teamId,
+      teamName,
+      weekStart: projection.weekStart,
+      weekEnd: projection.weekEnd,
+      jobs,
+      totalFinalPay: Math.round(jobs.reduce((sum, job) => sum + job.finalPay, 0) * 100) / 100,
+    };
+  }),
 
   getPayrollPayoutSummary: agentProcedure
     .input(z.object({ jobId: z.number().int().positive() }))
