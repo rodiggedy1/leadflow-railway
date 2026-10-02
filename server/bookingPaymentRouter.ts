@@ -13,6 +13,7 @@ import {
   BOOKING_PAYMENT_CONSENT_VERSION,
 } from "../shared/bookingPayment";
 import { NATIVE_BOOKING_PRICING_VERSION, type PrepareBookingInput } from "../shared/booking";
+import { BOOKING_TIME_ZONE } from "../shared/easternTime";
 import {
   PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
   PUBLIC_BOOKING_PRICING_VERSION,
@@ -106,8 +107,8 @@ async function ensureBookingPaymentTarget(record: typeof bookingFunnelRecords.$i
     throw new TRPCError({ code: "CONFLICT", message: "Reserve your appointment before adding a card." });
   }
   const built = record.pricingVersion === PUBLIC_BOOKING_PRICING_VERSION
-    ? buildPreparedPublicBooking(asPublicBookingInput(record), { nowMs: Date.now(), timeZone: ENV.businessTimezone })
-    : buildPreparedNativeBooking(asBookingInput(record), { nowMs: Date.now(), timeZone: ENV.businessTimezone });
+    ? buildPreparedPublicBooking(asPublicBookingInput(record), { nowMs: Date.now(), timeZone: BOOKING_TIME_ZONE })
+    : buildPreparedNativeBooking(asBookingInput(record), { nowMs: Date.now(), timeZone: BOOKING_TIME_ZONE });
   if (built.type === "price_changed") {
     throw new TRPCError({ code: "CONFLICT", message: "The quoted price changed. Please review the updated quote before continuing." });
   }

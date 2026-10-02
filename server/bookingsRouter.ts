@@ -27,6 +27,7 @@ import {
   bookingServiceIdSchema,
   prepareBookingInputSchema,
 } from "../shared/booking";
+import { BOOKING_TIME_ZONE } from "../shared/easternTime";
 import {
   NativeBookingIdempotencyConflictError,
   NativeBookingInputError,
@@ -359,7 +360,7 @@ export const bookingsRouter = router({
       try {
         return await prepareNativeBooking(input, {
           nowMs: Date.now(),
-          timeZone: ENV.businessTimezone,
+          timeZone: BOOKING_TIME_ZONE,
           persist: prepared => persistPreparedBooking(db, prepared),
         });
       } catch (error) {
@@ -395,7 +396,7 @@ export const bookingsRouter = router({
         };
         const built = buildPreparedCanonicalBooking(preparedInput, {
           nowMs: Date.now(),
-          timeZone: ENV.businessTimezone,
+          timeZone: BOOKING_TIME_ZONE,
         });
         if (built.type === "price_changed") {
           throw new NativeBookingInputError(
