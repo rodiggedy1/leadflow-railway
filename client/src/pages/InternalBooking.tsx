@@ -25,7 +25,14 @@ import {
 import { trpc } from "@/lib/trpc";
 import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
-import { easternCalendarWeekday, easternDateIso, easternDateLabel, easternMonthDate, easternMonthLabel, parseEasternDate } from "@shared/easternTime";
+import {
+  easternCalendarWeekday,
+  easternDateIso,
+  easternDateLabel,
+  easternMonthDate,
+  easternMonthLabel,
+  parseEasternDate,
+} from "@shared/easternTime";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -100,13 +107,16 @@ const ADDITIONAL_SERVICE_IMAGES = {
   "window-cleaning": livingRoom,
   "pet-area-cleaning": kitchen,
 } as const;
-const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(CANONICAL_POST_BOOKING_UPSELLS).map(([id, value]) => ({
+const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(
+  CANONICAL_POST_BOOKING_UPSELLS
+).map(([id, value]) => ({
   id,
   title: value.title,
   copy: value.copy,
   unitPriceCents: value.unitPriceCents,
   quantityLabel: value.quantityLabel,
-  image: ADDITIONAL_SERVICE_IMAGES[id as keyof typeof ADDITIONAL_SERVICE_IMAGES],
+  image:
+    ADDITIONAL_SERVICE_IMAGES[id as keyof typeof ADDITIONAL_SERVICE_IMAGES],
 }));
 
 function tomorrowIso() {
@@ -259,7 +269,6 @@ function BookingTeleprompter() {
     </section>
   );
 }
-
 
 function ChoiceCard({
   selected,
@@ -548,8 +557,8 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       additionalServices: paymentMethod === "card"
         ? []
         : Object.entries(additionalServices)
-            .filter(([, quantity]) => quantity > 0)
-            .map(([id, quantity]) => ({ id, quantity })),
+              .filter(([, quantity]) => quantity > 0)
+              .map(([id, quantity]) => ({ id, quantity })),
       booking: {
         ...createCanonicalBookingInput(canonicalDraft, {
           idempotencyKey,
@@ -604,9 +613,9 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     setError(null);
     setStep(Math.max(1, step - 1) as Step);
   };
-  const shellClass = onClose
-    ? "internal-booking-modal-shell"
-    : "internal-booking-shell";
+  const shellClass = `${
+    onClose ? "internal-booking-modal-shell" : "internal-booking-shell"
+  }${step === 1 ? " page1-review-surface" : ""}`;
 
   if (success)
     return (
@@ -679,86 +688,47 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     step === 1 ? (
       <>
         <BookingTeleprompter />
-        <div className="content-top">
+        <div className="review-page1-header">
           <div className="eyebrow">STEP 1 OF 9</div>
-          <h2>Select service type</h2>
+          <h2>What kind of cleaning do they need?</h2>
           <p className="subtitle">
-            Choose the cleaning service that best fits what the customer needs.
+            Choose the service that best matches what the customer describes.
           </p>
         </div>
-        <div className="suggestion">
-          <div className="suggestion-icon">✦</div>
-          <div>
-            <strong>AI suggestion</strong>
-            <span>
-              Based on what you’ve shared, Deep Cleaning is likely the best fit.
-            </span>
-          </div>
-          <button
-            type="button"
-            className="outline-btn"
-            onClick={() => setServiceId("deep")}
-          >
-            Use suggestion
-          </button>
-          <button type="button" className="icon-btn" aria-label="Dismiss">
-            ×
-          </button>
-        </div>
-        <div className="service-grid">
-          {SERVICES.map(value => (
-            <ChoiceCard
-              key={value}
-              selected={serviceId === value}
-              onClick={() => setServiceId(value)}
-              icon={Sparkles}
-              image={
-                value === "standard"
-                  ? standardBedroom
-                  : value === "deep"
-                    ? deepKitchen
-                    : moveoutBoxes
-              }
-              price={money(
-                calculatePublicBookingPrice({
-                  pricingMode,
-                  serviceId: value,
-                  bedrooms,
-                  bathrooms,
-                  homeType,
-                  condition,
-                  maidCount,
-                  hourCount,
-                  extras: Object.entries(extras)
-                    .filter(([, quantity]) => quantity > 0)
-                    .map(([id, quantity]) => ({ id, quantity })),
-                  recurrence: frequency,
-                }).firstCleaningTotalCents
-              )}
-              meta={
-                value === "standard"
-                  ? "~ 2.5 hours • Team payout ~$93"
-                  : value === "deep"
-                    ? "~ 3.5 hours • Team payout ~$137"
-                    : "~ 4 hours • Team payout ~$164"
-              }
-              say={
-                value === "standard"
-                  ? "This is our most popular option. It keeps your home clean and fresh with all the essential cleaning tasks."
-                  : value === "deep"
-                    ? "This is a more detailed clean. We focus on the areas that build up over time, so your home feels like a fresh start."
-                    : "This is a top-to-bottom clean that gets the home ready for a new tenant or homeowner. We clean inside cabinets, appliances, and more."
-              }
-              title={getPublicBookingServiceName(value)}
-              description={
-                value === "standard"
-                  ? "Routine cleaning for a regular, well-maintained home."
-                  : value === "deep"
-                    ? "A more detailed clean for homes that need extra attention."
-                    : "A thorough clean before a move or handoff."
-              }
-            />
-          ))}
+        <div
+          className="review-page1-choice-list"
+          role="group"
+          aria-label="Cleaning type"
+        >
+          {SERVICES.map(value => {
+            const title =
+              value === "moveout"
+                ? "Move-out Cleaning"
+                : getPublicBookingServiceName(value);
+            const description =
+              value === "standard"
+                ? "Routine cleaning for a regular, well-maintained home."
+                : value === "deep"
+                  ? "A more detailed clean for homes that need extra attention."
+                  : "A thorough clean before a move or handoff.";
+            return (
+              <button
+                key={value}
+                type="button"
+                className={`review-page1-choice${serviceId === value ? " selected" : ""}`}
+                onClick={() => setServiceId(value)}
+                aria-pressed={serviceId === value}
+              >
+                <span>
+                  <strong>{title}</strong>
+                  <small>{description}</small>
+                </span>
+                <span className="review-page1-choice-check" aria-hidden="true">
+                  {serviceId === value ? "✓" : ""}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </>
     ) : step === 2 ? (
@@ -1037,13 +1007,26 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               {Array.from(
                 {
                   length:
-                    easternCalendarWeekday(parseEasternDate(date).getUTCFullYear(), parseEasternDate(date).getUTCMonth()) +
-                    new Date(Date.UTC(parseEasternDate(date).getUTCFullYear(), parseEasternDate(date).getUTCMonth() + 1, 0, 12)).getUTCDate(),
+                    easternCalendarWeekday(
+                      parseEasternDate(date).getUTCFullYear(),
+                      parseEasternDate(date).getUTCMonth()
+                    ) +
+                    new Date(
+                      Date.UTC(
+                        parseEasternDate(date).getUTCFullYear(),
+                        parseEasternDate(date).getUTCMonth() + 1,
+                        0,
+                        12
+                      )
+                    ).getUTCDate(),
                 },
                 (_, index) => index
               ).map(index => {
                 const monthDate = parseEasternDate(date);
-                const firstDay = easternCalendarWeekday(monthDate.getUTCFullYear(), monthDate.getUTCMonth());
+                const firstDay = easternCalendarWeekday(
+                  monthDate.getUTCFullYear(),
+                  monthDate.getUTCMonth()
+                );
                 const day = index - firstDay + 1;
                 if (day < 1)
                   return <span className="muted" key={`empty-${index}`} />;
@@ -1399,7 +1382,8 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   window.setTimeout(() => setScriptCopied(false), 1800);
                 }}
               >
-                <Clipboard size={14} /> {scriptCopied ? "Copied" : "Copy script"}
+                <Clipboard size={14} />{" "}
+                {scriptCopied ? "Copied" : "Copy script"}
               </button>
             </div>
             <p>{customerScript}</p>
