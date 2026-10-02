@@ -4773,13 +4773,25 @@
   box-shadow: 0 15px 35px #0008;
 }
 .page1-review-surface .booking-teleprompter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
   min-height: 54px;
   padding: 10px 14px;
   border-bottom: 1px solid #34352f;
 }
 .page1-review-surface .booking-teleprompter-title {
+  display: flex;
+  align-items: center;
   min-width: 0;
   gap: 8px;
+}
+.page1-review-surface .booking-teleprompter-title > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
 }
 .page1-review-surface .booking-teleprompter-title strong,
 .page1-review-surface .booking-teleprompter-label {
@@ -4793,6 +4805,9 @@
   font-size: 13px;
 }
 .page1-review-surface .booking-teleprompter-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   flex-wrap: nowrap;
   gap: 8px;
 }
