@@ -10,7 +10,7 @@ const NAV_GROUPS: Array<{ label: string; items: DashboardDestination[] }> = [
   { label: "CUSTOMER OPERATIONS", items: [{ label: "Customer Profile", href: "/admin/customer-profile", icon: UserRound }, { label: "Schedule", href: "/admin/schedule", icon: CalendarRange }, { label: "Day Board", href: "/admin/day-board", icon: PanelsTopLeft }, { label: "Confirmation Calls", href: "/admin/confirmation-calls", icon: PhoneOutgoing }] },
   { label: "CUSTOMER COMMUNICATION", items: [{ label: "SMS", href: "/admin/sms", icon: MessageSquareMore }, { label: "Emails", href: "/admin/emails", icon: Mail }, { label: "AI Calls", href: "/admin/ai-calls", icon: PhoneCall }] },
   { label: "FINANCE & BILLING", items: [{ label: "Invoices", href: "/admin/invoices", icon: Receipt }, { label: "Payments", href: "/admin/payments", icon: CreditCard }] },
-  { label: "TEAM OPERATIONS", items: [{ label: "Team", href: "/admin/team", icon: UsersRound }, { label: "Reviews & Quality", href: "/admin/quality", icon: Star }, { label: "Payroll Summary", href: "/admin/payroll-summary", icon: WalletCards }, { label: "Hiring Admin", href: "/admin/hiring", icon: UserRoundCheck }] },
+  { label: "TEAM OPERATIONS", items: [{ label: "Team", href: "/admin/team", icon: UsersRound }, { label: "Reviews & Quality", href: "/admin/quality", icon: Star }, { label: "Payroll Summary", href: "/admin/payroll-summary-live", icon: WalletCards }, { label: "Hiring Admin", href: "/admin/hiring", icon: UserRoundCheck }] },
 ];
 
 export default function OriginalDashboardWorkspaceNav() {

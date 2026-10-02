@@ -49,6 +49,7 @@ const TeamAvailability = lazy(() => import("./pages/TeamAvailability"));
 const ConfirmationCalls = lazy(() => import("./pages/ConfirmationCalls"));
 const MissedCalls = lazy(() => import("./pages/MissedCalls"));
 const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
+const PayrollSummaryExactLive = lazy(() => import("./pages/PayrollSummaryExactLive"));
 const Performance = lazy(() => import("./pages/Performance"));
 const Metrics = lazy(() => import("./pages/Metrics"));
 const LeadNurturing = lazy(() => import("./pages/LeadNurturing"));
@@ -171,6 +172,10 @@ function AdminPaymentsExactReviewRoute() {
   return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AdminPayrollSummaryExactLiveRoute() {
+  return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>;
+}
+
 function AdminOperationsDashboardExactLiveRoute() {
   return <div className="review-nav-host odr-original-host"><OriginalDashboardWorkspaceNav /><OperationsDashboardExactLive /></div>;
 }
@@ -239,6 +244,7 @@ function Router() {
         <Route path={"/admin/confirmation-calls"} component={AdminConfirmationCallsExactReviewRoute} />
         <Route path={"/admin/missed-calls"} component={MissedCalls} />
         <Route path={"/admin/payroll-summary"} component={PayrollSummary} />
+        <Route path={"/admin/payroll-summary-live"} component={AdminPayrollSummaryExactLiveRoute} />
         <Route path={"/admin/performance"} component={Performance} />
         <Route path={"/admin/metrics"} component={Metrics} />
         <Route path={"/admin/lead-nurturing"} component={LeadNurturing} />
@@ -272,7 +278,7 @@ function isDayBoardExactLiveRoute(location: string) {
   const isTeamWorkspace = location === "/admin/team";
   const isHiringWorkspace = location === "/admin/hiring";
   const isSettingsWorkspace = location === "/admin/settings" || location === "/admin/widget-config";
-  return location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isOperationsDashboardWorkspace || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace || isSettingsWorkspace;
+  return location === "/admin/payroll-summary-live" || location === "/admin/day-board" || location === "/admin/sms" || location === "/admin/emails" || location === "/admin/customer-profile" || location === "/admin/confirmation-calls" || location === "/admin/ai-calls" || location === "/admin/invoices" || location === "/admin/payments" || isOperationsDashboardWorkspace || isCommandChatWorkspace || isTeamWorkspace || isHiringWorkspace || isSettingsWorkspace;
 }
 
 function PollingInstrumentation() {
