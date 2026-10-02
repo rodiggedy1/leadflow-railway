@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(new URL("../client/src/pages/PayrollSummary.tsx", import.meta.url), "utf8");
 
 describe("Payroll Summary team detail drawer", () => {
-  it("reuses the existing team detail procedure rather than adding a payroll data path", () => {
-    expect(source).toContain("trpc.teamPay.getTeamDetail.useMutation()");
+  it("uses the isolated legacy detail procedure for the drawer and exports", () => {
+    expect(source).toContain("trpc.teamPay.getLegacyPayrollSummary.useQuery({ weekStart })");
+    expect(source.match(/trpc\.teamPay\.getLegacyTeamDetail\.useMutation/g)).toHaveLength(3);
+    expect(source).not.toMatch(/trpc\.teamPay\.(getPayrollSummary|getTeamDetail)\./);
     expect(source).toContain("loadTeamDetail({ teamName, weekStart })");
   });
 

@@ -254,7 +254,7 @@ function buildTeamDetailCsv(
 // ─── Team row download button ─────────────────────────────────────────────────
 
 function TeamDownloadButton({ teamName, weekStart, weekEnd }: { teamName: string; weekStart: string; weekEnd: string }) {
-  const { mutate, isPending } = trpc.teamPay.getTeamDetail.useMutation({
+  const { mutate, isPending } = trpc.teamPay.getLegacyTeamDetail.useMutation({
     onSuccess: (data) => {
       const csv = buildTeamDetailCsv(
         data.teamName,
@@ -477,13 +477,13 @@ export default function PayrollSummary() {
 
   const weekEnd = useMemo(() => fmt(addDays(new Date(weekStart + "T00:00:00"), 6)), [weekStart]);
 
-  const { data, isLoading, error } = trpc.teamPay.getPayrollSummary.useQuery({ weekStart });
+  const { data, isLoading, error } = trpc.teamPay.getLegacyPayrollSummary.useQuery({ weekStart });
   const {
     mutate: loadTeamDetail,
     data: teamDetail,
     isPending: isTeamDetailLoading,
-  } = trpc.teamPay.getTeamDetail.useMutation();
-  const { mutateAsync: loadWorkbookTeamDetail } = trpc.teamPay.getTeamDetail.useMutation();
+  } = trpc.teamPay.getLegacyTeamDetail.useMutation();
+  const { mutateAsync: loadWorkbookTeamDetail } = trpc.teamPay.getLegacyTeamDetail.useMutation();
   const [isWorkbookDownloading, setIsWorkbookDownloading] = useState(false);
 
   const rows = data?.rows ?? [];
