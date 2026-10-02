@@ -568,6 +568,7 @@ export default function Book() {
           </div>
         </aside>
         <section className="booking-review-stage">
+          {step === 1 && <BookingTeleprompter />}
           <div
             className={`booking-review-card${step === 1 ? " booking-review-card--service" : step === 3 ? " booking-review-card--condition" : ""}`}
           >
@@ -751,6 +752,141 @@ export default function Book() {
         </section>
       </section>
     </main>
+  );
+}
+
+function BookingTeleprompter() {
+  const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
+  const [line, setLine] = useState(0);
+  const [questionOpen, setQuestionOpen] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const faq = trpc.bookingFunnel.answerFaq.useMutation();
+  const lines = [
+    "Absolutely — I can help you get that set up. Let me first make sure we choose the right cleaning.",
+    "Is this more of a routine cleaning, does the home need a deeper reset, or are you moving in or out?",
+  ];
+
+  useEffect(() => {
+    if (mode !== "auto") return;
+    const timer = window.setInterval(() => {
+      setLine(current => (current + 1) % lines.length);
+    }, 5200);
+    return () => window.clearInterval(timer);
+  }, [mode, lines.length]);
+
+  const askFaq = async () => {
+    const trimmed = question.trim();
+    if (trimmed.length < 2 || faq.isPending) return;
+    const result = await faq.mutateAsync({ question: trimmed });
+    setAnswer(result.answer);
+  };
+
+  return (
+    <section className="booking-teleprompter" aria-label="Live call script">
+      <header className="booking-teleprompter-head">
+        <div className="booking-teleprompter-title">
+          <span className="booking-teleprompter-dot" />
+          <div>
+            <strong>LIVE CALL · CLEANING TYPE</strong>
+            <span>Conversation follows the booking</span>
+          </div>
+        </div>
+        <div className="booking-teleprompter-controls">
+          {(["full", "manual", "auto"] as const).map(option => (
+            <button
+              key={option}
+              type="button"
+              className={mode === option ? "active" : ""}
+              onClick={() => {
+                setMode(option);
+                setLine(0);
+              }}
+            >
+              {option[0].toUpperCase() + option.slice(1)}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="booking-teleprompter-question-button"
+            onClick={() => setQuestionOpen(open => !open)}
+          >
+            <Sparkles /> Customer asked a question
+          </button>
+        </div>
+      </header>
+      <div
+        className={`booking-teleprompter-body booking-teleprompter-body--${mode}`}
+      >
+        {mode === "full" ? (
+          <>
+            <div className="booking-teleprompter-label">
+              ✦ CALL SCRIPT · CLEANING TYPE
+            </div>
+            <p>
+              “Absolutely — I can help you get that set up. Let me first make
+              sure we choose the right cleaning.{" "}
+              <strong>
+                Is this more of a routine cleaning, does the home need a deeper
+                reset, or are you moving in or out?
+              </strong>
+              ”
+            </p>
+          </>
+        ) : (
+          <p>{lines[line]}</p>
+        )}
+      </div>
+      {mode === "manual" && (
+        <footer className="booking-teleprompter-footer">
+          <button
+            type="button"
+            onClick={() => setLine(current => Math.max(0, current - 1))}
+            disabled={line === 0}
+          >
+            Previous
+          </button>
+          <span>
+            {line + 1} of {lines.length}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setLine(current => Math.min(lines.length - 1, current + 1))
+            }
+            disabled={line === lines.length - 1}
+          >
+            Next
+          </button>
+        </footer>
+      )}
+      {questionOpen && (
+        <div className="booking-teleprompter-faq">
+          <label htmlFor="booking-customer-question">
+            Ask the FAQ assistant
+          </label>
+          <div>
+            <input
+              id="booking-customer-question"
+              value={question}
+              onChange={event => setQuestion(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") void askFaq();
+              }}
+              placeholder="Type the customer’s question"
+            />
+            <button
+              type="button"
+              onClick={() => void askFaq()}
+              disabled={faq.isPending || question.trim().length < 2}
+            >
+              {faq.isPending ? "Thinking…" : "Ask"}
+            </button>
+          </div>
+          {answer && <p>{answer}</p>}
+        </div>
+      )}
+    </section>
   );
 }
 

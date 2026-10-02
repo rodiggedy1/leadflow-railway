@@ -2931,3 +2931,211 @@ button.booking-card-acceptance-submit:disabled {
     display: none;
   }
 }
+
+/* Additive Page 1 live-call teleprompter; booking controls remain unchanged. */
+.booking-teleprompter {
+  max-width: 1440px;
+  margin: 0 auto 18px;
+  overflow: hidden;
+  border: 1px solid #3b3a34;
+  border-radius: 20px;
+  background: #1b1c18;
+  color: #f1efe8;
+  box-shadow: 0 16px 34px rgba(23, 22, 19, 0.12);
+}
+.booking-teleprompter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 78px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #363630;
+}
+.booking-teleprompter-title {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 230px;
+}
+.booking-teleprompter-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: #e1b963;
+}
+.booking-teleprompter-title div {
+  display: grid;
+  gap: 4px;
+}
+.booking-teleprompter-title strong,
+.booking-teleprompter-label {
+  color: #e1b963;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+.booking-teleprompter-title span:last-child {
+  color: #aaa9a2;
+  font-size: 14px;
+}
+.booking-teleprompter-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  flex-wrap: wrap;
+}
+.booking-teleprompter-controls > button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid #494840;
+  background: #1b1c18;
+  color: #efede6;
+  font-size: 14px;
+  cursor: pointer;
+}
+.booking-teleprompter-controls > button:first-child {
+  border-radius: 9px 0 0 9px;
+}
+.booking-teleprompter-controls > button:nth-child(3) {
+  border-radius: 0 9px 9px 0;
+}
+.booking-teleprompter-controls > button.active {
+  border-color: #e1b963;
+  background: #e1b963;
+  color: #171613;
+}
+.booking-teleprompter-controls > .booking-teleprompter-question-button {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  margin-left: 14px;
+  border-radius: 9px;
+  color: #e1b963;
+}
+.booking-teleprompter-question-button svg {
+  width: 16px;
+}
+.booking-teleprompter-body {
+  min-height: 150px;
+  padding: 24px 28px 28px;
+}
+.booking-teleprompter-body--full {
+  min-height: 175px;
+}
+.booking-teleprompter-body--manual,
+.booking-teleprompter-body--auto {
+  display: flex;
+  align-items: center;
+}
+.booking-teleprompter-label {
+  margin-bottom: 15px;
+}
+.booking-teleprompter-body p {
+  max-width: 1160px;
+  margin: 0;
+  color: #f1efe8;
+  font-size: clamp(20px, 2vw, 30px);
+  font-weight: 500;
+  line-height: 1.32;
+}
+.booking-teleprompter-body--manual p,
+.booking-teleprompter-body--auto p {
+  font-size: clamp(22px, 2.2vw, 32px);
+}
+.booking-teleprompter-body strong {
+  font-weight: 700;
+}
+.booking-teleprompter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid #363630;
+  color: #aaa9a2;
+  font-size: 13px;
+}
+.booking-teleprompter-footer button {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid #494840;
+  border-radius: 8px;
+  background: transparent;
+  color: #efede6;
+  cursor: pointer;
+}
+.booking-teleprompter-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.booking-teleprompter-faq {
+  display: grid;
+  gap: 9px;
+  padding: 15px 20px 18px;
+  border-top: 1px solid #363630;
+  background: #20211c;
+}
+.booking-teleprompter-faq label {
+  color: #e1b963;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.booking-teleprompter-faq > div {
+  display: flex;
+  gap: 8px;
+}
+.booking-teleprompter-faq input {
+  min-width: 0;
+  flex: 1;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #494840;
+  border-radius: 8px;
+  background: #151613;
+  color: #f1efe8;
+}
+.booking-teleprompter-faq button {
+  min-width: 70px;
+  border: 0;
+  border-radius: 8px;
+  background: #e1b963;
+  color: #171613;
+  font-weight: 800;
+  cursor: pointer;
+}
+.booking-teleprompter-faq button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.booking-teleprompter-faq > p {
+  max-width: 900px;
+  margin: 2px 0 0;
+  color: #f1efe8;
+  font-size: 15px;
+  line-height: 1.45;
+}
+@media (max-width: 760px) {
+  .booking-teleprompter-head {
+    display: grid;
+  }
+  .booking-teleprompter-controls {
+    justify-content: flex-start;
+  }
+  .booking-teleprompter-controls > .booking-teleprompter-question-button {
+    margin: 10px 0 0;
+  }
+  .booking-teleprompter-body {
+    min-height: 145px;
+    padding: 20px;
+  }
+  .booking-teleprompter-body--full {
+    min-height: 170px;
+  }
+  .booking-teleprompter-body p {
+    font-size: 21px;
+  }
+}

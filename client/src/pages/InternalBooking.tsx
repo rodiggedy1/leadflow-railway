@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  Clipboard,
   ChevronRight,
   Clock3,
   CreditCard,
@@ -309,6 +310,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   >({});
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scriptCopied, setScriptCopied] = useState(false);
   const [createdBooking, setCreatedBooking] = useState<{
     bookingId: number;
     publicBookingNumber: string;
@@ -506,6 +508,37 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     pricingMode === "hourly"
       ? `${maidCount} maids · ${hourCount} hours`
       : `${bedrooms === 0 ? "Studio" : `${bedrooms} bed`} · ${bathrooms} bath · ${homeType}`;
+  const customerFirstName =
+    customerName.trim().split(/\s+/).filter(Boolean)[0] || "there";
+  const selectedTimeLabel =
+    TIMES.find(value => value === time) === "08:30"
+      ? "8:30 AM"
+      : TIMES.find(value => value === time) === "11:00"
+        ? "11:00 AM"
+        : TIMES.find(value => value === time) === "13:30"
+          ? "1:30 PM"
+          : TIMES.find(value => value === time) === "16:30"
+            ? "4:30 PM"
+            : time || "your selected time";
+  const selectedExtrasScript = selectedExtras
+    .map(([, extra]) => extra.label)
+    .join(", ");
+  const homeScript =
+    pricingMode === "hourly"
+      ? `${maidCount}-maid, ${hourCount}-hour cleaning`
+      : `${bedrooms === 0 ? "studio" : `${bedrooms}-bedroom`}, ${bathrooms}-bathroom ${homeType.toLowerCase()} home`;
+  const recurrenceScript = label(frequency);
+  const customerScript = [
+    `Alright ${customerFirstName}, let me make sure I have everything right.`,
+    `You're scheduled for a ${serviceName} for your ${homeScript} on ${dateLabel(date)}.`,
+    `Your arrival window is ${selectedTimeLabel} to ${selectedTimeLabel === "8:30 AM" ? "10:30 AM" : selectedTimeLabel === "11:00 AM" ? "1:00 PM" : selectedTimeLabel === "1:30 PM" ? "3:30 PM" : selectedTimeLabel === "4:30 PM" ? "6:30 PM" : "the end of the arrival window"}.`,
+    selectedExtrasScript ? `We're also adding ${selectedExtrasScript}.` : "",
+    frequency === "one-time"
+      ? `Your cleaning total is ${money(pricing.firstCleaningTotalCents)}.`
+      : `Your first cleaning is ${money(pricing.firstCleaningTotalCents)}, and your ${recurrenceScript.toLowerCase()} cleanings after that will be ${money(pricing.futureVisitTotalCents ?? pricing.firstCleaningTotalCents)}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const stepContent =
     step === 1 ? (
       <>
@@ -1211,6 +1244,33 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </button>
             </article>
           </div>
+          <section
+            className="customer-script-card"
+            aria-label="Customer script"
+          >
+            <div className="customer-script-heading">
+              <div>
+                <span className="eyebrow">CUSTOMER SCRIPT</span>
+                <h3>Ready to read or text</h3>
+              </div>
+              <button
+                type="button"
+                className="customer-script-copy"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(customerScript);
+                  setScriptCopied(true);
+                  window.setTimeout(() => setScriptCopied(false), 1800);
+                }}
+              >
+                <Clipboard size={14} /> {scriptCopied ? "Copied" : "Copy script"}
+              </button>
+            </div>
+            <p>{customerScript}</p>
+            <small>
+              Uses the current booking details, arrival window, extras, and live
+              pricing.
+            </small>
+          </section>
           <div className="confirmation-panel">
             <img src={deepKitchen} alt="Clean home interior" />
             <h3>You&apos;re almost all set!</h3>

@@ -2027,6 +2027,51 @@
   font-weight: 400;
   line-height: 1.35;
 }
+.customer-script-card {
+  grid-column: 1 / -1;
+  padding: 15px;
+  border: 1px solid rgba(226, 199, 109, 0.42);
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(47, 42, 28, 0.9), #151c21);
+}
+.customer-script-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.customer-script-heading h3 {
+  margin: 5px 0 0;
+  font-size: 16px;
+}
+.customer-script-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  border: 1px solid #7f6a34;
+  border-radius: 8px;
+  color: #f5d777;
+  background: rgba(226, 199, 109, 0.1);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.customer-script-copy:hover {
+  background: rgba(226, 199, 109, 0.2);
+}
+.customer-script-card > p {
+  margin: 12px 0 0;
+  color: #f0eee7;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.customer-script-card > small {
+  display: block;
+  margin-top: 9px;
+  color: #aeb6b6;
+  font-size: 10px;
+}
 .page8-view ~ .actions .continue-button {
   min-width: 190px;
 }
