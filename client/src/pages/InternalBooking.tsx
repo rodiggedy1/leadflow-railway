@@ -712,7 +712,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   };
   const shellClass = `${
     onClose ? "internal-booking-modal-shell" : "internal-booking-shell"
-  }${step === 1 ? " page1-review-surface" : ""}`;
+  } review-booking-shell`;
 
   if (success)
     return (
@@ -784,7 +784,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const stepContent =
     step === 1 ? (
       <>
-        <BookingTeleprompter />
         <div className="review-page1-header">
           <div className="eyebrow">STEP 1 OF 9</div>
           <h2>What kind of cleaning do they need?</h2>
@@ -1609,26 +1608,14 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ×
         </button>
       )}
-      <div className="review-badge">
-        REVIEW ONLY · SAMPLE DATA · PAGE {step} OF 9
-      </div>
-      <section className="internal-booking-frame app-shell">
-        <aside className="internal-booking-progress sidebar panel">
-          <button
-            type="button"
-            className="back-link"
-            onClick={() => (onClose ? onClose() : navigate("/admin/bookings"))}
-          >
-            <span>←</span> Back to bookings
-          </button>
-          <div className="brand-block">
-            <div className="eyebrow">INTERNAL BOOKING</div>
-            <h1>New Booking</h1>
-            <p>
-              Create a booking while on the phone or in chat with the customer.
-            </p>
+      <section className="review-app">
+        <aside className="review-left">
+          <div className="eyebrow">INTERNAL BOOKING</div>
+          <h2>New booking</h2>
+          <div className="review-muted">
+            Create a booking while on the phone or in chat with the customer.
           </div>
-          <nav className="steps" aria-label="Booking steps">
+          <nav className="review-steps" aria-label="Booking steps">
             {STEPS.map((title, index) => {
               const number = index + 1;
               const reviewTitle =
@@ -1641,45 +1628,36 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 <button
                   type="button"
                   key={title}
-                  className={`step${number === step ? " active" : ""}`}
+                  className={`review-step${number === step ? " active" : ""}${number < step ? " done" : ""}`}
                   onClick={() => number <= step && setStep(number as Step)}
                 >
-                  <b>{number}</b>
+                  <span className="review-step-number">{number}</span>
                   <span>{reviewTitle}</span>
                 </button>
               );
             })}
           </nav>
-          <div className="autosave">
-            <span className="spark">✦</span>
-            <div>
-              <strong>Auto-save enabled</strong>
-              <small>Draft saved 12s ago</small>
-            </div>
-          </div>
         </aside>
-        <section className="internal-booking-stage content panel">
-          <div className="internal-step-content">{stepContent}</div>
+        <section className="review-main">
+          <BookingTeleprompter />
+          <div className="review-step-content">{stepContent}</div>
           {error && (
-            <div className="form-error" role="alert">
+            <div className="form-error review-error" role="alert">
               {error}
             </div>
           )}
-          <footer className="internal-step-actions actions">
+          <footer className="review-footer">
             <button
               type="button"
-              className="internal-back-button back-button"
+              className="review-button"
               onClick={back}
               disabled={step === 1 || createBooking.isPending}
             >
-              <ArrowLeft /> Back
+              ← Back
             </button>
-            <span>
-              <Heart /> A cleaner, happier home is just a few steps away.
-            </span>
             <button
               type="button"
-              className="internal-next-button continue-button"
+              className="review-button review-button-gold"
               onClick={next}
               disabled={
                 createBooking.isPending ||
@@ -1689,38 +1667,28 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 (step === 7 && paymentMethod === "card" && !!createdBooking)
               }
             >
-              {createBooking.isPending || startCardSetup.isPending ? (
-                "Preparing card…"
-              ) : confirmCardSetup.isPending ? (
-                "Saving card…"
-              ) : updateAdditionalServices.isPending ? (
-                "Updating booking…"
-              ) : step === 9 ? (
-                <>
-                  <Check /> Create booking
-                </>
-              ) : (
-                <>
-                  Continue <ArrowRight />
-                </>
-              )}
+              {createBooking.isPending || startCardSetup.isPending
+                ? "Preparing card…"
+                : confirmCardSetup.isPending
+                  ? "Saving card…"
+                  : updateAdditionalServices.isPending
+                    ? "Updating booking…"
+                    : step === 9
+                      ? "Create booking →"
+                      : "Continue →"}
             </button>
           </footer>
         </section>
-        <aside className="internal-booking-right-rail right-rail">
-          <section className="internal-booking-summary-card summary">
-            <div className="internal-summary-head summary-head">
-              <div>
-                <h2>Booking summary</h2>
-                <span>Estimated first cleaning</span>
-              </div>
-              <strong>
-                {money(
-                  pricing.firstCleaningTotalCents + additionalServicesTotalCents
-                )}
-              </strong>
+        <aside className="review-right">
+          <section className="review-box">
+            <div className="review-eyebrow">BOOKING SUMMARY</div>
+            <div className="review-price">
+              {money(
+                pricing.firstCleaningTotalCents + additionalServicesTotalCents
+              )}
             </div>
-            <div className="internal-summary-list summary-list">
+            <div className="review-muted">Estimated first cleaning</div>
+            <div className="review-summary-rows">
               <div>
                 <span>Cleaning</span>
                 <b>{serviceName}</b>
@@ -1742,35 +1710,9 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   Edit
                 </button>
               </div>
-              <div>
-                <span>Condition</span>
-                <b>{condition}/10</b>
-                <button type="button" onClick={() => setStep(3)}>
-                  Edit
-                </button>
-              </div>
-              <div>
-                <span>Frequency</span>
-                <b>{label(frequency)}</b>
-                <button type="button" onClick={() => setStep(2)}>
-                  Edit
-                </button>
-              </div>
-              {additionalServicesTotalCents > 0 && (
-                <div>
-                  <span>Additional services</span>
-                  <b>{money(additionalServicesTotalCents)}</b>
-                  <button type="button" onClick={() => setStep(9)}>
-                    Edit
-                  </button>
-                </div>
-              )}
             </div>
             {pricing.futureVisitTotalCents !== null && (
-              <button
-                className="internal-breakdown-button breakdown"
-                type="button"
-              >
+              <div className="review-frequency">
                 <span>{label(frequency)} after visit one</span>
                 <b>
                   {money(
@@ -1778,39 +1720,21 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   )}{" "}
                   / visit
                 </b>
-              </button>
+              </div>
             )}
           </section>
-          <section className="internal-booking-notes-card notes">
-            <h3>✦ AI Booking Notes</h3>
+          <section className="review-box review-notes">
+            <div className="review-eyebrow">BOOKING NOTES</div>
             <textarea
               id="internal-company-notes"
+              rows={10}
               value={notes}
               onChange={event => setNotes(event.target.value)}
-              placeholder="Type notes from the customer call... (e.g. pets, specific areas, access requests)"
+              placeholder="Add notes for the cleaning team or internal staff…"
             />
-            <button
-              type="button"
-              className="internal-add-note-button add-note"
-              onClick={() =>
-                document.getElementById("internal-company-notes")?.focus()
-              }
-            >
-              + Add note
-            </button>
-            <p>
-              These notes stay with the booking and are visible to the team.
-            </p>
-          </section>
-          <section className="internal-booking-tips-card tips">
-            <h3>Booking tips</h3>
-            <ul>
-              <li>Confirm the arrival window with the customer.</li>
-              <li>Ask about pets, parking, and access before booking.</li>
-              <li>
-                Card payments are saved securely and charged after service.
-              </li>
-            </ul>
+            <div className="review-muted">
+              These notes will stay with the booking.
+            </div>
           </section>
         </aside>
       </section>
