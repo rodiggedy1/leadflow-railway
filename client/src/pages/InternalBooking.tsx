@@ -242,6 +242,7 @@ function BookingTeleprompter({
   const [questionOpen, setQuestionOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [priceConcernOpen, setPriceConcernOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
@@ -253,8 +254,8 @@ function BookingTeleprompter({
       return [
         ...base,
         futureTotal
-          ? `For this ${serviceName} on your ${homeDetail}, your first cleaning is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit, so it would be ${futureTotal} per visit. Would you like to continue with the option you selected, or would you prefer recurring service?`
-          : `For this ${serviceName} on your ${homeDetail}, your cleaning total is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit. Would you like to continue with the option you selected, or would you prefer recurring service?`,
+          ? `For this ${serviceName} on your ${homeDetail}, your first cleaning is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit, so it would be ${futureTotal} per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`
+          : `For this ${serviceName} on your ${homeDetail}, your cleaning total is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`,
       ];
     }
     if (step !== 9) return base;
@@ -406,6 +407,18 @@ function BookingTeleprompter({
                     “{lines[0]} {lines[1]}”
                   </div>
                 </>
+              ) : step === 4 ? (
+                <>
+                  <div className="fullCopy">
+                    “{lines[0]} {lines[1]}”
+                  </div>
+                  <div className="quote-after-extras-label">
+                    QUOTE AFTER YOU SELECT EXTRAS
+                  </div>
+                  <div className="fullCopy quote-after-extras-copy">
+                    {lines.slice(2).join(" ")}
+                  </div>
+                </>
               ) : (
                 <div className="fullCopy">
                   “{lines[0]} {lines.slice(1).join(" ")}”
@@ -465,6 +478,56 @@ function BookingTeleprompter({
         >
           Client doesn’t want to give card
         </button>
+      )}
+      {step === 4 && (
+        <>
+          <button
+            type="button"
+            className="price-concern-link"
+            onClick={() => setPriceConcernOpen(true)}
+          >
+            What to say if caller doesn’t like the price
+          </button>
+          {priceConcernOpen && (
+            <div
+              className="price-concern-shade"
+              role="presentation"
+              onClick={() => setPriceConcernOpen(false)}
+            >
+              <div
+                className="price-concern-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="price-concern-title"
+                onClick={event => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="price-concern-close"
+                  aria-label="Close price concern script"
+                  onClick={() => setPriceConcernOpen(false)}
+                >
+                  ×
+                </button>
+                <div className="ey">PRICE CONCERN</div>
+                <h2 id="price-concern-title">
+                  What to say if caller doesn’t like the price
+                </h2>
+                <p>
+                  I totally understand. A few things are baked into that
+                  number: the size and condition of the home, the extras you
+                  picked, and a fully background-checked, insured team. If
+                  you&apos;d like to bring it down, we could remove extras, or
+                  recurring service drops the per-visit price by 15%. Which
+                  would you rather do?
+                </p>
+                <div className="price-concern-note">
+                  Still didn’t like the price? Offer a 10% first-time discount.
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
       {questionOpen && (
         <div className="booking-teleprompter-faq">

@@ -4692,6 +4692,86 @@
 .review-booking-shell .left::-webkit-scrollbar,
 .review-booking-shell .right::-webkit-scrollbar { display: none; }
 .review-booking-shell .right textarea { color: #fff; }
+.review-booking-shell .quote-after-extras-label {
+  margin: 16px 0 9px;
+  padding-top: 13px;
+  border-top: 1px solid #34352f;
+  color: var(--gold2);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+.review-booking-shell .quote-after-extras-copy { line-height: 1.45; }
+.review-booking-shell .price-concern-link {
+  display: block;
+  margin: 10px 18px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gold2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.review-booking-shell .price-concern-link:hover { color: #fff; }
+.review-booking-shell .price-concern-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.68);
+}
+.review-booking-shell .price-concern-modal {
+  position: relative;
+  width: min(560px, calc(100vw - 40px));
+  padding: 26px;
+  border: 1px solid #5a5541;
+  border-radius: 16px;
+  background: #171815;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.7);
+}
+.review-booking-shell .price-concern-modal h2 {
+  margin: 16px 42px 12px 0;
+  color: #fff;
+  font-size: 20px;
+}
+.review-booking-shell .price-concern-modal p {
+  margin: 0;
+  color: #f4f1e8;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.review-booking-shell .price-concern-note {
+  margin-top: 18px;
+  padding: 11px 13px;
+  border-left: 3px solid var(--gold2);
+  border-radius: 0 8px 8px 0;
+  background: rgba(225, 185, 99, 0.1);
+  color: var(--gold2);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.review-booking-shell .price-concern-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #44463f;
+  border-radius: 50%;
+  background: #22231f;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.review-booking-shell .price-concern-close:hover { border-color: var(--gold); }
 .review-booking-shell .booking-teleprompter-faq { padding: 12px 18px; border-top: 1px solid #34332d; }
 .review-booking-shell .booking-teleprompter-faq > div { display: flex; gap: 8px; margin-top: 8px; }
 .review-booking-shell .booking-teleprompter-faq input { flex: 1; min-width: 0; padding: 9px; border: 1px solid #41423b; border-radius: 8px; background: #11120f; color: #fff; }
