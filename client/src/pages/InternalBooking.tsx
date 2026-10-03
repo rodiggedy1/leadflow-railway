@@ -160,6 +160,12 @@ function timeLabel(value: string) {
   const suffix = hour >= 12 ? "PM" : "AM";
   return `${hour % 12 || 12}:${match[2]} ${suffix}`;
 }
+function formatPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
 
 const TELE_LINES: Record<Step, string[]> = {
   1: [
@@ -189,6 +195,7 @@ const TELE_LINES: Record<Step, string[]> = {
     "Great. Before I finish this up, let me confirm where we’re sending everything.",
     "What’s your name, and what’s the best mobile number, email address, and service address for the appointment?",
     "We’ll use the mobile number for confirmations, appointment updates, and arrival notifications.",
+    "Two quick things so the day goes smoothly. Any pets in the home? And will someone be there, or will we need a key or lockbox code?",
   ],
   8: [
     "Perfect. The last thing we’ll do is put a card on file. Nothing is charged until after your cleaning is completed. It keeps our teams from having to travel with cash and makes payment easy for you once the job is done. Whenever you’re ready, I can take the card number.",
@@ -245,6 +252,7 @@ function BookingTeleprompter({
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [priceConcernOpen, setPriceConcernOpen] = useState(false);
+  const [cardRefusalOpen, setCardRefusalOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
@@ -488,15 +496,62 @@ function BookingTeleprompter({
         </div>
       )}
       {step === 8 && (
-        <button
-          type="button"
-          className="card-refusal-link"
-          onClick={() =>
-            window.dispatchEvent(new Event("internal-card-refusal"))
-          }
-        >
-          Client doesn’t want to give card
-        </button>
+        <>
+          <button
+            type="button"
+            className="card-refusal-link"
+            onClick={() => setCardRefusalOpen(true)}
+          >
+            Client doesn’t want to give card
+          </button>
+          {cardRefusalOpen && (
+            <div
+              className="card-refusal-shade open"
+              onClick={() => setCardRefusalOpen(false)}
+            >
+              <aside
+                className="card-refusal-modal open"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="card-refusal-title"
+                onClick={event => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="question-close"
+                  aria-label="Close card response"
+                  onClick={() => setCardRefusalOpen(false)}
+                >
+                  ×
+                </button>
+                <div className="ey">✦ CARD RESPONSE</div>
+                <h2 id="card-refusal-title">
+                  Client doesn’t want to give card
+                </h2>
+                <p className="card-refusal-copy">
+                  <strong>Reassure:</strong> Note, your card number is not
+                  stored anywhere, and nothing is charged until after the
+                  cleaning is done. Our system is managed securely by Stripe
+                  and your card is never stored anywhere. We&apos;ve been paying
+                  with cards for over 10 years with zero issues.
+                </p>
+                <p className="card-refusal-copy">
+                  If you&apos;d rather not read it out over the phone, I can text
+                  you a secure link to add it yourself. We just need it on
+                  file before the appointment is confirmed.
+                </p>
+                <button
+                  type="button"
+                  className="btn gold"
+                  style={{ marginTop: 18 }}
+                  onClick={() => setCardRefusalOpen(false)}
+                >
+                  Return to call
+                </button>
+              </aside>
+            </div>
+          )}
+        </>
       )}
       {step === 4 && (
         <>
@@ -1343,8 +1398,8 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             className="field"
             required
             value={customerPhone}
-            onChange={event => setCustomerPhone(event.target.value)}
-            placeholder="(302) 981-6192"
+            onChange={event => setCustomerPhone(formatPhoneNumber(event.target.value))}
+            placeholder="302-981-6192"
           />
         </div>
         <div className="card">
