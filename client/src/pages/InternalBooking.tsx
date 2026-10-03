@@ -226,6 +226,8 @@ function BookingTeleprompter({
   firstTotal,
   futureTotal,
   frequencyText,
+  arrivalWindowA,
+  arrivalWindowB,
 }: {
   step: Step;
   serviceName: string;
@@ -234,6 +236,8 @@ function BookingTeleprompter({
   firstTotal: string;
   futureTotal: string | null;
   frequencyText: string;
+  arrivalWindowA: string | null;
+  arrivalWindowB: string | null;
 }) {
   const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
   const [line, setLine] = useState(0);
@@ -250,6 +254,11 @@ function BookingTeleprompter({
   const faq = trpc.bookingFunnel.answerFaq.useMutation();
   const lines = useMemo(() => {
     const base = TELE_LINES[step];
+    if (step === 6) {
+      return [
+        `I have ${arrivalWindowA ?? "the recommended window"} or ${arrivalWindowB ?? "the second-best window"} open that day. The team arrives anytime within the two-hour window you choose. Which works better?`,
+      ];
+    }
     if (step === 4) {
       return [
         ...base,
@@ -276,6 +285,8 @@ function BookingTeleprompter({
     firstTotal,
     futureTotal,
     frequencyText,
+    arrivalWindowA,
+    arrivalWindowB,
   ]);
   const stopAutoPlay = () => {
     setPlaying(false);
@@ -392,7 +403,10 @@ function BookingTeleprompter({
           </button>
         </div>
       </div>
-      <div className="televiewport" ref={scrollRef}>
+      <div
+        className={`televiewport${step === 4 ? " televiewport-step-4" : ""}`}
+        ref={scrollRef}
+      >
         <div
           className={`teleScript ${mode === "full" ? "fullMode" : mode === "manual" ? "manualLine" : ""}`}
         >
@@ -781,6 +795,25 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         ? candidate
         : best
     );
+  }, [
+    standardTimeCounts,
+    standardTimeCountsQuery.isError,
+    standardTimeCountsQuery.isFetching,
+    standardTimeCountsQuery.isLoading,
+  ]);
+  const secondBestStandardTime = useMemo(() => {
+    if (
+      standardTimeCountsQuery.isLoading ||
+      standardTimeCountsQuery.isFetching ||
+      standardTimeCountsQuery.isError
+    )
+      return null;
+    const ranked = [...RECOMMENDABLE_STANDARD_TIMES].sort((a, b) => {
+      const countDifference =
+        (standardTimeCounts.get(a) ?? 0) - (standardTimeCounts.get(b) ?? 0);
+      return countDifference || RECOMMENDABLE_STANDARD_TIMES.indexOf(a) - RECOMMENDABLE_STANDARD_TIMES.indexOf(b);
+    });
+    return ranked[1] ?? null;
   }, [
     standardTimeCounts,
     standardTimeCountsQuery.isError,
@@ -1585,12 +1618,20 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   )
             }
             frequencyText={label(frequency)}
+            arrivalWindowA={
+              recommendedStandardTime ? timeLabel(recommendedStandardTime) : null
+            }
+            arrivalWindowB={
+              secondBestStandardTime ? timeLabel(secondBestStandardTime) : null
+            }
           />
-          <div className={`pagehead pagehead-step-${step}`}>
-            <div className="ey">STEP {step} OF 10</div>
-            <h1>{pageTitles[step - 1]}</h1>
-            <div className="muted">{pageLeads[step - 1]}</div>
-          </div>
+          {step !== 4 && (
+            <div className={`pagehead pagehead-step-${step}`}>
+              <div className="ey">STEP {step} OF 10</div>
+              <h1>{pageTitles[step - 1]}</h1>
+              <div className="muted">{pageLeads[step - 1]}</div>
+            </div>
+          )}
           <div className="step-content">{stepContent}</div>
           {error && (
             <div className="form-error error" role="alert">

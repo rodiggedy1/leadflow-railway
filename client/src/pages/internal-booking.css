@@ -5028,6 +5028,7 @@
   padding-top: 14px;
   padding-bottom: 8px;
 }
+.review-booking-shell .televiewport-step-4 { height: 300px; }
 .review-booking-shell .footer {
   position: static;
   z-index: auto;
