@@ -5049,16 +5049,16 @@
 .schedule-calendar-popover .rdp-disabled { opacity: .3; }
 .schedule-calendar-popover .rdp-button_previous,
 .schedule-calendar-popover .rdp-button_next { color: #e8c36f; }
-.review-booking-shell .schedule-time-options { display: grid; gap: 8px; margin-top: 8px; padding: 10px 0 2px; border-top: 1px solid rgba(255,255,255,.12); }
-.review-booking-shell .schedule-time-options > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
-.review-booking-shell .schedule-time-options > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.review-booking-shell .schedule-time-options button { min-height: 38px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: #121311; color: #f3f0e8; font-size: 14px; font-weight: 700; cursor: pointer; }
-.review-booking-shell .schedule-time-options button:hover { border-color: #e8c36f; background: rgba(232,195,111,.12); }
-.review-booking-shell .schedule-time-options button.selected { border-color: #e8c36f; background: #e8c36f; color: #171816; }
-.review-booking-shell .manual-time-field { display: grid; gap: 7px; margin-top: 10px; padding: 13px 15px; border: 1px solid rgba(232,195,111,.35); border-radius: 12px; background: #1c1d19; }
-.review-booking-shell .schedule-popover-time-field { margin-top: 6px; }
-.review-booking-shell .manual-time-field > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
-.review-booking-shell .manual-time-field input { width: 100%; min-height: 45px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; background: #121311; color: #f3f0e8; font-size: 18px; }
-.review-booking-shell .manual-time-field input:focus { border-color: #e8c36f; outline: none; box-shadow: 0 0 0 3px rgba(232,195,111,.14); }
-.review-booking-shell .manual-time-field small { color: #aaa9a2; font-size: 12px; }
+.schedule-calendar-popover .schedule-time-options { display: grid; gap: 8px; margin-top: 8px; padding: 10px 0 2px; border-top: 1px solid rgba(255,255,255,.12); }
+.schedule-calendar-popover .schedule-time-options > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.schedule-calendar-popover .schedule-time-options > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.schedule-calendar-popover .schedule-time-options button { display: block; width: 100%; min-height: 38px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: #121311; color: #f3f0e8; font-size: 14px; font-weight: 700; cursor: pointer; }
+.schedule-calendar-popover .schedule-time-options button:hover { border-color: #e8c36f; background: rgba(232,195,111,.12); }
+.schedule-calendar-popover .schedule-time-options button.selected { border-color: #e8c36f; background: #e8c36f; color: #171816; }
+.schedule-calendar-popover .manual-time-field { display: grid; gap: 7px; margin-top: 10px; padding: 13px 15px; border: 1px solid rgba(232,195,111,.35); border-radius: 12px; background: #1c1d19; }
+.schedule-calendar-popover .schedule-popover-time-field { margin-top: 6px; }
+.schedule-calendar-popover .manual-time-field > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.schedule-calendar-popover .manual-time-field input { width: 100%; min-height: 45px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; background: #121311; color: #f3f0e8; font-size: 18px; }
+.schedule-calendar-popover .manual-time-field input:focus { border-color: #e8c36f; outline: none; box-shadow: 0 0 0 3px rgba(232,195,111,.14); }
+.schedule-calendar-popover .manual-time-field small { color: #aaa9a2; font-size: 12px; }
 @media (max-width: 640px) { .schedule-calendar-popover { width: min(350px, calc(100vw - 28px)); } }
