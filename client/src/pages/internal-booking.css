@@ -5043,10 +5043,18 @@
 .schedule-calendar-popover .rdp-weekday { color: #aaa9a2; }
 .schedule-calendar-popover .rdp-day_button { color: #f3f0e8; border-radius: 9px; }
 .schedule-calendar-popover .rdp-day_button:hover { background: rgba(232,195,111,.18); }
+.schedule-calendar-popover .rdp-today { background: transparent !important; color: inherit !important; }
+.schedule-calendar-popover .rdp-today .rdp-day_button { background: transparent !important; color: #f3f0e8 !important; }
 .schedule-calendar-popover [data-selected-single="true"] { background: #e8c36f !important; color: #171816 !important; }
 .schedule-calendar-popover .rdp-disabled { opacity: .3; }
 .schedule-calendar-popover .rdp-button_previous,
 .schedule-calendar-popover .rdp-button_next { color: #e8c36f; }
+.review-booking-shell .schedule-time-options { display: grid; gap: 8px; margin-top: 8px; padding: 10px 0 2px; border-top: 1px solid rgba(255,255,255,.12); }
+.review-booking-shell .schedule-time-options > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.review-booking-shell .schedule-time-options > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.review-booking-shell .schedule-time-options button { min-height: 38px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: #121311; color: #f3f0e8; font-size: 14px; font-weight: 700; cursor: pointer; }
+.review-booking-shell .schedule-time-options button:hover { border-color: #e8c36f; background: rgba(232,195,111,.12); }
+.review-booking-shell .schedule-time-options button.selected { border-color: #e8c36f; background: #e8c36f; color: #171816; }
 .review-booking-shell .manual-time-field { display: grid; gap: 7px; margin-top: 10px; padding: 13px 15px; border: 1px solid rgba(232,195,111,.35); border-radius: 12px; background: #1c1d19; }
 .review-booking-shell .schedule-popover-time-field { margin-top: 6px; }
 .review-booking-shell .manual-time-field > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }

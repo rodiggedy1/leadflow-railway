@@ -1067,10 +1067,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               <ChevronRight />
             </button>
           </PopoverTrigger>
-          <PopoverContent
-            align="center"
-            className="schedule-calendar-popover"
-          >
+          <PopoverContent align="center" className="schedule-calendar-popover">
             <Calendar
               mode="single"
               selected={parseEasternDate(date)}
@@ -1080,6 +1077,28 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 setDate(easternDateIsoFromDate(nextDate));
               }}
             />
+            <div
+              className="schedule-time-options"
+              role="group"
+              aria-label="Arrival time options"
+            >
+              <span>CHOOSE AN ARRIVAL TIME</span>
+              <div>
+                {TIMES.map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={time === value ? "selected" : ""}
+                    onClick={() => {
+                      setManualTime(true);
+                      setTime(value);
+                    }}
+                  >
+                    {timeLabel(value)}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="manual-time-field schedule-popover-time-field">
               <span>EXACT ARRIVAL TIME · EASTERN TIME</span>
               <input
