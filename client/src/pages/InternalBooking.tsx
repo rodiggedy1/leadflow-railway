@@ -646,8 +646,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     null
   );
   const [cardSaved, setCardSaved] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [step, success, createdBooking]);
 
   const selectedExtras = EXTRA_OPTIONS.filter(([id]) => (extras[id] ?? 0) > 0);
@@ -1345,7 +1347,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             })}
           </nav>
         </aside>
-        <main className="main">
+        <main ref={mainRef} className="main">
           <BookingTeleprompter
             step={step as Step}
             serviceName={serviceName}
