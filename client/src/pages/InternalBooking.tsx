@@ -1067,7 +1067,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               <ChevronRight />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="schedule-calendar-popover">
+          <PopoverContent
+            align="center"
+            side="bottom"
+            sideOffset={8}
+            avoidCollisions={false}
+            className="schedule-calendar-popover"
+          >
             <Calendar
               mode="single"
               selected={parseEasternDate(date)}
