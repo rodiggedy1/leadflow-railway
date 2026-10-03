@@ -4899,22 +4899,34 @@
 .review-booking-shell .televiewport {
   height: 205px;
 }
-/* Keep the action bar anchored at the bottom of the review surface. */
+/* Shared page-fit contract: content and action bar remain in normal flow. */
 .review-booking-shell .main {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+}
+.review-booking-shell .tele {
+  flex: 0 0 auto;
+}
+.review-booking-shell .pagehead,
+.review-booking-shell .step-content {
+  flex: 0 0 auto;
+}
+.review-booking-shell .teleScript.fullMode {
+  padding-top: 14px;
+  padding-bottom: 8px;
+}
+.review-booking-shell .footer {
+  position: static;
+  z-index: auto;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-bottom: 0;
+  background: transparent;
 }
 @media (max-height: 900px) {
   .review-booking-shell .main {
-    padding-bottom: 92px;
-  }
-  .review-booking-shell .footer {
-    position: absolute;
-    right: 38px;
-    bottom: 17px;
-    left: 38px;
-    z-index: 5;
-    margin-top: 0;
-    padding-bottom: 0;
+    padding-bottom: 27px;
   }
 }
 @media (max-width: 900px) {
