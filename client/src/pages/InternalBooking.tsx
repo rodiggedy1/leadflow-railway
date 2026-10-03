@@ -111,10 +111,10 @@ const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(
   CANONICAL_POST_BOOKING_UPSELLS
 ).map(([id, value]) => ({
   id,
-  title: value.title,
-  copy: value.copy,
+  title: value.label,
+  copy: value.quantityUnit,
   unitPriceCents: value.unitPriceCents,
-  quantityLabel: value.quantityLabel,
+  quantityLabel: value.quantityUnit,
   image:
     ADDITIONAL_SERVICE_IMAGES[id as keyof typeof ADDITIONAL_SERVICE_IMAGES],
 }));
@@ -475,7 +475,6 @@ function ChoiceCard({
 }) {
   return (
     <article
-      type="button"
       className={`service-card${selected ? " selected" : ""}`}
       onClick={onClick}
       role="button"
@@ -870,533 +869,282 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     .join(" ");
   const stepContent =
     step === 1 ? (
+      <div className="choices" role="group" aria-label="Cleaning type">
+        {SERVICES.map(value => (
+          <button
+            key={value}
+            type="button"
+            className={`choice${serviceId === value ? " on" : ""}`}
+            onClick={() => setServiceId(value)}
+          >
+            {value === "moveout"
+              ? "Move-out Cleaning"
+              : getPublicBookingServiceName(value)}
+          </button>
+        ))}
+      </div>
+    ) : step === 2 ? (
       <>
-        <div className="review-page1-header">
-          <div className="eyebrow">STEP 1 OF 9</div>
-          <h2>What kind of cleaning do they need?</h2>
-          <p className="subtitle">
-            Choose the service that best matches what the customer describes.
+        <div className="compact-selectors">
+          <div className="card compact-card">
+            <div className="label">Bedrooms</div>
+            <div className="big">{bedrooms === 0 ? "Studio" : bedrooms}</div>
+            <div className="choices">
+              <button
+                type="button"
+                className="choice"
+                disabled={bedrooms <= 0}
+                onClick={() => setBedrooms(Math.max(0, bedrooms - 1))}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="choice"
+                disabled={bedrooms >= 7}
+                onClick={() => setBedrooms(Math.min(7, bedrooms + 1))}
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div className="card compact-card">
+            <div className="label">Bathrooms</div>
+            <div className="big">{bathrooms}</div>
+            <div className="choices">
+              <button
+                type="button"
+                className="choice"
+                disabled={bathrooms <= 1}
+                onClick={() => setBathrooms(Math.max(1, bathrooms - 1))}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="choice"
+                disabled={bathrooms >= 5}
+                onClick={() => setBathrooms(Math.min(5, bathrooms + 1))}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="section">
+          <div className="label">HOME TYPE</div>
+          <div className="choices">
+            {HOME_TYPES.map(value => (
+              <button
+                key={value}
+                type="button"
+                className={`choice${homeType === value ? " on" : ""}`}
+                onClick={() => setHomeType(value)}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="section">
+          <div className="label">CLEANING FREQUENCY</div>
+          <div className="choices">
+            {FREQUENCIES.map(value => (
+              <button
+                key={value}
+                type="button"
+                className={`choice${frequency === value ? " on" : ""}`}
+                onClick={() => setFrequency(value)}
+              >
+                <b>{label(value)}</b>
+                <br />
+                <span className="muted">
+                  {value === "one-time"
+                    ? "Single cleaning"
+                    : value === "weekly"
+                      ? "Every week"
+                      : value === "biweekly"
+                        ? "Every 2 weeks"
+                        : "Every 4 weeks"}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="muted frequency-note">
+            The first cleaning is full price. Recurring pricing applies to
+            future visits.
           </p>
         </div>
-        <div
-          className="review-page1-choice-list"
-          role="group"
-          aria-label="Cleaning type"
-        >
-          {SERVICES.map(value => {
-            const title =
-              value === "moveout"
-                ? "Move-out Cleaning"
-                : getPublicBookingServiceName(value);
-            const description =
-              value === "standard"
-                ? "Routine cleaning for a regular, well-maintained home."
-                : value === "deep"
-                  ? "A more detailed clean for homes that need extra attention."
-                  : "A thorough clean before a move or handoff.";
+      </>
+    ) : step === 3 ? (
+      <div className="card">
+        <div className="label">
+          HOME CONDITION · 1 = LIGHT TOUCH-UP · 10 = FULL RESET
+        </div>
+        <div className="condition">
+          {CONDITION_COPY.map((copy, index) => (
+            <button
+              key={copy}
+              type="button"
+              className={`cond${condition === index + 1 ? " on" : ""}`}
+              onClick={() => setCondition(index + 1)}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
+        <p className="muted" style={{ marginTop: 15 }}>
+          {condition} · {CONDITION_COPY[condition - 1]}
+        </p>
+      </div>
+    ) : step === 4 ? (
+      <div className="choices" role="group" aria-label="Extras">
+        {EXTRA_OPTIONS.map(([id, extra]) => {
+          const quantity = extras[id] ?? 0;
+          return (
+            <div key={id} className={`choice${quantity ? " on" : ""}`}>
+              <button
+                type="button"
+                className="choice-service-toggle"
+                onClick={() => setExtra(id, quantity ? -quantity : 1)}
+              >
+                {extra.label} · ${extra.unitPrice}
+                {quantity > 1 ? ` × ${quantity}` : ""}
+              </button>
+              <span className="quantity">
+                <button
+                  type="button"
+                  disabled={!quantity}
+                  onClick={() => setExtra(id, -1)}
+                >
+                  −
+                </button>
+                <b>{quantity}</b>
+                <button type="button" onClick={() => setExtra(id, 1)}>
+                  +
+                </button>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    ) : step === 5 ? (
+      <div className="card">
+        <div className="label">DATE</div>
+        <input
+          className="field"
+          type="date"
+          value={date}
+          min={tomorrowIso()}
+          onChange={event => setDate(event.target.value)}
+        />
+        <div className="label" style={{ marginTop: 17 }}>
+          AVAILABLE ARRIVAL WINDOWS
+        </div>
+        <div className="windows">
+          {TIMES.map((value, index) => {
+            const end = ["10:30", "13:00", "15:30", "18:00"][index];
+            const formatTime = (raw: string) => {
+              const [hour, minute] = raw.split(":").map(Number);
+              return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
+            };
             return (
               <button
                 key={value}
                 type="button"
-                className={`review-page1-choice${serviceId === value ? " selected" : ""}`}
-                onClick={() => setServiceId(value)}
-                aria-pressed={serviceId === value}
+                className={`window${time === value ? " on" : ""}`}
+                onClick={() => setTime(value)}
               >
-                <span>
-                  <strong>{title}</strong>
-                  <small>{description}</small>
-                </span>
-                <span className="review-page1-choice-check" aria-hidden="true">
-                  {serviceId === value ? "✓" : ""}
-                </span>
+                {formatTime(value)}–{formatTime(end)}
+                <small>
+                  {index === 1
+                    ? "Best fit · available"
+                    : "2-hour arrival window"}
+                </small>
               </button>
             );
           })}
         </div>
-      </>
-    ) : step === 2 ? (
-      <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 2 OF 9</div>
-          <h2>Tell us about the home</h2>
-          <p className="subtitle">
-            Use the same bedroom, bathroom, hourly, and recurring options as the
-            public form.
-          </p>
-        </div>
-        <div className="mode-toggle">
-          <button
-            type="button"
-            className={`mode${pricingMode === "home" ? " selected" : ""}`}
-            onClick={() => setPricingMode("home")}
-          >
-            Bedrooms &amp; bathrooms
-          </button>
-          <button
-            type="button"
-            className={`mode${pricingMode === "hourly" ? " selected" : ""}`}
-            onClick={() => setPricingMode("hourly")}
-          >
-            Book hourly instead
-          </button>
-        </div>
-        {pricingMode === "home" ? (
-          <>
-            <div className="counter-grid">
-              <StepperCard
-                title="Bedrooms"
-                value={bedrooms}
-                min={0}
-                max={7}
-                display={bedrooms === 0 ? "Studio" : String(bedrooms)}
-                onChange={setBedrooms}
-              />
-              <StepperCard
-                title="Bathrooms"
-                value={bathrooms}
-                min={1}
-                max={5}
-                display={String(bathrooms)}
-                onChange={setBathrooms}
-              />
-            </div>
-            <div className="field-label">Home type</div>
-            <div className="home-type-grid">
-              {HOME_TYPES.map(value => (
-                <button
-                  type="button"
-                  key={value}
-                  className={`choice${homeType === value ? " selected" : ""}`}
-                  onClick={() => setHomeType(value)}
-                >
-                  <span>
-                    {value === "House"
-                      ? "⌂"
-                      : value === "Apartment"
-                        ? "▥"
-                        : value === "Townhome"
-                          ? "♧"
-                          : "▥"}
-                  </span>
-                  <strong>{value}</strong>
-                  <i />
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="counter-grid">
-            <StepperCard
-              title="Maids"
-              value={maidCount}
-              min={1}
-              max={4}
-              display={String(maidCount)}
-              onChange={setMaidCount}
-            />
-            <StepperCard
-              title="Hours"
-              value={hourCount}
-              min={1}
-              max={8}
-              display={String(hourCount)}
-              onChange={setHourCount}
-            />
-          </div>
-        )}
-        <div className="divider" />
-        <div className="field-label">Recurring frequency</div>
-        <div className="frequency-grid">
-          {FREQUENCIES.map(value => (
-            <button
-              type="button"
-              key={value}
-              className={`frequency${frequency === value ? " selected" : ""}`}
-              onClick={() => setFrequency(value)}
-            >
-              <span>▦</span>
-              <strong>{label(value)}</strong>
-              <small>
-                {value === "weekly"
-                  ? "Save 20% after visit one"
-                  : value === "biweekly"
-                    ? "Save 15% after visit one"
-                    : value === "monthly"
-                      ? "Save 10% after visit one"
-                      : "Single visit"}
-              </small>
-              <i />
-            </button>
-          ))}
-        </div>
-        <div className="guidance page2-guidance">
-          <div className="guidance-icon">✦</div>
-          <div>
-            <strong>AI guidance</strong>
-            <p>
-              A 2 bed / 2 bath house with bi-weekly service is a common setup.
-              Consider mentioning any pets or specific areas in the notes if
-              relevant.
-            </p>
-          </div>
-          <button type="button" className="outline-btn">
-            Add to notes
-          </button>
-        </div>
-      </>
-    ) : step === 3 ? (
-      <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 3 OF 9</div>
-          <h2>How is the home currently maintained?</h2>
-          <p className="subtitle">
-            This helps set a fair estimate and enough time for the team.
-          </p>
-        </div>
-        <div className="condition-grid">
-          {CONDITION_COPY.map((copy, index) => (
-            <button
-              type="button"
-              key={copy}
-              className={`condition${condition === index + 1 ? " selected" : ""}`}
-              onClick={() => setCondition(index + 1)}
-            >
-              <b>{index + 1}</b>
-              <span className="condition-icon">
-                {["✦", "♡", "⌂", "▰", "♣", "!", "♢", "↻", "✧", "⌂"][index]}
-              </span>
-              <strong>{copy}</strong>
-              <small>
-                {copy === "Bring the good gloves"
-                  ? "Pets in the home or extra care needed."
-                  : "Normal day-to-day condition."}
-              </small>
-              <i />
-            </button>
-          ))}
-        </div>
-        <div className="guidance page3-guidance">
-          <div className="guidance-icon">✦</div>
-          <div>
-            <strong>AI guidance</strong>
-            <p>
-              You mentioned a pet in the home. Selecting “Bring the good gloves”
-              makes sense. This option includes extra time and the right
-              supplies for pet hair and care.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="outline-btn"
-            onClick={() => setCondition(5)}
-          >
-            Use this
-          </button>
-        </div>
-      </>
-    ) : step === 4 ? (
-      <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 4 OF 9</div>
-          <h2>Need anything else?</h2>
-          <p className="subtitle">
-            Add services and quantities while you are on the call.
-          </p>
-        </div>
-        <div className="extras-grid">
-          {EXTRA_OPTIONS.map(([id, extra], index) => {
-            const quantity = extras[id] ?? 0;
-            const icons = ["▣", "▤", "▥", "⊞", "▥", "▱", "▤", "✦", "⌂"];
-            const descriptions = [
-              "Clean inside kitchen cabinets.",
-              "Clean inside refrigerator.",
-              "Deep clean oven interior.",
-              "Clean interior windows.",
-              "Includes living areas and floors.",
-              "General organizing help.",
-              "Wash, dry and fold.",
-              "Spot clean walls and doors.",
-              "Sweep and tidy garage.",
-            ];
-            return (
-              <article
-                className={`extra-card${quantity ? " selected" : ""}`}
-                key={id}
-              >
-                <button
-                  className="extra-check"
-                  type="button"
-                  aria-label={`Select ${extra.label}`}
-                  onClick={() => setExtra(id, quantity ? -quantity : 1)}
-                >
-                  {quantity ? "✓" : "□"}
-                </button>
-                <span className="extra-icon">{icons[index]}</span>
-                <div>
-                  <strong>{extra.label}</strong>
-                  <small>{descriptions[index]}</small>
-                  <em>
-                    ${extra.unitPrice}
-                    {extra.quantityUnit ? ` / ${extra.quantityUnit}` : ""}
-                  </em>
-                </div>
-                <div className="quantity">
-                  <button
-                    type="button"
-                    onClick={() => setExtra(id, -1)}
-                    disabled={!quantity}
-                  >
-                    −
-                  </button>
-                  <b>{quantity}</b>
-                  <button type="button" onClick={() => setExtra(id, 1)}>
-                    ＋
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </>
-    ) : step === 5 ? (
-      <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 5 OF 9</div>
-          <h2>When should the cleaning happen?</h2>
-          <p className="subtitle">
-            Choose the date and arrival window that works best for the customer.
-          </p>
-        </div>
-        <div className="schedule-layout">
-          <section className="calendar-card">
-            <div className="schedule-card-head">
-              <strong>Select a date</strong>
-              <span>
-                {easternMonthLabel(parseEasternDate(date))}
-                <button type="button" aria-label="Previous month">
-                  ‹
-                </button>
-                <button type="button" aria-label="Next month">
-                  ›
-                </button>
-              </span>
-            </div>
-            <div className="weekdays">
-              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(day => (
-                <span key={day}>{day}</span>
-              ))}
-            </div>
-            <div className="calendar-grid">
-              {Array.from(
-                {
-                  length:
-                    easternCalendarWeekday(
-                      parseEasternDate(date).getUTCFullYear(),
-                      parseEasternDate(date).getUTCMonth()
-                    ) +
-                    new Date(
-                      Date.UTC(
-                        parseEasternDate(date).getUTCFullYear(),
-                        parseEasternDate(date).getUTCMonth() + 1,
-                        0,
-                        12
-                      )
-                    ).getUTCDate(),
-                },
-                (_, index) => index
-              ).map(index => {
-                const monthDate = parseEasternDate(date);
-                const firstDay = easternCalendarWeekday(
-                  monthDate.getUTCFullYear(),
-                  monthDate.getUTCMonth()
-                );
-                const day = index - firstDay + 1;
-                if (day < 1)
-                  return <span className="muted" key={`empty-${index}`} />;
-                const value = `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                return (
-                  <button
-                    className={`day${value === date ? " selected" : ""}`}
-                    disabled={value < tomorrowIso()}
-                    key={value}
-                    type="button"
-                    onClick={() => setDate(value)}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-          <section className="arrival-card">
-            <strong>Select an arrival window</strong>
-            <p>We&apos;ll send your team within a 2-hour window.</p>
-            <div className="arrival-list">
-              {TIMES.map((value, index) => {
-                const end = ["10:30", "13:00", "15:30", "18:00"][index];
-                const formatTime = (raw: string) => {
-                  const [hour, minute] = raw.split(":").map(Number);
-                  const suffix = hour >= 12 ? "PM" : "AM";
-                  const displayHour = hour % 12 || 12;
-                  return `${displayHour}:${String(minute).padStart(2, "0")} ${suffix}`;
-                };
-                return (
-                  <button
-                    className={`arrival${time === value ? " selected" : ""}`}
-                    key={value}
-                    type="button"
-                    onClick={() => setTime(value)}
-                  >
-                    <i />
-                    <span>◷</span>
-                    <b>
-                      {formatTime(value)} – {formatTime(end)}
-                    </b>
-                    {index === 0 && <em>Most popular</em>}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-          <aside className="window-info">
-            <h3>
-              <span>ⓘ</span> About the 2-hour window
-            </h3>
-            <p>
-              We&apos;ll send your cleaning team within the selected 2-hour
-              window. You&apos;ll get a text when they&apos;re on the way with a
-              more exact ETA (usually 30–60 minutes before arrival).
-            </p>
-            <hr />
-            <h3>Need a specific time?</h3>
-            <p>
-              If it&apos;s urgent or you have a preference, add a note and
-              we&apos;ll do our best to accommodate.
-            </p>
-          </aside>
-        </div>
-      </>
+      </div>
     ) : step === 6 ? (
-      <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 6 OF 9</div>
-          <h2>Who are we booking for?</h2>
-          <p className="subtitle">
-            Capture the customer details and anything the team should know.
-          </p>
-        </div>
-        <div className="customer-form">
-          <label>
-            Full name
-            <input
-              required
-              value={customerName}
-              onChange={event => setCustomerName(event.target.value)}
-              placeholder="Rohan Gilkes"
-            />
-          </label>
-          <label>
-            Phone number
-            <input
-              required
-              value={customerPhone}
-              onChange={event => setCustomerPhone(event.target.value)}
-              placeholder="(302) 981-6192"
-            />
-          </label>
-          <label>
-            Email <span>(for receipt and updates)</span>
-            <input
-              required
-              type="email"
-              value={customerEmail}
-              onChange={event => setCustomerEmail(event.target.value)}
-              placeholder="customer@example.com"
-            />
-          </label>
-          <label>
-            Service address{" "}
-            <button
-              className="apt-prompt"
-              type="button"
-              onClick={() =>
-                document.getElementById("internal-service-address")?.focus()
-              }
-            >
-              Apt / Unit number?
-            </button>
-            <div className="address-field">
-              <input
-                id="internal-service-address"
-                required
-                value={address}
-                onChange={event => setAddress(event.target.value)}
-                placeholder="Street, city, state, ZIP"
-              />
-            </div>
-          </label>
-          <label className="notes-field">
-            Access details / notes <span>(optional)</span>
-            <textarea
-              value={notes}
-              onChange={event => setNotes(event.target.value)}
-              maxLength={500}
-              placeholder="Gate code, parking, pets, or anything the team should know"
-            />
-            <small className="char-count">{notes.length}/500</small>
-          </label>
-        </div>
-        <div className="guidance customer-guidance">
-          <div className="guidance-icon">▤</div>
-          <div>
-            <strong>AI guidance</strong>
-            <p>
-              Collect any important access details (gate codes, lockbox,
-              parking, pets) and share customer preferences with the team.
-            </p>
+      <div className="grid2">
+        <div className="card">
+          <div className="label">FULL NAME</div>
+          <input
+            className="field"
+            required
+            value={customerName}
+            onChange={event => setCustomerName(event.target.value)}
+            placeholder="Rohan Gilkes"
+          />
+          <div className="label" style={{ marginTop: 13 }}>
+            PHONE
           </div>
+          <input
+            className="field"
+            required
+            value={customerPhone}
+            onChange={event => setCustomerPhone(event.target.value)}
+            placeholder="(302) 981-6192"
+          />
         </div>
-      </>
+        <div className="card">
+          <div className="label">EMAIL</div>
+          <input
+            className="field"
+            required
+            type="email"
+            value={customerEmail}
+            onChange={event => setCustomerEmail(event.target.value)}
+            placeholder="customer@example.com"
+          />
+          <div className="label" style={{ marginTop: 13 }}>
+            SERVICE ADDRESS
+          </div>
+          <input
+            className="field"
+            required
+            value={address}
+            onChange={event => setAddress(event.target.value)}
+            placeholder="Street, city, state, ZIP"
+          />
+        </div>
+        <div className="card" style={{ gridColumn: "1 / -1" }}>
+          <div className="label">ACCESS DETAILS / NOTES</div>
+          <textarea
+            className="field"
+            value={notes}
+            maxLength={500}
+            onChange={event => setNotes(event.target.value)}
+            placeholder="Gate code, parking, pets, or anything the team should know"
+          />
+          <small className="muted">{notes.length}/500</small>
+        </div>
+      </div>
     ) : step === 7 ? (
       <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 7 OF 9</div>
-          <h2>Payment</h2>
-          <p className="subtitle">
-            Add a card to hold the booking. You won’t be charged until after the
-            service is completed.
-          </p>
-        </div>
-        <div className="payment-methods">
+        <div className="choices" role="group" aria-label="Payment method">
           {(["card", "cashapp", "invoice"] as PaymentMethod[]).map(value => (
             <button
               key={value}
-              className={`payment-method${paymentMethod === value ? " selected" : ""}`}
               type="button"
+              className={`choice${paymentMethod === value ? " on" : ""}`}
               disabled={!!createdBooking}
               onClick={() => setPaymentMethod(value)}
             >
-              <i />
-              <span
-                className={`payment-icon${value === "cashapp" ? " cash" : ""}`}
-              >
-                {value === "cashapp" ? "$" : value === "invoice" ? "▤" : "▣"}
-              </span>
-              <strong>
-                {value === "cashapp"
-                  ? "Cash App"
-                  : value === "invoice"
-                    ? "Invoice"
-                    : "Credit card"}
-                {value === "card" && <small>Recommended</small>}
-              </strong>
-              <em>
+              <b>
                 {value === "card"
-                  ? "Most common"
+                  ? "Credit Card"
                   : value === "cashapp"
-                    ? "Send payment request\nafter booking"
-                    : "Mark as pay later\nCollect on service day"}
-              </em>
+                    ? "Cash App"
+                    : "Check"}
+              </b>
+              <br />
+              <span className="muted">
+                {value === "card"
+                  ? "Secure card on file · Nothing charged now"
+                  : "Collection after service"}
+              </span>
             </button>
           ))}
         </div>
@@ -1404,257 +1152,109 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         createdBooking &&
         cardClientSecret &&
         cardSetupIntentId ? (
-          <Elements
-            stripe={stripePromise}
-            options={{
-              clientSecret: cardClientSecret,
-              appearance: { theme: "stripe" },
-            }}
-          >
-            <PremiumCardSetupForm
-              customerName={customerName}
-              clientSecret={cardClientSecret}
-              dark
-              onConfirm={paymentMethodId =>
-                confirmCardSetup
-                  .mutateAsync({
-                    bookingId: createdBooking.bookingId,
-                    setupIntentId: cardSetupIntentId,
-                    paymentMethodId,
-                  })
-                  .then(() => undefined)
-              }
-            />
-          </Elements>
+          <div className="card" style={{ marginTop: 15 }}>
+            <b>Secure card entry</b>
+            <Elements
+              stripe={stripePromise}
+              options={{
+                clientSecret: cardClientSecret,
+                appearance: { theme: "stripe" },
+              }}
+            >
+              <PremiumCardSetupForm
+                customerName={customerName}
+                clientSecret={cardClientSecret}
+                dark
+                onConfirm={paymentMethodId =>
+                  confirmCardSetup
+                    .mutateAsync({
+                      bookingId: createdBooking.bookingId,
+                      setupIntentId: cardSetupIntentId,
+                      paymentMethodId,
+                    })
+                    .then(() => undefined)
+                }
+              />
+            </Elements>
+          </div>
         ) : paymentMethod === "card" && createdBooking ? (
-          <div className="booking-card-acceptance booking-card-acceptance-loading">
+          <div className="card" style={{ marginTop: 15 }}>
             Preparing secure card entry…
           </div>
-        ) : null}
+        ) : (
+          <div className="card" style={{ marginTop: 15 }}>
+            <b>Send secure card link</b>
+            <p className="muted">
+              The card is securely collected before the appointment is
+              confirmed.
+            </p>
+          </div>
+        )}
       </>
     ) : step === 8 ? (
-      <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 8 OF 9</div>
-          <h2>Review and book</h2>
-          <p className="subtitle">
-            Please confirm all details before we complete your booking.
-          </p>
+      <div className="card">
+        <div className="ey">READY TO BOOK</div>
+        <h2>{serviceName}</h2>
+        <div className="row">
+          <span>Home</span>
+          <b>{homeDetail}</b>
         </div>
-        <div className="final-review-layout">
-          <div className="review-cards">
-            <article className="review-card">
-              <span>⌂</span>
-              <div>
-                <strong>Service &amp; home details</strong>
-                <p>
-                  {serviceName}
-                  <br />
-                  {homeDetail}
-                </p>
-              </div>
-              <button type="button" onClick={() => setStep(1)}>
-                Edit
-              </button>
-            </article>
-            <article className="review-card">
-              <span>✦</span>
-              <div>
-                <strong>Home condition</strong>
-                <p>
-                  {CONDITION_COPY[condition - 1]}
-                  <br />
-                  Condition {condition}/10.
-                </p>
-              </div>
-              <button type="button" onClick={() => setStep(3)}>
-                Edit
-              </button>
-            </article>
-            <article className="review-card">
-              <span>⊕</span>
-              <div>
-                <strong>Extras</strong>
-                <p>
-                  {selectedExtras.length
-                    ? selectedExtras.map(([id, extra]) => (
-                        <span key={id}>
-                          {extra.label} <b>${extra.unitPrice}</b>
-                          <br />
-                        </span>
-                      ))
-                    : "No extras selected"}
-                </p>
-              </div>
-              <button type="button" onClick={() => setStep(4)}>
-                Edit
-              </button>
-            </article>
-            <article className="review-card">
-              <span>▦</span>
-              <div>
-                <strong>Date &amp; time</strong>
-                <p>
-                  {dateLabel(date)}
-                  <br />
-                  {time}
-                  <br />
-                  <small>
-                    ⓘ We&apos;ll send your team within a 2-hour window.
-                  </small>
-                </p>
-              </div>
-              <button type="button" onClick={() => setStep(5)}>
-                Edit
-              </button>
-            </article>
-            <article className="review-card">
-              <span>♙</span>
-              <div>
-                <strong>Your information</strong>
-                <p>
-                  {customerName || "Customer name"}
-                  <br />
-                  {customerPhone || "Phone number"}
-                  <br />
-                  {customerEmail || "Email"}
-                  <br />
-                  {address || "Service address"}
-                </p>
-              </div>
-              <button type="button" onClick={() => setStep(6)}>
-                Edit
-              </button>
-            </article>
-            <article className="review-card">
-              <span>▣</span>
-              <div>
-                <strong>Payment method</strong>
-                <p>
-                  {paymentMethod === "card"
-                    ? "Card on file"
-                    : paymentMethod === "cashapp"
-                      ? "Cash App"
-                      : "Invoice"}
-                  <br />
-                  {paymentMethod === "card"
-                    ? "Securely saved after booking"
-                    : "Collection selected"}
-                </p>
-              </div>
-              <button type="button" onClick={() => setStep(7)}>
-                Edit
-              </button>
-            </article>
-          </div>
-          <section
-            className="customer-script-card"
-            aria-label="Customer script"
-          >
-            <div className="customer-script-heading">
-              <div>
-                <span className="eyebrow">CUSTOMER SCRIPT</span>
-                <h3>Ready to read or text</h3>
-              </div>
-              <button
-                type="button"
-                className="customer-script-copy"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(customerScript);
-                  setScriptCopied(true);
-                  window.setTimeout(() => setScriptCopied(false), 1800);
-                }}
-              >
-                <Clipboard size={14} />{" "}
-                {scriptCopied ? "Copied" : "Copy script"}
-              </button>
-            </div>
-            <p>{customerScript}</p>
-            <small>
-              Uses the current booking details, arrival window, extras, and live
-              pricing.
-            </small>
-          </section>
-          <div className="confirmation-panel">
-            <img src={deepKitchen} alt="Clean home interior" />
-            <h3>You&apos;re almost all set!</h3>
-            <p>
-              Review your details and confirm your booking.
-              <br />
-              You&apos;ll receive a confirmation text shortly after booking.
-            </p>
-            <div className="confirmation-benefits">
-              <p>
-                <b>♢</b>
-                <strong>
-                  Secure payment
-                  <small>Your information is encrypted and safe.</small>
-                </strong>
-              </p>
-              <p>
-                <b>◷</b>
-                <strong>
-                  Flexible arrival window
-                  <small>
-                    We&apos;ll send your team within 2 hours of your selected
-                    time.
-                  </small>
-                </strong>
-              </p>
-              <p>
-                <b>▦</b>
-                <strong>
-                  Easy changes
-                  <small>
-                    Need to reschedule? Just reply to your confirmation text.
-                  </small>
-                </strong>
-              </p>
-            </div>
-          </div>
+        <div className="row">
+          <span>Arrival window</span>
+          <b>{selectedTimeLabel}</b>
         </div>
-      </>
+        <div className="row">
+          <span>First cleaning</span>
+          <b>{money(pricing.firstCleaningTotalCents)}</b>
+        </div>
+        <div className="row">
+          <span>
+            {frequency === "one-time"
+              ? "Payment"
+              : `${label(frequency)} thereafter`}
+          </span>
+          <b>
+            {frequency === "one-time"
+              ? "One-time service"
+              : money(
+                  pricing.futureVisitTotalCents ??
+                    pricing.firstCleaningTotalCents
+                )}
+          </b>
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <button type="button" className="btn gold" onClick={next}>
+            Continue to additional services
+          </button>
+        </div>
+      </div>
     ) : (
-      <>
-        <div className="content-top">
-          <div className="eyebrow">STEP 9 OF 9</div>
-          <h2>Would you like to add anything else?</h2>
-          <p className="subtitle">
-            Offer helpful add-on services before you complete the booking.
-          </p>
-        </div>
-        <div className="additional-services-intro">
-          <span>✦</span>
-          <div>
-            <strong>Additional services</strong>
-            <p>
-              These services can be added to the booking now. Choose a quantity
-              or leave everything at zero.
-            </p>
-          </div>
-        </div>
-        <div className="additional-services-grid">
-          {ADDITIONAL_SERVICES.map((service, index) => {
+      <div className="card">
+        <div className="label">OPTIONAL ADDITIONAL SERVICES</div>
+        <p className="muted">
+          Your appointment is booked. Select anything else you’d like added.
+        </p>
+        <div className="choices">
+          {ADDITIONAL_SERVICES.map(service => {
             const quantity = additionalServices[service.id] ?? 0;
-            const symbols = ["↔", "▦", "⊞", "⌂", "▰", "▤", "▥", "♣"];
             return (
-              <article
-                className={`additional-service-card${quantity ? " selected" : ""}`}
+              <div
                 key={service.id}
+                className={`choice${quantity ? " on" : ""}`}
               >
-                <span className="service-symbol">{symbols[index]}</span>
-                <div>
-                  <strong>{service.title}</strong>
-                  <small>{service.copy}</small>
-                  <em>
-                    From {money(service.unitPriceCents)} /{" "}
-                    {service.quantityLabel.slice(0, -1)}
-                  </em>
-                </div>
-                <div className="quantity">
+                <button
+                  type="button"
+                  className="choice-service-toggle"
+                  onClick={() =>
+                    setAdditionalService(service.id, quantity ? -quantity : 1)
+                  }
+                >
+                  {service.title} · {money(service.unitPriceCents)}
+                  {quantity ? ` × ${quantity}` : ""}
+                </button>
+                <span className="quantity">
                   <button
                     type="button"
-                    aria-label={`Decrease ${service.title}`}
                     disabled={!quantity}
                     onClick={() => setAdditionalService(service.id, -1)}
                   >
@@ -1663,24 +1263,24 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   <b>{quantity}</b>
                   <button
                     type="button"
-                    aria-label={`Increase ${service.title}`}
                     onClick={() => setAdditionalService(service.id, 1)}
                   >
-                    ＋
+                    +
                   </button>
-                </div>
-              </article>
+                </span>
+              </div>
             );
           })}
         </div>
-        <div className="additional-services-note">
-          <span>ⓘ</span>
-          <p>
-            Selected services will appear in the booking summary and final
-            total.
-          </p>
-        </div>
-      </>
+        <button
+          type="button"
+          className="btn gold"
+          style={{ marginTop: 18 }}
+          onClick={submit}
+        >
+          Save additional services
+        </button>
+      </div>
     );
 
   const pageTitles = [
@@ -1717,7 +1317,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ×
         </button>
       )}
-      <section className="app">
+      <section className="app review-booking-shell">
         <aside className="left">
           <div className="ey">INTERNAL BOOKING</div>
           <h2>New booking</h2>

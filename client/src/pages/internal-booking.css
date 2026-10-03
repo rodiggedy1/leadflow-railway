@@ -4735,3 +4735,73 @@
 .review-booking-shell .booking-card-acceptance-dark .booking-card-element-shell { min-height: 44px; padding: 0 12px; border-color: #41423b; border-radius: 8px; background: #151613; color: #fff; }
 .review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-submit { min-height: 46px; border-radius: 8px; background: #d9b66e; color: #17140e; }
 .review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-terms { color: #9d9e95; }
+/* Page 2 parity: preserve the prototype's compact choice geometry. */
+.review-booking-shell .page2-pricing-mode { margin-top: 0; }
+.review-booking-shell .page2-pricing-mode .choice { font-weight: 700; }
+.review-booking-shell .compact-card .choice:disabled { opacity: .45; cursor: not-allowed; }
+.review-booking-shell .section .choices .choice { color: #eee; }
+.review-booking-shell .section .choices .choice.on { color: var(--gold2); }
+
+/* Controlled parity scope: legacy modal selectors must not override prototype controls. */
+.review-booking-shell .choice {
+  min-height: 0;
+  padding: 11px 14px;
+  border: 1px solid #41423b;
+  border-radius: 8px;
+  background: #191a17;
+  color: #eee;
+  font: inherit;
+  text-align: left;
+}
+.review-booking-shell .choice.on {
+  border-color: var(--gold);
+  background: #2a271f;
+  color: var(--gold2);
+}
+.review-booking-shell .compact-selectors { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.review-booking-shell .compact-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 72px;
+  padding: 13px 16px;
+  background: var(--panel);
+  border: 1px solid #373832;
+  border-radius: 12px;
+}
+.review-booking-shell .compact-card .label { white-space: nowrap; }
+.review-booking-shell .compact-card .big { margin: 0 0 0 auto; font-size: 25px; }
+.review-booking-shell .compact-card .choices { margin: 0; gap: 6px; flex-wrap: nowrap; }
+.review-booking-shell .compact-card .choice { min-width: 38px; padding: 8px 10px; text-align: center; }
+.review-booking-shell .compact-card .choice:disabled { opacity: .45; cursor: not-allowed; }
+.review-booking-shell .section { margin-top: 19px; }
+.review-booking-shell .section .choices .choice { color: #eee; }
+.review-booking-shell .section .choices .choice.on { color: var(--gold2); }
+.review-booking-shell .frequency-note { margin: 9px 0 0; }
+.review-booking-shell .page2-pricing-mode { margin-top: 0; }
+.review-booking-shell .choice-service-toggle {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.review-booking-shell .choice .quantity {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 10px;
+}
+.review-booking-shell .choice .quantity button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid #41423b;
+  border-radius: 6px;
+  background: #1d1e1a;
+  color: #eee;
+  cursor: pointer;
+}
+.review-booking-shell .choice .quantity button:disabled { opacity: .45; cursor: not-allowed; }
