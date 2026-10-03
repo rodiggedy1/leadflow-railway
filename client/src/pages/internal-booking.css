@@ -4853,19 +4853,22 @@
 .review-booking-shell .televiewport {
   height: 240px;
 }
-/* Short viewport correction: keep the footer in document flow so Page 2 frequency copy cannot be covered. */
+/* Keep the action bar anchored at the bottom of the review surface. */
+.review-booking-shell .main {
+  min-height: 0;
+}
 @media (max-height: 900px) {
   .review-booking-shell .main {
-    padding-bottom: 24px;
+    padding-bottom: 92px;
   }
   .review-booking-shell .footer {
-    position: sticky;
-    right: auto;
-    bottom: 0;
-    left: auto;
+    position: absolute;
+    right: 38px;
+    bottom: 17px;
+    left: 38px;
     z-index: 5;
-    margin-top: 24px;
-    padding-bottom: 12px;
+    margin-top: 0;
+    padding-bottom: 0;
   }
 }
 /* Step 7 payment parity: one compact dark panel around the existing Stripe form. */
