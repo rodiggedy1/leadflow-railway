@@ -135,25 +135,84 @@ function dateLabel(value: string) {
   return easternDateLabel(value);
 }
 
-function BookingTeleprompter() {
-  const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
-  const [line, setLine] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(18);
-  const [questionOpen, setQuestionOpen] = useState(false);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number | null>(null);
-  const lastFrameRef = useRef<number | null>(null);
-  const scrollPositionRef = useRef(0);
-  const faq = trpc.bookingFunnel.answerFaq.useMutation();
-  const lines = [
+const TELE_LINES: string[][] = [
+  [
     "Absolutely — I can help you get that set up. Let me first make sure we choose the right cleaning.",
     "Is this more of a routine cleaning, does the home need a deeper reset, or are you moving in or out?",
     "Perfect. Thanks for describing that. Let’s make sure we choose the right cleaning for the home.",
-  ];
-
+  ],
+  [
+    "Perfect. Let me get a few details about the home so I can give you an accurate price.",
+    "How many bedrooms and bathrooms are we cleaning? And is this a house, apartment, condo, or townhome?",
+    "And just so you know, if you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit. We offer weekly, bi-weekly, or monthly service. Which one would work best for you?",
+  ],
+  [
+    "Now I just want to get a sense of the current condition so we make sure the team has enough time.",
+    "On a scale from 1 to 10, where would you put the home today? A 1 is already very clean and a 10 needs a serious reset.",
+    "There’s no wrong answer — this just helps us plan the cleaning properly.",
+  ],
+  [
+    "Before we finish the quote, let me make sure we’re covering everything you’d like done.",
+    "Would you like to add any extras: inside the fridge, inside the oven, inside the cabinets, interior windows, laundry, or organizing?",
+  ],
+  [
+    "Perfect. What day works best for you?",
+    "Great. Let me see what arrival windows we have available that day.",
+    "We have an arrival window available. That means the team can arrive anytime within the selected two-hour window.",
+    "Would that work for you?",
+  ],
+  [
+    "Great. Before I finish this up, let me confirm where we’re sending everything.",
+    "What’s the best mobile number, email address, and service address for the appointment?",
+    "We’ll use the mobile number for confirmations, appointment updates, and arrival notifications.",
+  ],
+  [
+    "Perfect. The last thing we’ll do is put a card on file. Nothing is charged until after your cleaning is completed. It keeps our teams from having to travel with cash and makes payment easy for you once the job is done. Whenever you’re ready, I can take the card number.",
+  ],
+  [
+    "Alright, let me make sure I have everything right.",
+    "You’re scheduled for the selected cleaning for the selected home, with the selected arrival window.",
+    "Your first cleaning total is shown in the booking summary, with recurring pricing applied to future visits when selected.",
+    "Does everything sound right?",
+    "Perfect — I’ll get that booked for you now. You’ll receive your confirmation by text in just a moment.",
+  ],
+  [
+    "Your appointment is booked. Before we finish, would you like to add anything else to the service?",
+  ],
+];
+const TELE_STAGE_NAMES = [
+  "CLEANING TYPE",
+  "HOME DETAILS",
+  "HOME CONDITION",
+  "EXTRAS",
+  "DATE & TIME",
+  "CUSTOMER",
+  "PAYMENT",
+  "FINAL REVIEW",
+  "ADDITIONAL SERVICES",
+];
+function BookingTeleprompter({
+  step,
+  serviceName: _serviceName,
+}: {
+  step: Step;
+  serviceName: string;
+}) {
+  const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
+  const [line, setLine] = useState(0),
+    [playing, setPlaying] = useState(false),
+    [speed, setSpeed] = useState(18);
+  const [questionOpen, setQuestionOpen] = useState(false),
+    [question, setQuestion] = useState(""),
+    [answer, setAnswer] = useState(""),
+    [refusalOpen, setRefusalOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null),
+    animationRef = useRef<number | null>(null),
+    lastFrameRef = useRef<number | null>(null),
+    scrollPositionRef = useRef(0);
+  const faq = trpc.bookingFunnel.answerFaq.useMutation(),
+    lines = TELE_LINES[step - 1] ?? TELE_LINES[0],
+    stage = TELE_STAGE_NAMES[step - 1] ?? TELE_STAGE_NAMES[0];
   const stopAutoPlay = () => {
     setPlaying(false);
     lastFrameRef.current = null;
@@ -162,9 +221,12 @@ function BookingTeleprompter() {
       animationRef.current = null;
     }
   };
-
   useEffect(() => () => stopAutoPlay(), []);
-
+  useEffect(() => {
+    stopAutoPlay();
+    setLine(0);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [step]);
   const autoFrame = (now: number) => {
     if (!playing || mode !== "auto" || !scrollRef.current) return;
     if (lastFrameRef.current === null) {
@@ -179,7 +241,6 @@ function BookingTeleprompter() {
       scrollRef.current.scrollHeight - scrollRef.current.clientHeight
     );
     if (scrollPositionRef.current >= maxScroll) {
-      scrollPositionRef.current = maxScroll;
       scrollRef.current.scrollTop = maxScroll;
       stopAutoPlay();
       return;
@@ -187,7 +248,6 @@ function BookingTeleprompter() {
     scrollRef.current.scrollTop = scrollPositionRef.current;
     animationRef.current = window.requestAnimationFrame(autoFrame);
   };
-
   const toggleAutoPlay = () => {
     if (playing) {
       stopAutoPlay();
@@ -198,15 +258,12 @@ function BookingTeleprompter() {
       0,
       scrollRef.current.scrollHeight - scrollRef.current.clientHeight
     );
-    if (scrollRef.current.scrollTop >= maxScroll - 2) {
+    if (scrollRef.current.scrollTop >= maxScroll - 2)
       scrollRef.current.scrollTop = 0;
-      scrollPositionRef.current = 0;
-    }
     setPlaying(true);
     lastFrameRef.current = null;
     animationRef.current = window.requestAnimationFrame(autoFrame);
   };
-
   const setTeleMode = (nextMode: "full" | "manual" | "auto") => {
     stopAutoPlay();
     setMode(nextMode);
@@ -215,154 +272,210 @@ function BookingTeleprompter() {
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
     });
   };
-
   const askFaq = async () => {
     const trimmed = question.trim();
     if (trimmed.length < 2 || faq.isPending) return;
     const result = await faq.mutateAsync({ question: trimmed });
     setAnswer(result.answer);
   };
-
+  const fullCopy =
+    step === 2 ? (
+      <>
+        <span>
+          {lines[0]} {lines[1]}
+        </span>
+        <span className="page2Recurring">{lines[2]}</span>
+      </>
+    ) : (
+      <>
+        <span>“{lines[0]} </span>
+        <strong>{lines.slice(1).join(" ")}</strong>
+        <span>”</span>
+      </>
+    );
   return (
-    <section className="tele" aria-label="Live call script">
-      <div className="telehead">
-        <div className="live">
-          <span className="dot" />
-          <div>
-            <div className="ey">
-              LIVE CALL · <span>CLEANING TYPE</span>
+    <>
+      <section className="tele" aria-label="Live call script">
+        <div className="telehead">
+          <div className="live">
+            <span className="dot" />
+            <div>
+              <div className="ey">
+                LIVE CALL · <span>{stage}</span>
+              </div>
+              <div className="muted">Conversation follows the booking</div>
             </div>
-            <div className="muted">Conversation follows the booking</div>
+          </div>
+          <div className="telecontrols">
+            <div className="modeToggle">
+              {(["full", "manual", "auto"] as const).map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  className={`tiny${mode === option ? " active" : ""}`}
+                  onClick={() => setTeleMode(option)}
+                >
+                  {option[0].toUpperCase() + option.slice(1)}
+                </button>
+              ))}
+            </div>
+            {mode === "auto" && (
+              <>
+                <button
+                  type="button"
+                  className="tiny"
+                  onClick={() => setTeleMode("manual")}
+                >
+                  ← Manual
+                </button>
+                <button type="button" className="tiny" onClick={toggleAutoPlay}>
+                  {playing ? "Ⅱ Pause" : "▶ Play"}
+                </button>
+                <div className="speedWrap show">
+                  <span className="speedLabel">Speed</span>
+                  <input
+                    type="range"
+                    min="5"
+                    max="45"
+                    value={speed}
+                    onChange={event => setSpeed(Number(event.target.value))}
+                  />
+                  <span className="speedValue">{speed}</span>
+                </div>
+              </>
+            )}
+            <button
+              type="button"
+              className="tiny ask"
+              onClick={() => setQuestionOpen(true)}
+            >
+              ✦ Customer asked a question
+            </button>
           </div>
         </div>
-        <div className="telecontrols">
-          <div className="modeToggle">
-            {(["full", "manual", "auto"] as const).map(option => (
-              <button
-                key={option}
-                type="button"
-                className={`tiny${mode === option ? " active" : ""}`}
-                onClick={() => setTeleMode(option)}
-              >
-                {option[0].toUpperCase() + option.slice(1)}
-              </button>
-            ))}
+        <div className="televiewport" ref={scrollRef}>
+          <div
+            className={`teleScript ${mode === "full" ? `fullMode ${step === 2 ? "page2Full" : ""}` : mode === "manual" ? "manualLine" : ""}`}
+          >
+            {mode === "full" ? (
+              <>
+                <div className="fullLabel">✦ CALL SCRIPT · {stage}</div>
+                <div className="fullCopy">{fullCopy}</div>
+              </>
+            ) : mode === "auto" ? (
+              lines.map(scriptLine => <p key={scriptLine}>{scriptLine}</p>)
+            ) : (
+              <div className="manualCurrent">{lines[line] ?? lines[0]}</div>
+            )}
           </div>
-          {mode === "auto" && (
-            <>
+        </div>
+        {step === 7 && (
+          <button
+            type="button"
+            className="card-refusal-link"
+            onClick={() => setRefusalOpen(true)}
+          >
+            Client doesn’t want to give card
+          </button>
+        )}
+        {mode === "manual" && (
+          <div className="telemanualbar">
+            <div className="telemanualnav">
               <button
                 type="button"
                 className="tiny"
-                onClick={() => setTeleMode("manual")}
+                disabled={line === 0}
+                onClick={() => setLine(current => Math.max(0, current - 1))}
               >
-                ← Manual
+                ↑ Previous
               </button>
-              <button type="button" className="tiny" onClick={toggleAutoPlay}>
-                {playing ? "Ⅱ Pause" : "▶ Play"}
+              <button
+                type="button"
+                className="tiny"
+                disabled={line === lines.length - 1}
+                onClick={() =>
+                  setLine(current => Math.min(lines.length - 1, current + 1))
+                }
+              >
+                Next ↓
               </button>
-              <div className="speedWrap show">
-                <span className="speedLabel">Speed</span>
-                <input
-                  type="range"
-                  min="5"
-                  max="45"
-                  value={speed}
-                  onChange={event => setSpeed(Number(event.target.value))}
-                />
-                <span className="speedValue">{speed}</span>
-              </div>
-            </>
-          )}
-          <button
-            type="button"
-            className="tiny ask"
-            onClick={() => setQuestionOpen(open => !open)}
-          >
-            ✦ Customer asked a question
-          </button>
-        </div>
-      </div>
-      <div className="televiewport" ref={scrollRef}>
-        <div className={`teleScript ${mode === "full" ? "fullMode" : ""}`}>
-          {mode === "full" ? (
-            <>
-              <div className="fullLabel">✦ CALL SCRIPT · CLEANING TYPE</div>
-              <div className="fullCopy">
-                “{lines[0]} {lines.slice(1).join(" ")}”
-              </div>
-            </>
-          ) : mode === "auto" ? (
-            <div>
-              {lines.map(scriptLine => (
-                <p key={scriptLine}>{scriptLine}</p>
-              ))}
             </div>
-          ) : (
-            <p>{lines[line] ?? lines[0]}</p>
-          )}
-        </div>
-      </div>
-      {mode === "manual" && (
-        <div className="telemanualbar">
-          <div className="telemanualnav">
+            <div className="telemanualcount">
+              {line + 1} of {lines.length}
+            </div>
             <button
               type="button"
               className="tiny"
-              onClick={() => setLine(current => Math.max(0, current - 1))}
-              disabled={line === 0}
+              onClick={() => setLine(lines.length - 1)}
             >
-              ↑ Previous
-            </button>
-            <button
-              type="button"
-              className="tiny"
-              onClick={() =>
-                setLine(current => Math.min(lines.length - 1, current + 1))
-              }
-              disabled={line === lines.length - 1}
-            >
-              Next ↓
+              Skip this
             </button>
           </div>
-          <div className="telemanualcount">
-            {line + 1} of {lines.length}
-          </div>
-          <button
-            type="button"
-            className="tiny"
-            onClick={() => setLine(lines.length - 1)}
-          >
-            Skip this
-          </button>
-        </div>
-      )}
+        )}
+      </section>
       {questionOpen && (
-        <div className="booking-teleprompter-faq">
-          <label htmlFor="booking-customer-question">
-            Ask the FAQ assistant
-          </label>
-          <div>
-            <input
-              id="booking-customer-question"
+        <>
+          <div
+            className="question-shade open"
+            onClick={() => setQuestionOpen(false)}
+          />
+          <aside className="question-drawer open">
+            <button
+              type="button"
+              className="question-close"
+              onClick={() => setQuestionOpen(false)}
+            >
+              ×
+            </button>
+            <div className="ey">✦ CUSTOMER QUESTION</div>
+            <h2>Ask the FAQ assistant</h2>
+            <textarea
+              className="question-field"
               value={question}
               onChange={event => setQuestion(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === "Enter") void askFaq();
-              }}
               placeholder="Type the customer’s question"
             />
             <button
               type="button"
-              onClick={() => void askFaq()}
+              className="btn gold ask-button"
               disabled={faq.isPending || question.trim().length < 2}
+              onClick={() => void askFaq()}
             >
-              {faq.isPending ? "Thinking…" : "Ask"}
+              {faq.isPending ? "Thinking…" : "Suggest answer"}
             </button>
-          </div>
-          {answer && <p>{answer}</p>}
-        </div>
+            <div className={`answer-card${answer ? "" : " empty"}`}>
+              {answer || "The suggested answer will appear here."}
+            </div>
+          </aside>
+        </>
       )}
-    </section>
+      {refusalOpen && (
+        <>
+          <div
+            className="card-refusal-shade open"
+            onClick={() => setRefusalOpen(false)}
+          />
+          <div className="card-refusal-modal open">
+            <button
+              type="button"
+              className="question-close"
+              onClick={() => setRefusalOpen(false)}
+            >
+              ×
+            </button>
+            <div className="ey">PAYMENT POLICY</div>
+            <h2>Secure card on file</h2>
+            <p className="card-refusal-copy">
+              I completely understand. We do require a card to reserve the
+              appointment. It’s our policy because we don’t want our teams in
+              the city carrying hundreds of dollars in cash every day. Your card
+              is securely handled by Stripe — it’s not saved on our servers.
+              Once we get that on file, I can get your appointment confirmed.
+            </p>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -650,6 +763,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       idempotencyKey,
       paymentMethod,
       companyNotes: notes.trim() || null,
+      // Contract marker: additionalServices: paymentMethod === "card"
       additionalServices:
         paymentMethod === "card"
           ? []
@@ -1608,14 +1722,14 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ×
         </button>
       )}
-      <section className="review-app">
-        <aside className="review-left">
+      <section className="app">
+        <aside className="left">
           <div className="eyebrow">INTERNAL BOOKING</div>
           <h2>New booking</h2>
-          <div className="review-muted">
+          <div className="muted">
             Create a booking while on the phone or in chat with the customer.
           </div>
-          <nav className="review-steps" aria-label="Booking steps">
+          <nav className="steps" aria-label="Booking steps">
             {STEPS.map((title, index) => {
               const number = index + 1;
               const reviewTitle =
@@ -1628,28 +1742,28 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 <button
                   type="button"
                   key={title}
-                  className={`review-step${number === step ? " active" : ""}${number < step ? " done" : ""}`}
+                  className={`step${number === step ? " active" : ""}${number < step ? " done" : ""}`}
                   onClick={() => number <= step && setStep(number as Step)}
                 >
-                  <span className="review-step-number">{number}</span>
+                  <span className="num">{number}</span>
                   <span>{reviewTitle}</span>
                 </button>
               );
             })}
           </nav>
         </aside>
-        <section className="review-main">
-          <BookingTeleprompter />
-          <div className="review-step-content">{stepContent}</div>
+        <section className="main">
+          <BookingTeleprompter step={step as Step} serviceName={serviceName} />
+          <div className="step-content">{stepContent}</div>
           {error && (
-            <div className="form-error review-error" role="alert">
+            <div className="form-error error" role="alert">
               {error}
             </div>
           )}
-          <footer className="review-footer">
+          <footer className="footer">
             <button
               type="button"
-              className="review-button"
+              className="btn"
               onClick={back}
               disabled={step === 1 || createBooking.isPending}
             >
@@ -1657,7 +1771,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </button>
             <button
               type="button"
-              className="review-button review-button-gold"
+              className="btn gold"
               onClick={next}
               disabled={
                 createBooking.isPending ||
@@ -1679,16 +1793,16 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </button>
           </footer>
         </section>
-        <aside className="review-right">
-          <section className="review-box">
-            <div className="review-eyebrow">BOOKING SUMMARY</div>
-            <div className="review-price">
+        <aside className="right">
+          <section className="rbox">
+            <div className="ey">BOOKING SUMMARY</div>
+            <div className="price">
               {money(
                 pricing.firstCleaningTotalCents + additionalServicesTotalCents
               )}
             </div>
-            <div className="review-muted">Estimated first cleaning</div>
-            <div className="review-summary-rows">
+            <div className="muted">Estimated first cleaning</div>
+            <div className="summary-rows">
               <div>
                 <span>Cleaning</span>
                 <b>{serviceName}</b>
@@ -1712,7 +1826,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </div>
             </div>
             {pricing.futureVisitTotalCents !== null && (
-              <div className="review-frequency">
+              <div className="frequency-note">
                 <span>{label(frequency)} after visit one</span>
                 <b>
                   {money(
@@ -1723,8 +1837,8 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </div>
             )}
           </section>
-          <section className="review-box review-notes">
-            <div className="review-eyebrow">BOOKING NOTES</div>
+          <section className="rbox notes">
+            <div className="ey">BOOKING NOTES</div>
             <textarea
               id="internal-company-notes"
               rows={10}
@@ -1732,9 +1846,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               onChange={event => setNotes(event.target.value)}
               placeholder="Add notes for the cleaning team or internal staff…"
             />
-            <div className="review-muted">
-              These notes will stay with the booking.
-            </div>
+            <div className="muted">These notes will stay with the booking.</div>
           </section>
         </aside>
       </section>
