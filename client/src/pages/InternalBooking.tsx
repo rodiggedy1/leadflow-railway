@@ -692,16 +692,20 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     }
     return counts;
   }, [standardTimeCountsQuery.data]);
-  const recommendedStandardTime = useMemo(
-    () =>
-      STANDARD_TIMES.reduce((best, candidate) =>
-        (standardTimeCounts.get(candidate) ?? 0) <
-        (standardTimeCounts.get(best) ?? 0)
-          ? candidate
-          : best
-      ),
-    [standardTimeCounts]
-  );
+  const recommendedStandardTime = useMemo(() => {
+    if (standardTimeCountsQuery.isLoading || standardTimeCountsQuery.isError)
+      return null;
+    return STANDARD_TIMES.reduce((best, candidate) =>
+      (standardTimeCounts.get(candidate) ?? 0) <
+      (standardTimeCounts.get(best) ?? 0)
+        ? candidate
+        : best
+    );
+  }, [
+    standardTimeCounts,
+    standardTimeCountsQuery.isError,
+    standardTimeCountsQuery.isLoading,
+  ]);
   useEffect(() => {
     if (time === "11:00") setTime("08:30");
   }, []);
@@ -1178,8 +1182,11 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               >
                 {timeLabel(value)}
                 <small>
-                  {recommended ? "Recommended · lightest schedule · " : ""}
-                  {count} {count === 1 ? "booking" : "bookings"}
+                  {standardTimeCountsQuery.isLoading
+                    ? "Loading schedule…"
+                    : standardTimeCountsQuery.isError
+                      ? "Schedule counts unavailable"
+                      : `${recommended ? "Recommended · lightest schedule · " : ""}${count} ${count === 1 ? "booking" : "bookings"}`}
                 </small>
               </button>
             );

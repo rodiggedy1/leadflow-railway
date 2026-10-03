@@ -48,7 +48,10 @@ import {
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { persistCanonicalBooking } from "./canonicalBookingPersistence";
 import { cancelCanonicalBooking } from "./bookingCancellationService";
-import { applyCanonicalAdditionalServices, BookingUpsellInputError } from "./bookingUpsellEngine";
+import {
+  applyCanonicalAdditionalServices,
+  BookingUpsellInputError,
+} from "./bookingUpsellEngine";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 import {
@@ -139,12 +142,13 @@ const internalPublicBookingInputSchema = z.object({
 async function applyInternalAdditionalServices(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   bookingId: number,
-  selections: Array<{ id: string; quantity: number }>,
+  selections: Array<{ id: string; quantity: number }>
 ) {
   try {
     return await applyCanonicalAdditionalServices(db, bookingId, selections);
   } catch (error) {
-    if (error instanceof BookingUpsellInputError) throw new NativeBookingInputError(error.message);
+    if (error instanceof BookingUpsellInputError)
+      throw new NativeBookingInputError(error.message);
     throw error;
   }
 }
@@ -245,9 +249,8 @@ async function persistPreparedBooking(
   const result = await persistCanonicalBooking(db, prepared, {
     paymentMethod: options.paymentMethod,
     companyNotes: options.companyNotes,
-    initialBookingStatus: options.paymentMethod === "card"
-      ? "pending_payment"
-      : "needs_attention",
+    initialBookingStatus:
+      options.paymentMethod === "card" ? "pending_payment" : "needs_attention",
   });
   return {
     booking: {
@@ -489,19 +492,60 @@ export const bookingsRouter = router({
           code: "INTERNAL_SERVER_ERROR",
           message: "Booking service unavailable.",
         });
-      return db
-        .select({
-          time: bookings.requestedLocalTime,
-          count: sql<number>`count(*)`,
-        })
-        .from(bookings)
-        .where(
-          and(
-            eq(bookings.requestedLocalDate, input.date),
-            sql`${bookings.status} NOT IN ('cancelled', 'expired')`
-          )
-        )
-        .groupBy(bookings.requestedLocalTime);
+      const [nativeBookings, operationalJobs] = await Promise.all([
+        db
+          .select({ bookingId: bookings.id, time: bookings.requestedLocalTime })
+          .from(bookings)
+          .where(
+            and(
+              eq(bookings.requestedLocalDate, input.date),
+              sql`${bookings.status} NOT IN ('cancelled', 'expired')`
+            )
+          ),
+        db
+          .select({
+            id: leadflowJobs.id,
+            bookingId: leadflowJobs.bookingId,
+            serviceDateTime: leadflowJobs.serviceDateTime,
+          })
+          .from(leadflowJobs)
+          .where(
+            and(
+              eq(leadflowJobs.jobDate, input.date),
+              sql`${leadflowJobs.bookingStatus} NOT IN ('cancelled', 'canceled', 'rescheduled', 'missing_from_launch27')`
+            )
+          ),
+      ]);
+
+      // Native bookings can also have a LeadFlow operational projection. Keep
+      // one occupancy record per booking and prefer the schedule-facing job
+      // timestamp when it exists. Imported jobs remain independently countable.
+      const occupancy = new Map<string, string>();
+      for (const row of nativeBookings) {
+        occupancy.set(`booking:${row.bookingId}`, row.time);
+      }
+      const easternTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+        timeZone: BOOKING_TIME_ZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      });
+      for (const row of operationalJobs) {
+        if (!row.serviceDateTime) continue;
+        const parsed = new Date(row.serviceDateTime);
+        if (Number.isNaN(parsed.getTime())) continue;
+        const time = easternTimeFormatter.format(parsed);
+        occupancy.set(
+          row.bookingId === null ? `job:${row.id}` : `booking:${row.bookingId}`,
+          time
+        );
+      }
+
+      const counts = new Map<string, number>();
+      for (const time of occupancy.values()) {
+        counts.set(time, (counts.get(time) ?? 0) + 1);
+      }
+      return Array.from(counts, ([time, count]) => ({ time, count }));
     }),
 
   get: bookingsAgentProcedure
@@ -810,15 +854,21 @@ export const bookingsRouter = router({
           .where(eq(bookings.id, booking.id));
 
         const [activeAssignment] = await tx
-          .select({ teamId: bookingAssignments.teamId, teamName: bookingAssignments.teamName })
+          .select({
+            teamId: bookingAssignments.teamId,
+            teamName: bookingAssignments.teamName,
+          })
           .from(bookingAssignments)
           .where(
             and(
               eq(bookingAssignments.bookingId, booking.id),
-              eq(bookingAssignments.status, "assigned"),
-            ),
+              eq(bookingAssignments.status, "assigned")
+            )
           )
-          .orderBy(desc(bookingAssignments.assignedAt), desc(bookingAssignments.id))
+          .orderBy(
+            desc(bookingAssignments.assignedAt),
+            desc(bookingAssignments.id)
+          )
           .limit(1);
 
         const [series] = await tx
@@ -868,9 +918,14 @@ export const bookingsRouter = router({
         await syncNativeBookingOperationalProjection(
           tx,
           nextBooking,
-          activeAssignment && activeAssignment.teamId !== null && activeAssignment.teamName !== null
-            ? { teamId: activeAssignment.teamId, teamName: activeAssignment.teamName }
-            : null,
+          activeAssignment &&
+            activeAssignment.teamId !== null &&
+            activeAssignment.teamName !== null
+            ? {
+                teamId: activeAssignment.teamId,
+                teamName: activeAssignment.teamName,
+              }
+            : null
         );
 
         return {
@@ -907,7 +962,10 @@ export const bookingsRouter = router({
         });
       const cancelled = await cancelCanonicalBooking(db, input.id);
       if (!cancelled)
-        throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Booking not found.",
+        });
       publishNativeBookingRefresh();
       return cancelled;
     }),
