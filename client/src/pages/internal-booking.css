@@ -5023,3 +5023,42 @@
     width: 100%;
   }
 }
+
+/* Step 5 scheduling controls: shared calendar popup + explicit manual-time mode. */
+.review-booking-shell .schedule-date-trigger {
+  width: 100%; min-height: 70px; display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border: 1px solid rgba(255,255,255,.22); border-radius: 14px;
+  background: #171816; color: #f3f0e8; text-align: left;
+}
+.review-booking-shell .schedule-date-trigger:hover,
+.review-booking-shell .schedule-date-trigger:focus-visible { border-color: #e8c36f; outline: none; box-shadow: 0 0 0 3px rgba(232,195,111,.14); }
+.review-booking-shell .schedule-date-trigger > svg:first-child { color: #e8c36f; width: 22px; height: 22px; flex: none; }
+.review-booking-shell .schedule-date-trigger > svg:last-child { margin-left: auto; width: 18px; color: #b4b1a9; }
+.review-booking-shell .schedule-date-trigger span { display: grid; gap: 4px; }
+.review-booking-shell .schedule-date-trigger strong { font-size: 18px; font-weight: 750; }
+.review-booking-shell .schedule-date-trigger small { color: #aaa9a2; font-size: 12px; }
+.review-booking-shell .schedule-calendar-popover { width: 350px; padding: 10px; border: 1px solid rgba(232,195,111,.45); border-radius: 16px; background: #171816; color: #f3f0e8; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+.review-booking-shell .schedule-calendar-popover [data-slot="calendar"] { width: 100%; background: transparent; --cell-size: 38px; }
+.review-booking-shell .schedule-calendar-popover .rdp-month_caption { color: #f3f0e8; }
+.review-booking-shell .schedule-calendar-popover .rdp-weekday { color: #aaa9a2; }
+.review-booking-shell .schedule-calendar-popover .rdp-day_button { color: #f3f0e8; border-radius: 9px; }
+.review-booking-shell .schedule-calendar-popover .rdp-day_button:hover { background: rgba(232,195,111,.18); }
+.review-booking-shell .schedule-calendar-popover [data-selected-single="true"] { background: #e8c36f !important; color: #171816 !important; }
+.review-booking-shell .schedule-calendar-popover .rdp-disabled { opacity: .3; }
+.review-booking-shell .schedule-calendar-popover .rdp-button_previous,
+.review-booking-shell .schedule-calendar-popover .rdp-button_next { color: #e8c36f; }
+.review-booking-shell .manual-time-panel { margin-top: 14px; }
+.review-booking-shell .manual-time-toggle { width: 100%; display: flex; align-items: center; gap: 12px; padding: 13px 15px; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; background: #141513; color: #f3f0e8; text-align: left; }
+.review-booking-shell .manual-time-toggle:hover,
+.review-booking-shell .manual-time-toggle.active { border-color: #e8c36f; background: rgba(232,195,111,.08); }
+.review-booking-shell .manual-time-toggle > svg { width: 19px; color: #e8c36f; flex: none; }
+.review-booking-shell .manual-time-toggle span:not(.manual-time-caret) { display: grid; gap: 3px; }
+.review-booking-shell .manual-time-toggle strong { font-size: 14px; }
+.review-booking-shell .manual-time-toggle small { color: #aaa9a2; font-size: 11px; }
+.review-booking-shell .manual-time-caret { margin-left: auto; color: #e8c36f; font-size: 22px; line-height: 1; }
+.review-booking-shell .manual-time-field { display: grid; gap: 7px; margin-top: 10px; padding: 13px 15px; border: 1px solid rgba(232,195,111,.35); border-radius: 12px; background: #1c1d19; }
+.review-booking-shell .manual-time-field > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.review-booking-shell .manual-time-field input { width: 100%; min-height: 45px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; background: #121311; color: #f3f0e8; font-size: 18px; }
+.review-booking-shell .manual-time-field input:focus { border-color: #e8c36f; outline: none; box-shadow: 0 0 0 3px rgba(232,195,111,.14); }
+.review-booking-shell .manual-time-field small { color: #aaa9a2; font-size: 12px; }
+@media (max-width: 640px) { .review-booking-shell .schedule-calendar-popover { width: min(350px, calc(100vw - 28px)); } }

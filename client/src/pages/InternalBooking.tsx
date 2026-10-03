@@ -23,11 +23,18 @@ import {
   UsersRound,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import {
   easternCalendarWeekday,
   easternDateIso,
+  easternDateIsoFromDate,
   easternDateLabel,
   easternMonthDate,
   easternMonthLabel,
@@ -119,9 +126,6 @@ const ADDITIONAL_SERVICES: AdditionalService[] = Object.entries(
     ADDITIONAL_SERVICE_IMAGES[id as keyof typeof ADDITIONAL_SERVICE_IMAGES],
 }));
 
-function tomorrowIso() {
-  return easternDateIso(new Date(), 1);
-}
 function money(cents: number) {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -133,6 +137,13 @@ function label(value: string) {
 function dateLabel(value: string) {
   if (!value) return "Choose a date";
   return easternDateLabel(value);
+}
+function timeLabel(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return value;
+  const hour = Number(match[1]);
+  const suffix = hour >= 12 ? "PM" : "AM";
+  return `${hour % 12 || 12}:${match[2]} ${suffix}`;
 }
 
 const TELE_LINES: Record<Step, string[]> = {
@@ -655,6 +666,8 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     null
   );
   const [cardSaved, setCardSaved] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [manualTime, setManualTime] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -1044,17 +1057,34 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     ) : step === 5 ? (
       <div className="card page5-schedule-card">
         <div className="label">DATE</div>
-        <input
-          className="field"
-          type="date"
-          value={date}
-          min={tomorrowIso()}
-          onChange={event => setDate(event.target.value)}
-        />
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <button type="button" className="schedule-date-trigger">
+              <CalendarDays />
+              <span>
+                <strong>{dateLabel(date)}</strong>
+                <small>Eastern Time · choose another date</small>
+              </span>
+              <ChevronRight />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="schedule-calendar-popover">
+            <Calendar
+              mode="single"
+              selected={parseEasternDate(date)}
+              defaultMonth={parseEasternDate(date)}
+              onSelect={nextDate => {
+                if (!nextDate) return;
+                setDate(easternDateIsoFromDate(nextDate));
+                setCalendarOpen(false);
+              }}
+            />
+          </PopoverContent>
+        </Popover>
         <div className="label" style={{ marginTop: 17 }}>
           AVAILABLE ARRIVAL WINDOWS
         </div>
-        <div className="windows">
+        <div className={`windows${manualTime ? " manual-time-selected" : ""}`}>
           {TIMES.map((value, index) => {
             const end = ["10:30", "13:00", "15:30", "18:00"][index];
             const formatTime = (raw: string) => {
@@ -1066,7 +1096,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 key={value}
                 type="button"
                 className={`window${time === value ? " on" : ""}`}
-                onClick={() => setTime(value)}
+                onClick={() => {
+                  setManualTime(false);
+                  setTime(value);
+                }}
               >
                 {formatTime(value)}–{formatTime(end)}
                 <small>
@@ -1077,6 +1110,31 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </button>
             );
           })}
+        </div>
+        <div className="manual-time-panel">
+          <button
+            type="button"
+            className={`manual-time-toggle${manualTime ? " active" : ""}`}
+            onClick={() => setManualTime(current => !current)}
+          >
+            <Clock3 />
+            <span>
+              <strong>Need a different arrival time?</strong>
+              <small>Enter an exact time instead of a standard window.</small>
+            </span>
+            <span className="manual-time-caret">{manualTime ? "−" : "+"}</span>
+          </button>
+          {manualTime && (
+            <label className="manual-time-field">
+              <span>EXACT ARRIVAL TIME · EASTERN TIME</span>
+              <input
+                type="time"
+                value={time}
+                onChange={event => setTime(event.target.value)}
+              />
+              {time && <small>Selected: {timeLabel(time)}</small>}
+            </label>
+          )}
         </div>
       </div>
     ) : step === 6 ? (
