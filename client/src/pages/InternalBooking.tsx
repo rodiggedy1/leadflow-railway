@@ -1033,7 +1033,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         })}
       </div>
     ) : step === 5 ? (
-      <div className="card">
+      <div className="card page5-schedule-card">
         <div className="label">DATE</div>
         <input
           className="field"

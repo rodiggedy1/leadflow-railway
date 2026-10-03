@@ -4751,6 +4751,30 @@
 .review-booking-shell .page2-choice-columns .choice {
   min-width: 0;
 }
+.review-booking-shell .page5-schedule-card {
+  padding: 12px;
+}
+.review-booking-shell .page5-schedule-card > .label[style] {
+  margin-top: 10px !important;
+}
+.review-booking-shell .page5-schedule-card .field {
+  padding: 9px 11px;
+  margin-top: 5px;
+}
+.review-booking-shell .page5-schedule-card .windows {
+  gap: 7px;
+  margin-top: 7px;
+}
+.review-booking-shell .page5-schedule-card .window {
+  min-height: 68px;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.review-booking-shell .page5-schedule-card .window small {
+  margin-top: 3px;
+  font-size: 11px;
+}
 .review-booking-shell .page2-pricing-mode { margin-top: 0; }
 .review-booking-shell .page2-pricing-mode .choice { font-weight: 700; }
 .review-booking-shell .compact-card .choice:disabled { opacity: .45; cursor: not-allowed; }
