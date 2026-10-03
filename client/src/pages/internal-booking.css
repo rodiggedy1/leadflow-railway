@@ -4805,3 +4805,30 @@
   cursor: pointer;
 }
 .review-booking-shell .choice .quantity button:disabled { opacity: .45; cursor: not-allowed; }
+/* Page 2 correction: neutralize legacy modal choice typography/layout inside the literal prototype shell. */
+.review-booking-shell .choice {
+  display: inline-block;
+  gap: 0;
+  min-height: 0;
+}
+.review-booking-shell .choice > span {
+  color: inherit;
+  font-size: inherit;
+}
+.review-booking-shell .choice > .muted {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.review-booking-shell .section .choices {
+  align-items: flex-start;
+}
+.review-booking-shell .section .choices .choice {
+  min-height: 0;
+}
+.review-booking-shell .choices > .choice:has(.quantity) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
