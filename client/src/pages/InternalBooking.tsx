@@ -163,22 +163,17 @@ function timeLabel(value: string) {
 
 const TELE_LINES: Record<Step, string[]> = {
   1: [
-    "Absolutely — I can help you get that set up. Let me first make sure we choose the right cleaning.",
-    "Is this more of a routine cleaning, does the home need a deeper reset, or are you moving in or out?",
-    "Perfect. Thanks for describing that. Let’s make sure we choose the right cleaning for the home.",
+    "Absolutely, I can help you get a quote and get everything set up. We've cleaned thousands of homes in the DMV area, and we're rated 4.9 stars on Google. Let's make sure we pick the right clean. Is this more of a routine clean, does the home need a deeper reset, or are you moving in or out?",
   ],
   2: [
-    "Perfect. Let me get a few details about the home so I can give you an accurate price.",
-    "How many bedrooms and bathrooms are we cleaning? And is this a house, apartment, condo, or townhome?",
+    "Now let's get a feel for the size of the home so I can build your price. How many bedrooms and bathrooms does it have? Is it a house, apartment, condo, or townhome? Finished basement?",
   ],
   3: [
-    "Now I just want to get a sense of the current condition so we make sure the team has enough time.",
-    "On a scale from 1 to 10, where would you put the home today? A 1 is already very clean and a 10 needs a serious reset.",
-    "There’s no wrong answer — this just helps us plan the cleaning properly.",
+    "Now I want to make sure the team has enough time. On a scale of 1 to 10, where would you put the home today? A 1 is already very clean, and a 10 needs a serious reset. There's no wrong answer, this just helps us plan properly.",
   ],
   4: [
     "Before we finish the quote, let me make sure we’re covering everything you’d like done.",
-    "Would you like to add any extras: inside the fridge, inside the oven, inside the cabinets, interior windows, laundry, or organizing?",
+    "Would you like to add any extras? Most popular are inside the fridge, inside the oven, inside cabinets, interior windows, laundry, and organizing. Anything there you’d want us to knock out while we’re there?",
     "Thanks for all of that. Let me walk you through the quote and the service options.",
   ],
   5: [

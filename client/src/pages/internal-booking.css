@@ -4687,6 +4687,10 @@
 .review-booking-shell .pagehead .muted { margin: 0 0 18px; }
 .review-booking-shell .app { height: 100%; min-height: 720px; }
 .review-booking-shell .main { min-width: 0; }
+.review-booking-shell .left,
+.review-booking-shell .right { scrollbar-width: none; }
+.review-booking-shell .left::-webkit-scrollbar,
+.review-booking-shell .right::-webkit-scrollbar { display: none; }
 .review-booking-shell .right textarea { color: #fff; }
 .review-booking-shell .booking-teleprompter-faq { padding: 12px 18px; border-top: 1px solid #34332d; }
 .review-booking-shell .booking-teleprompter-faq > div { display: flex; gap: 8px; margin-top: 8px; }
