@@ -78,7 +78,13 @@ const HOME_TYPES: PublicBookingHomeType[] = [
   "Townhome",
   "Condo",
 ];
-const TIMES = CANONICAL_TIME_SLOTS;
+const ARRIVAL_WINDOWS = CANONICAL_TIME_SLOTS;
+const TIMES = Array.from({ length: 20 }, (_, index) => {
+  const totalMinutes = 8 * 60 + 30 + index * 30;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+});
 const EXTRA_OPTIONS = Object.entries(PUBLIC_BOOKING_PRICED_EXTRAS);
 const CONDITION_COPY = CANONICAL_CONDITION_COPY;
 const STEPS = [
@@ -667,6 +673,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const [cardSaved, setCardSaved] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [manualTime, setManualTime] = useState(false);
+  const timeInputRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -862,13 +869,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const customerFirstName =
     customerName.trim().split(/\s+/).filter(Boolean)[0] || "there";
   const selectedTimeLabel =
-    TIMES.find(value => value === time) === "08:30"
+    ARRIVAL_WINDOWS.find(value => value === time) === "08:30"
       ? "8:30 AM"
-      : TIMES.find(value => value === time) === "11:00"
+      : ARRIVAL_WINDOWS.find(value => value === time) === "11:00"
         ? "11:00 AM"
-        : TIMES.find(value => value === time) === "13:30"
+        : ARRIVAL_WINDOWS.find(value => value === time) === "13:30"
           ? "1:30 PM"
-          : TIMES.find(value => value === time) === "16:30"
+          : ARRIVAL_WINDOWS.find(value => value === time) === "16:30"
             ? "4:30 PM"
             : time || "your selected time";
   const selectedExtrasScript = selectedExtras
@@ -1099,10 +1106,25 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 ))}
               </div>
             </div>
-            <label className="manual-time-field schedule-popover-time-field">
+            <label
+              className="manual-time-field schedule-popover-time-field"
+              onClick={event => {
+                if ((event.target as HTMLElement).tagName !== "INPUT") {
+                  try {
+                    timeInputRef.current?.showPicker?.();
+                  } catch {
+                    timeInputRef.current?.focus();
+                  }
+                }
+              }}
+            >
               <span>EXACT ARRIVAL TIME · EASTERN TIME</span>
               <input
+                ref={timeInputRef}
                 type="time"
+                min="08:30"
+                max="18:00"
+                step={1800}
                 value={time}
                 onChange={event => {
                   setManualTime(true);
@@ -1117,7 +1139,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           AVAILABLE ARRIVAL WINDOWS
         </div>
         <div className={`windows${manualTime ? " manual-time-selected" : ""}`}>
-          {TIMES.map((value, index) => {
+          {ARRIVAL_WINDOWS.map((value, index) => {
             const end = ["10:30", "13:00", "15:30", "18:00"][index];
             const formatTime = (raw: string) => {
               const [hour, minute] = raw.split(":").map(Number);
