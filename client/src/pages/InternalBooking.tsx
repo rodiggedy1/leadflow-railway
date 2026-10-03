@@ -1069,9 +1069,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           </PopoverTrigger>
           <PopoverContent
             align="center"
-            side="bottom"
-            sideOffset={8}
-            avoidCollisions={false}
             className="schedule-calendar-popover"
           >
             <Calendar
