@@ -224,22 +224,24 @@ function BookingTeleprompter() {
   };
 
   return (
-    <section className="booking-teleprompter" aria-label="Live call script">
-      <header className="booking-teleprompter-head">
-        <div className="booking-teleprompter-title">
-          <span className="booking-teleprompter-dot" />
+    <section className="tele" aria-label="Live call script">
+      <div className="telehead">
+        <div className="live">
+          <span className="dot" />
           <div>
-            <strong>LIVE CALL · CLEANING TYPE</strong>
-            <span>Conversation follows the booking</span>
+            <div className="ey">
+              LIVE CALL · <span>CLEANING TYPE</span>
+            </div>
+            <div className="muted">Conversation follows the booking</div>
           </div>
         </div>
-        <div className="booking-teleprompter-controls">
-          <div className="booking-teleprompter-mode-toggle">
+        <div className="telecontrols">
+          <div className="modeToggle">
             {(["full", "manual", "auto"] as const).map(option => (
               <button
                 key={option}
                 type="button"
-                className={mode === option ? "active" : ""}
+                className={`tiny${mode === option ? " active" : ""}`}
                 onClick={() => setTeleMode(option)}
               >
                 {option[0].toUpperCase() + option.slice(1)}
@@ -250,20 +252,16 @@ function BookingTeleprompter() {
             <>
               <button
                 type="button"
-                className="booking-teleprompter-small-control"
+                className="tiny"
                 onClick={() => setTeleMode("manual")}
               >
                 ← Manual
               </button>
-              <button
-                type="button"
-                className="booking-teleprompter-small-control"
-                onClick={toggleAutoPlay}
-              >
+              <button type="button" className="tiny" onClick={toggleAutoPlay}>
                 {playing ? "Ⅱ Pause" : "▶ Play"}
               </button>
-              <label className="booking-teleprompter-speed">
-                Speed
+              <div className="speedWrap show">
+                <span className="speedLabel">Speed</span>
                 <input
                   type="range"
                   min="5"
@@ -271,67 +269,72 @@ function BookingTeleprompter() {
                   value={speed}
                   onChange={event => setSpeed(Number(event.target.value))}
                 />
-                <output>{speed}</output>
-              </label>
+                <span className="speedValue">{speed}</span>
+              </div>
             </>
           )}
           <button
             type="button"
-            className="booking-teleprompter-question-button"
+            className="tiny ask"
             onClick={() => setQuestionOpen(open => !open)}
           >
-            <Sparkles /> Customer asked a question
+            ✦ Customer asked a question
           </button>
         </div>
-      </header>
-      <div
-        ref={scrollRef}
-        className={`booking-teleprompter-body booking-teleprompter-body--${mode}`}
-      >
-        {mode === "full" ? (
-          <>
-            <div className="booking-teleprompter-label">
-              ✦ CALL SCRIPT · CLEANING TYPE
+      </div>
+      <div className="televiewport" ref={scrollRef}>
+        <div className={`teleScript ${mode === "full" ? "fullMode" : ""}`}>
+          {mode === "full" ? (
+            <>
+              <div className="fullLabel">✦ CALL SCRIPT · CLEANING TYPE</div>
+              <div className="fullCopy">
+                “{lines[0]} {lines.slice(1).join(" ")}”
+              </div>
+            </>
+          ) : mode === "auto" ? (
+            <div>
+              {lines.map(scriptLine => (
+                <p key={scriptLine}>{scriptLine}</p>
+              ))}
             </div>
-            <p>
-              “{lines[0]} {lines.slice(1).join(" ")}”
-            </p>
-          </>
-        ) : mode === "auto" ? (
-          <div className="booking-teleprompter-auto-script">
-            {lines.map(scriptLine => (
-              <p key={scriptLine}>{scriptLine}</p>
-            ))}
-          </div>
-        ) : (
-          <p>{lines[line] ?? lines[0]}</p>
-        )}
+          ) : (
+            <p>{lines[line] ?? lines[0]}</p>
+          )}
+        </div>
       </div>
       {mode === "manual" && (
-        <footer className="booking-teleprompter-footer">
-          <button
-            type="button"
-            onClick={() => setLine(current => Math.max(0, current - 1))}
-            disabled={line === 0}
-          >
-            ↑ Previous
-          </button>
-          <span>
+        <div className="telemanualbar">
+          <div className="telemanualnav">
+            <button
+              type="button"
+              className="tiny"
+              onClick={() => setLine(current => Math.max(0, current - 1))}
+              disabled={line === 0}
+            >
+              ↑ Previous
+            </button>
+            <button
+              type="button"
+              className="tiny"
+              onClick={() =>
+                setLine(current => Math.min(lines.length - 1, current + 1))
+              }
+              disabled={line === lines.length - 1}
+            >
+              Next ↓
+            </button>
+          </div>
+          <div className="telemanualcount">
             {line + 1} of {lines.length}
-          </span>
+          </div>
           <button
             type="button"
-            onClick={() =>
-              setLine(current => Math.min(lines.length - 1, current + 1))
-            }
-            disabled={line === lines.length - 1}
+            className="tiny"
+            onClick={() => setLine(lines.length - 1)}
           >
-            Next ↓
-          </button>
-          <button type="button" onClick={() => setLine(lines.length - 1)}>
             Skip this
           </button>
-        </footer>
+        </div>
       )}
       {questionOpen && (
         <div className="booking-teleprompter-faq">

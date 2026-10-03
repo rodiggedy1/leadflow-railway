@@ -4276,138 +4276,196 @@
   min-height: 0;
   padding: 0;
 }
-.page1-review-surface .booking-teleprompter {
+.page1-review-surface .tele {
   position: sticky;
   top: 0;
   z-index: 4;
-  margin: 0 0 28px;
+  margin-bottom: 28px;
   overflow: hidden;
   border: 1px solid #4a4639;
   border-radius: 14px;
   background: #1c1c18;
   box-shadow: 0 15px 35px #0008;
 }
-.page1-review-surface .booking-teleprompter-head {
+.page1-review-surface .telehead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 74px;
   gap: 20px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #34352f;
+  padding: 8px 13px;
+  border-bottom: 1px solid #34332d;
 }
-.page1-review-surface .booking-teleprompter-title {
+.page1-review-surface .live {
   display: flex;
   align-items: center;
-  min-width: 0;
   gap: 8px;
 }
-.page1-review-surface .booking-teleprompter-title > div {
+.page1-review-surface .dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #d9b66e;
+}
+.page1-review-surface .telecontrols {
   display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-.page1-review-surface .booking-teleprompter-title strong {
-  color: #d9b66e;
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  font-weight: 850;
-  white-space: nowrap;
-}
-.page1-review-surface .booking-teleprompter-title span:last-child {
-  color: #9d9e95;
-  font-size: 13px;
-  white-space: nowrap;
-}
-.page1-review-surface .booking-teleprompter-controls {
-  display: flex;
-  flex: 0 0 auto;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
 }
-.page1-review-surface .booking-teleprompter-mode-toggle {
+.page1-review-surface .modeToggle {
   display: flex;
   overflow: hidden;
   border: 1px solid #4b4b43;
   border-radius: 9px;
 }
-.page1-review-surface .booking-teleprompter-mode-toggle button,
-.page1-review-surface .booking-teleprompter-small-control,
-.page1-review-surface .booking-teleprompter-question-button {
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid #4b4b43;
-  background: #1c1c18;
-  color: #f4f0e7;
+.page1-review-surface .tiny {
+  border: 1px solid #42433c;
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #eee;
+  background: #1d1e1a;
+  cursor: pointer;
   font-size: 11px;
-  white-space: nowrap;
 }
-.page1-review-surface .booking-teleprompter-mode-toggle button {
+.page1-review-surface .tiny:hover {
+  border-color: #66675f;
+}
+.page1-review-surface .modeToggle .tiny {
   min-width: 70px;
   border: 0;
   border-radius: 0;
 }
-.page1-review-surface .booking-teleprompter-mode-toggle button.active {
-  background: #d9b66e;
+.page1-review-surface .modeToggle .active {
   color: #17140e;
+  background: #d9b66e;
 }
-.page1-review-surface .booking-teleprompter-small-control,
-.page1-review-surface .booking-teleprompter-question-button {
-  border-radius: 9px;
+.page1-review-surface .tiny.ask {
+  color: #efd393;
 }
-.page1-review-surface .booking-teleprompter-speed {
-  display: inline-flex;
+.page1-review-surface .speedWrap {
+  display: none;
   align-items: center;
   gap: 7px;
+}
+.page1-review-surface .speedWrap.show {
+  display: flex;
+}
+.page1-review-surface .speedLabel,
+.page1-review-surface .speedValue {
   color: #aaa;
   font-size: 11px;
-  white-space: nowrap;
 }
-.page1-review-surface .booking-teleprompter-speed input {
+.page1-review-surface .speedValue {
+  min-width: 22px;
+  color: #d9b66e;
+  text-align: right;
+}
+.page1-review-surface .speedWrap input {
   width: 105px;
   accent-color: #d9b66e;
+  cursor: pointer;
 }
-.page1-review-surface .booking-teleprompter-body {
+.page1-review-surface .televiewport {
   position: relative;
   height: 205px;
   padding: 0 20px;
   overflow-y: auto;
-  background: #1c1c18;
   scrollbar-width: none;
 }
-.page1-review-surface .booking-teleprompter-body::-webkit-scrollbar {
+.page1-review-surface .televiewport::-webkit-scrollbar {
   display: none;
 }
-.page1-review-surface .booking-teleprompter-body--full {
-  padding-top: 14px;
-  padding-bottom: 12px;
-  overflow: hidden;
+.page1-review-surface .televiewport::before,
+.page1-review-surface .televiewport::after {
+  position: sticky;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  display: block;
+  height: 25px;
+  content: "";
+  pointer-events: none;
 }
-.page1-review-surface .booking-teleprompter-body--manual,
-.page1-review-surface .booking-teleprompter-body--auto {
-  display: flex;
-  align-items: center;
+.page1-review-surface .televiewport::before {
+  top: 0;
+  margin-bottom: -25px;
+  background: linear-gradient(#1c1c18, transparent);
 }
-.page1-review-surface .booking-teleprompter-body p {
+.page1-review-surface .televiewport::after {
+  bottom: 0;
+  margin-top: -25px;
+  background: linear-gradient(transparent, #1c1c18);
+}
+.page1-review-surface .teleScript {
+  position: relative;
+  z-index: 3;
   max-width: 850px;
-  margin: 0;
+  margin-right: 0;
+  margin-left: 0;
+  padding: 48px 0 120px;
   color: #f1efe8;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.55;
+  text-align: left;
+}
+.page1-review-surface .teleScript p {
+  margin: 0 0 24px;
+}
+.page1-review-surface .teleScript p:last-child {
+  margin-bottom: 0;
+}
+.page1-review-surface .teleScript.fullMode {
+  padding: 14px 0 12px;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.3;
 }
-.page1-review-surface .booking-teleprompter-label {
+.page1-review-surface .fullLabel {
   margin-bottom: 12px;
+  color: #d9b66e;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
 }
-.page1-review-surface .booking-teleprompter-footer {
+.page1-review-surface .fullCopy {
+  color: #f1efe8;
+}
+.page1-review-surface .fullCopy strong {
+  font-weight: 500;
+}
+.page1-review-surface .manualLine {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0;
+}
+.page1-review-surface .manualCurrent {
+  min-height: 50px;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.page1-review-surface .telemanualbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid #34352f;
+  padding: 8px 13px;
+  border-top: 1px solid #34332d;
+}
+.page1-review-surface .telemanualnav {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.page1-review-surface .telemanualcount {
+  color: #9d9e95;
+  font-size: 11px;
 }
 .page1-review-surface .review-page1-header {
   margin: 0 0 18px;
