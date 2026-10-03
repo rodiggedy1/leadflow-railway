@@ -4863,12 +4863,14 @@
   }
   .review-booking-shell .footer {
     position: absolute;
-    right: 38px;
-    bottom: 17px;
-    left: 38px;
+    right: 0;
+    bottom: 0;
+    left: 0;
     z-index: 5;
     margin-top: 0;
-    padding-bottom: 0;
+    padding: 0 0 4px;
+    border-top: 0;
+    background: transparent;
   }
 }
 /* Step 7 payment parity: one compact dark panel around the existing Stripe form. */
