@@ -177,9 +177,7 @@ const TELE_LINES: Record<Step, string[]> = {
     "Thanks for all of that. Let me walk you through the quote and the service options.",
   ],
   5: [
-    "Your first cleaning is shown at the full price. Recurring service is 15% less per visit after that.",
-    "Would you like to continue with a one-time cleaning, or would you prefer recurring service?",
-    "We offer weekly, bi-weekly, and monthly service. Which one would work best for you?",
+    "",
   ],
   6: [
     "Perfect. What day works best for you?",
@@ -189,7 +187,7 @@ const TELE_LINES: Record<Step, string[]> = {
   ],
   7: [
     "Great. Before I finish this up, let me confirm where we’re sending everything.",
-    "What’s the best mobile number, email address, and service address for the appointment?",
+    "What’s your name, and what’s the best mobile number, email address, and service address for the appointment?",
     "We’ll use the mobile number for confirmations, appointment updates, and arrival notifications.",
   ],
   8: [
@@ -262,9 +260,15 @@ function BookingTeleprompter({
     if (step === 4) {
       return [
         ...base,
+        `Your first cleaning is ${firstTotal}.`,
         futureTotal
-          ? `For this ${serviceName} on your ${homeDetail}, your first cleaning is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit, so it would be ${futureTotal} per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`
-          : `For this ${serviceName} on your ${homeDetail}, your cleaning total is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`,
+          ? `For this ${serviceName} on your ${homeDetail}, if you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit, so it would be ${futureTotal} per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`
+          : `For this ${serviceName} on your ${homeDetail}, if you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`,
+      ];
+    }
+    if (step === 5) {
+      return [
+        `Ok so we have the first cleaning at ${firstTotal}, since that's the full reset where the team gets the home to a great baseline. After that, recurring visits drop 15%, so you'd pay ${futureTotal ?? firstTotal} each time. Most of our clients choose recurring because it keeps the home fresh for less. Would weekly, bi-weekly, or monthly work best for you?`,
       ];
     }
     if (step !== 9) return base;
@@ -430,7 +434,8 @@ function BookingTeleprompter({
                     QUOTE AFTER YOU SELECT EXTRAS
                   </div>
                   <div className="fullCopy quote-after-extras-copy">
-                    {lines.slice(2).join(" ")}
+                    <span className="quote-highlight">{lines[2]}</span>{" "}
+                    {lines.slice(3).join(" ")}
                   </div>
                 </>
               ) : (

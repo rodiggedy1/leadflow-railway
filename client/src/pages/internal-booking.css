@@ -4702,6 +4702,14 @@
   letter-spacing: 0.16em;
 }
 .review-booking-shell .quote-after-extras-copy { line-height: 1.45; }
+.review-booking-shell .quote-highlight {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(225, 185, 99, 0.16);
+  color: var(--gold2);
+  font-weight: 800;
+}
 .review-booking-shell .price-concern-link {
   display: block;
   margin: 10px 18px 0;
