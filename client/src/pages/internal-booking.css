@@ -4832,3 +4832,24 @@
   justify-content: space-between;
   gap: 10px;
 }
+/* Goal parity correction: the modal shell's legacy selectors must not win over the review prototype. */
+.review-booking-shell .condition {
+  position: static;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: none;
+  align-items: stretch;
+  column-gap: 7px;
+  min-height: 0;
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: initial;
+  cursor: default;
+}
+.review-booking-shell .televiewport {
+  height: 240px;
+}
