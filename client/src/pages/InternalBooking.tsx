@@ -365,9 +365,18 @@ function BookingTeleprompter({
               <div className="fullLabel">
                 ✦ CALL SCRIPT · {TELE_STAGE[step]}
               </div>
-              <div className="fullCopy">
-                “{lines[0]} {lines.slice(1).join(" ")}”
-              </div>
+              {step === 2 ? (
+                <>
+                  <div className="fullCopy">
+                    “{lines[0]} {lines[1]}”
+                  </div>
+                  <div className="page2Recurring">{lines[2]}</div>
+                </>
+              ) : (
+                <div className="fullCopy">
+                  “{lines[0]} {lines.slice(1).join(" ")}”
+                </div>
+              )}
             </>
           ) : mode === "auto" ? (
             lines.map((scriptLine, index) => (
@@ -1367,7 +1376,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             }
             frequencyText={label(frequency)}
           />
-          <div className="pagehead">
+          <div className={`pagehead pagehead-step-${step}`}>
             <div className="ey">STEP {step} OF 9</div>
             <h1>{pageTitles[step - 1]}</h1>
             <div className="muted">{pageLeads[step - 1]}</div>
