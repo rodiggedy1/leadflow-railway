@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   Clipboard,
   ChevronRight,
-  Clock3,
   CreditCard,
   Heart,
   Home,
@@ -1076,9 +1075,20 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               onSelect={nextDate => {
                 if (!nextDate) return;
                 setDate(easternDateIsoFromDate(nextDate));
-                setCalendarOpen(false);
               }}
             />
+            <label className="manual-time-field schedule-popover-time-field">
+              <span>EXACT ARRIVAL TIME · EASTERN TIME</span>
+              <input
+                type="time"
+                value={time}
+                onChange={event => {
+                  setManualTime(true);
+                  setTime(event.target.value);
+                }}
+              />
+              {time && <small>Selected: {timeLabel(time)}</small>}
+            </label>
           </PopoverContent>
         </Popover>
         <div className="label" style={{ marginTop: 17 }}>
@@ -1110,31 +1120,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </button>
             );
           })}
-        </div>
-        <div className="manual-time-panel">
-          <button
-            type="button"
-            className={`manual-time-toggle${manualTime ? " active" : ""}`}
-            onClick={() => setManualTime(current => !current)}
-          >
-            <Clock3 />
-            <span>
-              <strong>Need a different arrival time?</strong>
-              <small>Enter an exact time instead of a standard window.</small>
-            </span>
-            <span className="manual-time-caret">{manualTime ? "−" : "+"}</span>
-          </button>
-          {manualTime && (
-            <label className="manual-time-field">
-              <span>EXACT ARRIVAL TIME · EASTERN TIME</span>
-              <input
-                type="time"
-                value={time}
-                onChange={event => setTime(event.target.value)}
-              />
-              {time && <small>Selected: {timeLabel(time)}</small>}
-            </label>
-          )}
         </div>
       </div>
     ) : step === 6 ? (

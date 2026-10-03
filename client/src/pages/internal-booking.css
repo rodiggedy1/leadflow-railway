@@ -5047,16 +5047,8 @@
 .review-booking-shell .schedule-calendar-popover .rdp-disabled { opacity: .3; }
 .review-booking-shell .schedule-calendar-popover .rdp-button_previous,
 .review-booking-shell .schedule-calendar-popover .rdp-button_next { color: #e8c36f; }
-.review-booking-shell .manual-time-panel { margin-top: 14px; }
-.review-booking-shell .manual-time-toggle { width: 100%; display: flex; align-items: center; gap: 12px; padding: 13px 15px; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; background: #141513; color: #f3f0e8; text-align: left; }
-.review-booking-shell .manual-time-toggle:hover,
-.review-booking-shell .manual-time-toggle.active { border-color: #e8c36f; background: rgba(232,195,111,.08); }
-.review-booking-shell .manual-time-toggle > svg { width: 19px; color: #e8c36f; flex: none; }
-.review-booking-shell .manual-time-toggle span:not(.manual-time-caret) { display: grid; gap: 3px; }
-.review-booking-shell .manual-time-toggle strong { font-size: 14px; }
-.review-booking-shell .manual-time-toggle small { color: #aaa9a2; font-size: 11px; }
-.review-booking-shell .manual-time-caret { margin-left: auto; color: #e8c36f; font-size: 22px; line-height: 1; }
 .review-booking-shell .manual-time-field { display: grid; gap: 7px; margin-top: 10px; padding: 13px 15px; border: 1px solid rgba(232,195,111,.35); border-radius: 12px; background: #1c1d19; }
+.review-booking-shell .schedule-popover-time-field { margin-top: 6px; }
 .review-booking-shell .manual-time-field > span { color: #d8b96b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
 .review-booking-shell .manual-time-field input { width: 100%; min-height: 45px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; background: #121311; color: #f3f0e8; font-size: 18px; }
 .review-booking-shell .manual-time-field input:focus { border-color: #e8c36f; outline: none; box-shadow: 0 0 0 3px rgba(232,195,111,.14); }
