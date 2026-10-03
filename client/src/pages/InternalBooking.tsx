@@ -169,7 +169,6 @@ const TELE_LINES: Record<Step, string[]> = {
   2: [
     "Perfect. Let me get a few details about the home so I can give you an accurate price.",
     "How many bedrooms and bathrooms are we cleaning? And is this a house, apartment, condo, or townhome?",
-    "And just so you know, if you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit. We offer weekly, bi-weekly, or monthly service. Which one would work best for you?",
   ],
   3: [
     "Now I just want to get a sense of the current condition so we make sure the team has enough time.",
@@ -179,6 +178,7 @@ const TELE_LINES: Record<Step, string[]> = {
   4: [
     "Before we finish the quote, let me make sure we’re covering everything you’d like done.",
     "Would you like to add any extras: inside the fridge, inside the oven, inside the cabinets, interior windows, laundry, or organizing?",
+    "Thanks for all of that. Let me walk you through the quote and the service options.",
   ],
   5: [
     "Perfect. What day works best for you?",
@@ -247,6 +247,14 @@ function BookingTeleprompter({
   const faq = trpc.bookingFunnel.answerFaq.useMutation();
   const lines = useMemo(() => {
     const base = TELE_LINES[step];
+    if (step === 4) {
+      return [
+        ...base,
+        futureTotal
+          ? `For this ${serviceName} on your ${homeDetail}, your first cleaning is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit, so it would be ${futureTotal} per visit. Would you like to continue with the option you selected, or would you prefer recurring service?`
+          : `For this ${serviceName} on your ${homeDetail}, your cleaning total is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit. Would you like to continue with the option you selected, or would you prefer recurring service?`,
+      ];
+    }
     if (step !== 8) return base;
     return [
       base[0],
@@ -395,7 +403,6 @@ function BookingTeleprompter({
                   <div className="fullCopy">
                     “{lines[0]} {lines[1]}”
                   </div>
-                  <div className="page2Recurring">{lines[2]}</div>
                 </>
               ) : (
                 <div className="fullCopy">
