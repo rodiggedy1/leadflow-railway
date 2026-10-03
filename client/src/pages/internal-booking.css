@@ -4868,3 +4868,64 @@
     padding-bottom: 12px;
   }
 }
+/* Step 7 payment parity: one compact dark panel around the existing Stripe form. */
+.review-booking-shell .step-content > .card:has(> .booking-card-acceptance-dark) {
+  margin-top: 15px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.review-booking-shell .booking-card-acceptance-dark {
+  width: 100%;
+  margin-top: 0;
+  padding: 18px;
+  gap: 14px;
+  border: 1px solid #373832;
+  border-radius: 12px;
+  background: #181916;
+  color: #f4f0e7;
+  box-shadow: none;
+}
+.review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-head strong {
+  font-size: 18px;
+}
+.review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+}
+.review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-fields label {
+  min-width: 0;
+}
+.review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-fields input,
+.review-booking-shell .booking-card-acceptance-dark .booking-card-element-shell {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-color: #41423b;
+  border-radius: 8px;
+  background: #151613;
+  color: #fff;
+}
+.review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-submit {
+  width: fit-content;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: #d9b66e;
+  color: #17140e;
+}
+@media (max-width: 760px) {
+  .review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-fields {
+    grid-template-columns: 1fr;
+  }
+  .review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-submit {
+    width: 100%;
+  }
+}
