@@ -101,6 +101,7 @@ const STEPS = [
   "Home details",
   "Home condition",
   "Extras",
+  "Cleaning frequency",
   "Date & time",
   "Customer",
   "Payment method",
@@ -108,7 +109,7 @@ const STEPS = [
   "Additional services",
 ];
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 type PaymentMethod = "card" | "cashapp" | "invoice";
 type AdditionalService = {
   id: string;
@@ -181,27 +182,32 @@ const TELE_LINES: Record<Step, string[]> = {
     "Thanks for all of that. Let me walk you through the quote and the service options.",
   ],
   5: [
+    "Your first cleaning is shown at the full price. Recurring service is 15% less per visit after that.",
+    "Would you like to continue with a one-time cleaning, or would you prefer recurring service?",
+    "We offer weekly, bi-weekly, and monthly service. Which one would work best for you?",
+  ],
+  6: [
     "Perfect. What day works best for you?",
     "Great. Let me see what arrival windows we have available that day.",
     "We have an arrival window available. That means the team can arrive anytime within the selected two-hour window.",
     "Would that work for you?",
   ],
-  6: [
+  7: [
     "Great. Before I finish this up, let me confirm where we’re sending everything.",
     "What’s the best mobile number, email address, and service address for the appointment?",
     "We’ll use the mobile number for confirmations, appointment updates, and arrival notifications.",
   ],
-  7: [
+  8: [
     "Perfect. The last thing we’ll do is put a card on file. Nothing is charged until after your cleaning is completed. It keeps our teams from having to travel with cash and makes payment easy for you once the job is done. Whenever you’re ready, I can take the card number.",
   ],
-  8: [
+  9: [
     "Alright, let me make sure I have everything right.",
     "You’re scheduled for the selected cleaning and home details, with the selected arrival window.",
     "Your first cleaning total and any recurring price are shown in the booking summary.",
     "Does everything sound right?",
     "Perfect — I’ll get that booked for you now. You’ll receive your confirmation by text in just a moment.",
   ],
-  9: [
+  10: [
     "Your appointment is booked. Before we finish, would you like to add anything else to the service?",
   ],
 };
@@ -210,11 +216,12 @@ const TELE_STAGE: Record<Step, string> = {
   2: "HOME DETAILS",
   3: "HOME CONDITION",
   4: "EXTRAS",
-  5: "DATE & TIME",
-  6: "CUSTOMER",
-  7: "PAYMENT",
-  8: "FINAL REVIEW",
-  9: "ADDITIONAL SERVICES",
+  5: "CLEANING FREQUENCY",
+  6: "DATE & TIME",
+  7: "CUSTOMER",
+  8: "PAYMENT",
+  9: "FINAL REVIEW",
+  10: "ADDITIONAL SERVICES",
 };
 function BookingTeleprompter({
   step,
@@ -255,7 +262,7 @@ function BookingTeleprompter({
           : `For this ${serviceName} on your ${homeDetail}, your cleaning total is ${firstTotal}. If you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit. Would you like to continue with the option you selected, or would you prefer recurring service?`,
       ];
     }
-    if (step !== 8) return base;
+    if (step !== 9) return base;
     return [
       base[0],
       `You’re scheduled for a ${serviceName} for your ${homeDetail} on ${dateText}.`,
@@ -453,7 +460,7 @@ function BookingTeleprompter({
           </button>
         </div>
       )}
-      {step === 7 && (
+      {step === 8 && (
         <button
           type="button"
           className="card-refusal-link"
@@ -669,7 +676,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     setAddress,
     extras,
     setExtra,
-  } = useCanonicalBookingFlow({ stepCount: 9 });
+  } = useCanonicalBookingFlow({ stepCount: 10 });
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [additionalServices, setAdditionalServices] = useState<
@@ -694,7 +701,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const mainRef = useRef<HTMLElement>(null);
   const standardTimeCountsQuery = trpc.bookings.standardTimeCounts.useQuery(
     { date },
-    { enabled: step === 5 && Boolean(date), staleTime: 30_000 }
+    { enabled: step === 6 && Boolean(date), staleTime: 30_000 }
   );
   const standardTimeCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -724,7 +731,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   ]);
   useEffect(() => {
     if (
-      step === 5 &&
+      step === 6 &&
       !timeSelectionTouched &&
       recommendedStandardTime !== null &&
       time !== recommendedStandardTime
@@ -761,7 +768,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           setCardSaved(true);
           setCardClientSecret(null);
           setCardSetupIntentId(null);
-          setStep(8);
+          setStep(9);
           return;
         }
         setCardClientSecret(result.clientSecret);
@@ -775,7 +782,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         setCardSaved(true);
         setCardClientSecret(null);
         setCardSetupIntentId(null);
-        setStep(8);
+        setStep(9);
       },
       onError: mutationError => setError(mutationError.message),
     });
@@ -849,7 +856,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const next = () => {
     setError(null);
     if (
-      step === 6 &&
+      step === 7 &&
       (!customerName.trim() ||
         !customerPhone.trim() ||
         !customerEmail.trim() ||
@@ -858,17 +865,17 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       setError("Complete the customer information before continuing.");
       return;
     }
-    if (step === 6 && paymentMethod === "card" && !createdBooking) {
-      setStep(7);
+    if (step === 7 && paymentMethod === "card" && !createdBooking) {
+      setStep(8);
       submit();
       return;
     }
-    if (step === 7 && paymentMethod === "card" && !createdBooking) {
+    if (step === 8 && paymentMethod === "card" && !createdBooking) {
       submit();
       return;
     }
     if (
-      step === 7 &&
+      step === 8 &&
       paymentMethod === "card" &&
       createdBooking &&
       !cardSaved
@@ -876,11 +883,11 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       setError("Save the card before continuing.");
       return;
     }
-    if (step === 9) {
+    if (step === 10) {
       submit();
       return;
     }
-    setStep(Math.min(9, step + 1) as Step);
+    setStep(Math.min(10, step + 1) as Step);
   };
   const back = () => {
     setError(null);
@@ -1012,50 +1019,19 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </div>
           </div>
         </div>
-        <div className="page2-choice-columns">
-          <div className="section">
-            <div className="label">HOME TYPE</div>
-            <div className="choices">
-              {HOME_TYPES.map(value => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`choice${homeType === value ? " on" : ""}`}
-                  onClick={() => setHomeType(value)}
-                >
-                  {value}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="section">
-            <div className="label">CLEANING FREQUENCY</div>
-            <div className="choices">
-              {FREQUENCIES.map(value => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`choice${frequency === value ? " on" : ""}`}
-                  onClick={() => setFrequency(value)}
-                >
-                  <b>{label(value)}</b>
-                  <br />
-                  <span className="muted">
-                    {value === "one-time"
-                      ? "Single cleaning"
-                      : value === "weekly"
-                        ? "Every week"
-                        : value === "biweekly"
-                          ? "Every 2 weeks"
-                          : "Every 4 weeks"}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <p className="muted frequency-note">
-              The first cleaning is full price. Recurring pricing applies to
-              future visits.
-            </p>
+        <div className="section">
+          <div className="label">HOME TYPE</div>
+          <div className="choices">
+            {HOME_TYPES.map(value => (
+              <button
+                key={value}
+                type="button"
+                className={`choice${homeType === value ? " on" : ""}`}
+                onClick={() => setHomeType(value)}
+              >
+                {value}
+              </button>
+            ))}
           </div>
         </div>
       </>
@@ -1112,6 +1088,36 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
         })}
       </div>
     ) : step === 5 ? (
+      <div className="card">
+        <div className="label">CLEANING FREQUENCY</div>
+        <div className="choices">
+          {FREQUENCIES.map(value => (
+            <button
+              key={value}
+              type="button"
+              className={`choice${frequency === value ? " on" : ""}`}
+              onClick={() => setFrequency(value)}
+            >
+              <b>{label(value)}</b>
+              <br />
+              <span className="muted">
+                {value === "one-time"
+                  ? "Single cleaning"
+                  : value === "weekly"
+                    ? "Every week"
+                    : value === "biweekly"
+                      ? "Every 2 weeks"
+                      : "Every 4 weeks"}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="muted frequency-note">
+          The first cleaning is full price. Recurring pricing applies to
+          future visits.
+        </p>
+      </div>
+    ) : step === 6 ? (
       <div className="card page5-schedule-card">
         <div className="label">DATE</div>
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
@@ -1223,7 +1229,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           })}
         </div>
       </div>
-    ) : step === 6 ? (
+    ) : step === 7 ? (
       <div className="grid2">
         <div className="card">
           <div className="label">FULL NAME</div>
@@ -1278,7 +1284,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           <small className="muted">{notes.length}/500</small>
         </div>
       </div>
-    ) : step === 7 ? (
+    ) : step === 8 ? (
       <>
         <div className="choices" role="group" aria-label="Payment method">
           {(["card", "cashapp", "invoice"] as PaymentMethod[]).map(value => (
@@ -1348,7 +1354,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           </div>
         )}
       </>
-    ) : step === 8 ? (
+    ) : step === 9 ? (
       <div className="card">
         <div className="ey">READY TO BOOK</div>
         <h2>{serviceName}</h2>
@@ -1445,6 +1451,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     "Tell us about the home",
     "How is the home currently maintained?",
     "Anything else while we’re there?",
+    "One-time or recurring service?",
     "When should the cleaning happen?",
     "Who are we booking for?",
     "Secure the appointment",
@@ -1456,6 +1463,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     "Capture enough detail to price and schedule the job correctly.",
     "Estimate the amount of buildup so the team gets enough time.",
     "Add services and quantities while you are on the call.",
+    "Choose one-time or recurring service before scheduling the appointment.",
     "Select the date and a two-hour arrival window.",
     "Confirm contact details and the service address.",
     "Choose how the customer will pay after service.",
@@ -1483,9 +1491,9 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             {STEPS.map((title, index) => {
               const number = index + 1;
               const reviewTitle =
-                number === 6
+                number === 7
                   ? "Customer"
-                  : number === 8
+                  : number === 9
                     ? "Final review"
                     : title;
               return (
@@ -1521,7 +1529,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             frequencyText={label(frequency)}
           />
           <div className={`pagehead pagehead-step-${step}`}>
-            <div className="ey">STEP {step} OF 9</div>
+            <div className="ey">STEP {step} OF 10</div>
             <h1>{pageTitles[step - 1]}</h1>
             <div className="muted">{pageLeads[step - 1]}</div>
           </div>
@@ -1549,7 +1557,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 startCardSetup.isPending ||
                 confirmCardSetup.isPending ||
                 updateAdditionalServices.isPending ||
-                (step === 7 && paymentMethod === "card" && !!createdBooking)
+                (step === 8 && paymentMethod === "card" && !!createdBooking)
               }
             >
               {createBooking.isPending || startCardSetup.isPending
@@ -1558,7 +1566,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   ? "Saving card…"
                   : updateAdditionalServices.isPending
                     ? "Updating booking…"
-                    : step === 9
+                    : step === 10
                       ? "Create booking →"
                       : "Continue →"}
             </button>
