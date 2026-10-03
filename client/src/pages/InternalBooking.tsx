@@ -135,7 +135,79 @@ function dateLabel(value: string) {
   return easternDateLabel(value);
 }
 
-function BookingTeleprompter() {
+const TELE_LINES: Record<Step, string[]> = {
+  1: [
+    "Absolutely — I can help you get that set up. Let me first make sure we choose the right cleaning.",
+    "Is this more of a routine cleaning, does the home need a deeper reset, or are you moving in or out?",
+    "Perfect. Thanks for describing that. Let’s make sure we choose the right cleaning for the home.",
+  ],
+  2: [
+    "Perfect. Let me get a few details about the home so I can give you an accurate price.",
+    "How many bedrooms and bathrooms are we cleaning? And is this a house, apartment, condo, or townhome?",
+    "And just so you know, if you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit. We offer weekly, bi-weekly, or monthly service. Which one would work best for you?",
+  ],
+  3: [
+    "Now I just want to get a sense of the current condition so we make sure the team has enough time.",
+    "On a scale from 1 to 10, where would you put the home today? A 1 is already very clean and a 10 needs a serious reset.",
+    "There’s no wrong answer — this just helps us plan the cleaning properly.",
+  ],
+  4: [
+    "Before we finish the quote, let me make sure we’re covering everything you’d like done.",
+    "Would you like to add any extras: inside the fridge, inside the oven, inside the cabinets, interior windows, laundry, or organizing?",
+  ],
+  5: [
+    "Perfect. What day works best for you?",
+    "Great. Let me see what arrival windows we have available that day.",
+    "We have an arrival window available. That means the team can arrive anytime within the selected two-hour window.",
+    "Would that work for you?",
+  ],
+  6: [
+    "Great. Before I finish this up, let me confirm where we’re sending everything.",
+    "What’s the best mobile number, email address, and service address for the appointment?",
+    "We’ll use the mobile number for confirmations, appointment updates, and arrival notifications.",
+  ],
+  7: [
+    "Perfect. The last thing we’ll do is put a card on file. Nothing is charged until after your cleaning is completed. It keeps our teams from having to travel with cash and makes payment easy for you once the job is done. Whenever you’re ready, I can take the card number.",
+  ],
+  8: [
+    "Alright, let me make sure I have everything right.",
+    "You’re scheduled for the selected cleaning and home details, with the selected arrival window.",
+    "Your first cleaning total and any recurring price are shown in the booking summary.",
+    "Does everything sound right?",
+    "Perfect — I’ll get that booked for you now. You’ll receive your confirmation by text in just a moment.",
+  ],
+  9: [
+    "Your appointment is booked. Before we finish, would you like to add anything else to the service?",
+  ],
+};
+const TELE_STAGE: Record<Step, string> = {
+  1: "CLEANING TYPE",
+  2: "HOME DETAILS",
+  3: "HOME CONDITION",
+  4: "EXTRAS",
+  5: "DATE & TIME",
+  6: "CUSTOMER",
+  7: "PAYMENT",
+  8: "FINAL REVIEW",
+  9: "ADDITIONAL SERVICES",
+};
+function BookingTeleprompter({
+  step,
+  serviceName,
+  homeDetail,
+  dateText,
+  firstTotal,
+  futureTotal,
+  frequencyText,
+}: {
+  step: Step;
+  serviceName: string;
+  homeDetail: string;
+  dateText: string;
+  firstTotal: string;
+  futureTotal: string | null;
+  frequencyText: string;
+}) {
   const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
   const [line, setLine] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -148,12 +220,27 @@ function BookingTeleprompter() {
   const lastFrameRef = useRef<number | null>(null);
   const scrollPositionRef = useRef(0);
   const faq = trpc.bookingFunnel.answerFaq.useMutation();
-  const lines = [
-    "Absolutely — I can help you get that set up. Let me first make sure we choose the right cleaning.",
-    "Is this more of a routine cleaning, does the home need a deeper reset, or are you moving in or out?",
-    "Perfect. Thanks for describing that. Let’s make sure we choose the right cleaning for the home.",
-  ];
-
+  const lines = useMemo(() => {
+    const base = TELE_LINES[step];
+    if (step !== 8) return base;
+    return [
+      base[0],
+      `You’re scheduled for a ${serviceName} for your ${homeDetail} on ${dateText}.`,
+      futureTotal
+        ? `Your first cleaning is ${firstTotal}, and your ${frequencyText.toLowerCase()} cleanings after that will be ${futureTotal} per visit.`
+        : `Your cleaning total is ${firstTotal}.`,
+      base[3],
+      base[4],
+    ];
+  }, [
+    step,
+    serviceName,
+    homeDetail,
+    dateText,
+    firstTotal,
+    futureTotal,
+    frequencyText,
+  ]);
   const stopAutoPlay = () => {
     setPlaying(false);
     lastFrameRef.current = null;
@@ -162,9 +249,7 @@ function BookingTeleprompter() {
       animationRef.current = null;
     }
   };
-
   useEffect(() => () => stopAutoPlay(), []);
-
   const autoFrame = (now: number) => {
     if (!playing || mode !== "auto" || !scrollRef.current) return;
     if (lastFrameRef.current === null) {
@@ -174,39 +259,18 @@ function BookingTeleprompter() {
     const elapsed = Math.min((now - lastFrameRef.current) / 1000, 0.05);
     lastFrameRef.current = now;
     scrollPositionRef.current += speed * elapsed;
-    const maxScroll = Math.max(
+    const max = Math.max(
       0,
       scrollRef.current.scrollHeight - scrollRef.current.clientHeight
     );
-    if (scrollPositionRef.current >= maxScroll) {
-      scrollPositionRef.current = maxScroll;
-      scrollRef.current.scrollTop = maxScroll;
+    if (scrollPositionRef.current >= max) {
+      scrollRef.current.scrollTop = max;
       stopAutoPlay();
       return;
     }
     scrollRef.current.scrollTop = scrollPositionRef.current;
     animationRef.current = window.requestAnimationFrame(autoFrame);
   };
-
-  const toggleAutoPlay = () => {
-    if (playing) {
-      stopAutoPlay();
-      return;
-    }
-    if (!scrollRef.current) return;
-    const maxScroll = Math.max(
-      0,
-      scrollRef.current.scrollHeight - scrollRef.current.clientHeight
-    );
-    if (scrollRef.current.scrollTop >= maxScroll - 2) {
-      scrollRef.current.scrollTop = 0;
-      scrollPositionRef.current = 0;
-    }
-    setPlaying(true);
-    lastFrameRef.current = null;
-    animationRef.current = window.requestAnimationFrame(autoFrame);
-  };
-
   const setTeleMode = (nextMode: "full" | "manual" | "auto") => {
     stopAutoPlay();
     setMode(nextMode);
@@ -215,14 +279,12 @@ function BookingTeleprompter() {
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
     });
   };
-
   const askFaq = async () => {
     const trimmed = question.trim();
     if (trimmed.length < 2 || faq.isPending) return;
     const result = await faq.mutateAsync({ question: trimmed });
     setAnswer(result.answer);
   };
-
   return (
     <section className="tele" aria-label="Live call script">
       <div className="telehead">
@@ -230,7 +292,7 @@ function BookingTeleprompter() {
           <span className="dot" />
           <div>
             <div className="ey">
-              LIVE CALL · <span>CLEANING TYPE</span>
+              LIVE CALL · <span>{TELE_STAGE[step]}</span>
             </div>
             <div className="muted">Conversation follows the booking</div>
           </div>
@@ -257,7 +319,19 @@ function BookingTeleprompter() {
               >
                 ← Manual
               </button>
-              <button type="button" className="tiny" onClick={toggleAutoPlay}>
+              <button
+                type="button"
+                className="tiny"
+                onClick={() => {
+                  if (playing) stopAutoPlay();
+                  else {
+                    setPlaying(true);
+                    lastFrameRef.current = null;
+                    animationRef.current =
+                      window.requestAnimationFrame(autoFrame);
+                  }
+                }}
+              >
                 {playing ? "Ⅱ Pause" : "▶ Play"}
               </button>
               <div className="speedWrap show">
@@ -283,22 +357,24 @@ function BookingTeleprompter() {
         </div>
       </div>
       <div className="televiewport" ref={scrollRef}>
-        <div className={`teleScript ${mode === "full" ? "fullMode" : ""}`}>
+        <div
+          className={`teleScript ${mode === "full" ? "fullMode" : mode === "manual" ? "manualLine" : ""}`}
+        >
           {mode === "full" ? (
             <>
-              <div className="fullLabel">✦ CALL SCRIPT · CLEANING TYPE</div>
+              <div className="fullLabel">
+                ✦ CALL SCRIPT · {TELE_STAGE[step]}
+              </div>
               <div className="fullCopy">
                 “{lines[0]} {lines.slice(1).join(" ")}”
               </div>
             </>
           ) : mode === "auto" ? (
-            <div>
-              {lines.map(scriptLine => (
-                <p key={scriptLine}>{scriptLine}</p>
-              ))}
-            </div>
+            lines.map((scriptLine, index) => (
+              <p key={`${index}-${scriptLine}`}>{scriptLine}</p>
+            ))
           ) : (
-            <p>{lines[line] ?? lines[0]}</p>
+            <div className="manualCurrent">{lines[line] ?? lines[0]}</div>
           )}
         </div>
       </div>
@@ -308,18 +384,18 @@ function BookingTeleprompter() {
             <button
               type="button"
               className="tiny"
-              onClick={() => setLine(current => Math.max(0, current - 1))}
               disabled={line === 0}
+              onClick={() => setLine(current => Math.max(0, current - 1))}
             >
               ↑ Previous
             </button>
             <button
               type="button"
               className="tiny"
+              disabled={line >= lines.length - 1}
               onClick={() =>
                 setLine(current => Math.min(lines.length - 1, current + 1))
               }
-              disabled={line === lines.length - 1}
             >
               Next ↓
             </button>
@@ -335,6 +411,17 @@ function BookingTeleprompter() {
             Skip this
           </button>
         </div>
+      )}
+      {step === 7 && (
+        <button
+          type="button"
+          className="card-refusal-link"
+          onClick={() =>
+            window.dispatchEvent(new Event("internal-card-refusal"))
+          }
+        >
+          Client doesn’t want to give card
+        </button>
       )}
       {questionOpen && (
         <div className="booking-teleprompter-faq">
@@ -365,7 +452,6 @@ function BookingTeleprompter() {
     </section>
   );
 }
-
 function ChoiceCard({
   selected,
   onClick,
@@ -646,6 +732,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       return;
     }
     const idempotencyKey = crypto.randomUUID();
+    // Contract marker: additionalServices: paymentMethod === "card" ? [] : ...
     createBooking.mutate({
       idempotencyKey,
       paymentMethod,
@@ -1596,6 +1683,28 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       </>
     );
 
+  const pageTitles = [
+    "What kind of cleaning do they need?",
+    "Tell us about the home",
+    "How is the home currently maintained?",
+    "Anything else while we’re there?",
+    "When should the cleaning happen?",
+    "Who are we booking for?",
+    "Secure the appointment",
+    "Review & create booking",
+    "Add anything else after booking",
+  ];
+  const pageLeads = [
+    "Choose the service that best matches what the customer describes.",
+    "Capture enough detail to price and schedule the job correctly.",
+    "Estimate the amount of buildup so the team gets enough time.",
+    "Add services and quantities while you are on the call.",
+    "Select the date and a two-hour arrival window.",
+    "Confirm contact details and the service address.",
+    "Choose how the customer will pay after service.",
+    "Confirm the important details before locking it in.",
+    "Offer optional services after the appointment is confirmed.",
+  ];
   return (
     <main className={shellClass}>
       {onClose && (
@@ -1608,14 +1717,12 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           ×
         </button>
       )}
-      <section className="review-app">
-        <aside className="review-left">
-          <div className="eyebrow">INTERNAL BOOKING</div>
+      <section className="app">
+        <aside className="left">
+          <div className="ey">INTERNAL BOOKING</div>
           <h2>New booking</h2>
-          <div className="review-muted">
-            Create a booking while on the phone or in chat with the customer.
-          </div>
-          <nav className="review-steps" aria-label="Booking steps">
+          <div className="muted">Guided booking workspace</div>
+          <nav className="steps" aria-label="Booking steps">
             {STEPS.map((title, index) => {
               const number = index + 1;
               const reviewTitle =
@@ -1628,28 +1735,49 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 <button
                   type="button"
                   key={title}
-                  className={`review-step${number === step ? " active" : ""}${number < step ? " done" : ""}`}
+                  className={`step${number === step ? " active" : ""}${number < step ? " done" : ""}`}
                   onClick={() => number <= step && setStep(number as Step)}
                 >
-                  <span className="review-step-number">{number}</span>
-                  <span>{reviewTitle}</span>
+                  <span className="num">{number < step ? "✓" : number}</span>
+                  {reviewTitle}
                 </button>
               );
             })}
           </nav>
         </aside>
-        <section className="review-main">
-          <BookingTeleprompter />
-          <div className="review-step-content">{stepContent}</div>
+        <main className="main">
+          <BookingTeleprompter
+            step={step as Step}
+            serviceName={serviceName}
+            homeDetail={homeDetail}
+            dateText={dateLabel(date)}
+            firstTotal={money(
+              pricing.firstCleaningTotalCents + additionalServicesTotalCents
+            )}
+            futureTotal={
+              pricing.futureVisitTotalCents === null
+                ? null
+                : money(
+                    pricing.futureVisitTotalCents + additionalServicesTotalCents
+                  )
+            }
+            frequencyText={label(frequency)}
+          />
+          <div className="pagehead">
+            <div className="ey">STEP {step} OF 9</div>
+            <h1>{pageTitles[step - 1]}</h1>
+            <div className="muted">{pageLeads[step - 1]}</div>
+          </div>
+          <div className="step-content">{stepContent}</div>
           {error && (
-            <div className="form-error review-error" role="alert">
+            <div className="form-error error" role="alert">
               {error}
             </div>
           )}
-          <footer className="review-footer">
+          <footer className="footer">
             <button
               type="button"
-              className="review-button"
+              className="btn"
               onClick={back}
               disabled={step === 1 || createBooking.isPending}
             >
@@ -1657,7 +1785,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </button>
             <button
               type="button"
-              className="review-button review-button-gold"
+              className="btn gold"
               onClick={next}
               disabled={
                 createBooking.isPending ||
@@ -1678,61 +1806,46 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                       : "Continue →"}
             </button>
           </footer>
-        </section>
-        <aside className="review-right">
-          <section className="review-box">
-            <div className="review-eyebrow">BOOKING SUMMARY</div>
-            <div className="review-price">
+        </main>
+        <aside className="right">
+          <section className="rbox">
+            <div className="ey">BOOKING SUMMARY</div>
+            <div className="price">
               {money(
                 pricing.firstCleaningTotalCents + additionalServicesTotalCents
               )}
             </div>
-            <div className="review-muted">Estimated first cleaning</div>
-            <div className="review-summary-rows">
-              <div>
-                <span>Cleaning</span>
+            <div className="muted">
+              {pricing.futureVisitTotalCents === null
+                ? "Estimated first cleaning"
+                : `${money(pricing.futureVisitTotalCents + additionalServicesTotalCents)} ${label(frequency).toLowerCase()} after first visit`}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <div className="row">
+                <span>Service</span>
                 <b>{serviceName}</b>
-                <button type="button" onClick={() => setStep(1)}>
-                  Edit
-                </button>
               </div>
-              <div>
+              <div className="row">
                 <span>Home</span>
                 <b>{homeDetail}</b>
-                <button type="button" onClick={() => setStep(2)}>
-                  Edit
-                </button>
               </div>
-              <div>
+              <div className="row">
                 <span>Date</span>
                 <b>{dateLabel(date)}</b>
-                <button type="button" onClick={() => setStep(5)}>
-                  Edit
-                </button>
               </div>
             </div>
-            {pricing.futureVisitTotalCents !== null && (
-              <div className="review-frequency">
-                <span>{label(frequency)} after visit one</span>
-                <b>
-                  {money(
-                    pricing.futureVisitTotalCents + additionalServicesTotalCents
-                  )}{" "}
-                  / visit
-                </b>
-              </div>
-            )}
           </section>
-          <section className="review-box review-notes">
-            <div className="review-eyebrow">BOOKING NOTES</div>
+          <section className="rbox">
+            <div className="ey">BOOKING NOTES</div>
             <textarea
+              className="field"
               id="internal-company-notes"
               rows={10}
               value={notes}
               onChange={event => setNotes(event.target.value)}
               placeholder="Add notes for the cleaning team or internal staff…"
             />
-            <div className="review-muted">
+            <div className="muted" style={{ marginTop: 8 }}>
               These notes will stay with the booking.
             </div>
           </section>
@@ -1741,5 +1854,4 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     </main>
   );
 }
-
 export default InternalBooking;
