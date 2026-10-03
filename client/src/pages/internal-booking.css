@@ -4853,3 +4853,18 @@
 .review-booking-shell .televiewport {
   height: 240px;
 }
+/* Short viewport correction: keep the footer in document flow so Page 2 frequency copy cannot be covered. */
+@media (max-height: 900px) {
+  .review-booking-shell .main {
+    padding-bottom: 24px;
+  }
+  .review-booking-shell .footer {
+    position: sticky;
+    right: auto;
+    bottom: 0;
+    left: auto;
+    z-index: 5;
+    margin-top: 24px;
+    padding-bottom: 12px;
+  }
+}
