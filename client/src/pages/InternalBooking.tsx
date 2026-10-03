@@ -933,49 +933,51 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             </div>
           </div>
         </div>
-        <div className="section">
-          <div className="label">HOME TYPE</div>
-          <div className="choices">
-            {HOME_TYPES.map(value => (
-              <button
-                key={value}
-                type="button"
-                className={`choice${homeType === value ? " on" : ""}`}
-                onClick={() => setHomeType(value)}
-              >
-                {value}
-              </button>
-            ))}
+        <div className="page2-choice-columns">
+          <div className="section">
+            <div className="label">HOME TYPE</div>
+            <div className="choices">
+              {HOME_TYPES.map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`choice${homeType === value ? " on" : ""}`}
+                  onClick={() => setHomeType(value)}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="section">
-          <div className="label">CLEANING FREQUENCY</div>
-          <div className="choices">
-            {FREQUENCIES.map(value => (
-              <button
-                key={value}
-                type="button"
-                className={`choice${frequency === value ? " on" : ""}`}
-                onClick={() => setFrequency(value)}
-              >
-                <b>{label(value)}</b>
-                <br />
-                <span className="muted">
-                  {value === "one-time"
-                    ? "Single cleaning"
-                    : value === "weekly"
-                      ? "Every week"
-                      : value === "biweekly"
-                        ? "Every 2 weeks"
-                        : "Every 4 weeks"}
-                </span>
-              </button>
-            ))}
+          <div className="section">
+            <div className="label">CLEANING FREQUENCY</div>
+            <div className="choices">
+              {FREQUENCIES.map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`choice${frequency === value ? " on" : ""}`}
+                  onClick={() => setFrequency(value)}
+                >
+                  <b>{label(value)}</b>
+                  <br />
+                  <span className="muted">
+                    {value === "one-time"
+                      ? "Single cleaning"
+                      : value === "weekly"
+                        ? "Every week"
+                        : value === "biweekly"
+                          ? "Every 2 weeks"
+                          : "Every 4 weeks"}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="muted frequency-note">
+              The first cleaning is full price. Recurring pricing applies to
+              future visits.
+            </p>
           </div>
-          <p className="muted frequency-note">
-            The first cleaning is full price. Recurring pricing applies to
-            future visits.
-          </p>
         </div>
       </>
     ) : step === 3 ? (

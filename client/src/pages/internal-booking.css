@@ -4736,6 +4736,21 @@
 .review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-submit { min-height: 46px; border-radius: 8px; background: #d9b66e; color: #17140e; }
 .review-booking-shell .booking-card-acceptance-dark .booking-card-acceptance-terms { color: #9d9e95; }
 /* Page 2 parity: preserve the prototype's compact choice geometry. */
+.review-booking-shell .page2-choice-columns {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.35fr);
+  align-items: start;
+  gap: 22px;
+}
+.review-booking-shell .page2-choice-columns .section {
+  min-width: 0;
+}
+.review-booking-shell .page2-choice-columns .choices {
+  align-items: stretch;
+}
+.review-booking-shell .page2-choice-columns .choice {
+  min-width: 0;
+}
 .review-booking-shell .page2-pricing-mode { margin-top: 0; }
 .review-booking-shell .page2-pricing-mode .choice { font-weight: 700; }
 .review-booking-shell .compact-card .choice:disabled { opacity: .45; cursor: not-allowed; }
@@ -4863,14 +4878,18 @@
   }
   .review-booking-shell .footer {
     position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    right: 38px;
+    bottom: 17px;
+    left: 38px;
     z-index: 5;
     margin-top: 0;
-    padding: 0 0 4px;
-    border-top: 0;
-    background: transparent;
+    padding-bottom: 0;
+  }
+}
+@media (max-width: 900px) {
+  .review-booking-shell .page2-choice-columns {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }
 /* Step 7 payment parity: one compact dark panel around the existing Stripe form. */
