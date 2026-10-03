@@ -85,6 +85,9 @@ const STANDARD_TIMES = [
   "16:30",
   "18:30",
 ] as const;
+const RECOMMENDABLE_STANDARD_TIMES = STANDARD_TIMES.filter(
+  value => value !== "18:30"
+);
 const TIMES = Array.from({ length: 20 }, (_, index) => {
   const totalMinutes = 8 * 60 + 30 + index * 30;
   const hours = Math.floor(totalMinutes / 60);
@@ -679,6 +682,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const [cardSaved, setCardSaved] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [manualTime, setManualTime] = useState(false);
+  const [timeSelectionTouched, setTimeSelectionTouched] = useState(false);
   const timeInputRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const standardTimeCountsQuery = trpc.bookings.standardTimeCounts.useQuery(
@@ -693,9 +697,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     return counts;
   }, [standardTimeCountsQuery.data]);
   const recommendedStandardTime = useMemo(() => {
-    if (standardTimeCountsQuery.isLoading || standardTimeCountsQuery.isError)
+    if (
+      standardTimeCountsQuery.isLoading ||
+      standardTimeCountsQuery.isFetching ||
+      standardTimeCountsQuery.isError
+    )
       return null;
-    return STANDARD_TIMES.reduce((best, candidate) =>
+    return RECOMMENDABLE_STANDARD_TIMES.reduce((best, candidate) =>
       (standardTimeCounts.get(candidate) ?? 0) <
       (standardTimeCounts.get(best) ?? 0)
         ? candidate
@@ -704,8 +712,19 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   }, [
     standardTimeCounts,
     standardTimeCountsQuery.isError,
+    standardTimeCountsQuery.isFetching,
     standardTimeCountsQuery.isLoading,
   ]);
+  useEffect(() => {
+    if (
+      step === 5 &&
+      !timeSelectionTouched &&
+      recommendedStandardTime !== null &&
+      time !== recommendedStandardTime
+    ) {
+      setTime(recommendedStandardTime);
+    }
+  }, [recommendedStandardTime, setTime, step, time, timeSelectionTouched]);
   useEffect(() => {
     if (time === "11:00") setTime("08:30");
   }, []);
@@ -1109,6 +1128,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               defaultMonth={parseEasternDate(date)}
               onSelect={nextDate => {
                 if (!nextDate) return;
+                setTimeSelectionTouched(false);
                 setDate(easternDateIsoFromDate(nextDate));
               }}
             />
@@ -1125,6 +1145,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                     type="button"
                     className={time === value ? "selected" : ""}
                     onClick={() => {
+                      setTimeSelectionTouched(true);
                       setManualTime(true);
                       setTime(value);
                     }}
@@ -1155,6 +1176,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 step={1800}
                 value={time}
                 onChange={event => {
+                  setTimeSelectionTouched(true);
                   setManualTime(true);
                   setTime(event.target.value);
                 }}
@@ -1176,6 +1198,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 type="button"
                 className={`window${time === value ? " on" : ""}`}
                 onClick={() => {
+                  setTimeSelectionTouched(true);
                   setManualTime(false);
                   setTime(value);
                 }}
