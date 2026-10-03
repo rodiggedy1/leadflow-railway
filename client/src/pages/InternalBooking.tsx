@@ -59,7 +59,6 @@ import {
   CANONICAL_CONDITION_COPY,
   CANONICAL_FREQUENCIES,
   CANONICAL_SERVICE_IDS,
-  CANONICAL_TIME_SLOTS,
   createCanonicalBookingInput,
   createCanonicalPricingInput,
 } from "@shared/canonicalBooking";
@@ -78,7 +77,14 @@ const HOME_TYPES: PublicBookingHomeType[] = [
   "Townhome",
   "Condo",
 ];
-const ARRIVAL_WINDOWS = CANONICAL_TIME_SLOTS;
+const STANDARD_TIMES = [
+  "08:30",
+  "10:30",
+  "12:30",
+  "14:30",
+  "16:30",
+  "18:30",
+] as const;
 const TIMES = Array.from({ length: 20 }, (_, index) => {
   const totalMinutes = 8 * 60 + 30 + index * 30;
   const hours = Math.floor(totalMinutes / 60);
@@ -675,6 +681,30 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const [manualTime, setManualTime] = useState(false);
   const timeInputRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const standardTimeCountsQuery = trpc.bookings.standardTimeCounts.useQuery(
+    { date },
+    { enabled: step === 5 && Boolean(date), staleTime: 30_000 }
+  );
+  const standardTimeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of standardTimeCountsQuery.data ?? []) {
+      counts.set(row.time, Number(row.count));
+    }
+    return counts;
+  }, [standardTimeCountsQuery.data]);
+  const recommendedStandardTime = useMemo(
+    () =>
+      STANDARD_TIMES.reduce((best, candidate) =>
+        (standardTimeCounts.get(candidate) ?? 0) <
+        (standardTimeCounts.get(best) ?? 0)
+          ? candidate
+          : best
+      ),
+    [standardTimeCounts]
+  );
+  useEffect(() => {
+    if (time === "11:00") setTime("08:30");
+  }, []);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -868,16 +898,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       : `${bedrooms === 0 ? "Studio" : `${bedrooms} bed`} · ${bathrooms} bath · ${homeType}`;
   const customerFirstName =
     customerName.trim().split(/\s+/).filter(Boolean)[0] || "there";
-  const selectedTimeLabel =
-    ARRIVAL_WINDOWS.find(value => value === time) === "08:30"
-      ? "8:30 AM"
-      : ARRIVAL_WINDOWS.find(value => value === time) === "11:00"
-        ? "11:00 AM"
-        : ARRIVAL_WINDOWS.find(value => value === time) === "13:30"
-          ? "1:30 PM"
-          : ARRIVAL_WINDOWS.find(value => value === time) === "16:30"
-            ? "4:30 PM"
-            : time || "your selected time";
+  const selectedTimeLabel = time ? timeLabel(time) : "your selected time";
   const selectedExtrasScript = selectedExtras
     .map(([, extra]) => extra.label)
     .join(", ");
@@ -1069,7 +1090,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               <CalendarDays />
               <span>
                 <strong>{dateLabel(date)}</strong>
-                <small>Eastern Time · choose another date</small>
+                <small>
+                  Eastern Time · {timeLabel(time)} arrival · choose another date
+                  or time
+                </small>
               </span>
               <ChevronRight />
             </button>
@@ -1136,15 +1160,12 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           </PopoverContent>
         </Popover>
         <div className="label" style={{ marginTop: 17 }}>
-          AVAILABLE ARRIVAL WINDOWS
+          STANDARD ARRIVAL TIMES
         </div>
-        <div className={`windows${manualTime ? " manual-time-selected" : ""}`}>
-          {ARRIVAL_WINDOWS.map((value, index) => {
-            const end = ["10:30", "13:00", "15:30", "18:00"][index];
-            const formatTime = (raw: string) => {
-              const [hour, minute] = raw.split(":").map(Number);
-              return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
-            };
+        <div className="windows standard-time-windows">
+          {STANDARD_TIMES.map(value => {
+            const count = standardTimeCounts.get(value) ?? 0;
+            const recommended = value === recommendedStandardTime;
             return (
               <button
                 key={value}
@@ -1155,11 +1176,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                   setTime(value);
                 }}
               >
-                {formatTime(value)}–{formatTime(end)}
+                {timeLabel(value)}
                 <small>
-                  {index === 1
-                    ? "Best fit · available"
-                    : "2-hour arrival window"}
+                  {recommended ? "Recommended · lightest schedule · " : ""}
+                  {count} {count === 1 ? "booking" : "bookings"}
                 </small>
               </button>
             );

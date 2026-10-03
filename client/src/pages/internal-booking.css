@@ -5063,3 +5063,20 @@
 .schedule-calendar-popover .manual-time-field input:focus { border-color: #e8c36f; outline: none; box-shadow: 0 0 0 3px rgba(232,195,111,.14); }
 .schedule-calendar-popover .manual-time-field small { color: #aaa9a2; font-size: 12px; }
 @media (max-width: 640px) { .schedule-calendar-popover { width: min(350px, calc(100vw - 28px)); } }
+
+/* Step 5 standard arrival-time cards: six slots with compact count metadata. */
+.review-booking-shell .page5-schedule-card .standard-time-windows {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.review-booking-shell .page5-schedule-card .standard-time-windows .window {
+  min-height: 62px;
+}
+.review-booking-shell .page5-schedule-card .standard-time-windows .window small {
+  min-height: 14px;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .review-booking-shell .page5-schedule-card .standard-time-windows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

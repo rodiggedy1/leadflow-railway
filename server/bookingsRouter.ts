@@ -480,6 +480,30 @@ export const bookingsRouter = router({
         .map(row => mapAdminBooking(row, assignments.get(row.id)));
     }),
 
+  standardTimeCounts: bookingsAgentProcedure
+    .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Booking service unavailable.",
+        });
+      return db
+        .select({
+          time: bookings.requestedLocalTime,
+          count: sql<number>`count(*)`,
+        })
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.requestedLocalDate, input.date),
+            sql`${bookings.status} NOT IN ('cancelled', 'expired')`
+          )
+        )
+        .groupBy(bookings.requestedLocalTime);
+    }),
+
   get: bookingsAgentProcedure
     .input(bookingGetInputSchema)
     .query(async ({ input }) => {
