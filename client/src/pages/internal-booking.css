@@ -4755,34 +4755,6 @@
 .review-booking-shell .pagehead-step-2 .muted {
   font-size: 18px;
 }
-.review-booking-shell .pagehead-step-2 h1,
-.review-booking-shell .pagehead-step-2 > .muted {
-  display: none;
-}
-.review-booking-shell .pagehead-step-2 {
-  margin-bottom: 4px;
-}
-.review-booking-shell .pagehead-step-5 h1,
-.review-booking-shell .pagehead-step-5 > .muted {
-  display: none;
-}
-.review-booking-shell .pagehead-step-5 {
-  margin-bottom: 4px;
-}
-.review-booking-shell .pagehead-step-6 h1,
-.review-booking-shell .pagehead-step-6 > .muted {
-  display: none;
-}
-.review-booking-shell .pagehead-step-6 {
-  margin-bottom: 4px;
-}
-.review-booking-shell .pagehead-step-7 h1,
-.review-booking-shell .pagehead-step-7 > .muted {
-  display: none;
-}
-.review-booking-shell .pagehead-step-7 {
-  margin-bottom: 4px;
-}
 .review-booking-shell .teleScript.fullMode {
   padding-bottom: 8px;
 }
