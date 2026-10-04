@@ -4924,6 +4924,20 @@
   line-height: 1.55;
   font-weight: 650;
 }
+.review-booking-shell .teleScript.autoMode {
+  padding-top: 42px;
+  padding-bottom: 150px;
+  color: #f4f0e7;
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.review-booking-shell .teleScript.autoMode p {
+  margin: 0 0 34px;
+}
+.review-booking-shell .teleScript.autoMode p:last-child {
+  margin-bottom: 0;
+}
 .review-booking-shell .page5-schedule-card {
   padding: 12px;
 }

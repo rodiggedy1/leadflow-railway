@@ -516,7 +516,7 @@ function BookingTeleprompter({
         ref={scrollRef}
       >
         <div
-          className={`teleScript ${mode === "full" ? "fullMode" : mode === "manual" ? "manualLine" : ""}`}
+          className={`teleScript ${mode === "full" ? "fullMode" : mode === "manual" ? "manualLine" : "autoMode"}`}
         >
           {mode === "full" ? (
             <>
