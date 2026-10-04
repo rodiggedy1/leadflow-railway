@@ -5043,6 +5043,13 @@
   padding-bottom: 8px;
 }
 .review-booking-shell .televiewport-step-4 { height: 300px; }
+.review-booking-shell .step4-call-script { margin-bottom: 22px; }
+.review-booking-shell .step4-quote-transition { margin: 14px 0 11px; color: #d1cec4; font-size: 14px; line-height: 1.4; }
+.review-booking-shell .step4-price-line { margin: 0 0 12px; }
+.review-booking-shell .step4-price-line .quote-highlight { display: inline-block; padding: 5px 11px; border-radius: 7px; background: rgba(225, 185, 99, 0.18); color: var(--gold2); font-size: 18px; font-weight: 800; }
+.review-booking-shell .step4-recurring-copy { max-width: 790px; margin: 0 0 13px; color: #eeece5; font-size: 14px; line-height: 1.45; }
+.review-booking-shell .step4-question { max-width: 790px; padding-top: 11px; border-top: 1px solid rgba(225, 185, 99, 0.2); color: #f1efe8; font-size: 15px; line-height: 1.45; font-weight: 700; }
+.review-booking-shell .card-refusal-link { display: block; }
 .review-booking-shell .footer {
   position: static;
   z-index: auto;

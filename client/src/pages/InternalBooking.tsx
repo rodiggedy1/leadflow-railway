@@ -339,8 +339,9 @@ function BookingTeleprompter({
         ...base,
         `Your first cleaning is ${firstTotal}.`,
         futureTotal
-          ? `For this ${serviceName} on your ${homeDetail}, if you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit, so it would be ${futureTotal} per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`
-          : `For this ${serviceName} on your ${homeDetail}, if you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit. Would you like to start as a one-time clean, or should I set you up on a recurring schedule?`,
+          ? `For this ${serviceName} on your ${homeDetail}, if you’d like us to keep the home maintained after this first cleaning, recurring service is 15% less per visit, so it would be ${futureTotal} per visit.`
+          : `For this ${serviceName} on your ${homeDetail}, if you’d like us to keep the home maintained after this first cleaning, we also offer recurring service at 15% less per visit.`,
+        "Would you like to start as a one-time clean, or should I set you up on a recurring schedule?",
       ];
     }
     if (step === 5) {
@@ -514,16 +515,18 @@ function BookingTeleprompter({
                 </>
               ) : step === 4 ? (
                 <>
-                  <div className="fullCopy">
+                  <div className="fullCopy step4-call-script">
                     “{lines[0]} {lines[1]}”
                   </div>
                   <div className="quote-after-extras-label">
                     QUOTE AFTER YOU SELECT EXTRAS
                   </div>
-                  <div className="fullCopy quote-after-extras-copy">
-                    <span className="quote-highlight">{lines[2]}</span>{" "}
-                    {lines.slice(3).join(" ")}
+                  <div className="step4-quote-transition">{lines[2]}</div>
+                  <div className="step4-price-line">
+                    <span className="quote-highlight">{lines[3]}</span>
                   </div>
+                  <div className="step4-recurring-copy">{lines[4]}</div>
+                  <div className="step4-question">{lines[5]}</div>
                 </>
               ) : step === 7 ? (
                 <>
