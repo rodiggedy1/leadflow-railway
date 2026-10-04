@@ -206,8 +206,10 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const todayBookingCount = todayBookingStats?.bookedCount ?? 0;');
     expect(page).toContain('const todayRevenue = todayBookingStats?.bookedRevenue ?? 0;');
     expect(page).toContain('setTodayDateStr((currentDate) => currentDate === nextDate ? currentDate : nextDate);');
-    expect(page).toContain('className="ccc-header-metric-bookings"');
+    expect(page).toContain('className="ccc-header-metric-bookings ccc-header-booking-hover"');
     expect(page).toContain('<b>{todayBookingCount}</b> Booked');
+    expect(page).toContain('todayBookingDetails.map((booking, index)');
+    expect(page).toContain('Booked by {booking.bookedByAgentName?.trim() || "Unknown agent"}');
     expect(page).toContain('<b>${todayRevenue.toLocaleString()}</b> Today');
     expect(page).not.toContain('<Users /><b>{metrics.participants}</b> Contributors');
     expect(page).toContain('<b>{openIssues.length}</b> Issues');
