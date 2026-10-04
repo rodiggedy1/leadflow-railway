@@ -48,7 +48,7 @@ describe("Command Chat exact live shell", () => {
       "getAllAgentPhotoMap.useQuery",
       "getAgentStatusList.useQuery",
       "listActiveThreads.useQuery",
-      "leads.stats.useQuery",
+      "bookings.todayStats.useQuery",
       "getPendingSuperAlerts.useQuery",
       "getSuperAlertMessageIds.useQuery",
       "acknowledgeSuperAlert.useMutation",
@@ -202,9 +202,9 @@ describe("Command Chat exact live shell", () => {
     expect(page).toContain('const activeThreadCount = activeThreads.length;');
     expect(page).toContain('const unreadThreadCount = activeThreads.filter((thread) => thread.hasUnread).length;');
     expect(page).toContain('const [todayDateStr, setTodayDateStr] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));');
-    expect(page).toContain('{ dateFrom: todayDateStr, dateTo: todayDateStr }');
-    expect(page).toContain('const todayBookingCount = todayStats?.bookedCount ?? 0;');
-    expect(page).toContain('const todayRevenue = todayStats?.bookedRevenue ?? 0;');
+    expect(page).toContain('trpc.bookings.todayStats.useQuery(undefined');
+    expect(page).toContain('const todayBookingCount = todayBookingStats?.bookedCount ?? 0;');
+    expect(page).toContain('const todayRevenue = todayBookingStats?.bookedRevenue ?? 0;');
     expect(page).toContain('setTodayDateStr((currentDate) => currentDate === nextDate ? currentDate : nextDate);');
     expect(page).toContain('className="ccc-header-metric-bookings"');
     expect(page).toContain('<b>{todayBookingCount}</b> Booked');

@@ -593,10 +593,12 @@ export default function CommandChatExactLive() {
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
   const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 30_000 });
-  const { data: todayStats } = trpc.leads.stats.useQuery(
-    { dateFrom: todayDateStr, dateTo: todayDateStr },
-    { enabled: isAuthenticated, staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false },
-  );
+  const { data: todayBookingStats } = trpc.bookings.todayStats.useQuery(undefined, {
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(undefined, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 3_000, refetchIntervalInBackground: false });
   const { data: superAlertMessageIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery({ channel }, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 60_000 });
   const { data: threadDetail } = trpc.opsChat.getThreadReplies.useQuery({ parentId: threadId ?? 0 }, { enabled: isAuthenticated && threadId !== null });
@@ -740,8 +742,8 @@ export default function CommandChatExactLive() {
   }, [agents.agents, callerName, photoMap]);
   const superAlertMessageIdSet = useMemo(() => new Set(superAlertMessageIds), [superAlertMessageIds]);
   const activeSuperAlert = pendingSuperAlerts[0] ?? null;
-  const todayBookingCount = todayStats?.bookedCount ?? 0;
-  const todayRevenue = todayStats?.bookedRevenue ?? 0;
+  const todayBookingCount = todayBookingStats?.bookedCount ?? 0;
+  const todayRevenue = todayBookingStats?.bookedRevenue ?? 0;
   const headerAgentPresence = useMemo(() => {
     const now = Date.now();
     return agents.agents.map((agent) => ({ ...agent, presence: commandPresenceStatus(agent, now) }));
@@ -912,6 +914,7 @@ export default function CommandChatExactLive() {
   useOpsStream({
     onNewMessage: (updatedChannel) => {
       if (!updatedChannel || updatedChannel === channel) void utils.opsChat.listChannelMessages.invalidate({ channel });
+      if (!updatedChannel || updatedChannel === "command") void utils.bookings.todayStats.invalidate();
       void utils.opsChat.listActiveThreads.invalidate();
       void utils.opsChat.getChannelCounts.invalidate();
     },
@@ -1182,6 +1185,15 @@ function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId,
   const media = mediaUrls(message.mediaUrl);
   const confirmationReply = confirmationReplyFromMessage(message);
   const callHandoff = callHandoffFromMessage(message);
+  let bookedByAgentName: string | null = null;
+  if (message.quickAction === "announce_booking") {
+    try {
+      const metadata = JSON.parse(message.metadata ?? "{}") as { bookedByAgentName?: unknown };
+      if (typeof metadata.bookedByAgentName === "string" && metadata.bookedByAgentName.trim()) {
+        bookedByAgentName = metadata.bookedByAgentName.trim();
+      }
+    } catch { /* preserve the generic message for legacy rows */ }
+  }
   const voiceCaller = callHandoff?.vapiCallId ? voiceCallIdentityByVapiId.get(callHandoff.vapiCallId) : null;
   const resolvedCallHandoff = callHandoff ? {
     ...callHandoff,
@@ -1191,7 +1203,7 @@ function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId,
   if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
   if (resolvedCallHandoff) return <IncomingCallHandoffCard handoff={resolvedCallHandoff} timestamp={message.ts} />;
   if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{renderMessageBody(message.body)}<time>{formatTime(message.ts)}</time></span></div>;
-  return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"} ${superAlert ? "ccc-live-super-alert-message" : ""}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em>{superAlert && <em className="ccc-live-super-alert-badge"><Zap />Super Alert</em>}<time>{formatTime(message.ts)}</time></div><p>{renderMessageBody(message.body, mentionPattern)}</p>{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <button type="button" key={url} onClick={() => onOpenPhoto(url)} aria-label="Open command attachment"><img src={commandAttachmentUrl(url)} alt="Command attachment" /></button>)}</div>}{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" className="ccc-live-quote-reply-action" onClick={onReply}>Reply</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
+  return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"} ${superAlert ? "ccc-live-super-alert-message" : ""}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em>{superAlert && <em className="ccc-live-super-alert-badge"><Zap />Super Alert</em>}<time>{formatTime(message.ts)}</time></div><p>{renderMessageBody(message.body, mentionPattern)}</p>{bookedByAgentName && <small>Booked by {bookedByAgentName}</small>}{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <button type="button" key={url} onClick={() => onOpenPhoto(url)} aria-label="Open command attachment"><img src={commandAttachmentUrl(url)} alt="Command attachment" /></button>)}</div>}{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" className="ccc-live-quote-reply-action" onClick={onReply}>Reply</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
 }
 
 function formatCallDuration(seconds: number | null) {
