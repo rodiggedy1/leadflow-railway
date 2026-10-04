@@ -1119,6 +1119,16 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       },
       onError: mutationError => setError(mutationError.message),
     });
+  const switchInternalPaymentMethod =
+    trpc.bookingPaymentAdmin.switchInternalPaymentMethod.useMutation({
+      onSuccess: result => {
+        setPaymentMethod(result.paymentMethod);
+        setCardClientSecret(null);
+        setCardSetupIntentId(null);
+        setError(null);
+      },
+      onError: mutationError => setError(mutationError.message),
+    });
   const confirmCardSetup =
     trpc.bookingPaymentAdmin.confirmInternalCardSetup.useMutation({
       onSuccess: () => {
@@ -1134,7 +1144,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       onSuccess: () => {
         if (createdBooking)
           setSuccess(
-            `${createdBooking.publicBookingNumber} created with card saved. It is now in Bookings for assignment and follow-up.`
+            `${createdBooking.publicBookingNumber} created with ${paymentMethod === "cashapp" ? "Cash App" : paymentMethod === "invoice" ? "Check" : "card saved"}. It is now in Bookings for assignment and follow-up.`
           );
       },
       onError: mutationError => setError(mutationError.message),
@@ -1695,8 +1705,19 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               key={value}
               type="button"
               className={`choice${paymentMethod === value ? " on" : ""}`}
-              disabled={!!createdBooking}
-              onClick={() => setPaymentMethod(value)}
+              disabled={
+                value === "card" ||
+                startCardSetup.isPending ||
+                switchInternalPaymentMethod.isPending ||
+                paymentMethod === value
+              }
+              onClick={() => {
+                if (!createdBooking || value === "card") return;
+                switchInternalPaymentMethod.mutate({
+                  bookingId: createdBooking.bookingId,
+                  paymentMethod: value,
+                });
+              }}
             >
               <b>
                 {value === "card"
@@ -1993,6 +2014,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 createBooking.isPending ||
                 startCardSetup.isPending ||
                 confirmCardSetup.isPending ||
+                switchInternalPaymentMethod.isPending ||
                 updateAdditionalServices.isPending ||
                 (step === 8 && paymentMethod === "card" && !!createdBooking)
               }

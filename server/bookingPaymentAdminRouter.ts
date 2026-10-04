@@ -23,6 +23,7 @@ import {
 import { createCanonicalBookingPortalHandoff } from "./customerPortalService";
 import { TRPCError } from "@trpc/server";
 import { syncNativeBookingPaymentState } from "./bookingLifecycleService";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 import { finalizeCanonicalBooking, finalizeCanonicalCardOnFile, startCanonicalCardSetup } from "./bookingPaymentEngine";
 import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
 import { authorizeCanonicalBookingHold, captureCanonicalPaymentIntent, cancelCanonicalPaymentIntent, chargeCanonicalSavedCard } from "./bookingPaymentActionsEngine";
@@ -226,6 +227,93 @@ export const bookingPaymentAdminRouter = router({
         });
       }
       return setup;
+    }),
+  switchInternalPaymentMethod: agentProcedure
+    .input(
+      z.object({
+        bookingId: z.number().int().positive(),
+        paymentMethod: z.enum(["cashapp", "invoice"]),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database unavailable",
+        });
+      const [booking] = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.id, input.bookingId))
+        .limit(1);
+      if (!booking)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+      const [profile] = await db
+        .select()
+        .from(bookingPaymentProfiles)
+        .where(eq(bookingPaymentProfiles.bookingId, input.bookingId))
+        .limit(1);
+      if (!profile)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "This booking is missing its payment profile.",
+        });
+      if (profile.paymentStatus === "card_on_file" || profile.stripePaymentMethodId)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "The payment method cannot be changed after the card is saved.",
+        });
+      if (profile.stripeSetupIntentId) {
+        const stripe = getStripeClient();
+        const setupIntent = await stripe.setupIntents.retrieve(profile.stripeSetupIntentId);
+        if (setupIntent.status !== "canceled" && setupIntent.status !== "succeeded")
+          await stripe.setupIntents.cancel(profile.stripeSetupIntentId);
+      }
+      const [funnel] = await db
+        .select()
+        .from(bookingFunnelRecords)
+        .where(eq(bookingFunnelRecords.bookingId, input.bookingId))
+        .limit(1);
+      await db.transaction(async tx => {
+        await tx
+          .update(bookingPaymentProfiles)
+          .set({
+            paymentStatus: "not_started",
+            stripeCustomerId: null,
+            stripeSetupIntentId: null,
+            stripePaymentIntentId: null,
+            cardBrand: null,
+            cardLast4: null,
+            cardExpMonth: null,
+            cardExpYear: null,
+            version: sql`${bookingPaymentProfiles.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(bookingPaymentProfiles.id, profile.id));
+        await tx.execute(
+          sql`UPDATE ${bookings} SET paymentMethod = ${input.paymentMethod}, status = 'needs_attention', updatedAt = NOW(3) WHERE id = ${input.bookingId}`
+        );
+        await syncNativeBookingPaymentState(tx, {
+          bookingId: input.bookingId,
+          paymentStatus: "not_started",
+          paymentBrand: null,
+          paymentLast4: null,
+        });
+        if (funnel)
+          await tx
+            .update(bookingFunnelRecords)
+            .set({
+              stripeCustomerId: null,
+              stripePaymentMethodId: null,
+              paymentBrand: null,
+              paymentLast4: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookingFunnelRecords.id, funnel.id));
+      });
+      broadcastOpsUpdate("booking_funnel_update");
+      return { bookingId: input.bookingId, paymentMethod: input.paymentMethod };
     }),
   confirmInternalCardSetup: agentProcedure
     .input(
