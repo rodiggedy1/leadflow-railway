@@ -312,6 +312,7 @@ function BookingTeleprompter({
   const [mode, setMode] = useState<"full" | "manual" | "auto">("full");
   const [line, setLine] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [autoCompleted, setAutoCompleted] = useState(false);
   const [speed, setSpeed] = useState(18);
   const [questionOpen, setQuestionOpen] = useState(false);
   const [question, setQuestion] = useState("");
@@ -394,6 +395,7 @@ function BookingTeleprompter({
     );
     if (scrollPositionRef.current >= max) {
       scrollRef.current.scrollTop = max;
+      setAutoCompleted(true);
       stopAutoPlay();
       return;
     }
@@ -412,6 +414,7 @@ function BookingTeleprompter({
   }, [playing, mode, speed]);
   const setTeleMode = (nextMode: "full" | "manual" | "auto") => {
     stopAutoPlay();
+    setAutoCompleted(false);
     setMode(nextMode);
     setLine(0);
     window.requestAnimationFrame(() => {
@@ -447,7 +450,7 @@ function BookingTeleprompter({
           </div>
         </div>
         <div className="telecontrols">
-          <div className="modeToggle">
+          <div className={`modeToggle${mode === "auto" ? " hidden" : ""}`}>
             {(["full", "manual", "auto"] as const).map(option => (
               <button
                 key={option}
@@ -464,15 +467,27 @@ function BookingTeleprompter({
               <button
                 type="button"
                 className="tiny"
+                onClick={() => setTeleMode("manual")}
+              >
+                ← Manual
+              </button>
+              <button
+                type="button"
+                className="tiny"
                 onClick={() => {
                   if (playing) stopAutoPlay();
                   else {
+                    if (autoCompleted || (scrollRef.current && scrollRef.current.scrollTop >= scrollRef.current.scrollHeight - scrollRef.current.clientHeight - 2)) {
+                      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+                      scrollPositionRef.current = 0;
+                    }
+                    setAutoCompleted(false);
                     setPlaying(true);
                     lastFrameRef.current = null;
                   }
                 }}
               >
-                {playing ? "Ⅱ Pause" : "▶ Play"}
+                {playing ? "Ⅱ Pause" : autoCompleted ? "↻ Replay" : "▶ Play"}
               </button>
               <div className="speedWrap show">
                 <span className="speedLabel">Speed</span>

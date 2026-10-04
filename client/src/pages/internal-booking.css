@@ -4904,6 +4904,14 @@
 .review-booking-shell .teleScript.fullMode {
   padding-bottom: 8px;
 }
+.review-booking-shell .modeToggle.hidden {
+  display: none;
+}
+.review-booking-shell .teleScript:not(.fullMode):not(.manualLine) {
+  font-size: 18px;
+  line-height: 1.55;
+  font-weight: 650;
+}
 .review-booking-shell .page5-schedule-card {
   padding: 12px;
 }
