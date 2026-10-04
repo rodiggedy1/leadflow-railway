@@ -763,10 +763,15 @@ function CleaningType({
 }) {
   return (
     <>
-      <h1>What can we help you with?</h1>
+      <h1>Book your cleaning in 60 seconds</h1>
       <p className="booking-review-lede">
-        Choose the type of cleaning that fits your needs.
+        See your exact price and available times instantly.
       </p>
+      <div className="booking-review-trust-signals" aria-label="Booking assurances">
+        <span>✓ Background-checked teams</span>
+        <span>✓ Insured</span>
+        <span>✓ Satisfaction guaranteed</span>
+      </div>
       <div className="booking-service-grid">
         {SERVICES.map(item => (
           <button
