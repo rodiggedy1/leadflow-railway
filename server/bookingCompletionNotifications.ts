@@ -31,9 +31,9 @@ function displayAmount(totalCents: number): string {
 }
 
 /**
- * Sends the four user-requested booking notifications after Stripe card setup is
- * verified. A unique booking/channel row is claimed before delivery; no retry,
- * charge, hold, lifecycle change, or other side effect is performed here.
+ * Sends the four booking notifications after a booking is created. A unique
+ * booking/channel row is claimed before delivery; no retry, charge, hold,
+ * lifecycle change, or other side effect is performed here.
  */
 export async function sendBookingCompletionNotifications(bookingId: number): Promise<void> {
   const db = await getDb();
@@ -44,17 +44,23 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
 
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
   const [profile] = await db.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.bookingId, bookingId)).limit(1);
-  if (!booking || !profile || profile.paymentStatus !== "card_on_file") return;
+  if (!booking || !profile) return;
 
   const amount = displayAmount(booking.firstCleaningTotalCents);
   const name = booking.customerName;
   const first = firstName(name);
   const schedule = `${booking.requestedLocalDate} at ${booking.requestedLocalTime}`;
+  const paymentText = booking.paymentMethod === "card"
+    ? "Your selected payment method is a card. Nothing is charged until after your cleaning is complete. We'll follow up if we need anything else before the appointment."
+    : booking.paymentMethod === "cashapp"
+      ? "Your selected payment method is Cash App. Payment will be collected after your cleaning is complete."
+      : "Your selected payment method is check. Payment will be collected after your cleaning is complete.";
   const purchaserText = [
     `Hi ${first} — you're booked with Maids in Black!`,
     `Your ${booking.serviceName} is scheduled for ${booking.requestedLocalDate} during the ${booking.requestedLocalTime} arrival window.`,
     `Total: ${amount}`,
-    "Your card is securely on file and will not be charged until after your cleaning is complete. We'll text you closer to your appointment with updates from your cleaning team.",
+    paymentText,
+    "We'll text you closer to your appointment with updates from your cleaning team.",
     "Need to make a change or have a question? Just reply to this message.",
     "— Maids in Black",
   ].join("\n\n");

@@ -54,6 +54,7 @@ import {
 } from "./bookingUpsellEngine";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import {
   NATIVE_BOOKING_OPERATIONAL_ORIGIN,
   nativeBookingCustomerNotes,
@@ -418,6 +419,9 @@ export const bookingsRouter = router({
           db,
           persisted.booking.id,
           input.additionalServices
+        );
+        void sendBookingCompletionNotifications(persisted.booking.id).catch(error =>
+          console.error("[BookingsRouter] Booking notifications failed:", error)
         );
         publishNativeBookingRefresh();
         return {

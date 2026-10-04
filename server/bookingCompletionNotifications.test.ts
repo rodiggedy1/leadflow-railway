@@ -9,7 +9,7 @@ const schema = readFileSync(resolve(import.meta.dirname, "../drizzle/schema.ts")
 const migrationPostconditions = JSON.parse(readFileSync(resolve(import.meta.dirname, "versioned-migrations/0014_create_booking_notification_deliveries.postconditions.json"), "utf8"));
 
 describe("booking completion notifications", () => {
-  it("uses the established purchaser, CS, owner, and Command Chat channels after verified card setup", () => {
+  it("uses the established purchaser, CS, owner, and Command Chat channels for every created booking", () => {
     expect(dispatcher).toContain('const CS_SUPPORT_NUMBER = "+12028885362"');
     expect(dispatcher).toContain('const OWNER_ALERT_NUMBER = "+13029816191"');
     expect(dispatcher).toContain('"purchaser_sms" | "cs_sms" | "owner_sms" | "command_chat"');
@@ -17,6 +17,7 @@ describe("booking completion notifications", () => {
     expect(dispatcher).toContain('broadcastOpsUpdate("new_message", { channel: "command" })');
     expect(paymentRouter).toContain("void sendBookingCompletionNotifications(record.bookingId).catch");
     expect(webhook).toContain("void sendBookingCompletionNotifications(bound.booking.id).catch");
+    expect(readFileSync(resolve(import.meta.dirname, "bookingsRouter.ts"), "utf8")).toContain("void sendBookingCompletionNotifications(persisted.booking.id).catch");
   });
 
   it("uses booking-scoped idempotency and never introduces retry, hold, capture, or charge behavior", () => {
@@ -27,7 +28,9 @@ describe("booking completion notifications", () => {
     expect(dispatcher).toContain('eq(bookingNotificationDeliveries.claimToken, claimToken)');
     expect(dispatcher).toContain('status: "sending"');
     expect(dispatcher).not.toContain("insertId");
-    expect(dispatcher).toContain('profile.paymentStatus !== "card_on_file"');
+    expect(dispatcher).not.toContain('profile.paymentStatus !== "card_on_file"');
+    expect(dispatcher).toContain('booking.paymentMethod === "card"');
+    expect(dispatcher).toContain('booking.paymentMethod === "cashapp"');
     expect(dispatcher).not.toContain("setTimeout(");
     expect(dispatcher).not.toContain("capture");
     expect(dispatcher).not.toContain("createPaymentIntent");
