@@ -59,6 +59,7 @@ import stillLife from "@/assets/book-now-review/still-life.jpg";
 import upsellCarpetCleaning from "@/assets/book-now-review/upsell-carpet-cleaning.webp";
 import upsellExteriorWindowCleaning from "@/assets/book-now-review/upsell-exterior-window-cleaning.jpeg";
 import testimonialCleaner from "@/assets/book-now-review/testimonial-cleaner.webp";
+import amberTestimonial from "@/assets/book-now-review/amber-testimonial.png";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -254,6 +255,7 @@ const CONDITION_IMAGES = [
   trashBags,
 ] as const;
 const TIME_SLOTS = CANONICAL_TIME_SLOT_LABELS;
+const REVIEW_OPENING_COUNTS = [2, 4, 3] as const;
 const POST_BOOKING_UPSELL_IMAGES = {
   "moving-help": livingRoom,
   "carpet-cleaning": upsellCarpetCleaning,
@@ -304,6 +306,8 @@ function firstBookableDate(): Date {
 }
 
 export default function Book() {
+  const reviewMode =
+    typeof window !== "undefined" && window.location.hostname.endsWith(".manus.computer");
   const {
     step,
     setStep,
@@ -429,6 +433,10 @@ export default function Book() {
       setFormError("Enter the complete service address.");
       return false;
     }
+    if (reviewMode) {
+      setFormError("");
+      return true;
+    }
     try {
       let current = funnelRecordRef.current;
       if (!current) {
@@ -540,7 +548,11 @@ export default function Book() {
             {BOOKING_PHASES.map(({ title, subtitle, icon: Icon, steps }, index) => {
               const phaseNumber = index + 1;
               const isDone = steps.every(itemStep => itemStep < step);
-              const isCurrent = !isDone && steps.includes(step as (typeof steps)[number]);
+              const isCurrent =
+                !isDone &&
+                (step === 1
+                  ? index === 0
+                  : steps.includes(step as (typeof steps)[number]));
               return (
                 <li
                   key={title}
@@ -632,6 +644,7 @@ export default function Book() {
               {step === 7 && (
                 <Payment
                   funnelRecord={funnelRecord}
+                  reviewMode={reviewMode}
                   fullName={fullName}
                   amountCents={priceBreakdown.firstCleaningTotalCents}
                   cardOnFile={cardOnFile}
@@ -1038,6 +1051,27 @@ function HomeDetails({
           </strong>
         </section>
       )}
+      <blockquote className="booking-home-testimonial">
+        <img
+          className="booking-home-testimonial-avatar"
+          src={amberTestimonial}
+          alt="Amber C."
+        />
+        <span className="booking-home-testimonial-divider" aria-hidden="true" />
+        <div className="booking-home-testimonial-copy">
+          <span className="booking-home-testimonial-stars" aria-label="5 out of 5 stars">
+            <Star fill="currentColor" />
+            <Star fill="currentColor" />
+            <Star fill="currentColor" />
+            <Star fill="currentColor" />
+            <Star fill="currentColor" />
+          </span>
+          <p>“Our 3 bedroom, 3 bathroom house has never looked and smelled so clean.”</p>
+          <footer>
+            <strong>— Amber C.</strong>
+          </footer>
+        </div>
+      </blockquote>
     </>
   );
 }
@@ -1186,9 +1220,14 @@ function DateTime({
   const earliestMonth = easternMonthDate(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1);
   const previousMonth = easternMonthDate(year, month - 1, 1);
   const nextMonth = easternMonthDate(year, month + 1, 1);
+  const quickDateStrings = useMemo(
+    () => [0, 1, 2].map(offset => easternDateIso(new Date(), offset)),
+    []
+  );
+  const quickDates = quickDateStrings.map(parseEasternDate);
   return (
     <>
-      <h1>When works for you?</h1>
+      <h1>When should we come?</h1>
       <p className="booking-review-lede">
         Select a date and time for your cleaning.
       </p>
@@ -1223,35 +1262,66 @@ function DateTime({
               if (index < leading) return <span key={`empty-${index}`} />;
               const date = easternMonthDate(year, month, day);
               const unavailable = date < earliest;
+              const selected = isoDate(date) === isoDate(selectedDate);
+              const hasAvailability =
+                !unavailable && [1, 2, 3, 5, 6].includes(date.getUTCDay());
               return (
                 <button
                   type="button"
                   className={
-                    isoDate(date) === isoDate(selectedDate)
+                    selected
                       ? "selected"
-                      : unavailable
-                        ? "muted"
-                        : ""
+                        : unavailable
+                          ? "muted"
+                          : ""
                   }
                   disabled={unavailable}
                   key={day}
                   onClick={() => onSelectDate(date)}
                 >
                   {day}
+                  {hasAvailability && !selected && (
+                    <span
+                      className="booking-calendar-availability-dot"
+                      aria-hidden="true"
+                    />
+                  )}
                 </button>
               );
             })}
           </div>
-          <div className="booking-review-note">
-            <CalendarDays />
-            <span>
-              <strong>Need something sooner?</strong> Text us at{" "}
-              <b>(202) 888-5362</b> — we’ll do our best to help.
-            </span>
+          <div className="booking-calendar-quick-dates">
+            {quickDates.map((date, index) => (
+              <button
+                type="button"
+                key={isoDate(date)}
+                className={isoDate(date) === isoDate(selectedDate) ? "selected" : ""}
+                onClick={() => onSelectDate(date)}
+              >
+                <strong>
+                  {index === 0
+                    ? "Today"
+                    : index === 1
+                      ? "Tomorrow"
+                      : formatDate(date).split(",")[0]}
+                </strong>
+                <span>
+                  {REVIEW_OPENING_COUNTS[index]} openings
+                </span>
+                <ChevronRight />
+              </button>
+            ))}
           </div>
         </section>
         <section className="booking-times">
-          <h3>Arrival window</h3>
+          <header className="booking-times-header">
+            <div>
+              <strong>{formatDate(selectedDate).split(",")[0]}</strong>
+              <span>{formatDate(selectedDate).split(",").slice(1).join(",").trim()}</span>
+            </div>
+            <b>4 openings</b>
+          </header>
+          <p className="booking-times-label">Choose an arrival window</p>
           {TIME_SLOTS.map(time => (
             <button
               type="button"
@@ -1259,7 +1329,12 @@ function DateTime({
               key={time}
               onClick={() => onSelectTime(time)}
             >
-              {time}
+              <span className="booking-time-radio" aria-hidden="true" />
+              <span>
+                <strong>{time}</strong>
+                <small>Arrival window</small>
+              </span>
+              {selectedTime === time && <em>Selected</em>}
             </button>
           ))}
         </section>
@@ -1354,12 +1429,14 @@ function YourInformation(props: {
 }
 function Payment({
   funnelRecord,
+  reviewMode,
   fullName,
   amountCents,
   cardOnFile,
   onCardReady,
 }: {
   funnelRecord: BookingFunnelPublicResult | null;
+  reviewMode: boolean;
   fullName: string;
   amountCents: number;
   cardOnFile: boolean;
@@ -1367,12 +1444,40 @@ function Payment({
 }) {
   return (
     <>
-      <h1>Payment</h1>
-      <p className="booking-review-lede">
-        Add a card to hold your booking. You won’t be charged until after your
-        service is completed.
-      </p>
-      {cardOnFile ? (
+      <section className="booking-payment-hero">
+        <h1>Reserve your cleaning</h1>
+        <div className="booking-payment-reassurance">
+          <span className="booking-payment-reassurance-icon"><LockKeyhole /></span>
+          <div>
+            <strong>You won’t be charged today.</strong>
+            <p>Your card securely reserves your appointment.<br />Payment is processed after your cleaning is completed.</p>
+          </div>
+        </div>
+        <div className="booking-payment-trust" aria-label="Payment assurances">
+          <div>
+            <span><ShieldCheck /></span>
+            <strong>Secure<br />payments</strong>
+            <small>Powered by Stripe</small>
+          </div>
+          <div>
+            <span><CreditCard /></span>
+            <strong>Your card<br />is not stored</strong>
+            <small>Handled securely<br />by Stripe</small>
+          </div>
+          <div>
+            <span><ShieldCheck /></span>
+            <strong>Protects our teams</strong>
+            <small>Helps us avoid traveling with cash throughout the city</small>
+          </div>
+        </div>
+      </section>
+      {reviewMode ? (
+        <div className="booking-live-card-saved">
+          <Check />
+          Review mode: secure card entry is intentionally skipped so the remaining
+          booking steps can be inspected.
+        </div>
+      ) : cardOnFile ? (
         <div className="booking-live-card-saved">
           <Check />
           Your card is securely on file. Continue to take a final look at your
