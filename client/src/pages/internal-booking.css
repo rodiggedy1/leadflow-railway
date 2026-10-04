@@ -4908,6 +4908,17 @@
 .review-booking-shell .modeToggle.hidden {
   display: none;
 }
+.review-booking-shell .telecontrols > .tiny.ask {
+  border: 1px solid #42433c;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #1d1e1a;
+  color: #efd393;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: normal;
+}
 .review-booking-shell .teleScript:not(.fullMode):not(.manualLine) {
   font-size: 18px;
   line-height: 1.55;
