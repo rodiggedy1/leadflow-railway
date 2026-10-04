@@ -1218,7 +1218,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       setError("Complete the customer information before continuing.");
       return;
     }
-    if (step === 8 && paymentMethod === "card" && !createdBooking) {
+    if (step === 8 && !createdBooking) {
       submit();
       return;
     }
@@ -1707,12 +1707,16 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               className={`choice${paymentMethod === value ? " on" : ""}`}
               disabled={
                 value === "card" ||
-                startCardSetup.isPending ||
                 switchInternalPaymentMethod.isPending ||
                 paymentMethod === value
               }
               onClick={() => {
-                if (!createdBooking || value === "card") return;
+                if (value === "card") return;
+                if (!createdBooking) {
+                  setPaymentMethod(value);
+                  setError(null);
+                  return;
+                }
                 switchInternalPaymentMethod.mutate({
                   bookingId: createdBooking.bookingId,
                   paymentMethod: value,
