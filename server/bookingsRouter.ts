@@ -351,7 +351,7 @@ function mapAdminBooking(
 export const bookingsRouter = router({
   todayStats: bookingsAgentProcedure.query(async () => {
     const db = await getDb();
-    if (!db) return { bookedCount: 0, bookedRevenue: 0 };
+    if (!db) return { bookedCount: 0, bookedRevenue: 0, bookingDetails: [] };
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: BOOKING_TIME_ZONE }).format(new Date());
     const tomorrowDate = new Date(`${today}T00:00:00.000Z`);
     tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
@@ -363,7 +363,12 @@ export const bookingsRouter = router({
       businessLocalDateTimeToUtcMs(tomorrow, "00:00", BOOKING_TIME_ZONE)
     );
     const rows = await db
-      .select({ status: bookings.status, totalCents: bookings.firstCleaningTotalCents })
+      .select({
+        status: bookings.status,
+        customerName: bookings.customerName,
+        bookedByAgentName: bookings.bookedByAgentName,
+        totalCents: bookings.firstCleaningTotalCents,
+      })
       .from(bookings)
       .where(
         and(
@@ -375,6 +380,11 @@ export const bookingsRouter = router({
     return {
       bookedCount: activeRows.length,
       bookedRevenue: activeRows.reduce((sum, row) => sum + Math.round(Number(row.totalCents ?? 0) / 100), 0),
+      bookingDetails: activeRows.map((row) => ({
+        customerName: row.customerName,
+        bookedByAgentName: row.bookedByAgentName,
+        totalCents: row.totalCents,
+      })),
     };
   }),
   getPublicWidgetConfig: publicProcedure.query(async () => {
