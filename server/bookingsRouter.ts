@@ -349,6 +349,20 @@ function mapAdminBooking(
 }
 
 export const bookingsRouter = router({
+  todayStats: bookingsAgentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { bookedCount: 0, bookedRevenue: 0 };
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: BOOKING_TIME_ZONE }).format(new Date());
+    const rows = await db
+      .select({ status: bookings.status, totalCents: bookings.firstCleaningTotalCents })
+      .from(bookings)
+      .where(eq(bookings.requestedLocalDate, today));
+    const activeRows = rows.filter((row) => !["cancelled", "canceled"].includes(row.status));
+    return {
+      bookedCount: activeRows.length,
+      bookedRevenue: activeRows.reduce((sum, row) => sum + Math.round(Number(row.totalCents ?? 0) / 100), 0),
+    };
+  }),
   getPublicWidgetConfig: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return DEFAULT_BOOKING_WIDGET_DRAFT;
