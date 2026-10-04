@@ -223,18 +223,64 @@
   font-size: 21px;
   line-height: 1.35;
 }
+.booking-review-promise {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr);
+  gap: 28px;
+  align-items: stretch;
+  margin-bottom: 28px;
+}
+.booking-review-promise-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 0 6px;
+}
+.booking-review-promise-copy h1 {
+  margin-top: 0;
+  margin-bottom: 14px;
+}
+.booking-review-promise-copy .booking-review-lede {
+  margin-bottom: 28px;
+}
+.booking-review-promise-image {
+  width: 100%;
+  height: 285px;
+  min-height: 0;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 15px;
+}
 .booking-review-trust-signals {
   display: flex;
   flex-wrap: wrap;
-  gap: 9px 22px;
-  margin: -13px 0 28px;
+  gap: 18px 24px;
+  margin: 0;
   color: #514536;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-size: 15px;
 }
 .booking-review-trust-signals span {
-  white-space: nowrap;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  line-height: 1.25;
+}
+.booking-review-trust-signals i {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #f4eee5;
+  color: #514536;
+  font-style: normal;
+}
+.booking-review-trust-signals svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.7;
 }
 .booking-service-grid {
   display: grid;
@@ -2925,12 +2971,43 @@ button.booking-card-acceptance-submit:disabled {
   height: 57px;
   background: #e9e3dc;
 }
+@media (max-width: 900px) {
+  .booking-review-promise {
+    grid-template-columns: 1fr;
+  }
+  .booking-review-promise-image {
+    height: 230px;
+  }
+}
 @keyframes booking-card-loading {
   to {
     background-position: -220% 0;
   }
 }
 @media (max-width: 620px) {
+  .booking-review-promise {
+    gap: 18px;
+  }
+  .booking-review-promise-copy h1 {
+    margin-bottom: 10px;
+  }
+  .booking-review-promise-copy .booking-review-lede {
+    margin-bottom: 20px;
+  }
+  .booking-review-promise-image {
+    height: 190px;
+  }
+  .booking-review-trust-signals {
+    gap: 13px 15px;
+  }
+  .booking-review-trust-signals i {
+    width: 38px;
+    height: 38px;
+  }
+  .booking-review-trust-signals svg {
+    width: 20px;
+    height: 20px;
+  }
   .booking-card-acceptance {
     gap: 19px;
     margin-top: 26px;

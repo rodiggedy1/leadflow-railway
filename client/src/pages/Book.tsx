@@ -53,6 +53,7 @@ import {
 import { CANONICAL_POST_BOOKING_UPSELLS } from "@shared/canonicalBookingCatalog";
 import { easternCalendarWeekday, easternDateIso, easternDateIsoFromDate, easternDateLabel, easternMonthDate, easternMonthLabel, parseEasternDate } from "@shared/easternTime";
 import livingRoom from "@/assets/book-now-review/living-room.jpg";
+import promiseImage from "@/assets/book-now-review/sunlit-marble-tabletop-vignette.png";
 import kitchen from "@/assets/book-now-review/kitchen.jpg";
 import stillLife from "@/assets/book-now-review/still-life.jpg";
 import upsellCarpetCleaning from "@/assets/book-now-review/upsell-carpet-cleaning.webp";
@@ -763,14 +764,19 @@ function CleaningType({
 }) {
   return (
     <>
-      <h1>Book your cleaning in 60 seconds</h1>
-      <p className="booking-review-lede">
-        See your exact price and available times instantly.
-      </p>
-      <div className="booking-review-trust-signals" aria-label="Booking assurances">
-        <span>✓ Background-checked teams</span>
-        <span>✓ Insured</span>
-        <span>✓ Satisfaction guaranteed</span>
+      <div className="booking-review-promise">
+        <div className="booking-review-promise-copy">
+          <h1>Book your cleaning<br />in 60 seconds.</h1>
+          <p className="booking-review-lede">
+            Get your price, choose a time, and you&apos;re booked.
+          </p>
+          <div className="booking-review-trust-signals" aria-label="Booking assurances">
+            <span><i><UsersRound /></i><b>Background-checked<br />teams</b></span>
+            <span><i><ShieldCheck /></i><b>Insured</b></span>
+            <span><i><Star /></i><b>Satisfaction<br />guaranteed</b></span>
+          </div>
+        </div>
+        <img className="booking-review-promise-image" src={promiseImage} alt="Sunlit living room with a marble table" />
       </div>
       <div className="booking-service-grid">
         {SERVICES.map(item => (
