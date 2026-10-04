@@ -345,7 +345,7 @@ function BookingTeleprompter({
     }
     if (step === 5) {
       return [
-        `Ok so we have the first cleaning at ${firstTotal}, since that's the full reset where the team gets the home to a great baseline. After that, recurring visits drop 15%, so you'd pay ${futureTotal ?? firstTotal} each time. Most of our clients choose recurring because it keeps the home fresh for less. Would weekly, bi-weekly, or monthly work best for you?`,
+        `Ok so we have the first cleaning at ${firstTotal}, since that's the full reset where the team gets the home to a great baseline. After that, recurring visits drop 15% and since there is no adjustment for the condition of the home, you would only pay ${futureTotal ?? firstTotal} each time. Most of our clients choose recurring because it keeps the home fresh for less. Would weekly, bi-weekly, or monthly work best for you?`,
       ];
     }
     if (step !== 9) return base;
@@ -523,6 +523,16 @@ function BookingTeleprompter({
                   <div className="fullCopy quote-after-extras-copy">
                     <span className="quote-highlight">{lines[2]}</span>{" "}
                     {lines.slice(3).join(" ")}
+                  </div>
+                </>
+              ) : step === 7 ? (
+                <>
+                  <div className="fullCopy">
+                    “{lines[0]} {lines.slice(1, 3).join(" ")}”
+                  </div>
+                  <div className="quote-after-extras-label">ACCESS &amp; NOTES</div>
+                  <div className="fullCopy quote-after-extras-copy">
+                    “{lines[3]}”
                   </div>
                 </>
               ) : (
