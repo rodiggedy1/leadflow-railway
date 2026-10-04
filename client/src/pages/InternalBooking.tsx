@@ -400,6 +400,16 @@ function BookingTeleprompter({
     scrollRef.current.scrollTop = scrollPositionRef.current;
     animationRef.current = window.requestAnimationFrame(autoFrame);
   };
+  useEffect(() => {
+    if (!playing || mode !== "auto") return;
+    animationRef.current = window.requestAnimationFrame(autoFrame);
+    return () => {
+      if (animationRef.current !== null) {
+        window.cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [playing, mode, speed]);
   const setTeleMode = (nextMode: "full" | "manual" | "auto") => {
     stopAutoPlay();
     setMode(nextMode);
@@ -454,20 +464,11 @@ function BookingTeleprompter({
               <button
                 type="button"
                 className="tiny"
-                onClick={() => setTeleMode("manual")}
-              >
-                ← Manual
-              </button>
-              <button
-                type="button"
-                className="tiny"
                 onClick={() => {
                   if (playing) stopAutoPlay();
                   else {
                     setPlaying(true);
                     lastFrameRef.current = null;
-                    animationRef.current =
-                      window.requestAnimationFrame(autoFrame);
                   }
                 }}
               >
@@ -1213,6 +1214,17 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       },
     });
   };
+  useEffect(() => {
+    if (
+      step === 8 &&
+      paymentMethod === "card" &&
+      !createdBooking &&
+      !createBooking.isPending &&
+      !createBooking.isSuccess
+    ) {
+      submit();
+    }
+  }, [step, paymentMethod, createdBooking, createBooking.isPending, createBooking.isSuccess]);
   const next = () => {
     setError(null);
     if (
@@ -1717,6 +1729,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               type="button"
               className={`choice${paymentMethod === value ? " on" : ""}`}
               disabled={
+                createBooking.isPending ||
                 switchInternalPaymentMethod.isPending ||
                 paymentMethod === value
               }
@@ -1777,7 +1790,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               />
             </Elements>
           </div>
-        ) : paymentMethod === "card" && createdBooking ? (
+        ) : paymentMethod === "card" ? (
           <div className="card" style={{ marginTop: 15 }}>
             Preparing secure card entry…
           </div>
