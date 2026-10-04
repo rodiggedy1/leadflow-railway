@@ -29,8 +29,10 @@ describe("booking completion notifications", () => {
     expect(dispatcher).toContain('status: "sending"');
     expect(dispatcher).not.toContain("insertId");
     expect(dispatcher).not.toContain('profile.paymentStatus !== "card_on_file"');
-    expect(dispatcher).toContain('booking.paymentMethod === "card"');
-    expect(dispatcher).toContain('booking.paymentMethod === "cashapp"');
+    expect(dispatcher).toContain("You're booked! 🎉 Your Maids in Black cleaning is confirmed.");
+    expect(dispatcher).toContain("Nothing is charged until your cleaning is complete. We'll text you closer to your appointment with updates from your cleaning team.");
+    expect(dispatcher).toContain("Need to reschedule or add anything? Just reply here. Consider it handled. ✨");
+    expect(dispatcher).not.toContain("booking.paymentMethod ===");
     expect(dispatcher).not.toContain("setTimeout(");
     expect(dispatcher).not.toContain("capture");
     expect(dispatcher).not.toContain("createPaymentIntent");

@@ -30,6 +30,42 @@ function displayAmount(totalCents: number): string {
   return `$${(totalCents / 100).toFixed(2)}`;
 }
 
+function displayConfirmationAmount(totalCents: number): string {
+  const amount = totalCents / 100;
+  return Number.isInteger(amount) ? `$${amount}` : `$${amount.toFixed(2)}`;
+}
+
+function displayConfirmationDate(localDate: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${localDate}T12:00:00Z`));
+}
+
+function displayConfirmationTime(hour: number, minute: number): string {
+  const normalizedHour = ((hour % 24) + 24) % 24;
+  const suffix = normalizedHour >= 12 ? "PM" : "AM";
+  const displayHour = normalizedHour % 12 || 12;
+  return `${displayHour}:${String(minute).padStart(2, "0")} ${suffix}`.replace(/:00 /, " ");
+}
+
+function displayArrivalWindow(localTime: string): string {
+  const [hourText, minuteText] = localTime.split(":");
+  const startHour = Number(hourText);
+  const startMinute = Number(minuteText);
+  return `${displayConfirmationTime(startHour, startMinute)} to ${displayConfirmationTime(startHour + 2, startMinute)}`;
+}
+
+function displayExtras(extras: typeof bookings.$inferSelect.extras): string {
+  if (!extras.length) return "None";
+  return extras.map(extra => {
+    const label = extra.label.replace(/\b\w/g, character => character.toUpperCase());
+    return extra.quantity > 1 ? `${label} × ${extra.quantity}` : label;
+  }).join(", ");
+}
+
 /**
  * Sends the four booking notifications after a booking is created. A unique
  * booking/channel row is claimed before delivery; no retry, charge, hold,
@@ -48,21 +84,20 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
 
   const amount = displayAmount(booking.firstCleaningTotalCents);
   const name = booking.customerName;
-  const first = firstName(name);
   const schedule = `${booking.requestedLocalDate} at ${booking.requestedLocalTime}`;
-  const paymentText = booking.paymentMethod === "card"
-    ? "Your selected payment method is a card. Nothing is charged until after your cleaning is complete. We'll follow up if we need anything else before the appointment."
-    : booking.paymentMethod === "cashapp"
-      ? "Your selected payment method is Cash App. Payment will be collected after your cleaning is complete."
-      : "Your selected payment method is check. Payment will be collected after your cleaning is complete.";
+  const confirmationAmount = displayConfirmationAmount(booking.firstCleaningTotalCents);
   const purchaserText = [
-    `Hi ${first} — you're booked with Maids in Black!`,
-    `Your ${booking.serviceName} is scheduled for ${booking.requestedLocalDate} during the ${booking.requestedLocalTime} arrival window.`,
-    `Total: ${amount}`,
-    paymentText,
-    "We'll text you closer to your appointment with updates from your cleaning team.",
-    "Need to make a change or have a question? Just reply to this message.",
-    "— Maids in Black",
+    "You're booked! 🎉 Your Maids in Black cleaning is confirmed.",
+    [
+      `📅 ${displayConfirmationDate(booking.requestedLocalDate)}`,
+      `🕚 Arrival window: ${displayArrivalWindow(booking.requestedLocalTime)}`,
+      `📍 ${booking.address}`,
+      `🧼 ${booking.serviceName}, ${booking.bedrooms} bed / ${booking.bathrooms} bath`,
+      `➕ Add-on: ${displayExtras(booking.extras)}`,
+      `💵 Total: ${confirmationAmount}`,
+    ].join("\n"),
+    "Nothing is charged until your cleaning is complete. We'll text you closer to your appointment with updates from your cleaning team.",
+    "Need to reschedule or add anything? Just reply here. Consider it handled. ✨",
   ].join("\n\n");
   const operationsText = `New booking: ${name} · ${booking.serviceName} · ${schedule} · ${amount} · ${booking.publicBookingNumber}`;
   const celebrationNote = `${booking.serviceName} · ${schedule}`;
