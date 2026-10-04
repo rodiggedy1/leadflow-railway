@@ -1673,16 +1673,24 @@ export default function NativeBookingsWorkspace({
             </section>
             <section className="bookings-editor-section">
               <small>PAYMENT</small>
-              {active.source === "booking" && (
-                <div className="bookings-card-panel">
-                  <CreditCard />
-                  <div>
-                    <strong>{labelPaymentMethod(active.paymentMethod)}</strong>
-                    <p>Payment method selected for this booking.</p>
+              {active.source === "booking" ? (
+                active.paymentMethod === "cashapp" ||
+                active.paymentMethod === "invoice" ? (
+                  <div className="bookings-card-panel">
+                    <CreditCard />
+                    <div>
+                      <strong>{labelPaymentMethod(active.paymentMethod)}</strong>
+                      <p>Collection after service. No card is required.</p>
+                    </div>
                   </div>
-                </div>
-              )}
-              {active.source === "leadflow" ? (
+                ) : active.firstCleaningTotalCents !== null ? (
+                  <BookingPaymentActions
+                    bookingId={active.id}
+                    totalCents={active.firstCleaningTotalCents}
+                    paymentStatus={active.paymentStatus}
+                  />
+                ) : null
+              ) : active.source === "leadflow" ? (
                 <div
                   className={
                     active.paymentStatus === "card_on_file"
@@ -1702,24 +1710,6 @@ export default function NativeBookingsWorkspace({
                     </p>
                   </div>
                 </div>
-              ) : active.source === "booking" &&
-                active.firstCleaningTotalCents !== null ? (
-                active.paymentMethod === "cashapp" ||
-                active.paymentMethod === "invoice" ? (
-                  <div className="bookings-card-panel">
-                    <CreditCard />
-                    <div>
-                      <strong>{labelPaymentMethod(active.paymentMethod)}</strong>
-                      <p>Collection after service. No card is required.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <BookingPaymentActions
-                    bookingId={active.id}
-                    totalCents={active.firstCleaningTotalCents}
-                    paymentStatus={active.paymentStatus}
-                  />
-                )
               ) : portalPaymentAvailable &&
                 active.firstCleaningTotalCents !== null ? (
                 <PortalRequestPaymentActions
