@@ -4925,15 +4925,17 @@
   font-weight: 650;
 }
 .review-booking-shell .teleScript.autoMode {
-  padding-top: 42px;
-  padding-bottom: 150px;
-  color: #f4f0e7;
-  font-size: 32px;
+  padding: 48px 0 120px;
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 850px;
+  color: #f1efe8;
+  font-size: 36px;
   font-weight: 650;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 .review-booking-shell .teleScript.autoMode p {
-  margin: 0 0 34px;
+  margin: 0 0 24px;
 }
 .review-booking-shell .teleScript.autoMode p:last-child {
   margin-bottom: 0;
