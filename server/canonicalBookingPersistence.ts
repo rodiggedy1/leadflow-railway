@@ -117,6 +117,9 @@ export async function persistCanonicalBooking(
             status: options.initialBookingStatus ?? "pending_payment",
             availabilityStatus: prepared.availabilityStatus,
             assignmentStatus: prepared.assignmentStatus,
+            ...(options.paymentMethod
+              ? { paymentMethod: options.paymentMethod }
+              : {}),
             customerName: prepared.customerName,
             customerPhone: prepared.customerPhone,
             customerEmail: prepared.customerEmail,
