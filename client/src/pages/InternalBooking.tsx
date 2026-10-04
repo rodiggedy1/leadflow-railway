@@ -1161,10 +1161,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
           publicBookingNumber: result.publicBookingNumber,
         });
         startCardSetup.mutate({ bookingId: result.bookingId });
-      } else
-        setSuccess(
-          `${result.publicBookingNumber} created at ${money(result.totalCents)}. It is now in Bookings for assignment and follow-up.`
-        );
+      } else {
+        setCreatedBooking({
+          bookingId: result.bookingId,
+          publicBookingNumber: result.publicBookingNumber,
+        });
+        setStep(9);
+      }
       setError(null);
     },
     onError: mutationError => {
