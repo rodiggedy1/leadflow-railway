@@ -56,6 +56,7 @@ export const CANONICAL_TIME_SLOTS = [
   "10:30",
   "12:30",
   "14:30",
+  "16:30",
 ] as const;
 
 export const CANONICAL_TIME_SLOT_LABELS = [
@@ -63,6 +64,7 @@ export const CANONICAL_TIME_SLOT_LABELS = [
   "10:30 AM",
   "12:30 PM",
   "2:30 PM",
+  "4:30 PM",
 ] as const;
 
 export type CanonicalBookingDraft = {

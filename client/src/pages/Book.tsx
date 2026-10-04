@@ -1323,7 +1323,7 @@ function DateTime({
             </div>
             <b>4 openings</b>
           </header>
-          <p className="booking-times-label">Choose an arrival window</p>
+          <p className="booking-times-label">Choose your 2-hour arrival window</p>
           {TIME_SLOTS.map(time => (
             <button
               type="button"

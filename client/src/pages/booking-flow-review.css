@@ -919,7 +919,7 @@
   gap: 4px;
   min-width: 0;
   min-height: 70px;
-  padding: 12px 30px 12px 13px;
+  padding: 12px 12px 12px 13px;
   border: 1px solid #e5ded5;
   border-radius: 12px;
   background: #fffdfb;
@@ -932,7 +932,7 @@
   background: #f8f0e7;
 }
 .booking-calendar-quick-dates strong {
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .booking-calendar-quick-date-label {
@@ -940,7 +940,7 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  gap: 6px;
+  gap: 3px;
 }
 .booking-calendar-quick-date-label svg {
   position: static;
@@ -955,25 +955,25 @@
   white-space: nowrap;
 }
 .booking-times {
-  padding: 22px;
+  padding: 20px;
 }
 .booking-times-header {
   display: flex;
   align-items: start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 22px;
+  margin-bottom: 12px;
 }
 .booking-times-header div {
   display: grid;
   gap: 4px;
 }
 .booking-times-header strong {
-  font-size: 22px;
+  font-size: 19px;
 }
 .booking-times-header span {
   color: #776f67;
-  font-size: 16px;
+  font-size: 14px;
 }
 .booking-times-header b {
   padding: 7px 11px;
@@ -984,18 +984,18 @@
   white-space: nowrap;
 }
 .booking-times-label {
-  margin: 0 0 12px;
+  margin: 0 0 9px;
   color: #4b4037;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 .booking-times > button:not(.selected) {
   display: flex;
   align-items: center;
   gap: 13px;
-  height: 65px;
-  margin-bottom: 10px;
-  padding: 0 13px;
+  height: 57px;
+  margin-bottom: 7px;
+  padding: 0 11px;
   border-radius: 12px;
   background: #fffdfb;
   text-align: left;
@@ -1004,9 +1004,9 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  height: 65px;
-  margin-bottom: 10px;
-  padding: 0 10px;
+  height: 57px;
+  margin-bottom: 7px;
+  padding: 0 9px;
   border-color: #7a4a22;
   border-radius: 12px;
   background: #fffaf4;
@@ -1036,7 +1036,7 @@
 }
 .booking-times > button > span:nth-child(2) small {
   color: #776f67;
-  font-size: 12px;
+  font-size: 11px;
 }
 .booking-times > button.selected > span:nth-child(2) small {
   color: #776f67;
