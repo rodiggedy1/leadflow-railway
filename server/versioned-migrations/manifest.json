@@ -359,6 +359,14 @@
       "sha256": "e18dba30407c1bd10e1b73286f81218e8cec91f4cc56e0ebf636975c1e6b5e75",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0047_create_cash_app_payment_tokens.postconditions.json"
+    },
+    {
+      "id": "0048_add_internal_booking_attribution",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0048_add_internal_booking_attribution.sql",
+      "sha256": "a4821006f4f41fd51199676128ab260361ae200a9fa1503edb06a9689bc6a837",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0048_add_internal_booking_attribution.postconditions.json"
     }
   ]
 }

@@ -244,11 +244,15 @@ async function persistPreparedBooking(
   options: {
     createAtomicPaymentProfile?: boolean;
     paymentMethod?: "card" | "cashapp" | "invoice";
+    bookedByAgentId?: number;
+    bookedByAgentName?: string;
     companyNotes?: string | null;
   } = {}
 ) {
   const result = await persistCanonicalBooking(db, prepared, {
     paymentMethod: options.paymentMethod,
+    bookedByAgentId: options.bookedByAgentId,
+    bookedByAgentName: options.bookedByAgentName,
     companyNotes: options.companyNotes,
     initialBookingStatus:
       options.paymentMethod === "card" ? "pending_payment" : "needs_attention",
@@ -335,6 +339,8 @@ function mapAdminBooking(
     pricingVersion: row.pricingVersion,
     firstCleaningTotalCents: row.firstCleaningTotalCents,
     futureVisitTotalCents: row.futureVisitTotalCents,
+    bookedByAgentId: row.bookedByAgentId,
+    bookedByAgentName: row.bookedByAgentName,
     companyNotes: row.companyNotes,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
@@ -389,7 +395,7 @@ export const bookingsRouter = router({
 
   createInternal: bookingsAgentProcedure
     .input(internalPublicBookingInputSchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db)
         throw new TRPCError({
@@ -413,6 +419,8 @@ export const bookingsRouter = router({
         const persisted = await persistPreparedBooking(db, built.prepared, {
           createAtomicPaymentProfile: true,
           paymentMethod: input.paymentMethod,
+          bookedByAgentId: ctx.agent.agentId,
+          bookedByAgentName: ctx.agent.agentName,
           companyNotes: input.companyNotes,
         });
         const additionalServices = await applyInternalAdditionalServices(

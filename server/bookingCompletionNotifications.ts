@@ -160,7 +160,14 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
           authorRole: "office",
           body: `🎉 New booking! ${name} — ${amount} · ${celebrationNote}`,
           quickAction: "announce_booking",
-          metadata: JSON.stringify({ personName: name, amount, note: celebrationNote, bookingId }),
+          metadata: JSON.stringify({
+            personName: name,
+            amount,
+            note: celebrationNote,
+            bookingId,
+            bookedByAgentId: booking.bookedByAgentId,
+            bookedByAgentName: booking.bookedByAgentName,
+          }),
         });
         broadcastOpsUpdate("new_message", { channel: "command" });
         await db.update(bookingNotificationDeliveries).set({ status: "sent", updatedAt: new Date() }).where(eq(bookingNotificationDeliveries.id, deliveryId));
