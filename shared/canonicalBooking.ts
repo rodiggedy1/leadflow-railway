@@ -53,15 +53,17 @@ export const CANONICAL_CONDITION_COPY = [
 
 export const CANONICAL_TIME_SLOTS = [
   "08:30",
-  "11:00",
-  "13:30",
+  "10:30",
+  "12:30",
+  "14:30",
   "16:30",
 ] as const;
 
 export const CANONICAL_TIME_SLOT_LABELS = [
   "8:30 AM",
-  "11:00 AM",
-  "1:30 PM",
+  "10:30 AM",
+  "12:30 PM",
+  "2:30 PM",
   "4:30 PM",
 ] as const;
 
