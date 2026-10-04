@@ -244,13 +244,28 @@
 .booking-review-promise-copy .booking-review-lede {
   margin-bottom: 28px;
 }
+.booking-review-promise-image-wrap {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 15px;
+}
+.booking-review-promise-image-wrap::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0 auto 0 0;
+  width: 24%;
+  background: linear-gradient(90deg, #fffdfb 0%, rgba(255, 253, 251, 0.78) 30%, rgba(255, 253, 251, 0) 100%);
+  content: "";
+  pointer-events: none;
+}
 .booking-review-promise-image {
+  display: block;
   width: 100%;
   height: 285px;
   min-height: 0;
   object-fit: cover;
   object-position: center;
-  border-radius: 15px;
 }
 .booking-review-trust-signals {
   display: flex;
@@ -2974,6 +2989,12 @@ button.booking-card-acceptance-submit:disabled {
 @media (max-width: 900px) {
   .booking-review-promise {
     grid-template-columns: 1fr;
+  }
+  .booking-review-promise-image-wrap {
+    border-radius: 15px;
+  }
+  .booking-review-promise-image-wrap::before {
+    display: none;
   }
   .booking-review-promise-image {
     height: 230px;

@@ -776,7 +776,9 @@ function CleaningType({
             <span><i><Star /></i><b>Satisfaction<br />guaranteed</b></span>
           </div>
         </div>
-        <img className="booking-review-promise-image" src={promiseImage} alt="Sunlit living room with a marble table" />
+        <div className="booking-review-promise-image-wrap">
+          <img className="booking-review-promise-image" src={promiseImage} alt="Sunlit living room with a marble table" />
+        </div>
       </div>
       <div className="booking-service-grid">
         {SERVICES.map(item => (
