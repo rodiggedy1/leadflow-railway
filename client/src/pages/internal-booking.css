@@ -4930,11 +4930,13 @@
   margin-right: 0;
   max-width: 850px;
   color: #f1efe8;
-  font-size: 36px;
+  font-size: 18px !important;
   font-weight: 650;
-  line-height: 1.55;
+  line-height: 1.4;
 }
 .review-booking-shell .teleScript.autoMode p {
+  font-size: 18px !important;
+  line-height: 1.4;
   margin: 0 0 24px;
 }
 .review-booking-shell .teleScript.autoMode p:last-child {
