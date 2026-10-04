@@ -4789,6 +4789,7 @@
 .review-booking-shell .basement-prompt h2 { margin: 18px 0 10px; color: #fff; }
 .review-booking-shell .basement-prompt p { margin: 0; color: #b8b9b0; line-height: 1.5; }
 .review-booking-shell .basement-prompt-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.review-booking-shell .basement-selected-note { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--gold2); border-radius: 0 8px 8px 0; background: rgba(225, 185, 99, 0.1); color: var(--gold2); font-size: 13px; font-weight: 700; }
 .review-booking-shell .step-content > .content-top { display:none; }
 .review-booking-shell .booking-card-acceptance-dark { background: #181916; border-color: #4a4639; color: #f4f0e7; }
 .review-booking-shell .booking-card-acceptance-dark input { background: #151613; color: #fff; border-color: #41423b; }

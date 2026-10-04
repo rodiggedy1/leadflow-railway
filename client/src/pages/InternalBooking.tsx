@@ -992,7 +992,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     setAddress,
     extras,
     setExtra,
-  } = useCanonicalBookingFlow({ stepCount: 10 });
+  } = useCanonicalBookingFlow({
+    stepCount: 10,
+    overrides: { homeType: "Apartment" },
+  });
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [additionalServices, setAdditionalServices] = useState<
@@ -1376,6 +1379,11 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               </button>
             ))}
           </div>
+          {extras.basement ? (
+            <div className="basement-selected-note">
+              ✓ Basement added as an extra · ${PUBLIC_BOOKING_PRICED_EXTRAS.basement.unitPrice}
+            </div>
+          ) : null}
         </div>
         {basementPromptOpen && (homeType === "House" || homeType === "Townhome") && (
           <div
