@@ -22,6 +22,10 @@ describe("internal booking attribution", () => {
     expect(schema).toContain('bookedByAgentName: varchar("bookedByAgentName", { length: 255 })');
     expect(notifications).toContain("bookedByAgentName: booking.bookedByAgentName");
     expect(chat).toContain("Booked by {bookedByAgentName}");
+    expect(router).toContain("businessLocalDateTimeToUtcMs(today, \"00:00\", BOOKING_TIME_ZONE)");
+    expect(router).toContain("gte(bookings.createdAt, startOfToday)");
+    expect(router).toContain("lt(bookings.createdAt, startOfTomorrow)");
+    expect(router).not.toContain("where(eq(bookings.requestedLocalDate, today))");
   });
 
   it("does not add a polling or timer path to attribution", () => {

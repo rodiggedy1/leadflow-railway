@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
@@ -353,10 +353,24 @@ export const bookingsRouter = router({
     const db = await getDb();
     if (!db) return { bookedCount: 0, bookedRevenue: 0 };
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: BOOKING_TIME_ZONE }).format(new Date());
+    const tomorrowDate = new Date(`${today}T00:00:00.000Z`);
+    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+    const tomorrow = tomorrowDate.toISOString().slice(0, 10);
+    const startOfToday = new Date(
+      businessLocalDateTimeToUtcMs(today, "00:00", BOOKING_TIME_ZONE)
+    );
+    const startOfTomorrow = new Date(
+      businessLocalDateTimeToUtcMs(tomorrow, "00:00", BOOKING_TIME_ZONE)
+    );
     const rows = await db
       .select({ status: bookings.status, totalCents: bookings.firstCleaningTotalCents })
       .from(bookings)
-      .where(eq(bookings.requestedLocalDate, today));
+      .where(
+        and(
+          gte(bookings.createdAt, startOfToday),
+          lt(bookings.createdAt, startOfTomorrow)
+        )
+      );
     const activeRows = rows.filter((row) => !["cancelled", "canceled"].includes(row.status));
     return {
       bookedCount: activeRows.length,
