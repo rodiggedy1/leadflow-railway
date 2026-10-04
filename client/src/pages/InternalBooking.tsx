@@ -177,13 +177,18 @@ function formatPhoneNumber(value: string) {
 
 const TELE_LINES: Record<Step, string[]> = {
   1: [
-    "Absolutely, I can help you get a quote and get everything set up. We've cleaned thousands of homes in the DMV area, and we're rated 4.9 stars on Google. Let's make sure we pick the right clean. Is this more of a routine clean, does the home need a deeper reset, or are you moving in or out?",
+    "Absolutely, I can help you get a quote and get everything set up.",
+    "We've cleaned thousands of homes in the DMV area, and we're rated 4.9 stars on Google.",
+    "Let's make sure we pick the right clean. Is this more of a routine clean, does the home need a deeper reset, or are you moving in or out?",
   ],
   2: [
-    "Now let's get a feel for the size of the home so I can build your price. How many bedrooms and bathrooms does it have? Is it a house, apartment, condo, or townhome? Finished basement?",
+    "Now let's get a feel for the size of the home so I can build your price.",
+    "How many bedrooms and bathrooms does it have? Is it a house, apartment, condo, or townhome? Finished basement?",
   ],
   3: [
-    "Now I want to make sure the team has enough time. On a scale of 1 to 10, where would you put the home today? A 1 is already very clean, and a 10 needs a serious reset. There's no wrong answer, this just helps us plan properly.",
+    "Now I want to make sure the team has enough time.",
+    "On a scale of 1 to 10, where would you put the home today? A 1 is already very clean, and a 10 needs a serious reset.",
+    "There's no wrong answer, this just helps us plan properly.",
   ],
   4: [
     "Before we finish the quote, let me make sure we’re covering everything you’d like done.",
