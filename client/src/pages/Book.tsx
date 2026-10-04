@@ -89,15 +89,31 @@ type Frequency = BookingWidgetRecurringFrequency;
 type Extra = { id: string; title: string; description: string; image: string };
 type FunnelPatch = UpdateBookingFunnelInput["patch"];
 
-const STEPS = [
-  ["Cleaning Type", "Choose your service"],
-  ["Home Details", "Tell us about your home"],
-  ["Home Condition", "Helps us give you the best experience."],
-  ["Extras", "Add more (optional)"],
-  ["Date & Time", "Pick what works for you"],
-  ["Your Info", "Contact details"],
-  ["Payment", "Secure and easy"],
-  ["Review & Book", "Confirm your cleaning"],
+const BOOKING_PHASES = [
+  {
+    title: "Your home",
+    subtitle: "Tell us a few details about your home.",
+    icon: House,
+    steps: [2, 3],
+  },
+  {
+    title: "Your cleaning",
+    subtitle: "Choose your service and any extras.",
+    icon: Sparkles,
+    steps: [1, 4],
+  },
+  {
+    title: "Schedule",
+    subtitle: "Pick a date and time that works for you.",
+    icon: CalendarDays,
+    steps: [5],
+  },
+  {
+    title: "Confirm",
+    subtitle: "Add your info, payment method, and book.",
+    icon: Check,
+    steps: [6, 7, 8],
+  },
 ] as const;
 
 const SERVICES: Array<{
@@ -497,21 +513,6 @@ export default function Book() {
       />
     );
 
-  const progressDetails = [
-    selectedService.title,
-    pricingMode === "hourly"
-      ? `${maidCount} maids × ${hourCount} hrs`
-      : `${bedrooms === 0 ? "Studio" : `${bedrooms} bed`} · ${bathrooms} bath · ${homeType}`,
-    `${condition} · ${CONDITION_COPY[condition - 1]}`,
-    selectedExtras.length
-      ? `${selectedExtras.length} extras selected`
-      : "No extras selected",
-    `${dateLabel} · ${selectedTime}`,
-    fullName || "Contact details",
-    cardOnFile ? "Card securely on file" : "Card required",
-    "Confirm your cleaning",
-  ];
-
   return (
     <main className="booking-review-page booking-live-page">
       <header className="booking-review-header">
@@ -536,37 +537,33 @@ export default function Book() {
           aria-label="Booking progress"
         >
           <ol>
-            {STEPS.map(([title, subtitle], index) => {
-              const itemStep = index + 1;
+            {BOOKING_PHASES.map(({ title, subtitle, icon: Icon, steps }, index) => {
+              const phaseNumber = index + 1;
+              const isDone = steps.every(itemStep => itemStep < step);
+              const isCurrent = !isDone && steps.includes(step as (typeof steps)[number]);
               return (
                 <li
                   key={title}
                   className={
-                    itemStep < step
+                    isDone
                       ? "done"
-                      : itemStep === step
+                      : isCurrent
                         ? "current"
                         : "future"
                   }
                 >
-                  <span>{itemStep < step ? <Check /> : itemStep}</span>
+                  <span className="booking-review-progress-number">
+                    {isDone ? <Check /> : phaseNumber}
+                  </span>
                   <div>
+                    <span className="booking-review-progress-icon"><Icon /></span>
                     <strong>{title}</strong>
-                    <small>
-                      {itemStep < step ? progressDetails[index] : subtitle}
-                    </small>
+                    <small>{subtitle}</small>
                   </div>
                 </li>
               );
             })}
           </ol>
-          <div className="booking-review-secure">
-            <ShieldCheck />
-            <div>
-              <strong>Secure booking</strong>
-              <span>Your information is always protected.</span>
-            </div>
-          </div>
         </aside>
         <section className="booking-review-stage">
           <div

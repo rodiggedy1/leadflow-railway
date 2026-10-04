@@ -84,22 +84,22 @@
   min-height: calc(100vh - 106px);
 }
 .booking-review-progress {
-  padding: 38px 30px 34px;
+  padding: 48px 26px 34px;
   background: linear-gradient(90deg, #f4efe8, #faf8f5);
 }
 .booking-review-progress ol {
   position: relative;
   display: grid;
-  gap: 25px;
+  gap: 52px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .booking-review-progress ol:before {
   position: absolute;
-  top: 25px;
-  bottom: 25px;
-  left: 20px;
+  top: 42px;
+  bottom: 42px;
+  left: 21px;
   width: 1px;
   background: #d8d1c7;
   content: "";
@@ -109,7 +109,7 @@
   z-index: 1;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
-  gap: 14px;
+  gap: 16px;
   align-items: start;
 }
 .booking-review-progress li > span {
@@ -133,20 +133,37 @@
 }
 .booking-review-progress li > div {
   display: grid;
-  gap: 5px;
-  padding-top: 3px;
+  gap: 9px;
+  padding-top: 0;
+}
+.booking-review-progress-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #f8f2eb;
+  color: #2d2924;
+}
+.booking-review-progress-icon svg {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.7;
 }
 .booking-review-progress li strong {
-  font-size: 16px;
-  line-height: 1.1;
+  color: #171613;
+  font-size: 24px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
 }
 .booking-review-progress li small {
   color: #6d6a66;
-  font-size: 13px;
-  line-height: 1.25;
+  font-size: 16px;
+  line-height: 1.38;
 }
-.booking-review-progress li.current small {
-  color: #403d38;
+.booking-review-progress li.future > span {
+  background: #f8f2eb;
+  color: #6d6a66;
 }
 .booking-review-secure {
   display: flex;
