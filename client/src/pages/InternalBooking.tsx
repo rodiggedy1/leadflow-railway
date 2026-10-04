@@ -1018,6 +1018,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const [cardSaved, setCardSaved] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [basementPromptOpen, setBasementPromptOpen] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [manualTime, setManualTime] = useState(false);
   const [timeSelectionTouched, setTimeSelectionTouched] = useState(false);
   const timeInputRef = useRef<HTMLInputElement>(null);
@@ -1207,11 +1208,6 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       setError("Complete the customer information before continuing.");
       return;
     }
-    if (step === 7 && paymentMethod === "card" && !createdBooking) {
-      setStep(8);
-      submit();
-      return;
-    }
     if (step === 8 && paymentMethod === "card" && !createdBooking) {
       submit();
       return;
@@ -1238,6 +1234,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   const shellClass = `${
     onClose ? "internal-booking-modal-shell" : "internal-booking-shell"
   } review-booking-shell`;
+  const requestClose = () => setCloseConfirmOpen(true);
 
   if (success)
     return (
@@ -1878,11 +1875,37 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   ];
   return (
     <main className={shellClass}>
+      {closeConfirmOpen && onClose && (
+        <div className="booking-close-confirm-shade" role="presentation">
+          <div
+            className="booking-close-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="booking-close-confirm-title"
+          >
+            <div className="ey">CLOSE BOOKING</div>
+            <h2 id="booking-close-confirm-title">Close this booking window?</h2>
+            <p>Any information entered so far will be lost.</p>
+            <div className="booking-close-confirm-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setCloseConfirmOpen(false)}
+              >
+                Keep booking open
+              </button>
+              <button type="button" className="btn gold" onClick={onClose}>
+                Close window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {onClose && (
         <button
           type="button"
           className="internal-booking-modal-close"
-          onClick={onClose}
+          onClick={requestClose}
           aria-label="Close new booking form"
         >
           ×

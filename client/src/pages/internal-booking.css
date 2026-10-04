@@ -754,6 +754,26 @@
   background: #302556;
   border-color: #a98cff;
 }
+.booking-close-confirm-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 10030;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+}
+.booking-close-confirm {
+  width: min(430px, 100%);
+  padding: 26px;
+  border: 1px solid #5a5541;
+  border-radius: 16px;
+  background: #171815;
+  box-shadow: 0 28px 90px #000b;
+}
+.booking-close-confirm h2 { margin: 16px 0 8px; color: #fff; font-size: 22px; }
+.booking-close-confirm p { margin: 0; color: #b8b9b0; line-height: 1.5; }
+.booking-close-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
 .form-error {
   margin: 0 38px 14px;
   padding: 10px 12px;
