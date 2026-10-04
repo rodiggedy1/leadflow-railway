@@ -4784,6 +4784,11 @@
 .review-booking-shell .booking-teleprompter-faq > div { display: flex; gap: 8px; margin-top: 8px; }
 .review-booking-shell .booking-teleprompter-faq input { flex: 1; min-width: 0; padding: 9px; border: 1px solid #41423b; border-radius: 8px; background: #11120f; color: #fff; }
 .review-booking-shell .booking-teleprompter-faq p { margin: 10px 0 0; color: #f1efe8; line-height: 1.5; }
+.review-booking-shell .basement-prompt-shade { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 18px; background: #0009; }
+.review-booking-shell .basement-prompt { position: relative; width: min(520px, calc(100vw - 36px)); padding: 28px; border: 1px solid #5a5541; border-radius: 16px; background: #171815; box-shadow: 0 28px 90px #000b; }
+.review-booking-shell .basement-prompt h2 { margin: 18px 0 10px; color: #fff; }
+.review-booking-shell .basement-prompt p { margin: 0; color: #b8b9b0; line-height: 1.5; }
+.review-booking-shell .basement-prompt-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
 .review-booking-shell .step-content > .content-top { display:none; }
 .review-booking-shell .booking-card-acceptance-dark { background: #181916; border-color: #4a4639; color: #f4f0e7; }
 .review-booking-shell .booking-card-acceptance-dark input { background: #151613; color: #fff; border-color: #41423b; }

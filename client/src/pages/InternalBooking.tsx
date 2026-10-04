@@ -1011,6 +1011,7 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
   );
   const [cardSaved, setCardSaved] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [basementPromptOpen, setBasementPromptOpen] = useState(false);
   const [manualTime, setManualTime] = useState(false);
   const [timeSelectionTouched, setTimeSelectionTouched] = useState(false);
   const timeInputRef = useRef<HTMLInputElement>(null);
@@ -1362,13 +1363,72 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
                 key={value}
                 type="button"
                 className={`choice${homeType === value ? " on" : ""}`}
-                onClick={() => setHomeType(value)}
+                onClick={() => {
+                  setHomeType(value);
+                  if (value === "House" || value === "Townhome") {
+                    setBasementPromptOpen(true);
+                  } else if (extras.basement) {
+                    setExtra("basement", -extras.basement);
+                  }
+                }}
               >
                 {value}
               </button>
             ))}
           </div>
         </div>
+        {basementPromptOpen && (homeType === "House" || homeType === "Townhome") && (
+          <div
+            className="basement-prompt-shade"
+            role="presentation"
+            onClick={() => setBasementPromptOpen(false)}
+          >
+            <div
+              className="basement-prompt"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="basement-prompt-title"
+              onClick={event => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="question-close"
+                aria-label="Close basement selection"
+                onClick={() => setBasementPromptOpen(false)}
+              >
+                ×
+              </button>
+              <div className="ey">HOME DETAILS</div>
+              <h2 id="basement-prompt-title">Does the home have a basement?</h2>
+              <p>
+                We’ll include the basement as an extra so the team has enough
+                time to complete the service properly.
+              </p>
+              <div className="basement-prompt-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    if (extras.basement) setExtra("basement", -extras.basement);
+                    setBasementPromptOpen(false);
+                  }}
+                >
+                  No basement
+                </button>
+                <button
+                  type="button"
+                  className="btn gold"
+                  onClick={() => {
+                    if (!extras.basement) setExtra("basement", 1);
+                    setBasementPromptOpen(false);
+                  }}
+                >
+                  Yes, add basement
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     ) : step === 3 ? (
       <div className="card">
