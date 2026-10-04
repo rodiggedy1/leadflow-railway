@@ -160,6 +160,14 @@ function timeLabel(value: string) {
   const suffix = hour >= 12 ? "PM" : "AM";
   return `${hour % 12 || 12}:${match[2]} ${suffix}`;
 }
+function twoHourWindowLabel(value: string | null, fallback: string) {
+  if (!value) return fallback;
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return value;
+  const endMinutes = Number(match[1]) * 60 + Number(match[2]) + 120;
+  const end = `${String(Math.floor(endMinutes / 60) % 24).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
+  return `${timeLabel(value)} to ${timeLabel(end)}`;
+}
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 10);
   if (digits.length <= 3) return digits;
@@ -186,10 +194,7 @@ const TELE_LINES: Record<Step, string[]> = {
     "",
   ],
   6: [
-    "Perfect. What day works best for you?",
-    "Great. Let me see what arrival windows we have available that day.",
-    "We have an arrival window available. That means the team can arrive anytime within the selected two-hour window.",
-    "Would that work for you?",
+    "Now let's find a time that works. What day were you hoping to have us come out?",
   ],
   7: [
     "Great. Before I finish this up, let me confirm where we’re sending everything.",
@@ -325,7 +330,8 @@ function BookingTeleprompter({
     const base = TELE_LINES[step];
     if (step === 6) {
       return [
-        `I have ${arrivalWindowA ?? "the recommended window"} or ${arrivalWindowB ?? "the second-best window"} open that day. The team arrives anytime within the two-hour window you choose. Which works better?`,
+        base[0],
+        `Let me pull up the schedule... Okay, good news, I have two arrival windows open that day. One is ${twoHourWindowLabel(arrivalWindowA, "the recommended window")} and the other is ${twoHourWindowLabel(arrivalWindowB, "the second-best window")}. The team arrives anytime within the window you choose. Which one works better for you?`,
       ];
     }
     if (step === 4) {
@@ -1847,10 +1853,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
             }
             frequencyText={label(frequency)}
             arrivalWindowA={
-              recommendedStandardTime ? timeLabel(recommendedStandardTime) : null
+              recommendedStandardTime
             }
             arrivalWindowB={
-              secondBestStandardTime ? timeLabel(secondBestStandardTime) : null
+              secondBestStandardTime
             }
           />
           {step !== 4 && (
