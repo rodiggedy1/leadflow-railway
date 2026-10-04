@@ -935,18 +935,24 @@
   font-size: 14px;
   white-space: nowrap;
 }
+.booking-calendar-quick-date-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+}
+.booking-calendar-quick-date-label svg {
+  position: static;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  transform: none;
+}
 .booking-calendar-quick-dates span {
   color: #776f67;
   font-size: 12px;
   white-space: nowrap;
-}
-.booking-calendar-quick-dates svg {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  z-index: 1;
-  width: 16px;
-  transform: translateY(-50%);
 }
 .booking-times {
   padding: 22px;

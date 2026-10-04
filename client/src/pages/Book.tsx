@@ -1298,17 +1298,19 @@ function DateTime({
                 className={isoDate(date) === isoDate(selectedDate) ? "selected" : ""}
                 onClick={() => onSelectDate(date)}
               >
-                <strong>
-                  {index === 0
-                    ? "Today"
-                    : index === 1
-                      ? "Tomorrow"
-                      : formatDate(date).split(",")[0]}
-                </strong>
+                <span className="booking-calendar-quick-date-label">
+                  <strong>
+                    {index === 0
+                      ? "Today"
+                      : index === 1
+                        ? "Tomorrow"
+                        : formatDate(date).split(",")[0]}
+                  </strong>
+                  <ChevronRight aria-hidden="true" />
+                </span>
                 <span>
                   {REVIEW_OPENING_COUNTS[index]} openings
                 </span>
-                <ChevronRight />
               </button>
             ))}
           </div>
