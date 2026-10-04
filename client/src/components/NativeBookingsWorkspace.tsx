@@ -438,6 +438,9 @@ function BookingListRow({
           : `${row.bedrooms} bed · ${row.bathrooms} baths`;
   const hasCard =
     row.paymentStatus === "card_on_file" || row.paymentStatus === "captured";
+  const isNonCardBooking =
+    row.source === "booking" &&
+    (row.paymentMethod === "cashapp" || row.paymentMethod === "invoice");
   const sourceMissing = row.status === "missing_from_launch27";
   return (
     <button
@@ -508,11 +511,13 @@ function BookingListRow({
         </span>
       </span>
       <span
-        className={hasCard ? "bookings-payment-ok" : "bookings-payment-missing"}
+        className={hasCard || isNonCardBooking ? "bookings-payment-ok" : "bookings-payment-missing"}
       >
         <CreditCard />
         {row.paymentStatus === "captured"
           ? "Paid"
+          : isNonCardBooking
+            ? labelPaymentMethod(row.paymentMethod)
           : hasCard
             ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
             : "Not started"}
@@ -1699,11 +1704,22 @@ export default function NativeBookingsWorkspace({
                 </div>
               ) : active.source === "booking" &&
                 active.firstCleaningTotalCents !== null ? (
-                <BookingPaymentActions
-                  bookingId={active.id}
-                  totalCents={active.firstCleaningTotalCents}
-                  paymentStatus={active.paymentStatus}
-                />
+                active.paymentMethod === "cashapp" ||
+                active.paymentMethod === "invoice" ? (
+                  <div className="bookings-card-panel">
+                    <CreditCard />
+                    <div>
+                      <strong>{labelPaymentMethod(active.paymentMethod)}</strong>
+                      <p>Collection after service. No card is required.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <BookingPaymentActions
+                    bookingId={active.id}
+                    totalCents={active.firstCleaningTotalCents}
+                    paymentStatus={active.paymentStatus}
+                  />
+                )
               ) : portalPaymentAvailable &&
                 active.firstCleaningTotalCents !== null ? (
                 <PortalRequestPaymentActions
