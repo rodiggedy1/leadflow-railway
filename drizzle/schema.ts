@@ -4442,6 +4442,9 @@ export const bookings = mysqlTable("bookings", {
   assignmentStatus: varchar("assignmentStatus", { length: 32 }).notNull().default("unassigned"),
   paymentStatus: varchar("paymentStatus", { length: 32 }).notNull().default("not_started"),
   paymentMethod: varchar("paymentMethod", { length: 20 }).notNull().default("card"),
+  /** Immutable creator attribution for internal bookings; null for public bookings. */
+  bookedByAgentId: int("bookedByAgentId"),
+  bookedByAgentName: varchar("bookedByAgentName", { length: 255 }),
   customerName: varchar("customerName", { length: 255 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
   customerEmail: varchar("customerEmail", { length: 320 }).notNull(),

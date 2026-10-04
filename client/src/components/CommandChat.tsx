@@ -5008,6 +5008,7 @@ const MessageList = memo(function MessageList({
                   const personName = (meta.personName as string) ?? "";
                   const amount = (meta.amount as string | null) ?? null;
                   const note = (meta.note as string | null) ?? null;
+                  const bookedByAgentName = (meta.bookedByAgentName as string | null) ?? null;
                   return (
                     <div key={msg.id} className="flex justify-start my-1 px-1">
                       <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
@@ -5041,6 +5042,7 @@ const MessageList = memo(function MessageList({
                           })}
                           <PartyPopper className="h-4 w-4 text-white relative z-10" />
                           <span className="text-[10px] font-bold text-white uppercase tracking-widest relative z-10">🎉 New Booking!</span>
+                          {bookedByAgentName && <span className="text-[10px] text-emerald-200 relative z-10">Booked by {bookedByAgentName}</span>}
                           <span className="ml-auto text-[10px] text-purple-200 relative z-10">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         {/* Body */}

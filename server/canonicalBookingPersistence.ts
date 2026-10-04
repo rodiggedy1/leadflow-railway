@@ -16,6 +16,8 @@ export type CanonicalPersistenceOptions = {
   funnelSource?: "book-page" | "internal";
   funnelStage?: "lead" | "payment_incomplete" | "booked";
   paymentMethod?: "card" | "cashapp" | "invoice";
+  bookedByAgentId?: number;
+  bookedByAgentName?: string;
   companyNotes?: string | null;
   initialBookingStatus?: "pending_payment" | "needs_attention";
 };
@@ -153,6 +155,8 @@ export async function persistCanonicalBooking(
             assignmentStatus: prepared.assignmentStatus,
             paymentStatus: prepared.paymentStatus,
             paymentMethod: options.paymentMethod ?? "card",
+            bookedByAgentId: options.bookedByAgentId,
+            bookedByAgentName: options.bookedByAgentName,
             customerName: prepared.customerName,
             customerPhone: prepared.customerPhone,
             customerEmail: prepared.customerEmail,
@@ -192,6 +196,8 @@ export async function persistCanonicalBooking(
           assignmentStatus: prepared.assignmentStatus,
           paymentStatus: prepared.paymentStatus,
           paymentMethod: options.paymentMethod ?? "card",
+          bookedByAgentId: options.bookedByAgentId,
+          bookedByAgentName: options.bookedByAgentName,
           customerName: prepared.customerName,
           customerPhone: prepared.customerPhone,
           customerEmail: prepared.customerEmail,

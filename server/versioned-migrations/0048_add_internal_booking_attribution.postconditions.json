@@ -1,0 +1,1 @@
+{"format":1,"table":"bookings","columns":[{"name":"bookedByAgentId","columnType":"int","nullable":true},{"name":"bookedByAgentName","columnType":"varchar(255)","nullable":true}],"indexes":[]}
