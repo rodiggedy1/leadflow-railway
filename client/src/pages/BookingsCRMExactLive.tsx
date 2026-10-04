@@ -124,6 +124,8 @@ const labelRecurrence = (value: string | null | undefined) => {
       ? "One-time"
       : normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };
+const labelPaymentMethod = (value: string | null | undefined) =>
+  value === "cashapp" ? "Cash App" : value === "invoice" ? "Check" : "Card";
 const photoDownloadUrl = (photo: any, index: number) =>
   `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
 const sourceLabel = (row: any) =>
@@ -176,6 +178,9 @@ function BookingListRow({
           : `${row.bedrooms} bed · ${row.bathrooms} baths`;
   const hasCard =
     row.paymentStatus === "card_on_file" || row.paymentStatus === "captured";
+  const isNonCardBooking =
+    row.source === "booking" &&
+    (row.paymentMethod === "cashapp" || row.paymentMethod === "invoice");
   const sourceMissing = row.status === "missing_from_launch27";
   return (
     <button
@@ -247,10 +252,14 @@ function BookingListRow({
           </small>
         </span>
       </span>
-      <span className={hasCard ? "bcr-payment-ok" : "bcr-payment-missing"}>
+      <span
+        className={hasCard || isNonCardBooking ? "bcr-payment-ok" : "bcr-payment-missing"}
+      >
         <CreditCard size={14} />
         {row.paymentStatus === "captured"
           ? "Paid"
+          : isNonCardBooking
+            ? labelPaymentMethod(row.paymentMethod)
           : hasCard
             ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
             : "Not started"}
@@ -1027,6 +1036,16 @@ function BookingDetailDrawer({ model }: { model: any }) {
                   <p>
                     Imported from Launch27. Payment actions remain unchanged.
                   </p>
+                </div>
+              </div>
+            ) : active.source === "booking" &&
+              (active.paymentMethod === "cashapp" ||
+                active.paymentMethod === "invoice") ? (
+              <div className="bcr-card-panel">
+                <CreditCard />
+                <div>
+                  <strong>{labelPaymentMethod(active.paymentMethod)}</strong>
+                  <p>Collection after service. No card is required.</p>
                 </div>
               </div>
             ) : active.source === "booking" &&
