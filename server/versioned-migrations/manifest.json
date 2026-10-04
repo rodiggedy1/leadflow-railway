@@ -364,7 +364,7 @@
       "id": "0048_add_internal_booking_attribution",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0048_add_internal_booking_attribution.sql",
-      "sha256": "a4821006f4f41fd51199676128ab260361ae200a9fa1503edb06a9689bc6a837",
+      "sha256": "ca1b8ee04885b1d40a692e425c32d350e4b7469cf97068d4462d3577bfe70b32",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0048_add_internal_booking_attribution.postconditions.json"
     }
