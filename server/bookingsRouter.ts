@@ -571,7 +571,17 @@ export const bookingsRouter = router({
           message: "Booking not found.",
         });
       const assignments = await activeAssignmentsByBookingId(db, [rows[0].id]);
-      return mapAdminBooking(rows[0], assignments.get(rows[0].id));
+      const mapped = mapAdminBooking(rows[0], assignments.get(rows[0].id));
+      if (input.id === 150026) {
+        console.log("[Preview payment diagnostic]", {
+          id: mapped.id,
+          publicBookingNumber: mapped.publicBookingNumber,
+          paymentMethod: mapped.paymentMethod,
+          paymentStatus: mapped.paymentStatus,
+          status: mapped.status,
+        });
+      }
+      return mapped;
     }),
   teams: bookingsAgentProcedure.query(async () => {
     const db = await getDb();
