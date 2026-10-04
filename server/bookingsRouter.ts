@@ -317,6 +317,9 @@ function mapAdminBooking(
     customerEmail: row.customerEmail,
     serviceId: row.serviceId,
     serviceName: row.serviceName,
+    homeType: isPublicBookingPriceSnapshot(row.priceSnapshot)
+      ? row.priceSnapshot.input.homeType
+      : null,
     bedrooms: row.bedrooms,
     bathrooms: row.bathrooms,
     extras: row.extras,

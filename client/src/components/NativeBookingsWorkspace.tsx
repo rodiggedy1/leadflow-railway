@@ -65,6 +65,8 @@ type WorkspaceRow = {
   requestedLocalTime: string | null;
   address: string | null;
   serviceName: string | null;
+  homeType?: "House" | "Apartment" | "Townhome" | "Condo" | null;
+  paymentMethod?: "card" | "cashapp" | "invoice" | null;
   bedrooms: number | null;
   bathrooms: number | null;
   recurrence: string | null;
@@ -159,6 +161,14 @@ const labelRecurrence = (value: string | null | undefined) => {
       ? "One-time"
       : normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };
+const labelPaymentMethod = (value: WorkspaceRow["paymentMethod"]) =>
+  value === "cashapp"
+    ? "Cash App"
+    : value === "invoice"
+      ? "Check"
+      : value === "card"
+        ? "Card"
+        : "Not selected";
 const extrasFrom = (value: unknown): NativeExtra[] =>
   Array.isArray(value)
     ? value.filter((item): item is NativeExtra =>
@@ -660,6 +670,8 @@ export default function NativeBookingsWorkspace({
         requestedLocalTime: booking.requestedLocalTime,
         address: booking.address,
         serviceName: booking.serviceName,
+        homeType: booking.homeType,
+        paymentMethod: booking.paymentMethod,
         bedrooms: booking.bedrooms,
         bathrooms: booking.bathrooms,
         recurrence: booking.recurrence,
@@ -838,6 +850,8 @@ export default function NativeBookingsWorkspace({
         requestedLocalTime: booking.requestedLocalTime,
         address: booking.address,
         serviceName: booking.serviceName,
+        homeType: booking.homeType,
+        paymentMethod: booking.paymentMethod,
         bedrooms: booking.bedrooms,
         bathrooms: booking.bathrooms,
         recurrence: booking.recurrence,
@@ -1560,7 +1574,7 @@ export default function NativeBookingsWorkspace({
               <p className="bookings-home-line">
                 {active.bedrooms === null || active.bathrooms === null
                   ? "Room details not entered yet"
-                  : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms`}
+                  : `${active.bedrooms === 0 ? "Studio" : `${active.bedrooms} bedrooms`} · ${active.bathrooms} bathrooms${active.homeType ? ` · ${active.homeType}` : ""}`}
               </p>
               <div className="bookings-selected-extras">
                 {active.extras.length ? (
@@ -1654,6 +1668,15 @@ export default function NativeBookingsWorkspace({
             </section>
             <section className="bookings-editor-section">
               <small>PAYMENT</small>
+              {active.source === "booking" && (
+                <div className="bookings-card-panel">
+                  <CreditCard />
+                  <div>
+                    <strong>{labelPaymentMethod(active.paymentMethod)}</strong>
+                    <p>Payment method selected for this booking.</p>
+                  </div>
+                </div>
+              )}
               {active.source === "leadflow" ? (
                 <div
                   className={

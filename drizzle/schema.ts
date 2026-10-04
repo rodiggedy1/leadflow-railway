@@ -4441,6 +4441,7 @@ export const bookings = mysqlTable("bookings", {
   availabilityStatus: varchar("availabilityStatus", { length: 32 }).notNull().default("requested"),
   assignmentStatus: varchar("assignmentStatus", { length: 32 }).notNull().default("unassigned"),
   paymentStatus: varchar("paymentStatus", { length: 32 }).notNull().default("not_started"),
+  paymentMethod: varchar("paymentMethod", { length: 20 }).notNull().default("card"),
   customerName: varchar("customerName", { length: 255 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
   customerEmail: varchar("customerEmail", { length: 320 }).notNull(),

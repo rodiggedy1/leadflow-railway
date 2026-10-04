@@ -1217,9 +1217,13 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
       (!customerName.trim() ||
         !customerPhone.trim() ||
         !customerEmail.trim() ||
-        !address.trim())
+        address.trim().length < 5)
     ) {
-      setError("Complete the customer information before continuing.");
+      setError(
+        address.trim().length < 5
+          ? "Enter the complete service address before continuing."
+          : "Complete the customer information before continuing."
+      );
       return;
     }
     if (step === 8 && !createdBooking) {
