@@ -223,6 +223,66 @@ const TELE_STAGE: Record<Step, string> = {
   9: "FINAL REVIEW",
   10: "ADDITIONAL SERVICES",
 };
+const FAQ_CATEGORIES = [
+  {
+    name: "Services",
+    questions: [
+      ["What’s included in a standard cleaning?", "Standard cleaning includes dusting, vacuuming, mopping, bathroom and kitchen cleaning, wiping down surfaces, and general tidying. Inside appliances can be added as an extra."],
+      ["What’s included in a deep clean?", "A deep clean includes everything in a standard cleaning, plus hard-to-reach spots, hidden grime, baseboards, window sills, light fixtures, and more detailed scrubbing. Inside appliances are available upon request."],
+      ["Do you offer move-in or move-out cleaning?", "Yes. Move-in and move-out cleaning covers the entire property, including floors, walls, baseboards, kitchens, bathrooms, inside cabinets and drawers, and inside appliances."],
+      ["Do you bring your own supplies?", "Yes, Maids in Black brings all professional-grade cleaning products and equipment. Customers do not need to provide anything."],
+      ["Do you clean inside appliances?", "Not in a standard cleaning, but inside appliances can be added as an extra. Deep cleans and move-in/out cleans include inside appliances."],
+    ],
+  },
+  {
+    name: "Pricing",
+    questions: [
+      ["How is pricing calculated?", "Pricing is based on the number of bedrooms and bathrooms and the type of service. The exact price is provided upfront before booking, with no hidden fees."],
+      ["Are there hidden fees?", "No. The exact price is provided upfront before booking, with no hidden fees."],
+      ["Do you offer recurring cleaning?", "Yes. Weekly, bi-weekly, and monthly recurring options are available with flexible scheduling."],
+      ["Can I get an instant quote?", "Yes. Customers can get an instant quote online at maidsinblack.com or call 202-888-5362."],
+    ],
+  },
+  {
+    name: "Scheduling & Policies",
+    questions: [
+      ["Do you offer same-day service?", "Yes — same-day service is available based on availability. Call 202-888-5362 as soon as possible and we’ll do our best to accommodate you."],
+      ["What’s the cancellation policy?", "Cancel or reschedule at least 24 hours in advance with no fee. Late cancellations may be subject to a fee."],
+      ["How long does cleaning take?", "Cleaning takes about one hour per bedroom. A two-bedroom home takes roughly two hours."],
+      ["Will the same cleaners come each time?", "We do our best to send the same cleaners for recurring services. If a change is necessary, all cleaners are trained to the same high standards."],
+      ["Can I reschedule my cleaning?", "Yes. Reschedule at least 24 hours in advance with no penalty. Late changes may be subject to a fee."],
+    ],
+  },
+  {
+    name: "Booking & Payment",
+    questions: [
+      ["Why is a card required?", "A valid credit or debit card is needed to secure the appointment and protect the schedule from last-minute no-shows."],
+      ["When am I charged?", "The card is charged only after the cleaning service is completed."],
+      ["Do you require a deposit?", "No deposit is required. A valid credit or debit card is needed to secure the appointment."],
+      ["What payment methods do you accept?", "Maids in Black accepts all major credit and debit cards. Cash and checks are not accepted."],
+      ["Can I book by phone?", "Yes. Call 202-888-5362 to book by phone, or book online at maidsinblack.com for instant confirmation."],
+    ],
+  },
+  {
+    name: "What’s Included",
+    questions: [
+      ["What does standard cleaning cover?", "Standard cleaning covers dusting, vacuuming carpets and rugs, mopping hard floors, bathroom cleaning, kitchen cleaning, wiping down surfaces, and general tidying."],
+      ["What does deep cleaning add?", "Deep cleaning adds hard-to-reach spots, hidden grime, baseboards, window sills, light fixtures, and more detailed scrubbing throughout."],
+      ["What does move-in/move-out cleaning cover?", "It includes a full deep clean of the property, inside cabinets and drawers, inside appliances, floors, walls, baseboards, kitchens, and bathrooms."],
+      ["Are inside ovens and fridges included?", "They are not included in a standard cleaning but can be added as an extra. Deep cleans and move-in/out cleans include inside appliances."],
+    ],
+  },
+  {
+    name: "Trust & Company",
+    questions: [
+      ["Are you bonded and insured?", "Yes, Maids in Black is fully bonded and insured. All cleaners are background checked, and your home and assets are protected."],
+      ["Who comes to the home?", "Most homes are serviced by a team of two cleaners. Larger homes receive additional team members as needed."],
+      ["Do I need to be home during the cleaning?", "No. Many customers leave a key or provide access instructions so the trusted team can clean while they go about their day."],
+      ["What if I’m not satisfied?", "Contact us within 24 hours and we’ll come back and make it right free of charge. If you’re still not satisfied after the re-clean, a full refund is offered."],
+      ["What areas do you serve?", "Maids in Black serves the entire DMV area, including Washington DC, Maryland, Virginia, and surrounding areas."],
+    ],
+  },
+] as const;
 function BookingTeleprompter({
   step,
   serviceName,
@@ -251,6 +311,9 @@ function BookingTeleprompter({
   const [questionOpen, setQuestionOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [faqMode, setFaqMode] = useState<"answer" | "ask">("answer");
+  const [activeFaqCategory, setActiveFaqCategory] = useState(0);
+  const [activeFaqQuestion, setActiveFaqQuestion] = useState("");
   const [priceConcernOpen, setPriceConcernOpen] = useState(false);
   const [cardRefusalOpen, setCardRefusalOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -343,6 +406,16 @@ function BookingTeleprompter({
     if (trimmed.length < 2 || faq.isPending) return;
     const result = await faq.mutateAsync({ question: trimmed });
     setAnswer(result.answer);
+    setFaqMode("answer");
+  };
+  const usePrewrittenFaq = (categoryIndex: number, questionIndex: number) => {
+    const item = FAQ_CATEGORIES[categoryIndex]?.questions[questionIndex];
+    if (!item) return;
+    setActiveFaqCategory(categoryIndex);
+    setActiveFaqQuestion(`${categoryIndex}:${questionIndex}`);
+    setQuestion(item[0]);
+    setAnswer(item[1]);
+    setFaqMode("answer");
   };
   return (
     <section className="tele" aria-label="Live call script">
@@ -604,30 +677,125 @@ function BookingTeleprompter({
         </>
       )}
       {questionOpen && (
-        <div className="booking-teleprompter-faq">
-          <label htmlFor="booking-customer-question">
-            Ask the FAQ assistant
-          </label>
-          <div>
-            <input
-              id="booking-customer-question"
-              value={question}
-              onChange={event => setQuestion(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === "Enter") void askFaq();
-              }}
-              placeholder="Type the customer’s question"
-            />
+        <>
+          <div
+            className="question-shade open"
+            onClick={() => setQuestionOpen(false)}
+          />
+          <aside
+            className="question-drawer open"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="booking-question-title"
+          >
             <button
               type="button"
-              onClick={() => void askFaq()}
-              disabled={faq.isPending || question.trim().length < 2}
+              className="question-close"
+              aria-label="Close customer question assistant"
+              onClick={() => setQuestionOpen(false)}
             >
-              {faq.isPending ? "Thinking…" : "Ask"}
+              ×
             </button>
-          </div>
-          {answer && <p>{answer}</p>}
-        </div>
+            <h2 id="booking-question-title">Ask the FAQ assistant</h2>
+            <div className="faq-mode-switch">
+              <button
+                type="button"
+                className={`faq-mode-button${faqMode === "answer" ? " active" : ""}`}
+                onClick={() => setFaqMode("answer")}
+              >
+                Suggested Answer
+              </button>
+              <button
+                type="button"
+                className={`faq-mode-button${faqMode === "ask" ? " active" : ""}`}
+                onClick={() => setFaqMode("ask")}
+              >
+                Ask AI
+              </button>
+            </div>
+            {faqMode === "answer" ? (
+              <div className="faq-mode-panel">
+                <div className="faq-answer-label">SUGGESTED ANSWER</div>
+                <div
+                  className={`answer-card faq-answer-card${answer ? "" : " empty"}`}
+                >
+                  {answer || "Select a question below or ask the FAQ assistant."}
+                </div>
+              </div>
+            ) : (
+              <div className="faq-mode-panel">
+                <div className="label">CUSTOMER QUESTION</div>
+                <textarea
+                  id="booking-customer-question"
+                  className="question-field"
+                  value={question}
+                  onChange={event => setQuestion(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void askFaq();
+                    }
+                  }}
+                  placeholder="What did the customer ask?"
+                />
+                <button
+                  type="button"
+                  className="btn gold ask-button"
+                  onClick={() => void askFaq()}
+                  disabled={faq.isPending || question.trim().length < 2}
+                >
+                  {faq.isPending ? "Thinking…" : "✦ Ask AI"}
+                </button>
+              </div>
+            )}
+            <div className="faq-shortcuts">
+              <div className="faq-shortcuts-title">PREWRITTEN FAQ ANSWERS</div>
+              <div>
+                <div className="faq-category-label">TOPIC</div>
+                <div className="faq-category-list">
+                  {FAQ_CATEGORIES.map((category, index) => (
+                    <button
+                      key={category.name}
+                      type="button"
+                      className={`faq-category${activeFaqCategory === index ? " active" : ""}`}
+                      onClick={() => {
+                        setActiveFaqCategory(index);
+                        setActiveFaqQuestion("");
+                      }}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="faq-question-label">
+                  QUESTIONS IN {FAQ_CATEGORIES[activeFaqCategory].name.toUpperCase()}
+                </div>
+                <div className="faq-question-list">
+                  {FAQ_CATEGORIES[activeFaqCategory].questions.map(
+                    ([prompt], index) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        className={`faq-pill${activeFaqQuestion === `${activeFaqCategory}:${index}` ? " active" : ""}`}
+                        onClick={() => usePrewrittenFaq(activeFaqCategory, index)}
+                      >
+                        {prompt}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn"
+              style={{ marginTop: 18 }}
+              onClick={() => setQuestionOpen(false)}
+            >
+              ✓ Return to call
+            </button>
+          </aside>
+        </>
       )}
     </section>
   );
