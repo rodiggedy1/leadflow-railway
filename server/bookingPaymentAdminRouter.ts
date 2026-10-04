@@ -232,7 +232,7 @@ export const bookingPaymentAdminRouter = router({
     .input(
       z.object({
         bookingId: z.number().int().positive(),
-        paymentMethod: z.enum(["cashapp", "invoice"]),
+        paymentMethod: z.enum(["card", "cashapp", "invoice"]),
       })
     )
     .mutation(async ({ input }) => {

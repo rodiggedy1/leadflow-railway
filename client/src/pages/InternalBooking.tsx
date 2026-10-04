@@ -1123,6 +1123,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
     trpc.bookingPaymentAdmin.switchInternalPaymentMethod.useMutation({
       onSuccess: result => {
         setPaymentMethod(result.paymentMethod);
+        if (result.paymentMethod === "card" && createdBooking) {
+          setCardSaved(false);
+          startCardSetup.mutate({ bookingId: createdBooking.bookingId });
+        }
         setCardClientSecret(null);
         setCardSetupIntentId(null);
         setError(null);
@@ -1706,12 +1710,10 @@ export function InternalBooking({ onClose }: { onClose?: () => void }) {
               type="button"
               className={`choice${paymentMethod === value ? " on" : ""}`}
               disabled={
-                value === "card" ||
                 switchInternalPaymentMethod.isPending ||
                 paymentMethod === value
               }
               onClick={() => {
-                if (value === "card") return;
                 if (!createdBooking) {
                   setPaymentMethod(value);
                   setError(null);
