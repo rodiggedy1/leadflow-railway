@@ -367,6 +367,14 @@
       "sha256": "ca1b8ee04885b1d40a692e425c32d350e4b7469cf97068d4462d3577bfe70b32",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0048_add_internal_booking_attribution.postconditions.json"
+    },
+    {
+      "id": "0049_add_customer_booking_link_attribution",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0049_add_customer_booking_link_attribution.sql",
+      "sha256": "20c2d6cf7df6716d73861af1a705a5db1452c23eb2293567987c0e9078003d1f",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0049_add_customer_booking_link_attribution.postconditions.json"
     }
   ]
 }

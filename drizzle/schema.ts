@@ -4527,6 +4527,8 @@ export const bookingFunnelRecords = mysqlTable("booking_funnel_records", {
   source: varchar("source", { length: 24 }).notNull(),
   stage: varchar("stage", { length: 32 }).notNull().default("lead"),
   bookingId: int("bookingId"),
+  bookedByAgentId: int("bookedByAgentId"),
+  bookedByAgentName: varchar("bookedByAgentName", { length: 255 }),
   customerName: varchar("customerName", { length: 255 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
   customerEmail: varchar("customerEmail", { length: 320 }),
