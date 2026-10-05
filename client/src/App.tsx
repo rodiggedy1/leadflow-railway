@@ -69,6 +69,7 @@ const ReadinessDashboard = lazy(() => import("./pages/ReadinessDashboard"));
 const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
+const RevenueAgent = lazy(() => import("./pages/RevenueAgent"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
@@ -219,6 +220,7 @@ function Router() {
         <Route path={"/admin/campaign-approval"} component={CampaignApprovalPage} />
         <Route path={"/admin/calls"} component={AllCalls} />
         <Route path={"/admin/revenue"} component={RevenueAttribution} />
+        <Route path={"/admin/revenue-agent"} component={RevenueAgent} />
         <Route path={"/admin/quality"} component={CleanerDashboard} />
         <Route path={"/cleaner"} component={() => { window.location.replace("/portal-v2"); return null; }} />
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
