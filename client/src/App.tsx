@@ -86,6 +86,7 @@ const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));
 const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));
+const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -175,6 +176,10 @@ function AdminPaymentsExactReviewRoute() {
   return <AdminPageGuard pageId="payments"><ReviewWorkspaceFrame navActivePath="/review/payments"><PaymentsExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AiTeamReviewRoute() {
+  return <ReviewWorkspaceFrame navActivePath="/review/ai-team"><AiTeamReview /></ReviewWorkspaceFrame>;
+}
+
 function AdminPayrollSummaryExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>;
 }
@@ -202,6 +207,7 @@ function Router() {
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/review/customer-booking-link"} component={CustomerBookingLinkReview} />
+        <Route path={"/review/ai-team"} component={AiTeamReviewRoute} />
         <Route path={"/book/:token"} component={CustomerBookingLinkLive} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
