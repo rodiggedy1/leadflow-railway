@@ -1,5 +1,6 @@
 import NativeBookingsWorkspace from "@/components/NativeBookingsWorkspace";
 import { InternalBooking } from "@/pages/InternalBooking";
+import CustomerBookingLinksAdmin from "@/pages/CustomerBookingLinksAdmin";
 import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { trpc } from "@/lib/trpc";
@@ -1391,6 +1392,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
 
 function ExactBookingsCRMShell({ model }: { model: any }) {
   const [newBookingOpen, setNewBookingOpen] = useState(false);
+  const [newQuoteOpen, setNewQuoteOpen] = useState(false);
   const {
     view,
     setView,
@@ -1472,7 +1474,9 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
             <span>
               {view === "bookings"
                 ? "Native requests and isolated Launch27 imports appear here for review."
-                : "Phone-captured booking leads appear here while customers finish the flow."}
+                : view === "leads"
+                  ? "Phone-captured booking leads appear here while customers finish the flow."
+                  : "Personalized customer booking links created by your team."}
             </span>
           </div>
           <div className="bcr-header-actions">
@@ -1483,6 +1487,14 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
             >
               <Plus size={14} />
               New booking
+            </button>
+            <button
+              type="button"
+              className="bcr-new-quote"
+              onClick={() => setNewQuoteOpen(true)}
+            >
+              <Plus size={14} />
+              New quote
             </button>
             <button
               type="button"
@@ -1552,6 +1564,13 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
               onClick={() => setView("leads")}
             >
               Leads
+            </button>
+            <button
+              type="button"
+              className={view === "quotes" ? "is-active" : ""}
+              onClick={() => setView("quotes")}
+            >
+              Quotes
             </button>
           </div>
           {view === "bookings" && (
@@ -1631,9 +1650,9 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
               <CalendarDays size={16} />
             </span>
             <div>
-              <small>{view === "bookings" ? "BOOKINGS" : "LEADS"}</small>
+              <small>{view === "bookings" ? "BOOKINGS" : view === "leads" ? "LEADS" : "QUOTES"}</small>
               <strong>{metricRows.length}</strong>
-              <p>{view === "bookings" ? "on selected date" : "in progress"}</p>
+              <p>{view === "bookings" ? "on selected date" : view === "leads" ? "in progress" : "created by agents"}</p>
             </div>
           </article>
           <article>
@@ -1702,9 +1721,13 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
                   {option}
                 </button>
               ))
-            ) : (
+            ) : view === "leads" ? (
               <button type="button" className="active">
                 Lead / In progress
+              </button>
+            ) : (
+              <button type="button" className="active">
+                All quotes
               </button>
             )}
           </div>
@@ -1737,7 +1760,9 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
           aria-label={
             view === "bookings"
               ? "LeadFlow bookings list"
-              : "Native LeadFlow leads list"
+              : view === "leads"
+                ? "Native LeadFlow leads list"
+                : "Customer booking quotes list"
           }
         >
           <div className="bcr-booking-list-head">
@@ -1783,7 +1808,9 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
               <p>
                 {view === "bookings"
                   ? "Try another date or clear your filters."
-                  : "New phone-captured leads will appear here."}
+                  : view === "leads"
+                    ? "New phone-captured leads will appear here."
+                    : "Create a quote to give a customer a personalized booking link."}
               </p>
             </div>
           )}
@@ -1792,6 +1819,14 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
       <BookingDetailDrawer model={model} />
       <PhotoLightbox model={model} />
       {newBookingOpen && <InternalBooking onClose={() => setNewBookingOpen(false)} />}
+      {newQuoteOpen && (
+        <div className="bcr-quote-modal-backdrop" role="dialog" aria-modal="true" aria-label="Create customer quote" onClick={() => setNewQuoteOpen(false)}>
+          <section className="bcr-quote-modal" onClick={event => event.stopPropagation()}>
+            <header className="bcr-quote-modal-header"><div><small>BOOKINGS · AGENT TOOL</small><h2>New quote</h2><p>Build a personalized link without leaving the Booking CRM.</p></div><button type="button" aria-label="Close new quote" onClick={() => setNewQuoteOpen(false)}><X size={18} /></button></header>
+            <div className="bcr-quote-modal-scroll"><CustomerBookingLinksAdmin /></div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
