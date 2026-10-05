@@ -17,6 +17,9 @@ const Home = lazy(() => import("./pages/Home"));
 const Book = lazy(() => import("./pages/Book"));
 const BookWidget = lazy(() => import("./pages/BookWidget"));
 const BookNow = lazy(() => import("./pages/BookNow"));
+const CustomerBookingLinkReview = lazy(() => import("./pages/CustomerBookingLinkReview"));
+const CustomerBookingLinkLive = lazy(() => import("./pages/CustomerBookingLinkLive"));
+const CustomerBookingLinksAdmin = lazy(() => import("./pages/CustomerBookingLinksAdmin"));
 const CustomerPortal = lazy(() => import("./pages/CustomerPortal"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AgentDashboard = lazy(() => import("./pages/AgentDashboard"));
@@ -197,6 +200,8 @@ function Router() {
         <Route path={"/book"} component={Book} />
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
+        <Route path={"/review/customer-booking-link"} component={CustomerBookingLinkReview} />
+        <Route path={"/book/:token"} component={CustomerBookingLinkLive} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
         <Route path={"/admin/dashboard"} component={AdminOperationsDashboardExactLiveRoute} />
@@ -221,6 +226,7 @@ function Router() {
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
+        <Route path={"/admin/customer-booking-links"} component={CustomerBookingLinksAdmin} />
         <Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />
         <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/command-center"} component={CommandCenter} />
