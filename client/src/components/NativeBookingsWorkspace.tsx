@@ -539,7 +539,7 @@ export default function NativeBookingsWorkspace({
   realtimeEnabled: boolean;
   render?: (model: any) => ReactNode;
 }) {
-  const [view, setView] = useState<"bookings" | "leads">("bookings");
+  const [view, setView] = useState<"bookings" | "leads" | "quotes">("bookings");
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [date, setDate] = useState(businessDate);
   const [query, setQuery] = useState("");
@@ -695,7 +695,7 @@ export default function NativeBookingsWorkspace({
         companyNotes: booking.companyNotes,
       }));
     const funnelRows = funnelLeads
-      .filter(lead => !lead.bookingId)
+      .filter(lead => lead.source !== "customer-booking-link" && !lead.bookingId)
       .map(lead => ({
         key: `funnel:${lead.id}`,
         source: "funnel" as const,
@@ -720,6 +720,36 @@ export default function NativeBookingsWorkspace({
         paymentBrand: null,
         paymentLast4: lead.paymentLast4,
         stripePaymentMethodId: null,
+        paymentChargedAt: null,
+        firstCleaningTotalCents: lead.firstCleaningTotalCents,
+        futureVisitTotalCents: lead.futureVisitTotalCents,
+        companyNotes: null,
+      }));
+    const quoteRows = funnelLeads
+      .filter(lead => lead.source === "customer-booking-link")
+      .map(lead => ({
+        key: `funnel:${lead.id}`,
+        source: "funnel" as const,
+        id: lead.id,
+        publicNumber: lead.publicFunnelNumber,
+        customerName: lead.customerName,
+        customerPhone: lead.customerPhone,
+        customerEmail: lead.customerEmail,
+        status: lead.stage,
+        requestedLocalDate: lead.requestedLocalDate,
+        requestedLocalTime: lead.requestedLocalTime,
+        address: lead.address,
+        serviceName: lead.serviceName,
+        bedrooms: lead.bedrooms,
+        bathrooms: lead.bathrooms,
+        recurrence: lead.recurrence,
+        extras: funnelExtrasFrom(lead.extras),
+        specialRequestNotes: notesFrom(lead.specialRequestNotes),
+        assignmentStatus: "unassigned",
+        assignedTeamName: null,
+        paymentStatus: lead.paymentLast4 ? "card_on_file" : "not_started",
+        paymentBrand: lead.paymentBrand ?? null,
+        paymentLast4: lead.paymentLast4 ?? null,
         paymentChargedAt: null,
         firstCleaningTotalCents: lead.firstCleaningTotalCents,
         futureVisitTotalCents: lead.futureVisitTotalCents,
@@ -828,6 +858,7 @@ export default function NativeBookingsWorkspace({
       row => row.requestedLocalDate === date
     );
     if (view === "bookings") return [...scheduledPortalRows, ...scheduledRows];
+    if (view === "quotes") return quoteRows;
     return inProgressFunnelRows;
   }, [
     bookings,
@@ -835,6 +866,7 @@ export default function NativeBookingsWorkspace({
     funnelLeads,
     leadflowJobsQuery.data,
     portalRequests,
+    quoteRows,
     status,
     view,
   ]);

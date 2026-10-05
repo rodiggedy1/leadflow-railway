@@ -249,3 +249,67 @@
     width: 100%;
   }
 }
+
+/* Customer quote creation stays inside the Booking CRM; the builder keeps its existing pricing UI. */
+.booking-crm-review .bcr-new-quote {
+  min-height: 30px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2b241f;
+  border: 1px solid #d8b992;
+  border-radius: 7px;
+  background: #f4d6ad;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.booking-crm-review .bcr-new-quote:hover { background: #f8e1c4; }
+.bcr-quote-modal-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(9, 8, 12, .78);
+  backdrop-filter: blur(5px);
+}
+.bcr-quote-modal {
+  width: min(1180px, 100%);
+  max-height: min(92dvh, 980px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #51433a;
+  border-radius: 18px;
+  background: #f6f2ec;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, .45);
+}
+.bcr-quote-modal-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 24px;
+  color: #f8f2ec;
+  background: #30231d;
+}
+.bcr-quote-modal-header small { color: #e2b889; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.bcr-quote-modal-header h2 { margin: 4px 0 0; font-size: 22px; line-height: 1.1; }
+.bcr-quote-modal-header p { margin: 5px 0 0; color: #cdbeb3; font-size: 11px; }
+.bcr-quote-modal-header > button { display: grid; place-items: center; width: 30px; height: 30px; color: #f8f2ec; border: 1px solid #65544a; border-radius: 8px; background: transparent; cursor: pointer; }
+.bcr-quote-modal-header > button:hover { background: rgba(255,255,255,.1); }
+.bcr-quote-modal-scroll { min-height: 0; overflow: auto; }
+.bcr-quote-modal-scroll > main { min-height: 0; padding: 20px 24px 28px; background: #f6f2ec; }
+.bcr-quote-modal-scroll > main > div { max-width: none; }
+.bcr-quote-modal-scroll > main > div > header { display: none; }
+.bcr-quote-modal-scroll .lg\:sticky { position: sticky; top: 0; }
+@media (max-width: 760px) {
+  .bcr-quote-modal-backdrop { padding: 0; }
+  .bcr-quote-modal { width: 100%; max-height: 100dvh; border-radius: 0; }
+  .bcr-quote-modal-header { padding: 15px 16px; }
+  .bcr-quote-modal-scroll > main { padding: 14px 12px 20px; }
+}
