@@ -24,8 +24,6 @@ import { sendCustomerPortalLeadCreatedCommandChatCard, sendWidgetLeadCreatedNoti
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { buildPreparedCanonicalBooking } from "./bookingsService";
 import { persistCanonicalBooking } from "./canonicalBookingPersistence";
-import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
-import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { normalizePhone } from "./utils/phone";
 import { createPublicBookingPriceSnapshot, PUBLIC_BOOKING_PRICING_VERSION } from "../shared/publicBookingPricing";
 import {
@@ -97,6 +95,7 @@ function normalizedPatchOrThrow(patch: Parameters<typeof normalizeBookingFunnelP
 function customerLinkSafeRecord(row: typeof bookingFunnelRecords.$inferSelect) {
   return {
     token: row.publicFunnelNumber,
+    mutationToken: createBookingFunnelMutationToken(ENV.cookieSecret, row.publicFunnelNumber, row.idempotencyKey),
     customerName: row.customerName,
     customerPhone: row.customerPhone,
     customerEmail: row.customerEmail,
@@ -256,15 +255,13 @@ export const bookingFunnelRouter = router({
       const persisted = await persistCanonicalBooking(db, built.prepared, {
         funnelRecordId: funnel.id,
         funnelSource: "book-page",
-        funnelStage: "booked",
+        funnelStage: "payment_incomplete",
         paymentMethod: "card",
         bookedByAgentId: funnel.bookedByAgentId ?? undefined,
         bookedByAgentName: funnel.bookedByAgentName ?? undefined,
         initialBookingStatus: "pending_payment",
       });
-      await db.update(bookingFunnelRecords).set({ stage: "booked", bookingId: persisted.bookingId, updatedAt: new Date() }).where(eq(bookingFunnelRecords.id, funnel.id));
-      void sendBookingCompletionNotifications(persisted.bookingId).catch(error => console.error("[BookingFunnelRouter] Quote booking notifications failed:", error));
-      broadcastCleanerPortalJobsChanged();
+      await db.update(bookingFunnelRecords).set({ stage: "payment_incomplete", bookingId: persisted.bookingId, updatedAt: new Date() }).where(eq(bookingFunnelRecords.id, funnel.id));
       broadcastOpsUpdate("booking_funnel_update");
       return { bookingId: persisted.bookingId, publicBookingNumber: persisted.publicBookingNumber, created: persisted.created };
     }),
