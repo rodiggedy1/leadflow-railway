@@ -66,9 +66,9 @@ export default function CustomerBookingLinkLive() {
   const pricing = data?.priceSnapshot && typeof data.priceSnapshot === "object" ? (data.priceSnapshot as { input: { pricingMode: "home" | "hourly"; serviceId: "standard" | "deep" | "moveout"; bedrooms: number; bathrooms: number; homeType: "House" | "Apartment" | "Townhome" | "Condo"; condition: number; maidCount: number; hourCount: number; extras: { id: string; quantity: number }[]; recurrence: "one-time" | "weekly" | "biweekly" | "monthly" } }).input : null;
   const firstName = (name || data?.customerName || "there").split(/\s+/)[0];
   const serviceName = data?.serviceName || "Cleaning";
-  const baseDate = data.requestedLocalDate || tomorrow();
+  const baseDate = data?.requestedLocalDate || tomorrow();
   const dateOptions = [0, 1, 2].map((offset) => addDays(baseDate, offset));
-  const requestedTime = data.requestedLocalTime || "10:30";
+  const requestedTime = data?.requestedLocalTime || "10:30";
   const timeOptions = Array.from(new Set([requestedTime, "08:30", "13:00"]));
   const submitDetails = async (event: React.FormEvent) => {
     event.preventDefault();
