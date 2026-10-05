@@ -260,7 +260,7 @@ export const bookingFunnelRouter = router({
       const persisted = await persistCanonicalBooking(db, built.prepared, {
         funnelRecordId: funnel.id,
         funnelSource: "customer-booking-link",
-        bookingSource: "customer-booking-link",
+        bookingSource: "full_page",
         funnelStage: "payment_incomplete",
         paymentMethod: "card",
         bookedByAgentId: funnel.bookedByAgentId ?? undefined,
@@ -307,7 +307,7 @@ export const bookingFunnelRouter = router({
       const persisted = await persistCanonicalBooking(db, built.prepared, {
         funnelRecordId: funnel.id,
         funnelSource: "customer-booking-link",
-        bookingSource: "customer-booking-link",
+        bookingSource: "full_page",
         funnelStage: "payment_incomplete",
         paymentMethod: "card",
         bookedByAgentId: funnel.bookedByAgentId ?? undefined,
