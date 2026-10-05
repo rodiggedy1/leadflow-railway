@@ -93,3 +93,36 @@
 .customer-link-step-booking .customer-link-date-options .customer-link-option b{font-size:20px;line-height:1.18;letter-spacing:-.01em}
 .customer-link-step-booking .customer-link-date-options .customer-link-option small{font-size:13px}
 @media(max-width:620px){.customer-link-step-booking .customer-link-date-options .customer-link-option b{font-size:19px}}
+
+/* Final approved date/time selector scale: calm, compact, and aligned to the reference. */
+.customer-link-step-booking .customer-link-section-heading{margin:24px 0 12px}
+.customer-link-step-booking .customer-link-section-heading h2{font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:25px;line-height:1.2;font-weight:750;letter-spacing:-.02em}
+.customer-link-step-booking .customer-link-section-heading p{margin-top:8px;color:#817970;font-size:16px;line-height:1.35}
+.customer-link-step-booking .customer-link-time-heading{margin-top:30px}
+.customer-link-step-booking .customer-link-time-heading p{display:none}
+.customer-link-step-booking .customer-link-date-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.customer-link-step-booking .customer-link-time-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.customer-link-step-booking .customer-link-date-options .customer-link-option,
+.customer-link-step-booking .customer-link-time-options .customer-link-option{min-height:92px;padding:20px 22px;border:1px solid #ddd7d0;border-radius:18px;background:#fff}
+.customer-link-step-booking .customer-link-date-options .customer-link-option.is-selected,
+.customer-link-step-booking .customer-link-time-options .customer-link-option.is-selected{border:2px solid #684326;background:#fcfaf6;box-shadow:none}
+.customer-link-step-booking .customer-link-date-options .customer-link-option b,
+.customer-link-step-booking .customer-link-time-options .customer-link-option b{font-size:20px;line-height:1.18;letter-spacing:-.01em}
+.customer-link-step-booking .customer-link-date-options .customer-link-option small,
+.customer-link-step-booking .customer-link-time-options .customer-link-option small{margin-top:5px;color:#817b74;font-size:14px;line-height:1.25}
+.customer-link-step-booking .customer-link-time-options .customer-link-option em{margin-top:6px;color:#684326;font-size:14px;line-height:1.2}
+.customer-link-step-booking .customer-link-date-picker{margin-top:12px}
+.customer-link-step-booking .customer-link-date-picker label{font-size:16px;margin-bottom:8px}
+.customer-link-step-booking .customer-link-date-picker input{padding:13px 15px;border-radius:14px}
+.customer-link-step-booking .customer-link-date-picker small{margin-top:7px;font-size:13px}
+@media(max-width:620px){
+  .customer-link-step-booking .customer-link-section-heading h2{font-size:24px}
+  .customer-link-step-booking .customer-link-section-heading p{font-size:15px}
+  .customer-link-step-booking .customer-link-date-options .customer-link-option,
+  .customer-link-step-booking .customer-link-time-options .customer-link-option{min-height:88px;padding:18px 16px}
+  .customer-link-step-booking .customer-link-date-options .customer-link-option b,
+  .customer-link-step-booking .customer-link-time-options .customer-link-option b{font-size:18px}
+}
+
+/* The whole date field is the calendar target, not only the browser icon. */
+.customer-link-step-booking .customer-link-date-picker input[type="date"]{cursor:pointer}
