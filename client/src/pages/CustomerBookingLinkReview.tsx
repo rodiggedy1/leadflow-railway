@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./customer-booking-link-review.css";
 import teamPhoto from "../assets/book-now-review/maids-in-black-team-shirt-index2.jpg";
+import testimonialPhoto from "../assets/book-now-review/SmilingHomeInteriorSelfie.png";
 
 function WistiaPlayer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,9 +94,8 @@ export default function CustomerBookingLinkReview() {
                   <div className="customer-link-section-heading customer-link-time-heading"><h2>Choose a time</h2><p>The team arrives within the arrival window you select.</p></div>
                   <div className="customer-link-options customer-link-time-options">{times.map((time) => <button key={time.label} type="button" className={`customer-link-option ${selectedTime === time.label ? "is-selected" : ""}`} onClick={() => setSelectedTime(time.label)}><b>{time.label}</b><small>{time.detail}</small><em>{time.availability}</em></button>)}</div>
                   <div className="customer-link-confidence"><b>Your home is in good hands.</b><span>✓ Vetted, background-checked cleaning teams<br />✓ Fully insured<br />✓ Not happy? Tell us and we'll make it right.<br />✓ Plans change? Reschedule easily.</span></div>
-                  <div className="customer-link-confidence"><b>You don't need to be home.</b><span>Leave entry instructions and we'll handle the rest.</span></div>
-                  <div className="customer-link-testimonial">
-                    <div className="customer-link-testimonial-avatar">AC</div>
+                                    <div className="customer-link-testimonial">
+                    <img className="customer-link-testimonial-avatar" src={testimonialPhoto} alt="Amber C." />
                     <div><div className="customer-link-testimonial-stars">★★★★★</div><p>“Our 3 bedroom, 3 bathroom house has never looked and smelled so clean.”</p><small>— Amber C. · Google review</small></div>
                   </div>
                   <img className="customer-link-team-photo" src={teamPhoto} alt="Professional Maids in Black cleaning team" />
