@@ -92,13 +92,13 @@ const ACTIVITY = [
 function getCustomerCareProposal(message: string) {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
   if (/(^|\b)(cancel|cancellation|call off|don'?t need the clean)(\b|$)/.test(normalized)) {
-    return { title: "Verify cancellation request", recommendation: "Create a customer-care task; booking stays unchanged." };
+    return { title: "Cancellation request", task: "Verify the customer’s request, then cancel the booking", recommendation: "Do not change the booking until the request is verified." };
   }
   if (/(^|\b)(reschedule|reschedul|move my|change my|different date|different time|another day)(\b|$)/.test(normalized)) {
-    return { title: "Verify reschedule request", recommendation: "Create a customer-care task; verify availability before changing anything." };
+    return { title: "Reschedule request", task: "Verify the requested date/time, check openings, then reschedule", recommendation: "Do not change the booking until availability is verified." };
   }
   if (/(^|\b)(problem|issue|missed|complaint|not happy|broken|damaged|refund|credit|special request|extra instruction)(\b|$)/.test(normalized)) {
-    return { title: "Review customer-care request", recommendation: "Create a support task for human follow-up." };
+    return { title: "Customer-care request", task: "Review the issue and decide the appropriate customer resolution", recommendation: "Human follow-up is required before offering a credit, refund, or return visit." };
   }
   return null;
 }
@@ -121,12 +121,17 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
 
 function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
   const utils = trpc.useUtils();
+  const [showConversation, setShowConversation] = useState(false);
   let metadata: { draftId?: number } = {};
   try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* malformed legacy card */ }
   const draftId = metadata.draftId;
   const { data: draft, isLoading } = trpc.opsChat.getSmsDraft.useQuery(
     { draftId: draftId! },
     { enabled: Boolean(draftId), refetchOnWindowFocus: false },
+  );
+  const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSmsDraftConversation.useQuery(
+    { draftId: draftId!, limit: 20 },
+    { enabled: Boolean(draftId) && showConversation, refetchOnWindowFocus: false },
   );
   const approveReply = trpc.opsChat.approveSmsDraft.useMutation({
     onSuccess: result => {
@@ -154,12 +159,16 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
       <div className="ai-team-need-copy">
         <strong>{proposal?.title ?? "Madison reply approval"}</strong>
         <p>{customerName}: “{draft.originalMessage}”</p>
-        <em>Madison recommends: {proposal?.recommendation ?? "Approve the drafted reply below."}</em>
+        <em>{proposal ? <><b>Recommended task:</b> {proposal.task}<br /><span>Madison recommends: {proposal.recommendation}</span></> : "Approve the drafted reply below."}</em>
         <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{draft.generatedDraft ?? "Draft is still being prepared."}</div>
+        <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
+        {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">
+          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small><p>{message.content}</p></div>)}
+        </div>}
       </div>
       <div className="ai-team-need-actions">
         <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: draft.generatedDraft ?? "", approvedBy: agentName })} disabled={approveReply.isPending || !draft.generatedDraft}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>
-        {proposal && <button type="button" className="is-quiet" onClick={() => createTask.mutate({ title: `${proposal.title} — ${customerName}`, issueType: proposal.title.includes("reschedule") ? "reschedule_needed" : proposal.title.includes("cancellation") ? "other" : "manager_review", severity: "medium", notes: `${proposal.recommendation}\n\nIncoming SMS: ${draft.originalMessage}\nPhone: ${draft.fromPhone}\nBooking remains unchanged pending human verification.`, waitingOn: "Office", relatedSessionId: draft.sessionId, createdByName: agentName })} disabled={createTask.isPending}>{createTask.isPending ? "Opening…" : "Approve task"}</button>}
+        {proposal && <button type="button" className="is-quiet" onClick={() => createTask.mutate({ title: `${proposal.task} — ${customerName}`, issueType: proposal.title.includes("Reschedule") ? "reschedule_needed" : proposal.title.includes("Cancellation") ? "other" : "manager_review", severity: "medium", notes: `${proposal.task}.\n\n${proposal.recommendation}\n\nIncoming SMS: ${draft.originalMessage}\nPhone: ${draft.fromPhone}\nBooking remains unchanged pending human verification.`, waitingOn: "Office", relatedSessionId: draft.sessionId, createdByName: agentName })} disabled={createTask.isPending}>{createTask.isPending ? "Opening…" : "Approve task"}</button>}
       </div>
     </article>
   );
