@@ -91,7 +91,7 @@ export default function CustomerBookingLinksAdmin() {
         address,
         requestedLocalDate: date,
         requestedLocalTime: time,
-        pricing,
+        pricing: { ...pricing, extras: [...pricing.extras] },
         notes: notes.split("\n").map(item => item.trim()).filter(Boolean),
       });
       setCreatedPath(result.urlPath);

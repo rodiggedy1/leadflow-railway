@@ -114,6 +114,7 @@ async function ensureBookingPaymentTarget(record: typeof bookingFunnelRecords.$i
   }
   const persisted = await persistCanonicalBooking(db, built.prepared, {
     funnelRecordId: record.id,
+    bookingSource: record.source === "customer-booking-link" ? "customer-booking-link" : undefined,
     initialBookingStatus: "pending_payment",
   });
   const paymentProfile = await db.select().from(bookingPaymentProfiles).where(eq(bookingPaymentProfiles.bookingId, persisted.bookingId)).limit(1);

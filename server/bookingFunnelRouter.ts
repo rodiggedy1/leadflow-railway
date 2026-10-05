@@ -249,7 +249,7 @@ export const bookingFunnelRouter = router({
         idempotencyKey: input.idempotencyKey,
         surface: "full_page",
         customer: { fullName: input.customerName, phone: input.customerPhone, email: input.customerEmail },
-        service: { serviceId: quotePricing.serviceId, bedrooms: quotePricing.bedrooms, bathrooms: quotePricing.bathrooms, extras: quotePricing.extras, specialRequestNotes: funnel.specialRequestNotes ?? [] },
+        service: { serviceId: quotePricing.serviceId, bedrooms: quotePricing.bedrooms, bathrooms: quotePricing.bathrooms, extras: [...quotePricing.extras], specialRequestNotes: funnel.specialRequestNotes ?? [] },
         address: input.address,
         requestedSchedule: { localDate: input.requestedLocalDate, localTime: input.requestedLocalTime },
         recurrence: input.recurrence,
@@ -259,7 +259,8 @@ export const bookingFunnelRouter = router({
       if (built.type === "price_changed") throw new TRPCError({ code: "BAD_REQUEST", message: "The quoted price changed. Please refresh this link." });
       const persisted = await persistCanonicalBooking(db, built.prepared, {
         funnelRecordId: funnel.id,
-        funnelSource: "book-page",
+        funnelSource: "customer-booking-link",
+        bookingSource: "customer-booking-link",
         funnelStage: "payment_incomplete",
         paymentMethod: "card",
         bookedByAgentId: funnel.bookedByAgentId ?? undefined,
@@ -295,7 +296,7 @@ export const bookingFunnelRouter = router({
         idempotencyKey: funnel.idempotencyKey,
         surface: "full_page",
         customer: { fullName: booking.customerName, phone: booking.customerPhone, email: booking.customerEmail },
-        service: { serviceId: quotePricing.serviceId, bedrooms: quotePricing.bedrooms, bathrooms: quotePricing.bathrooms, extras: quotePricing.extras, specialRequestNotes: funnel.specialRequestNotes ?? [] },
+        service: { serviceId: quotePricing.serviceId, bedrooms: quotePricing.bedrooms, bathrooms: quotePricing.bathrooms, extras: [...quotePricing.extras], specialRequestNotes: funnel.specialRequestNotes ?? [] },
         address: booking.address,
         requestedSchedule: { localDate: booking.requestedLocalDate, localTime: booking.requestedLocalTime },
         recurrence: input.recurrence,
@@ -305,7 +306,8 @@ export const bookingFunnelRouter = router({
       if (built.type !== "ready") throw new TRPCError({ code: "CONFLICT", message: "The quoted price changed. Please refresh this link." });
       const persisted = await persistCanonicalBooking(db, built.prepared, {
         funnelRecordId: funnel.id,
-        funnelSource: "book-page",
+        funnelSource: "customer-booking-link",
+        bookingSource: "customer-booking-link",
         funnelStage: "payment_incomplete",
         paymentMethod: "card",
         bookedByAgentId: funnel.bookedByAgentId ?? undefined,

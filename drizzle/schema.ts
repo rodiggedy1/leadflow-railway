@@ -4452,6 +4452,7 @@ export const bookings = mysqlTable("bookings", {
   serviceName: varchar("serviceName", { length: 120 }).notNull(),
   bedrooms: int("bedrooms").notNull(),
   bathrooms: int("bathrooms").notNull(),
+  homeType: varchar("homeType", { length: 32 }),
   extras: json("extras").$type<Array<{ id: string; label: string; quantity: number; unitPriceCents: number; totalCents: number }>>().notNull(),
   specialRequestNotes: json("specialRequestNotes").$type<string[]>().notNull(),
   address: varchar("address", { length: 500 }).notNull(),
