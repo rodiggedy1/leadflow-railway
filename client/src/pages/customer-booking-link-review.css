@@ -123,3 +123,6 @@
   .customer-link-step-booking .customer-link-date-options .customer-link-option b,
   .customer-link-step-booking .customer-link-time-options .customer-link-option b{font-size:18px}
 }
+
+/* The whole date field is the calendar target, not only the browser icon. */
+.customer-link-step-booking .customer-link-date-picker input[type="date"]{cursor:pointer}
