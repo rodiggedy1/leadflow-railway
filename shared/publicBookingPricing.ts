@@ -65,6 +65,8 @@ export type PublicBookingPricingInput = {
   hourCount: number;
   extras: readonly PublicBookingExtraSelection[];
   recurrence: BookingWidgetRecurringFrequency;
+  /** Optional agent-entered first-cleaning total, in cents. */
+  customPriceCents?: number;
 };
 
 export type PublicBookingPricedExtra = {
@@ -227,7 +229,11 @@ export function calculatePublicBookingPrice(
     (total, extra) => total + extra.totalCents,
     0
   );
-  const firstCleaningTotalCents = serviceSubtotalCents + extrasTotalCents;
+  if (input.customPriceCents !== undefined) {
+    assertIntegerRange(input.customPriceCents, "Custom first-cleaning price", 1, 1_000_000);
+  }
+  const firstCleaningTotalCents =
+    input.customPriceCents ?? serviceSubtotalCents + extrasTotalCents;
   const futureVisitBaseTotalCents =
     input.pricingMode === "hourly"
       ? hourlyServiceTotalCents

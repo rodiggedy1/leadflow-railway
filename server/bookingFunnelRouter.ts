@@ -1,13 +1,18 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { bookingFunnelRecords } from "../drizzle/schema";
+import { bookingFunnelRecords, bookings } from "../drizzle/schema";
 import {
   beginBookingFunnelInputSchema,
   bookingFunnelFaqQuestionInputSchema,
   bookingFunnelGetInputSchema,
   bookingFunnelListInputSchema,
+  createCustomerBookingLinkInputSchema,
+  customerBookingLinkTokenInputSchema,
   reserveBookingFunnelInputSchema,
+  submitCustomerBookingLinkInputSchema,
+  updateCustomerBookingLinkInputSchema,
   updateBookingFunnelInputSchema,
 } from "../shared/bookingFunnel";
 import { bookingsAgentProcedure, publicProcedure, router } from "./_core/trpc";
@@ -18,6 +23,10 @@ import { broadcastOpsUpdate } from "./sseBroadcast";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
 import { sendCustomerPortalLeadCreatedCommandChatCard, sendWidgetLeadCreatedNotifications } from "./bookingLeadCreatedNotifications";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
+import { buildPreparedCanonicalBooking } from "./bookingsService";
+import { persistCanonicalBooking } from "./canonicalBookingPersistence";
+import { normalizePhone } from "./utils/phone";
+import { createPublicBookingPriceSnapshot, isPublicBookingPriceSnapshot, PUBLIC_BOOKING_PRICING_VERSION } from "../shared/publicBookingPricing";
 import {
   BookingFunnelInputError,
   createBookingFunnelMutationToken,
@@ -84,6 +93,30 @@ function normalizedPatchOrThrow(patch: Parameters<typeof normalizeBookingFunnelP
   }
 }
 
+function customerLinkSafeRecord(row: typeof bookingFunnelRecords.$inferSelect) {
+  return {
+    token: row.publicFunnelNumber,
+    mutationToken: createBookingFunnelMutationToken(ENV.cookieSecret, row.publicFunnelNumber, row.idempotencyKey),
+    customerName: row.customerName,
+    customerPhone: row.customerPhone,
+    customerEmail: row.customerEmail,
+    address: row.address,
+    requestedLocalDate: row.requestedLocalDate,
+    requestedLocalTime: row.requestedLocalTime,
+    serviceId: row.serviceId,
+    serviceName: row.serviceName,
+    bedrooms: row.bedrooms,
+    bathrooms: row.bathrooms,
+    extras: row.extras,
+    recurrence: row.recurrence,
+    firstCleaningTotalCents: row.firstCleaningTotalCents,
+    futureVisitTotalCents: row.futureVisitTotalCents,
+    priceSnapshot: row.priceSnapshot,
+    stage: row.stage,
+    bookingId: row.bookingId,
+  };
+}
+
 export const bookingFunnelRouter = router({
   answerFaq: publicProcedure
     .input(bookingFunnelFaqQuestionInputSchema)
@@ -137,6 +170,159 @@ export const bookingFunnelRouter = router({
         }
         return { answer: BOOKING_FAQ_FALLBACK, supported: false };
       }
+    }),
+
+  createCustomerLink: bookingsAgentProcedure
+    .input(createCustomerBookingLinkInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const phone = normalizePhone(input.customerPhone);
+      if (!phone) throw new TRPCError({ code: "BAD_REQUEST", message: "Enter a valid U.S. phone number." });
+      const priceSnapshot = createPublicBookingPriceSnapshot(input.pricing);
+      const normalizedCustomerName = input.customerName.trim().replace(/\s+/g, " ");
+      const nameSlug = normalizedCustomerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || "customer";
+      const token = `mib-${nameSlug}-${randomBytes(5).toString("hex")}`.slice(0, 40);
+      const idempotencyKey = randomUUID();
+      const commandHash = createHash("sha256").update(JSON.stringify({ token, idempotencyKey, input })).digest("hex");
+      const now = new Date();
+      await db.insert(bookingFunnelRecords).values({
+        publicFunnelNumber: token,
+        idempotencyKey,
+        commandHash,
+        source: "customer-booking-link",
+        stage: "lead",
+        bookedByAgentId: ctx.agent.agentId,
+        bookedByAgentName: ctx.agent.agentName,
+        customerName: normalizedCustomerName,
+        customerPhone: phone,
+        customerEmail: input.customerEmail.trim().toLowerCase(),
+        serviceId: input.pricing.serviceId,
+        serviceName: priceSnapshot.serviceName,
+        bedrooms: input.pricing.bedrooms,
+        bathrooms: input.pricing.bathrooms,
+        extras: input.pricing.extras,
+        specialRequestNotes: input.notes,
+        address: input.address,
+        requestedLocalDate: input.requestedLocalDate,
+        requestedLocalTime: input.requestedLocalTime,
+        requestedTimeZone: "America/New_York",
+        recurrence: input.pricing.recurrence,
+        pricingVersion: PUBLIC_BOOKING_PRICING_VERSION,
+        firstCleaningTotalCents: priceSnapshot.breakdown.firstCleaningTotalCents,
+        futureVisitTotalCents: priceSnapshot.breakdown.futureVisitTotalCents,
+        priceSnapshot,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+      broadcastOpsUpdate("booking_funnel_update");
+      return { token, urlPath: `/book/${token}`, firstCleaningTotalCents: priceSnapshot.breakdown.firstCleaningTotalCents };
+    }),
+
+  getCustomerLink: publicProcedure
+    .input(customerBookingLinkTokenInputSchema)
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const rows = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.token)).limit(1);
+      const row = rows[0];
+      if (!row || row.source !== "customer-booking-link" || row.stage === "cancelled") throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
+      return customerLinkSafeRecord(row);
+    }),
+
+  submitCustomerLink: publicProcedure
+    .input(submitCustomerBookingLinkInputSchema)
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const rows = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.token)).limit(1);
+      const funnel = rows[0];
+      if (!funnel || funnel.source !== "customer-booking-link") throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
+      if (funnel.bookingId || funnel.stage === "booked") return { bookingId: funnel.bookingId, publicBookingNumber: null, created: false };
+      if (!isPublicBookingPriceSnapshot(funnel.priceSnapshot)) {
+        throw new TRPCError({ code: "CONFLICT", message: "This quote is no longer valid. Please ask Madison for a new link." });
+      }
+      const quotePricing = { ...funnel.priceSnapshot.input, recurrence: input.recurrence };
+      const pricingSnapshot = createPublicBookingPriceSnapshot(quotePricing);
+      const built = buildPreparedCanonicalBooking({
+        idempotencyKey: input.idempotencyKey,
+        surface: "full_page",
+        customer: { fullName: input.customerName, phone: input.customerPhone, email: input.customerEmail },
+        service: { serviceId: quotePricing.serviceId, bedrooms: quotePricing.bedrooms, bathrooms: quotePricing.bathrooms, extras: quotePricing.extras, specialRequestNotes: funnel.specialRequestNotes ?? [] },
+        address: input.address,
+        requestedSchedule: { localDate: input.requestedLocalDate, localTime: input.requestedLocalTime },
+        recurrence: input.recurrence,
+        acceptedPricing: { version: PUBLIC_BOOKING_PRICING_VERSION, totalCents: pricingSnapshot.breakdown.firstCleaningTotalCents },
+        pricing: quotePricing,
+      }, { nowMs: Date.now(), timeZone: "America/New_York" });
+      if (built.type === "price_changed") throw new TRPCError({ code: "BAD_REQUEST", message: "The quoted price changed. Please refresh this link." });
+      const persisted = await persistCanonicalBooking(db, built.prepared, {
+        funnelRecordId: funnel.id,
+        funnelSource: "book-page",
+        funnelStage: "payment_incomplete",
+        paymentMethod: "card",
+        bookedByAgentId: funnel.bookedByAgentId ?? undefined,
+        bookedByAgentName: funnel.bookedByAgentName ?? undefined,
+        initialBookingStatus: "pending_payment",
+      });
+      await db.update(bookingFunnelRecords).set({ stage: "payment_incomplete", bookingId: persisted.bookingId, updatedAt: new Date() }).where(eq(bookingFunnelRecords.id, funnel.id));
+      broadcastOpsUpdate("booking_funnel_update");
+      return { bookingId: persisted.bookingId, publicBookingNumber: persisted.publicBookingNumber, created: persisted.created };
+    }),
+
+  updateCustomerLink: publicProcedure
+    .input(updateCustomerBookingLinkInputSchema)
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const [funnel] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.token)).limit(1);
+      if (!funnel || funnel.source !== "customer-booking-link") throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
+      if (!verifyBookingFunnelMutationToken(ENV.cookieSecret, input.mutationToken, funnel.publicFunnelNumber, funnel.idempotencyKey)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
+      }
+      if (!funnel.bookingId || funnel.stage !== "payment_incomplete") {
+        throw new TRPCError({ code: "CONFLICT", message: "This booking can no longer be changed." });
+      }
+      const [booking] = await db.select().from(bookings).where(eq(bookings.id, funnel.bookingId)).limit(1);
+      if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
+      if (!isPublicBookingPriceSnapshot(funnel.priceSnapshot)) {
+        throw new TRPCError({ code: "CONFLICT", message: "This quote is no longer valid. Please ask Madison for a new link." });
+      }
+      const quotePricing = { ...funnel.priceSnapshot.input, recurrence: input.recurrence };
+      const pricingSnapshot = createPublicBookingPriceSnapshot(quotePricing);
+      const built = buildPreparedCanonicalBooking({
+        idempotencyKey: funnel.idempotencyKey,
+        surface: "full_page",
+        customer: { fullName: booking.customerName, phone: booking.customerPhone, email: booking.customerEmail },
+        service: { serviceId: quotePricing.serviceId, bedrooms: quotePricing.bedrooms, bathrooms: quotePricing.bathrooms, extras: quotePricing.extras, specialRequestNotes: funnel.specialRequestNotes ?? [] },
+        address: booking.address,
+        requestedSchedule: { localDate: booking.requestedLocalDate, localTime: booking.requestedLocalTime },
+        recurrence: input.recurrence,
+        acceptedPricing: { version: PUBLIC_BOOKING_PRICING_VERSION, totalCents: pricingSnapshot.breakdown.firstCleaningTotalCents },
+        pricing: quotePricing,
+      }, { nowMs: Date.now(), timeZone: "America/New_York" });
+      if (built.type !== "ready") throw new TRPCError({ code: "CONFLICT", message: "The quoted price changed. Please refresh this link." });
+      const persisted = await persistCanonicalBooking(db, built.prepared, {
+        funnelRecordId: funnel.id,
+        funnelSource: "book-page",
+        funnelStage: "payment_incomplete",
+        paymentMethod: "card",
+        bookedByAgentId: funnel.bookedByAgentId ?? undefined,
+        bookedByAgentName: funnel.bookedByAgentName ?? undefined,
+        initialBookingStatus: "pending_payment",
+      });
+      await db.update(bookingFunnelRecords).set({
+        stage: "payment_incomplete",
+        bookingId: persisted.bookingId,
+        recurrence: input.recurrence,
+        firstCleaningTotalCents: pricingSnapshot.breakdown.firstCleaningTotalCents,
+        futureVisitTotalCents: pricingSnapshot.breakdown.futureVisitTotalCents,
+        priceSnapshot: pricingSnapshot,
+        updatedAt: new Date(),
+      }).where(eq(bookingFunnelRecords.id, funnel.id));
+      broadcastOpsUpdate("booking_funnel_update");
+      return { bookingId: persisted.bookingId, recurrence: input.recurrence };
     }),
 
   begin: publicProcedure
