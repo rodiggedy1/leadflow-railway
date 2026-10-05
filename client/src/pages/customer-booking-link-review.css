@@ -88,3 +88,8 @@
   .customer-link-step-booking .customer-link-date-options .customer-link-option,
   .customer-link-step-booking .customer-link-time-options .customer-link-option{min-height:88px;padding:20px 18px}
 }
+
+/* Date-card title scale: the first card carries the full selected date; the other cards carry weekdays. */
+.customer-link-step-booking .customer-link-date-options .customer-link-option b{font-size:20px;line-height:1.18;letter-spacing:-.01em}
+.customer-link-step-booking .customer-link-date-options .customer-link-option small{font-size:13px}
+@media(max-width:620px){.customer-link-step-booking .customer-link-date-options .customer-link-option b{font-size:19px}}

@@ -68,7 +68,7 @@ export default function CustomerBookingLinkLive() {
   const serviceName = data?.serviceName || "Cleaning";
   const baseDate = data?.requestedLocalDate || tomorrow();
   const dateOptions = [0, 1, 2].map((offset) => addDays(baseDate, offset));
-  const dateLabels = dateOptions.map((date, index) => ({ date, label: index === 0 ? "Tomorrow" : weekdayLabel(date), detail: index === 0 ? "2 teams available" : index === 1 ? "4 openings" : "3 openings" }));
+  const dateLabels = dateOptions.map((date) => ({ date, label: formatDate(date), detail: date === baseDate ? "Reserved for you" : "Available opening" }));
   const requestedTime = data?.requestedLocalTime || "10:30";
   const timeOptions = Array.from(new Set([requestedTime, "13:00"]));
   const submitDetails = async (event: React.FormEvent) => {
