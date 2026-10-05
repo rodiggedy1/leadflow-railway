@@ -866,7 +866,6 @@ export default function NativeBookingsWorkspace({
     funnelLeads,
     leadflowJobsQuery.data,
     portalRequests,
-    quoteRows,
     status,
     view,
   ]);
