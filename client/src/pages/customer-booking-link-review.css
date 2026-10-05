@@ -69,3 +69,22 @@
   .customer-link-step-booking .customer-link-option em{margin-top:10px;font-size:17px}
   .customer-link-step-booking .customer-link-time-options .customer-link-option{min-height:156px}
 }
+
+/* Compact opening-picker parity: three dates and two times, matching the approved reference. */
+.customer-link-step-booking .customer-link-date-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.customer-link-step-booking .customer-link-time-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.customer-link-step-booking .customer-link-date-options .customer-link-option,
+.customer-link-step-booking .customer-link-time-options .customer-link-option{min-height:90px;padding:22px 22px;border:1px solid #ddd7d0;border-radius:18px;background:#fff}
+.customer-link-step-booking .customer-link-date-options .customer-link-option.is-selected,
+.customer-link-step-booking .customer-link-time-options .customer-link-option.is-selected{border:2px solid #684326;background:#fcfaf6;box-shadow:none}
+.customer-link-step-booking .customer-link-date-options .customer-link-option b,
+.customer-link-step-booking .customer-link-time-options .customer-link-option b{font-size:21px;line-height:1.15}
+.customer-link-step-booking .customer-link-date-options .customer-link-option small,
+.customer-link-step-booking .customer-link-time-options .customer-link-option small{margin-top:6px;color:#817b74;font-size:14px;line-height:1.25}
+.customer-link-step-booking .customer-link-time-options .customer-link-option em{margin-top:7px;color:#684326;font-size:14px;line-height:1.2}
+@media(max-width:620px){
+  .customer-link-step-booking .customer-link-date-options{grid-template-columns:1fr}
+  .customer-link-step-booking .customer-link-time-options{grid-template-columns:1fr 1fr}
+  .customer-link-step-booking .customer-link-date-options .customer-link-option,
+  .customer-link-step-booking .customer-link-time-options .customer-link-option{min-height:88px;padding:20px 18px}
+}
