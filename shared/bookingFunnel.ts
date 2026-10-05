@@ -17,6 +17,7 @@ export const customerBookingLinkPricingSchema = z.object({
   hourCount: z.number().int().min(1).max(8),
   extras: z.array(z.object({ id: z.string().trim().min(1).max(80), quantity: z.number().int().min(1).max(50) })).max(50),
   recurrence: z.enum(["one-time", "weekly", "biweekly", "monthly"]),
+  customPriceCents: z.number().int().min(1).max(1_000_000).optional(),
 });
 export type CustomerBookingLinkPricing = z.infer<typeof customerBookingLinkPricingSchema>;
 

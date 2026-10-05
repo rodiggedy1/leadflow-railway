@@ -43,10 +43,12 @@ export default function CustomerBookingLinksAdmin() {
   const [condition, setCondition] = useState(5);
   const [recurrence, setRecurrence] = useState<Recurrence>("one-time");
   const [selectedExtras, setSelectedExtras] = useState<ExtraId[]>([]);
+  const [customPrice, setCustomPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [createdPath, setCreatedPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const customPriceCents = customPrice.trim() === "" ? undefined : Math.round(Number(customPrice) * 100);
   const pricing = useMemo<PublicBookingPricingInput>(() => ({
     pricingMode: "home",
     serviceId,
@@ -58,7 +60,8 @@ export default function CustomerBookingLinksAdmin() {
     hourCount: 1,
     extras: selectedExtras.map(id => ({ id, quantity: 1 })),
     recurrence,
-  }), [serviceId, bedrooms, bathrooms, homeType, condition, selectedExtras, recurrence]);
+    ...(customPriceCents !== undefined ? { customPriceCents } : {}),
+  }), [serviceId, bedrooms, bathrooms, homeType, condition, selectedExtras, recurrence, customPriceCents]);
 
   const breakdown = useMemo(() => {
     try {
@@ -128,6 +131,7 @@ export default function CustomerBookingLinksAdmin() {
             <div className="mt-4 grid gap-4 md:grid-cols-3"><NumberField label="Bedrooms" value={bedrooms} min={0} max={7} onChange={setBedrooms} /><NumberField label="Bathrooms" value={bathrooms} min={1} max={5} onChange={setBathrooms} /><label className="block text-sm font-semibold">Home type<select value={homeType} onChange={event => setHomeType(event.target.value as PublicBookingHomeType)} className="mt-2 w-full rounded-2xl border border-[#d8cec5] bg-white p-3.5"><option>House</option><option>Apartment</option><option>Townhome</option><option>Condo</option></select></label></div>
             <label className="mt-4 block text-sm font-semibold">Home condition: <span className="font-normal text-[#81766e]">{condition}/10</span><input type="range" min="1" max="10" value={condition} onChange={event => setCondition(Number(event.target.value))} className="mt-3 w-full accent-[#8a5a38]" /><span className="mt-1 flex justify-between text-xs font-normal text-[#81766e]"><span>Already clean</span><span>Needs a serious reset</span></span></label>
             <div className="mt-6"><p className="text-sm font-semibold">Extras</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{EXTRA_OPTIONS.map(extra => <button key={extra.id} type="button" onClick={() => toggleExtra(extra.id)} className={`flex items-center justify-between rounded-2xl border p-3 text-left text-sm transition ${selectedExtras.includes(extra.id) ? "border-[#684326] bg-[#fbf7f1] ring-1 ring-[#684326]" : "border-[#e1d8d0] bg-white hover:border-[#b89476]"}`}><span><span className="mr-2 inline-grid h-5 w-5 place-items-center rounded-full border text-xs">{selectedExtras.includes(extra.id) ? "✓" : ""}</span>{extra.label}</span><b className="text-[#684326]">+${extra.price}</b></button>)}</div></div>
+            <div className="mt-6 rounded-2xl border border-[#d8cec5] bg-[#fbf7f1] p-4"><label className="block text-sm font-semibold">Custom first-cleaning price <span className="font-normal text-[#81766e]">(optional)</span><input type="number" min="1" step="0.01" value={customPrice} onChange={event => setCustomPrice(event.target.value)} placeholder={breakdown ? (breakdown.firstCleaningTotalCents / 100).toFixed(2) : "0.00"} className="mt-2 w-full rounded-2xl border border-[#d8cec5] bg-white p-3.5 font-normal" /></label><p className="mt-2 text-xs text-[#81766e]">Leave blank to use the calculated price. Enter the exact amount you want the customer to see and pay for the first cleaning.</p>{customPrice.trim() !== "" && !Number.isFinite(customPriceCents) && <p className="mt-2 text-xs font-semibold text-red-700">Enter a valid dollar amount.</p>}</div>
             <div className="mt-6"><p className="text-sm font-semibold">Future service frequency</p><div className="mt-3 grid gap-2 sm:grid-cols-4">{(["one-time", "weekly", "biweekly", "monthly"] as const).map(option => <button key={option} type="button" onClick={() => setRecurrence(option)} className={`rounded-2xl border px-3 py-3 text-sm font-semibold ${recurrence === option ? "border-[#684326] bg-[#fbf7f1] text-[#684326] ring-1 ring-[#684326]" : "border-[#e1d8d0] bg-white"}`}>{option === "one-time" ? "One time" : option === "biweekly" ? "Every 2 weeks" : option === "weekly" ? "Weekly" : "Monthly"}</button>)}</div></div>
             <label className="mt-6 block text-sm font-semibold">Internal notes <textarea value={notes} onChange={event => setNotes(event.target.value)} rows={3} placeholder="Entry instructions or notes for the team" className="mt-2 w-full rounded-2xl border border-[#d8cec5] p-3.5 font-normal" /></label>
           </section>
@@ -135,9 +139,9 @@ export default function CustomerBookingLinksAdmin() {
 
         <aside className="h-fit rounded-3xl bg-[#4a2d1b] p-6 text-white shadow-[0_18px_60px_rgba(74,54,35,0.22)] lg:sticky lg:top-6">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#e8c8a4]">Quote preview</p><h2 className="mt-2 text-2xl font-bold">{name || "Customer quote"}</h2><p className="mt-1 text-sm text-[#e4d4c7]">{serviceId === "standard" ? "Standard" : serviceId === "deep" ? "Deep" : "Move-out"} Cleaning · {bedrooms} bed · {bathrooms} bath</p>
-          <div className="my-6 border-y border-white/20 py-5"><p className="text-sm text-[#e4d4c7]">First cleaning</p><p className="mt-1 text-5xl font-bold">{breakdown ? money(breakdown.firstCleaningTotalCents) : "—"}</p>{breakdown?.futureVisitTotalCents != null && <p className="mt-2 text-sm text-[#e8c8a4]">{money(breakdown.futureVisitTotalCents)} per {recurrence} visit after the first cleaning</p>}</div>
+          <div className="my-6 border-y border-white/20 py-5"><p className="text-sm text-[#e4d4c7]">First cleaning</p><p className="mt-1 text-5xl font-bold">{breakdown ? money(breakdown.firstCleaningTotalCents) : "—"}</p>{customPrice.trim() !== "" && breakdown && <p className="mt-2 text-xs text-[#e8c8a4]">Custom price applied · calculated price would be {money(calculatePublicBookingPrice({ ...pricing, customPriceCents: undefined }).firstCleaningTotalCents)}</p>}{breakdown?.futureVisitTotalCents != null && <p className="mt-2 text-sm text-[#e8c8a4]">{money(breakdown.futureVisitTotalCents)} per {recurrence} visit after the first cleaning</p>}</div>
           <div className="space-y-2 text-sm text-[#f2e6dc]"><div className="flex justify-between"><span>Service subtotal</span><b>{breakdown ? money(breakdown.serviceSubtotalCents) : "—"}</b></div><div className="flex justify-between"><span>Extras</span><b>{breakdown ? money(breakdown.extrasTotalCents) : "—"}</b></div><div className="flex justify-between"><span>Date</span><b>{date || "—"}</b></div><div className="flex justify-between"><span>Arrival</span><b>{formatWindow(time)}</b></div></div>
-          <button type="submit" disabled={create.isPending || !breakdown} className="mt-7 w-full rounded-2xl bg-white px-5 py-4 font-bold text-[#4a2d1b] shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{create.isPending ? "Creating secure link…" : "Create secure booking link"}</button>
+          <button type="submit" disabled={create.isPending || !breakdown || (customPrice.trim() !== "" && !Number.isFinite(customPriceCents))} className="mt-7 w-full rounded-2xl bg-white px-5 py-4 font-bold text-[#4a2d1b] shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{create.isPending ? "Creating secure link…" : "Create secure booking link"}</button>
           {error && <p className="mt-4 rounded-xl bg-red-100 p-3 text-sm text-red-900" role="alert">{error}</p>}
           {createdPath && <div className="mt-5 rounded-2xl bg-emerald-100 p-4 text-emerald-950"><p className="font-bold">Link created. Attribution is saved.</p><a className="mt-2 block break-all text-sm underline" href={createdPath}>{window.location.origin}{createdPath}</a><button type="button" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}${createdPath}`)} className="mt-3 rounded-full bg-emerald-800 px-4 py-2 text-sm font-bold text-white">Copy link</button></div>}
         </aside>
