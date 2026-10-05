@@ -13,7 +13,8 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export type CanonicalPersistenceOptions = {
   funnelRecordId?: number;
-  funnelSource?: "book-page" | "internal";
+  funnelSource?: "book-page" | "customer-booking-link" | "internal";
+  bookingSource?: PreparedNativeBooking["source"] | "customer-booking-link";
   funnelStage?: "lead" | "payment_incomplete" | "booked";
   paymentMethod?: "card" | "cashapp" | "invoice";
   bookedByAgentId?: number;
@@ -115,7 +116,7 @@ export async function persistCanonicalBooking(
           created = false;
           await tx.update(bookings).set({
             commandHash: prepared.commandHash,
-            source: prepared.source,
+            source: options.bookingSource ?? prepared.source,
             status: options.initialBookingStatus ?? "pending_payment",
             availabilityStatus: prepared.availabilityStatus,
             assignmentStatus: prepared.assignmentStatus,
@@ -129,6 +130,7 @@ export async function persistCanonicalBooking(
             serviceName: prepared.serviceName,
             bedrooms: prepared.bedrooms,
             bathrooms: prepared.bathrooms,
+            homeType: prepared.homeType,
             extras: prepared.extras,
             specialRequestNotes: prepared.specialRequestNotes,
             address: prepared.address,
@@ -149,7 +151,7 @@ export async function persistCanonicalBooking(
             publicBookingNumber: prepared.publicBookingNumber,
             idempotencyKey: prepared.idempotencyKey,
             commandHash: prepared.commandHash,
-            source: prepared.source,
+            source: options.bookingSource ?? prepared.source,
             status: options.initialBookingStatus ?? "pending_payment",
             availabilityStatus: prepared.availabilityStatus,
             assignmentStatus: prepared.assignmentStatus,
@@ -164,6 +166,7 @@ export async function persistCanonicalBooking(
             serviceName: prepared.serviceName,
             bedrooms: prepared.bedrooms,
             bathrooms: prepared.bathrooms,
+            homeType: prepared.homeType,
             extras: prepared.extras,
             specialRequestNotes: prepared.specialRequestNotes,
             address: prepared.address,
@@ -190,7 +193,7 @@ export async function persistCanonicalBooking(
           publicBookingNumber: prepared.publicBookingNumber,
           idempotencyKey: prepared.idempotencyKey,
           commandHash: prepared.commandHash,
-          source: prepared.source,
+          source: options.bookingSource ?? prepared.source,
           status: options.initialBookingStatus ?? "needs_attention",
           availabilityStatus: prepared.availabilityStatus,
           assignmentStatus: prepared.assignmentStatus,
@@ -205,6 +208,7 @@ export async function persistCanonicalBooking(
           serviceName: prepared.serviceName,
           bedrooms: prepared.bedrooms,
           bathrooms: prepared.bathrooms,
+          homeType: prepared.homeType,
           extras: prepared.extras,
           specialRequestNotes: prepared.specialRequestNotes,
           address: prepared.address,

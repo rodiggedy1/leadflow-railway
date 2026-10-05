@@ -16,6 +16,7 @@ import {
   PUBLIC_BOOKING_PRICING_VERSION,
   createPublicBookingPriceSnapshot,
   getPublicBookingServiceName,
+  type PublicBookingHomeType,
   type PublicBookingPricingInput,
   type PublicBookingPriceSnapshot,
 } from "../shared/publicBookingPricing";
@@ -41,6 +42,7 @@ export type PreparedNativeBooking = {
   serviceName: string;
   bedrooms: number;
   bathrooms: number;
+  homeType: PublicBookingHomeType | null;
   extras: BookingPriceSnapshot["extras"];
   specialRequestNotes: string[];
   address: string;
@@ -216,6 +218,7 @@ export function buildPreparedNativeBooking(
       serviceName,
       bedrooms: input.service.bedrooms,
       bathrooms: input.service.bathrooms,
+      homeType: null,
       extras,
       specialRequestNotes,
       address,
@@ -404,6 +407,7 @@ export function buildPreparedPublicBooking(
       serviceName: getPublicBookingServiceName(input.service.serviceId),
       bedrooms: input.service.bedrooms,
       bathrooms: input.service.bathrooms,
+      homeType: input.pricing.pricingMode === "home" ? input.pricing.homeType : null,
       extras: breakdown.extras,
       specialRequestNotes,
       address,

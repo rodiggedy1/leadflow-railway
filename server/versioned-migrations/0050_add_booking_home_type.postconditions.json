@@ -1,0 +1,1 @@
+{"format":1,"table":"bookings","columns":[{"name":"homeType","columnType":"varchar(32)","nullable":true}],"indexes":[]}
