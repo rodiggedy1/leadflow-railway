@@ -47,6 +47,11 @@ export const submitCustomerBookingLinkInputSchema = z.object({
   pricing: customerBookingLinkPricingSchema,
   additionalServices: z.array(z.object({ id: z.string().trim().min(1).max(80), quantity: z.number().int().min(1).max(50) })).max(20).default([]),
 });
+export const updateCustomerBookingLinkInputSchema = z.object({
+  token: z.string().trim().min(8).max(40),
+  mutationToken: z.string().trim().min(32).max(128),
+  recurrence: z.enum(["one-time", "weekly", "biweekly", "monthly"]),
+});
 
 export const beginBookingFunnelInputSchema = z.object({
   idempotencyKey: z.string().uuid(),
