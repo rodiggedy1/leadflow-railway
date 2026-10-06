@@ -1,5 +1,14 @@
 import { bigint, boolean, date, datetime, decimal, double, index, int, json, longtext, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
+import {
+  madisonActionReadiness,
+  madisonActionTypes,
+  madisonApprovalDecisions,
+  madisonDispositions,
+  madisonIntentTypes,
+  madisonModificationOperations,
+  madisonProposalStatuses,
+} from "../shared/madisonOperations";
 
 /**
  * Core user table backing auth flow.
@@ -4256,6 +4265,107 @@ export const madisonSmsDrafts = mysqlTable("madison_sms_drafts", {
 ]);
 export type MadisonSmsDraft = typeof madisonSmsDrafts.$inferSelect;
 export type InsertMadisonSmsDraft = typeof madisonSmsDrafts.$inferInsert;
+
+/** Structured Madison decision records, separate from the existing SMS draft lifecycle. */
+export const madisonDecisions = mysqlTable("madison_decisions", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  sourceMessageId: varchar("sourceMessageId", { length: 128 }).notNull(),
+  sessionId: bigint("sessionId", { mode: "number" }).notNull(),
+  customerId: varchar("customerId", { length: 128 }),
+  summary: text("summary").notNull(),
+  disposition: mysqlEnum("disposition", madisonDispositions as unknown as [string, ...string[]]).notNull(),
+  replyRecommended: tinyint("replyRecommended").notNull().default(0),
+  replyDraft: text("replyDraft"),
+  uncertainties: json("uncertainties").notNull(),
+  contextUsed: json("contextUsed").notNull(),
+  modelProvider: varchar("modelProvider", { length: 64 }).notNull(),
+  modelName: varchar("modelName", { length: 128 }).notNull(),
+  modelVersion: varchar("modelVersion", { length: 128 }),
+  promptVersion: varchar("promptVersion", { length: 64 }).notNull(),
+  schemaVersion: varchar("schemaVersion", { length: 64 }).notNull(),
+  validatorVersion: varchar("validatorVersion", { length: 64 }).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  uniqueIndex("uq_madison_decisions_source_message").on(t.sourceMessageId),
+  index("idx_madison_decisions_session_created").on(t.sessionId, t.createdAt),
+  index("idx_madison_decisions_disposition_created").on(t.disposition, t.createdAt),
+]);
+export type MadisonDecisionRecord = typeof madisonDecisions.$inferSelect;
+export type InsertMadisonDecisionRecord = typeof madisonDecisions.$inferInsert;
+
+/** Independently reviewable intents within a decision. */
+export const madisonIntents = mysqlTable("madison_intents", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  decisionId: bigint("decisionId", { mode: "number" }).notNull(),
+  intentKey: varchar("intentKey", { length: 64 }).notNull(),
+  intentType: mysqlEnum("intentType", madisonIntentTypes as unknown as [string, ...string[]]).notNull(),
+  confidence: decimal("confidence", { precision: 5, scale: 4 }),
+  evidence: json("evidence").notNull(),
+  uncertainties: json("uncertainties").notNull(),
+  target: json("target").notNull(),
+  request: json("request").notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  uniqueIndex("uq_madison_intents_decision_key").on(t.decisionId, t.intentKey),
+  index("idx_madison_intents_decision").on(t.decisionId),
+  index("idx_madison_intents_type").on(t.intentType),
+]);
+export type MadisonIntentRecord = typeof madisonIntents.$inferSelect;
+export type InsertMadisonIntentRecord = typeof madisonIntents.$inferInsert;
+
+/** One operational proposal per actionable intent/action pair. */
+export const madisonActionProposals = mysqlTable("madison_action_proposals", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  intentId: bigint("intentId", { mode: "number" }).notNull(),
+  decisionId: bigint("decisionId", { mode: "number" }).notNull(),
+  proposalKey: varchar("proposalKey", { length: 96 }).notNull(),
+  actionType: mysqlEnum("actionType", madisonActionTypes as unknown as [string, ...string[]]).notNull(),
+  operation: mysqlEnum("operation", madisonModificationOperations as unknown as [string, ...string[]]),
+  parameters: json("parameters").notNull(),
+  targetType: varchar("targetType", { length: 32 }).notNull(),
+  targetId: varchar("targetId", { length: 128 }),
+  occurrenceKey: varchar("occurrenceKey", { length: 128 }),
+  riskLevel: tinyint("riskLevel").notNull(),
+  readiness: mysqlEnum("readiness", madisonActionReadiness as unknown as [string, ...string[]]).notNull(),
+  missingParameters: json("missingParameters").notNull(),
+  verificationSteps: json("verificationSteps").notNull(),
+  expectedCurrentState: json("expectedCurrentState").notNull(),
+  bookingVersion: varchar("bookingVersion", { length: 128 }),
+  actionFingerprint: varchar("actionFingerprint", { length: 128 }).notNull(),
+  status: mysqlEnum("status", madisonProposalStatuses as unknown as [string, ...string[]]).notNull().default("PROPOSED"),
+  supersededByProposalId: bigint("supersededByProposalId", { mode: "number" }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  uniqueIndex("uq_madison_action_proposals_key").on(t.proposalKey),
+  uniqueIndex("uq_madison_action_proposals_fingerprint").on(t.actionFingerprint),
+  index("idx_madison_action_proposals_intent").on(t.intentId),
+  index("idx_madison_action_proposals_decision").on(t.decisionId),
+  index("idx_madison_action_proposals_status_created").on(t.status, t.createdAt),
+  index("idx_madison_action_proposals_target").on(t.targetId),
+  index("idx_madison_action_proposals_superseded").on(t.supersededByProposalId),
+]);
+export type MadisonActionProposalRecord = typeof madisonActionProposals.$inferSelect;
+export type InsertMadisonActionProposalRecord = typeof madisonActionProposals.$inferInsert;
+
+/** Immutable human approval, dismissal, and correction audit events. */
+export const madisonActionApprovals = mysqlTable("madison_action_approvals", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  proposalId: bigint("proposalId", { mode: "number" }).notNull(),
+  decision: mysqlEnum("decision", madisonApprovalDecisions as unknown as [string, ...string[]]).notNull(),
+  correctedActionType: mysqlEnum("correctedActionType", madisonActionTypes as unknown as [string, ...string[]]),
+  correctionReason: varchar("correctionReason", { length: 64 }),
+  correctedBy: varchar("correctedBy", { length: 128 }).notNull(),
+  createdIssueId: bigint("createdIssueId", { mode: "number" }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  index("idx_madison_action_approvals_proposal_created").on(t.proposalId, t.createdAt),
+  index("idx_madison_action_approvals_issue").on(t.createdIssueId),
+  index("idx_madison_action_approvals_decision_created").on(t.decision, t.createdAt),
+]);
+export type MadisonActionApprovalRecord = typeof madisonActionApprovals.$inferSelect;
+export type InsertMadisonActionApprovalRecord = typeof madisonActionApprovals.$inferInsert;
 
 /**
  * madisonEmailDrafts — one row per inbound email thread that Madison processes.
