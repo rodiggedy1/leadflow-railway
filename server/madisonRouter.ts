@@ -231,16 +231,21 @@ function publicCandidate(candidate: MadisonCandidate) {
   };
 }
 
-export function getSmsQueueLastRole(messageHistory: string | null, summaryRole: string | null): string | null {
-  if (summaryRole && summaryRole !== "unknown") return summaryRole;
-  if (!messageHistory) return summaryRole;
+export function getSmsQueueLastRole(messageHistory: string | null): string | null {
+  // The summary columns can be stale when an inbound/outbound write races or
+  // when older history was backfilled. The queue must match the conversation
+  // the owner sees, so use the last real SMS entry from messageHistory.
+  if (!messageHistory) return null;
   try {
     const history = JSON.parse(messageHistory) as unknown;
-    if (!Array.isArray(history)) return summaryRole;
-    const last = history.at(-1) as { role?: string } | undefined;
-    return typeof last?.role === "string" ? last.role : summaryRole;
+    if (!Array.isArray(history)) return null;
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const role = (history[index] as { role?: unknown } | null)?.role;
+      if (role === "user" || role === "assistant") return role;
+    }
+    return null;
   } catch {
-    return summaryRole;
+    return null;
   }
 }
 
@@ -263,7 +268,6 @@ export const madisonRouter = router({
         metadata: opsChatMessages.metadata,
         mediaUrl: opsChatMessages.mediaUrl,
         draftStatus: madisonSmsDrafts.status,
-        lastMessageRole: conversationSessions.lastMessageRole,
         messageHistory: conversationSessions.messageHistory,
       })
       .from(opsChatMessages)
@@ -280,7 +284,7 @@ export const madisonRouter = router({
       ))
       .orderBy(desc(opsChatMessages.lastActivityAt), desc(opsChatMessages.id));
     return rows
-      .filter(row => shouldShowSmsQueueCard(getSmsQueueLastRole(row.messageHistory, row.lastMessageRole)))
+      .filter(row => shouldShowSmsQueueCard(getSmsQueueLastRole(row.messageHistory)))
       .map(row => ({
         id: row.id,
         ts: row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now(),
