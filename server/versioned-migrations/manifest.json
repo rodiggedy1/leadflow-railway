@@ -423,6 +423,14 @@
       "sha256": "993347c6540422a5fe47a0a5250c1bbfbbc31530135b4d52ad2f4a25121f7f33",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0055_create_madison_action_approvals.postconditions.json"
+    },
+    {
+      "id": "0056_create_madison_missions",
+      "mode": "create-table",
+      "sqlFile": "0056_create_madison_missions.sql",
+      "sha256": "19d70800d64afeffa4d002e35debf93dd2e5cae6045083219f2b28e1048b06dc",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0056_create_madison_missions.postconditions.json"
     }
   ]
 }

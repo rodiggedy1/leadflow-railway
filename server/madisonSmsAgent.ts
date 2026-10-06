@@ -27,6 +27,7 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
+import { formatVerifiedQuoteReply, resolveVerifiedQuote } from "./madisonMissionStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -207,12 +208,21 @@ export async function triggerMadisonSmsDraft(params: {
 
     // ── Step 4.5: Fetch conversation history for LLM context ─────────────────
     let conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+    let quoteInputs: { bedrooms: string | null; bathrooms: string | null; serviceType: string | null } | undefined;
     try {
       const [sessionRow] = await db
-        .select({ messageHistory: conversationSessions.messageHistory })
+        .select({
+          messageHistory: conversationSessions.messageHistory,
+          bedrooms: conversationSessions.bedrooms,
+          bathrooms: conversationSessions.bathrooms,
+          serviceType: conversationSessions.serviceType,
+        })
         .from(conversationSessions)
         .where(eq(conversationSessions.id, sessionId))
         .limit(1);
+      quoteInputs = sessionRow
+        ? { bedrooms: sessionRow.bedrooms, bathrooms: sessionRow.bathrooms, serviceType: sessionRow.serviceType }
+        : undefined;
       const parsed = JSON.parse((sessionRow?.messageHistory as string) ?? "[]");
       if (Array.isArray(parsed)) {
         conversationMessages = parsed
@@ -244,6 +254,10 @@ export async function triggerMadisonSmsDraft(params: {
       knowledgeContext,
       conversationMessages,
     });
+    const verifiedQuote = resolveVerifiedQuote(quoteInputs ?? {}).quote;
+    const reviewDraft = verifiedQuote
+      ? formatVerifiedQuoteReply(verifiedQuote)
+      : draftResponse.draft;
 
     // ── Step 6: Compute Quality Score ─────────────────────────────────────────
     const qualityScore = computeQualityScore({
@@ -264,7 +278,7 @@ export async function triggerMadisonSmsDraft(params: {
         observations: draftResponse.observations as any,
         suggestedActions: draftResponse.suggestedActions as any,
         followUps: draftResponse.followUps as any,
-        generatedDraft: draftResponse.draft,
+        generatedDraft: reviewDraft,
         intentSummary: draftResponse.intentSummary,
         qualityScore: qualityScore as any,
         updatedAt: new Date(),
@@ -292,10 +306,11 @@ export async function triggerMadisonSmsDraft(params: {
       classification,
       intent,
       intentSummary: draftResponse.intentSummary,
-      draft: draftResponse.draft,
+      draft: reviewDraft,
       context,
       capabilityResult,
       contextUsed,
+      quoteInputs,
     });
     // ── Step 7.5: Classify lead category ────────────────────────────────────────
     const leadCategory = await classifyLeadCategory({
@@ -320,7 +335,7 @@ export async function triggerMadisonSmsDraft(params: {
       senderName: context.senderName ?? senderName,
       isCleaner,
       inboundText,
-      draft: draftResponse.draft,
+      draft: reviewDraft,
       observations: draftResponse.observations,
       leadCategory,
       unansweredMinutes,

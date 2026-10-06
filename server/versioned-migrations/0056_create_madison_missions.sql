@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS `madison_customer_missions` (
+  `id` bigint AUTO_INCREMENT NOT NULL,
+  `missionKey` varchar(160) NOT NULL,
+  `sessionId` bigint NOT NULL,
+  `customerId` varchar(128),
+  `leadId` varchar(128),
+  `bookingId` varchar(128),
+  `type` enum('BOOK_SERVICE','MODIFY_BOOKING','CANCEL_BOOKING','RESOLVE_SERVICE_ISSUE','RESOLVE_PAYMENT_ISSUE','GENERAL_SUPPORT') NOT NULL,
+  `status` enum('ACTIVE','WAITING_CUSTOMER','WAITING_APPROVAL','WAITING_SYSTEM','COMPLETED','ABANDONED','ESCALATED') NOT NULL,
+  `objective` text NOT NULL,
+  `currentStep` varchar(64) NOT NULL,
+  `nextBestAction` varchar(64),
+  `resolvedContext` json NOT NULL,
+  `missingContext` json NOT NULL,
+  `createdAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_madison_customer_missions_key` (`missionKey`),
+  KEY `idx_madison_customer_missions_session_status` (`sessionId`,`status`),
+  KEY `idx_madison_customer_missions_type_status` (`type`,`status`),
+  KEY `idx_madison_customer_missions_customer` (`customerId`)
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `madison_customer_mission_facts` (
+  `id` bigint AUTO_INCREMENT NOT NULL,
+  `missionId` bigint NOT NULL,
+  `factKey` varchar(96) NOT NULL,
+  `value` json NOT NULL,
+  `source` enum('customer_sms','leadflow_context') NOT NULL,
+  `sourceRecordId` varchar(128),
+  `sourceMessageId` varchar(128),
+  `confidence` enum('verified','customer_stated') NOT NULL,
+  `observedAt` datetime(3) NOT NULL,
+  `verifiedAt` datetime(3),
+  `expiresAt` datetime(3),
+  `createdAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_madison_customer_mission_facts_key` (`missionId`,`factKey`),
+  KEY `idx_madison_customer_mission_facts_source_message` (`sourceMessageId`),
+  KEY `idx_madison_customer_mission_facts_expires` (`expiresAt`)
+);
