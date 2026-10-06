@@ -1,9 +1,10 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions } from "../drizzle/schema";
+import { conversationSessions, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
 
@@ -230,7 +231,85 @@ function publicCandidate(candidate: MadisonCandidate) {
   };
 }
 
+export function getSmsQueueLastRole(messageHistory: string | null, summaryRole: string | null): string | null {
+  if (summaryRole && summaryRole !== "unknown") return summaryRole;
+  if (!messageHistory) return summaryRole;
+  try {
+    const history = JSON.parse(messageHistory) as unknown;
+    if (!Array.isArray(history)) return summaryRole;
+    const last = history.at(-1) as { role?: string } | undefined;
+    return typeof last?.role === "string" ? last.role : summaryRole;
+  } catch {
+    return summaryRole;
+  }
+}
+
+export function shouldShowSmsQueueCard(lastRole: string | null, draftStatus: string): boolean {
+  return lastRole === "user" || draftStatus === "DRAFT_READY";
+}
+
 export const madisonRouter = router({
+  getActiveSmsQueue: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db
+      .select({
+        id: opsChatMessages.id,
+        createdAt: opsChatMessages.createdAt,
+        body: opsChatMessages.body,
+        metadata: opsChatMessages.metadata,
+        mediaUrl: opsChatMessages.mediaUrl,
+        draftStatus: madisonSmsDrafts.status,
+        lastMessageRole: conversationSessions.lastMessageRole,
+        messageHistory: conversationSessions.messageHistory,
+      })
+      .from(opsChatMessages)
+      .innerJoin(madisonSmsDrafts, and(
+        eq(sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`, madisonSmsDrafts.id),
+        notInArray(madisonSmsDrafts.status, ["SENT", "DISMISSED", "DELIVERED"]),
+      ))
+      .leftJoin(conversationSessions, eq(opsChatMessages.sessionId, conversationSessions.id))
+      .where(and(
+        eq(opsChatMessages.channel, "command"),
+        eq(opsChatMessages.quickAction as any, "madison_sms_draft"),
+        eq(opsChatMessages.cardStatus as any, "active"),
+        sql`JSON_VALID(${opsChatMessages.metadata}) = 1`,
+      ))
+      .orderBy(desc(opsChatMessages.lastActivityAt), desc(opsChatMessages.id));
+    return rows
+      .filter(row => shouldShowSmsQueueCard(getSmsQueueLastRole(row.messageHistory, row.lastMessageRole), row.draftStatus))
+      .map(row => ({
+        id: row.id,
+        ts: row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now(),
+        quickAction: "madison_sms_draft" as const,
+        body: row.body,
+        metadata: row.metadata ?? null,
+        mediaUrl: row.mediaUrl ?? null,
+      }));
+  }),
+  resolveSmsCard: opsChatProcedure
+    .input(z.object({
+      messageId: z.number().int().positive(),
+      resolutionReason: z.enum(["no_reply_needed", "handled_elsewhere"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false as const, reason: "no_db" };
+      const [card] = await db.select({ metadata: opsChatMessages.metadata, cardStatus: opsChatMessages.cardStatus })
+        .from(opsChatMessages)
+        .where(and(eq(opsChatMessages.id, input.messageId), eq(opsChatMessages.quickAction as any, "madison_sms_draft")))
+        .limit(1);
+      if (!card) return { ok: false as const, reason: "not_found" };
+      if (card.cardStatus !== "active") return { ok: false as const, reason: "already_resolved" };
+      let metadata: Record<string, unknown> = {};
+      try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* replace malformed metadata with an audit payload */ }
+      const updatedMetadata = JSON.stringify({ ...metadata, resolvedBy: ctx.opsCaller.name, resolvedAt: new Date().toISOString(), resolutionReason: input.resolutionReason });
+      await db.update(opsChatMessages)
+        .set({ metadata: updatedMetadata, cardStatus: "dismissed", activeDedupKey: null })
+        .where(and(eq(opsChatMessages.id, input.messageId), eq(opsChatMessages.cardStatus as any, "active")));
+      broadcastOpsUpdate("madison_sms_card_resolved", { messageId: input.messageId });
+      return { ok: true as const };
+    }),
   getNextBestActions: opsChatProcedure.query(async () => {
     const candidates = await loadMadisonCandidates();
     return {
