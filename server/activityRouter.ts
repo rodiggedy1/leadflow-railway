@@ -7,13 +7,14 @@
 import { router, protectedProcedure, opsChatProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { activityLog } from "../drizzle/schema";
-import { desc, gte, isNull } from "drizzle-orm";
+import { activityLog, madisonSmsDrafts } from "../drizzle/schema";
+import { madisonSmsActionApprovals } from "./madisonActionApprovalStore";
+import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 
 export const activityRouter = router({
   /**
-   * Get the latest activity feed items.
-   * Returns the most recent historical events, newest first.
+   * Get Madison's historical approved actions.
+   * Generic activity such as new leads and bookings is intentionally excluded.
    */
   getFeed: opsChatProcedure
     .input(z.object({
@@ -28,28 +29,63 @@ export const activityRouter = router({
       const sinceDays = input?.sinceDays ?? 30;
       const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
-      const items = await db
-        .select()
-        .from(activityLog)
-        .where(gte(activityLog.createdAt, since))
-        .orderBy(desc(activityLog.createdAt))
-        .limit(limit);
+      const [approvedReplies, approvedTasks] = await Promise.all([
+        db.select({
+          id: madisonSmsDrafts.id,
+          senderName: madisonSmsDrafts.senderName,
+          approvedText: madisonSmsDrafts.approvedText,
+          generatedDraft: madisonSmsDrafts.generatedDraft,
+          originalMessage: madisonSmsDrafts.originalMessage,
+          approvedBy: madisonSmsDrafts.approvedBy,
+          sentAt: madisonSmsDrafts.sentAt,
+          deliveredAt: madisonSmsDrafts.deliveredAt,
+        })
+          .from(madisonSmsDrafts)
+          .where(and(
+            inArray(madisonSmsDrafts.status, ["SENT", "DELIVERED"]),
+            gte(madisonSmsDrafts.sentAt, since),
+          )),
+        db.select({
+          id: madisonSmsActionApprovals.id,
+          customerName: madisonSmsActionApprovals.customerName,
+          task: madisonSmsActionApprovals.task,
+          recommendation: madisonSmsActionApprovals.recommendation,
+          approvedBy: madisonSmsActionApprovals.approvedBy,
+          approvedAt: madisonSmsActionApprovals.approvedAt,
+          issueId: madisonSmsActionApprovals.issueId,
+        })
+          .from(madisonSmsActionApprovals)
+          .where(and(
+            eq(madisonSmsActionApprovals.status, "APPROVED"),
+            gte(madisonSmsActionApprovals.approvedAt, since),
+          )),
+      ]);
 
-      // Count unread (readAt is null)
-      const unreadCount = items.filter(item => item.readAt === null).length;
-
-      return {
-        items: items.map(item => ({
-          id: item.id,
-          eventType: item.eventType,
-          title: item.title,
-          body: item.body,
-          meta: item.meta ? (() => { try { return JSON.parse(item.meta!); } catch { return {}; } })() : {},
-          readAt: item.readAt,
-          createdAt: item.createdAt,
+      const items = [
+        ...approvedReplies.map(reply => ({
+          id: reply.id,
+          eventType: "ai_sms_sent" as const,
+          title: `Madison sent approved reply${reply.senderName ? ` — ${reply.senderName}` : ""}`,
+          body: reply.approvedText ?? reply.generatedDraft ?? reply.originalMessage,
+          meta: { kind: "madison_reply", draftId: reply.id, approvedBy: reply.approvedBy },
+          readAt: null,
+          createdAt: reply.sentAt ?? reply.deliveredAt,
         })),
-        unreadCount,
-      };
+        ...approvedTasks.map(task => ({
+          id: -task.id,
+          eventType: "ai_sms_sent" as const,
+          title: `Madison task approved${task.customerName ? ` — ${task.customerName}` : ""}`,
+          body: `${task.task}. ${task.recommendation}`,
+          meta: { kind: "madison_task", approvalId: task.id, issueId: task.issueId, approvedBy: task.approvedBy },
+          readAt: null,
+          createdAt: task.approvedAt,
+        })),
+      ]
+        .filter(item => item.createdAt !== null)
+        .sort((a, b) => b.createdAt!.getTime() - a.createdAt!.getTime())
+        .slice(0, limit);
+
+      return { items, unreadCount: 0 };
     }),
 
   /**
