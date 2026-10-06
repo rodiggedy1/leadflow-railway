@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FocusEvent, type MouseEvent } from "react";
-import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Command, CreditCard, LayoutDashboard, Mail, MessageSquareMore, PanelsTopLeft, PhoneCall, PhoneOutgoing, Receipt, SlidersHorizontal, Star, UserRound, UserRoundCheck, UsersRound, WalletCards } from "lucide-react";
+import { BarChart3, Bot, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Command, CreditCard, LayoutDashboard, Mail, MessageSquareMore, PanelsTopLeft, PhoneCall, PhoneOutgoing, Receipt, SlidersHorizontal, Star, UserRound, UserRoundCheck, UsersRound, WalletCards } from "lucide-react";
 import { useLocation } from "wouter";
 import "./review-workspace-nav.css";
 
@@ -11,7 +11,7 @@ type ReviewDestination = {
 };
 
 const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
-  { label: "CRM OVERVIEW", items: [{ label: "Dashboard", href: "/review/operations-dashboard", liveHref: "/admin/dashboard", icon: LayoutDashboard }, { label: "Workspace Chat", href: "/review/command-chat-crm", liveHref: "/admin/command-chat", icon: Command }, { label: "Leads CRM", href: "/review/leads-crm", liveHref: "/admin/leads", icon: LayoutDashboard }, { label: "Bookings CRM", href: "/review/bookings-crm", liveHref: "/admin/bookings", icon: CalendarDays }] },
+  { label: "CRM OVERVIEW", items: [{ label: "Dashboard", href: "/review/operations-dashboard", liveHref: "/admin/dashboard", icon: LayoutDashboard }, { label: "AI Team", href: "/review/ai-team", icon: Bot }, { label: "Workspace Chat", href: "/review/command-chat-crm", liveHref: "/admin/command-chat", icon: Command }, { label: "Leads CRM", href: "/review/leads-crm", liveHref: "/admin/leads", icon: LayoutDashboard }, { label: "Bookings CRM", href: "/review/bookings-crm", liveHref: "/admin/bookings", icon: CalendarDays }, { label: "Revenue", href: "/review/revenue-agent", liveHref: "/admin/revenue-agent", icon: BarChart3 }] },
   {
     label: "CUSTOMER OPERATIONS",
     items: [
@@ -35,7 +35,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
 
 export default function ReviewWorkspaceNav({ activePath }: { activePath?: string }) {
   const [location] = useLocation();
-  const defaultOpenRoutes = ["/review/operations-dashboard", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
+  const defaultOpenRoutes = ["/review/operations-dashboard", "/review/ai-team", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/revenue-agent", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
   const routeKey = activePath ?? location;
   const useLiveDestinations = activePath !== undefined;
   const settingsHref = useLiveDestinations ? "/admin/settings" : "/review/settings";
