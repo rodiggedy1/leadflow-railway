@@ -115,6 +115,19 @@ function getIssueCategory(message: string): IssueCategory {
   return "General question";
 }
 
+function formatConversationTime(ts: number | null | undefined): string | null {
+  if (!ts) return null;
+  const milliseconds = ts < 1_000_000_000_000 ? ts * 1000 : ts;
+  const date = new Date(milliseconds);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function AgentAvatar({ agent, large = false }: { agent: Agent; large?: boolean }) {
   return <div className={`ai-team-avatar ai-team-avatar--${agent.color} ${large ? "is-large" : ""}`}><Sparkles size={large ? 23 : 17} /></div>;
 }
@@ -131,7 +144,7 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
   );
 }
 
-function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
+function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
   const utils = trpc.useUtils();
   const [showConversation, setShowConversation] = useState(false);
   let metadata: { draftId?: number } = {};
@@ -189,17 +202,18 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
   if (!draft) return null;
   const proposal = getCustomerCareProposal(draft.originalMessage ?? "");
   const customerName = draft.senderName ?? "Customer";
+  const latestCardTime = formatConversationTime(card.ts);
   return (
     <article className="ai-team-need-card">
       <div className="ai-team-need-icon"><MessageSquare size={17} /></div>
       <div className="ai-team-need-copy">
         <strong>{proposal?.title ?? "Madison reply approval"}</strong>
-        <p>{customerName}: “{draft.originalMessage}”</p>
+        <p>{customerName}: “{draft.originalMessage}”{latestCardTime && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {latestCardTime}</time>}</p>
         <em>{proposal ? <><b>Recommended task:</b> {proposal.task}<br /><span>Madison recommends: {proposal.recommendation}</span></> : "Approve the drafted reply below."}</em>
         <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{draft.generatedDraft ?? "Draft is still being prepared."}</div>
         <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
         {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">
-          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small><p>{message.content}</p></div>)}
+          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => { const messageTime = formatConversationTime(message.ts); return <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small>{messageTime && <time dateTime={new Date(message.ts).toISOString()}>{messageTime}</time>}</div><p>{message.content}</p></div>; })}
         </div>}
       </div>
       <div className="ai-team-need-actions">
