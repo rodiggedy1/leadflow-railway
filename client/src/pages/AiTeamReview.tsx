@@ -21,6 +21,7 @@ import "./ai-team-review.css";
 
 type Tab = "overview" | "agents" | "activity";
 type IssueCategory = "Reschedule" | "Cancellation" | "Service issue" | "Refund / credit" | "General question" | "Booking request";
+type ActivityItem = { id: number; ts: number; title: string; detail: string; kind: "madison" };
 const ISSUE_CATEGORIES: IssueCategory[] = ["Reschedule", "Cancellation", "Service issue", "Refund / credit", "General question", "Booking request"];
 type Agent = {
   id: string;
@@ -242,6 +243,13 @@ export default function AiTeamReview() {
   const utils = trpc.useUtils();
   const { data: focusCards = [], isLoading: focusLoading } = trpc.madison.getActiveSmsQueue.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
+  const activityItems: ActivityItem[] = liveSmsCards.slice(0, 6).map(card => ({
+    id: card.id,
+    ts: card.ts,
+    title: "Madison SMS awaiting review",
+    detail: card.body,
+    kind: "madison",
+  }));
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
   const refreshLiveQueue = () => { void utils.madison.getActiveSmsQueue.invalidate(); };
 
@@ -262,11 +270,11 @@ export default function AiTeamReview() {
         <section className="ai-team-summary"><div><strong>184</strong><span>actions handled today</span></div><div><strong>37</strong><span>leads answered</span></div><div><strong>12</strong><span>bookings made</span></div><div><strong>$4,821</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
-        <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact /></section>
+        <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact items={activityItems} /></section>
       </>}
 
       {tab === "agents" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>AI TEAM</span><h2>Employees, not automations</h2></div><p>Each agent has a mission, authority, and clear escalation boundary.</p></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>}
-      {tab === "activity" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>A clear record of what got done</h2></div><p>Open an item to see the reasoning, context, and action.</p></div><ActivityList /></section>}
+      {tab === "activity" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>A clear record of what got done</h2></div><p>Open an item to see the reasoning, context, and action.</p></div><ActivityList items={activityItems} /></section>}
 
       <section className="ai-team-autonomy"><div><span>AUTONOMY</span><h2>How much should AI handle?</h2><p>Configure the default. Set tighter rules for individual actions in each agent’s authority.</p></div><div className="ai-team-autonomy-control"><div className="ai-team-autonomy-track">{["observe", "assist", "act", "run business"].map(item => <button type="button" key={item} className={autonomy === item ? "is-active" : ""} onClick={() => { setAutonomy(item); toast.info("Autonomy control is a visual review state only."); }}>{item}</button>)}</div><small>{autonomy === "observe" ? "AI recommends actions but does not take them." : autonomy === "assist" ? "AI handles conversations and asks before operational changes." : autonomy === "act" ? "AI handles routine operations independently." : "AI only escalates exceptions outside its authority."}</small></div></section>
 
@@ -275,6 +283,7 @@ export default function AiTeamReview() {
   );
 }
 
-function ActivityList({ compact = false }: { compact?: boolean }) {
-  return <div className={`ai-team-activity-list ${compact ? "is-compact" : ""}`}>{ACTIVITY.map(([time, title, detail, kind]) => <button type="button" className="ai-team-activity-row" key={`${time}-${title}`} onClick={() => toast.info("Activity detail is a review-only interaction.")}><time>{time}</time><span className={`ai-team-activity-dot is-${kind}`} /> <div><strong>{title}</strong><p>{detail}</p></div><ChevronRight size={15} /></button>)}</div>;
+function ActivityList({ compact = false, items }: { compact?: boolean; items: ActivityItem[] }) {
+  if (items.length === 0) return <div className="ai-team-activity-list"><div className="ai-team-activity-empty">No active Madison activity is waiting for review.</div></div>;
+  return <div className={`ai-team-activity-list ${compact ? "is-compact" : ""}`}>{items.map(item => <button type="button" className="ai-team-activity-row" key={item.id} onClick={() => toast.info("Open the Madison card above to review this item.")}><time>{new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(item.ts))}</time><span className={`ai-team-activity-dot is-${item.kind}`} /> <div><strong>{item.title}</strong><p>{item.detail}</p></div><ChevronRight size={15} /></button>)}</div>;
 }
