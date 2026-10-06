@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "table": "madison_sms_draft_edits",
+  "columns": [
+    { "name": "id", "columnType": "bigint", "nullable": false, "autoIncrement": true },
+    { "name": "draftId", "columnType": "bigint", "nullable": false },
+    { "name": "originalText", "columnType": "text", "nullable": false },
+    { "name": "editedText", "columnType": "text", "nullable": false },
+    { "name": "editedBy", "columnType": "varchar(128)", "nullable": false },
+    { "name": "editedAt", "columnType": "datetime(3)", "nullable": false, "default": "CURRENT_TIMESTAMP(3)" }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "idx_madison_sms_draft_edits_draft", "columns": ["draftId"], "unique": false },
+    { "name": "idx_madison_sms_draft_edits_time", "columns": ["editedAt"], "unique": false }
+  ]
+}
