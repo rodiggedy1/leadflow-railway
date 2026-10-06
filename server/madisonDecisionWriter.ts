@@ -17,6 +17,7 @@ import {
 } from "@shared/madisonOperations";
 import { createMadisonActionFingerprint } from "./madisonOperationsValidator";
 import type { CapabilityResult, ClassificationResult, ResolvedContext } from "./madisonSmsAgent";
+import { hasBookServiceSignal, upsertBookServiceMission } from "./madisonMissionStore";
 
 type MadisonDb = NonNullable<Awaited<ReturnType<import("./db").getDb>>>;
 
@@ -203,6 +204,15 @@ export async function persistMadisonDecision(
     } catch (error) {
       if (!isDuplicate(error)) throw error;
     }
+  }
+
+  if (hasBookServiceSignal(input.inboundText)) {
+    await upsertBookServiceMission(db, {
+      sessionId: input.sessionId,
+      sourceMessageId: input.sourceMessageId,
+      inboundText: input.inboundText,
+      context: input.context,
+    });
   }
 
   return { decisionId, created: true };
