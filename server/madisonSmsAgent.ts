@@ -24,6 +24,9 @@ import { ENV } from "./_core/env";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
 import { sendSms } from "./openphone";
+import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
+import type { MadisonResolvedContext } from "./madisonContext";
+import { persistMadisonDecision } from "./madisonDecisionWriter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,16 +37,7 @@ export interface ClassificationResult {
   intentConfidence: number; // 0–1
 }
 
-export interface ResolvedContext {
-  customerId?: number;
-  customerName?: string;
-  cleanerJobId?: number;
-  teamName?: string;
-  cleanerPhone?: string;
-  serviceDateTime?: string;
-  isCleaner: boolean;
-  senderName?: string;
-}
+export type ResolvedContext = MadisonResolvedContext;
 
 export interface CapabilityResult {
   capability: string;
@@ -187,7 +181,7 @@ export async function triggerMadisonSmsDraft(params: {
     const intent = resolveIntent(classification.type, inboundText);
 
     // ── Step 3: Resolve Context (who is this person?) ─────────────────────────
-    const context = await resolveContext(fromPhone, isCleaner, senderName, db);
+    const context = await resolveMadisonContext(fromPhone, isCleaner, senderName, db);
     await db.update(madisonSmsDrafts)
       .set({
         status: "TOOLS_RUNNING",
@@ -277,6 +271,32 @@ export async function triggerMadisonSmsDraft(params: {
       })
       .where(eq(madisonSmsDrafts.id, draftId));
 
+    const contextUsed = [
+      {
+        kind: "latest_message" as const,
+        id: inboundOpenPhoneId,
+        summary: "Latest inbound SMS",
+      },
+      ...(context.bookingId
+        ? [{ kind: "active_booking" as const, id: String(context.bookingId), summary: "Matched native booking" }]
+        : []),
+      ...(context.leadflowJobId
+        ? [{ kind: "upcoming_booking" as const, id: String(context.leadflowJobId), summary: "Matched LeadFlow operational job" }]
+        : []),
+    ];
+    await persistMadisonDecision(db, {
+      sourceMessageId: inboundOpenPhoneId,
+      sessionId,
+      customerId: context.customerId ?? null,
+      inboundText,
+      classification,
+      intent,
+      intentSummary: draftResponse.intentSummary,
+      draft: draftResponse.draft,
+      context,
+      capabilityResult,
+      contextUsed,
+    });
     // ── Step 7.5: Classify lead category ────────────────────────────────────────
     const leadCategory = await classifyLeadCategory({
       sessionId,
@@ -413,184 +433,43 @@ function resolveIntent(type: SmsMessageType, text: string): string | null {
 
 // ─── Step 3: Resolve Context ──────────────────────────────────────────────────
 
-async function resolveContext(
-  fromPhone: string,
-  isCleaner: boolean,
-  senderName: string | undefined,
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
-): Promise<ResolvedContext> {
-  const { cleanerJobs, cleanerProfiles, completedJobs } = await import("../drizzle/schema");
-  const { like, ne } = await import("drizzle-orm");
-
-  const fromPhoneDigits = fromPhone.replace(/^\+1/, "").replace(/[^\d]/g, "");
-  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-
-  // Try to find today's job for this phone number
-  try {
-    if (isCleaner) {
-      // Look up by cleaner phone
-      const [profile] = await db
-        .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
-        .from(cleanerProfiles)
-        .where(eq(cleanerProfiles.phone, fromPhoneDigits))
-        .limit(1);
-
-      if (profile) {
-        const [job] = await db
-          .select({
-            id: cleanerJobs.id,
-            customerName: cleanerJobs.customerName,
-            teamName: cleanerJobs.teamName,
-            serviceDateTime: cleanerJobs.serviceDateTime,
-          })
-          .from(cleanerJobs)
-          .where(
-            and(
-              eq(cleanerJobs.cleanerProfileId, profile.id),
-              eq(cleanerJobs.jobDate, today),
-              ne(cleanerJobs.bookingStatus, "cancelled"),
-              ne(cleanerJobs.bookingStatus, "rescheduled"),
-            )
-          )
-          .orderBy(cleanerJobs.serviceDateTime)
-          .limit(1);
-
-        return {
-          isCleaner: true,
-          senderName: profile.name ?? senderName,
-          cleanerJobId: job?.id,
-          customerName: job?.customerName ?? undefined,
-          teamName: job?.teamName ?? undefined,
-          serviceDateTime: job?.serviceDateTime ?? undefined,
-          cleanerPhone: fromPhone,
-        };
-      }
-    } else {
-      // Look up customer by phone — check completedJobs and cleanerJobs
-      const phoneFormatted = `(${fromPhoneDigits.slice(0, 3)}) ${fromPhoneDigits.slice(3, 6)}-${fromPhoneDigits.slice(6)}`;
-
-      const [job] = await db
-        .select({
-          id: cleanerJobs.id,
-          customerName: cleanerJobs.customerName,
-          teamName: cleanerJobs.teamName,
-          serviceDateTime: cleanerJobs.serviceDateTime,
-          cleanerPhone: cleanerProfiles.phone,
-        })
-        .from(cleanerJobs)
-        .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
-        .where(
-          and(
-            like(cleanerJobs.customerPhone, `%${fromPhoneDigits.slice(-7)}%`),
-            eq(cleanerJobs.jobDate, today),
-            ne(cleanerJobs.bookingStatus, "cancelled"),
-            ne(cleanerJobs.bookingStatus, "rescheduled"),
-          )
-        )
-        .orderBy(cleanerJobs.serviceDateTime)
-        .limit(1);
-
-      if (job) {
-        return {
-          isCleaner: false,
-          senderName: job.customerName ?? senderName,
-          cleanerJobId: job.id,
-          customerName: job.customerName ?? undefined,
-          teamName: job.teamName ?? undefined,
-          serviceDateTime: job.serviceDateTime ?? undefined,
-          cleanerPhone: job.cleanerPhone ? `+1${job.cleanerPhone}` : undefined,
-        };
-      }
-    }
-  } catch (err) {
-    console.warn("[MadisonSMS] resolveContext error:", err);
-  }
-
-  return { isCleaner, senderName };
-}
-
 // ─── Step 4a: Capability — get_eta ───────────────────────────────────────────
 
 export async function executeGetEta(
   context: ResolvedContext,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<CapabilityResult> {
-  const observations: string[] = [];
-  const suggestedActions: string[] = ["send", "edit", "dismiss"];
-  const followUps: string[] = [];
-
-  if (!context.cleanerJobId) {
-    observations.push("No job found for today for this contact.");
+  if (!context.leadflowJobId) {
     return {
       capability: "get_eta",
-      capabilityVersion: 1,
-      args: { fromPhone: context.cleanerPhone },
-      result: { found: false },
-      observations,
+      capabilityVersion: 2,
+      args: {},
+      result: { found: false, reason: "leadflow_job_unresolved" },
+      observations: ["No unambiguous LeadFlow-owned operational job matched this customer."],
       suggestedActions: ["send", "edit", "dismiss"],
-      followUps: ["Check if job is scheduled for a different date"],
+      followUps: ["Verify the customer and booking before checking ETA."],
     };
   }
 
-  // Check for a recent ETA call result (< 30 minutes old)
-  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
-  const recentEtaMsg = await db
-    .select({ body: opsChatMessages.body, createdAt: opsChatMessages.createdAt })
-    .from(opsChatMessages)
-    .where(
-      and(
-        eq(opsChatMessages.quickAction, "eta_call_result"),
-        eq(opsChatMessages.channel, "command"),
-      )
-    )
-    .orderBy(desc(opsChatMessages.createdAt))
-    .limit(1)
-    .catch(() => []);
-
-  const recentEta = recentEtaMsg[0];
-  const etaAge = recentEta ? (Date.now() - new Date(recentEta.createdAt).getTime()) : Infinity;
-
-  if (recentEta && etaAge < 15 * 60 * 1000) {
-    // Fresh ETA (< 15 min) — use directly
-    observations.push(`✅ ETA already on file (${Math.round(etaAge / 60000)} min ago): ${recentEta.body?.slice(0, 100)}`);
-    observations.push(`Job scheduled: ${context.serviceDateTime ?? "unknown time"}`);
-    return {
-      capability: "get_eta",
-      capabilityVersion: 1,
-      args: { cleanerJobId: context.cleanerJobId },
-      result: { etaFromCache: recentEta.body, ageMinutes: Math.round(etaAge / 60000) },
-      observations,
-      suggestedActions: ["send", "edit", "dismiss"],
-      followUps: [],
-    };
-  } else if (recentEta && etaAge < 30 * 60 * 1000) {
-    // Slightly stale (15–30 min) — use with timestamp
-    observations.push(`⚠️ ETA on file is ${Math.round(etaAge / 60000)} min old: ${recentEta.body?.slice(0, 100)}`);
-    observations.push(`Job scheduled: ${context.serviceDateTime ?? "unknown time"}`);
-    suggestedActions.push("call_team");
-    followUps.push("Consider calling team for a fresh ETA");
-  } else {
-    // No recent ETA — suggest calling
-    observations.push(`No recent ETA on file.`);
-    observations.push(`Job scheduled: ${context.serviceDateTime ?? "unknown time"}`);
-    if (context.teamName) observations.push(`Team: ${context.teamName}`);
-    suggestedActions.push("call_team");
-    followUps.push("Call team to get current ETA");
-  }
+  const progress = await getMadisonEtaProgress(context.leadflowJobId, db);
 
   return {
     capability: "get_eta",
-    capabilityVersion: 1,
-    args: { cleanerJobId: context.cleanerJobId },
+    capabilityVersion: 2,
+    args: { leadflowJobId: context.leadflowJobId },
     result: {
       found: true,
       serviceDateTime: context.serviceDateTime,
       teamName: context.teamName,
-      hasRecentEta: !!recentEta && etaAge < 30 * 60 * 1000,
+      etaTimeStr: progress?.etaTimeStr ?? null,
+      etaTimestamp: progress?.etaTimestamp ?? null,
+      jobStatus: progress?.jobStatus ?? "assigned",
     },
-    observations,
-    suggestedActions,
-    followUps,
+    observations: progress?.etaTimeStr
+      ? [`LeadFlow ETA on file: ${progress.etaTimeStr}.`]
+      : ["LeadFlow job matched, but no ETA has been recorded yet."],
+    suggestedActions: ["send", "edit", "dismiss"],
+    followUps: progress?.etaTimeStr ? [] : ["Verify ETA with the assigned team before promising a time."],
   };
 }
 
@@ -600,80 +479,30 @@ export async function executeCardStatus(
   context: ResolvedContext,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<CapabilityResult> {
-  const observations: string[] = [];
-
-  if (!context.cleanerJobId) {
-    observations.push("No job found for today for this contact.");
+  if (!context.bookingId) {
     return {
       capability: "card_status",
-      capabilityVersion: 1,
+      capabilityVersion: 2,
       args: {},
-      result: { found: false },
-      observations,
+      result: { found: false, reason: "booking_unresolved" },
+      observations: ["No unambiguous native booking matched this customer."],
       suggestedActions: ["send", "edit", "dismiss"],
-      followUps: [],
+      followUps: ["Verify the customer and booking before checking payment status."],
     };
   }
 
-  try {
-    const { cleanerJobs } = await import("../drizzle/schema");
-    const [job] = await db
-      .select({
-        id: cleanerJobs.id,
-        customerName: cleanerJobs.customerName,
-        bookingStatus: cleanerJobs.bookingStatus,
-        cardStatus: (cleanerJobs as any).cardStatus,
-        preAuthStatus: (cleanerJobs as any).preAuthStatus,
-      })
-      .from(cleanerJobs)
-      .where(eq(cleanerJobs.id, context.cleanerJobId))
-      .limit(1);
-
-    if (!job) {
-      observations.push("Job not found in database.");
-      return {
-        capability: "card_status",
-        capabilityVersion: 1,
-        args: { cleanerJobId: context.cleanerJobId },
-        result: { found: false },
-        observations,
-        suggestedActions: ["send", "edit", "dismiss"],
-        followUps: [],
-      };
-    }
-
-    const cardStatus = job.cardStatus ?? "unknown";
-    const preAuthStatus = job.preAuthStatus ?? "unknown";
-
-    if (cardStatus === "on_file" || cardStatus === "charged") {
-      observations.push(`✅ Card on file for ${job.customerName}`);
-      observations.push(`Payment status: ${cardStatus}`);
-    } else {
-      observations.push(`⚠️ Card issue for ${job.customerName}: ${cardStatus}`);
-      observations.push(`Pre-auth status: ${preAuthStatus}`);
-    }
-
-    return {
-      capability: "card_status",
-      capabilityVersion: 1,
-      args: { cleanerJobId: context.cleanerJobId },
-      result: { cardStatus, preAuthStatus, customerName: job.customerName },
-      observations,
-      suggestedActions: ["send", "edit", "dismiss"],
-      followUps: [],
-    };
-  } catch (err) {
-    observations.push("Could not retrieve card status from database.");
-    return {
-      capability: "card_status",
-      capabilityVersion: 1,
-      args: { cleanerJobId: context.cleanerJobId },
-      result: { error: String(err) },
-      observations,
-      suggestedActions: ["send", "edit", "dismiss"],
-      followUps: [],
-    };
-  }
+  const payment = await getMadisonBookingPayment(context.bookingId, db);
+  return {
+    capability: "card_status",
+    capabilityVersion: 2,
+    args: { bookingId: context.bookingId },
+    result: payment ? { found: true, ...payment } : { found: false, reason: "booking_not_found" },
+    observations: payment
+      ? [`Native booking payment status: ${payment.paymentStatus}.`]
+      : ["The resolved native booking no longer exists."],
+    suggestedActions: ["send", "edit", "dismiss"],
+    followUps: [],
+  };
 }
 
 // ─── Step 5: Generate DraftResponse ──────────────────────────────────────────
@@ -897,7 +726,7 @@ async function classifyLeadCategory(params: {
     if (context.isCleaner) return "regular";
 
     // ── Deterministic rule 2: has a job today → operational → regular ─────────
-    if (context.cleanerJobId) return "regular";
+    if (context.bookingId || context.leadflowJobId) return "regular";
 
     // ── Deterministic rule 3: operational intents → regular ───────────────────
     if (intent === "get_eta" || intent === "card_status") return "regular";
