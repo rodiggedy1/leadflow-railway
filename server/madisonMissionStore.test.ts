@@ -8,6 +8,7 @@ import {
   formatMissingQuoteQuestion,
   hasBookServiceSignal,
   resolveVerifiedQuote,
+  shouldContinueBookServiceQuote,
 } from "./madisonMissionStore";
 
 describe("Madison BOOK_SERVICE mission foundation", () => {
@@ -44,6 +45,9 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
         bedrooms: "2 bedrooms",
         bathrooms: "2 bathrooms",
         serviceType: "standard",
+        condition: 5,
+        extras: [],
+        extrasConfirmed: true,
       })
     ).toEqual({
       missing: [],
@@ -51,31 +55,63 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
         bedrooms: "2 Bedrooms",
         bathrooms: "2 Bathrooms",
         serviceType: "Standard Cleaning",
+        condition: 5,
+        extras: [],
         amountDollars: 269,
-        pricingVersion: "engine/pricing-v1",
+        pricingVersion: "public-book-v2",
       },
     });
   });
 
   it("does not calculate or invent a quote when a required input is missing", () => {
     expect(
-      resolveVerifiedQuote({ bedrooms: "2 bedrooms", bathrooms: "2 bathrooms" })
+      resolveVerifiedQuote({ bedrooms: "2 bedrooms", bathrooms: "2 bathrooms", serviceType: "standard" })
     ).toEqual({
       quote: null,
-      missing: ["serviceType"],
+      missing: ["condition", "extras"],
     });
   });
 
+  it("applies the canonical condition adjustment and extras total", () => {
+    const result = resolveVerifiedQuote({
+      bedrooms: "2 bedrooms",
+      bathrooms: "2 bathrooms",
+      serviceType: "standard",
+      condition: 7,
+      extras: [{ id: "inside-oven", quantity: 1 }],
+      extrasConfirmed: true,
+    });
+    expect(result.quote?.amountDollars).toBe(368);
+    expect(result.quote?.extras).toEqual([{ id: "inside-oven", quantity: 1 }]);
+  });
+
   it("extracts quote inputs from the customer SMS", () => {
-    expect(extractQuoteInputsFromText("We need a deep cleaning for our 3 bed, 2.5 bath home")).toEqual({
+    expect(extractQuoteInputsFromText("We need a deep cleaning for our 3 bed, 2.5 bath home, condition 7, plus inside oven")).toEqual({
       bedrooms: "3 bed",
       bathrooms: "2.5 bath",
       serviceType: "Deep Cleaning",
+      condition: 7,
+      extras: [{ id: "inside-oven", quantity: 1 }],
+      extrasConfirmed: true,
     });
   });
 
   it("asks only for the verified fields still missing", () => {
     expect(formatMissingQuoteQuestion(["bathrooms", "serviceType"])).toBe("I can get that quote started — could you tell me how many bathrooms are in the home and what type of cleaning you need (standard, deep, or move-in/move-out)?");
+  });
+
+  it("requires condition and an extras answer before finalizing a quote", () => {
+    expect(formatMissingQuoteQuestion(["condition", "extras"])).toContain("home’s condition from 1 to 10");
+    expect(formatMissingQuoteQuestion(["condition", "extras"])).toContain("or just say no extras");
+  });
+
+  it("does not hide condition and extras from the initial quote question", () => {
+    expect(formatMissingQuoteQuestion(["serviceType", "bedrooms", "bathrooms", "condition", "extras"])).toContain("whether you want any extras");
+  });
+
+  it("continues an active quote mission when the customer only supplies details", () => {
+    expect(shouldContinueBookServiceQuote("I need a standard cleaning and it's a two bedroom 2 Bathroom.", true, false)).toBe(true);
+    expect(shouldContinueBookServiceQuote("I need a standard cleaning and it's a two bedroom 2 Bathroom.", false, false)).toBe(false);
   });
 
   it("maps Madison mission columns to the deployed table names", async () => {

@@ -33,12 +33,11 @@ export async function createMadisonQuoteLink(
     bedrooms,
     bathrooms,
     homeType: "House" as const,
-    condition: 5,
+    condition: verified.quote.condition,
     maidCount: 1,
     hourCount: 3,
-    extras: [],
+    extras: verified.quote.extras,
     recurrence: "one-time" as const,
-    customPriceCents: verified.quote.amountDollars * 100,
   };
   const priceSnapshot = createPublicBookingPriceSnapshot(pricing);
   const publicFunnelNumber = createBookingFunnelNumber();
@@ -60,8 +59,11 @@ export async function createMadisonQuoteLink(
     serviceName: priceSnapshot.serviceName,
     bedrooms,
     bathrooms,
-    extras: [],
-    specialRequestNotes: ["Created from Madison verified quote"],
+    extras: verified.quote.extras,
+    specialRequestNotes: [
+      "Created from Madison verified quote",
+      `Home condition: ${verified.quote.condition}/10`,
+    ],
     address: null,
     requestedLocalDate: null,
     requestedLocalTime: null,
