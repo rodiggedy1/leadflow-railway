@@ -27,6 +27,8 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
+import { extractQuoteInputsFromText, formatMissingQuoteQuestion, formatVerifiedQuoteReply, hasBookServiceSignal, resolveVerifiedQuote } from "./madisonMissionStore";
+import { createMadisonQuoteLink } from "./madisonQuoteLinkService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -207,12 +209,21 @@ export async function triggerMadisonSmsDraft(params: {
 
     // ── Step 4.5: Fetch conversation history for LLM context ─────────────────
     let conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+    let quoteInputs: { bedrooms: string | null; bathrooms: string | null; serviceType: string | null } | undefined;
     try {
       const [sessionRow] = await db
-        .select({ messageHistory: conversationSessions.messageHistory })
+        .select({
+          messageHistory: conversationSessions.messageHistory,
+          bedrooms: conversationSessions.bedrooms,
+          bathrooms: conversationSessions.bathrooms,
+          serviceType: conversationSessions.serviceType,
+        })
         .from(conversationSessions)
         .where(eq(conversationSessions.id, sessionId))
         .limit(1);
+      quoteInputs = sessionRow
+        ? { bedrooms: sessionRow.bedrooms, bathrooms: sessionRow.bathrooms, serviceType: sessionRow.serviceType }
+        : undefined;
       const parsed = JSON.parse((sessionRow?.messageHistory as string) ?? "[]");
       if (Array.isArray(parsed)) {
         conversationMessages = parsed
@@ -244,6 +255,41 @@ export async function triggerMadisonSmsDraft(params: {
       knowledgeContext,
       conversationMessages,
     });
+    const extractedQuoteInputs = extractQuoteInputsFromText(inboundText);
+    quoteInputs = {
+      bedrooms: quoteInputs?.bedrooms ?? extractedQuoteInputs.bedrooms,
+      bathrooms: quoteInputs?.bathrooms ?? extractedQuoteInputs.bathrooms,
+      serviceType: quoteInputs?.serviceType ?? extractedQuoteInputs.serviceType,
+    };
+    const quoteResolution = resolveVerifiedQuote(quoteInputs);
+    const verifiedQuote = quoteResolution.quote;
+    let automaticQuoteLink: string | null = null;
+    let automaticQuoteReply: string | null = null;
+    let reviewDraft = draftResponse.draft;
+    if (hasBookServiceSignal(inboundText)) {
+      if (!verifiedQuote) {
+        automaticQuoteReply = formatMissingQuoteQuestion(quoteResolution.missing);
+        reviewDraft = automaticQuoteReply;
+      }
+    }
+    if (verifiedQuote && hasBookServiceSignal(inboundText) && quoteInputs) {
+      try {
+        const quoteLink = await createMadisonQuoteLink(db, {
+          sessionId,
+          customerName: context.senderName ?? senderName,
+          customerPhone: fromPhone,
+          quoteInputs,
+          agentName: "Madison",
+        });
+        automaticQuoteLink = quoteLink.absoluteUrl;
+        automaticQuoteReply = `${formatVerifiedQuoteReply(verifiedQuote)}\n\nYou can choose your date and finish your details here: ${automaticQuoteLink}`;
+        reviewDraft = automaticQuoteReply;
+      } catch (error) {
+        console.error(`[MadisonSMS] Automatic quote-link creation failed for draft ${draftId}:`, error);
+        automaticQuoteReply = null;
+        reviewDraft = formatVerifiedQuoteReply(verifiedQuote);
+      }
+    }
 
     // ── Step 6: Compute Quality Score ─────────────────────────────────────────
     const qualityScore = computeQualityScore({
@@ -264,7 +310,7 @@ export async function triggerMadisonSmsDraft(params: {
         observations: draftResponse.observations as any,
         suggestedActions: draftResponse.suggestedActions as any,
         followUps: draftResponse.followUps as any,
-        generatedDraft: draftResponse.draft,
+        generatedDraft: reviewDraft,
         intentSummary: draftResponse.intentSummary,
         qualityScore: qualityScore as any,
         updatedAt: new Date(),
@@ -292,11 +338,32 @@ export async function triggerMadisonSmsDraft(params: {
       classification,
       intent,
       intentSummary: draftResponse.intentSummary,
-      draft: draftResponse.draft,
+      draft: reviewDraft,
       context,
       capabilityResult,
       contextUsed,
+      quoteInputs,
     });
+    if (automaticQuoteReply) {
+      const [claimResult] = await db
+        .update(madisonSmsDrafts)
+        .set({ status: "SENDING", approvedText: reviewDraft, approvedBy: "madison_auto_quote", approvedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(madisonSmsDrafts.id, draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
+      if (((claimResult as any).affectedRows ?? 0) === 1) {
+        try {
+          const result = await sendSms({ to: fromPhone, content: reviewDraft, fromNumberId: ENV.openPhoneCsNumberId || undefined });
+          await db.update(madisonSmsDrafts)
+            .set({ status: "SENT", sentAt: new Date(), outboundOpenPhoneId: result.messageId ?? null, updatedAt: new Date() })
+            .where(eq(madisonSmsDrafts.id, draftId));
+          await postAutoSentCard({ draftId, sessionId, fromPhone, senderName: context.senderName ?? senderName ?? fromPhone, inboundText, autoReply: reviewDraft, autoSendConfidence: 1, db });
+          console.log(`[MadisonSMS] AUTO-SENT quote flow reply for ${fromPhone}: ${automaticQuoteLink ?? "missing-input question"}`);
+          return;
+        } catch (error) {
+          await db.update(madisonSmsDrafts).set({ status: "FAILED", errorMessage: error instanceof Error ? error.message : "Automatic quote SMS failed", updatedAt: new Date() }).where(eq(madisonSmsDrafts.id, draftId));
+          throw error;
+        }
+      }
+    }
     // ── Step 7.5: Classify lead category ────────────────────────────────────────
     const leadCategory = await classifyLeadCategory({
       sessionId,
@@ -320,7 +387,7 @@ export async function triggerMadisonSmsDraft(params: {
       senderName: context.senderName ?? senderName,
       isCleaner,
       inboundText,
-      draft: draftResponse.draft,
+      draft: reviewDraft,
       observations: draftResponse.observations,
       leadCategory,
       unansweredMinutes,

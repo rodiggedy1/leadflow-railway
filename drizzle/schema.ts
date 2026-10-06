@@ -3937,6 +3937,55 @@ export const madisonMissions = mysqlTable("madison_missions", {
 export type MadisonMission = typeof madisonMissions.$inferSelect;
 export type InsertMadisonMission = typeof madisonMissions.$inferInsert;
 
+/** Persistent customer objective shared across multiple Madison SMS messages. */
+export const madisonCustomerMissions = mysqlTable("madison_customer_missions", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  missionKey: varchar("missionKey", { length: 160 }).notNull(),
+  sessionId: bigint("sessionId", { mode: "number" }).notNull(),
+  customerId: varchar("customerId", { length: 128 }),
+  leadId: varchar("leadId", { length: 128 }),
+  bookingId: varchar("bookingId", { length: 128 }),
+  type: mysqlEnum("type_customer_mission", ["BOOK_SERVICE", "MODIFY_BOOKING", "CANCEL_BOOKING", "RESOLVE_SERVICE_ISSUE", "RESOLVE_PAYMENT_ISSUE", "GENERAL_SUPPORT"]).notNull(),
+  status: mysqlEnum("status_customer_mission", ["ACTIVE", "WAITING_CUSTOMER", "WAITING_APPROVAL", "WAITING_SYSTEM", "COMPLETED", "ABANDONED", "ESCALATED"]).notNull(),
+  objective: text("objective").notNull(),
+  currentStep: varchar("currentStep", { length: 64 }).notNull(),
+  nextBestAction: varchar("nextBestAction", { length: 64 }),
+  resolvedContext: json("resolvedContext").notNull(),
+  missingContext: json("missingContext").notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  uniqueIndex("uq_madison_customer_missions_key").on(t.missionKey),
+  index("idx_madison_customer_missions_session_status").on(t.sessionId, t.status),
+  index("idx_madison_customer_missions_type_status").on(t.type, t.status),
+  index("idx_madison_customer_missions_customer").on(t.customerId),
+]);
+export type MadisonCustomerMissionRecord = typeof madisonCustomerMissions.$inferSelect;
+export type InsertMadisonCustomerMissionRecord = typeof madisonCustomerMissions.$inferInsert;
+
+/** Provenance-bearing facts collected from customer messages and LeadFlow context. */
+export const madisonCustomerMissionFacts = mysqlTable("madison_customer_mission_facts", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  missionId: bigint("missionId", { mode: "number" }).notNull(),
+  factKey: varchar("factKey", { length: 96 }).notNull(),
+  value: json("value").notNull(),
+  source: mysqlEnum("source_customer_mission_fact", ["customer_sms", "leadflow_context"]).notNull(),
+  sourceRecordId: varchar("sourceRecordId", { length: 128 }),
+  sourceMessageId: varchar("sourceMessageId", { length: 128 }),
+  confidence: mysqlEnum("confidence_customer_mission_fact", ["verified", "customer_stated"]).notNull(),
+  observedAt: datetime("observedAt", { mode: "date", fsp: 3 }).notNull(),
+  verifiedAt: datetime("verifiedAt", { mode: "date", fsp: 3 }),
+  expiresAt: datetime("expiresAt", { mode: "date", fsp: 3 }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  uniqueIndex("uq_madison_customer_mission_facts_key").on(t.missionId, t.factKey),
+  index("idx_madison_customer_mission_facts_source_message").on(t.sourceMessageId),
+  index("idx_madison_customer_mission_facts_expires").on(t.expiresAt),
+]);
+export type MadisonCustomerMissionFactRecord = typeof madisonCustomerMissionFacts.$inferSelect;
+export type InsertMadisonCustomerMissionFactRecord = typeof madisonCustomerMissionFacts.$inferInsert;
+
 // ─── Invoice Templates ────────────────────────────────────────────────────────
 export const invoiceTemplates = mysqlTable("invoiceTemplates", {
   id: int("id").autoincrement().primaryKey(),
@@ -4366,7 +4415,6 @@ export const madisonActionApprovals = mysqlTable("madison_action_approvals", {
 ]);
 export type MadisonActionApprovalRecord = typeof madisonActionApprovals.$inferSelect;
 export type InsertMadisonActionApprovalRecord = typeof madisonActionApprovals.$inferInsert;
-
 /**
  * madisonEmailDrafts — one row per inbound email thread that Madison processes.
  * Mirrors madisonSmsDrafts exactly; sending uses gmail.sendReply instead of OpenPhone.

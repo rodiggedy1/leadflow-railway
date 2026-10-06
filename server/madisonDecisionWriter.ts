@@ -17,6 +17,7 @@ import {
 } from "@shared/madisonOperations";
 import { createMadisonActionFingerprint } from "./madisonOperationsValidator";
 import type { CapabilityResult, ClassificationResult, ResolvedContext } from "./madisonSmsAgent";
+import { hasBookServiceSignal, upsertBookServiceMission, type QuoteInputs } from "./madisonMissionStore";
 
 type MadisonDb = NonNullable<Awaited<ReturnType<import("./db").getDb>>>;
 
@@ -32,6 +33,7 @@ export type PersistMadisonDecisionInput = {
   context: ResolvedContext;
   capabilityResult: CapabilityResult | null;
   contextUsed: MadisonContextReference[];
+  quoteInputs?: QuoteInputs;
 };
 
 function isDuplicate(error: unknown): boolean {
@@ -203,6 +205,16 @@ export async function persistMadisonDecision(
     } catch (error) {
       if (!isDuplicate(error)) throw error;
     }
+  }
+
+  if (hasBookServiceSignal(input.inboundText)) {
+    await upsertBookServiceMission(db, {
+      sessionId: input.sessionId,
+      sourceMessageId: input.sourceMessageId,
+      inboundText: input.inboundText,
+      context: input.context,
+      quoteInputs: input.quoteInputs,
+    });
   }
 
   return { decisionId, created: true };
