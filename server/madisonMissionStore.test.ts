@@ -117,6 +117,26 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
     expect(shouldContinueBookServiceQuote("I need a standard cleaning and it's a two bedroom 2 Bathroom.", false, false)).toBe(false);
   });
 
+  it("does not turn ordinary operational messages into quote requests", () => {
+    const falsePositives = [
+      "Yes! I told my husband. He is going to be doing it in the next 30 mins.",
+      "Can I confirm by tomorrow?",
+      "Can you cancel the cleaning for tomorrow?",
+      "The website won't let me pause cleaning since it's after 5.",
+      "Do you have availability Monday?",
+    ];
+    for (const message of falsePositives) {
+      expect(shouldContinueBookServiceQuote(message, true, true)).toBe(false);
+    }
+  });
+
+  it("continues an active quote mission for recognizable field answers", () => {
+    expect(shouldContinueBookServiceQuote("standard cleaning", true, false)).toBe(true);
+    expect(shouldContinueBookServiceQuote("3 bedrooms and 2 bathrooms", true, false)).toBe(true);
+    expect(shouldContinueBookServiceQuote("condition 7", true, false)).toBe(true);
+    expect(shouldContinueBookServiceQuote("no extras", true, false)).toBe(true);
+  });
+
   it("maps Madison mission columns to the deployed table names", async () => {
     const schema = await readFile(path.resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     expect(schema).toContain('type: mysqlEnum("type",');

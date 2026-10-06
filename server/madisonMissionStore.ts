@@ -77,10 +77,27 @@ export function hasBookServiceSignal(text: string): boolean {
 
 export function shouldContinueBookServiceQuote(
   text: string,
-  hasActiveMission: boolean,
-  hasVerifiedQuote: boolean,
+  _hasActiveMission: boolean,
+  _hasVerifiedQuote: boolean,
 ): boolean {
-  return hasActiveMission || hasVerifiedQuote || hasBookServiceSignal(text);
+  const normalized = text.toLowerCase();
+  const explicitQuoteRequest = /\b(quote|price|pricing|cost|how much)\b/.test(
+    normalized,
+  );
+  const extracted = extractQuoteInputsFromText(text);
+  const suppliesQuoteInput = Boolean(
+    extracted.serviceType ||
+      extracted.bedrooms ||
+      extracted.bathrooms ||
+      extracted.condition ||
+      extracted.extras !== null ||
+      extracted.extrasConfirmed,
+  );
+
+  // An active mission or an already-verified quote is context, not proof that
+  // the current SMS is another quote step. The current message must contain
+  // quote language or a recognizable answer to one of Madison's quote fields.
+  return explicitQuoteRequest || (_hasActiveMission && suppliesQuoteInput);
 }
 
 export async function hasActiveBookServiceMission(
