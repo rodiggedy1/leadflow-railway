@@ -227,7 +227,7 @@ export const bookingFunnelRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
       const rows = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.token)).limit(1);
       const row = rows[0];
-      if (!row || row.source !== "customer-booking-link" || row.stage === "cancelled") throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
+      if (!row || !["customer-booking-link", "madison-quote"].includes(row.source) || row.stage === "cancelled") throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
       return customerLinkSafeRecord(row);
     }),
 
