@@ -20,6 +20,8 @@ import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import "./ai-team-review.css";
 
 type Tab = "overview" | "agents" | "activity";
+type IssueCategory = "Reschedule" | "Cancellation" | "Service issue" | "Refund / credit" | "General question" | "Booking request";
+const ISSUE_CATEGORIES: IssueCategory[] = ["Reschedule", "Cancellation", "Service issue", "Refund / credit", "General question", "Booking request"];
 type Agent = {
   id: string;
   name: string;
@@ -103,6 +105,16 @@ function getCustomerCareProposal(message: string) {
   return null;
 }
 
+function getIssueCategory(message: string): IssueCategory {
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  if (/(^|\b)(reschedule|reschedul|move my|change my|different date|different time|another day)(\b|$)/.test(normalized)) return "Reschedule";
+  if (/(^|\b)(cancel|cancellation|call off|don'?t need the clean)(\b|$)/.test(normalized)) return "Cancellation";
+  if (/(^|\b)(refund|credit|money back|charged twice|charge me)(\b|$)/.test(normalized)) return "Refund / credit";
+  if (/(^|\b)(problem|issue|missed|complaint|not happy|broken|damaged|dirty|didn'?t clean)(\b|$)/.test(normalized)) return "Service issue";
+  if (/(^|\b)(book|booking|quote|price|estimate|availability|available|schedule a clean|start service)(\b|$)/.test(normalized)) return "Booking request";
+  return "General question";
+}
+
 function AgentAvatar({ agent, large = false }: { agent: Agent; large?: boolean }) {
   return <div className={`ai-team-avatar ai-team-avatar--${agent.color} ${large ? "is-large" : ""}`}><Sparkles size={large ? 23 : 17} /></div>;
 }
@@ -176,6 +188,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
 
 export default function AiTeamReview() {
   const [tab, setTab] = useState<Tab>("overview");
+  const [issueFilter, setIssueFilter] = useState<IssueCategory | "All issues">("All issues");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [autonomy, setAutonomy] = useState("assist");
   const [resolved, setResolved] = useState<string[]>([]);
@@ -183,6 +196,7 @@ export default function AiTeamReview() {
   const utils = trpc.useUtils();
   const { data: focusCards = [], isLoading: focusLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
+  const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
   const refreshLiveQueue = () => { void utils.opsChat.getFocusCards.invalidate(); };
 
   const actionPreview = (id: string, action: string) => {
@@ -200,7 +214,7 @@ export default function AiTeamReview() {
 
       {tab === "overview" && <>
         <section className="ai-team-summary"><div><strong>184</strong><span>actions handled today</span></div><div><strong>37</strong><span>leads answered</span></div><div><strong>12</strong><span>bookings made</span></div><div><strong>$4,821</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
-        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : liveSmsCards.map(card => <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
+        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
         <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact /></section>
       </>}
