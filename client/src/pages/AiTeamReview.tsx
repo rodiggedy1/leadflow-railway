@@ -21,7 +21,21 @@ import "./ai-team-review.css";
 
 type Tab = "overview" | "agents" | "activity";
 type IssueCategory = "Reschedule" | "Cancellation" | "Service issue" | "Refund / credit" | "General question" | "Booking request";
-type ActivityItem = { id: number; ts: number; title: string; detail: string; kind: "madison" };
+type ActivityAudit = {
+  kind: "madison_reply" | "madison_task";
+  originalMessage?: string | null;
+  incomingMessage?: string | null;
+  approvedText?: string | null;
+  task?: string | null;
+  recommendation?: string | null;
+  status?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: Date | string | null;
+  sentAt?: Date | string | null;
+  deliveredAt?: Date | string | null;
+  issueId?: number | null;
+};
+type ActivityItem = { id: number; ts: number; title: string; detail: string; kind: "madison"; audit: ActivityAudit };
 const ISSUE_CATEGORIES: IssueCategory[] = ["Reschedule", "Cancellation", "Service issue", "Refund / credit", "General question", "Booking request"];
 type Agent = {
   id: string;
@@ -261,6 +275,7 @@ export default function AiTeamReview() {
     title: item.title,
     detail: item.body ?? item.eventType.replace(/_/g, " "),
     kind: "madison",
+    audit: item.meta as ActivityAudit,
   }));
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
   const refreshLiveQueue = () => { void utils.madison.getActiveSmsQueue.invalidate(); };
@@ -290,7 +305,7 @@ export default function AiTeamReview() {
 
       <section className="ai-team-autonomy"><div><span>AUTONOMY</span><h2>How much should AI handle?</h2><p>Configure the default. Set tighter rules for individual actions in each agent’s authority.</p></div><div className="ai-team-autonomy-control"><div className="ai-team-autonomy-track">{["observe", "assist", "act", "run business"].map(item => <button type="button" key={item} className={autonomy === item ? "is-active" : ""} onClick={() => { setAutonomy(item); toast.info("Autonomy control is a visual review state only."); }}>{item}</button>)}</div><small>{autonomy === "observe" ? "AI recommends actions but does not take them." : autonomy === "assist" ? "AI handles conversations and asks before operational changes." : autonomy === "act" ? "AI handles routine operations independently." : "AI only escalates exceptions outside its authority."}</small></div></section>
 
-      {selectedActivity && <div className="ai-team-drawer-backdrop" role="presentation" onClick={() => setSelectedActivity(null)}><aside className="ai-team-drawer" role="dialog" aria-modal="true" aria-label={`${selectedActivity.title} details`} onClick={event => event.stopPropagation()}><button className="ai-team-drawer-close" type="button" onClick={() => setSelectedActivity(null)} aria-label="Close activity details"><X size={18} /></button><div className="ai-team-drawer-agent"><div className="ai-team-avatar ai-team-avatar--violet"><MessageSquare size={22} /></div><div><span>AI TEAM · MADISON ACTIVITY</span><h2>{selectedActivity.title}</h2><p>{formatActivityTime(selectedActivity.ts)}</p></div></div><div className="ai-team-drawer-block"><span>ACTION</span><strong>Approved Madison action</strong></div><div className="ai-team-drawer-block"><span>DETAIL</span><p className="ai-team-activity-detail">{selectedActivity.detail}</p></div><button type="button" className="ai-team-drawer-footer" onClick={() => setSelectedActivity(null)}>Close detail <X size={15} /></button></aside></div>}
+      {selectedActivity && <div className="ai-team-drawer-backdrop" role="presentation" onClick={() => setSelectedActivity(null)}><aside className="ai-team-drawer" role="dialog" aria-modal="true" aria-label={`${selectedActivity.title} details`} onClick={event => event.stopPropagation()}><button className="ai-team-drawer-close" type="button" onClick={() => setSelectedActivity(null)} aria-label="Close activity details"><X size={18} /></button><div className="ai-team-drawer-agent"><div className="ai-team-avatar ai-team-avatar--violet"><MessageSquare size={22} /></div><div><span>AI TEAM · MADISON ACTIVITY</span><h2>{selectedActivity.title}</h2><p>{formatActivityTime(selectedActivity.ts)}</p></div></div><div className="ai-team-drawer-block"><span>STATUS</span><strong>{selectedActivity.audit.kind === "madison_task" ? "Task approved" : "Approved and sent"}</strong><p className="ai-team-activity-detail">{selectedActivity.audit.kind === "madison_task" ? "The booking remained unchanged. A human-approved customer-care task was created." : "Madison’s approved reply was sent to the customer."}</p></div><div className="ai-team-drawer-block"><span>CUSTOMER MESSAGE</span><p className="ai-team-activity-detail">{selectedActivity.audit.originalMessage ?? selectedActivity.audit.incomingMessage ?? "No original message was stored."}</p></div>{selectedActivity.audit.kind === "madison_reply" ? <div className="ai-team-drawer-block"><span>APPROVED REPLY</span><p className="ai-team-activity-detail">{selectedActivity.audit.approvedText ?? selectedActivity.detail}</p></div> : <div className="ai-team-drawer-block"><span>RECOMMENDED TASK</span><strong>{selectedActivity.audit.task ?? selectedActivity.title}</strong><p className="ai-team-activity-detail">{selectedActivity.audit.recommendation ?? selectedActivity.detail}</p>{selectedActivity.audit.issueId && <p className="ai-team-audit-meta">Issue ID: {selectedActivity.audit.issueId}</p>}</div>}<div className="ai-team-drawer-block"><span>APPROVAL</span><p className="ai-team-audit-meta">Approved by: {selectedActivity.audit.approvedBy ?? "Owner"}</p><p className="ai-team-audit-meta">Approved: {selectedActivity.audit.approvedAt ? formatActivityTime(new Date(selectedActivity.audit.approvedAt).getTime()) : formatActivityTime(selectedActivity.ts)}</p>{selectedActivity.audit.kind === "madison_reply" && selectedActivity.audit.deliveredAt && <p className="ai-team-audit-meta">Delivered: {formatActivityTime(new Date(selectedActivity.audit.deliveredAt).getTime())}</p>}</div><button type="button" className="ai-team-drawer-footer" onClick={() => setSelectedActivity(null)}>Close detail <X size={15} /></button></aside></div>}
       {selectedAgent && <div className="ai-team-drawer-backdrop" role="presentation" onClick={() => setSelectedAgent(null)}><aside className="ai-team-drawer" role="dialog" aria-modal="true" aria-label={`${selectedAgent.name} details`} onClick={event => event.stopPropagation()}><button className="ai-team-drawer-close" type="button" onClick={() => setSelectedAgent(null)} aria-label="Close agent details"><X size={18} /></button><div className="ai-team-drawer-agent"><AgentAvatar agent={selectedAgent} large /><div><span>AI TEAM · AGENT PROFILE</span><h2>{selectedAgent.name}</h2><p>{selectedAgent.role}</p></div></div><div className="ai-team-drawer-block"><span>MISSION</span><strong>{selectedAgent.mission}</strong></div><div className="ai-team-drawer-block"><span>CAN DO</span><div className="ai-team-check-list">{selectedAgent.capabilities.map(item => <p key={item}><Check size={14} />{item}</p>)}</div></div><div className="ai-team-drawer-block ai-team-drawer-escalate"><span>REQUIRES YOUR APPROVAL</span>{selectedAgent.approvals.map(item => <p key={item}><AlertTriangle size={14} />{item}</p>)}</div><button type="button" className="ai-team-drawer-footer" onClick={() => toast.info("Conversation detail is part of the next review iteration.")}>Watch current conversation <ArrowRight size={15} /></button></aside></div>}
     </main>
   );
