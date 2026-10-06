@@ -32,6 +32,6 @@ describe("Madison substantive SMS human approval boundary", () => {
 
     expect(approvalCardStart).toBeGreaterThan(substantiveDraftStart);
     expect(approvalCardBlock).toContain("postDraftCardToCommandChat");
-    expect(approvalCardBlock).toContain("draft: draftResponse.draft");
+    expect(approvalCardBlock).toContain("draft: reviewDraft");
   });
 });

@@ -274,7 +274,7 @@ export const madisonRouter = router({
       .from(opsChatMessages)
       .innerJoin(madisonSmsDrafts, and(
         eq(sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`, madisonSmsDrafts.id),
-        notInArray(madisonSmsDrafts.status, ["SENT", "DISMISSED", "DELIVERED"]),
+        notInArray(madisonSmsDrafts.status, ["DISMISSED"]),
       ))
       .leftJoin(conversationSessions, eq(opsChatMessages.sessionId, conversationSessions.id))
       .where(and(
