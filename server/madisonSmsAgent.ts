@@ -27,7 +27,7 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
-import { formatVerifiedQuoteReply, hasBookServiceSignal, resolveVerifiedQuote } from "./madisonMissionStore";
+import { extractQuoteInputsFromText, formatMissingQuoteQuestion, formatVerifiedQuoteReply, hasBookServiceSignal, resolveVerifiedQuote } from "./madisonMissionStore";
 import { createMadisonQuoteLink } from "./madisonQuoteLinkService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -255,9 +255,23 @@ export async function triggerMadisonSmsDraft(params: {
       knowledgeContext,
       conversationMessages,
     });
-    const verifiedQuote = resolveVerifiedQuote(quoteInputs ?? {}).quote;
+    const extractedQuoteInputs = extractQuoteInputsFromText(inboundText);
+    quoteInputs = {
+      bedrooms: quoteInputs?.bedrooms ?? extractedQuoteInputs.bedrooms,
+      bathrooms: quoteInputs?.bathrooms ?? extractedQuoteInputs.bathrooms,
+      serviceType: quoteInputs?.serviceType ?? extractedQuoteInputs.serviceType,
+    };
+    const quoteResolution = resolveVerifiedQuote(quoteInputs);
+    const verifiedQuote = quoteResolution.quote;
     let automaticQuoteLink: string | null = null;
+    let automaticQuoteReply: string | null = null;
     let reviewDraft = draftResponse.draft;
+    if (hasBookServiceSignal(inboundText)) {
+      if (!verifiedQuote) {
+        automaticQuoteReply = formatMissingQuoteQuestion(quoteResolution.missing);
+        reviewDraft = automaticQuoteReply;
+      }
+    }
     if (verifiedQuote && hasBookServiceSignal(inboundText) && quoteInputs) {
       try {
         const quoteLink = await createMadisonQuoteLink(db, {
@@ -268,9 +282,11 @@ export async function triggerMadisonSmsDraft(params: {
           agentName: "Madison",
         });
         automaticQuoteLink = quoteLink.absoluteUrl;
-        reviewDraft = `${formatVerifiedQuoteReply(verifiedQuote)}\n\nYou can choose your date and finish your details here: ${automaticQuoteLink}`;
+        automaticQuoteReply = `${formatVerifiedQuoteReply(verifiedQuote)}\n\nYou can choose your date and finish your details here: ${automaticQuoteLink}`;
+        reviewDraft = automaticQuoteReply;
       } catch (error) {
         console.error(`[MadisonSMS] Automatic quote-link creation failed for draft ${draftId}:`, error);
+        automaticQuoteReply = null;
         reviewDraft = formatVerifiedQuoteReply(verifiedQuote);
       }
     }
@@ -328,7 +344,7 @@ export async function triggerMadisonSmsDraft(params: {
       contextUsed,
       quoteInputs,
     });
-    if (automaticQuoteLink) {
+    if (automaticQuoteReply) {
       const [claimResult] = await db
         .update(madisonSmsDrafts)
         .set({ status: "SENDING", approvedText: reviewDraft, approvedBy: "madison_auto_quote", approvedAt: new Date(), updatedAt: new Date() })
@@ -340,7 +356,7 @@ export async function triggerMadisonSmsDraft(params: {
             .set({ status: "SENT", sentAt: new Date(), outboundOpenPhoneId: result.messageId ?? null, updatedAt: new Date() })
             .where(eq(madisonSmsDrafts.id, draftId));
           await postAutoSentCard({ draftId, sessionId, fromPhone, senderName: context.senderName ?? senderName ?? fromPhone, inboundText, autoReply: reviewDraft, autoSendConfidence: 1, db });
-          console.log(`[MadisonSMS] AUTO-SENT quote link for ${fromPhone}: ${automaticQuoteLink}`);
+          console.log(`[MadisonSMS] AUTO-SENT quote flow reply for ${fromPhone}: ${automaticQuoteLink ?? "missing-input question"}`);
           return;
         } catch (error) {
           await db.update(madisonSmsDrafts).set({ status: "FAILED", errorMessage: error instanceof Error ? error.message : "Automatic quote SMS failed", updatedAt: new Date() }).where(eq(madisonSmsDrafts.id, draftId));

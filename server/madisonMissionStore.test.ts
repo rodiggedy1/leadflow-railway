@@ -4,6 +4,8 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 import {
   deriveBookServiceState,
+  extractQuoteInputsFromText,
+  formatMissingQuoteQuestion,
   hasBookServiceSignal,
   resolveVerifiedQuote,
 } from "./madisonMissionStore";
@@ -62,6 +64,18 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
       quote: null,
       missing: ["serviceType"],
     });
+  });
+
+  it("extracts quote inputs from the customer SMS", () => {
+    expect(extractQuoteInputsFromText("We need a deep cleaning for our 3 bed, 2.5 bath home")).toEqual({
+      bedrooms: "3 bed",
+      bathrooms: "2.5 bath",
+      serviceType: "Deep Cleaning",
+    });
+  });
+
+  it("asks only for the verified fields still missing", () => {
+    expect(formatMissingQuoteQuestion(["bathrooms", "serviceType"])).toBe("I can get that quote started — could you tell me how many bathrooms are in the home and what type of cleaning you need (standard, deep, or move-in/move-out)?");
   });
 
   it("registers the additive migration with a matching checksum", async () => {

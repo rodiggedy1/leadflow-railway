@@ -186,6 +186,32 @@ export function resolveVerifiedQuote(inputs: QuoteInputs): {
   };
 }
 
+export function extractQuoteInputsFromText(text: string): QuoteInputs {
+  const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
+  const bedrooms = normalized.match(/\bstudio\b|\b(\d+)\s*(?:bed|beds|bedroom|bedrooms)\b/)?.[0] ?? null;
+  const bathrooms = normalized.match(/\b(\d+(?:\.5)?)\s*(?:bath|baths|bathroom|bathrooms)\b/)?.[0] ?? null;
+  const serviceType = /\bdeep(?:\s+cleaning)?\b/.test(normalized)
+    ? "Deep Cleaning"
+    : /\b(?:move[- ]?in|move[- ]?out|move[- ]?in\/move[- ]?out)\b/.test(normalized)
+      ? "Move-In / Move-Out Cleaning"
+      : /\b(?:standard|regular)\s+clean(?:ing)?\b/.test(normalized)
+        ? "Standard Cleaning"
+        : null;
+  return { bedrooms, bathrooms, serviceType };
+}
+
+export function formatMissingQuoteQuestion(missing: string[]): string {
+  const prompts: Record<string, string> = {
+    serviceType: "what type of cleaning you need (standard, deep, or move-in/move-out)",
+    bedrooms: "how many bedrooms are in the home",
+    bathrooms: "how many bathrooms are in the home",
+  };
+  const requested = missing.map(item => prompts[item]).filter(Boolean);
+  if (requested.length === 1) return `I can get that quote started — could you tell me ${requested[0]}?`;
+  if (requested.length === 2) return `I can get that quote started — could you tell me ${requested[0]} and ${requested[1]}?`;
+  return "I can get that quote started — what type of cleaning do you need, and how many bedrooms and bathrooms are in the home?";
+}
+
 export function formatVerifiedQuoteReply(quote: VerifiedQuote): string {
   return `Thanks — based on a ${quote.bedrooms.toLowerCase()} / ${quote.bathrooms.toLowerCase()} home, your ${quote.serviceType.toLowerCase()} would be $${quote.amountDollars} for the first cleaning. What day works best?`;
 }
