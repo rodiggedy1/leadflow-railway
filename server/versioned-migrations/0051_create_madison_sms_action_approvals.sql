@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `madison_sms_action_approvals` (
+  `id` bigint AUTO_INCREMENT NOT NULL,
+  `draftId` bigint NOT NULL,
+  `sessionId` bigint NOT NULL,
+  `fromPhone` varchar(30) NOT NULL,
+  `customerName` varchar(255),
+  `incomingMessage` text NOT NULL,
+  `proposalType` varchar(64) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `task` text NOT NULL,
+  `recommendation` text NOT NULL,
+  `status` enum('PROPOSED','APPROVING','APPROVED','DISMISSED') NOT NULL DEFAULT 'PROPOSED',
+  `approvedBy` varchar(128),
+  `approvedAt` datetime(3),
+  `issueId` int,
+  `createdAt` datetime(3) NOT NULL,
+  `updatedAt` datetime(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_madison_action_approval_draft` (`draftId`),
+  KEY `idx_madison_action_approval_status` (`status`),
+  KEY `idx_madison_action_approval_session` (`sessionId`)
+);
