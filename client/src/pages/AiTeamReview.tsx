@@ -150,6 +150,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
       if (result.ok) {
         toast.success("Madison's reply was approved and sent.");
         void utils.opsChat.getFocusCards.invalidate();
+        void utils.madison.getActiveSmsQueue.invalidate();
         onChanged();
       } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
     },
@@ -158,6 +159,17 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
     onSuccess: () => {
       toast.success("Customer-care task opened. The booking was not changed.");
       onChanged();
+    },
+    onError: error => toast.error(error.message),
+  });
+  const resolveCard = trpc.madison.resolveSmsCard.useMutation({
+    onSuccess: result => {
+      if (result.ok) {
+        toast.success("Removed from the active queue. No message was sent and the booking was unchanged.");
+        onChanged();
+      } else {
+        toast.error(result.reason === "already_resolved" ? "This request was already resolved." : "Unable to resolve this request.");
+      }
     },
     onError: error => toast.error(error.message),
   });
@@ -181,6 +193,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
       <div className="ai-team-need-actions">
         <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: draft.generatedDraft ?? "", approvedBy: agentName })} disabled={approveReply.isPending || !draft.generatedDraft}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>
         {proposal && <button type="button" className="is-quiet" onClick={() => createTask.mutate({ title: `${proposal.task} — ${customerName}`, issueType: proposal.title.includes("Reschedule") ? "reschedule_needed" : proposal.title.includes("Cancellation") ? "other" : "manager_review", severity: "medium", notes: `${proposal.task}.\n\n${proposal.recommendation}\n\nIncoming SMS: ${draft.originalMessage}\nPhone: ${draft.fromPhone}\nBooking remains unchanged pending human verification.`, waitingOn: "Office", relatedSessionId: draft.sessionId, createdByName: agentName })} disabled={createTask.isPending}>{createTask.isPending ? "Opening…" : "Approve task"}</button>}
+        <button type="button" className="is-resolve" onClick={() => resolveCard.mutate({ messageId: card.id, resolutionReason: "no_reply_needed" })} disabled={resolveCard.isPending}>{resolveCard.isPending ? "Resolving…" : "No reply needed"}</button>
       </div>
     </article>
   );
@@ -194,10 +207,10 @@ export default function AiTeamReview() {
   const [resolved, setResolved] = useState<string[]>([]);
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
-  const { data: focusCards = [], isLoading: focusLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: focusCards = [], isLoading: focusLoading } = trpc.madison.getActiveSmsQueue.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
-  const refreshLiveQueue = () => { void utils.opsChat.getFocusCards.invalidate(); };
+  const refreshLiveQueue = () => { void utils.madison.getActiveSmsQueue.invalidate(); };
 
   const actionPreview = (id: string, action: string) => {
     setResolved(items => items.includes(id) ? items : [...items, id]);
