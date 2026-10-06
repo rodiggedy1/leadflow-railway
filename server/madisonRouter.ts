@@ -1,9 +1,10 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions } from "../drizzle/schema";
+import { conversationSessions, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
 
@@ -230,7 +231,92 @@ function publicCandidate(candidate: MadisonCandidate) {
   };
 }
 
+export function getSmsQueueLastRole(messageHistory: string | null): string | null {
+  // The summary columns can be stale when an inbound/outbound write races or
+  // when older history was backfilled. The queue must match the conversation
+  // the owner sees, so use the last real SMS entry from messageHistory.
+  if (!messageHistory) return null;
+  try {
+    const history = JSON.parse(messageHistory) as unknown;
+    if (!Array.isArray(history)) return null;
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const role = (history[index] as { role?: unknown } | null)?.role;
+      if (role === "user" || role === "assistant") return role;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function shouldShowSmsQueueCard(lastRole: string | null): boolean {
+  // If Madison or the office sent the latest message, the customer does not
+  // currently need a response. Draft status alone must not keep stale cards
+  // in the owner queue.
+  return lastRole === "user";
+}
+
 export const madisonRouter = router({
+  getActiveSmsQueue: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db
+      .select({
+        id: opsChatMessages.id,
+        createdAt: opsChatMessages.createdAt,
+        body: opsChatMessages.body,
+        metadata: opsChatMessages.metadata,
+        mediaUrl: opsChatMessages.mediaUrl,
+        draftStatus: madisonSmsDrafts.status,
+        messageHistory: conversationSessions.messageHistory,
+      })
+      .from(opsChatMessages)
+      .innerJoin(madisonSmsDrafts, and(
+        eq(sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.draftId')) AS UNSIGNED)`, madisonSmsDrafts.id),
+        notInArray(madisonSmsDrafts.status, ["SENT", "DISMISSED", "DELIVERED"]),
+      ))
+      .leftJoin(conversationSessions, eq(opsChatMessages.sessionId, conversationSessions.id))
+      .where(and(
+        eq(opsChatMessages.channel, "command"),
+        eq(opsChatMessages.quickAction as any, "madison_sms_draft"),
+        eq(opsChatMessages.cardStatus as any, "active"),
+        sql`JSON_VALID(${opsChatMessages.metadata}) = 1`,
+      ))
+      .orderBy(desc(opsChatMessages.lastActivityAt), desc(opsChatMessages.id));
+    return rows
+      .filter(row => shouldShowSmsQueueCard(getSmsQueueLastRole(row.messageHistory)))
+      .map(row => ({
+        id: row.id,
+        ts: row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now(),
+        quickAction: "madison_sms_draft" as const,
+        body: row.body,
+        metadata: row.metadata ?? null,
+        mediaUrl: row.mediaUrl ?? null,
+      }));
+  }),
+  resolveSmsCard: opsChatProcedure
+    .input(z.object({
+      messageId: z.number().int().positive(),
+      resolutionReason: z.enum(["no_reply_needed", "handled_elsewhere"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false as const, reason: "no_db" };
+      const [card] = await db.select({ metadata: opsChatMessages.metadata, cardStatus: opsChatMessages.cardStatus })
+        .from(opsChatMessages)
+        .where(and(eq(opsChatMessages.id, input.messageId), eq(opsChatMessages.quickAction as any, "madison_sms_draft")))
+        .limit(1);
+      if (!card) return { ok: false as const, reason: "not_found" };
+      if (card.cardStatus !== "active") return { ok: false as const, reason: "already_resolved" };
+      let metadata: Record<string, unknown> = {};
+      try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* replace malformed metadata with an audit payload */ }
+      const updatedMetadata = JSON.stringify({ ...metadata, resolvedBy: ctx.opsCaller.name, resolvedAt: new Date().toISOString(), resolutionReason: input.resolutionReason });
+      await db.update(opsChatMessages)
+        .set({ metadata: updatedMetadata, cardStatus: "dismissed", activeDedupKey: null })
+        .where(and(eq(opsChatMessages.id, input.messageId), eq(opsChatMessages.cardStatus as any, "active")));
+      broadcastOpsUpdate("madison_sms_card_resolved", { messageId: input.messageId });
+      return { ok: true as const };
+    }),
   getNextBestActions: opsChatProcedure.query(async () => {
     const candidates = await loadMadisonCandidates();
     return {

@@ -115,6 +115,19 @@ function getIssueCategory(message: string): IssueCategory {
   return "General question";
 }
 
+function formatConversationTime(ts: number | null | undefined): string | null {
+  if (!ts) return null;
+  const milliseconds = ts < 1_000_000_000_000 ? ts * 1000 : ts;
+  const date = new Date(milliseconds);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function AgentAvatar({ agent, large = false }: { agent: Agent; large?: boolean }) {
   return <div className={`ai-team-avatar ai-team-avatar--${agent.color} ${large ? "is-large" : ""}`}><Sparkles size={large ? 23 : 17} /></div>;
 }
@@ -131,7 +144,7 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
   );
 }
 
-function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
+function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
   const utils = trpc.useUtils();
   const [showConversation, setShowConversation] = useState(false);
   let metadata: { draftId?: number } = {};
@@ -150,6 +163,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
       if (result.ok) {
         toast.success("Madison's reply was approved and sent.");
         void utils.opsChat.getFocusCards.invalidate();
+        void utils.madison.getActiveSmsQueue.invalidate();
         onChanged();
       } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
     },
@@ -161,26 +175,51 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
     },
     onError: error => toast.error(error.message),
   });
+  const resolveCard = trpc.madison.resolveSmsCard.useMutation({
+    onMutate: async ({ messageId }) => {
+      await utils.madison.getActiveSmsQueue.cancel();
+      const previous = utils.madison.getActiveSmsQueue.getData();
+      utils.madison.getActiveSmsQueue.setData(undefined, cards => cards?.filter(card => card.id !== messageId));
+      return { previous };
+    },
+    onSuccess: result => {
+      if (result.ok) {
+        toast.success("Removed from the active queue. No message was sent and the booking was unchanged.");
+      } else {
+        toast.error(result.reason === "already_resolved" ? "This request was already resolved." : "Unable to resolve this request.");
+      }
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previous) utils.madison.getActiveSmsQueue.setData(undefined, context.previous);
+      toast.error(error.message);
+    },
+    onSettled: () => {
+      void utils.madison.getActiveSmsQueue.invalidate();
+      onChanged();
+    },
+  });
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
   const proposal = getCustomerCareProposal(draft.originalMessage ?? "");
   const customerName = draft.senderName ?? "Customer";
+  const latestCardTime = formatConversationTime(card.ts);
   return (
     <article className="ai-team-need-card">
       <div className="ai-team-need-icon"><MessageSquare size={17} /></div>
       <div className="ai-team-need-copy">
         <strong>{proposal?.title ?? "Madison reply approval"}</strong>
-        <p>{customerName}: “{draft.originalMessage}”</p>
+        <p>{customerName}: “{draft.originalMessage}”{latestCardTime && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {latestCardTime}</time>}</p>
         <em>{proposal ? <><b>Recommended task:</b> {proposal.task}<br /><span>Madison recommends: {proposal.recommendation}</span></> : "Approve the drafted reply below."}</em>
         <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{draft.generatedDraft ?? "Draft is still being prepared."}</div>
         <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
         {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">
-          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small><p>{message.content}</p></div>)}
+          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => { const messageTime = formatConversationTime(message.ts); return <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small>{messageTime && <time dateTime={new Date(message.ts).toISOString()}>{messageTime}</time>}</div><p>{message.content}</p></div>; })}
         </div>}
       </div>
       <div className="ai-team-need-actions">
         <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: draft.generatedDraft ?? "", approvedBy: agentName })} disabled={approveReply.isPending || !draft.generatedDraft}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>
         {proposal && <button type="button" className="is-quiet" onClick={() => createTask.mutate({ title: `${proposal.task} — ${customerName}`, issueType: proposal.title.includes("Reschedule") ? "reschedule_needed" : proposal.title.includes("Cancellation") ? "other" : "manager_review", severity: "medium", notes: `${proposal.task}.\n\n${proposal.recommendation}\n\nIncoming SMS: ${draft.originalMessage}\nPhone: ${draft.fromPhone}\nBooking remains unchanged pending human verification.`, waitingOn: "Office", relatedSessionId: draft.sessionId, createdByName: agentName })} disabled={createTask.isPending}>{createTask.isPending ? "Opening…" : "Approve task"}</button>}
+        <button type="button" className="is-resolve" onClick={() => resolveCard.mutate({ messageId: card.id, resolutionReason: "no_reply_needed" })} disabled={resolveCard.isPending}>{resolveCard.isPending ? "Resolving…" : "No reply needed"}</button>
       </div>
     </article>
   );
@@ -194,10 +233,10 @@ export default function AiTeamReview() {
   const [resolved, setResolved] = useState<string[]>([]);
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
-  const { data: focusCards = [], isLoading: focusLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: focusCards = [], isLoading: focusLoading } = trpc.madison.getActiveSmsQueue.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
-  const refreshLiveQueue = () => { void utils.opsChat.getFocusCards.invalidate(); };
+  const refreshLiveQueue = () => { void utils.madison.getActiveSmsQueue.invalidate(); };
 
   const actionPreview = (id: string, action: string) => {
     setResolved(items => items.includes(id) ? items : [...items, id]);
