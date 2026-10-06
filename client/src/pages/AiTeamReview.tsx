@@ -163,15 +163,27 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; meta
     onError: error => toast.error(error.message),
   });
   const resolveCard = trpc.madison.resolveSmsCard.useMutation({
+    onMutate: async ({ messageId }) => {
+      await utils.madison.getActiveSmsQueue.cancel();
+      const previous = utils.madison.getActiveSmsQueue.getData();
+      utils.madison.getActiveSmsQueue.setData(undefined, cards => cards?.filter(card => card.id !== messageId));
+      return { previous };
+    },
     onSuccess: result => {
       if (result.ok) {
         toast.success("Removed from the active queue. No message was sent and the booking was unchanged.");
-        onChanged();
       } else {
         toast.error(result.reason === "already_resolved" ? "This request was already resolved." : "Unable to resolve this request.");
       }
     },
-    onError: error => toast.error(error.message),
+    onError: (error, _variables, context) => {
+      if (context?.previous) utils.madison.getActiveSmsQueue.setData(undefined, context.previous);
+      toast.error(error.message);
+    },
+    onSettled: () => {
+      void utils.madison.getActiveSmsQueue.invalidate();
+      onChanged();
+    },
   });
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
