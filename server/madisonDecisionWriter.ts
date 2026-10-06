@@ -34,6 +34,7 @@ export type PersistMadisonDecisionInput = {
   capabilityResult: CapabilityResult | null;
   contextUsed: MadisonContextReference[];
   quoteInputs?: QuoteInputs;
+  quoteConversationActive?: boolean;
 };
 
 function isDuplicate(error: unknown): boolean {
@@ -207,7 +208,7 @@ export async function persistMadisonDecision(
     }
   }
 
-  if (hasBookServiceSignal(input.inboundText)) {
+  if (hasBookServiceSignal(input.inboundText) || input.quoteConversationActive) {
     await upsertBookServiceMission(db, {
       sessionId: input.sessionId,
       sourceMessageId: input.sourceMessageId,
