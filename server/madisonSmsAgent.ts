@@ -1012,7 +1012,7 @@ async function postAutoSentCard(params: {
 }): Promise<void> {
   const { draftId, sessionId, fromPhone, senderName, inboundText, autoReply, autoSendConfidence, db } = params;
   const eventTs = Date.now();
-  const body = `✦ Madison replied automatically\n${senderName}: "${inboundText}"\nMadison: "${autoReply}"`;
+  const body = `Madison sent reply\n${senderName}: "${inboundText}"\nMadison: "${autoReply}"`;
   const metadataJson = JSON.stringify({
     draftId,
     sessionId,
@@ -1028,12 +1028,12 @@ async function postAutoSentCard(params: {
     authorName: "Madison",
     authorRole: "system",
     body,
-    quickAction: "madison_auto_sent",
+    quickAction: "madison_sms_draft",
     metadata: metadataJson,
     sessionId,
     lastActivityAt: eventTs,
-    // Use 'dismissed' so this never appears in active-card queries or Focus
-    cardStatus: "dismissed",
+    // Keep the sent reply visible until the owner explicitly dismisses it.
+    cardStatus: "active",
     activeDedupKey: null,
   });
   const { broadcastOpsUpdate } = await import("./sseBroadcast");

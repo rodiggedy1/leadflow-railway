@@ -78,6 +78,18 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
     expect(formatMissingQuoteQuestion(["bathrooms", "serviceType"])).toBe("I can get that quote started — could you tell me how many bathrooms are in the home and what type of cleaning you need (standard, deep, or move-in/move-out)?");
   });
 
+  it("maps Madison mission columns to the deployed table names", async () => {
+    const schema = await readFile(path.resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    expect(schema).toContain('type: mysqlEnum("type",');
+    expect(schema).toContain('status: mysqlEnum("status",');
+    expect(schema).toContain('source: mysqlEnum("source",');
+    expect(schema).toContain('confidence: mysqlEnum("confidence",');
+    expect(schema).not.toContain('mysqlEnum("type_customer_mission",');
+    expect(schema).not.toContain('mysqlEnum("status_customer_mission",');
+    expect(schema).not.toContain('mysqlEnum("source_customer_mission_fact",');
+    expect(schema).not.toContain('mysqlEnum("confidence_customer_mission_fact",');
+  });
+
   it("registers both additive Madison migrations with matching checksums", async () => {
     const directory = path.resolve(
       process.cwd(),
