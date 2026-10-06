@@ -4,28 +4,34 @@
  * tRPC procedures for the in-app activity notification feed.
  */
 
-import { router, protectedProcedure } from "./_core/trpc";
+import { router, protectedProcedure, opsChatProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
 import { activityLog } from "../drizzle/schema";
-import { desc, isNull, lte, and } from "drizzle-orm";
+import { desc, gte, isNull } from "drizzle-orm";
 
 export const activityRouter = router({
   /**
    * Get the latest activity feed items.
-   * Returns up to 50 most recent events, newest first.
+   * Returns the most recent historical events, newest first.
    */
-  getFeed: protectedProcedure
-    .input(z.object({ limit: z.number().min(1).max(100).default(50) }).optional())
+  getFeed: opsChatProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(100).default(100),
+      sinceDays: z.number().int().min(1).max(365).default(30),
+    }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return { items: [], unreadCount: 0 };
 
-      const limit = input?.limit ?? 50;
+      const limit = input?.limit ?? 100;
+      const sinceDays = input?.sinceDays ?? 30;
+      const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
       const items = await db
         .select()
         .from(activityLog)
+        .where(gte(activityLog.createdAt, since))
         .orderBy(desc(activityLog.createdAt))
         .limit(limit);
 

@@ -242,12 +242,13 @@ export default function AiTeamReview() {
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
   const { data: focusCards = [], isLoading: focusLoading } = trpc.madison.getActiveSmsQueue.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: activityFeed } = trpc.activity.getFeed.useQuery({ limit: 100, sinceDays: 30 }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
-  const activityItems: ActivityItem[] = liveSmsCards.slice(0, 6).map(card => ({
-    id: card.id,
-    ts: card.ts,
-    title: "Madison SMS awaiting review",
-    detail: card.body,
+  const activityItems: ActivityItem[] = (activityFeed?.items ?? []).map(item => ({
+    id: item.id,
+    ts: new Date(item.createdAt).getTime(),
+    title: item.title,
+    detail: item.body ?? item.eventType.replace(/_/g, " "),
     kind: "madison",
   }));
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
@@ -284,6 +285,6 @@ export default function AiTeamReview() {
 }
 
 function ActivityList({ compact = false, items }: { compact?: boolean; items: ActivityItem[] }) {
-  if (items.length === 0) return <div className="ai-team-activity-list"><div className="ai-team-activity-empty">No active Madison activity is waiting for review.</div></div>;
+  if (items.length === 0) return <div className="ai-team-activity-list"><div className="ai-team-activity-empty">No activity has been recorded in the last 30 days.</div></div>;
   return <div className={`ai-team-activity-list ${compact ? "is-compact" : ""}`}>{items.map(item => <button type="button" className="ai-team-activity-row" key={item.id} onClick={() => toast.info("Open the Madison card above to review this item.")}><time>{new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(item.ts))}</time><span className={`ai-team-activity-dot is-${item.kind}`} /> <div><strong>{item.title}</strong><p>{item.detail}</p></div><ChevronRight size={15} /></button>)}</div>;
 }
