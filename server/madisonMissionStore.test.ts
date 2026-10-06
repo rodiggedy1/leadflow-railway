@@ -97,16 +97,19 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
   });
 
   it("asks only for the verified fields still missing", () => {
-    expect(formatMissingQuoteQuestion(["bathrooms", "serviceType"])).toBe("I can get that quote started — could you tell me how many bathrooms are in the home and what type of cleaning you need (standard, deep, or move-in/move-out)?");
+    expect(formatMissingQuoteQuestion(["bathrooms", "serviceType"])).toBe("I can get that quote started — could you tell me how many bathrooms are in the home?");
   });
 
-  it("requires condition and an extras answer before finalizing a quote", () => {
-    expect(formatMissingQuoteQuestion(["condition", "extras"])).toContain("home’s condition from 1 to 10");
-    expect(formatMissingQuoteQuestion(["condition", "extras"])).toContain("or just say no extras");
+  it("combines bedrooms and bathrooms into one home-size question", () => {
+    expect(formatMissingQuoteQuestion(["bedrooms", "bathrooms", "condition", "extras"])).toBe("I can get that quote started — how many bedrooms and bathrooms are in the home?");
   });
 
-  it("does not hide condition and extras from the initial quote question", () => {
-    expect(formatMissingQuoteQuestion(["serviceType", "bedrooms", "bathrooms", "condition", "extras"])).toContain("whether you want any extras");
+  it("asks for condition before extras when both are missing", () => {
+    expect(formatMissingQuoteQuestion(["condition", "extras"])).toBe("I can get that quote started — could you tell me how you would rate the home’s condition from 1 to 10, where 1 is basically spotless and 10 needs a full reset?");
+  });
+
+  it("asks only the first discovery question initially", () => {
+    expect(formatMissingQuoteQuestion(["serviceType", "bedrooms", "bathrooms", "condition", "extras"])).toBe("I can get that quote started — could you tell me what type of cleaning you need (standard, deep, or move-in/move-out)?");
   });
 
   it("continues an active quote mission when the customer only supplies details", () => {
