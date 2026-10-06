@@ -3,19 +3,17 @@ import { getSmsQueueLastRole, shouldShowSmsQueueCard } from "./madisonRouter";
 
 describe("Madison queue visibility", () => {
   it("shows a card when the customer sent the latest message", () => {
-    expect(shouldShowSmsQueueCard("user", "RECEIVED")).toBe(true);
-    expect(shouldShowSmsQueueCard("user", "TOOLS_RUNNING")).toBe(true);
+    expect(shouldShowSmsQueueCard("user")).toBe(true);
   });
 
-  it("hides non-pending cards when Madison or an agent sent the latest message", () => {
-    expect(shouldShowSmsQueueCard("assistant", "SENT")).toBe(false);
-    expect(shouldShowSmsQueueCard("assistant", "RECEIVED")).toBe(false);
-    expect(shouldShowSmsQueueCard("unknown", "FAILED")).toBe(false);
+  it("hides cards when Madison or the office sent the latest message", () => {
+    expect(shouldShowSmsQueueCard("assistant")).toBe(false);
+    expect(shouldShowSmsQueueCard("unknown")).toBe(false);
+    expect(shouldShowSmsQueueCard(null)).toBe(false);
   });
 
-  it("keeps a DRAFT_READY reply visible for owner approval", () => {
-    expect(shouldShowSmsQueueCard("assistant", "DRAFT_READY")).toBe(true);
-    expect(shouldShowSmsQueueCard(null, "DRAFT_READY")).toBe(true);
+  it("does not let DRAFT_READY status keep a stale assistant-last card visible", () => {
+    expect(shouldShowSmsQueueCard("assistant")).toBe(false);
   });
 
   it("falls back to message history when the summary role is missing", () => {

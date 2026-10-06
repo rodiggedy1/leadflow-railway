@@ -244,8 +244,11 @@ export function getSmsQueueLastRole(messageHistory: string | null, summaryRole: 
   }
 }
 
-export function shouldShowSmsQueueCard(lastRole: string | null, draftStatus: string): boolean {
-  return lastRole === "user" || draftStatus === "DRAFT_READY";
+export function shouldShowSmsQueueCard(lastRole: string | null): boolean {
+  // If Madison or the office sent the latest message, the customer does not
+  // currently need a response. Draft status alone must not keep stale cards
+  // in the owner queue.
+  return lastRole === "user";
 }
 
 export const madisonRouter = router({
@@ -277,7 +280,7 @@ export const madisonRouter = router({
       ))
       .orderBy(desc(opsChatMessages.lastActivityAt), desc(opsChatMessages.id));
     return rows
-      .filter(row => shouldShowSmsQueueCard(getSmsQueueLastRole(row.messageHistory, row.lastMessageRole), row.draftStatus))
+      .filter(row => shouldShowSmsQueueCard(getSmsQueueLastRole(row.messageHistory, row.lastMessageRole)))
       .map(row => ({
         id: row.id,
         ts: row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now(),
