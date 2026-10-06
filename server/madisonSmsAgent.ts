@@ -27,7 +27,8 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
-import { formatVerifiedQuoteReply, resolveVerifiedQuote } from "./madisonMissionStore";
+import { formatVerifiedQuoteReply, hasBookServiceSignal, resolveVerifiedQuote } from "./madisonMissionStore";
+import { createMadisonQuoteLink } from "./madisonQuoteLinkService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -255,9 +256,24 @@ export async function triggerMadisonSmsDraft(params: {
       conversationMessages,
     });
     const verifiedQuote = resolveVerifiedQuote(quoteInputs ?? {}).quote;
-    const reviewDraft = verifiedQuote
-      ? formatVerifiedQuoteReply(verifiedQuote)
-      : draftResponse.draft;
+    let automaticQuoteLink: string | null = null;
+    let reviewDraft = draftResponse.draft;
+    if (verifiedQuote && hasBookServiceSignal(inboundText) && quoteInputs) {
+      try {
+        const quoteLink = await createMadisonQuoteLink(db, {
+          sessionId,
+          customerName: context.senderName ?? senderName,
+          customerPhone: fromPhone,
+          quoteInputs,
+          agentName: "Madison",
+        });
+        automaticQuoteLink = quoteLink.absoluteUrl;
+        reviewDraft = `${formatVerifiedQuoteReply(verifiedQuote)}\n\nYou can choose your date and finish your details here: ${automaticQuoteLink}`;
+      } catch (error) {
+        console.error(`[MadisonSMS] Automatic quote-link creation failed for draft ${draftId}:`, error);
+        reviewDraft = formatVerifiedQuoteReply(verifiedQuote);
+      }
+    }
 
     // ── Step 6: Compute Quality Score ─────────────────────────────────────────
     const qualityScore = computeQualityScore({
@@ -312,6 +328,26 @@ export async function triggerMadisonSmsDraft(params: {
       contextUsed,
       quoteInputs,
     });
+    if (automaticQuoteLink) {
+      const [claimResult] = await db
+        .update(madisonSmsDrafts)
+        .set({ status: "SENDING", approvedText: reviewDraft, approvedBy: "madison_auto_quote", approvedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(madisonSmsDrafts.id, draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
+      if (((claimResult as any).affectedRows ?? 0) === 1) {
+        try {
+          const result = await sendSms({ to: fromPhone, content: reviewDraft, fromNumberId: ENV.openPhoneCsNumberId || undefined });
+          await db.update(madisonSmsDrafts)
+            .set({ status: "SENT", sentAt: new Date(), outboundOpenPhoneId: result.messageId ?? null, updatedAt: new Date() })
+            .where(eq(madisonSmsDrafts.id, draftId));
+          await postAutoSentCard({ draftId, sessionId, fromPhone, senderName: context.senderName ?? senderName ?? fromPhone, inboundText, autoReply: reviewDraft, autoSendConfidence: 1, db });
+          console.log(`[MadisonSMS] AUTO-SENT quote link for ${fromPhone}: ${automaticQuoteLink}`);
+          return;
+        } catch (error) {
+          await db.update(madisonSmsDrafts).set({ status: "FAILED", errorMessage: error instanceof Error ? error.message : "Automatic quote SMS failed", updatedAt: new Date() }).where(eq(madisonSmsDrafts.id, draftId));
+          throw error;
+        }
+      }
+    }
     // ── Step 7.5: Classify lead category ────────────────────────────────────────
     const leadCategory = await classifyLeadCategory({
       sessionId,

@@ -7,7 +7,6 @@ import {
   Check,
   ChevronRight,
   Clock3,
-  ExternalLink,
   MessageSquare,
   ShieldCheck,
   Sparkles,
@@ -173,7 +172,6 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
 function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
   const utils = trpc.useUtils();
   const [showConversation, setShowConversation] = useState(false);
-  const [quoteLink, setQuoteLink] = useState<string | null>(null);
   let metadata: { draftId?: number } = {};
   try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* malformed legacy card */ }
   const draftId = metadata.draftId;
@@ -206,14 +204,6 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
         void utils.madison.getActionApproval.invalidate({ draftId });
         onChanged();
       } else toast.error(`Task was not approved: ${result.reason}`);
-    },
-    onError: error => toast.error(error.message),
-  });
-  const createQuoteLink = trpc.madison.createQuoteLink.useMutation({
-    onSuccess: result => {
-      const url = `${window.location.origin}${result.urlPath}`;
-      setQuoteLink(url);
-      toast.success("Quote link created. No booking or message was sent.");
     },
     onError: error => toast.error(error.message),
   });
@@ -260,11 +250,9 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
       </div>
       <div className="ai-team-need-actions">
         <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: draft.generatedDraft ?? "", approvedBy: agentName })} disabled={approveReply.isPending || !draft.generatedDraft}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>
-        <button type="button" className="is-quiet" onClick={() => createQuoteLink.mutate({ draftId })} disabled={createQuoteLink.isPending || Boolean(quoteLink)}>{createQuoteLink.isPending ? "Creating link…" : quoteLink ? "Quote link created" : "Create quote link"}</button>
         {proposal && <button type="button" className="is-quiet" onClick={() => approveActionTask.mutate({ draftId, approvedBy: agentName ?? "Owner" })} disabled={approveActionTask.isPending || actionApproval?.status === "APPROVED" || actionApproval?.status === "APPROVING"}>{actionApproval?.status === "APPROVED" ? "Task approved" : actionApproval?.status === "APPROVING" || approveActionTask.isPending ? "Approving…" : "Approve task"}</button>}
         <button type="button" className="is-resolve" onClick={() => resolveCard.mutate({ messageId: card.id, resolutionReason: "no_reply_needed" })} disabled={resolveCard.isPending}>{resolveCard.isPending ? "Resolving…" : "No reply needed"}</button>
       </div>
-      {quoteLink && <a className="ai-team-conversation-button" href={quoteLink} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Open customer quote link</a>}
     </article>
   );
 }

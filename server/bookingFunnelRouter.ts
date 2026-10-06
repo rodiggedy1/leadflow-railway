@@ -238,7 +238,7 @@ export const bookingFunnelRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
       const rows = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.token)).limit(1);
       const funnel = rows[0];
-      if (!funnel || funnel.source !== "customer-booking-link") throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
+      if (!funnel || !["customer-booking-link", "madison-quote"].includes(funnel.source)) throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
       if (funnel.bookingId || funnel.stage === "booked") return { bookingId: funnel.bookingId, publicBookingNumber: null, created: false };
       if (!isPublicBookingPriceSnapshot(funnel.priceSnapshot)) {
         throw new TRPCError({ code: "CONFLICT", message: "This quote is no longer valid. Please ask Madison for a new link." });
@@ -278,7 +278,7 @@ export const bookingFunnelRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
       const [funnel] = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.token)).limit(1);
-      if (!funnel || funnel.source !== "customer-booking-link") throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
+      if (!funnel || !["customer-booking-link", "madison-quote"].includes(funnel.source)) throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
       if (!verifyBookingFunnelMutationToken(ENV.cookieSecret, input.mutationToken, funnel.publicFunnelNumber, funnel.idempotencyKey)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       }
