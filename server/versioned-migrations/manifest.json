@@ -439,6 +439,14 @@
       "sha256": "a33efcf8f117823a602798a3246fe65771ded84f13b6fa30633d750004ac57ef",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0057_create_madison_mission_facts.postconditions.json"
+    },
+    {
+      "id": "0058_create_madison_sms_draft_edits",
+      "mode": "create-table",
+      "sqlFile": "0058_create_madison_sms_draft_edits.sql",
+      "sha256": "a473f1b7e197e87120e7b38b6c31fd7ecb2ce1c83e49479b3dd04e282cd94bd0",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0058_create_madison_sms_draft_edits.postconditions.json"
     }
   ]
 }

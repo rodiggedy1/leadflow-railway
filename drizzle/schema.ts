@@ -4315,6 +4315,21 @@ export const madisonSmsDrafts = mysqlTable("madison_sms_drafts", {
 export type MadisonSmsDraft = typeof madisonSmsDrafts.$inferSelect;
 export type InsertMadisonSmsDraft = typeof madisonSmsDrafts.$inferInsert;
 
+/** Immutable audit record for a human edit made before approving a Madison SMS draft. */
+export const madisonSmsDraftEdits = mysqlTable("madison_sms_draft_edits", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  draftId: bigint("draftId", { mode: "number" }).notNull(),
+  originalText: text("originalText").notNull(),
+  editedText: text("editedText").notNull(),
+  editedBy: varchar("editedBy", { length: 128 }).notNull(),
+  editedAt: datetime("editedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  index("idx_madison_sms_draft_edits_draft").on(t.draftId),
+  index("idx_madison_sms_draft_edits_time").on(t.editedAt),
+]);
+export type MadisonSmsDraftEdit = typeof madisonSmsDraftEdits.$inferSelect;
+export type InsertMadisonSmsDraftEdit = typeof madisonSmsDraftEdits.$inferInsert;
+
 /** Structured Madison decision records, separate from the existing SMS draft lifecycle. */
 export const madisonDecisions = mysqlTable("madison_decisions", {
   id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
