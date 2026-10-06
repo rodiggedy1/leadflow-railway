@@ -168,10 +168,17 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
       } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
     },
   });
-  const createTask = trpc.opsChat.createIssue.useMutation({
-    onSuccess: () => {
-      toast.success("Customer-care task opened. The booking was not changed.");
-      onChanged();
+  const { data: actionApproval } = trpc.madison.getActionApproval.useQuery(
+    { draftId: draftId! },
+    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
+  );
+  const approveActionTask = trpc.madison.approveActionTask.useMutation({
+    onSuccess: result => {
+      if (result.ok) {
+        toast.success(result.alreadyApproved ? "This customer-care task was already approved." : "Customer-care task approved. The booking was not changed.");
+        void utils.madison.getActionApproval.invalidate({ draftId });
+        onChanged();
+      } else toast.error(`Task was not approved: ${result.reason}`);
     },
     onError: error => toast.error(error.message),
   });
@@ -200,7 +207,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
   });
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
-  const proposal = getCustomerCareProposal(draft.originalMessage ?? "");
+  const proposal = actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "");
   const customerName = draft.senderName ?? "Customer";
   const latestCardTime = formatConversationTime(card.ts);
   return (
@@ -218,7 +225,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
       </div>
       <div className="ai-team-need-actions">
         <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: draft.generatedDraft ?? "", approvedBy: agentName })} disabled={approveReply.isPending || !draft.generatedDraft}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>
-        {proposal && <button type="button" className="is-quiet" onClick={() => createTask.mutate({ title: `${proposal.task} — ${customerName}`, issueType: proposal.title.includes("Reschedule") ? "reschedule_needed" : proposal.title.includes("Cancellation") ? "other" : "manager_review", severity: "medium", notes: `${proposal.task}.\n\n${proposal.recommendation}\n\nIncoming SMS: ${draft.originalMessage}\nPhone: ${draft.fromPhone}\nBooking remains unchanged pending human verification.`, waitingOn: "Office", relatedSessionId: draft.sessionId, createdByName: agentName })} disabled={createTask.isPending}>{createTask.isPending ? "Opening…" : "Approve task"}</button>}
+        {proposal && <button type="button" className="is-quiet" onClick={() => approveActionTask.mutate({ draftId, approvedBy: agentName ?? "Owner" })} disabled={approveActionTask.isPending || actionApproval?.status === "APPROVED" || actionApproval?.status === "APPROVING"}>{actionApproval?.status === "APPROVED" ? "Task approved" : actionApproval?.status === "APPROVING" || approveActionTask.isPending ? "Approving…" : "Approve task"}</button>}
         <button type="button" className="is-resolve" onClick={() => resolveCard.mutate({ messageId: card.id, resolutionReason: "no_reply_needed" })} disabled={resolveCard.isPending}>{resolveCard.isPending ? "Resolving…" : "No reply needed"}</button>
       </div>
     </article>

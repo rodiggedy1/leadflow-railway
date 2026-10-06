@@ -1,10 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
+import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { buildMadisonActionProposal, madisonSmsActionApprovals } from "./madisonActionApprovalStore";
 
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
 
@@ -294,6 +295,50 @@ export const madisonRouter = router({
         mediaUrl: row.mediaUrl ?? null,
       }));
   }),
+  getActionApproval: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [stored] = await db.select().from(madisonSmsActionApprovals).where(eq(madisonSmsActionApprovals.draftId, input.draftId)).limit(1);
+      if (stored) return stored;
+      const [draft] = await db.select({ sessionId: madisonSmsDrafts.sessionId, fromPhone: madisonSmsDrafts.fromPhone, senderName: madisonSmsDrafts.senderName, originalMessage: madisonSmsDrafts.originalMessage }).from(madisonSmsDrafts).where(eq(madisonSmsDrafts.id, input.draftId)).limit(1);
+      if (!draft) return null;
+      const proposal = buildMadisonActionProposal(draft.originalMessage);
+      return proposal ? { id: null, draftId: input.draftId, sessionId: draft.sessionId, fromPhone: draft.fromPhone, customerName: draft.senderName, incomingMessage: draft.originalMessage, ...proposal, status: "PROPOSED" as const, approvedBy: null, approvedAt: null, issueId: null } : null;
+    }),
+  approveActionTask: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive(), approvedBy: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false as const, reason: "no_db" };
+      let [approval] = await db.select().from(madisonSmsActionApprovals).where(eq(madisonSmsActionApprovals.draftId, input.draftId)).limit(1);
+      if (!approval) {
+        const [draft] = await db.select({ sessionId: madisonSmsDrafts.sessionId, fromPhone: madisonSmsDrafts.fromPhone, senderName: madisonSmsDrafts.senderName, originalMessage: madisonSmsDrafts.originalMessage }).from(madisonSmsDrafts).where(eq(madisonSmsDrafts.id, input.draftId)).limit(1);
+        if (!draft) return { ok: false as const, reason: "not_found" };
+        const proposal = buildMadisonActionProposal(draft.originalMessage);
+        if (!proposal) return { ok: false as const, reason: "no_action_proposed" };
+        await db.insert(madisonSmsActionApprovals).values({ draftId: input.draftId, sessionId: draft.sessionId, fromPhone: draft.fromPhone, customerName: draft.senderName, incomingMessage: draft.originalMessage, ...proposal, status: "PROPOSED", createdAt: new Date(), updatedAt: new Date() }).onDuplicateKeyUpdate({ set: { updatedAt: new Date() } });
+        [approval] = await db.select().from(madisonSmsActionApprovals).where(eq(madisonSmsActionApprovals.draftId, input.draftId)).limit(1);
+      }
+      if (!approval) return { ok: false as const, reason: "not_found" };
+      if (approval.status === "APPROVED") return { ok: true as const, alreadyApproved: true, issueId: approval.issueId };
+      const [claim] = await db.update(madisonSmsActionApprovals).set({ status: "APPROVING", updatedAt: new Date() }).where(and(eq(madisonSmsActionApprovals.id, approval.id), eq(madisonSmsActionApprovals.status, "PROPOSED")));
+      if (((claim as any).affectedRows ?? 0) === 0) return { ok: false as const, reason: "already_approving" };
+      const issueType = approval.proposalType === "reschedule" ? "reschedule_needed" : approval.proposalType === "cancellation" ? "other" : "manager_review";
+      try {
+        const now = Date.now();
+        const [issueInsert] = await db.insert(issueEngineTable).values({ title: `${approval.task} — ${approval.customerName ?? "Customer"}`, issueType: issueType as any, severity: "medium", status: "open", notes: `${approval.task}.\n\n${approval.recommendation}\n\nIncoming SMS: ${approval.incomingMessage}\nPhone: ${approval.fromPhone}\nBooking remains unchanged pending human verification.`, ownerName: null, waitingOn: "Office", relatedSessionId: approval.sessionId, relatedJobId: null, createdByName: input.approvedBy, lastActivityAt: now });
+        const issueId = Number((issueInsert as any)?.insertId);
+        await db.insert(issueEngineTimeline).values({ issueId, event: `AI-recommended task approved by ${input.approvedBy}`, actor: input.approvedBy });
+        await db.update(madisonSmsActionApprovals).set({ status: "APPROVED", approvedBy: input.approvedBy, approvedAt: new Date(), issueId, updatedAt: new Date() }).where(eq(madisonSmsActionApprovals.id, approval.id));
+        broadcastOpsUpdate("madison_action_task_approved", { draftId: input.draftId, issueId });
+        return { ok: true as const, alreadyApproved: false, issueId };
+      } catch (error) {
+        await db.update(madisonSmsActionApprovals).set({ status: "PROPOSED", updatedAt: new Date() }).where(eq(madisonSmsActionApprovals.id, approval.id));
+        throw error;
+      }
+    }),
   resolveSmsCard: opsChatProcedure
     .input(z.object({
       messageId: z.number().int().positive(),
