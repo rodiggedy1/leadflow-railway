@@ -21,6 +21,21 @@ import "./ai-team-review.css";
 
 type Tab = "overview" | "agents" | "activity";
 type IssueCategory = "Reschedule" | "Cancellation" | "Service issue" | "Refund / credit" | "General question" | "Booking request";
+type ActivityAudit = {
+  kind: "madison_reply" | "madison_task";
+  originalMessage?: string | null;
+  incomingMessage?: string | null;
+  approvedText?: string | null;
+  task?: string | null;
+  recommendation?: string | null;
+  status?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: Date | string | null;
+  sentAt?: Date | string | null;
+  deliveredAt?: Date | string | null;
+  issueId?: number | null;
+};
+type ActivityItem = { id: number; ts: number; title: string; detail: string; kind: "madison"; audit: ActivityAudit };
 const ISSUE_CATEGORIES: IssueCategory[] = ["Reschedule", "Cancellation", "Service issue", "Refund / credit", "General question", "Booking request"];
 type Agent = {
   id: string;
@@ -126,6 +141,16 @@ function formatConversationTime(ts: number | null | undefined): string | null {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatActivityTime(ts: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ts));
 }
 
 function AgentAvatar({ agent, large = false }: { agent: Agent; large?: boolean }) {
@@ -236,12 +261,23 @@ export default function AiTeamReview() {
   const [tab, setTab] = useState<Tab>("overview");
   const [issueFilter, setIssueFilter] = useState<IssueCategory | "All issues">("All issues");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null);
   const [autonomy, setAutonomy] = useState("assist");
   const [resolved, setResolved] = useState<string[]>([]);
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
   const { data: focusCards = [], isLoading: focusLoading } = trpc.madison.getActiveSmsQueue.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: activityFeed } = trpc.activity.getFeed.useQuery({ limit: 100, sinceDays: 30 }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: dashboardStats } = trpc.commandCenter.getDashboardStats.useQuery({ range: "today" }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
+  const activityItems: ActivityItem[] = (activityFeed?.items ?? []).map(item => ({
+    id: item.id,
+    ts: new Date(item.createdAt).getTime(),
+    title: item.title,
+    detail: item.body ?? item.eventType.replace(/_/g, " "),
+    kind: "madison",
+    audit: item.meta as ActivityAudit,
+  }));
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
   const refreshLiveQueue = () => { void utils.madison.getActiveSmsQueue.invalidate(); };
 
@@ -259,22 +295,24 @@ export default function AiTeamReview() {
       </header>
 
       {tab === "overview" && <>
-        <section className="ai-team-summary"><div><strong>184</strong><span>actions handled today</span></div><div><strong>37</strong><span>leads answered</span></div><div><strong>12</strong><span>bookings made</span></div><div><strong>$4,821</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
+        <section className="ai-team-summary"><div><strong>{activityFeed ? activityFeed.todayActions : "—"}</strong><span>actions handled today</span></div><div><strong>{activityFeed ? activityFeed.todayLeadsAnswered : "—"}</strong><span>leads answered</span></div><div><strong>{dashboardStats ? dashboardStats.bookedJobs : "—"}</strong><span>bookings made</span></div><div><strong>{dashboardStats ? `$${dashboardStats.bookedRevenue.toLocaleString()}` : "—"}</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
-        <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact /></section>
+        <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact items={activityItems} onOpen={setSelectedActivity} /></section>
       </>}
 
       {tab === "agents" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>AI TEAM</span><h2>Employees, not automations</h2></div><p>Each agent has a mission, authority, and clear escalation boundary.</p></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>}
-      {tab === "activity" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>A clear record of what got done</h2></div><p>Open an item to see the reasoning, context, and action.</p></div><ActivityList /></section>}
+      {tab === "activity" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>A clear record of what got done</h2></div><p>Open an item to see the reasoning, context, and action.</p></div><ActivityList items={activityItems} onOpen={setSelectedActivity} /></section>}
 
       <section className="ai-team-autonomy"><div><span>AUTONOMY</span><h2>How much should AI handle?</h2><p>Configure the default. Set tighter rules for individual actions in each agent’s authority.</p></div><div className="ai-team-autonomy-control"><div className="ai-team-autonomy-track">{["observe", "assist", "act", "run business"].map(item => <button type="button" key={item} className={autonomy === item ? "is-active" : ""} onClick={() => { setAutonomy(item); toast.info("Autonomy control is a visual review state only."); }}>{item}</button>)}</div><small>{autonomy === "observe" ? "AI recommends actions but does not take them." : autonomy === "assist" ? "AI handles conversations and asks before operational changes." : autonomy === "act" ? "AI handles routine operations independently." : "AI only escalates exceptions outside its authority."}</small></div></section>
 
+      {selectedActivity && <div className="ai-team-drawer-backdrop" role="presentation" onClick={() => setSelectedActivity(null)}><aside className="ai-team-drawer" role="dialog" aria-modal="true" aria-label={`${selectedActivity.title} details`} onClick={event => event.stopPropagation()}><button className="ai-team-drawer-close" type="button" onClick={() => setSelectedActivity(null)} aria-label="Close activity details"><X size={18} /></button><div className="ai-team-drawer-agent"><div className="ai-team-avatar ai-team-avatar--violet"><MessageSquare size={22} /></div><div><span>AI TEAM · MADISON ACTIVITY</span><h2>{selectedActivity.title}</h2><p>{formatActivityTime(selectedActivity.ts)}</p></div></div><div className="ai-team-drawer-block"><span>STATUS</span><strong>{selectedActivity.audit.kind === "madison_task" ? "Task approved" : "Approved and sent"}</strong><p className="ai-team-activity-detail">{selectedActivity.audit.kind === "madison_task" ? "The booking remained unchanged. A human-approved customer-care task was created." : "Madison’s approved reply was sent to the customer."}</p></div><div className="ai-team-drawer-block"><span>CUSTOMER MESSAGE</span><p className="ai-team-activity-detail">{selectedActivity.audit.originalMessage ?? selectedActivity.audit.incomingMessage ?? "No original message was stored."}</p></div>{selectedActivity.audit.kind === "madison_reply" ? <div className="ai-team-drawer-block"><span>APPROVED REPLY</span><p className="ai-team-activity-detail">{selectedActivity.audit.approvedText ?? selectedActivity.detail}</p></div> : <div className="ai-team-drawer-block"><span>RECOMMENDED TASK</span><strong>{selectedActivity.audit.task ?? selectedActivity.title}</strong><p className="ai-team-activity-detail">{selectedActivity.audit.recommendation ?? selectedActivity.detail}</p>{selectedActivity.audit.issueId && <p className="ai-team-audit-meta">Issue ID: {selectedActivity.audit.issueId}</p>}</div>}<div className="ai-team-drawer-block"><span>APPROVAL</span><p className="ai-team-audit-meta">Approved by: {selectedActivity.audit.approvedBy ?? "Owner"}</p><p className="ai-team-audit-meta">Approved: {selectedActivity.audit.approvedAt ? formatActivityTime(new Date(selectedActivity.audit.approvedAt).getTime()) : formatActivityTime(selectedActivity.ts)}</p>{selectedActivity.audit.kind === "madison_reply" && selectedActivity.audit.deliveredAt && <p className="ai-team-audit-meta">Delivered: {formatActivityTime(new Date(selectedActivity.audit.deliveredAt).getTime())}</p>}</div><button type="button" className="ai-team-drawer-footer" onClick={() => setSelectedActivity(null)}>Close detail <X size={15} /></button></aside></div>}
       {selectedAgent && <div className="ai-team-drawer-backdrop" role="presentation" onClick={() => setSelectedAgent(null)}><aside className="ai-team-drawer" role="dialog" aria-modal="true" aria-label={`${selectedAgent.name} details`} onClick={event => event.stopPropagation()}><button className="ai-team-drawer-close" type="button" onClick={() => setSelectedAgent(null)} aria-label="Close agent details"><X size={18} /></button><div className="ai-team-drawer-agent"><AgentAvatar agent={selectedAgent} large /><div><span>AI TEAM · AGENT PROFILE</span><h2>{selectedAgent.name}</h2><p>{selectedAgent.role}</p></div></div><div className="ai-team-drawer-block"><span>MISSION</span><strong>{selectedAgent.mission}</strong></div><div className="ai-team-drawer-block"><span>CAN DO</span><div className="ai-team-check-list">{selectedAgent.capabilities.map(item => <p key={item}><Check size={14} />{item}</p>)}</div></div><div className="ai-team-drawer-block ai-team-drawer-escalate"><span>REQUIRES YOUR APPROVAL</span>{selectedAgent.approvals.map(item => <p key={item}><AlertTriangle size={14} />{item}</p>)}</div><button type="button" className="ai-team-drawer-footer" onClick={() => toast.info("Conversation detail is part of the next review iteration.")}>Watch current conversation <ArrowRight size={15} /></button></aside></div>}
     </main>
   );
 }
 
-function ActivityList({ compact = false }: { compact?: boolean }) {
-  return <div className={`ai-team-activity-list ${compact ? "is-compact" : ""}`}>{ACTIVITY.map(([time, title, detail, kind]) => <button type="button" className="ai-team-activity-row" key={`${time}-${title}`} onClick={() => toast.info("Activity detail is a review-only interaction.")}><time>{time}</time><span className={`ai-team-activity-dot is-${kind}`} /> <div><strong>{title}</strong><p>{detail}</p></div><ChevronRight size={15} /></button>)}</div>;
+function ActivityList({ compact = false, items, onOpen }: { compact?: boolean; items: ActivityItem[]; onOpen: (item: ActivityItem) => void }) {
+  if (items.length === 0) return <div className="ai-team-activity-list"><div className="ai-team-activity-empty">No activity has been recorded in the last 30 days.</div></div>;
+  return <div className={`ai-team-activity-list ${compact ? "is-compact" : ""}`}>{items.map(item => <button type="button" className="ai-team-activity-row" key={item.id} onClick={() => onOpen(item)}><time dateTime={new Date(item.ts).toISOString()}>{formatActivityTime(item.ts)}</time><span className={`ai-team-activity-dot is-${item.kind}`} /> <div><strong>{item.title}</strong><p>{item.detail}</p></div><ChevronRight size={15} /></button>)}</div>;
 }
