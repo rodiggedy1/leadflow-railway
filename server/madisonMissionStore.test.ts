@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveBookServiceState,
   hasBookServiceSignal,
+  resolveVerifiedQuote,
 } from "./madisonMissionStore";
 
 describe("Madison BOOK_SERVICE mission foundation", () => {
@@ -32,6 +33,34 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
       nextBestAction: "ASK_CUSTOMER",
       objective:
         "Book the customer by first resolving the minimum information needed for a verified quote.",
+    });
+  });
+
+  it("calculates a verified quote with the canonical pricing engine", () => {
+    expect(
+      resolveVerifiedQuote({
+        bedrooms: "2 bedrooms",
+        bathrooms: "2 bathrooms",
+        serviceType: "standard",
+      })
+    ).toEqual({
+      missing: [],
+      quote: {
+        bedrooms: "2 Bedrooms",
+        bathrooms: "2 Bathrooms",
+        serviceType: "Standard Cleaning",
+        amountDollars: 269,
+        pricingVersion: "engine/pricing-v1",
+      },
+    });
+  });
+
+  it("does not calculate or invent a quote when a required input is missing", () => {
+    expect(
+      resolveVerifiedQuote({ bedrooms: "2 bedrooms", bathrooms: "2 bathrooms" })
+    ).toEqual({
+      quote: null,
+      missing: ["serviceType"],
     });
   });
 
