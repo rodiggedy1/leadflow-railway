@@ -1,0 +1,132 @@
+{
+  "format": 1,
+  "table": "madison_decisions",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "bigint",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "sourceMessageId",
+      "columnType": "varchar(128)",
+      "nullable": false
+    },
+    {
+      "name": "sessionId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "customerId",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "summary",
+      "columnType": "text",
+      "nullable": false
+    },
+    {
+      "name": "disposition",
+      "columnType": "enum('NO_ACTION','REPLY_ONLY','ACTION_REQUIRED','CLARIFICATION_REQUIRED','ANALYSIS_PENDING')",
+      "nullable": false
+    },
+    {
+      "name": "replyRecommended",
+      "columnType": "tinyint",
+      "nullable": false,
+      "default": "'0'"
+    },
+    {
+      "name": "replyDraft",
+      "columnType": "text",
+      "nullable": true
+    },
+    {
+      "name": "uncertainties",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "contextUsed",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "modelProvider",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    {
+      "name": "modelName",
+      "columnType": "varchar(128)",
+      "nullable": false
+    },
+    {
+      "name": "modelVersion",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "promptVersion",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    {
+      "name": "schemaVersion",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    {
+      "name": "validatorVersion",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    {
+      "name": "createdAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    },
+    {
+      "name": "updatedAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_madison_decisions_source_message",
+      "columns": [
+        "sourceMessageId"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_madison_decisions_session_created",
+      "columns": [
+        "sessionId",
+        "createdAt"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_decisions_disposition_created",
+      "columns": [
+        "disposition",
+        "createdAt"
+      ],
+      "unique": false
+    }
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "table": "madison_sms_action_approvals",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "bigint",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "draftId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "sessionId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "fromPhone",
+      "columnType": "varchar(30)",
+      "nullable": false
+    },
+    {
+      "name": "customerName",
+      "columnType": "varchar(255)",
+      "nullable": true
+    },
+    {
+      "name": "incomingMessage",
+      "columnType": "text",
+      "nullable": false
+    },
+    {
+      "name": "proposalType",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    {
+      "name": "title",
+      "columnType": "varchar(255)",
+      "nullable": false
+    },
+    {
+      "name": "task",
+      "columnType": "text",
+      "nullable": false
+    },
+    {
+      "name": "recommendation",
+      "columnType": "text",
+      "nullable": false
+    },
+    {
+      "name": "status",
+      "columnType": "enum('PROPOSED','APPROVING','APPROVED','DISMISSED')",
+      "nullable": false,
+      "default": "'PROPOSED'"
+    },
+    {
+      "name": "approvedBy",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "approvedAt",
+      "columnType": "datetime(3)",
+      "nullable": true
+    },
+    {
+      "name": "issueId",
+      "columnType": "int",
+      "nullable": true
+    },
+    {
+      "name": "createdAt",
+      "columnType": "datetime(3)",
+      "nullable": false
+    },
+    {
+      "name": "updatedAt",
+      "columnType": "datetime(3)",
+      "nullable": false
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_madison_action_approval_draft",
+      "columns": [
+        "draftId"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_madison_action_approval_status",
+      "columns": [
+        "status"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_action_approval_session",
+      "columns": [
+        "sessionId"
+      ],
+      "unique": false
+    }
+  ]
+}

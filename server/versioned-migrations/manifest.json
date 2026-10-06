@@ -383,6 +383,46 @@
       "sha256": "71e1321f0dadfccd712247f4f9dc7ff5c0360a717ab44fd252e3c0a7a1509260",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0050_add_booking_home_type.postconditions.json"
+    },
+    {
+      "id": "0051_create_madison_sms_action_approvals",
+      "mode": "create-table",
+      "sqlFile": "0051_create_madison_sms_action_approvals.sql",
+      "sha256": "94c9d323ee345d5402572cb7a7279ac03b79989a38306bb780952b37128afe34",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0051_create_madison_sms_action_approvals.postconditions.json"
+    },
+    {
+      "id": "0052_create_madison_decisions",
+      "mode": "create-table",
+      "sqlFile": "0052_create_madison_decisions.sql",
+      "sha256": "6c4c3f870e29b4dd3b18739579120a5d2013f9db07ee6e156e2c18668afa5778",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0052_create_madison_decisions.postconditions.json"
+    },
+    {
+      "id": "0053_create_madison_intents",
+      "mode": "create-table",
+      "sqlFile": "0053_create_madison_intents.sql",
+      "sha256": "0c857b357dc426da3f389d75821ba75a7e519dc6403008696307064b8ef836df",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0053_create_madison_intents.postconditions.json"
+    },
+    {
+      "id": "0054_create_madison_action_proposals",
+      "mode": "create-table",
+      "sqlFile": "0054_create_madison_action_proposals.sql",
+      "sha256": "1a02c053cdc3abc85bef6b68c9f326e4d77d0d8543b6b9b1597232bfd9823c3b",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0054_create_madison_action_proposals.postconditions.json"
+    },
+    {
+      "id": "0055_create_madison_action_approvals",
+      "mode": "create-table",
+      "sqlFile": "0055_create_madison_action_approvals.sql",
+      "sha256": "993347c6540422a5fe47a0a5250c1bbfbbc31530135b4d52ad2f4a25121f7f33",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0055_create_madison_action_approvals.postconditions.json"
     }
   ]
 }

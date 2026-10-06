@@ -1,0 +1,89 @@
+{
+  "format": 1,
+  "table": "madison_intents",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "bigint",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "decisionId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "intentKey",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    {
+      "name": "intentType",
+      "columnType": "enum('INFORMATIONAL','NEW_BOOKING','MODIFY_BOOKING','CANCEL_BOOKING','SERVICE_REQUEST','SERVICE_COMPLAINT','PAYMENT_ISSUE','REFUND_CREDIT','TEAM_ETA','CUSTOMER_INFO_UPDATE','OTHER_OPERATIONAL','UNCLEAR')",
+      "nullable": false
+    },
+    {
+      "name": "confidence",
+      "columnType": "decimal(5,4)",
+      "nullable": true
+    },
+    {
+      "name": "evidence",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "uncertainties",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "target",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "request",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "createdAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_madison_intents_decision_key",
+      "columns": [
+        "decisionId",
+        "intentKey"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_madison_intents_decision",
+      "columns": [
+        "decisionId"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_intents_type",
+      "columns": [
+        "intentType"
+      ],
+      "unique": false
+    }
+  ]
+}

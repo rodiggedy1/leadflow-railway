@@ -1,0 +1,174 @@
+{
+  "format": 1,
+  "table": "madison_action_proposals",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "bigint",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "intentId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "decisionId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "proposalKey",
+      "columnType": "varchar(96)",
+      "nullable": false
+    },
+    {
+      "name": "actionType",
+      "columnType": "enum('RESCHEDULE_BOOKING','CANCEL_BOOKING','SERVICE_ISSUE_REVIEW','REFUND_CREDIT_REVIEW','OTHER_OPERATION')",
+      "nullable": false
+    },
+    {
+      "name": "operation",
+      "columnType": "enum('CHANGE_DATE','CHANGE_TIME','ADD_EXTRA','REMOVE_EXTRA','CHANGE_SERVICE','CHANGE_FREQUENCY','CHANGE_ADDRESS','CHANGE_ACCESS_INSTRUCTIONS','CHANGE_ARRIVAL_INSTRUCTIONS','OTHER_MODIFICATION')",
+      "nullable": true
+    },
+    {
+      "name": "parameters",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "targetType",
+      "columnType": "varchar(32)",
+      "nullable": false
+    },
+    {
+      "name": "targetId",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "occurrenceKey",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "riskLevel",
+      "columnType": "tinyint",
+      "nullable": false
+    },
+    {
+      "name": "readiness",
+      "columnType": "enum('READY_FOR_HUMAN_REVIEW','MISSING_PARAMETERS','TARGET_UNRESOLVED','POLICY_REVIEW_REQUIRED','CONFLICTING_STATE')",
+      "nullable": false
+    },
+    {
+      "name": "missingParameters",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "verificationSteps",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "expectedCurrentState",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "bookingVersion",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "actionFingerprint",
+      "columnType": "varchar(128)",
+      "nullable": false
+    },
+    {
+      "name": "status",
+      "columnType": "enum('PROPOSED','NEEDS_REVIEW','APPROVING','APPROVED','DISMISSED','SUPERSEDED','PENDING_EXECUTION','EXECUTING','COMPLETED','FAILED')",
+      "nullable": false,
+      "default": "'PROPOSED'"
+    },
+    {
+      "name": "supersededByProposalId",
+      "columnType": "bigint",
+      "nullable": true
+    },
+    {
+      "name": "createdAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    },
+    {
+      "name": "updatedAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_madison_action_proposals_key",
+      "columns": [
+        "proposalKey"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_madison_action_proposals_fingerprint",
+      "columns": [
+        "actionFingerprint"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_madison_action_proposals_intent",
+      "columns": [
+        "intentId"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_action_proposals_decision",
+      "columns": [
+        "decisionId"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_action_proposals_status_created",
+      "columns": [
+        "status",
+        "createdAt"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_action_proposals_target",
+      "columns": [
+        "targetId"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_action_proposals_superseded",
+      "columns": [
+        "supersededByProposalId"
+      ],
+      "unique": false
+    }
+  ]
+}

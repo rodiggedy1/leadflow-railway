@@ -21,6 +21,21 @@ import "./ai-team-review.css";
 
 type Tab = "overview" | "agents" | "activity";
 type IssueCategory = "Reschedule" | "Cancellation" | "Service issue" | "Refund / credit" | "General question" | "Booking request";
+type AiTeamActivity = {
+  id: string;
+  source: "activity_log" | "madison_decision";
+  eventType: string;
+  occurredAt: Date | string;
+  title: string;
+  summary: string;
+  status: string;
+  agent: string | null;
+  sessionId: number | null;
+  decisionId: number | null;
+  proposalId: number | null;
+  issueId: number | null;
+  metadata: Record<string, unknown>;
+};
 const ISSUE_CATEGORIES: IssueCategory[] = ["Reschedule", "Cancellation", "Service issue", "Refund / credit", "General question", "Booking request"];
 type Agent = {
   id: string;
@@ -82,15 +97,6 @@ const AGENTS: Agent[] = [
   },
 ];
 
-const ACTIVITY = [
-  ["1:24 PM", "Madison replied to Thumbtack lead", "Sarah asked about move-out cleaning.", "madison"],
-  ["1:23 PM", "Follow-up Agent recovered abandoned quote", "$329 booking confirmed ✓", "followup"],
-  ["1:21 PM", "Operations reassigned a job", "Team 3 → Team 6", "operations"],
-  ["1:18 PM", "Customer Care issued $25 credit", "Within authorized limit", "care"],
-  ["1:16 PM", "ETA Agent called Team 4", "Arrival confirmed for 1:45 PM", "eta"],
-  ["1:12 PM", "Madison sent follow-up", "Lead had not responded for 2 hours", "madison"],
-] as const;
-
 function getCustomerCareProposal(message: string) {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
   if (/(^|\b)(cancel|cancellation|call off|don'?t need the clean)(\b|$)/.test(normalized)) {
@@ -126,6 +132,21 @@ function formatConversationTime(ts: number | null | undefined): string | null {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatActivityTime(value: Date | string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function activityKind(item: AiTeamActivity): string {
+  const value = `${item.agent ?? ""} ${item.eventType}`.toLowerCase();
+  if (value.includes("madison")) return "madison";
+  if (value.includes("operation")) return "operations";
+  if (value.includes("care")) return "care";
+  if (value.includes("eta")) return "eta";
+  return "followup";
 }
 
 function AgentAvatar({ agent, large = false }: { agent: Agent; large?: boolean }) {
@@ -236,11 +257,13 @@ export default function AiTeamReview() {
   const [tab, setTab] = useState<Tab>("overview");
   const [issueFilter, setIssueFilter] = useState<IssueCategory | "All issues">("All issues");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<AiTeamActivity | null>(null);
   const [autonomy, setAutonomy] = useState("assist");
   const [resolved, setResolved] = useState<string[]>([]);
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
   const { data: focusCards = [], isLoading: focusLoading } = trpc.madison.getActiveSmsQueue.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: activityItems = [], isLoading: activityLoading } = trpc.activity.getAiTeamFeed.useQuery({ limit: 50 }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
   const refreshLiveQueue = () => { void utils.madison.getActiveSmsQueue.invalidate(); };
@@ -254,7 +277,7 @@ export default function AiTeamReview() {
     <main className="ai-team-page">
       <header className="ai-team-header">
         <div className="ai-team-eyebrow"><span className="ai-team-orb"><Bot size={17} /></span><span>AI TEAM</span><b><i />7 agents working</b></div>
-        <div className="ai-team-header-row"><div><h1>Your business is being handled.</h1><p>Supervise the decisions that need you. Everything else stays moving.</p></div><button className="ai-team-notice" type="button" onClick={() => toast.info("This is a visual review page with synthetic data.")}><ShieldCheck size={16} />Review only</button></div>
+        <div className="ai-team-header-row"><div><h1>Your business is being handled.</h1><p>Supervise the decisions that need you. Everything else stays moving.</p></div><button className="ai-team-notice" type="button" onClick={() => toast.info("Activity is read-only. Actions still require the approval controls in the queue.")}><ShieldCheck size={16} />Review only</button></div>
         <nav className="ai-team-tabs" aria-label="AI Team sections">{(["overview", "agents", "activity"] as Tab[]).map(item => <button key={item} type="button" className={tab === item ? "is-active" : ""} onClick={() => setTab(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</nav>
       </header>
 
@@ -262,19 +285,29 @@ export default function AiTeamReview() {
         <section className="ai-team-summary"><div><strong>184</strong><span>actions handled today</span></div><div><strong>37</strong><span>leads answered</span></div><div><strong>12</strong><span>bookings made</span></div><div><strong>$4,821</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
-        <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact /></section>
+        <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact items={activityItems as AiTeamActivity[]} loading={activityLoading} onOpen={setSelectedActivity} /></section>
       </>}
 
       {tab === "agents" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>AI TEAM</span><h2>Employees, not automations</h2></div><p>Each agent has a mission, authority, and clear escalation boundary.</p></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>}
-      {tab === "activity" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>A clear record of what got done</h2></div><p>Open an item to see the reasoning, context, and action.</p></div><ActivityList /></section>}
+      {tab === "activity" && <section className="ai-team-section ai-team-tab-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>A clear record of what got done</h2></div><p>Open an item to see the reasoning, context, and action.</p></div><ActivityList items={activityItems as AiTeamActivity[]} loading={activityLoading} onOpen={setSelectedActivity} /></section>}
 
       <section className="ai-team-autonomy"><div><span>AUTONOMY</span><h2>How much should AI handle?</h2><p>Configure the default. Set tighter rules for individual actions in each agent’s authority.</p></div><div className="ai-team-autonomy-control"><div className="ai-team-autonomy-track">{["observe", "assist", "act", "run business"].map(item => <button type="button" key={item} className={autonomy === item ? "is-active" : ""} onClick={() => { setAutonomy(item); toast.info("Autonomy control is a visual review state only."); }}>{item}</button>)}</div><small>{autonomy === "observe" ? "AI recommends actions but does not take them." : autonomy === "assist" ? "AI handles conversations and asks before operational changes." : autonomy === "act" ? "AI handles routine operations independently." : "AI only escalates exceptions outside its authority."}</small></div></section>
 
       {selectedAgent && <div className="ai-team-drawer-backdrop" role="presentation" onClick={() => setSelectedAgent(null)}><aside className="ai-team-drawer" role="dialog" aria-modal="true" aria-label={`${selectedAgent.name} details`} onClick={event => event.stopPropagation()}><button className="ai-team-drawer-close" type="button" onClick={() => setSelectedAgent(null)} aria-label="Close agent details"><X size={18} /></button><div className="ai-team-drawer-agent"><AgentAvatar agent={selectedAgent} large /><div><span>AI TEAM · AGENT PROFILE</span><h2>{selectedAgent.name}</h2><p>{selectedAgent.role}</p></div></div><div className="ai-team-drawer-block"><span>MISSION</span><strong>{selectedAgent.mission}</strong></div><div className="ai-team-drawer-block"><span>CAN DO</span><div className="ai-team-check-list">{selectedAgent.capabilities.map(item => <p key={item}><Check size={14} />{item}</p>)}</div></div><div className="ai-team-drawer-block ai-team-drawer-escalate"><span>REQUIRES YOUR APPROVAL</span>{selectedAgent.approvals.map(item => <p key={item}><AlertTriangle size={14} />{item}</p>)}</div><button type="button" className="ai-team-drawer-footer" onClick={() => toast.info("Conversation detail is part of the next review iteration.")}>Watch current conversation <ArrowRight size={15} /></button></aside></div>}
+      {selectedActivity && <ActivityDetail activity={selectedActivity} onClose={() => setSelectedActivity(null)} />}
     </main>
   );
 }
 
-function ActivityList({ compact = false }: { compact?: boolean }) {
-  return <div className={`ai-team-activity-list ${compact ? "is-compact" : ""}`}>{ACTIVITY.map(([time, title, detail, kind]) => <button type="button" className="ai-team-activity-row" key={`${time}-${title}`} onClick={() => toast.info("Activity detail is a review-only interaction.")}><time>{time}</time><span className={`ai-team-activity-dot is-${kind}`} /> <div><strong>{title}</strong><p>{detail}</p></div><ChevronRight size={15} /></button>)}</div>;
+function ActivityList({ compact = false, items, loading, onOpen }: { compact?: boolean; items: AiTeamActivity[]; loading: boolean; onOpen: (item: AiTeamActivity) => void }) {
+  if (loading) return <div className="ai-team-activity-list"><div className="ai-team-activity-empty">Loading recorded activity…</div></div>;
+  if (items.length === 0) return <div className="ai-team-activity-list"><div className="ai-team-activity-empty">No recorded activity is available yet.</div></div>;
+  return <div className={`ai-team-activity-list ${compact ? "is-compact" : ""}`}>{items.map(item => <button type="button" className="ai-team-activity-row" key={item.id} onClick={() => onOpen(item)}><time>{formatActivityTime(item.occurredAt)}</time><span className={`ai-team-activity-dot is-${activityKind(item)}`} /> <div><strong>{item.title}</strong><p>{item.summary}</p></div><ChevronRight size={15} /></button>)}</div>;
+}
+
+function ActivityDetail({ activity, onClose }: { activity: AiTeamActivity; onClose: () => void }) {
+  const metadata = activity.metadata;
+  const proposal = metadata.proposal as { actionType?: string; operation?: string; readiness?: string; verificationSteps?: string[] } | null;
+  const approval = metadata.approval as { decision?: string; correctedBy?: string } | null;
+  return <div className="ai-team-drawer-backdrop" role="presentation" onClick={onClose}><aside className="ai-team-drawer ai-team-activity-drawer" role="dialog" aria-modal="true" aria-label="Activity detail" onClick={event => event.stopPropagation()}><button className="ai-team-drawer-close" type="button" onClick={onClose} aria-label="Close activity detail"><X size={18} /></button><div className="ai-team-drawer-agent"><span className={`ai-team-activity-detail-icon is-${activityKind(activity)}`}><MessageSquare size={18} /></span><div><span>RECORDED ACTIVITY</span><h2>{activity.title}</h2><p>{formatActivityTime(activity.occurredAt)} · {activity.agent ?? "LeadFlow"}</p></div></div><div className="ai-team-drawer-block"><span>SUMMARY</span><strong>{activity.summary}</strong></div><div className="ai-team-drawer-block"><span>STATUS</span><p className="ai-team-activity-status">{activity.status.replaceAll("_", " ")}</p>{activity.source === "madison_decision" && <><p className="ai-team-activity-detail-line">Disposition: {String(metadata.disposition ?? "—")}</p>{typeof metadata.replyDraft === "string" && <p className="ai-team-activity-detail-line"><b>Reply draft:</b> {metadata.replyDraft}</p>}</>}</div>{proposal && <div className="ai-team-drawer-block"><span>RECOMMENDED ACTION</span><strong>{proposal.actionType?.replaceAll("_", " ") ?? "Operational task"}</strong><p className="ai-team-activity-detail-line">{proposal.operation?.replaceAll("_", " ") ?? "Review the request"} · {proposal.readiness?.replaceAll("_", " ") ?? "Needs review"}</p>{proposal.verificationSteps?.map(step => <p className="ai-team-activity-detail-line" key={step}>✓ {step}</p>)}</div>}{approval && <div className="ai-team-drawer-block"><span>APPROVAL RECORD</span><p className="ai-team-activity-detail-line">{approval.decision?.replaceAll("_", " ")} by {approval.correctedBy ?? "owner"}</p></div>}<button type="button" className="ai-team-drawer-footer" onClick={onClose}>Close activity detail <ArrowLeft size={15} /></button></aside></div>;
 }

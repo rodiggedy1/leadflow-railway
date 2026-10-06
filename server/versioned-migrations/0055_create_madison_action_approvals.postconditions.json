@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "table": "madison_action_approvals",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "bigint",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "proposalId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "decision",
+      "columnType": "enum('APPROVE','DISMISS','WRONG_ACTION')",
+      "nullable": false
+    },
+    {
+      "name": "correctedActionType",
+      "columnType": "enum('RESCHEDULE_BOOKING','CANCEL_BOOKING','SERVICE_ISSUE_REVIEW','REFUND_CREDIT_REVIEW','OTHER_OPERATION')",
+      "nullable": true
+    },
+    {
+      "name": "correctionReason",
+      "columnType": "varchar(64)",
+      "nullable": true
+    },
+    {
+      "name": "correctedBy",
+      "columnType": "varchar(128)",
+      "nullable": false
+    },
+    {
+      "name": "createdIssueId",
+      "columnType": "bigint",
+      "nullable": true
+    },
+    {
+      "name": "createdAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_madison_action_approvals_proposal_created",
+      "columns": [
+        "proposalId",
+        "createdAt"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_action_approvals_issue",
+      "columns": [
+        "createdIssueId"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_action_approvals_decision_created",
+      "columns": [
+        "decision",
+        "createdAt"
+      ],
+      "unique": false
+    }
+  ]
+}
