@@ -342,12 +342,13 @@ export function formatMissingQuoteQuestion(missing: string[]): string {
     condition: "how you would rate the home’s condition from 1 to 10, where 1 is basically spotless and 10 needs a full reset",
     extras: "whether you want any extras, such as inside the oven or fridge, interior windows, cabinets, the basement, laundry, organizing, wiping walls, or sweeping the garage (or just say no extras)",
   };
-  const requested = missing.map(item => prompts[item]).filter(Boolean);
-  if (requested.length === 1) return `I can get that quote started — could you tell me ${requested[0]}?`;
-  if (requested.length === 2) return `I can get that quote started — could you tell me ${requested[0]} and ${requested[1]}?`;
-  if (requested.length === 3)
-    return `I can get that quote started — could you tell me ${requested[0]}, ${requested[1]}, and ${requested[2]}?`;
-  return "I can get that quote started — what type of cleaning do you need, and how many bedrooms and bathrooms are in the home? Then I’ll ask you to rate the home’s condition from 1 to 10 and whether you want any extras.";
+  if (!missing.includes("serviceType") && missing.includes("bedrooms") && missing.includes("bathrooms")) {
+    return "I can get that quote started — how many bedrooms and bathrooms are in the home?";
+  }
+  const next = missing.map(item => prompts[item]).find(Boolean);
+  return next
+    ? `I can get that quote started — could you tell me ${next}?`
+    : "I can get that quote started — what type of cleaning are you looking for?";
 }
 
 export function formatVerifiedQuoteReply(quote: VerifiedQuote): string {
