@@ -27,7 +27,7 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
-import { extractQuoteInputsFromText, formatMissingQuoteQuestion, formatVerifiedQuoteReply, hasBookServiceSignal, resolveVerifiedQuote } from "./madisonMissionStore";
+import { extractQuoteInputsFromText, formatMissingQuoteQuestion, formatVerifiedQuoteReply, getActiveBookServiceQuoteInputs, hasActiveBookServiceMission, resolveVerifiedQuote, shouldContinueBookServiceQuote, type QuoteInputs } from "./madisonMissionStore";
 import { createMadisonQuoteLink } from "./madisonQuoteLinkService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ export async function triggerMadisonSmsDraft(params: {
         .where(eq(madisonSmsDrafts.id, draftId));
       await postAutoSentCard({ draftId, sessionId, fromPhone,
         senderName: senderName ?? fromPhone, inboundText,
-        autoReply: phase1aResponse, autoSendConfidence: 1.0, db });
+        autoReply: phase1aResponse, autoSendReason: "deterministic_template", autoSendConfidence: 1.0, db });
       console.log(`[MadisonSMS] Phase1A AUTO-SENT for ${fromPhone}: "${inboundText}" → "${phase1aResponse}"`);
       return;
     }
@@ -209,7 +209,7 @@ export async function triggerMadisonSmsDraft(params: {
 
     // ── Step 4.5: Fetch conversation history for LLM context ─────────────────
     let conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
-    let quoteInputs: { bedrooms: string | null; bathrooms: string | null; serviceType: string | null } | undefined;
+    let quoteInputs: QuoteInputs | undefined;
     try {
       const [sessionRow] = await db
         .select({
@@ -256,23 +256,33 @@ export async function triggerMadisonSmsDraft(params: {
       conversationMessages,
     });
     const extractedQuoteInputs = extractQuoteInputsFromText(inboundText);
+    const persistedQuoteInputs = await getActiveBookServiceQuoteInputs(db, sessionId);
     quoteInputs = {
-      bedrooms: quoteInputs?.bedrooms ?? extractedQuoteInputs.bedrooms,
-      bathrooms: quoteInputs?.bathrooms ?? extractedQuoteInputs.bathrooms,
-      serviceType: quoteInputs?.serviceType ?? extractedQuoteInputs.serviceType,
+      bedrooms: quoteInputs?.bedrooms ?? persistedQuoteInputs.bedrooms ?? extractedQuoteInputs.bedrooms,
+      bathrooms: quoteInputs?.bathrooms ?? persistedQuoteInputs.bathrooms ?? extractedQuoteInputs.bathrooms,
+      serviceType: quoteInputs?.serviceType ?? persistedQuoteInputs.serviceType ?? extractedQuoteInputs.serviceType,
+      condition: persistedQuoteInputs.condition ?? extractedQuoteInputs.condition,
+      extras: extractedQuoteInputs.extras ?? persistedQuoteInputs.extras,
+      extrasConfirmed: extractedQuoteInputs.extrasConfirmed || persistedQuoteInputs.extrasConfirmed,
     };
     const quoteResolution = resolveVerifiedQuote(quoteInputs);
     const verifiedQuote = quoteResolution.quote;
+    const activeBookServiceMission = await hasActiveBookServiceMission(db, sessionId);
+    const quoteConversationActive = shouldContinueBookServiceQuote(
+      inboundText,
+      activeBookServiceMission,
+      Boolean(verifiedQuote),
+    );
     let automaticQuoteLink: string | null = null;
     let automaticQuoteReply: string | null = null;
     let reviewDraft = draftResponse.draft;
-    if (hasBookServiceSignal(inboundText)) {
+    if (quoteConversationActive) {
       if (!verifiedQuote) {
         automaticQuoteReply = formatMissingQuoteQuestion(quoteResolution.missing);
         reviewDraft = automaticQuoteReply;
       }
     }
-    if (verifiedQuote && hasBookServiceSignal(inboundText) && quoteInputs) {
+    if (verifiedQuote && quoteConversationActive && quoteInputs) {
       try {
         const quoteLink = await createMadisonQuoteLink(db, {
           sessionId,
@@ -343,6 +353,7 @@ export async function triggerMadisonSmsDraft(params: {
       capabilityResult,
       contextUsed,
       quoteInputs,
+      quoteConversationActive,
     });
     if (automaticQuoteReply) {
       const [claimResult] = await db
@@ -355,7 +366,7 @@ export async function triggerMadisonSmsDraft(params: {
           await db.update(madisonSmsDrafts)
             .set({ status: "SENT", sentAt: new Date(), outboundOpenPhoneId: result.messageId ?? null, updatedAt: new Date() })
             .where(eq(madisonSmsDrafts.id, draftId));
-          await postAutoSentCard({ draftId, sessionId, fromPhone, senderName: context.senderName ?? senderName ?? fromPhone, inboundText, autoReply: reviewDraft, autoSendConfidence: 1, db });
+          await postAutoSentCard({ draftId, sessionId, fromPhone, senderName: context.senderName ?? senderName ?? fromPhone, inboundText, autoReply: reviewDraft, autoSendReason: "verified_quote", autoSendConfidence: 1, db });
           console.log(`[MadisonSMS] AUTO-SENT quote flow reply for ${fromPhone}: ${automaticQuoteLink ?? "missing-input question"}`);
           return;
         } catch (error) {
@@ -375,9 +386,9 @@ export async function triggerMadisonSmsDraft(params: {
     });
 
     // ── Step 7.6: Human approval boundary ─────────────────────────────────────
-    // Phase 1A returned above and remains the sole automatic courtesy-reply path.
-    // Every substantive generated draft remains DRAFT_READY until an agent approves
-    // it through opsChat.approveSmsDraft.
+    // Active verified quote conversations are handled automatically above.
+    // Every other substantive generated draft remains DRAFT_READY until an agent
+    // approves it through opsChat.approveSmsDraft.
 
     // ── Step 8: Post Draft Card to Command Chat ───────────────────────────────
     await postDraftCardToCommandChat({
@@ -1007,10 +1018,11 @@ async function postAutoSentCard(params: {
   senderName: string;
   inboundText: string;
   autoReply: string;
+  autoSendReason: "deterministic_template" | "verified_quote";
   autoSendConfidence: number;
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
 }): Promise<void> {
-  const { draftId, sessionId, fromPhone, senderName, inboundText, autoReply, autoSendConfidence, db } = params;
+  const { draftId, sessionId, fromPhone, senderName, inboundText, autoReply, autoSendReason, autoSendConfidence, db } = params;
   const eventTs = Date.now();
   const body = `Madison sent reply\n${senderName}: "${inboundText}"\nMadison: "${autoReply}"`;
   const metadataJson = JSON.stringify({
@@ -1020,7 +1032,7 @@ async function postAutoSentCard(params: {
     inboundText,
     autoReply,
     autoSentAt: new Date().toISOString(),
-    autoSendReason: "social_acknowledgment",
+    autoSendReason,
     autoSendConfidence,
   });
   await db.insert(opsChatMessages).values({
