@@ -78,7 +78,7 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
     expect(formatMissingQuoteQuestion(["bathrooms", "serviceType"])).toBe("I can get that quote started — could you tell me how many bathrooms are in the home and what type of cleaning you need (standard, deep, or move-in/move-out)?");
   });
 
-  it("registers the additive migration with a matching checksum", async () => {
+  it("registers both additive Madison migrations with matching checksums", async () => {
     const directory = path.resolve(
       process.cwd(),
       "server",
@@ -99,6 +99,7 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
     const migration = manifest.migrations.find(
       item => item.id === "0056_create_madison_missions"
     );
+    const factsMigration = manifest.migrations.find(item => item.id === "0057_create_madison_mission_facts");
     expect(migration).toMatchObject({
       mode: "create-table",
       sqlFile: "0056_create_madison_missions.sql",
@@ -115,9 +116,19 @@ describe("Madison BOOK_SERVICE mission foundation", () => {
     expect(sql).toContain(
       "CREATE TABLE IF NOT EXISTS `madison_customer_missions`"
     );
-    expect(sql).toContain(
+    expect(sql).not.toContain(
       "CREATE TABLE IF NOT EXISTS `madison_customer_mission_facts`"
     );
     expect(sql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/i);
+    expect(factsMigration).toMatchObject({
+      mode: "create-table",
+      sqlFile: "0057_create_madison_mission_facts.sql",
+      replayMode: "verified-idempotent",
+      postconditionsFile: "0057_create_madison_mission_facts.postconditions.json",
+    });
+    const factsSql = await readFile(path.join(directory, factsMigration!.sqlFile), "utf8");
+    expect(createHash("sha256").update(factsSql).digest("hex")).toBe(factsMigration!.sha256);
+    expect(factsSql).toContain("CREATE TABLE IF NOT EXISTS `madison_customer_mission_facts`");
+    expect(factsSql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/i);
   });
 });

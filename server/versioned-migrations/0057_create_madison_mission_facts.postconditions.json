@@ -1,0 +1,105 @@
+{
+  "format": 1,
+  "table": "madison_customer_mission_facts",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "bigint",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "missionId",
+      "columnType": "bigint",
+      "nullable": false
+    },
+    {
+      "name": "factKey",
+      "columnType": "varchar(96)",
+      "nullable": false
+    },
+    {
+      "name": "value",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "source",
+      "columnType": "enum('customer_sms','leadflow_context')",
+      "nullable": false
+    },
+    {
+      "name": "sourceRecordId",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "sourceMessageId",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    {
+      "name": "confidence",
+      "columnType": "enum('verified','customer_stated')",
+      "nullable": false
+    },
+    {
+      "name": "observedAt",
+      "columnType": "datetime(3)",
+      "nullable": false
+    },
+    {
+      "name": "verifiedAt",
+      "columnType": "datetime(3)",
+      "nullable": true
+    },
+    {
+      "name": "expiresAt",
+      "columnType": "datetime(3)",
+      "nullable": true
+    },
+    {
+      "name": "createdAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    },
+    {
+      "name": "updatedAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_madison_customer_mission_facts_key",
+      "columns": [
+        "missionId",
+        "factKey"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_madison_customer_mission_facts_source_message",
+      "columns": [
+        "sourceMessageId"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_customer_mission_facts_expires",
+      "columns": [
+        "expiresAt"
+      ],
+      "unique": false
+    }
+  ]
+}
