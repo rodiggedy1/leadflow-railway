@@ -5,3 +5,8 @@
 .ai-team-need-actions{flex-wrap:wrap}.ai-team-need-actions button.is-resolve{background:transparent;color:#806d5d;border-color:#d8c9bb}.ai-team-need-actions button:disabled{cursor:wait;opacity:.55}
 
 .ai-team-need-actions{flex-wrap:wrap}.ai-team-need-actions button.is-resolve{background:transparent;color:#806d5d;border-color:#d8c9bb}.ai-team-need-actions button:disabled{cursor:wait;opacity:.55}
+
+/* Activity history: show an unambiguous date/time and readable detail content. */
+.ai-team-activity-row{grid-template-columns:145px 9px 1fr 16px}
+.ai-team-activity-detail{margin:10px 0 0;color:#665c52;font-size:13px;line-height:1.65;white-space:pre-wrap}
+@media(max-width:560px){.ai-team-activity-row{grid-template-columns:108px 8px 1fr 12px}}
