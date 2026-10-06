@@ -355,26 +355,6 @@ export async function triggerMadisonSmsDraft(params: {
       quoteInputs,
       quoteConversationActive,
     });
-    if (automaticQuoteReply) {
-      const [claimResult] = await db
-        .update(madisonSmsDrafts)
-        .set({ status: "SENDING", approvedText: reviewDraft, approvedBy: "madison_auto_quote", approvedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(madisonSmsDrafts.id, draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
-      if (((claimResult as any).affectedRows ?? 0) === 1) {
-        try {
-          const result = await sendSms({ to: fromPhone, content: reviewDraft, fromNumberId: ENV.openPhoneCsNumberId || undefined });
-          await db.update(madisonSmsDrafts)
-            .set({ status: "SENT", sentAt: new Date(), outboundOpenPhoneId: result.messageId ?? null, updatedAt: new Date() })
-            .where(eq(madisonSmsDrafts.id, draftId));
-          await postAutoSentCard({ draftId, sessionId, fromPhone, senderName: context.senderName ?? senderName ?? fromPhone, inboundText, autoReply: reviewDraft, autoSendReason: "verified_quote", autoSendConfidence: 1, db });
-          console.log(`[MadisonSMS] AUTO-SENT quote flow reply for ${fromPhone}: ${automaticQuoteLink ?? "missing-input question"}`);
-          return;
-        } catch (error) {
-          await db.update(madisonSmsDrafts).set({ status: "FAILED", errorMessage: error instanceof Error ? error.message : "Automatic quote SMS failed", updatedAt: new Date() }).where(eq(madisonSmsDrafts.id, draftId));
-          throw error;
-        }
-      }
-    }
     // ── Step 7.5: Classify lead category ────────────────────────────────────────
     const leadCategory = await classifyLeadCategory({
       sessionId,
@@ -386,9 +366,8 @@ export async function triggerMadisonSmsDraft(params: {
     });
 
     // ── Step 7.6: Human approval boundary ─────────────────────────────────────
-    // Active verified quote conversations are handled automatically above.
-    // Every other substantive generated draft remains DRAFT_READY until an agent
-    // approves it through opsChat.approveSmsDraft.
+    // Quote replies and every other substantive generated draft remain DRAFT_READY
+    // until an agent approves them through opsChat.approveSmsDraft.
 
     // ── Step 8: Post Draft Card to Command Chat ───────────────────────────────
     await postDraftCardToCommandChat({

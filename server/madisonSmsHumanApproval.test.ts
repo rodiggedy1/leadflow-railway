@@ -34,4 +34,10 @@ describe("Madison substantive SMS human approval boundary", () => {
     expect(approvalCardBlock).toContain("postDraftCardToCommandChat");
     expect(approvalCardBlock).toContain("draft: reviewDraft");
   });
+
+  it("keeps the quote flow inside human approval", () => {
+    expect(source).not.toContain('approvedBy: "madison_auto_quote"');
+    expect(source).not.toContain("AUTO-SENT quote flow reply");
+    expect(source).toContain("Quote replies and every other substantive generated draft remain DRAFT_READY");
+  });
 });

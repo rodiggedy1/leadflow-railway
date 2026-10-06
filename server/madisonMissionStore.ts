@@ -576,7 +576,7 @@ export async function upsertBookServiceMission(
       factKey: "quote_reply_proposal",
       value: {
         text: formatVerifiedQuoteReply(verifiedQuote.quote),
-        status: "READY_FOR_AUTOMATION",
+        status: "READY_FOR_HUMAN_REVIEW",
         amountDollars: verifiedQuote.quote.amountDollars,
       },
       source: "leadflow_context",
