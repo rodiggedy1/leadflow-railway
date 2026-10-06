@@ -39,6 +39,7 @@ import {
   issueEngineTable,
   issueEngineTimeline,
   madisonSmsDrafts,
+  madisonSmsDraftEdits,
   madisonEmailDrafts,
   focusPoints,
   gmailThreadMeta,
@@ -5812,6 +5813,15 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       if (!draft) return { ok: false, reason: "not_found" };
 
       try {
+        if (draft.generatedDraft !== null && input.approvedText !== draft.generatedDraft) {
+          await db.insert(madisonSmsDraftEdits).values({
+            draftId: draft.id,
+            originalText: draft.generatedDraft,
+            editedText: input.approvedText,
+            editedBy: input.approvedBy,
+            editedAt: new Date(),
+          });
+        }
         // Send via CS phone number
         const result = await sendSms({
           to: draft.fromPhone,

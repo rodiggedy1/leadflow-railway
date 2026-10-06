@@ -40,4 +40,22 @@ describe("Madison substantive SMS human approval boundary", () => {
     expect(source).not.toContain("AUTO-SENT quote flow reply");
     expect(source).toContain("Quote replies and every other substantive generated draft remain DRAFT_READY");
   });
+
+  it("records a human edit before sending without replacing Madison's original draft", () => {
+    const approvalSource = readFileSync(resolve(process.cwd(), "server/opsChatRouter.ts"), "utf8");
+    const schemaSource = readFileSync(resolve(process.cwd(), "drizzle/schema.ts"), "utf8");
+    const approvalBlock = approvalSource.slice(approvalSource.indexOf("approveSmsDraft"), approvalSource.indexOf("dismissSmsDraft"));
+    expect(approvalBlock).toContain("madisonSmsDraftEdits");
+    expect(approvalBlock).toContain("originalText: draft.generatedDraft");
+    expect(approvalBlock).toContain("editedText: input.approvedText");
+    expect(approvalBlock).toContain("editedBy: input.approvedBy");
+    expect(schemaSource).toContain("generatedDraft: text(\"generatedDraft\")");
+  });
+
+  it("exposes edit and approve-edited controls on the AI Team card", () => {
+    const reviewSource = readFileSync(resolve(process.cwd(), "client/src/pages/AiTeamReview.tsx"), "utf8");
+    expect(reviewSource).toContain("Edit reply");
+    expect(reviewSource).toContain("Approve edited reply");
+    expect(reviewSource).toContain("Original Madison draft is preserved.");
+  });
 });
