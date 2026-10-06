@@ -23,11 +23,13 @@ export const activityRouter = router({
     }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) return { items: [], unreadCount: 0 };
+      if (!db) return { items: [], unreadCount: 0, todayActions: 0, todayLeadsAnswered: 0 };
 
       const limit = input?.limit ?? 100;
       const sinceDays = input?.sinceDays ?? 30;
       const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
       const [approvedReplies, approvedTasks] = await Promise.all([
         db.select({
@@ -109,7 +111,15 @@ export const activityRouter = router({
         .sort((a, b) => b.createdAt!.getTime() - a.createdAt!.getTime())
         .slice(0, limit);
 
-      return { items, unreadCount: 0 };
+      const todayReplies = approvedReplies.filter(reply => reply.sentAt && reply.sentAt >= todayStart).length;
+      const todayTasks = approvedTasks.filter(task => task.approvedAt && task.approvedAt >= todayStart).length;
+
+      return {
+        items,
+        unreadCount: 0,
+        todayActions: todayReplies + todayTasks,
+        todayLeadsAnswered: todayReplies,
+      };
     }),
 
   /**
