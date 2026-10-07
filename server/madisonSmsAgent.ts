@@ -80,6 +80,38 @@ const SMS_DRAFT_EXCLUDED_PHONES = new Set<string>([
   "+17259009272",
 ]);
 
+type MadisonDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+async function runShadowForDraft(input: {
+  db: MadisonDb;
+  sourceMessageId: string;
+  draftId: number;
+  sessionId: number;
+  inboundText: string;
+}): Promise<void> {
+  const shadowResult = await persistMadisonMessageShadow(input);
+  if (shadowResult.ok) return;
+
+  console.error(
+    `[MadisonSMS] Shadow ${shadowResult.stage} failure for draft ${input.draftId}: ${shadowResult.errorCode} ${shadowResult.errorMessage}`
+  );
+  await input.db
+    .update(madisonSmsDrafts)
+    .set({
+      errorStage: `shadow_${shadowResult.stage}`,
+      errorCode: shadowResult.errorCode,
+      errorMessage: shadowResult.errorMessage,
+      updatedAt: new Date(),
+    })
+    .where(eq(madisonSmsDrafts.id, input.draftId))
+    .catch(error =>
+      console.error(
+        `[MadisonSMS] Could not record Shadow failure for draft ${input.draftId}:`,
+        error
+      )
+    );
+}
+
 /**
  * Fire-and-forget entry point. Call from webhooks.ts after storing the inbound message.
  * Never throws — all errors are caught and written to the DB.
@@ -137,7 +169,34 @@ export async function triggerMadisonSmsDraft(params: {
       throw err;
     });
 
-    if (!insertResult) return;
+    if (!insertResult) {
+      // Production and Preview share the Madison database. If the other
+      // environment created this draft first, this environment must still run
+      // its read-only Shadow classifier instead of exiting at the duplicate
+      // guard. It must not rerun Madison or create another card.
+      const [existingDraft] = await db
+        .select({
+          id: madisonSmsDrafts.id,
+          sessionId: madisonSmsDrafts.sessionId,
+        })
+        .from(madisonSmsDrafts)
+        .where(eq(madisonSmsDrafts.inboundOpenPhoneId, inboundOpenPhoneId))
+        .limit(1);
+      if (!existingDraft) {
+        console.warn(
+          `[MadisonSMS] Duplicate draft ${inboundOpenPhoneId} was reported but could not be reloaded`
+        );
+        return;
+      }
+      await runShadowForDraft({
+        db,
+        sourceMessageId: inboundOpenPhoneId,
+        draftId: existingDraft.id,
+        sessionId: existingDraft.sessionId,
+        inboundText,
+      });
+      return;
+    }
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
 
@@ -145,27 +204,13 @@ export async function triggerMadisonSmsDraft(params: {
     // abandon the prediction before it reaches the database. The helper
     // reports its own errors and cannot affect Madison's draft, approval, or
     // send path.
-    const shadowResult = await persistMadisonMessageShadow({
+    await runShadowForDraft({
       db,
       sourceMessageId: inboundOpenPhoneId,
       draftId,
       sessionId,
       inboundText,
     });
-    if (!shadowResult.ok) {
-      console.error(
-        `[MadisonSMS] Shadow ${shadowResult.stage} failure for draft ${draftId}: ${shadowResult.errorCode} ${shadowResult.errorMessage}`
-      );
-      await db.update(madisonSmsDrafts)
-        .set({
-          errorStage: `shadow_${shadowResult.stage}`,
-          errorCode: shadowResult.errorCode,
-          errorMessage: shadowResult.errorMessage,
-          updatedAt: new Date(),
-        })
-        .where(eq(madisonSmsDrafts.id, draftId))
-        .catch(error => console.error(`[MadisonSMS] Could not record Shadow failure for draft ${draftId}:`, error));
-    }
 
     // ── Step 0.5: Phase 1A Deterministic Auto-Reply ────────────────────────────────────────────────────────────────────
     // Context-independent social acknowledgments — no LLM needed, fixed safe response.
