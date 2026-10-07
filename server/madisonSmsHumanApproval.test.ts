@@ -35,10 +35,13 @@ describe("Madison substantive SMS human approval boundary", () => {
     expect(approvalCardBlock).toContain("draft: reviewDraft");
   });
 
-  it("keeps the quote flow inside human approval", () => {
-    expect(source).not.toContain('approvedBy: "madison_auto_quote"');
-    expect(source).not.toContain("AUTO-SENT quote flow reply");
-    expect(source).toContain("Quote replies and every other substantive generated draft remain DRAFT_READY");
+  it("keeps quote behavior out of the generic Madison pipeline while disabled", () => {
+    expect(source).not.toContain("createMadisonQuoteLink");
+    expect(source).not.toContain("extractQuoteInputsFromText");
+    expect(source).not.toContain("formatMissingQuoteQuestion");
+    expect(source).not.toContain("resolveVerifiedQuote");
+    const quoteAgentSource = readFileSync(resolve(process.cwd(), "server/madisonQuoteAgent.ts"), "utf8");
+    expect(quoteAgentSource).toContain("MADISON_QUOTE_AGENT_ENABLED = false");
   });
 
   it("records a human edit before sending without replacing Madison's original draft", () => {
