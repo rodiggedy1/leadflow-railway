@@ -30,6 +30,7 @@ describe("Madison Message Understanding shadow contract", () => {
       nextBestAction: "CREATE_REVIEW_TASK",
       confidence: 0.93,
       classifierVersion: "madison-shadow-v1",
+      model: "gpt-4o",
     });
   });
 

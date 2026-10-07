@@ -154,7 +154,7 @@ export function normalizeShadowPrediction(
           .filter((item): item is string => typeof item === "string")
           .slice(0, 20)
       : [],
-    model: "gpt-5-mini",
+    model: "gpt-4o",
     classifierVersion: "madison-shadow-v1",
   };
 }
