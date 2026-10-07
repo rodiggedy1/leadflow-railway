@@ -145,7 +145,7 @@ export function normalizeShadowPrediction(
           .filter((item): item is string => typeof item === "string")
           .slice(0, 20)
       : [],
-    model: "gpt-5-mini",
+    model: "configured-default",
     classifierVersion: "madison-shadow-v1",
   };
 }
@@ -231,14 +231,10 @@ export async function persistMadisonMessageShadow(input: {
   resolvedCustomerId?: string | null;
   resolvedBookingId?: number | null;
 }): Promise<void> {
-  console.info(
-    `[MadisonShadow] start source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`
-  );
+  console.info(`[MadisonShadow] start source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`);
   try {
     const prediction = await classifyMadisonMessageShadow(input);
-    console.info(
-      `[MadisonShadow] classified source=${input.sourceMessageId} category=${prediction.primaryCategory} mission=${prediction.mission}`
-    );
+    console.info(`[MadisonShadow] classified source=${input.sourceMessageId} category=${prediction.primaryCategory} mission=${prediction.mission}`);
     await input.db
       .insert(madisonMessageUnderstanding)
       .values({
@@ -283,9 +279,7 @@ export async function persistMadisonMessageShadow(input: {
             )
           );
       });
-    console.info(
-      `[MadisonShadow] persisted source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`
-    );
+    console.info(`[MadisonShadow] persisted source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`);
   } catch (error) {
     console.error(
       `[MadisonShadow] failed source=${input.sourceMessageId} draft=${input.draftId ?? "none"}:`,

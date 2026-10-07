@@ -19,12 +19,7 @@ export type FileContent = {
   type: "file_url";
   file_url: {
     url: string;
-    mime_type?:
-      | "audio/mpeg"
-      | "audio/wav"
-      | "application/pdf"
-      | "audio/mp4"
-      | "video/mp4";
+    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4" ;
   };
 };
 
@@ -61,7 +56,6 @@ export type ToolChoice =
   | ToolChoiceExplicit;
 
 export type InvokeParams = {
-  model?: string;
   messages: Message[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
@@ -215,12 +209,11 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+const resolveApiUrl = () => "https://api.openai.com/v1/chat/completions";
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-    throw new Error("Built-in Forge LLM credentials are not configured");
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured");
   }
 };
 
@@ -273,7 +266,6 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
 
   const {
-    model,
     messages,
     tools,
     toolChoice,
@@ -285,7 +277,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: model ?? "gpt-5-mini",
+    model: "gpt-4o",
     messages: messages.map(normalizeMessage),
   };
 
@@ -301,7 +293,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_completion_tokens = 16384;
+  payload.max_tokens = 16384;
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
@@ -318,7 +310,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
     body: JSON.stringify(payload),
   });
