@@ -9,6 +9,7 @@ import { z } from "zod";
 import { getDb } from "./db";
 import { activityLog, madisonSmsDrafts } from "../drizzle/schema";
 import { madisonSmsActionApprovals } from "./madisonActionApprovalStore";
+import { getBusinessDayStart } from "./businessTime";
 import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 
 export const activityRouter = router({
@@ -28,8 +29,7 @@ export const activityRouter = router({
       const limit = input?.limit ?? 100;
       const sinceDays = input?.sinceDays ?? 30;
       const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const todayStart = getBusinessDayStart();
 
       const [approvedReplies, approvedTasks] = await Promise.all([
         db.select({
