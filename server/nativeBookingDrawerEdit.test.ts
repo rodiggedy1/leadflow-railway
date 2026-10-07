@@ -76,6 +76,8 @@ describe("native booking drawer commercial edits", () => {
     expect(footer.indexOf("bcr-save-changes")).toBeLessThan(
       footer.indexOf("bcr-cancel-booking")
     );
+    expect(page).toContain("requestedLocalDate: model.rescheduleDate || undefined");
+    expect(page).toContain("requestedLocalTime: model.rescheduleTime || undefined");
     expect(page).not.toContain(
       "disabled={model.updateBookingDetails.isPending}\n                      onClick={() =>\n                        model.updateActiveBookingSchedule"
     );
