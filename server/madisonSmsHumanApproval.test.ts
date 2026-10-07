@@ -35,6 +35,18 @@ describe("Madison substantive SMS human approval boundary", () => {
     expect(approvalCardBlock).toContain("draft: reviewDraft");
   });
 
+  it("runs Shadow only when the other environment already owns the draft", () => {
+    const duplicateBranchStart = source.indexOf("if (!insertResult) {");
+    const duplicateBranchEnd = source.indexOf("const [insertHeader]", duplicateBranchStart);
+    const duplicateBranch = source.slice(duplicateBranchStart, duplicateBranchEnd);
+
+    expect(duplicateBranchStart).toBeGreaterThanOrEqual(0);
+    expect(duplicateBranch).toContain("existingDraft");
+    expect(duplicateBranch).toContain("await runShadowForDraft");
+    expect(duplicateBranch).toContain("return;");
+    expect(duplicateBranch).not.toContain("postDraftCardToCommandChat");
+  });
+
   it("keeps quote behavior out of the generic Madison pipeline while disabled", () => {
     expect(source).not.toContain("createMadisonQuoteLink");
     expect(source).not.toContain("extractQuoteInputsFromText");

@@ -2529,18 +2529,23 @@ async function handleCsInboundMessage(msg: any) {
       console.warn("[CS] syncAllOutboundMessages error:", err)
     );
     console.log(`[CS] Madison trigger check — messageId=${messageId ?? "MISSING"}, inboundText=${inboundText.trim() ? "present("+inboundText.length+")" : "EMPTY"}, resolvedSessionId=${resolvedSessionId}`);
-    // Fire Madison SMS Draft Agent async (non-blocking) — generates a draft reply card in Command Chat
+    // Await the Madison SMS Draft Agent so its Shadow prediction is persisted before
+    // this inbound processing path completes. Shadow is read-only and cannot change
+    // Madison's reply, approval, or task behavior.
     if (messageId && inboundText.trim()) {
-      import("./madisonSmsAgent").then(({ triggerMadisonSmsDraft }) => {
-        triggerMadisonSmsDraft({
+      try {
+        const { triggerMadisonSmsDraft } = await import("./madisonSmsAgent");
+        await triggerMadisonSmsDraft({
           inboundOpenPhoneId: messageId,
           sessionId: resolvedSessionId,
           fromPhone,
           senderName: resolvedName ?? existingSession?.leadName ?? undefined,
           isCleaner,
           inboundText,
-        }).catch((err: unknown) => console.warn("[MadisonSMS] triggerMadisonSmsDraft error:", err));
-      }).catch((err: unknown) => console.warn("[MadisonSMS] import error:", err));
+        });
+      } catch (err: unknown) {
+        console.warn("[MadisonSMS] triggerMadisonSmsDraft error:", err);
+      }
     }
   }
 }
