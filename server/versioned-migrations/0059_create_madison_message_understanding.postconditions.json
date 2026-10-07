@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "table": "madison_message_understanding",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "bigint",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "sourceMessageId",
+      "columnType": "varchar(128)",
+      "nullable": false
+    },
+    { "name": "draftId", "columnType": "bigint", "nullable": true },
+    { "name": "sessionId", "columnType": "bigint", "nullable": false },
+    { "name": "inboundText", "columnType": "text", "nullable": false },
+    {
+      "name": "primaryCategory",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    { "name": "categories", "columnType": "json", "nullable": false },
+    { "name": "mission", "columnType": "varchar(64)", "nullable": false },
+    { "name": "missionState", "columnType": "varchar(64)", "nullable": false },
+    {
+      "name": "nextBestAction",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    { "name": "confidence", "columnType": "decimal(5,4)", "nullable": false },
+    { "name": "knownFacts", "columnType": "json", "nullable": false },
+    { "name": "missingFacts", "columnType": "json", "nullable": false },
+    {
+      "name": "resolvedCustomerId",
+      "columnType": "varchar(128)",
+      "nullable": true
+    },
+    { "name": "resolvedBookingId", "columnType": "bigint", "nullable": true },
+    { "name": "model", "columnType": "varchar(64)", "nullable": false },
+    {
+      "name": "classifierVersion",
+      "columnType": "varchar(64)",
+      "nullable": false
+    },
+    {
+      "name": "createdAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    },
+    {
+      "name": "updatedAt",
+      "columnType": "datetime(3)",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP(3)"
+    }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    {
+      "name": "uq_madison_message_understanding_source_version",
+      "columns": ["sourceMessageId", "classifierVersion"],
+      "unique": true
+    },
+    {
+      "name": "idx_madison_message_understanding_session_created",
+      "columns": ["sessionId", "createdAt"],
+      "unique": false
+    },
+    {
+      "name": "idx_madison_message_understanding_category_created",
+      "columns": ["primaryCategory", "createdAt"],
+      "unique": false
+    }
+  ]
+}
