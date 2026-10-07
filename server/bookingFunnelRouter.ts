@@ -489,6 +489,24 @@ export const bookingFunnelRouter = router({
       if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       return mapAdminRecord(rows[0]);
     }),
+  updateSchedule: bookingsAgentProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      requestedLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      requestedLocalTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const result = await db.update(bookingFunnelRecords).set({
+        requestedLocalDate: input.requestedLocalDate,
+        requestedLocalTime: input.requestedLocalTime,
+        updatedAt: new Date(),
+      }).where(eq(bookingFunnelRecords.id, input.id));
+      if (affectedRows(result) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Booking lead not found." });
+      broadcastOpsUpdate("booking_funnel_update");
+      return { id: input.id, requestedLocalDate: input.requestedLocalDate, requestedLocalTime: input.requestedLocalTime };
+    }),
   cancel: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
