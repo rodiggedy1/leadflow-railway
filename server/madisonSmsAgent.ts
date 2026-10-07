@@ -141,9 +141,11 @@ export async function triggerMadisonSmsDraft(params: {
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
 
-    // Shadow-only understanding. It is fire-and-forget and cannot affect
-    // Madison's existing draft, approval, or send path.
-    void persistMadisonMessageShadow({
+    // Shadow-only understanding. Await the write so runtime teardown cannot
+    // abandon the prediction before it reaches the database. The helper
+    // catches its own errors and cannot affect Madison's draft, approval, or
+    // send path.
+    await persistMadisonMessageShadow({
       db,
       sourceMessageId: inboundOpenPhoneId,
       draftId,
