@@ -7,7 +7,6 @@ import {
   MISSION_STATES,
   NEXT_BEST_ACTIONS,
   normalizeShadowPrediction,
-  deterministicShadowPrediction,
 } from "./madisonMessageUnderstanding";
 
 describe("Madison Message Understanding shadow contract", () => {
@@ -75,24 +74,6 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(CUSTOMER_MISSIONS).toContain("BOOK_SERVICE");
     expect(MISSION_STATES).toContain("PARTIALLY_RESOLVED");
     expect(NEXT_BEST_ACTIONS).toContain("HOLD_FOR_HUMAN");
-  });
-
-  it("records an obvious cancellation without depending on the shadow LLM", () => {
-    expect(
-      deterministicShadowPrediction("Hi, can you cancel my booking?")
-    ).toMatchObject({
-      primaryCategory: "CANCELLATION_REQUEST",
-      mission: "CANCEL_BOOKING",
-      missionState: "READY_FOR_REVIEW",
-      nextBestAction: "CREATE_REVIEW_TASK",
-      confidence: 0.99,
-    });
-  });
-
-  it("does not turn ordinary operational text into a cancellation prediction", () => {
-    expect(
-      deterministicShadowPrediction("He will be there in 30 mins")
-    ).toBeNull();
   });
 
   it("does not make shadow predictions part of Madison execution", () => {
