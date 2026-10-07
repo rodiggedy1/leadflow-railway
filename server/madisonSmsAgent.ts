@@ -143,7 +143,7 @@ export async function triggerMadisonSmsDraft(params: {
 
     // Shadow-only understanding. Await the write so runtime teardown cannot
     // abandon the prediction before it reaches the database. The helper
-    // reports its own errors and cannot affect Madison's draft, approval, or
+    // catches its own errors and cannot affect Madison's draft, approval, or
     // send path.
     const shadowResult = await persistMadisonMessageShadow({
       db,
