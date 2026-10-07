@@ -82,7 +82,7 @@ describe("Madison Message Understanding shadow contract", () => {
       "utf8"
     );
     expect(source).toContain("persistMadisonMessageShadow");
-    expect(source).toContain("await persistMadisonMessageShadow");
+    expect(source).toContain("void persistMadisonMessageShadow");
     expect(source).not.toContain("shadowPrediction.nextBestAction");
     expect(source).not.toContain("executeShadowAction");
   });
