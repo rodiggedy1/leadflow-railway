@@ -547,6 +547,7 @@ export default function NativeBookingsWorkspace({
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
   const [photoLightbox, setPhotoLightbox] = useState<{
     label: "Before" | "After";
     photos: StaffJobPhoto[];
