@@ -81,6 +81,15 @@ export type MadisonShadowPrediction = {
   classifierVersion: string;
 };
 
+export type MadisonShadowPersistenceResult =
+  | { ok: true; stage: "persisted"; prediction: MadisonShadowPrediction }
+  | {
+      ok: false;
+      stage: "classifier" | "persistence";
+      errorCode: string;
+      errorMessage: string;
+    };
+
 const enumOr = <T extends string>(
   value: unknown,
   allowed: readonly T[],
@@ -230,15 +239,29 @@ export async function persistMadisonMessageShadow(input: {
   conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
   resolvedCustomerId?: string | null;
   resolvedBookingId?: number | null;
-}): Promise<void> {
+}): Promise<MadisonShadowPersistenceResult> {
   console.info(
     `[MadisonShadow] start source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`
   );
+
+  let prediction: MadisonShadowPrediction;
   try {
-    const prediction = await classifyMadisonMessageShadow(input);
-    console.info(
-      `[MadisonShadow] classified source=${input.sourceMessageId} category=${prediction.primaryCategory} mission=${prediction.mission}`
+    prediction = await classifyMadisonMessageShadow(input);
+  } catch (error: any) {
+    const errorCode = String(error?.code ?? "SHADOW_CLASSIFIER_ERROR");
+    const errorMessage = String(error?.message ?? error);
+    console.error(
+      `[MadisonShadow] classifier failed source=${input.sourceMessageId} draft=${input.draftId ?? "none"}:`,
+      error
     );
+    return { ok: false, stage: "classifier", errorCode, errorMessage };
+  }
+
+  console.info(
+    `[MadisonShadow] classified source=${input.sourceMessageId} category=${prediction.primaryCategory} mission=${prediction.mission}`
+  );
+
+  try {
     await input.db
       .insert(madisonMessageUnderstanding)
       .values({
@@ -286,10 +309,14 @@ export async function persistMadisonMessageShadow(input: {
     console.info(
       `[MadisonShadow] persisted source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`
     );
-  } catch (error) {
+    return { ok: true, stage: "persisted", prediction };
+  } catch (error: any) {
+    const errorCode = String(error?.code ?? "SHADOW_PERSISTENCE_ERROR");
+    const errorMessage = String(error?.message ?? error);
     console.error(
-      `[MadisonShadow] failed source=${input.sourceMessageId} draft=${input.draftId ?? "none"}:`,
+      `[MadisonShadow] persistence failed source=${input.sourceMessageId} draft=${input.draftId ?? "none"}:`,
       error
     );
+    return { ok: false, stage: "persistence", errorCode, errorMessage };
   }
 }
