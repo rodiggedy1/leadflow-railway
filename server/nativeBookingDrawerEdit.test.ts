@@ -63,6 +63,8 @@ describe("native booking drawer commercial edits", () => {
     );
     expect(workspace).toContain("trpc.bookings.updateDetails.useMutation");
     expect(workspace).toContain("updateActiveBookingDetails");
+    expect(workspace).toContain("isValidDateKey");
+    expect(workspace).toContain("dates.filter(isValidDateKey)");
     expect(page).not.toContain('className="bcr-commercial-actions"');
     const footer = page.slice(
       page.indexOf('<footer className="bcr-workspace-detail-footer">'),

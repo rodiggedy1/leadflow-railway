@@ -1636,7 +1636,7 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
         </section>
         {view === "bookings" && (
           <section className="bcr-date-rail" aria-label="Select booking date">
-            {dates.map((option: string) => {
+            {dates.filter((option: string) => /^\d{4}-\d{2}-\d{2}$/.test(option)).map((option: string) => {
               const item = new Date(`${option}T12:00:00`);
               return (
                 <button

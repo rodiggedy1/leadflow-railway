@@ -118,8 +118,10 @@ const businessDate = () =>
     day: "2-digit",
   }).format(new Date());
 const dateAtNoon = (value: string) => new Date(`${value}T12:00:00`);
+const isValidDateKey = (value: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(dateAtNoon(value).getTime());
 const shiftDate = (value: string, days: number) => {
-  const date = dateAtNoon(value);
+  const date = dateAtNoon(isValidDateKey(value) ? value : businessDate());
   date.setDate(date.getDate() + days);
   return [
     date.getFullYear(),
@@ -562,6 +564,9 @@ export default function NativeBookingsWorkspace({
     }),
     [date, query, status]
   );
+  useEffect(() => {
+    if (!isValidDateKey(date)) setDate(businessDate());
+  }, [date]);
   const funnelListInput = useMemo(
     () => ({ query: query.trim() || undefined, limit: 200 }),
     [query]
@@ -1398,7 +1403,7 @@ export default function NativeBookingsWorkspace({
         </div>
         {view === "bookings" && (
           <div className="bookings-date-rail" aria-label="Select booking date">
-            {dates.map(option => {
+            {dates.filter(isValidDateKey).map(option => {
               const item = dateAtNoon(option);
               return (
                 <button
