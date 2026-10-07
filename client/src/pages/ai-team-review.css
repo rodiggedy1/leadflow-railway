@@ -16,5 +16,3 @@
 .ai-team-needs-grid{align-items:stretch}
 .ai-team-need-card{height:100%}
 .ai-team-need-actions{margin-top:auto;align-items:flex-start}
-
-.ai-team-shadow-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.ai-team-shadow-grid p{margin:0;padding:9px;border:1px solid #eadfd3;border-radius:8px;background:#faf5ef}.ai-team-shadow-grid b{display:block;color:#a18870;font-size:9px;letter-spacing:.08em;text-transform:uppercase}.ai-team-shadow-grid strong{display:block;margin-top:4px;color:#5f4a38;font:700 12px Inter;line-height:1.3}@media(max-width:560px){.ai-team-shadow-grid{grid-template-columns:1fr}}
