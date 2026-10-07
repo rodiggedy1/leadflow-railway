@@ -1081,8 +1081,6 @@ export default function NativeBookingsWorkspace({
     extras: Array<{ id: string; quantity: number }>;
     firstCleaningTotalCents: number;
     companyNotes: string | null;
-    requestedLocalDate?: string;
-    requestedLocalTime?: string;
   }) => {
     if (
       !active ||
@@ -1095,7 +1093,7 @@ export default function NativeBookingsWorkspace({
       {
         onSuccess: () => {
           setImportSummary(
-            `${active.customerName}'s booking details and schedule were saved.`
+            `${active.customerName}'s price, extras, and notes were saved.`
           );
           refreshBookingAndFunnelQueries();
         },

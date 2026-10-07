@@ -1378,10 +1378,8 @@ function BookingDetailDrawer({ model }: { model: any }) {
               type="button"
               className="bcr-save-changes"
               disabled={
-                model.updateBookingDetails.isPending ||
-                (!activeCommercialDraft.isSaveable &&
-                  model.rescheduleDate === active.requestedLocalDate &&
-                  model.rescheduleTime === active.requestedLocalTime)
+                !activeCommercialDraft.isSaveable ||
+                model.updateBookingDetails.isPending
               }
               onClick={() =>
                 model.updateActiveBookingDetails({
@@ -1392,8 +1390,6 @@ function BookingDetailDrawer({ model }: { model: any }) {
                   firstCleaningTotalCents:
                     activeCommercialDraft.firstCleaningTotalCents ?? 0,
                   companyNotes: activeCommercialDraft.companyNotes,
-                  requestedLocalDate: model.rescheduleDate || undefined,
-                  requestedLocalTime: model.rescheduleTime || undefined,
                 })
               }
             >
