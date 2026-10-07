@@ -354,9 +354,19 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
   const [showEditor, setShowEditor] = useState(false);
   const [finalPayout, setFinalPayout] = useState("");
   const [reason, setReason] = useState("");
+  const payrollSource = active.source === "booking" ? "booking" : "leadflow";
   const summaryQuery = trpc.leadflowJobs.getPayrollPayoutSummary.useQuery(
-    { jobId: active.id },
-    { enabled: active.source === "leadflow", staleTime: 15_000 }
+    {
+      jobId: active.id,
+      source: payrollSource,
+      ...(payrollSource === "booking" && active.requestedLocalDate
+        ? { serviceDate: active.requestedLocalDate }
+        : {}),
+    },
+    {
+      enabled: active.source === "leadflow" || active.source === "booking",
+      staleTime: 15_000,
+    }
   );
   const setFinalPayoutMutation =
     trpc.leadflowJobs.setPayrollFinalPayout.useMutation({
@@ -365,6 +375,7 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
           summaryQuery.refetch(),
           model.leadflowJobsQuery.refetch(),
         ]);
+        model.refreshBookingAndFunnelQueries();
         setFinalPayout("");
         setReason("");
         setShowEditor(false);
@@ -382,7 +393,7 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
     setFinalPayout("");
     setReason("");
   }, [active.id]);
-  if (active.source !== "leadflow") return null;
+  if (active.source !== "leadflow" && active.source !== "booking") return null;
 
   const summary = summaryQuery.data;
   const adjustments = Array.isArray(summary?.adjustments)
@@ -414,6 +425,10 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
       return;
     setFinalPayoutMutation.mutate({
       jobId: active.id,
+      source: payrollSource,
+      ...(payrollSource === "booking" && active.requestedLocalDate
+        ? { serviceDate: active.requestedLocalDate }
+        : {}),
       targetFinalPayCents,
       reason: reason.trim(),
     });
