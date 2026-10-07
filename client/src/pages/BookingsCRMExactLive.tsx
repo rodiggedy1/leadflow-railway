@@ -1305,18 +1305,23 @@ function BookingDetailDrawer({ model }: { model: any }) {
             />
             {(active.source === "leadflow" || active.source === "booking") && (
               <div className="bcr-customer-actions bcr-request-actions">
-                <div>
+                <div className="bcr-schedule-fields">
                   <label>
                     <CalendarDays size={14} />
-                    Reschedule{" "}
+                    Date
                     <input
+                      aria-label="Booking date"
                       type="date"
                       value={model.rescheduleDate}
                       onChange={event =>
                         model.setRescheduleDate(event.target.value)
                       }
                     />
+                  </label>
+                  <label>
+                    Time
                     <input
+                      aria-label="Booking time"
                       type="time"
                       value={model.rescheduleTime}
                       onChange={event =>
