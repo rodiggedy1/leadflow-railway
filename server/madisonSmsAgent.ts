@@ -27,6 +27,7 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
+import { persistMadisonMessageShadow } from "./madisonMessageUnderstanding";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,16 @@ export async function triggerMadisonSmsDraft(params: {
     if (!insertResult) return;
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
+
+    // Shadow-only understanding. It is fire-and-forget and cannot affect
+    // Madison's existing draft, approval, or send path.
+    void persistMadisonMessageShadow({
+      db,
+      sourceMessageId: inboundOpenPhoneId,
+      draftId,
+      sessionId,
+      inboundText,
+    });
 
     // ── Step 0.5: Phase 1A Deterministic Auto-Reply ────────────────────────────────────────────────────────────────────
     // Context-independent social acknowledgments — no LLM needed, fixed safe response.
