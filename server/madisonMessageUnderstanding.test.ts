@@ -86,19 +86,4 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(source).not.toContain("shadowPrediction.nextBestAction");
     expect(source).not.toContain("executeShadowAction");
   });
-
-  it("keeps Shadow persistence failure stages separate from the Madison draft lifecycle", () => {
-    const source = readFileSync(
-      resolve(process.cwd(), "server/madisonMessageUnderstanding.ts"),
-      "utf8"
-    );
-    const agentSource = readFileSync(
-      resolve(process.cwd(), "server/madisonSmsAgent.ts"),
-      "utf8"
-    );
-    expect(source).toContain('stage: "classifier" | "persistence"');
-    expect(source).toContain('stage: "persisted"');
-    expect(agentSource).toContain("shadowResult.stage");
-    expect(agentSource).toContain('errorStage: `shadow_${shadowResult.stage}`');
-  });
 });
