@@ -27,8 +27,6 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
-import { extractQuoteInputsFromText, formatMissingQuoteQuestion, formatVerifiedQuoteReply, getActiveBookServiceQuoteInputs, hasActiveBookServiceMission, resolveVerifiedQuote, shouldContinueBookServiceQuote, type QuoteInputs } from "./madisonMissionStore";
-import { createMadisonQuoteLink } from "./madisonQuoteLinkService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -209,21 +207,14 @@ export async function triggerMadisonSmsDraft(params: {
 
     // ── Step 4.5: Fetch conversation history for LLM context ─────────────────
     let conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
-    let quoteInputs: QuoteInputs | undefined;
     try {
       const [sessionRow] = await db
         .select({
           messageHistory: conversationSessions.messageHistory,
-          bedrooms: conversationSessions.bedrooms,
-          bathrooms: conversationSessions.bathrooms,
-          serviceType: conversationSessions.serviceType,
         })
         .from(conversationSessions)
         .where(eq(conversationSessions.id, sessionId))
         .limit(1);
-      quoteInputs = sessionRow
-        ? { bedrooms: sessionRow.bedrooms, bathrooms: sessionRow.bathrooms, serviceType: sessionRow.serviceType }
-        : undefined;
       const parsed = JSON.parse((sessionRow?.messageHistory as string) ?? "[]");
       if (Array.isArray(parsed)) {
         conversationMessages = parsed
@@ -244,6 +235,8 @@ export async function triggerMadisonSmsDraft(params: {
     }
 
     // ── Step 5: Generate DraftResponse ────────────────────────────────────────
+    // Quote Agent is isolated but intentionally disabled; quote messages use
+    // the normal Madison approval draft until that agent is rebuilt and tested.
     const draftResponse = await generateDraftResponse({
       inboundText,
       senderName: context.senderName ?? senderName,
@@ -255,51 +248,7 @@ export async function triggerMadisonSmsDraft(params: {
       knowledgeContext,
       conversationMessages,
     });
-    const extractedQuoteInputs = extractQuoteInputsFromText(inboundText);
-    const persistedQuoteInputs = await getActiveBookServiceQuoteInputs(db, sessionId);
-    quoteInputs = {
-      bedrooms: quoteInputs?.bedrooms ?? persistedQuoteInputs.bedrooms ?? extractedQuoteInputs.bedrooms,
-      bathrooms: quoteInputs?.bathrooms ?? persistedQuoteInputs.bathrooms ?? extractedQuoteInputs.bathrooms,
-      serviceType: quoteInputs?.serviceType ?? persistedQuoteInputs.serviceType ?? extractedQuoteInputs.serviceType,
-      condition: persistedQuoteInputs.condition ?? extractedQuoteInputs.condition,
-      extras: extractedQuoteInputs.extras ?? persistedQuoteInputs.extras,
-      extrasConfirmed: extractedQuoteInputs.extrasConfirmed || persistedQuoteInputs.extrasConfirmed,
-    };
-    const quoteResolution = resolveVerifiedQuote(quoteInputs);
-    const verifiedQuote = quoteResolution.quote;
-    const activeBookServiceMission = await hasActiveBookServiceMission(db, sessionId);
-    const quoteConversationActive = shouldContinueBookServiceQuote(
-      inboundText,
-      activeBookServiceMission,
-      Boolean(verifiedQuote),
-    );
-    let automaticQuoteLink: string | null = null;
-    let automaticQuoteReply: string | null = null;
-    let reviewDraft = draftResponse.draft;
-    if (quoteConversationActive) {
-      if (!verifiedQuote) {
-        automaticQuoteReply = formatMissingQuoteQuestion(quoteResolution.missing);
-        reviewDraft = automaticQuoteReply;
-      }
-    }
-    if (verifiedQuote && quoteConversationActive && quoteInputs) {
-      try {
-        const quoteLink = await createMadisonQuoteLink(db, {
-          sessionId,
-          customerName: context.senderName ?? senderName,
-          customerPhone: fromPhone,
-          quoteInputs,
-          agentName: "Madison",
-        });
-        automaticQuoteLink = quoteLink.absoluteUrl;
-        automaticQuoteReply = `${formatVerifiedQuoteReply(verifiedQuote)}\n\nYou can choose your date and finish your details here: ${automaticQuoteLink}`;
-        reviewDraft = automaticQuoteReply;
-      } catch (error) {
-        console.error(`[MadisonSMS] Automatic quote-link creation failed for draft ${draftId}:`, error);
-        automaticQuoteReply = null;
-        reviewDraft = formatVerifiedQuoteReply(verifiedQuote);
-      }
-    }
+    const reviewDraft = draftResponse.draft;
 
     // ── Step 6: Compute Quality Score ─────────────────────────────────────────
     const qualityScore = computeQualityScore({
@@ -352,8 +301,6 @@ export async function triggerMadisonSmsDraft(params: {
       context,
       capabilityResult,
       contextUsed,
-      quoteInputs,
-      quoteConversationActive,
     });
     // ── Step 7.5: Classify lead category ────────────────────────────────────────
     const leadCategory = await classifyLeadCategory({
