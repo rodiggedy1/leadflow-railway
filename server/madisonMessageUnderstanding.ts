@@ -231,10 +231,8 @@ export async function persistMadisonMessageShadow(input: {
   resolvedCustomerId?: string | null;
   resolvedBookingId?: number | null;
 }): Promise<void> {
-  console.info(`[MadisonShadow] start source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`);
   try {
     const prediction = await classifyMadisonMessageShadow(input);
-    console.info(`[MadisonShadow] classified source=${input.sourceMessageId} category=${prediction.primaryCategory} mission=${prediction.mission}`);
     await input.db
       .insert(madisonMessageUnderstanding)
       .values({
@@ -279,10 +277,9 @@ export async function persistMadisonMessageShadow(input: {
             )
           );
       });
-    console.info(`[MadisonShadow] persisted source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`);
   } catch (error) {
-    console.error(
-      `[MadisonShadow] failed source=${input.sourceMessageId} draft=${input.draftId ?? "none"}:`,
+    console.warn(
+      `[MadisonShadow] Non-blocking prediction failed for ${input.sourceMessageId}:`,
       error
     );
   }
