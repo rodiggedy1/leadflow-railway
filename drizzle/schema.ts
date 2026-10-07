@@ -4358,35 +4358,6 @@ export const madisonDecisions = mysqlTable("madison_decisions", {
 export type MadisonDecisionRecord = typeof madisonDecisions.$inferSelect;
 export type InsertMadisonDecisionRecord = typeof madisonDecisions.$inferInsert;
 
-/** Shadow-only Message Understanding predictions; never used to execute actions. */
-export const madisonMessageUnderstanding = mysqlTable("madison_message_understanding", {
-  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
-  sourceMessageId: varchar("sourceMessageId", { length: 128 }).notNull(),
-  draftId: bigint("draftId", { mode: "number" }),
-  sessionId: bigint("sessionId", { mode: "number" }).notNull(),
-  inboundText: text("inboundText").notNull(),
-  primaryCategory: varchar("primaryCategory", { length: 64 }).notNull(),
-  categories: json("categories").notNull(),
-  mission: varchar("mission", { length: 64 }).notNull(),
-  missionState: varchar("missionState", { length: 64 }).notNull(),
-  nextBestAction: varchar("nextBestAction", { length: 64 }).notNull(),
-  confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(),
-  knownFacts: json("knownFacts").notNull(),
-  missingFacts: json("missingFacts").notNull(),
-  resolvedCustomerId: varchar("resolvedCustomerId", { length: 128 }),
-  resolvedBookingId: bigint("resolvedBookingId", { mode: "number" }),
-  model: varchar("model", { length: 64 }).notNull(),
-  classifierVersion: varchar("classifierVersion", { length: 64 }).notNull(),
-  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
-  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
-}, (t) => [
-  uniqueIndex("uq_madison_message_understanding_source_version").on(t.sourceMessageId, t.classifierVersion),
-  index("idx_madison_message_understanding_session_created").on(t.sessionId, t.createdAt),
-  index("idx_madison_message_understanding_category_created").on(t.primaryCategory, t.createdAt),
-]);
-export type MadisonMessageUnderstanding = typeof madisonMessageUnderstanding.$inferSelect;
-export type InsertMadisonMessageUnderstanding = typeof madisonMessageUnderstanding.$inferInsert;
-
 /** Independently reviewable intents within a decision. */
 export const madisonIntents = mysqlTable("madison_intents", {
   id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
