@@ -150,10 +150,61 @@ export function normalizeShadowPrediction(
   };
 }
 
+/**
+ * High-signal fallback for messages whose operational intent is unambiguous.
+ * Shadow Mode must remain observable even if its separate LLM call is slow or
+ * unavailable; this function never executes an action or changes Madison's
+ * existing draft path.
+ */
+export function deterministicShadowPrediction(
+  inboundText: string
+): MadisonShadowPrediction | null {
+  const text = inboundText.trim().toLowerCase();
+  if (!text) return null;
+
+  if (
+    /\b(cancel|cancellation|call\s+off)\b/.test(text) &&
+    /\b(book(?:ing)?|clean(?:ing)?|service|appointment)\b/.test(text)
+  ) {
+    return normalizeShadowPrediction({
+      primaryCategory: "CANCELLATION_REQUEST",
+      categories: ["CANCELLATION_REQUEST"],
+      mission: "CANCEL_BOOKING",
+      missionState: "READY_FOR_REVIEW",
+      nextBestAction: "CREATE_REVIEW_TASK",
+      confidence: 0.99,
+      knownFacts: ["customer requested cancellation"],
+      missingFacts: ["request verification"],
+    });
+  }
+
+  if (
+    /\b(reschedule|different\s+(?:date|day|time)|move\s+(?:my|the)|change\s+(?:my|the))\b/.test(
+      text
+    )
+  ) {
+    return normalizeShadowPrediction({
+      primaryCategory: "RESCHEDULE_REQUEST",
+      categories: ["RESCHEDULE_REQUEST"],
+      mission: "MODIFY_BOOKING",
+      missionState: "READY_FOR_REVIEW",
+      nextBestAction: "CREATE_REVIEW_TASK",
+      confidence: 0.98,
+      knownFacts: ["customer requested a schedule change"],
+      missingFacts: ["requested replacement date and time"],
+    });
+  }
+
+  return null;
+}
+
 export async function classifyMadisonMessageShadow(input: {
   inboundText: string;
   conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction> {
+  const deterministic = deterministicShadowPrediction(input.inboundText);
+  if (deterministic) return deterministic;
+
   const response = await invokeLLM({
     messages: [
       {
@@ -231,10 +282,14 @@ export async function persistMadisonMessageShadow(input: {
   resolvedCustomerId?: string | null;
   resolvedBookingId?: number | null;
 }): Promise<void> {
-  console.info(`[MadisonShadow] start source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`);
+  console.info(
+    `[MadisonShadow] start source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`
+  );
   try {
     const prediction = await classifyMadisonMessageShadow(input);
-    console.info(`[MadisonShadow] classified source=${input.sourceMessageId} category=${prediction.primaryCategory} mission=${prediction.mission}`);
+    console.info(
+      `[MadisonShadow] classified source=${input.sourceMessageId} category=${prediction.primaryCategory} mission=${prediction.mission}`
+    );
     await input.db
       .insert(madisonMessageUnderstanding)
       .values({
@@ -279,7 +334,9 @@ export async function persistMadisonMessageShadow(input: {
             )
           );
       });
-    console.info(`[MadisonShadow] persisted source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`);
+    console.info(
+      `[MadisonShadow] persisted source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`
+    );
   } catch (error) {
     console.error(
       `[MadisonShadow] failed source=${input.sourceMessageId} draft=${input.draftId ?? "none"}:`,
