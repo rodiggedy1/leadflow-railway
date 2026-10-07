@@ -21,6 +21,7 @@ describe("native booking drawer commercial edits", () => {
       "firstCleaningTotalCents: z",
       "companyNotes: z.string().trim().max(4_000).nullable()",
       "requestedLocalDate: z",
+      "requestedLocalTime: z",
       "recurrence: z.enum(NATIVE_BOOKING_RECURRENCES)",
       "nativeBookingFutureVisitTotalCents",
       "requestedStartAt",
@@ -47,11 +48,14 @@ describe("native booking drawer commercial edits", () => {
       'active.source === "booking" && (',
       'active.source === "booking" ? (',
       "updateActiveBookingSchedule",
+      "requestedLocalTime",
       "(active.firstCleaningTotalCents ?? 0)",
       "onDraftChange",
       "displayedFirstCleaningTotalCents",
       "displayedExtras",
       "Save booking updates",
+      'type="time"',
+      "jobTime: model.rescheduleTime",
     ])
       expect(page).toContain(marker);
     expect(page).not.toMatch(
@@ -75,6 +79,14 @@ describe("native booking drawer commercial edits", () => {
     expect(page).not.toContain(
       "disabled={model.updateBookingDetails.isPending}\n                      onClick={() =>\n                        model.updateActiveBookingSchedule"
     );
+  });
+
+  it("supports time edits for imported LeadFlow bookings through the owned job path", () => {
+    const router = read("server/leadflowJobsRouter.ts");
+    expect(router).toContain("jobTime: z.string().regex");
+    expect(router).toContain("businessLocalDateTimeToUtcMs");
+    expect(router).toContain("input.jobDate || input.jobTime");
+    expect(router).not.toContain(prohibitedLegacySymbol);
   });
 
   it("uses an additive company-notes migration for the native booking table", () => {

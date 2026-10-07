@@ -5,6 +5,7 @@ import { activityLog, bookingAssignments, cleanerPortalJobPhotos, cleanerPortalJ
 import { agentPageProcedure, agentProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
+import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { leadflowCallMatrixRouter } from "./leadflowCallMatrixRouter";
 import { sendSms } from "./openphone";
@@ -19,8 +20,9 @@ const listInput = z.object({
 const updateInput = z.object({
   jobId: z.number().int().positive(),
   jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  jobTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
   frequency: z.enum(["One time", "Weekly", "Bi-weekly", "Tri-weekly", "Monthly"]).optional(),
-}).refine((value) => value.jobDate !== undefined || value.frequency !== undefined, "Choose a date or frequency to update.");
+}).refine((value) => value.jobDate !== undefined || value.jobTime !== undefined || value.frequency !== undefined, "Choose a date, time, or frequency to update.");
 const bookingPhotoReferenceInput = z.object({
   bookingKey: z.string().regex(/^(leadflow|booking|funnel|portal):\d+$/, "Invalid booking reference."),
 });
@@ -1194,8 +1196,13 @@ export const leadflowJobsRouter = router({
         throw new Error("A matching LeadFlow job already exists on that date.");
       }
     }
+    const serviceDateTime = input.jobTime
+      ? new Date(businessLocalDateTimeToUtcMs(jobDate, input.jobTime, "America/New_York")).toISOString()
+      : input.jobDate
+        ? moveServiceDateTimeToBusinessDate(job.serviceDateTime, jobDate)
+        : job.serviceDateTime;
     await db.update(leadflowJobs).set({
-      ...(input.jobDate ? { jobDate, serviceDateTime: moveServiceDateTimeToBusinessDate(job.serviceDateTime, jobDate) } : {}),
+      ...(input.jobDate || input.jobTime ? { jobDate, serviceDateTime } : {}),
       ...(input.frequency ? { frequency: input.frequency } : {}),
     }).where(eq(leadflowJobs.id, job.id));
     broadcastCleanerPortalJobsChanged();

@@ -798,6 +798,10 @@ export const bookingsRouter = router({
             .string()
             .regex(/^\d{4}-\d{2}-\d{2}$/)
             .optional(),
+          requestedLocalTime: z
+            .string()
+            .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+            .optional(),
           recurrence: z.enum(NATIVE_BOOKING_RECURRENCES).optional(),
         })
         .refine(
@@ -806,6 +810,7 @@ export const bookingsRouter = router({
             value.firstCleaningTotalCents !== undefined ||
             value.companyNotes !== undefined ||
             value.requestedLocalDate !== undefined ||
+            value.requestedLocalTime !== undefined ||
             value.recurrence !== undefined,
           "Choose booking details to update."
         )
@@ -876,6 +881,8 @@ export const bookingsRouter = router({
             : input.companyNotes?.trim() || null;
         const requestedLocalDate =
           input.requestedLocalDate ?? booking.requestedLocalDate;
+        const requestedLocalTime =
+          input.requestedLocalTime ?? booking.requestedLocalTime;
         const recurrence =
           input.recurrence ??
           (booking.recurrence as (typeof NATIVE_BOOKING_RECURRENCES)[number]);
@@ -885,7 +892,7 @@ export const bookingsRouter = router({
         );
         const requestedStartAt = businessLocalDateTimeToUtcMs(
           requestedLocalDate,
-          booking.requestedLocalTime,
+          requestedLocalTime,
           booking.requestedTimeZone
         );
         const now = new Date();
@@ -934,7 +941,7 @@ export const bookingsRouter = router({
             status: "intent_pending",
             frequency: recurrence,
             anchorLocalDate: requestedLocalDate,
-            anchorLocalTime: booking.requestedLocalTime,
+            anchorLocalTime: requestedLocalTime,
             timeZone: booking.requestedTimeZone,
             firstCleaningTotalCents,
             futureVisitTotalCents,
@@ -964,6 +971,7 @@ export const bookingsRouter = router({
           firstCleaningTotalCents,
           companyNotes,
           requestedLocalDate,
+          requestedLocalTime,
           requestedStartAt,
           recurrence,
           futureVisitTotalCents,

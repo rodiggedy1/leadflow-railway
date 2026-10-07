@@ -547,6 +547,7 @@ export default function NativeBookingsWorkspace({
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
   const [photoLightbox, setPhotoLightbox] = useState<{
     label: "Before" | "After";
     photos: StaffJobPhoto[];
@@ -1018,7 +1019,12 @@ export default function NativeBookingsWorkspace({
         ? (active.requestedLocalDate ?? "")
         : ""
     );
-  }, [active?.key, active?.requestedLocalDate, active?.source]);
+    setRescheduleTime(
+      active?.source === "leadflow" || active?.source === "booking"
+        ? (active.requestedLocalTime ?? "")
+        : ""
+    );
+  }, [active?.key, active?.requestedLocalDate, active?.requestedLocalTime, active?.source]);
 
   const dates = useMemo(
     () => [-1, 0, 1, 2].map(offset => shiftDate(date, offset)),
@@ -1098,6 +1104,7 @@ export default function NativeBookingsWorkspace({
   };
   const updateActiveBookingSchedule = (input: {
     requestedLocalDate?: string;
+    requestedLocalTime?: string;
     recurrence?: "one-time" | "weekly" | "biweekly" | "monthly";
   }) => {
     if (
@@ -1179,6 +1186,7 @@ export default function NativeBookingsWorkspace({
           refreshBookingAndFunnelQueries,
           refreshLeadflowJobDetails,
           rescheduleDate,
+          rescheduleTime,
           revenueCents,
           rows,
           setActiveKey,
@@ -1187,6 +1195,7 @@ export default function NativeBookingsWorkspace({
           setPhotoLightbox,
           setQuery,
           setRescheduleDate,
+          setRescheduleTime,
           setStatus,
           setView,
           staffMessages,

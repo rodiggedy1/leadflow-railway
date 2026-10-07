@@ -1316,12 +1316,21 @@ function BookingDetailDrawer({ model }: { model: any }) {
                         model.setRescheduleDate(event.target.value)
                       }
                     />
+                    <input
+                      type="time"
+                      value={model.rescheduleTime}
+                      onChange={event =>
+                        model.setRescheduleTime(event.target.value)
+                      }
+                    />
                   </label>
                   <button
                     type="button"
                     disabled={
                       !model.rescheduleDate ||
-                      model.rescheduleDate === active.requestedLocalDate ||
+                      !model.rescheduleTime ||
+                      (model.rescheduleDate === active.requestedLocalDate &&
+                        model.rescheduleTime === active.requestedLocalTime) ||
                       (active.source === "leadflow"
                         ? model.updateLeadflowJob.isPending
                         : model.updateBookingDetails.isPending)
@@ -1329,21 +1338,26 @@ function BookingDetailDrawer({ model }: { model: any }) {
                     onClick={() =>
                       active.source === "leadflow"
                         ? model.updateLeadflowJob.mutate(
-                            { jobId: active.id, jobDate: model.rescheduleDate },
+                            {
+                              jobId: active.id,
+                              jobDate: model.rescheduleDate,
+                              jobTime: model.rescheduleTime,
+                            },
                             { onSuccess: model.refreshBookingAndFunnelQueries }
                           )
                         : model.updateActiveBookingSchedule({
                             requestedLocalDate: model.rescheduleDate,
+                            requestedLocalTime: model.rescheduleTime,
                           })
                     }
                   >
                     {active.source === "leadflow"
                       ? model.updateLeadflowJob.isPending
                         ? "Saving…"
-                        : "Save date"
+                        : "Save schedule"
                       : model.updateBookingDetails.isPending
                         ? "Saving…"
-                        : "Save date"}
+                        : "Save schedule"}
                   </button>
                 </div>
               </div>
