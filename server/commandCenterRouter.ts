@@ -44,6 +44,7 @@ import { getCompletedBookingsForDate } from "./launch27";
 import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSources";
+import { getBusinessDayStart } from "./businessTime";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 type LeadsCrmHistoryEntry = {
@@ -116,9 +117,7 @@ function calcRevenue(row: {
 function getWindowStart(range: "today" | "7d" | "30d"): Date {
   const now = new Date();
   if (range === "today") {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    return d;
+    return getBusinessDayStart(now);
   }
   if (range === "7d") {
     const d = new Date(now);
