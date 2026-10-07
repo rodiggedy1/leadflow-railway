@@ -617,6 +617,8 @@ export default function NativeBookingsWorkspace({
   const cancelBooking = trpc.bookings.cancel.useMutation();
   const assignBookingTeam = trpc.bookings.assignTeam.useMutation();
   const updateBookingDetails = trpc.bookings.updateDetails.useMutation();
+  const updateFunnelSchedule = trpc.bookingFunnel.updateSchedule.useMutation();
+  const updatePortalSchedule = trpc.bookings.updateStaffRequestSchedule.useMutation();
   const cancelFunnel = trpc.bookingFunnel.cancel.useMutation();
   const cancelPortalRequest = trpc.bookings.cancelStaffRequest.useMutation();
   const selectedBookingId = activeKey?.startsWith("booking:")
@@ -1015,12 +1017,12 @@ export default function NativeBookingsWorkspace({
 
   useEffect(() => {
     setRescheduleDate(
-      active?.source === "leadflow" || active?.source === "booking"
+      active?.source === "leadflow" || active?.source === "booking" || active?.source === "funnel" || active?.source === "portal"
         ? (active.requestedLocalDate ?? "")
         : ""
     );
     setRescheduleTime(
-      active?.source === "leadflow" || active?.source === "booking"
+      active?.source === "leadflow" || active?.source === "booking" || active?.source === "funnel" || active?.source === "portal"
         ? (active.requestedLocalTime ?? "")
         : ""
     );
@@ -1127,6 +1129,20 @@ export default function NativeBookingsWorkspace({
       }
     );
   };
+  const updateFunnelRecordSchedule = (input: { requestedLocalDate: string; requestedLocalTime: string }) => {
+    if (!active || active.source !== "funnel" || updateFunnelSchedule.isPending) return;
+    updateFunnelSchedule.mutate({ id: active.id, ...input }, {
+      onSuccess: () => { setImportSummary(`${active.customerName}'s schedule was saved.`); refreshBookingAndFunnelQueries(); },
+      onError: error => setImportSummary(`Booking lead schedule could not be saved: ${error.message}`),
+    });
+  };
+  const updatePortalRecordSchedule = (input: { requestedLocalDate: string; requestedLocalTime: string }) => {
+    if (!active || active.source !== "portal" || updatePortalSchedule.isPending) return;
+    updatePortalSchedule.mutate({ id: active.id, ...input }, {
+      onSuccess: () => { setImportSummary(`${active.customerName}'s schedule was saved.`); refreshBookingAndFunnelQueries(); },
+      onError: error => setImportSummary(`Service request schedule could not be saved: ${error.message}`),
+    });
+  };
   const cancelActiveRecord = () => {
     if (!active || cancellationPending) return;
     const onSuccess = () => {
@@ -1205,6 +1221,10 @@ export default function NativeBookingsWorkspace({
           status,
           syncLeadflowJobsDate,
           updateLeadflowJob,
+          updateFunnelSchedule,
+          updatePortalSchedule,
+          updateFunnelRecordSchedule,
+          updatePortalRecordSchedule,
           updateActiveBookingDetails,
           updateActiveBookingSchedule,
           updateBookingDetails,

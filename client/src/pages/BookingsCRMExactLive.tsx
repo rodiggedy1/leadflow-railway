@@ -1303,7 +1303,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
               readOnly
               placeholder="No special requests"
             />
-            {(active.source === "leadflow" || active.source === "booking") && (
+            {(["leadflow", "booking", "funnel", "portal"] as const).includes(active.source) && (
               <div className="bcr-customer-actions bcr-request-actions">
                 <div className="bcr-schedule-fields">
                   <label>
@@ -1338,31 +1338,34 @@ function BookingDetailDrawer({ model }: { model: any }) {
                         model.rescheduleTime === active.requestedLocalTime) ||
                       (active.source === "leadflow"
                         ? model.updateLeadflowJob.isPending
-                        : model.updateBookingDetails.isPending)
+                        : active.source === "funnel"
+                          ? model.updateFunnelSchedule.isPending
+                          : active.source === "portal"
+                            ? model.updatePortalSchedule.isPending
+                            : model.updateBookingDetails.isPending)
                     }
                     onClick={() =>
                       active.source === "leadflow"
                         ? model.updateLeadflowJob.mutate(
-                            {
-                              jobId: active.id,
-                              jobDate: model.rescheduleDate,
-                              jobTime: model.rescheduleTime,
-                            },
+                            { jobId: active.id, jobDate: model.rescheduleDate, jobTime: model.rescheduleTime },
                             { onSuccess: model.refreshBookingAndFunnelQueries }
                           )
-                        : model.updateActiveBookingSchedule({
-                            requestedLocalDate: model.rescheduleDate,
-                            requestedLocalTime: model.rescheduleTime,
-                          })
+                        : active.source === "funnel"
+                          ? model.updateFunnelRecordSchedule({ requestedLocalDate: model.rescheduleDate, requestedLocalTime: model.rescheduleTime })
+                          : active.source === "portal"
+                            ? model.updatePortalRecordSchedule({ requestedLocalDate: model.rescheduleDate, requestedLocalTime: model.rescheduleTime })
+                            : model.updateActiveBookingSchedule({ requestedLocalDate: model.rescheduleDate, requestedLocalTime: model.rescheduleTime })
                     }
                   >
                     {active.source === "leadflow"
                       ? model.updateLeadflowJob.isPending
                         ? "Saving…"
                         : "Save schedule"
-                      : model.updateBookingDetails.isPending
-                        ? "Saving…"
-                        : "Save schedule"}
+                      : active.source === "funnel"
+                        ? model.updateFunnelSchedule.isPending ? "Saving…" : "Save schedule"
+                        : active.source === "portal"
+                          ? model.updatePortalSchedule.isPending ? "Saving…" : "Save schedule"
+                          : model.updateBookingDetails.isPending ? "Saving…" : "Save schedule"}
                   </button>
                 </div>
               </div>

@@ -1045,6 +1045,24 @@ export const bookingsRouter = router({
         .orderBy(desc(customerPortalServiceRequests.createdAt))
         .limit(input.limit);
     }),
+  updateStaffRequestSchedule: bookingsAgentProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      requestedLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      requestedLocalTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const result = await db.update(customerPortalServiceRequests).set({
+        requestedLocalDate: input.requestedLocalDate,
+        requestedLocalTime: input.requestedLocalTime,
+        updatedAt: new Date(),
+      }).where(eq(customerPortalServiceRequests.id, input.id));
+      if (Number((result as { affectedRows?: number }).affectedRows ?? 0) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Service request not found." });
+      broadcastOpsUpdate("booking_funnel_update");
+      return { id: input.id, requestedLocalDate: input.requestedLocalDate, requestedLocalTime: input.requestedLocalTime };
+    }),
   cancelStaffRequest: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
