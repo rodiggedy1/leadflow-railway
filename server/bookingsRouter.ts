@@ -904,6 +904,7 @@ export const bookingsRouter = router({
             firstCleaningTotalCents,
             companyNotes,
             requestedLocalDate,
+            requestedLocalTime,
             requestedStartAt,
             recurrence,
             recurringIntentStatus:
