@@ -356,7 +356,13 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
   const [reason, setReason] = useState("");
   const payrollSource = active.source === "booking" ? "booking" : "leadflow";
   const summaryQuery = trpc.leadflowJobs.getPayrollPayoutSummary.useQuery(
-    { jobId: active.id, source: payrollSource },
+    {
+      jobId: active.id,
+      source: payrollSource,
+      ...(payrollSource === "booking" && active.requestedLocalDate
+        ? { serviceDate: active.requestedLocalDate }
+        : {}),
+    },
     {
       enabled: active.source === "leadflow" || active.source === "booking",
       staleTime: 15_000,
@@ -420,6 +426,9 @@ function BookingPayrollPanel({ active, model }: { active: any; model: any }) {
     setFinalPayoutMutation.mutate({
       jobId: active.id,
       source: payrollSource,
+      ...(payrollSource === "booking" && active.requestedLocalDate
+        ? { serviceDate: active.requestedLocalDate }
+        : {}),
       targetFinalPayCents,
       reason: reason.trim(),
     });

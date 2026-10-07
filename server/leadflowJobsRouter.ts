@@ -34,10 +34,26 @@ function parseBookingPhotoReference(bookingKey: string) {
   return { source, sourceId };
 }
 
-async function resolveOperationalJobId(db: Db, source: string, sourceId: number) {
+async function resolveOperationalJobId(
+  db: Db,
+  source: string,
+  sourceId: number,
+  serviceDate?: string,
+) {
   if (source === "leadflow") return sourceId;
   if (source !== "booking") return null;
-  const rows = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.bookingId, sourceId)).limit(1);
+  const rows = await db
+    .select({ id: leadflowJobs.id })
+    .from(leadflowJobs)
+    .where(and(
+      eq(leadflowJobs.bookingId, sourceId),
+      serviceDate ? eq(leadflowJobs.jobDate, serviceDate) : undefined,
+      ne(leadflowJobs.bookingStatus, "cancelled"),
+      ne(leadflowJobs.bookingStatus, "rescheduled"),
+      ne(leadflowJobs.bookingStatus, "missing_from_launch27"),
+    ))
+    .orderBy(desc(leadflowJobs.jobDate), desc(leadflowJobs.id))
+    .limit(1);
   return rows[0]?.id ?? null;
 }
 
@@ -65,6 +81,7 @@ const PAYROLL_INACTIVE_BOOKING_STATUSES = new Set(["cancelled", "rescheduled", "
 const payrollBookingInput = z.object({
   jobId: z.number().int().positive(),
   source: z.enum(["booking", "leadflow"]).default("leadflow"),
+  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 function payrollPercent(payPercent: string | null): number {
@@ -77,8 +94,15 @@ async function bookingPayrollPayoutSummary(
   db: Db,
   source: "booking" | "leadflow",
   recordId: number,
+  serviceDate?: string,
 ) {
-  const operationalJobId = await resolveOperationalJobId(db, source, recordId);
+  if (source === "booking" && serviceDate === undefined) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Native booking payout requires the selected service date.",
+    });
+  }
+  const operationalJobId = await resolveOperationalJobId(db, source, recordId, serviceDate);
   if (operationalJobId === null) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Active booking payroll record not found." });
   }
@@ -98,6 +122,30 @@ async function bookingPayrollPayoutSummary(
       finalPayCents: null,
       adjustments: [],
     };
+  }
+
+  if (job.bookingId !== null) {
+    const activeAssignments = await db
+      .select({ id: bookingAssignments.id })
+      .from(bookingAssignments)
+      .where(and(
+        eq(bookingAssignments.bookingId, job.bookingId),
+        eq(bookingAssignments.teamId, job.teamId),
+        eq(bookingAssignments.status, "assigned"),
+      ))
+      .limit(1);
+    if (activeAssignments.length === 0) {
+      return {
+        leadflowJobId: job.id,
+        assignedTeamName: job.teamName,
+        canAdjust: false,
+        unavailableReason: "This native booking no longer has an active assignment to the stored team.",
+        basePayCents: null,
+        adjustmentCents: 0,
+        finalPayCents: null,
+        adjustments: [],
+      };
+    }
   }
 
   const payrollTeamRows = job.bookingId === null
@@ -1141,7 +1189,7 @@ export const leadflowJobsRouter = router({
   getPayrollPayoutSummary: agentProcedure.input(payrollBookingInput).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    return bookingPayrollPayoutSummary(db, input.source, input.jobId);
+    return bookingPayrollPayoutSummary(db, input.source, input.jobId, input.serviceDate);
   }),
 
   setPayrollFinalPayout: agentProcedure.input(payrollBookingInput.extend({
@@ -1150,7 +1198,7 @@ export const leadflowJobsRouter = router({
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const summary = await bookingPayrollPayoutSummary(db, input.source, input.jobId);
+    const summary = await bookingPayrollPayoutSummary(db, input.source, input.jobId, input.serviceDate);
     if (!summary.canAdjust || summary.finalPayCents == null) {
       throw new TRPCError({ code: "BAD_REQUEST", message: summary.unavailableReason ?? "This payroll adjustment is unavailable." });
     }
@@ -1169,7 +1217,7 @@ export const leadflowJobsRouter = router({
       createdByAgentName: ctx.agent.agentName,
     });
     broadcastCleanerPortalJobsChanged();
-    return bookingPayrollPayoutSummary(db, input.source, input.jobId);
+    return bookingPayrollPayoutSummary(db, input.source, input.jobId, input.serviceDate);
   }),
 
   importNextThirtyDays: bookingsAgentProcedure.mutation(async () => {
