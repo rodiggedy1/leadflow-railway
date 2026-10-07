@@ -7,7 +7,7 @@
 import { router, protectedProcedure, opsChatProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { activityLog, madisonSmsDrafts } from "../drizzle/schema";
+import { activityLog, madisonMessageUnderstanding, madisonSmsDrafts } from "../drizzle/schema";
 import { madisonSmsActionApprovals } from "./madisonActionApprovalStore";
 import { getBusinessDayStart } from "./businessTime";
 import { and, eq, gte, inArray, isNull } from "drizzle-orm";
@@ -122,6 +122,35 @@ export const activityRouter = router({
         todayActions: todayReplies + todayTasks,
         todayLeadsAnswered: todayReplies,
       };
+    }),
+
+  /** Read-only shadow understanding for an Activity drawer item. */
+  getShadowPrediction: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [prediction] = await db
+        .select({
+          id: madisonMessageUnderstanding.id,
+          sourceMessageId: madisonMessageUnderstanding.sourceMessageId,
+          draftId: madisonMessageUnderstanding.draftId,
+          primaryCategory: madisonMessageUnderstanding.primaryCategory,
+          categories: madisonMessageUnderstanding.categories,
+          mission: madisonMessageUnderstanding.mission,
+          missionState: madisonMessageUnderstanding.missionState,
+          nextBestAction: madisonMessageUnderstanding.nextBestAction,
+          confidence: madisonMessageUnderstanding.confidence,
+          knownFacts: madisonMessageUnderstanding.knownFacts,
+          missingFacts: madisonMessageUnderstanding.missingFacts,
+          model: madisonMessageUnderstanding.model,
+          classifierVersion: madisonMessageUnderstanding.classifierVersion,
+          createdAt: madisonMessageUnderstanding.createdAt,
+        })
+        .from(madisonMessageUnderstanding)
+        .where(eq(madisonMessageUnderstanding.draftId, input.draftId))
+        .limit(1);
+      return prediction ?? null;
     }),
 
   /**
