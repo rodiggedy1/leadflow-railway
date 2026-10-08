@@ -8,7 +8,7 @@ import {
   nextRecurringBusinessDate,
   shouldMarkImportedLaunch27JobMissing,
 } from "./leadflowJobsService";
-import { normalizeLaunch27Extras } from "./launch27";
+import { normalizeLaunch27Extras, normalizeLaunch27PricingExtras } from "./launch27";
 
 const booking = (overrides: Partial<Parameters<typeof isActiveLaunch27Booking>[0]> = {}) => ({
   id: 42,
@@ -56,6 +56,12 @@ describe("isolated LeadFlow jobs import", () => {
       "launch27_extra_1000",
     ]);
     expect(normalizeLaunch27Extras(JSON.stringify([{ id: 82, name: "Inside oven" }]))).toEqual(["clean_inside_oven"]);
+    expect(normalizeLaunch27PricingExtras([
+      { id: 81, name: "Clean inside full fridge" },
+      { id: 74, name: "Clean finished basement" },
+      { id: 3, name: "3 bedrooms" },
+      { id: 4, name: "2 bathrooms" },
+    ])).toEqual(["clean_inside_full_fridge", "clean_finished_basement"]);
   });
 
   it("builds exactly 30 consecutive calendar dates including the start date", () => {
