@@ -90,6 +90,8 @@ function slugifyLaunch27Extra(value: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
+const L27_EXTRA_KEYS = new Set(Object.values(L27_EXTRA_ID_TO_KEY));
+
 /** Normalize Launch27 extra payloads without silently dropping unknown items. */
 export function normalizeLaunch27Extras(value: unknown): string[] {
   let parsed = value;
@@ -120,6 +122,29 @@ export function normalizeLaunch27Extras(value: unknown): string[] {
     if (key && !extras.includes(key)) extras.push(key);
   }
   return extras;
+}
+
+export function normalizeLaunch27PricingExtras(value: unknown): string[] {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap(item => {
+    if (!item || typeof item !== "object") return [];
+    const candidate = item as { id?: unknown; name?: unknown; label?: unknown; title?: unknown };
+    const numericId = typeof candidate.id === "number" ? candidate.id : Number(candidate.id);
+    const knownKey = Number.isFinite(numericId) ? L27_EXTRA_ID_TO_KEY[numericId] : undefined;
+    if (knownKey) return [knownKey];
+    const rawName = candidate.name ?? candidate.label ?? candidate.title;
+    if (typeof rawName !== "string") return [];
+    const key = slugifyLaunch27Extra(rawName);
+    return L27_EXTRA_KEYS.has(key) ? [key] : [];
+  });
 }
 
 function getBaseUrl(): string {
@@ -196,6 +221,12 @@ export async function getCompletedBookingsForDate(
       const extras: string[] = [];
       for (const svc of b.services ?? []) {
         for (const key of normalizeLaunch27Extras(svc.extras)) {
+          if (!extras.includes(key)) extras.push(key);
+        }
+        // Launch27 also returns some add-ons (including fridge/basement options)
+        // as pricing parameters. Do not treat bedroom/bathroom sizing parameters
+        // as extras; only accept IDs and names from the known extra catalog here.
+        for (const key of normalizeLaunch27PricingExtras(svc.pricing_parameters)) {
           if (!extras.includes(key)) extras.push(key);
         }
       }
