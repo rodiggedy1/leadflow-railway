@@ -8,6 +8,7 @@ import {
   nextRecurringBusinessDate,
   shouldMarkImportedLaunch27JobMissing,
 } from "./leadflowJobsService";
+import { normalizeLaunch27Extras } from "./launch27";
 
 const booking = (overrides: Partial<Parameters<typeof isActiveLaunch27Booking>[0]> = {}) => ({
   id: 42,
@@ -44,6 +45,19 @@ const booking = (overrides: Partial<Parameters<typeof isActiveLaunch27Booking>[0
 });
 
 describe("isolated LeadFlow jobs import", () => {
+  it("preserves mapped, named, and unknown Launch27 extras", () => {
+    expect(normalizeLaunch27Extras([
+      { id: 74, name: "Clean finished basement" },
+      { id: 999, name: "Inside the garage" },
+      { id: 1000 },
+    ])).toEqual([
+      "clean_finished_basement",
+      "inside_the_garage",
+      "launch27_extra_1000",
+    ]);
+    expect(normalizeLaunch27Extras(JSON.stringify([{ id: 82, name: "Inside oven" }]))).toEqual(["clean_inside_oven"]);
+  });
+
   it("builds exactly 30 consecutive calendar dates including the start date", () => {
     const dates = getConsecutiveBusinessDates("2026-09-06");
     expect(dates).toHaveLength(30);

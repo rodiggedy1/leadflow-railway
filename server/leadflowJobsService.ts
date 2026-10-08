@@ -307,6 +307,7 @@ export async function refreshImportedLaunch27JobDetails(): Promise<{ checked: nu
         teamName: source.teams.map((team) => team.title).filter(Boolean).join(", ") || null,
         teamId: firstTeam?.id ?? null,
         jobTotalCents: launch27BookingTotalCents(source),
+        extras: source.extras.length > 0 ? JSON.stringify(source.extras) : null,
         hasStripeCard: source.hasStripeCard ? 1 : 0,
         paymentBrand: source.paymentBrand || null,
         paymentLast4: source.paymentLast4 || null,

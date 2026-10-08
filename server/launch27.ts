@@ -81,6 +81,47 @@ const L27_EXTRA_ID_TO_KEY: Record<number, string> = {
   96:  "pool_deck",
 };
 
+function slugifyLaunch27Extra(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/** Normalize Launch27 extra payloads without silently dropping unknown items. */
+export function normalizeLaunch27Extras(value: unknown): string[] {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed) as unknown;
+    } catch {
+      parsed = [parsed];
+    }
+  }
+  const items = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object"
+      ? Object.values(parsed)
+      : [];
+  const extras: string[] = [];
+  for (const item of items) {
+    const candidate = item && typeof item === "object"
+      ? item as { id?: unknown; name?: unknown; label?: unknown; title?: unknown }
+      : null;
+    const id = candidate?.id;
+    const numericId = typeof id === "number" ? id : Number(id);
+    const knownKey = Number.isFinite(numericId) ? L27_EXTRA_ID_TO_KEY[numericId] : undefined;
+    const rawName = candidate?.name ?? candidate?.label ?? candidate?.title;
+    const name = typeof rawName === "string" ? slugifyLaunch27Extra(rawName) : "";
+    const rawString = typeof item === "string" ? slugifyLaunch27Extra(item) : "";
+    const key = knownKey || name || rawString || (Number.isFinite(numericId) ? `launch27_extra_${numericId}` : "");
+    if (key && !extras.includes(key)) extras.push(key);
+  }
+  return extras;
+}
+
 function getBaseUrl(): string {
   const subdomain = ENV.launch27Subdomain || "maidsinblack";
   return `https://${subdomain}.launch27.com`;
@@ -151,16 +192,11 @@ export async function getCompletedBookingsForDate(
     const raw = await response.json() as RawBooking[];
     if (!Array.isArray(raw) || raw.length === 0) break;
     for (const b of raw) {
-      // Parse extras: collect all extra items across all services, map L27 IDs to internal keys
+      // Parse extras across all services. Keep unknown IDs/names instead of silently dropping them.
       const extras: string[] = [];
       for (const svc of b.services ?? []) {
-        const rawExtras = svc.extras;
-        if (!rawExtras || !Array.isArray(rawExtras)) continue;
-        for (const e of rawExtras as Array<{ id: number; name: string }>) {
-          const key = L27_EXTRA_ID_TO_KEY[e.id];
-          if (key && !extras.includes(key)) {
-            extras.push(key);
-          }
+        for (const key of normalizeLaunch27Extras(svc.extras)) {
+          if (!extras.includes(key)) extras.push(key);
         }
       }
 

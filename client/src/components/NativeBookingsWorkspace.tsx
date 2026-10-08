@@ -209,6 +209,14 @@ const notesFrom = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+const importedExtraLabel = (id: string) => {
+  const catalogLabel = BOOKING_WIDGET_PRICED_EXTRAS.find(extra => extra.id === id)?.label;
+  if (catalogLabel) return catalogLabel;
+  return id
+    .replace(/^launch27_extra_\d+_?/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, character => character.toUpperCase()) || id;
+};
 const importedExtrasFrom = (value: string | null): NativeExtra[] => {
   if (!value) return [];
   try {
@@ -218,9 +226,7 @@ const importedExtrasFrom = (value: string | null): NativeExtra[] => {
           .filter((item): item is string => typeof item === "string")
           .map(id => ({
             id,
-            label:
-              BOOKING_WIDGET_PRICED_EXTRAS.find(extra => extra.id === id)
-                ?.label ?? id,
+            label: importedExtraLabel(id),
             quantity: 1,
           }))
       : [];
