@@ -16,6 +16,7 @@ export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
  */
 export const ADMIN_PAGES = [
   { id: "command-center",    label: "AI Center",     group: "Core" },
+  { id: "ai-actions",        label: "AI Actions",    group: "Core" },
   { id: "leads",             label: "Leads",         group: "Core" },
   { id: "pipeline",          label: "Pipeline",      group: "Core" },
   { id: "callbacks",         label: "Callbacks",     group: "Voice" },
