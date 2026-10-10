@@ -466,7 +466,7 @@
     },
     {
       "id": "0061_add_madison_sms_policy_snapshot",
-      "mode": "alter-table",
+      "mode": "additive-columns-existing-table",
       "sqlFile": "0061_add_madison_sms_policy_snapshot.sql",
       "sha256": "6a5d931d54d29cd8c4092b8ef428477a3c15be4986ce1855c44b49164431d8c7",
       "replayMode": "verified-idempotent",
