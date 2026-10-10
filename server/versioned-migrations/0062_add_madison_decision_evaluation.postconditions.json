@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "table": "madison_sms_action_approvals",
+  "columns": [
+    { "name": "decisionEvaluation", "columnType": "json", "nullable": true }
+  ],
+  "indexes": []
+}

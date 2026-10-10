@@ -471,6 +471,14 @@
       "sha256": "89fc2b3f5918a41c85d3fe54018ecf56af32f63db1f6f3f618f17e25f10cc2df",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0061_add_madison_sms_policy_snapshot.postconditions.json"
+    },
+    {
+      "id": "0062_add_madison_decision_evaluation",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0062_add_madison_decision_evaluation.sql",
+      "sha256": "55456890ad25cd34fb46e527ebdeb5d93294c61c86e04256830a90bef81430f4",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0062_add_madison_decision_evaluation.postconditions.json"
     }
   ]
 }

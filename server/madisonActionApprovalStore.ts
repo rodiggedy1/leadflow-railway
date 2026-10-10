@@ -1,4 +1,4 @@
-import { mysqlEnum, mysqlTable, bigint, datetime, int, text, varchar, uniqueIndex, index } from "drizzle-orm/mysql-core";
+import { mysqlEnum, mysqlTable, bigint, datetime, int, json, text, varchar, uniqueIndex, index } from "drizzle-orm/mysql-core";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 
@@ -15,8 +15,10 @@ export const madisonSmsActionApprovals = mysqlTable("madison_sms_action_approval
   proposalType: varchar("proposalType", { length: 64 }).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   task: text("task").notNull(),
-  recommendation: text("recommendation").notNull(),
-  status: mysqlEnum("status", madisonActionApprovalStatuses as unknown as [string, ...string[]]).notNull().default("PROPOSED"),
+	  recommendation: text("recommendation").notNull(),
+	  /** Deterministic confidence/policy/facts snapshot used by the approval gate. */
+	  decisionEvaluation: json("decisionEvaluation"),
+	  status: mysqlEnum("status", madisonActionApprovalStatuses as unknown as [string, ...string[]]).notNull().default("PROPOSED"),
   approvedBy: varchar("approvedBy", { length: 128 }),
   approvedAt: datetime("approvedAt", { mode: "date", fsp: 3 }),
   issueId: int("issueId"),
