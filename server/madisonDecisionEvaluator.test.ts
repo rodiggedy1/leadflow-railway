@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { evaluateMadisonDecision, getMadisonConfidenceBand } from "./madisonDecisionEvaluator";
 
 const base = {
+  actionKey: "create_support_task" as const,
   policyMode: "approval_required" as const,
   policyEnabled: true,
   targetResolution: "partial" as const,

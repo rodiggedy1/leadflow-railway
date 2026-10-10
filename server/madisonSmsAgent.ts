@@ -29,6 +29,7 @@ import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
 import { persistMadisonMessageShadow } from "./madisonMessageUnderstanding";
 import { getSmsReplyPolicy } from "./aiActionPolicy";
+import { guardMadisonDraftAgainstUnverifiedBookingChange } from "./madisonReplyDecision";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -325,7 +326,11 @@ export async function triggerMadisonSmsDraft(params: {
       knowledgeContext,
       conversationMessages,
     });
-    const reviewDraft = draftResponse.draft;
+    const reviewDraft = guardMadisonDraftAgainstUnverifiedBookingChange({
+      inboundText,
+      draft: draftResponse.draft,
+      senderName: context.senderName ?? senderName,
+    });
 
     // ── Step 6: Compute Quality Score ─────────────────────────────────────────
     const qualityScore = computeQualityScore({
@@ -668,6 +673,7 @@ When you catch yourself writing something like the above — stop. Start over. A
 8. Use the Maids in Black knowledge base for accurate details (guarantee, policies, team info).
 9. Never make up information — only use the context provided.
 10. If you don't have enough info to answer confidently, say so warmly and offer to check.
+11. For reschedule or booking-change requests, never say the booking was moved, changed, confirmed, or booked unless the context explicitly includes the requested time and verified availability. If either is missing, ask for the missing time or say you will check availability before confirming.
 
 Return JSON only.${contextBlock}
 

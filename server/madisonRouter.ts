@@ -1,13 +1,13 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonMessageUnderstanding, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
+import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { buildMadisonActionProposal, madisonSmsActionApprovals } from "./madisonActionApprovalStore";
-import { evaluateMadisonDecision, type MadisonDecisionEvaluation } from "./madisonDecisionEvaluator";
-import { getSupportTaskPolicy } from "./aiActionPolicy";
+import type { MadisonDecisionEvaluation } from "./madisonDecisionEvaluator";
+import { evaluateMadisonSupportTaskForDraft } from "./madisonReplyDecision";
 
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
 
@@ -68,30 +68,7 @@ async function evaluateSupportTaskForDraft(
   draftId: number,
   fromPhone: string,
 ): Promise<MadisonDecisionEvaluation> {
-  const [shadow] = await db.select({
-    confidence: madisonMessageUnderstanding.confidence,
-    missingFacts: madisonMessageUnderstanding.missingFacts,
-    resolvedBookingId: madisonMessageUnderstanding.resolvedBookingId,
-  }).from(madisonMessageUnderstanding)
-    .where(eq(madisonMessageUnderstanding.draftId, draftId))
-    .orderBy(desc(madisonMessageUnderstanding.createdAt))
-    .limit(1);
-  const policy = await getSupportTaskPolicy(db);
-  const missingFacts = Array.isArray(shadow?.missingFacts)
-    ? shadow.missingFacts.filter((fact): fact is string => typeof fact === "string")
-    : [];
-  return evaluateMadisonDecision({
-    confidence: shadow?.confidence ?? 0,
-    confidenceSource: shadow ? "shadow" : "fallback",
-    policyMode: policy.mode,
-    policyEnabled: policy.enabled,
-    // A support task may require manual booking lookup; this does not grant
-    // permission to mutate the booking.
-    targetResolution: shadow?.resolvedBookingId ? "resolved" : fromPhone ? "partial" : "unresolved",
-    requiredFactsPresent: missingFacts.length === 0,
-    missingFacts,
-    currentStateVerified: true,
-  });
+  return evaluateMadisonSupportTaskForDraft(db, draftId, fromPhone);
 }
 function activityTimestamp(session: MadisonSessionRow): number {
   return session.lastMessageTs ?? session.updatedAt.getTime() ?? session.createdAt.getTime();
@@ -343,6 +320,13 @@ export const madisonRouter = router({
       if (!proposal) return null;
       const decisionEvaluation = await evaluateSupportTaskForDraft(db, input.draftId, draft.fromPhone);
       return { id: null, draftId: input.draftId, sessionId: draft.sessionId, fromPhone: draft.fromPhone, customerName: draft.senderName, incomingMessage: draft.originalMessage, ...proposal, decisionEvaluation, status: "PROPOSED" as const, approvedBy: null, approvedAt: null, issueId: null };
+    }),
+  getReplyDecisionEvaluation: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      return evaluateMadisonReplyForDraft(db, input.draftId);
     }),
   approveActionTask: opsChatProcedure
     .input(z.object({ draftId: z.number().int().positive(), approvedBy: z.string().min(1) }))
