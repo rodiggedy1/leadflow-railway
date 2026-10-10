@@ -163,7 +163,8 @@ function formatShadowValue(value: string | null | undefined): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function formatDecisionOutcome(value: string): string {
+function formatDecisionOutcome(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) return "Unavailable";
   const words = value.replace(/^blocked_/, "blocked: ").replace(/_/g, " ").toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
