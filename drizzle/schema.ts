@@ -4410,6 +4410,31 @@ export const madisonMessageUnderstanding = mysqlTable("madison_message_understan
 ]);
 export type MadisonMessageUnderstanding = typeof madisonMessageUnderstanding.$inferSelect;
 export type InsertMadisonMessageUnderstanding = typeof madisonMessageUnderstanding.$inferInsert;
+/** Append-only evidence events used to project the current conversation facts. */
+export const madisonConversationFactEvents = mysqlTable("madison_conversation_fact_events", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  eventId: varchar("eventId", { length: 128 }).notNull(),
+  sessionId: bigint("sessionId", { mode: "number" }).notNull(),
+  draftId: bigint("draftId", { mode: "number" }),
+  factKey: varchar("factKey", { length: 96 }).notNull(),
+  value: json("value").notNull(),
+  sourceType: mysqlEnum("sourceType", ["customer_message", "leadflow_context", "employee", "external_system"]).notNull(),
+  sourceMessageId: varchar("sourceMessageId", { length: 128 }),
+  sourceRecordId: varchar("sourceRecordId", { length: 128 }),
+  status: mysqlEnum("status", ["current", "superseded", "disputed", "unverified"]).notNull().default("current"),
+  confidence: decimal("confidence", { precision: 5, scale: 4 }),
+  observedAt: datetime("observedAt", { mode: "date", fsp: 3 }).notNull(),
+  validUntil: datetime("validUntil", { mode: "date", fsp: 3 }),
+  supersedesFactId: bigint("supersedesFactId", { mode: "number" }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (t) => [
+  uniqueIndex("uq_madison_fact_events_event_id").on(t.eventId),
+  index("idx_madison_fact_events_session_observed").on(t.sessionId, t.observedAt),
+  index("idx_madison_fact_events_draft_observed").on(t.draftId, t.observedAt),
+  index("idx_madison_fact_events_key_observed").on(t.factKey, t.observedAt),
+]);
+export type MadisonConversationFactEvent = typeof madisonConversationFactEvents.$inferSelect;
+export type InsertMadisonConversationFactEvent = typeof madisonConversationFactEvents.$inferInsert;
 
 /** Independently reviewable intents within a decision. */
 export const madisonIntents = mysqlTable("madison_intents", {

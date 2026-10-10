@@ -479,6 +479,14 @@
       "sha256": "9192db83a91a7a44f537e16089ce3a2ce1540010c6c745ab97f7ebeee5bd8281",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0062_add_madison_decision_evaluation.postconditions.json"
+    },
+    {
+      "id": "0063_create_madison_conversation_fact_events",
+      "mode": "create-table",
+      "sqlFile": "0063_create_madison_conversation_fact_events.sql",
+      "sha256": "975fc80350a11b27ce5a228f6b65464becfb038c270dd9f4ab4412ceb334c52d",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0063_create_madison_conversation_fact_events.postconditions.json"
     }
   ]
 }

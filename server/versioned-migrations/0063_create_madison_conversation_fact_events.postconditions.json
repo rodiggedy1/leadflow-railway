@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "table": "madison_conversation_fact_events",
+  "columns": [
+    { "name": "id", "columnType": "bigint", "nullable": false, "autoIncrement": true },
+    { "name": "eventId", "columnType": "varchar(128)", "nullable": false },
+    { "name": "sessionId", "columnType": "bigint", "nullable": false },
+    { "name": "draftId", "columnType": "bigint", "nullable": true },
+    { "name": "factKey", "columnType": "varchar(96)", "nullable": false },
+    { "name": "value", "columnType": "json", "nullable": false },
+    { "name": "sourceType", "columnType": "enum('customer_message','leadflow_context','employee','external_system')", "nullable": false },
+    { "name": "sourceMessageId", "columnType": "varchar(128)", "nullable": true },
+    { "name": "sourceRecordId", "columnType": "varchar(128)", "nullable": true },
+    { "name": "status", "columnType": "enum('current','superseded','disputed','unverified')", "nullable": false, "default": "current" },
+    { "name": "confidence", "columnType": "decimal(5,4)", "nullable": true },
+    { "name": "observedAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "validUntil", "columnType": "datetime(3)", "nullable": true },
+    { "name": "supersedesFactId", "columnType": "bigint", "nullable": true },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false, "default": "CURRENT_TIMESTAMP(3)" }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "uq_madison_fact_events_event_id", "columns": ["eventId"], "unique": true },
+    { "name": "idx_madison_fact_events_session_observed", "columns": ["sessionId", "observedAt"], "unique": false },
+    { "name": "idx_madison_fact_events_draft_observed", "columns": ["draftId", "observedAt"], "unique": false },
+    { "name": "idx_madison_fact_events_key_observed", "columns": ["factKey", "observedAt"], "unique": false }
+  ]
+}
