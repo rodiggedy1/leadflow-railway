@@ -6,6 +6,7 @@ import {
   MESSAGE_CATEGORIES,
   MISSION_STATES,
   NEXT_BEST_ACTIONS,
+  filterCurrentTurnFactObservations,
   normalizeShadowPrediction,
 } from "./madisonMessageUnderstanding";
 
@@ -20,8 +21,10 @@ describe("Madison Message Understanding shadow contract", () => {
       confidence: 0.93,
       knownFacts: ["existing booking"],
       missingFacts: ["issue resolution"],
-      factObservations: [{ factKey: "requested_date", value: "2026-10-10" }],
-    });
+      factObservations: [{ factKey: "requested_date", value: "2026-10-10", evidenceExcerpt: "Saturday October 10th" }],
+      extractionStatus: "COMPLETE",
+      extractionQualityNote: null,
+    }, { model: "gemini-3.5-flash-lite" });
 
     expect(prediction).toMatchObject({
       primaryCategory: "SERVICE_ISSUE",
@@ -31,9 +34,10 @@ describe("Madison Message Understanding shadow contract", () => {
       nextBestAction: "CREATE_REVIEW_TASK",
       confidence: 0.93,
       classifierVersion: "madison-shadow-v1",
-      model: "gpt-4o",
+      model: "gemini-3.5-flash-lite",
     });
-    expect(prediction.factObservations).toEqual([{ factKey: "requested_date", value: "2026-10-10" }]);
+    expect(prediction.factObservations).toEqual([{ factKey: "requested_date", value: "2026-10-10", evidenceExcerpt: "Saturday October 10th", sourceMessageId: undefined }]);
+    expect(prediction.extractionStatus).toBe("COMPLETE");
   });
 
   it("falls back to safe review values for malformed model output", () => {
@@ -57,6 +61,42 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(prediction.knownFacts).toEqual(["valid"]);
     expect(prediction.missingFacts).toEqual([]);
     expect(prediction.factObservations).toEqual([]);
+    expect(prediction.extractionStatus).toBe("NO_FACTS_PRESENT");
+  });
+
+  it("adapts valid OpenAI JSON-object aliases without heuristic extraction", () => {
+    const prediction = normalizeShadowPrediction({
+      category: "AVAILABILITY_REQUEST",
+      mission: "PROVIDE_TEAM_STATUS",
+      missionState: "NEW",
+      nextAction: "CHECK_AVAILABILITY",
+      factObservations: [
+        { key: "requested_date", value: "October 15th", evidenceExcerpt: "October 15th" },
+        { key: "excluded_teams", value: ["Onilda", "JessiCleaning"], evidenceExcerpt: "outside of Onilda and JessiCleaning" },
+      ],
+      extractionStatus: "COMPLETE",
+    }, { model: "gpt-5.5" });
+
+    expect(prediction.primaryCategory).toBe("AVAILABILITY_REQUEST");
+    expect(prediction.mission).toBe("PROVIDE_TEAM_STATUS");
+    expect(prediction.nextBestAction).toBe("CHECK_AVAILABILITY");
+    expect(prediction.factObservations).toEqual([
+      { factKey: "requested_date", value: "October 15th", evidenceExcerpt: "October 15th", sourceMessageId: undefined },
+      { factKey: "excluded_teams", value: "Onilda, JessiCleaning", evidenceExcerpt: "outside of Onilda and JessiCleaning", sourceMessageId: undefined },
+    ]);
+    expect(prediction.model).toBe("gpt-5.5");
+  });
+
+  it("keeps historical-only facts out of the current fact ledger", () => {
+    const facts = [
+      { factKey: "requested_date", value: "October 15th", evidenceExcerpt: "October 15th", sourceMessageId: undefined },
+      { factKey: "refund_item", value: "mat", evidenceExcerpt: "refund of the mat", sourceMessageId: undefined },
+    ];
+
+    expect(filterCurrentTurnFactObservations(
+      facts,
+      "Good morning, are there any cleaning teams available for October 15th, outside of Onilda and JessiCleaning? I'd prefer a different team."
+    )).toEqual([facts[0]]);
   });
 
   it("keeps the taxonomy finite and includes the agreed operational categories", () => {

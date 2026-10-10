@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "table": "madison_message_understanding",
+  "columns": [
+    { "name": "extractionStatus", "columnType": "enum('COMPLETE','PARTIAL','NO_FACTS_PRESENT','EXTRACTION_FAILED','VALIDATION_FAILED')", "nullable": false, "default": "NO_FACTS_PRESENT" },
+    { "name": "extractionQualityNote", "columnType": "text", "nullable": true }
+  ],
+  "indexes": []
+}

@@ -65,6 +65,7 @@ type MessageCategory = (typeof MESSAGE_CATEGORIES)[number];
 type CustomerMission = (typeof CUSTOMER_MISSIONS)[number];
 type MissionState = (typeof MISSION_STATES)[number];
 type NextBestAction = (typeof NEXT_BEST_ACTIONS)[number];
+export type MadisonExtractionStatus = "COMPLETE" | "PARTIAL" | "NO_FACTS_PRESENT" | "EXTRACTION_FAILED" | "VALIDATION_FAILED";
 
 type MadisonDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
@@ -77,7 +78,9 @@ export type MadisonShadowPrediction = {
   confidence: number;
   knownFacts: string[];
   missingFacts: string[];
-  factObservations: Array<{ factKey: string; value: string }>;
+  factObservations: Array<{ factKey: string; value: string; evidenceExcerpt: string; sourceMessageId?: string }>;
+  extractionStatus: MadisonExtractionStatus;
+  extractionQualityNote: string | null;
   model: string;
   classifierVersion: string;
 };
@@ -119,9 +122,37 @@ const boundedConfidence = (value: unknown): number => {
 };
 
 export function normalizeShadowPrediction(
-  value: unknown
+  value: unknown,
+  metadata?: { model?: string; classifierVersion?: string }
 ): MadisonShadowPrediction {
-  const raw = (value ?? {}) as Record<string, unknown>;
+  const source = (value ?? {}) as Record<string, unknown>;
+  const raw: Record<string, unknown> = {
+    ...source,
+    primaryCategory: source.primaryCategory ?? source.category,
+    missionState: source.missionState ?? source.mission_state,
+    nextBestAction: source.nextBestAction ?? source.nextAction ?? (Array.isArray(source.next_actions) ? source.next_actions[0] : source.next_actions),
+    factObservations: Array.isArray(source.factObservations)
+      ? source.factObservations.map(observation => {
+          const item = observation && typeof observation === "object" ? observation as Record<string, unknown> : {};
+          return {
+            factKey: item.factKey ?? item.key,
+            value: Array.isArray(item.value) ? item.value.join(", ") : item.value,
+            evidenceExcerpt: item.evidenceExcerpt,
+            sourceMessageId: item.sourceMessageId,
+          };
+        })
+      : source.factObservations && typeof source.factObservations === "object"
+        ? Object.entries(source.factObservations as Record<string, unknown>).map(([key, observation]) => {
+            const item = observation && typeof observation === "object" ? observation as Record<string, unknown> : {};
+            return {
+              factKey: item.factKey ?? item.key ?? key,
+              value: Array.isArray(item.value) ? item.value.join(", ") : item.value,
+              evidenceExcerpt: item.evidenceExcerpt,
+              sourceMessageId: item.sourceMessageId,
+            };
+          })
+        : [],
+  };
   const primaryCategory = enumOr(
     raw.primaryCategory,
     MESSAGE_CATEGORIES,
@@ -157,35 +188,106 @@ export function normalizeShadowPrediction(
       : [],
     factObservations: Array.isArray(raw.factObservations)
       ? raw.factObservations
-          .filter((item): item is { factKey: string; value: string } =>
+          .filter((item): item is { factKey: string; value: string; evidenceExcerpt: string; sourceMessageId?: string } =>
             Boolean(item) && typeof item === "object" &&
             typeof (item as Record<string, unknown>).factKey === "string" &&
-            typeof (item as Record<string, unknown>).value === "string"
+            typeof (item as Record<string, unknown>).value === "string" &&
+            typeof (item as Record<string, unknown>).evidenceExcerpt === "string"
           )
           .map(item => ({
             factKey: item.factKey.trim().slice(0, 96),
-            value: item.value.trim(),
+            value: item.value.trim().slice(0, 160),
+            evidenceExcerpt: item.evidenceExcerpt.trim().slice(0, 500),
+            sourceMessageId: typeof item.sourceMessageId === "string" ? item.sourceMessageId.trim().slice(0, 128) : undefined,
           }))
-          .filter(item => item.factKey.length > 0 && item.value.length > 0)
+          .filter(item => item.factKey.length > 0 && item.value.length > 0 && item.evidenceExcerpt.length > 0)
           .slice(0, 20)
       : [],
-    model: "gpt-4o",
-    classifierVersion: "madison-shadow-v1",
+    extractionStatus: enumOr(raw.extractionStatus, ["COMPLETE", "PARTIAL", "NO_FACTS_PRESENT", "EXTRACTION_FAILED", "VALIDATION_FAILED"] as const, "NO_FACTS_PRESENT"),
+    extractionQualityNote: typeof raw.extractionQualityNote === "string" ? raw.extractionQualityNote.slice(0, 500) : null,
+    model: typeof metadata?.model === "string" && metadata.model.trim() ? metadata.model.trim().slice(0, 64) : "unknown",
+    classifierVersion: typeof metadata?.classifierVersion === "string" && metadata.classifierVersion.trim() ? metadata.classifierVersion.trim().slice(0, 64) : "madison-shadow-v1",
   };
+}
+
+export function filterCurrentTurnFactObservations(
+  facts: MadisonShadowPrediction["factObservations"],
+  inboundText: string
+) {
+  const currentText = inboundText.trim().toLowerCase();
+  return facts.filter(fact =>
+    currentText.includes(fact.evidenceExcerpt.trim().toLowerCase())
+  );
 }
 
 export async function classifyMadisonMessageShadow(input: {
   inboundText: string;
   conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction> {
+  const configuredModel = process.env.OPENAI_MODEL?.trim() || "gpt-4o";
+  const responseFormat = configuredModel.startsWith("gpt-5")
+    ? { type: "json_object" as const }
+    : {
+        type: "json_schema" as const,
+        json_schema: {
+          name: "madison_shadow_prediction",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              primaryCategory: { type: "string", enum: [...MESSAGE_CATEGORIES] },
+              categories: {
+                type: "array",
+                items: { type: "string", enum: [...MESSAGE_CATEGORIES] },
+                maxItems: 3,
+              },
+              mission: { type: "string", enum: [...CUSTOMER_MISSIONS] },
+              missionState: { type: "string", enum: [...MISSION_STATES] },
+              nextBestAction: { type: "string", enum: [...NEXT_BEST_ACTIONS] },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+              knownFacts: { type: "array", items: { type: "string" }, maxItems: 20 },
+              missingFacts: { type: "array", items: { type: "string" }, maxItems: 20 },
+              factObservations: {
+                type: "array",
+                maxItems: 20,
+                items: {
+                  type: "object",
+                  properties: {
+                    factKey: { type: "string", minLength: 1, maxLength: 96 },
+                    value: { type: "string", minLength: 1 },
+                    evidenceExcerpt: { type: "string", minLength: 1, maxLength: 500 },
+                    sourceMessageId: { type: "string", maxLength: 128 },
+                  },
+                  required: ["factKey", "value", "evidenceExcerpt"],
+                  additionalProperties: false,
+                },
+              },
+              extractionStatus: {
+                type: "string",
+                enum: ["COMPLETE", "PARTIAL", "NO_FACTS_PRESENT", "EXTRACTION_FAILED", "VALIDATION_FAILED"],
+              },
+              extractionQualityNote: { type: ["string", "null"], maxLength: 500 },
+            },
+            required: [
+              "primaryCategory", "categories", "mission", "missionState", "nextBestAction",
+              "confidence", "knownFacts", "missingFacts", "factObservations", "extractionStatus",
+              "extractionQualityNote",
+            ],
+            additionalProperties: false,
+          },
+        },
+      };
   const response = await invokeLLM({
     messages: [
       {
         role: "system",
         content: `You are Madison's shadow-only message understanding classifier for a cleaning-service SMS inbox.
 Do not execute actions. Classify the customer's current goal in context.
-Extract only explicit customer-stated facts as factObservations. Do not infer, verify, or invent values.
+Extract only explicit customer-stated facts from the current inbound message as factObservations. Do not infer, verify, or invent values.
+Conversation history is context only: it may resolve continuity or references, but unrelated historical facts must not become current facts.
+Every fact observation must include the exact short evidenceExcerpt copied from the current inbound customer message that supports the value. Use sourceMessageId only when the supplied context identifies it.
 Use stable snake_case fact keys such as requested_date, requested_time, requested_service, and customer_provided_booking_reference.
+Set extractionStatus to COMPLETE when all explicit facts in the supplied conversation are captured, PARTIAL when some are captured but another explicit fact may be missing, and NO_FACTS_PRESENT only when the supplied customer messages contain no actionable facts.
 Use only the supplied enum values. The quote agent is disabled, so QUOTE_REQUEST may be predicted but must not cause quote calculation or link creation.
 Return JSON only. Prefer AMBIGUOUS, UNRESOLVED, and HOLD_FOR_HUMAN when context is insufficient.
 Categories: ${MESSAGE_CATEGORIES.join(", ")}
@@ -193,72 +295,18 @@ Missions: ${CUSTOMER_MISSIONS.join(", ")}
 Mission states: ${MISSION_STATES.join(", ")}
 Next actions: ${NEXT_BEST_ACTIONS.join(", ")}`,
       },
-      ...(input.conversationMessages ?? []).slice(-8),
+      ...(input.conversationMessages ?? []).filter(message => message.content.trim().length > 0).slice(-8),
       { role: "user", content: input.inboundText },
     ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "madison_shadow_prediction",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            primaryCategory: { type: "string", enum: [...MESSAGE_CATEGORIES] },
-            categories: {
-              type: "array",
-              items: { type: "string", enum: [...MESSAGE_CATEGORIES] },
-              maxItems: 3,
-            },
-            mission: { type: "string", enum: [...CUSTOMER_MISSIONS] },
-            missionState: { type: "string", enum: [...MISSION_STATES] },
-            nextBestAction: { type: "string", enum: [...NEXT_BEST_ACTIONS] },
-            confidence: { type: "number", minimum: 0, maximum: 1 },
-            knownFacts: {
-              type: "array",
-              items: { type: "string" },
-              maxItems: 20,
-            },
-            missingFacts: {
-              type: "array",
-              items: { type: "string" },
-              maxItems: 20,
-            },
-            factObservations: {
-              type: "array",
-              maxItems: 20,
-              items: {
-                type: "object",
-                properties: {
-                  factKey: { type: "string", minLength: 1, maxLength: 96 },
-                  value: { type: "string", minLength: 1 },
-                },
-                required: ["factKey", "value"],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: [
-            "primaryCategory",
-            "categories",
-            "mission",
-            "missionState",
-            "nextBestAction",
-            "confidence",
-            "knownFacts",
-            "missingFacts",
-            "factObservations",
-          ],
-          additionalProperties: false,
-        },
-      },
-    },
+    response_format: responseFormat,
   });
   const content = response?.choices?.[0]?.message?.content;
   if (!content) throw new Error("Shadow classifier returned no content");
-  return normalizeShadowPrediction(
-    typeof content === "string" ? JSON.parse(content) : content
+  const prediction = normalizeShadowPrediction(
+    typeof content === "string" ? JSON.parse(content) : content,
+    { model: response.model, classifierVersion: "madison-shadow-v1" }
   );
+  return prediction;
 }
 
 export async function persistMadisonMessageShadow(input: {
@@ -293,6 +341,15 @@ export async function persistMadisonMessageShadow(input: {
   );
 
   try {
+    const supportedFacts = filterCurrentTurnFactObservations(
+      prediction.factObservations,
+      input.inboundText
+    );
+    const rejectedFactCount = prediction.factObservations.length - supportedFacts.length;
+    const extractionStatus = rejectedFactCount > 0 ? "VALIDATION_FAILED" : prediction.extractionStatus;
+    const extractionQualityNote = rejectedFactCount > 0
+      ? `${rejectedFactCount} historical or unsupported fact observation(s) were not added to the current fact ledger because the evidence excerpt was not found in the current inbound message.`
+      : prediction.extractionQualityNote;
     await input.db
       .insert(madisonMessageUnderstanding)
       .values({
@@ -312,6 +369,8 @@ export async function persistMadisonMessageShadow(input: {
         resolvedBookingId: input.resolvedBookingId ?? null,
         model: prediction.model,
         classifierVersion: prediction.classifierVersion,
+        extractionStatus,
+        extractionQualityNote,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -337,7 +396,7 @@ export async function persistMadisonMessageShadow(input: {
             )
           );
       });
-    for (const [index, fact] of prediction.factObservations.entries()) {
+    for (const [index, fact] of supportedFacts.entries()) {
       const eventId = `${input.sourceMessageId}:${prediction.classifierVersion}:${index}`;
       await input.db.insert(madisonConversationFactEvents).values({
         eventId,
@@ -346,8 +405,11 @@ export async function persistMadisonMessageShadow(input: {
         factKey: fact.factKey,
         value: fact.value,
         sourceType: "customer_message",
-        sourceMessageId: input.sourceMessageId,
+        sourceMessageId: fact.sourceMessageId === input.sourceMessageId ? fact.sourceMessageId : input.sourceMessageId,
         status: "current",
+        validationStatus: "validated",
+        evidenceExcerpt: fact.evidenceExcerpt,
+        normalizationContext: null,
         confidence: prediction.confidence.toFixed(4),
         observedAt: new Date(),
         createdAt: new Date(),

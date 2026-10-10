@@ -487,6 +487,22 @@
       "sha256": "975fc80350a11b27ce5a228f6b65464becfb038c270dd9f4ab4412ceb334c52d",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0063_create_madison_conversation_fact_events.postconditions.json"
+    },
+    {
+      "id": "0064_add_madison_extraction_diagnostics",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0064_add_madison_extraction_diagnostics.sql",
+      "sha256": "bc4e5438fb1c88a9c318ec9bfd256a6229b9c145211d091c04a424490ca6680a",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0064_add_madison_extraction_diagnostics.postconditions.json"
+    },
+    {
+      "id": "0065_add_madison_fact_evidence_metadata",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0065_add_madison_fact_evidence_metadata.sql",
+      "sha256": "92c51f04e21a8d8bf9b124af2b33514b2618b90cdd75dbf49a9d93263a084c96",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0065_add_madison_fact_evidence_metadata.postconditions.json"
     }
   ]
 }

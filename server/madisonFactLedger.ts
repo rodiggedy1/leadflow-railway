@@ -1,5 +1,6 @@
 export type MadisonFactStatus = "current" | "superseded" | "disputed" | "unverified";
 export type MadisonFactSourceType = "customer_message" | "leadflow_context" | "employee" | "external_system";
+export type MadisonFactValidationStatus = "unverified" | "validated" | "rejected";
 
 export type MadisonFactEvent = {
   factKey: string;
@@ -8,6 +9,9 @@ export type MadisonFactEvent = {
   sourceMessageId?: string;
   sourceRecordId?: string;
   status?: MadisonFactStatus;
+  validationStatus?: MadisonFactValidationStatus;
+  evidenceExcerpt?: string;
+  normalizationContext?: Record<string, unknown> | null;
   confidence?: number;
   observedAt: string;
   validUntil?: string;

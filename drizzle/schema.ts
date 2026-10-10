@@ -4401,6 +4401,8 @@ export const madisonMessageUnderstanding = mysqlTable("madison_message_understan
   resolvedBookingId: bigint("resolvedBookingId", { mode: "number" }),
   model: varchar("model", { length: 64 }).notNull(),
   classifierVersion: varchar("classifierVersion", { length: 64 }).notNull(),
+  extractionStatus: mysqlEnum("extractionStatus", ["COMPLETE", "PARTIAL", "NO_FACTS_PRESENT", "EXTRACTION_FAILED", "VALIDATION_FAILED"]).notNull().default("NO_FACTS_PRESENT"),
+  extractionQualityNote: text("extractionQualityNote"),
   createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 }, (t) => [
@@ -4422,6 +4424,9 @@ export const madisonConversationFactEvents = mysqlTable("madison_conversation_fa
   sourceMessageId: varchar("sourceMessageId", { length: 128 }),
   sourceRecordId: varchar("sourceRecordId", { length: 128 }),
   status: mysqlEnum("status", ["current", "superseded", "disputed", "unverified"]).notNull().default("current"),
+  validationStatus: mysqlEnum("validationStatus", ["unverified", "validated", "rejected"]).notNull().default("unverified"),
+  evidenceExcerpt: text("evidenceExcerpt"),
+  normalizationContext: json("normalizationContext"),
   confidence: decimal("confidence", { precision: 5, scale: 4 }),
   observedAt: datetime("observedAt", { mode: "date", fsp: 3 }).notNull(),
   validUntil: datetime("validUntil", { mode: "date", fsp: 3 }),

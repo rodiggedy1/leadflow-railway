@@ -145,6 +145,8 @@ export const activityRouter = router({
           missingFacts: madisonMessageUnderstanding.missingFacts,
           model: madisonMessageUnderstanding.model,
           classifierVersion: madisonMessageUnderstanding.classifierVersion,
+          extractionStatus: madisonMessageUnderstanding.extractionStatus,
+          extractionQualityNote: madisonMessageUnderstanding.extractionQualityNote,
           createdAt: madisonMessageUnderstanding.createdAt,
         })
         .from(madisonMessageUnderstanding)
