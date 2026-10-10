@@ -476,7 +476,7 @@
       "id": "0062_add_madison_decision_evaluation",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0062_add_madison_decision_evaluation.sql",
-      "sha256": "55456890ad25cd34fb46e527ebdeb5d93294c61c86e04256830a90bef81430f4",
+      "sha256": "9192db83a91a7a44f537e16089ce3a2ce1540010c6c745ab97f7ebeee5bd8281",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0062_add_madison_decision_evaluation.postconditions.json"
     }
