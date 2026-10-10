@@ -167,6 +167,11 @@ function formatDecisionOutcome(value: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+function formatFactValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
 function AgentAvatar({ agent, large = false }: { agent: Agent; large?: boolean }) {
   return <div className={`ai-team-avatar ai-team-avatar--${agent.color} ${large ? "is-large" : ""}`}><Sparkles size={large ? 23 : 17} /></div>;
 }
@@ -186,6 +191,7 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
 function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
   const utils = trpc.useUtils();
   const [showConversation, setShowConversation] = useState(false);
+  const [showEvidence, setShowEvidence] = useState(false);
   const [editingReply, setEditingReply] = useState(false);
   const [editedReply, setEditedReply] = useState("");
   let metadata: { draftId?: number; autoSentAt?: string; autoReply?: string } = {};
@@ -221,6 +227,10 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
   const { data: replyDecisionEvaluation } = trpc.madison.getReplyDecisionEvaluation.useQuery(
     { draftId: draftId! },
     { enabled: Boolean(draftId), refetchOnWindowFocus: false },
+  );
+  const { data: factEvidence = [], isLoading: factEvidenceLoading } = trpc.madison.getFactEvidence.useQuery(
+    { draftId: draftId! },
+    { enabled: Boolean(draftId) && showEvidence, refetchOnWindowFocus: false },
   );
   const approveActionTask = trpc.madison.approveActionTask.useMutation({
     onSuccess: result => {
@@ -284,6 +294,22 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
           <span>{formatShadowValue(decisionEvaluation.confidenceBand)} confidence · {decisionEvaluation.reasonCodes.length > 0 ? decisionEvaluation.reasonCodes.map(formatDecisionOutcome).join(" · ") : "All review gates passed"}</span>
         </div>}
         <div className="ai-team-card-shadow"><span>SHADOW UNDERSTANDING · READ ONLY</span>{shadowLoading ? <p>Loading prediction…</p> : shadowError ? <p>Prediction could not be loaded. Check Preview logs for the failure stage.</p> : shadowPrediction ? <><div className="ai-team-shadow-grid"><p><b>Category</b><strong>{formatShadowValue(shadowPrediction.primaryCategory)}</strong></p><p><b>Mission</b><strong>{formatShadowValue(shadowPrediction.mission)}</strong></p><p><b>State</b><strong>{formatShadowValue(shadowPrediction.missionState)}</strong></p><p><b>Next action</b><strong>{formatShadowValue(shadowPrediction.nextBestAction)}</strong></p><p className="ai-team-shadow-confidence"><b>Confidence</b><span><strong>{Math.round(Number(shadowPrediction.confidence) * 100)}% confidence</strong><i aria-hidden="true" style={{ width: `${Math.round(Number(shadowPrediction.confidence) * 100)}%` }} /></span></p></div><p><b>Known:</b> {Array.isArray(shadowPrediction.knownFacts) && shadowPrediction.knownFacts.length > 0 ? shadowPrediction.knownFacts.join(" · ") : "None recorded"}</p><p><b>Missing:</b> {Array.isArray(shadowPrediction.missingFacts) && shadowPrediction.missingFacts.length > 0 ? shadowPrediction.missingFacts.join(" · ") : "None recorded"}</p></> : <p>No prediction recorded for this card yet. New Preview messages will report the exact classifier/persistence stage in server logs.</p>}</div>
+        <div className={`ai-team-card-evidence ${showEvidence ? "is-open" : ""}`}>
+          <button type="button" className="ai-team-evidence-toggle" onClick={() => setShowEvidence(value => !value)} aria-expanded={showEvidence}>
+            <span>FACTS &amp; EVIDENCE</span><strong>{showEvidence ? "Hide details" : "Show details"}</strong><ChevronRight size={14} />
+          </button>
+          {showEvidence && <div className="ai-team-evidence-body">
+            {factEvidenceLoading ? <p>Loading recorded evidence…</p> : factEvidence.length === 0 ? <p>No persisted fact observations for this draft.</p> : factEvidence.map(fact => {
+              const confidence = fact.confidence === null ? null : Math.round(Number(fact.confidence) * 100);
+              const observedAt = fact.observedAt ? new Date(fact.observedAt).getTime() : 0;
+              return <div className="ai-team-evidence-item" key={fact.eventId}>
+                <div className="ai-team-evidence-fact"><b>{formatShadowValue(fact.factKey)}</b><strong>{formatFactValue(fact.value)}</strong></div>
+                <div className="ai-team-evidence-meta"><span>{formatShadowValue(fact.sourceType)}{fact.sourceMessageId ? ` · ${fact.sourceMessageId}` : ""}</span><span>{formatShadowValue(fact.status)}{confidence !== null ? ` · ${confidence}% confidence` : ""}{observedAt ? ` · ${formatConversationTime(observedAt)}` : ""}</span></div>
+              </div>;
+            })}
+            <small>Evidence is read-only. Use View conversation below to inspect the source messages.</small>
+          </div>}
+        </div>
         {editingReply && <small style={{ display: "block", marginTop: 4, color: "#8b8177" }}>{editedReply.length}/1600 characters · Original Madison draft is preserved.</small>}
         <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
         {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">

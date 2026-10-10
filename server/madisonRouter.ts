@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
+import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonConversationFactEvents, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -327,6 +327,29 @@ export const madisonRouter = router({
       const db = await getDb();
       if (!db) return null;
       return evaluateMadisonReplyForDraft(db, input.draftId);
+    }),
+  getFactEvidence: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          eventId: madisonConversationFactEvents.eventId,
+          factKey: madisonConversationFactEvents.factKey,
+          value: madisonConversationFactEvents.value,
+          sourceType: madisonConversationFactEvents.sourceType,
+          sourceMessageId: madisonConversationFactEvents.sourceMessageId,
+          sourceRecordId: madisonConversationFactEvents.sourceRecordId,
+          status: madisonConversationFactEvents.status,
+          confidence: madisonConversationFactEvents.confidence,
+          observedAt: madisonConversationFactEvents.observedAt,
+          validUntil: madisonConversationFactEvents.validUntil,
+        })
+        .from(madisonConversationFactEvents)
+        .where(eq(madisonConversationFactEvents.draftId, input.draftId))
+        .orderBy(asc(madisonConversationFactEvents.observedAt), asc(madisonConversationFactEvents.eventId));
+      return rows;
     }),
   approveActionTask: opsChatProcedure
     .input(z.object({ draftId: z.number().int().positive(), approvedBy: z.string().min(1) }))
