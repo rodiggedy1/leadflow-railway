@@ -224,7 +224,7 @@ export async function classifyMadisonMessageShadow(input: {
   inboundText: string;
   conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction> {
-  const configuredModel = process.env.MADISON_OPENAI_MODEL?.trim() || "gpt-5.5";
+  const configuredModel = process.env.OPENAI_MODEL?.trim() || "gpt-4o";
   const responseFormat = configuredModel.startsWith("gpt-5")
     ? { type: "json_object" as const }
     : {
@@ -278,17 +278,17 @@ export async function classifyMadisonMessageShadow(input: {
         },
       };
   const response = await invokeLLM({
-    model: configuredModel,
     messages: [
       {
         role: "system",
         content: `You are Madison's shadow-only message understanding classifier for a cleaning-service SMS inbox.
 Do not execute actions. Classify the customer's current goal in context.
-Extract only explicit customer-stated facts from the current inbound message as factObservations. Do not infer, verify, or invent values.
+Extract every explicit actionable detail from the current inbound message as factObservations. Do not infer, verify, or invent values. This includes explicit requested actions, dates, relative dates, times, service details, constraints, exclusions, and booking references.
 Conversation history is context only: it may resolve continuity or references, but unrelated historical facts must not become current facts.
 Every fact observation must include the exact short evidenceExcerpt copied from the current inbound customer message that supports the value. Use sourceMessageId only when the supplied context identifies it.
 Use stable snake_case fact keys such as requested_date, requested_time, requested_service, and customer_provided_booking_reference.
 Set extractionStatus to COMPLETE when all explicit facts in the supplied conversation are captured, PARTIAL when some are captured but another explicit fact may be missing, and NO_FACTS_PRESENT only when the supplied customer messages contain no actionable facts.
+For example, the message “I am going to need to cancel this and reschedule for tomorrow morning.” has actionable facts for the cancellation/reschedule request, the relative date “tomorrow,” and the time period “morning”; it must not be returned as NO_FACTS_PRESENT.
 Use only the supplied enum values. The quote agent is disabled, so QUOTE_REQUEST may be predicted but must not cause quote calculation or link creation.
 Return JSON only. Prefer AMBIGUOUS, UNRESOLVED, and HOLD_FOR_HUMAN when context is insufficient.
 Categories: ${MESSAGE_CATEGORIES.join(", ")}
