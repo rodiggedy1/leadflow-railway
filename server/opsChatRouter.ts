@@ -56,6 +56,7 @@ import { invokeLLM } from "./_core/llm";
 import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
+import { evaluateMadisonReplyForDraft } from "./madisonReplyDecision";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
@@ -5794,6 +5795,11 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return { ok: false, reason: "no_db" };
+
+      const decisionEvaluation = await evaluateMadisonReplyForDraft(db, input.draftId);
+      if (decisionEvaluation.outcome !== "ready_for_human_approval") {
+        return { ok: false, reason: decisionEvaluation.outcome, decisionEvaluation };
+      }
 
       // Atomic transition: only succeed if status is still DRAFT_READY
       const [updateResult] = await db

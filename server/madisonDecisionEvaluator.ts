@@ -9,12 +9,13 @@ export type MadisonDecisionOutcome =
   | "blocked_unresolved_target"
   | "blocked_policy_disabled"
   | "blocked_confidence";
+export type MadisonDecisionActionKey = "create_support_task" | "send_sms_reply";
 
 export type MadisonDecisionEvaluation = {
   confidence: number;
   confidenceBand: MadisonConfidenceBand;
   confidenceSource: "shadow" | "structured_decision" | "fallback";
-  actionKey: "create_support_task";
+  actionKey: MadisonDecisionActionKey;
   policyMode: AiActionMode;
   policyEnabled: boolean;
   targetResolution: "resolved" | "partial" | "unresolved";
@@ -29,6 +30,7 @@ export type MadisonDecisionEvaluation = {
 };
 
 export type EvaluateMadisonDecisionInput = {
+  actionKey: MadisonDecisionActionKey;
   confidence?: number | string | null;
   confidenceSource?: MadisonDecisionEvaluation["confidenceSource"];
   policyMode: AiActionMode;
@@ -77,7 +79,7 @@ export function evaluateMadisonDecision(input: EvaluateMadisonDecisionInput): Ma
     reasons.push("confidence_below_review_threshold");
   } else if (input.policyMode === "automatic") {
     outcome = "blocked_confidence";
-    reasons.push("automatic_execution_not_enabled_for_support_tasks");
+    reasons.push(`automatic_execution_not_enabled_for_${input.actionKey === "send_sms_reply" ? "sms_replies" : "support_tasks"}`);
   } else if (input.policyMode === "suggest_only") {
     outcome = "recommendation_only";
     reasons.push("policy_suggest_only");
@@ -94,7 +96,7 @@ export function evaluateMadisonDecision(input: EvaluateMadisonDecisionInput): Ma
     confidence,
     confidenceBand,
     confidenceSource: input.confidenceSource ?? "fallback",
-    actionKey: "create_support_task",
+    actionKey: input.actionKey,
     policyMode: input.policyMode,
     policyEnabled: input.policyEnabled,
     targetResolution: input.targetResolution,

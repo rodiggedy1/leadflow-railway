@@ -77,6 +77,11 @@ const dayBoardProcedure = agentPageProcedure("field-management");
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 const PAYROLL_INACTIVE_BOOKING_STATUSES = new Set(["cancelled", "rescheduled", "missing_from_launch27"]);
+const payrollBookingInput = z.object({
+  jobId: z.number().int().positive(),
+  source: z.enum(["booking", "leadflow"]).default("leadflow"),
+  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
 
 const payrollBookingInput = z.object({
   jobId: z.number().int().positive(),

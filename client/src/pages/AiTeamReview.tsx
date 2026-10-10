@@ -218,6 +218,10 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     { draftId: draftId! },
     { enabled: Boolean(draftId), refetchOnWindowFocus: false },
   );
+  const { data: replyDecisionEvaluation } = trpc.madison.getReplyDecisionEvaluation.useQuery(
+    { draftId: draftId! },
+    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
+  );
   const approveActionTask = trpc.madison.approveActionTask.useMutation({
     onSuccess: result => {
       if (result.ok) {
@@ -254,7 +258,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
   const proposal = actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "");
-  const decisionEvaluation = actionApproval?.decisionEvaluation;
+  const decisionEvaluation = actionApproval?.decisionEvaluation ?? replyDecisionEvaluation;
   const customerName = draft.senderName ?? "Customer";
   const latestCardTime = formatConversationTime(card.ts);
   const generatedReply = draft.generatedDraft ?? "";
@@ -275,7 +279,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
           style={{ marginTop: 10, width: "100%", resize: "vertical", border: "1px solid #cdb79f", borderRadius: 10, padding: 10, color: "#4f473f", font: "inherit", lineHeight: 1.45, background: "#fffdf9" }}
         /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{autoSent ? metadata.autoReply ?? draft.approvedText ?? draft.generatedDraft : draft.generatedDraft ?? "Draft is still being prepared."}</div>}
         <div className="ai-team-policy-note"><b>SMS policy:</b> {draft.sendPolicyEnabled === 0 ? "Disabled" : draft.sendPolicyMode === "automatic" ? "Automatic policy selected · approval still required in this rollout" : draft.sendPolicyMode === "suggest_only" ? "Suggest only" : "Approval required"}</div>
-        {proposal && decisionEvaluation && <div className={`ai-team-decision-summary is-${decisionEvaluation.outcome}`}>
+        {decisionEvaluation && <div className={`ai-team-decision-summary is-${decisionEvaluation.outcome}`}>
           <div><b>Decision readiness</b><strong>{formatDecisionOutcome(decisionEvaluation.outcome)}</strong></div>
           <span>{formatShadowValue(decisionEvaluation.confidenceBand)} confidence · {decisionEvaluation.reasonCodes.length > 0 ? decisionEvaluation.reasonCodes.map(formatDecisionOutcome).join(" · ") : "All review gates passed"}</span>
         </div>}
