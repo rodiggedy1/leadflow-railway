@@ -65,6 +65,8 @@ describe("Madison substantive SMS human approval boundary", () => {
     expect(approvalBlock).toContain("editedText: input.approvedText");
     expect(approvalBlock).toContain("editedBy: input.approvedBy");
     expect(schemaSource).toContain("generatedDraft: text(\"generatedDraft\")");
+    expect(approvalBlock).toContain("approvedText: input.approvedText");
+    expect(approvalBlock).not.toContain("decisionEvaluation.outcome !== \"ready_for_human_approval\"");
   });
 
   it("exposes edit and approve-edited controls on the AI Team card", () => {
