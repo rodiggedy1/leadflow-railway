@@ -468,7 +468,7 @@
       "id": "0061_add_madison_sms_policy_snapshot",
       "mode": "additive-columns-existing-table",
       "sqlFile": "0061_add_madison_sms_policy_snapshot.sql",
-      "sha256": "6a5d931d54d29cd8c4092b8ef428477a3c15be4986ce1855c44b49164431d8c7",
+      "sha256": "89fc2b3f5918a41c85d3fe54018ecf56af32f63db1f6f3f618f17e25f10cc2df",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0061_add_madison_sms_policy_snapshot.postconditions.json"
     }
