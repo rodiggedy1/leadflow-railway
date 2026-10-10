@@ -463,6 +463,14 @@
       "sha256": "327fc8c154b1117f812961d79e73d263db0edc16bbdc00459e74db80241e0442",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0060_create_ai_action_policies.postconditions.json"
+    },
+    {
+      "id": "0061_add_madison_sms_policy_snapshot",
+      "mode": "alter-table",
+      "sqlFile": "0061_add_madison_sms_policy_snapshot.sql",
+      "sha256": "6a5d931d54d29cd8c4092b8ef428477a3c15be4986ce1855c44b49164431d8c7",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0061_add_madison_sms_policy_snapshot.postconditions.json"
     }
   ]
 }

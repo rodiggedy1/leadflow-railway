@@ -4303,6 +4303,10 @@ export const madisonSmsDrafts = mysqlTable("madison_sms_drafts", {
   generatedDraft: text("generatedDraft"),
   /** What was actually sent — may differ from generatedDraft if agent edited */
   approvedText: text("approvedText"),
+  /** Snapshot of the send_sms_reply policy used when this draft was created. */
+  sendPolicyMode: varchar("sendPolicyMode", { length: 32 }).notNull().default("approval_required"),
+  sendPolicyEnabled: tinyint("sendPolicyEnabled").notNull().default(1),
+  sendPolicyEvaluatedAt: datetime("sendPolicyEvaluatedAt", { mode: "date", fsp: 3 }),
 
   // Human action
   approvedBy: varchar("approvedBy", { length: 128 }),

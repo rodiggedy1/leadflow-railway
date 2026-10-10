@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "table": "madison_sms_drafts",
+  "columns": [
+    { "name": "sendPolicyMode", "columnType": "varchar(32)", "nullable": false, "default": "approval_required" },
+    { "name": "sendPolicyEnabled", "columnType": "tinyint", "nullable": false, "default": "1" },
+    { "name": "sendPolicyEvaluatedAt", "columnType": "datetime(3)", "nullable": true }
+  ]
+}
