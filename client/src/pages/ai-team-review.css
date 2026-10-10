@@ -41,3 +41,5 @@
   font-size: 11px;
   line-height: 1.4;
 }
+
+.ai-team-decision-summary{margin-top:9px;padding:9px 10px;border:1px solid #eadfd3;border-radius:8px;background:#fbf7f2;color:#81776c;font-size:10px;line-height:1.4}.ai-team-decision-summary>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.ai-team-decision-summary b{color:#a18870;font-size:9px;letter-spacing:.1em;text-transform:uppercase}.ai-team-decision-summary strong{color:#5f4a38;font-size:12px}.ai-team-decision-summary>span{display:block;margin-top:3px}.ai-team-decision-summary.is-ready_for_human_approval{border-color:#d8c2ab;background:#fcf6ed}.ai-team-decision-summary.is-clarification_required,.ai-team-decision-summary.is-blocked_confidence,.ai-team-decision-summary.is-blocked_missing_facts,.ai-team-decision-summary.is-blocked_unresolved_target,.ai-team-decision-summary.is-blocked_policy_disabled{border-color:#e2cfc0;background:#fff9f4}.ai-team-decision-summary.is-recommendation_only{border-color:#ddd4cb;background:#faf8f5}

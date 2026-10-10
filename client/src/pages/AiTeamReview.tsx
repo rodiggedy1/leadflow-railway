@@ -162,6 +162,11 @@ function formatShadowValue(value: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+function formatDecisionOutcome(value: string): string {
+  const words = value.replace(/^blocked_/, "blocked: ").replace(/_/g, " ").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 function AgentAvatar({ agent, large = false }: { agent: Agent; large?: boolean }) {
   return <div className={`ai-team-avatar ai-team-avatar--${agent.color} ${large ? "is-large" : ""}`}><Sparkles size={large ? 23 : 17} /></div>;
 }
@@ -249,6 +254,7 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
   const proposal = actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "");
+  const decisionEvaluation = actionApproval?.decisionEvaluation;
   const customerName = draft.senderName ?? "Customer";
   const latestCardTime = formatConversationTime(card.ts);
   const generatedReply = draft.generatedDraft ?? "";
@@ -269,6 +275,10 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
           style={{ marginTop: 10, width: "100%", resize: "vertical", border: "1px solid #cdb79f", borderRadius: 10, padding: 10, color: "#4f473f", font: "inherit", lineHeight: 1.45, background: "#fffdf9" }}
         /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{autoSent ? metadata.autoReply ?? draft.approvedText ?? draft.generatedDraft : draft.generatedDraft ?? "Draft is still being prepared."}</div>}
         <div className="ai-team-policy-note"><b>SMS policy:</b> {draft.sendPolicyEnabled === 0 ? "Disabled" : draft.sendPolicyMode === "automatic" ? "Automatic policy selected · approval still required in this rollout" : draft.sendPolicyMode === "suggest_only" ? "Suggest only" : "Approval required"}</div>
+        {proposal && decisionEvaluation && <div className={`ai-team-decision-summary is-${decisionEvaluation.outcome}`}>
+          <div><b>Decision readiness</b><strong>{formatDecisionOutcome(decisionEvaluation.outcome)}</strong></div>
+          <span>{formatShadowValue(decisionEvaluation.confidenceBand)} confidence · {decisionEvaluation.reasonCodes.length > 0 ? decisionEvaluation.reasonCodes.map(formatDecisionOutcome).join(" · ") : "All review gates passed"}</span>
+        </div>}
         <div className="ai-team-card-shadow"><span>SHADOW UNDERSTANDING · READ ONLY</span>{shadowLoading ? <p>Loading prediction…</p> : shadowError ? <p>Prediction could not be loaded. Check Preview logs for the failure stage.</p> : shadowPrediction ? <><div className="ai-team-shadow-grid"><p><b>Category</b><strong>{formatShadowValue(shadowPrediction.primaryCategory)}</strong></p><p><b>Mission</b><strong>{formatShadowValue(shadowPrediction.mission)}</strong></p><p><b>State</b><strong>{formatShadowValue(shadowPrediction.missionState)}</strong></p><p><b>Next action</b><strong>{formatShadowValue(shadowPrediction.nextBestAction)}</strong></p><p className="ai-team-shadow-confidence"><b>Confidence</b><span><strong>{Math.round(Number(shadowPrediction.confidence) * 100)}% confidence</strong><i aria-hidden="true" style={{ width: `${Math.round(Number(shadowPrediction.confidence) * 100)}%` }} /></span></p></div><p><b>Known:</b> {Array.isArray(shadowPrediction.knownFacts) && shadowPrediction.knownFacts.length > 0 ? shadowPrediction.knownFacts.join(" · ") : "None recorded"}</p><p><b>Missing:</b> {Array.isArray(shadowPrediction.missingFacts) && shadowPrediction.missingFacts.length > 0 ? shadowPrediction.missingFacts.join(" · ") : "None recorded"}</p></> : <p>No prediction recorded for this card yet. New Preview messages will report the exact classifier/persistence stage in server logs.</p>}</div>
         {editingReply && <small style={{ display: "block", marginTop: 4, color: "#8b8177" }}>{editedReply.length}/1600 characters · Original Madison draft is preserved.</small>}
         <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>

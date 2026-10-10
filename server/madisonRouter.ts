@@ -1,11 +1,13 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
+import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonMessageUnderstanding, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { buildMadisonActionProposal, madisonSmsActionApprovals } from "./madisonActionApprovalStore";
+import { evaluateMadisonDecision, type MadisonDecisionEvaluation } from "./madisonDecisionEvaluator";
+import { getSupportTaskPolicy } from "./aiActionPolicy";
 
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
 
@@ -61,6 +63,36 @@ function normalizedPhone(phone: string): string {
   return digits.slice(-10) || phone;
 }
 
+async function evaluateSupportTaskForDraft(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  draftId: number,
+  fromPhone: string,
+): Promise<MadisonDecisionEvaluation> {
+  const [shadow] = await db.select({
+    confidence: madisonMessageUnderstanding.confidence,
+    missingFacts: madisonMessageUnderstanding.missingFacts,
+    resolvedBookingId: madisonMessageUnderstanding.resolvedBookingId,
+  }).from(madisonMessageUnderstanding)
+    .where(eq(madisonMessageUnderstanding.draftId, draftId))
+    .orderBy(desc(madisonMessageUnderstanding.createdAt))
+    .limit(1);
+  const policy = await getSupportTaskPolicy(db);
+  const missingFacts = Array.isArray(shadow?.missingFacts)
+    ? shadow.missingFacts.filter((fact): fact is string => typeof fact === "string")
+    : [];
+  return evaluateMadisonDecision({
+    confidence: shadow?.confidence ?? 0,
+    confidenceSource: shadow ? "shadow" : "fallback",
+    policyMode: policy.mode,
+    policyEnabled: policy.enabled,
+    // A support task may require manual booking lookup; this does not grant
+    // permission to mutate the booking.
+    targetResolution: shadow?.resolvedBookingId ? "resolved" : fromPhone ? "partial" : "unresolved",
+    requiredFactsPresent: missingFacts.length === 0,
+    missingFacts,
+    currentStateVerified: true,
+  });
+}
 function activityTimestamp(session: MadisonSessionRow): number {
   return session.lastMessageTs ?? session.updatedAt.getTime() ?? session.createdAt.getTime();
 }
@@ -301,11 +333,16 @@ export const madisonRouter = router({
       const db = await getDb();
       if (!db) return null;
       const [stored] = await db.select().from(madisonSmsActionApprovals).where(eq(madisonSmsActionApprovals.draftId, input.draftId)).limit(1);
-      if (stored) return stored;
+      if (stored) {
+        const evaluation = stored.decisionEvaluation ?? await evaluateSupportTaskForDraft(db, input.draftId, stored.fromPhone);
+        return { ...stored, decisionEvaluation: evaluation };
+      }
       const [draft] = await db.select({ sessionId: madisonSmsDrafts.sessionId, fromPhone: madisonSmsDrafts.fromPhone, senderName: madisonSmsDrafts.senderName, originalMessage: madisonSmsDrafts.originalMessage }).from(madisonSmsDrafts).where(eq(madisonSmsDrafts.id, input.draftId)).limit(1);
       if (!draft) return null;
       const proposal = buildMadisonActionProposal(draft.originalMessage);
-      return proposal ? { id: null, draftId: input.draftId, sessionId: draft.sessionId, fromPhone: draft.fromPhone, customerName: draft.senderName, incomingMessage: draft.originalMessage, ...proposal, status: "PROPOSED" as const, approvedBy: null, approvedAt: null, issueId: null } : null;
+      if (!proposal) return null;
+      const decisionEvaluation = await evaluateSupportTaskForDraft(db, input.draftId, draft.fromPhone);
+      return { id: null, draftId: input.draftId, sessionId: draft.sessionId, fromPhone: draft.fromPhone, customerName: draft.senderName, incomingMessage: draft.originalMessage, ...proposal, decisionEvaluation, status: "PROPOSED" as const, approvedBy: null, approvedAt: null, issueId: null };
     }),
   approveActionTask: opsChatProcedure
     .input(z.object({ draftId: z.number().int().positive(), approvedBy: z.string().min(1) }))
@@ -318,11 +355,19 @@ export const madisonRouter = router({
         if (!draft) return { ok: false as const, reason: "not_found" };
         const proposal = buildMadisonActionProposal(draft.originalMessage);
         if (!proposal) return { ok: false as const, reason: "no_action_proposed" };
-        await db.insert(madisonSmsActionApprovals).values({ draftId: input.draftId, sessionId: draft.sessionId, fromPhone: draft.fromPhone, customerName: draft.senderName, incomingMessage: draft.originalMessage, ...proposal, status: "PROPOSED", createdAt: new Date(), updatedAt: new Date() }).onDuplicateKeyUpdate({ set: { updatedAt: new Date() } });
+        const decisionEvaluation = await evaluateSupportTaskForDraft(db, input.draftId, draft.fromPhone);
+        await db.insert(madisonSmsActionApprovals).values({ draftId: input.draftId, sessionId: draft.sessionId, fromPhone: draft.fromPhone, customerName: draft.senderName, incomingMessage: draft.originalMessage, ...proposal, decisionEvaluation, status: "PROPOSED", createdAt: new Date(), updatedAt: new Date() }).onDuplicateKeyUpdate({ set: { updatedAt: new Date(), decisionEvaluation } });
         [approval] = await db.select().from(madisonSmsActionApprovals).where(eq(madisonSmsActionApprovals.draftId, input.draftId)).limit(1);
       }
       if (!approval) return { ok: false as const, reason: "not_found" };
       if (approval.status === "APPROVED") return { ok: true as const, alreadyApproved: true, issueId: approval.issueId };
+      const decisionEvaluation = approval.decisionEvaluation ?? await evaluateSupportTaskForDraft(db, input.draftId, approval.fromPhone);
+      if (approval.decisionEvaluation == null) {
+        await db.update(madisonSmsActionApprovals).set({ decisionEvaluation, updatedAt: new Date() }).where(eq(madisonSmsActionApprovals.id, approval.id));
+      }
+      if (decisionEvaluation.outcome !== "ready_for_human_approval") {
+        return { ok: false as const, reason: decisionEvaluation.outcome, decisionEvaluation };
+      }
       const [claim] = await db.update(madisonSmsActionApprovals).set({ status: "APPROVING", updatedAt: new Date() }).where(and(eq(madisonSmsActionApprovals.id, approval.id), eq(madisonSmsActionApprovals.status, "PROPOSED")));
       if (((claim as any).affectedRows ?? 0) === 0) return { ok: false as const, reason: "already_approving" };
       const issueType = approval.proposalType === "reschedule" ? "reschedule_needed" : approval.proposalType === "cancellation" ? "other" : "manager_review";
