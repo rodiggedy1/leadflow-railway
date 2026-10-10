@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, isNotNull, isNull, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonConversationFactEvents, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -350,13 +350,7 @@ export const madisonRouter = router({
           validUntil: madisonConversationFactEvents.validUntil,
         })
         .from(madisonConversationFactEvents)
-        .where(and(
-          eq(madisonConversationFactEvents.draftId, input.draftId),
-          eq(madisonConversationFactEvents.status, "current"),
-          eq(madisonConversationFactEvents.validationStatus, "validated"),
-          isNotNull(madisonConversationFactEvents.evidenceExcerpt),
-          ne(madisonConversationFactEvents.evidenceExcerpt, ""),
-        ))
+        .where(eq(madisonConversationFactEvents.draftId, input.draftId))
         .orderBy(asc(madisonConversationFactEvents.observedAt), asc(madisonConversationFactEvents.eventId));
       return rows;
     }),
