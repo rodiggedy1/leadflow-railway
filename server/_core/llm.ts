@@ -281,7 +281,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: process.env.OPENAI_MODEL?.trim() || "gpt-4o",
+    model: process.env.OPENAI_MODEL?.trim() || "gpt-5.5",
     messages: messages.map(normalizeMessage),
   };
 
@@ -319,12 +319,15 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
+  const responseBody = await response.json() as InvokeResult & { error?: unknown };
+  if (!response.ok || responseBody.error) {
+    const providerError = typeof responseBody.error === "string"
+      ? responseBody.error
+      : JSON.stringify(responseBody.error ?? responseBody);
     throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+      `LLM invoke failed: ${response.status} ${response.statusText} – ${providerError}`
     );
   }
 
-  return (await response.json()) as InvokeResult;
+  return responseBody;
 }
