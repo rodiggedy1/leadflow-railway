@@ -120,6 +120,16 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(NEXT_BEST_ACTIONS).toContain("HOLD_FOR_HUMAN");
   });
 
+  it("keeps the strict nested fact schema and explicit reschedule examples aligned", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "server/madisonMessageUnderstanding.ts"),
+      "utf8"
+    );
+    expect(source).toContain('required: ["factKey", "value", "evidenceExcerpt", "sourceMessageId"]');
+    expect(source).toContain('For “Can you reschedule please”, return at least one factObservation');
+    expect(source).toContain('For “Can we reschedule to tomorrow morning then?”, return separate factObservations');
+  });
+
   it("does not make shadow predictions part of Madison execution", () => {
     const source = readFileSync(
       resolve(process.cwd(), "server/madisonSmsAgent.ts"),

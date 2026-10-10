@@ -288,6 +288,9 @@ Conversation history is context only: it may resolve continuity or references, b
 Every fact observation must include the exact short evidenceExcerpt copied from the current inbound customer message that supports the value. Use sourceMessageId only when the supplied context identifies it.
 Use stable snake_case fact keys such as requested_date, requested_time, requested_service, and customer_provided_booking_reference.
 Set extractionStatus to COMPLETE when all explicit facts in the supplied conversation are captured, PARTIAL when some are captured but another explicit fact may be missing, and NO_FACTS_PRESENT only when the supplied customer messages contain no actionable facts.
+Never return NO_FACTS_PRESENT for a message that contains an explicit request, requested action, date, relative date, time, service detail, constraint, exclusion, or booking reference. The action itself is a fact even when the customer has not supplied a date or time yet.
+For “Can you reschedule please”, return at least one factObservation with factKey “requested_action”, value “reschedule”, and evidenceExcerpt copied exactly as “reschedule”. Set extractionStatus to COMPLETE.
+For “Can we reschedule to tomorrow morning then?”, return separate factObservations for requested action “reschedule”, requested date “tomorrow”, and requested time “morning”, with exact evidence excerpts “reschedule”, “tomorrow”, and “morning”. Set extractionStatus to COMPLETE.
 For example, the message “I am going to need to cancel this and reschedule for tomorrow morning.” has actionable facts for the cancellation/reschedule request, the relative date “tomorrow,” and the time period “morning”; it must not be returned as NO_FACTS_PRESENT.
 Use only the supplied enum values. The quote agent is disabled, so QUOTE_REQUEST may be predicted but must not cause quote calculation or link creation.
 Return JSON only. Prefer AMBIGUOUS, UNRESOLVED, and HOLD_FOR_HUMAN when context is insufficient.
