@@ -20,6 +20,7 @@ describe("Madison Message Understanding shadow contract", () => {
       confidence: 0.93,
       knownFacts: ["existing booking"],
       missingFacts: ["issue resolution"],
+      factObservations: [{ factKey: "requested_date", value: "2026-10-10" }],
     });
 
     expect(prediction).toMatchObject({
@@ -32,6 +33,7 @@ describe("Madison Message Understanding shadow contract", () => {
       classifierVersion: "madison-shadow-v1",
       model: "gpt-4o",
     });
+    expect(prediction.factObservations).toEqual([{ factKey: "requested_date", value: "2026-10-10" }]);
   });
 
   it("falls back to safe review values for malformed model output", () => {
@@ -54,6 +56,7 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(prediction.confidence).toBe(1);
     expect(prediction.knownFacts).toEqual(["valid"]);
     expect(prediction.missingFacts).toEqual([]);
+    expect(prediction.factObservations).toEqual([]);
   });
 
   it("keeps the taxonomy finite and includes the agreed operational categories", () => {

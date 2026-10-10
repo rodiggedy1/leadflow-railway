@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `madison_conversation_fact_events` (
+  `id` bigint AUTO_INCREMENT NOT NULL,
+  `eventId` varchar(128) NOT NULL,
+  `sessionId` bigint NOT NULL,
+  `draftId` bigint,
+  `factKey` varchar(96) NOT NULL,
+  `value` json NOT NULL,
+  `sourceType` enum('customer_message','leadflow_context','employee','external_system') NOT NULL,
+  `sourceMessageId` varchar(128),
+  `sourceRecordId` varchar(128),
+  `status` enum('current','superseded','disputed','unverified') NOT NULL DEFAULT 'current',
+  `confidence` decimal(5,4),
+  `observedAt` datetime(3) NOT NULL,
+  `validUntil` datetime(3),
+  `supersedesFactId` bigint,
+  `createdAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_madison_fact_events_event_id` (`eventId`),
+  KEY `idx_madison_fact_events_session_observed` (`sessionId`,`observedAt`),
+  KEY `idx_madison_fact_events_draft_observed` (`draftId`,`observedAt`),
+  KEY `idx_madison_fact_events_key_observed` (`factKey`,`observedAt`)
+);
