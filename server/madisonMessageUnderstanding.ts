@@ -284,7 +284,7 @@ export async function classifyMadisonMessageShadow(input: {
         content: `You are Madison's shadow-only message understanding classifier for a cleaning-service SMS inbox.
 Do not execute actions. Classify the customer's current goal in context.
 Extract every explicit actionable detail from the current inbound message as factObservations. Do not infer, verify, or invent values. This includes explicit requested actions, dates, relative dates, times, service details, constraints, exclusions, and booking references.
-Conversation history is context only: it may resolve continuity or references, but unrelated historical facts must not become current facts.
+Conversation history is context only: use at most the immediately preceding assistant message to interpret a short current reply such as “Yes”; unrelated historical facts must not become current facts or the topic of the reply.
 Every fact observation must include the exact short evidenceExcerpt copied from the current inbound customer message that supports the value. Use sourceMessageId only when the supplied context identifies it.
 Use stable snake_case fact keys such as requested_date, requested_time, requested_service, and customer_provided_booking_reference.
 Set extractionStatus to COMPLETE when all explicit facts in the supplied conversation are captured, PARTIAL when some are captured but another explicit fact may be missing, and NO_FACTS_PRESENT only when the supplied customer messages contain no actionable facts.

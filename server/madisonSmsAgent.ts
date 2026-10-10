@@ -90,6 +90,7 @@ async function runShadowForDraft(input: {
   draftId: number;
   sessionId: number;
   inboundText: string;
+  conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction | null> {
   const shadowResult = await persistMadisonMessageShadow(input);
   if (shadowResult.ok) return shadowResult.prediction;
@@ -141,6 +142,72 @@ export function buildMadisonCurrentFactContext(
   ].join("\n");
 }
 
+type MadisonConversationMessage = {
+  role: "user" | "assistant";
+  content: string;
+  messageId?: string;
+};
+
+function findMadisonCurrentTurnIndex(
+  messages: MadisonConversationMessage[],
+  inboundText: string,
+  inboundMessageId?: string,
+): number {
+  if (inboundMessageId) {
+    const exactIndex = messages.findLastIndex(
+      (message) => message.role === "user" && message.messageId === inboundMessageId,
+    );
+    if (exactIndex >= 0) return exactIndex;
+  }
+  const current = inboundText.trim().toLowerCase();
+  return messages.findLastIndex(
+    (message) => message.role === "user" && message.content.trim().toLowerCase() === current,
+  );
+}
+
+/**
+ * Return the active exchange for the current inbound message: the latest
+ * Madison topic-setting turn plus contiguous customer follow-ups after it.
+ * Stable provider message IDs are preferred over text matching so repeated
+ * replies such as “Yes” cannot bind to the wrong historical turn.
+ */
+export function getMadisonImmediatePriorAssistantMessage(
+  messages: MadisonConversationMessage[],
+  inboundText: string,
+  inboundMessageId?: string,
+): string | null {
+  const currentTurnIndex = findMadisonCurrentTurnIndex(messages, inboundText, inboundMessageId);
+  if (currentTurnIndex < 0) return null;
+  for (let index = currentTurnIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "assistant" && message.content.trim()) return message.content.trim();
+  }
+  return null;
+}
+
+/**
+ * Build the bounded active exchange for the current inbound turn.
+ * Older session history is intentionally excluded because sessions can contain
+ * multiple unrelated customer, team, and automated-message threads.
+ */
+export function buildMadisonRelevantConversationContext(
+  messages: MadisonConversationMessage[],
+  inboundText: string,
+  inboundMessageId?: string,
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const currentTurnIndex = findMadisonCurrentTurnIndex(messages, inboundText, inboundMessageId);
+  if (currentTurnIndex < 0) return [];
+  let assistantIndex = -1;
+  for (let index = currentTurnIndex - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "assistant" && messages[index].content.trim()) {
+      assistantIndex = index;
+      break;
+    }
+  }
+  if (assistantIndex < 0) return [];
+  return messages.slice(assistantIndex, currentTurnIndex);
+}
+
 /**
  * Fire-and-forget entry point. Call from webhooks.ts after storing the inbound message.
  * Never throws — all errors are caught and written to the DB.
@@ -173,6 +240,8 @@ export async function triggerMadisonSmsDraft(params: {
 
   const now = new Date();
   let draftId: number | undefined;
+  let conversationMessages: MadisonConversationMessage[] = [];
+  let relevantConversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
 
   try {
     // ── Step 0: Create draft record (RECEIVED) ────────────────────────────────
@@ -233,6 +302,33 @@ export async function triggerMadisonSmsDraft(params: {
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
 
+    try {
+      const [sessionRow] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, sessionId))
+        .limit(1);
+      const parsed = JSON.parse((sessionRow?.messageHistory as string) ?? "[]");
+      if (Array.isArray(parsed)) {
+        conversationMessages = parsed
+          .map((m: any) => {
+            const role = m.role === "assistant" ? "assistant" as const : m.role === "user" ? "user" as const : null;
+            return role && m.content?.trim()
+              ? { role, content: m.content.trim(), messageId: typeof m.opMsgId === "string" ? m.opMsgId : undefined }
+              : null;
+          })
+          .filter((m): m is MadisonConversationMessage => m !== null)
+          .slice(-12);
+        relevantConversationMessages = buildMadisonRelevantConversationContext(
+          conversationMessages,
+          inboundText,
+          inboundOpenPhoneId,
+        );
+      }
+    } catch (err) {
+      console.warn("[MadisonSMS] Failed to fetch relevant conversation context:", err);
+    }
+
     // Shadow-only understanding. Await the write so runtime teardown cannot
     // abandon the prediction before it reaches the database. The helper
     // reports its own errors and cannot affect Madison's draft, approval, or
@@ -243,6 +339,7 @@ export async function triggerMadisonSmsDraft(params: {
       draftId,
       sessionId,
       inboundText,
+      conversationMessages: relevantConversationMessages,
     });
 
     // ── Step 0.5: Phase 1A Deterministic Auto-Reply ────────────────────────────────────────────────────────────────────
@@ -310,34 +407,9 @@ export async function triggerMadisonSmsDraft(params: {
     }
     // INFORMATION, CONVERSATION, UNKNOWN → no tool needed
 
-    // ── Step 4.5: Fetch conversation history for LLM context ─────────────────
-    let conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
-    try {
-      const [sessionRow] = await db
-        .select({
-          messageHistory: conversationSessions.messageHistory,
-        })
-        .from(conversationSessions)
-        .where(eq(conversationSessions.id, sessionId))
-        .limit(1);
-      const parsed = JSON.parse((sessionRow?.messageHistory as string) ?? "[]");
-      if (Array.isArray(parsed)) {
-        conversationMessages = parsed
-          .map((m: any) => {
-            const role =
-              m.role === "assistant" ? "assistant" as const
-              : m.role === "user" ? "user" as const
-              : null;
-            return role && m.content?.trim()
-              ? { role, content: m.content.trim() }
-              : null;
-          })
-          .filter((m): m is { role: "user" | "assistant"; content: string } => m !== null)
-          .slice(-8);
-      }
-    } catch (err) {
-      console.warn("[MadisonSMS] Failed to fetch conversation history:", err);
-    }
+    const immediatePriorAssistantMessage = relevantConversationMessages.findLast(
+      (message) => message.role === "assistant",
+    )?.content ?? null;
 
     // ── Step 5: Generate DraftResponse ────────────────────────────────────────
     // Quote Agent is isolated but intentionally disabled; quote messages use
@@ -352,6 +424,7 @@ export async function triggerMadisonSmsDraft(params: {
       capabilityResult,
       knowledgeContext,
       currentFacts: shadowPrediction?.factObservations ?? [],
+      immediatePriorAssistantMessage,
     });
     const reviewDraft = guardMadisonDraftAgainstUnverifiedBookingChange({
       inboundText,
@@ -630,8 +703,9 @@ async function generateDraftResponse(params: {
   capabilityResult: CapabilityResult | null;
   knowledgeContext: string | null;
   currentFacts: MadisonValidatedCurrentFact[];
+  immediatePriorAssistantMessage: string | null;
 }): Promise<DraftResponse> {
-  const { inboundText, senderName, isCleaner, classification, intent, context, capabilityResult, knowledgeContext, currentFacts } = params;
+  const { inboundText, senderName, isCleaner, classification, intent, context, capabilityResult, knowledgeContext, currentFacts, immediatePriorAssistantMessage } = params;
 
   const firstName = senderName?.split(" ")[0] ?? (isCleaner ? "there" : "there");
 
@@ -644,6 +718,9 @@ async function generateDraftResponse(params: {
   }
 
   const currentFactContext = buildMadisonCurrentFactContext(inboundText, currentFacts);
+  const priorTurnContext = immediatePriorAssistantMessage
+    ? `\n\nImmediately preceding Madison message (the current inbound may be answering this):\n${immediatePriorAssistantMessage}\n\nReply to the current inbound message above. Do not start a new topic from older history.`
+    : "\n\nNo immediately preceding Madison message was available. Do not invent the topic of this reply.";
   const systemPrompt = `You are Madison, the AI assistant for Maids in Black, a professional cleaning service in Washington DC.
 You are drafting an SMS reply to a ${isCleaner ? "cleaner/team member" : "customer"} named ${firstName}.
 
@@ -706,7 +783,7 @@ When you catch yourself writing something like the above — stop. Start over. A
 13. If the customer mentions another, second, new, or different property, do not reuse facts from the prior property. Ask for the missing details for the newly mentioned property.
 
 Return JSON only.
-${currentFactContext}${contextBlock}
+${currentFactContext}${priorTurnContext}${contextBlock}
 
 Additional context:
 - The customer's intent has been classified as "${intent ?? classification.type}".
