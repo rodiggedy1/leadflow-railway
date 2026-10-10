@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { madisonMessageUnderstanding } from "../drizzle/schema";
+import { madisonConversationFactEvents, madisonMessageUnderstanding } from "../drizzle/schema";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
 
@@ -77,6 +77,7 @@ export type MadisonShadowPrediction = {
   confidence: number;
   knownFacts: string[];
   missingFacts: string[];
+  factObservations: Array<{ factKey: string; value: string }>;
   model: string;
   classifierVersion: string;
 };
@@ -154,6 +155,20 @@ export function normalizeShadowPrediction(
           .filter((item): item is string => typeof item === "string")
           .slice(0, 20)
       : [],
+    factObservations: Array.isArray(raw.factObservations)
+      ? raw.factObservations
+          .filter((item): item is { factKey: string; value: string } =>
+            Boolean(item) && typeof item === "object" &&
+            typeof (item as Record<string, unknown>).factKey === "string" &&
+            typeof (item as Record<string, unknown>).value === "string"
+          )
+          .map(item => ({
+            factKey: item.factKey.trim().slice(0, 96),
+            value: item.value.trim(),
+          }))
+          .filter(item => item.factKey.length > 0 && item.value.length > 0)
+          .slice(0, 20)
+      : [],
     model: "gpt-4o",
     classifierVersion: "madison-shadow-v1",
   };
@@ -169,6 +184,8 @@ export async function classifyMadisonMessageShadow(input: {
         role: "system",
         content: `You are Madison's shadow-only message understanding classifier for a cleaning-service SMS inbox.
 Do not execute actions. Classify the customer's current goal in context.
+Extract only explicit customer-stated facts as factObservations. Do not infer, verify, or invent values.
+Use stable snake_case fact keys such as requested_date, requested_time, requested_service, and customer_provided_booking_reference.
 Use only the supplied enum values. The quote agent is disabled, so QUOTE_REQUEST may be predicted but must not cause quote calculation or link creation.
 Return JSON only. Prefer AMBIGUOUS, UNRESOLVED, and HOLD_FOR_HUMAN when context is insufficient.
 Categories: ${MESSAGE_CATEGORIES.join(", ")}
@@ -207,6 +224,19 @@ Next actions: ${NEXT_BEST_ACTIONS.join(", ")}`,
               items: { type: "string" },
               maxItems: 20,
             },
+            factObservations: {
+              type: "array",
+              maxItems: 20,
+              items: {
+                type: "object",
+                properties: {
+                  factKey: { type: "string", minLength: 1, maxLength: 96 },
+                  value: { type: "string", minLength: 1 },
+                },
+                required: ["factKey", "value"],
+                additionalProperties: false,
+              },
+            },
           },
           required: [
             "primaryCategory",
@@ -217,6 +247,7 @@ Next actions: ${NEXT_BEST_ACTIONS.join(", ")}`,
             "confidence",
             "knownFacts",
             "missingFacts",
+            "factObservations",
           ],
           additionalProperties: false,
         },
@@ -306,6 +337,24 @@ export async function persistMadisonMessageShadow(input: {
             )
           );
       });
+    for (const [index, fact] of prediction.factObservations.entries()) {
+      const eventId = `${input.sourceMessageId}:${prediction.classifierVersion}:${index}`;
+      await input.db.insert(madisonConversationFactEvents).values({
+        eventId,
+        sessionId: input.sessionId,
+        draftId: input.draftId ?? null,
+        factKey: fact.factKey,
+        value: fact.value,
+        sourceType: "customer_message",
+        sourceMessageId: input.sourceMessageId,
+        status: "current",
+        confidence: prediction.confidence.toFixed(4),
+        observedAt: new Date(),
+        createdAt: new Date(),
+      }).catch((error: any) => {
+        if (error?.code !== "ER_DUP_ENTRY" && !String(error?.message ?? "").includes("Duplicate")) throw error;
+      });
+    }
     console.info(
       `[MadisonShadow] persisted source=${input.sourceMessageId} draft=${input.draftId ?? "none"}`
     );
