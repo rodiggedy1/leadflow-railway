@@ -83,12 +83,6 @@ const payrollBookingInput = z.object({
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
-const payrollBookingInput = z.object({
-  jobId: z.number().int().positive(),
-  source: z.enum(["booking", "leadflow"]).default("leadflow"),
-  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-});
-
 function payrollPercent(payPercent: string | null): number {
   const parsed = Number.parseFloat(payPercent ?? "0");
   if (!Number.isFinite(parsed)) return 0;
