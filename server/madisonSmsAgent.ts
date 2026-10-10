@@ -28,6 +28,7 @@ import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment 
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
 import { persistMadisonMessageShadow } from "./madisonMessageUnderstanding";
+import { getSmsReplyPolicy } from "./aiActionPolicy";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ export async function triggerMadisonSmsDraft(params: {
 
   try {
     // ── Step 0: Create draft record (RECEIVED) ────────────────────────────────
+    const smsReplyPolicy = await getSmsReplyPolicy(db);
     const insertResult = await db.insert(madisonSmsDrafts).values({
       inboundOpenPhoneId,
       sessionId,
@@ -158,6 +160,9 @@ export async function triggerMadisonSmsDraft(params: {
       observations: [],
       suggestedActions: [],
       followUps: [],
+      sendPolicyMode: smsReplyPolicy.mode,
+      sendPolicyEnabled: smsReplyPolicy.enabled ? 1 : 0,
+      sendPolicyEvaluatedAt: now,
       createdAt: now,
       updatedAt: now,
     }).catch((err) => {

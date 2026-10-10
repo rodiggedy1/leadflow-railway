@@ -34,3 +34,10 @@
 .ai-team-card-shadow .ai-team-shadow-confidence strong{margin:0;color:#81776c;font:700 12px Inter;white-space:nowrap;text-align:left}
 .ai-team-card-shadow .ai-team-shadow-confidence i{display:block;width:0;min-width:0;height:7px;border-radius:999px;background:#e4dcd3;position:relative;overflow:hidden}
 .ai-team-card-shadow .ai-team-shadow-confidence i:before{position:absolute;inset:0;right:auto;width:100%;border-radius:999px;background:#b2774c;content:""}
+
+.ai-team-policy-note {
+  margin-top: 8px;
+  color: #8b8177;
+  font-size: 11px;
+  line-height: 1.4;
+}
