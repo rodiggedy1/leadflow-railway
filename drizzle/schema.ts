@@ -549,6 +549,26 @@ export const pageViews = mysqlTable("page_views", {
 export type PageView = typeof pageViews.$inferSelect;
 export type InsertPageView = typeof pageViews.$inferInsert;
 
+/** Merchant-scoped autonomy policy for each AI action. */
+export const aiActionPolicies = mysqlTable("ai_action_policies", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  merchantId: varchar("merchantId", { length: 128 }).notNull(),
+  actionKey: varchar("actionKey", { length: 96 }).notNull(),
+  label: varchar("label", { length: 160 }).notNull(),
+  description: text("description").notNull(),
+  category: varchar("category", { length: 64 }).notNull(),
+  mode: mysqlEnum("mode", ["approval_required", "suggest_only", "automatic"]).default("approval_required").notNull(),
+  enabled: tinyint("enabled").default(1).notNull(),
+  updatedBy: varchar("updatedBy", { length: 128 }),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => ({
+  merchantAction: uniqueIndex("uq_ai_action_policies_merchant_action").on(table.merchantId, table.actionKey),
+  merchantCategory: index("idx_ai_action_policies_merchant_category").on(table.merchantId, table.category),
+}));
+export type AiActionPolicy = typeof aiActionPolicies.$inferSelect;
+export type InsertAiActionPolicy = typeof aiActionPolicies.$inferInsert;
+
 /**
  * Reactivation campaign statuses:
  * DRAFT     → Created but not yet launched

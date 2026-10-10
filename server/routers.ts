@@ -47,6 +47,7 @@ import { leadflowScheduleCallsRouter } from "./leadflowScheduleCallsRouter";
 import { opsChatRouter } from "./opsChatRouter";
 import { madisonMovesRouter } from "./madisonsMovesRouter";
 import { madisonRouter } from "./madisonRouter";
+import { aiActionsRouter } from "./aiActionsRouter";
 import { followUpsRouter } from "./followUpsRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { invokeLLM } from "./_core/llm";
@@ -7535,6 +7536,7 @@ Return JSON with exactly these fields:
   leadflowScheduleCalls: leadflowScheduleCallsRouter,
   opsChat: opsChatRouter,
   madison: madisonRouter,
+  aiActions: aiActionsRouter,
   followUps: followUpsRouter,
   teamPay: teamPayRouter,
     calls: callsRouter,

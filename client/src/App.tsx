@@ -87,6 +87,7 @@ const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));
 const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
+const AiActionsControlCenter = lazy(() => import("./pages/AiActionsControlCenter"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -179,6 +180,9 @@ function AdminPaymentsExactReviewRoute() {
 function AiTeamReviewRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/ai-team"><AiTeamReview /></ReviewWorkspaceFrame>;
 }
+function AiActionsControlCenterRoute() {
+  return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/review/ai-actions"><AiActionsControlCenter /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
 
 function AdminPayrollSummaryExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>;
@@ -208,6 +212,7 @@ function Router() {
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/review/customer-booking-link"} component={CustomerBookingLinkReview} />
         <Route path={"/review/ai-team"} component={AiTeamReviewRoute} />
+        <Route path={"/review/ai-actions"} component={AiActionsControlCenterRoute} />
         <Route path={"/book/:token"} component={CustomerBookingLinkLive} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
@@ -272,6 +277,7 @@ function Router() {
         <Route path={"/admin/readiness"} component={ReadinessDashboard} />
         <Route path={"/admin/invoices"} component={AdminInvoicesExactReviewRoute} />
         <Route path={"/admin/team"} component={AdminTeamExactLiveRoute} />
+        <Route path={"/admin/ai-actions"} component={AiActionsControlCenterRoute} />
         <Route path={"/admin/madison-focus"} component={MadisonFocus} />
         <Route path={"/admin/madison-debrief"} component={DebriefRedirect} />
         <Route path={"/madison-debug"} component={MadisonDebugPanel} />

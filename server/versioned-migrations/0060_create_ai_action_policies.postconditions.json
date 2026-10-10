@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "table": "ai_action_policies",
+  "columns": [
+    { "name": "id", "columnType": "bigint", "nullable": false, "autoIncrement": true },
+    { "name": "merchantId", "columnType": "varchar(128)", "nullable": false },
+    { "name": "actionKey", "columnType": "varchar(96)", "nullable": false },
+    { "name": "label", "columnType": "varchar(160)", "nullable": false },
+    { "name": "description", "columnType": "text", "nullable": false },
+    { "name": "category", "columnType": "varchar(64)", "nullable": false },
+    { "name": "mode", "columnType": "enum('approval_required','suggest_only','automatic')", "nullable": false, "default": "approval_required" },
+    { "name": "enabled", "columnType": "tinyint", "nullable": false, "default": "1" },
+    { "name": "updatedBy", "columnType": "varchar(128)", "nullable": true },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false, "default": "CURRENT_TIMESTAMP(3)" },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false, "default": "CURRENT_TIMESTAMP(3)" }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "uq_ai_action_policies_merchant_action", "columns": ["merchantId", "actionKey"], "unique": true },
+    { "name": "idx_ai_action_policies_merchant_category", "columns": ["merchantId", "category"], "unique": false }
+  ]
+}
