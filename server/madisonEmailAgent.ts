@@ -12,7 +12,7 @@
  * - Sending uses sendGmailReply() — the same function the AI concierge uses
  */
 import { getDb } from "./db";
-import { madisonEmailDrafts, opsChatMessages, completedJobs, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
+import { madisonEmailDrafts, opsChatMessages, leadflowJobs } from "../drizzle/schema";
 import { eq, and, like, ne, sql } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
@@ -38,51 +38,33 @@ async function resolveEmailCustomerContext(
 ): Promise<ResolvedContext> {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   try {
-    // Step 1: Find customer by email in completedJobs
-    const [cj] = await db
-      .select({ phone: completedJobs.phone, name: completedJobs.name, firstName: completedJobs.firstName })
-      .from(completedJobs)
-      .where(like(completedJobs.email, fromEmail.toLowerCase()))
-      .limit(1);
-    if (!cj?.phone) return { isCleaner: false };
-
-    const phone10 = cj.phone.replace(/[^\d]/g, "").slice(-10);
-    const senderName = cj.name ?? cj.firstName ?? undefined;
-
-    // Step 2: Find today's job by customer phone
+    // Resolve the sender and today's operational context from LeadFlow-owned data only.
     const [job] = await db
       .select({
-        id: cleanerJobs.id,
-        customerName: cleanerJobs.customerName,
-        teamName: cleanerJobs.teamName,
-        serviceDateTime: cleanerJobs.serviceDateTime,
-        jobAddress: cleanerJobs.jobAddress,
-        serviceType: cleanerJobs.serviceType,
-        frequency: cleanerJobs.frequency,
-        customerNotes: cleanerJobs.customerNotes,
-        cleanerPhone: cleanerProfiles.phone,
+        id: leadflowJobs.id,
+        customerName: leadflowJobs.customerName,
+        teamName: leadflowJobs.teamName,
+        serviceDateTime: leadflowJobs.serviceDateTime,
       })
-      .from(cleanerJobs)
-      .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+      .from(leadflowJobs)
       .where(
         and(
-          like(cleanerJobs.customerPhone, `%${phone10.slice(-7)}%`),
-          eq(cleanerJobs.jobDate, today),
-          ne(cleanerJobs.bookingStatus, "cancelled"),
-          ne(cleanerJobs.bookingStatus, "rescheduled"),
+          like(leadflowJobs.customerEmail, fromEmail.toLowerCase()),
+          eq(leadflowJobs.jobDate, today),
+          ne(leadflowJobs.bookingStatus, "cancelled"),
+          ne(leadflowJobs.bookingStatus, "rescheduled"),
         )
       )
-      .orderBy(cleanerJobs.serviceDateTime)
+      .orderBy(leadflowJobs.serviceDateTime)
       .limit(1);
 
     return {
       isCleaner: false,
-      senderName: job?.customerName ?? senderName,
-      cleanerJobId: job?.id,
-      customerName: job?.customerName ?? senderName,
+      senderName: job?.customerName,
+      leadflowJobId: job?.id,
+      customerName: job?.customerName,
       teamName: job?.teamName ?? undefined,
       serviceDateTime: job?.serviceDateTime ?? undefined,
-      cleanerPhone: job?.cleanerPhone ? `+1${job.cleanerPhone}` : undefined,
     };
   } catch (err) {
     console.warn("[email-draft] resolveEmailCustomerContext error:", err);
