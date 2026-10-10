@@ -33,8 +33,9 @@ export async function evaluateMadisonReplyForDraft(
   const missingFacts = shadowFacts(shadow?.missingFacts);
   return evaluateMadisonDecision({
     actionKey: "send_sms_reply",
-    confidence: shadow?.confidence ?? 0,
-    confidenceSource: shadow ? "shadow" : "fallback",
+    confidence: shadow?.confidence,
+    confidenceSource: shadow ? "shadow" : undefined,
+    predictionState: shadow ? "succeeded" : "legacy_missing",
     policyMode: policy.mode,
     policyEnabled: policy.enabled,
     targetResolution: shadow?.resolvedBookingId ? "resolved" : draft?.fromPhone ? "partial" : "unresolved",
@@ -54,8 +55,9 @@ export async function evaluateMadisonSupportTaskForDraft(
   const missingFacts = shadowFacts(shadow?.missingFacts);
   return evaluateMadisonDecision({
     actionKey: "create_support_task",
-    confidence: shadow?.confidence ?? 0,
-    confidenceSource: shadow ? "shadow" : "fallback",
+    confidence: shadow?.confidence,
+    confidenceSource: shadow ? "shadow" : undefined,
+    predictionState: shadow ? "succeeded" : "legacy_missing",
     policyMode: policy.mode,
     policyEnabled: policy.enabled,
     targetResolution: shadow?.resolvedBookingId ? "resolved" : fromPhone ? "partial" : "unresolved",

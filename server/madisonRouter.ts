@@ -1,13 +1,13 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonConversationFactEvents, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
+import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonConversationFactEvents, madisonMessageUnderstanding, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { buildMadisonActionProposal, madisonSmsActionApprovals } from "./madisonActionApprovalStore";
 import type { MadisonDecisionEvaluation } from "./madisonDecisionEvaluator";
-import { evaluateMadisonSupportTaskForDraft } from "./madisonReplyDecision";
+import { evaluateMadisonReplyForDraft, evaluateMadisonSupportTaskForDraft } from "./madisonReplyDecision";
 
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
 
@@ -327,6 +327,67 @@ export const madisonRouter = router({
       const db = await getDb();
       if (!db) return null;
       return evaluateMadisonReplyForDraft(db, input.draftId);
+    }),
+  getUnifiedReview: opsChatProcedure
+    .input(z.object({ draftId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [draft] = await db.select({
+        id: madisonSmsDrafts.id,
+        sessionId: madisonSmsDrafts.sessionId,
+        fromPhone: madisonSmsDrafts.fromPhone,
+        originalMessage: madisonSmsDrafts.originalMessage,
+        generatedDraft: madisonSmsDrafts.generatedDraft,
+        approvedText: madisonSmsDrafts.approvedText,
+        status: madisonSmsDrafts.status,
+      }).from(madisonSmsDrafts).where(eq(madisonSmsDrafts.id, input.draftId)).limit(1);
+      if (!draft) return null;
+      const [shadow] = await db.select({
+        sourceMessageId: madisonMessageUnderstanding.sourceMessageId,
+        primaryCategory: madisonMessageUnderstanding.primaryCategory,
+        mission: madisonMessageUnderstanding.mission,
+        missionState: madisonMessageUnderstanding.missionState,
+        nextBestAction: madisonMessageUnderstanding.nextBestAction,
+        confidence: madisonMessageUnderstanding.confidence,
+        knownFacts: madisonMessageUnderstanding.knownFacts,
+        missingFacts: madisonMessageUnderstanding.missingFacts,
+        extractionStatus: madisonMessageUnderstanding.extractionStatus,
+        extractionQualityNote: madisonMessageUnderstanding.extractionQualityNote,
+        model: madisonMessageUnderstanding.model,
+        classifierVersion: madisonMessageUnderstanding.classifierVersion,
+        createdAt: madisonMessageUnderstanding.createdAt,
+      }).from(madisonMessageUnderstanding)
+        .where(eq(madisonMessageUnderstanding.draftId, input.draftId))
+        .orderBy(desc(madisonMessageUnderstanding.createdAt)).limit(1);
+      const replyEvaluation = await evaluateMadisonReplyForDraft(db, input.draftId);
+      const actionEvaluation = await evaluateSupportTaskForDraft(db, input.draftId, draft.fromPhone);
+      const facts = await db.select({
+        eventId: madisonConversationFactEvents.eventId,
+        factKey: madisonConversationFactEvents.factKey,
+        value: madisonConversationFactEvents.value,
+        sourceType: madisonConversationFactEvents.sourceType,
+        sourceMessageId: madisonConversationFactEvents.sourceMessageId,
+        sourceRecordId: madisonConversationFactEvents.sourceRecordId,
+        status: madisonConversationFactEvents.status,
+        validationStatus: madisonConversationFactEvents.validationStatus,
+        evidenceExcerpt: madisonConversationFactEvents.evidenceExcerpt,
+        normalizationContext: madisonConversationFactEvents.normalizationContext,
+        confidence: madisonConversationFactEvents.confidence,
+        observedAt: madisonConversationFactEvents.observedAt,
+        validUntil: madisonConversationFactEvents.validUntil,
+      }).from(madisonConversationFactEvents)
+        .where(eq(madisonConversationFactEvents.draftId, input.draftId))
+        .orderBy(asc(madisonConversationFactEvents.observedAt), asc(madisonConversationFactEvents.eventId));
+      return {
+        draft,
+        predictionState: shadow ? "succeeded" as const : "legacy_missing" as const,
+        shadow,
+        replyEvaluation,
+        actionEvaluation,
+        facts,
+        evaluationVersions: replyEvaluation.versions,
+      };
     }),
   getFactEvidence: opsChatProcedure
     .input(z.object({ draftId: z.number().int().positive() }))

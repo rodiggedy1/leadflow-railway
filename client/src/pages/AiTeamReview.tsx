@@ -157,7 +157,8 @@ function formatActivityTime(ts: number): string {
   }).format(new Date(ts));
 }
 
-function formatShadowValue(value: string): string {
+function formatShadowValue(value: string | null | undefined): string {
+  if (!value) return "Unavailable";
   const words = value.replace(/_/g, " ").toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
@@ -228,9 +229,9 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     { draftId: draftId! },
     { enabled: Boolean(draftId), refetchOnWindowFocus: false },
   );
-  const { data: factEvidence = [], isLoading: factEvidenceLoading } = trpc.madison.getFactEvidence.useQuery(
+  const { data: unifiedReview, isLoading: unifiedReviewLoading } = trpc.madison.getUnifiedReview.useQuery(
     { draftId: draftId! },
-    { enabled: Boolean(draftId) && showEvidence, refetchOnWindowFocus: false },
+    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
   );
   const approveActionTask = trpc.madison.approveActionTask.useMutation({
     onSuccess: result => {
@@ -268,7 +269,11 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
   const proposal = actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "");
-  const decisionEvaluation = actionApproval?.decisionEvaluation ?? replyDecisionEvaluation;
+  const decisionEvaluation = proposal
+    ? unifiedReview?.actionEvaluation ?? actionApproval?.decisionEvaluation
+    : unifiedReview?.replyEvaluation ?? replyDecisionEvaluation;
+  const factEvidence = unifiedReview?.facts ?? [];
+  const factEvidenceLoading = unifiedReviewLoading;
   const customerName = draft.senderName ?? "Customer";
   const latestCardTime = formatConversationTime(card.ts);
   const generatedReply = draft.generatedDraft ?? "";
@@ -290,8 +295,8 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
         /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{autoSent ? metadata.autoReply ?? draft.approvedText ?? draft.generatedDraft : draft.generatedDraft ?? "Draft is still being prepared."}</div>}
         <div className="ai-team-policy-note"><b>SMS policy:</b> {draft.sendPolicyEnabled === 0 ? "Disabled" : draft.sendPolicyMode === "automatic" ? "Automatic policy selected · approval still required in this rollout" : draft.sendPolicyMode === "suggest_only" ? "Suggest only" : "Approval required"}</div>
         {decisionEvaluation && <div className={`ai-team-decision-summary is-${decisionEvaluation.outcome}`}>
-          <div><b>Decision readiness</b><strong>{formatDecisionOutcome(decisionEvaluation.outcome)}</strong></div>
-          <span>{formatShadowValue(decisionEvaluation.confidenceBand)} confidence · {decisionEvaluation.reasonCodes.length > 0 ? decisionEvaluation.reasonCodes.map(formatDecisionOutcome).join(" · ") : "All review gates passed"}</span>
+          <div><b>{decisionEvaluation.actionKey === "send_sms_reply" ? "Reply readiness" : "Action readiness"}</b><strong>{formatDecisionOutcome(decisionEvaluation.actionKey === "send_sms_reply" ? decisionEvaluation.replyReadiness : decisionEvaluation.actionReadiness)}</strong></div>
+          <span>{decisionEvaluation.confidenceBand ? `${formatShadowValue(decisionEvaluation.confidenceBand)} confidence` : "Confidence unavailable"} · {decisionEvaluation.actionKey === "send_sms_reply" ? `Reply evaluation: ${formatShadowValue(decisionEvaluation.replyEvaluationStatus)}` : `Prediction: ${formatShadowValue(decisionEvaluation.predictionState)}`} · {decisionEvaluation.reasonCodes.length > 0 ? decisionEvaluation.reasonCodes.map(formatDecisionOutcome).join(" · ") : "All review gates passed"}</span>
         </div>}
         <div className="ai-team-card-shadow"><span>SHADOW UNDERSTANDING · READ ONLY</span>{shadowLoading ? <p>Loading prediction…</p> : shadowError ? <p>Prediction could not be loaded. Check Preview logs for the failure stage.</p> : shadowPrediction ? <><div className="ai-team-shadow-grid"><p><b>Category</b><strong>{formatShadowValue(shadowPrediction.primaryCategory)}</strong></p><p><b>Mission</b><strong>{formatShadowValue(shadowPrediction.mission)}</strong></p><p><b>State</b><strong>{formatShadowValue(shadowPrediction.missionState)}</strong></p><p><b>Next action</b><strong>{formatShadowValue(shadowPrediction.nextBestAction)}</strong></p><p className="ai-team-shadow-confidence"><b>Confidence</b><span><strong>{Math.round(Number(shadowPrediction.confidence) * 100)}% confidence</strong><i aria-hidden="true" style={{ width: `${Math.round(Number(shadowPrediction.confidence) * 100)}%` }} /></span></p></div><p><b>Known:</b> {Array.isArray(shadowPrediction.knownFacts) && shadowPrediction.knownFacts.length > 0 ? shadowPrediction.knownFacts.join(" · ") : "None recorded"}</p><p><b>Missing:</b> {Array.isArray(shadowPrediction.missingFacts) && shadowPrediction.missingFacts.length > 0 ? shadowPrediction.missingFacts.join(" · ") : "None recorded"}</p></> : <p>No prediction recorded for this card yet. New Preview messages will report the exact classifier/persistence stage in server logs.</p>}</div>
         {shadowPrediction?.extractionStatus && <div className="ai-team-extraction-note"><b>Extraction:</b> {formatShadowValue(shadowPrediction.extractionStatus)}{shadowPrediction.extractionQualityNote ? ` · ${shadowPrediction.extractionQualityNote}` : ""}</div>}
