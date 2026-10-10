@@ -224,7 +224,7 @@ export async function classifyMadisonMessageShadow(input: {
   inboundText: string;
   conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction> {
-  const configuredModel = process.env.OPENAI_MODEL?.trim() || "gpt-5.5";
+  const configuredModel = "gpt-4o";
   const responseFormat = configuredModel.startsWith("gpt-5")
     ? { type: "json_object" as const }
     : {

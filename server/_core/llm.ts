@@ -209,11 +209,7 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () => {
-  const configuredBase = process.env.OPENAI_API_BASE ?? process.env.OPENAI_BASE_URL;
-  const base = configuredBase?.trim().replace(/\/$/, "") || "https://api.openai.com";
-  return `${base}${base.endsWith("/v1") ? "" : "/v1"}/chat/completions`;
-};
+const resolveApiUrl = () => "https://api.openai.com/v1/chat/completions";
 
 const assertApiKey = () => {
   if (!process.env.OPENAI_API_KEY) {
@@ -281,7 +277,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: process.env.OPENAI_MODEL?.trim() || "gpt-5.5",
+    model: "gpt-4o",
     messages: messages.map(normalizeMessage),
   };
 

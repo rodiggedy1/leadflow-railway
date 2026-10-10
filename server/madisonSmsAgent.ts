@@ -27,7 +27,7 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
-import { persistMadisonMessageShadow } from "./madisonMessageUnderstanding";
+import { persistMadisonMessageShadow, type MadisonShadowPrediction } from "./madisonMessageUnderstanding";
 import { getSmsReplyPolicy } from "./aiActionPolicy";
 import { guardMadisonDraftAgainstUnverifiedBookingChange } from "./madisonReplyDecision";
 
@@ -90,9 +90,9 @@ async function runShadowForDraft(input: {
   draftId: number;
   sessionId: number;
   inboundText: string;
-}): Promise<void> {
+}): Promise<MadisonShadowPrediction | null> {
   const shadowResult = await persistMadisonMessageShadow(input);
-  if (shadowResult.ok) return;
+  if (shadowResult.ok) return shadowResult.prediction;
 
   console.error(
     `[MadisonSMS] Shadow ${shadowResult.stage} failure for draft ${input.draftId}: ${shadowResult.errorCode} ${shadowResult.errorMessage}`
@@ -112,6 +112,33 @@ async function runShadowForDraft(input: {
         error
       )
     );
+  return null;
+}
+
+export type MadisonValidatedCurrentFact = Pick<
+  MadisonShadowPrediction["factObservations"][number],
+  "factKey" | "value" | "evidenceExcerpt"
+>;
+
+/** Facts from the current inbound turn that are safe for draft generation. */
+export function buildMadisonCurrentFactContext(
+  inboundText: string,
+  facts: MadisonValidatedCurrentFact[] = [],
+): string {
+  const currentFacts = facts.filter((fact) => {
+    const excerpt = fact.evidenceExcerpt.trim();
+    return excerpt.length > 0 && inboundText.includes(excerpt);
+  });
+  if (currentFacts.length === 0) {
+    return "No validated current-turn facts were persisted. Use only the inbound message and ask for missing details instead of carrying facts forward from earlier conversation.";
+  }
+  return [
+    "Validated current-turn facts (the only customer facts you may state as known):",
+    ...currentFacts.map(
+      (fact) => `- ${fact.factKey}: ${fact.value} (evidence: ${fact.evidenceExcerpt})`,
+    ),
+    "Do not use facts from earlier conversation history unless they appear in this list or in verified operational context for this exact request.",
+  ].join("\n");
 }
 
 /**
@@ -210,7 +237,7 @@ export async function triggerMadisonSmsDraft(params: {
     // abandon the prediction before it reaches the database. The helper
     // reports its own errors and cannot affect Madison's draft, approval, or
     // send path.
-    await runShadowForDraft({
+    const shadowPrediction = await runShadowForDraft({
       db,
       sourceMessageId: inboundOpenPhoneId,
       draftId,
@@ -324,7 +351,7 @@ export async function triggerMadisonSmsDraft(params: {
       context,
       capabilityResult,
       knowledgeContext,
-      conversationMessages,
+      currentFacts: shadowPrediction?.factObservations ?? [],
     });
     const reviewDraft = guardMadisonDraftAgainstUnverifiedBookingChange({
       inboundText,
@@ -602,9 +629,9 @@ async function generateDraftResponse(params: {
   context: ResolvedContext;
   capabilityResult: CapabilityResult | null;
   knowledgeContext: string | null;
-  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  currentFacts: MadisonValidatedCurrentFact[];
 }): Promise<DraftResponse> {
-  const { inboundText, senderName, isCleaner, classification, intent, context, capabilityResult, knowledgeContext, conversationMessages } = params;
+  const { inboundText, senderName, isCleaner, classification, intent, context, capabilityResult, knowledgeContext, currentFacts } = params;
 
   const firstName = senderName?.split(" ")[0] ?? (isCleaner ? "there" : "there");
 
@@ -616,6 +643,7 @@ async function generateDraftResponse(params: {
     contextBlock = `\n\nRelevant knowledge base context:\n${knowledgeContext}`;
   }
 
+  const currentFactContext = buildMadisonCurrentFactContext(inboundText, currentFacts);
   const systemPrompt = `You are Madison, the AI assistant for Maids in Black, a professional cleaning service in Washington DC.
 You are drafting an SMS reply to a ${isCleaner ? "cleaner/team member" : "customer"} named ${firstName}.
 
@@ -674,13 +702,16 @@ When you catch yourself writing something like the above — stop. Start over. A
 9. Never make up information — only use the context provided.
 10. If you don't have enough info to answer confidently, say so warmly and offer to check.
 11. For reschedule or booking-change requests, never say the booking was moved, changed, confirmed, or booked unless the context explicitly includes the requested time and verified availability. If either is missing, ask for the missing time or say you will check availability before confirming.
+12. Treat the current inbound message as a new factual turn. Never carry bedrooms, bathrooms, address, city, service type, price, date, or other property details from an earlier turn into this reply unless they appear in the validated current-turn facts below or verified operational context for this exact request.
+13. If the customer mentions another, second, new, or different property, do not reuse facts from the prior property. Ask for the missing details for the newly mentioned property.
 
-Return JSON only.${contextBlock}
+Return JSON only.
+${currentFactContext}${contextBlock}
 
 Additional context:
 - The customer's intent has been classified as "${intent ?? classification.type}".
 - Use that classification when drafting the reply.
-- Do not ask questions already answered in the conversation history above.
+- Do not treat omitted historical details as answered for the current property.
 
 === MAIDS IN BLACK KNOWLEDGE BASE ===
 ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
@@ -689,7 +720,6 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
     const response = await invokeLLM({
       messages: [
         { role: "system", content: systemPrompt },
-        ...conversationMessages,
         { role: "user", content: inboundText },
       ],
       response_format: {
