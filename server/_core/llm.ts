@@ -56,6 +56,7 @@ export type ToolChoice =
   | ToolChoiceExplicit;
 
 export type InvokeParams = {
+  model?: string;
   messages: Message[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
@@ -270,6 +271,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
 
   const {
+    model,
     messages,
     tools,
     toolChoice,
@@ -281,7 +283,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: process.env.OPENAI_MODEL?.trim() || "gpt-4o",
+    model: model?.trim() || process.env.OPENAI_MODEL?.trim() || "gpt-4o",
     messages: messages.map(normalizeMessage),
   };
 

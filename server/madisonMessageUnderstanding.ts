@@ -224,7 +224,7 @@ export async function classifyMadisonMessageShadow(input: {
   inboundText: string;
   conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction> {
-  const configuredModel = process.env.OPENAI_MODEL?.trim() || "gpt-4o";
+  const configuredModel = process.env.MADISON_OPENAI_MODEL?.trim() || "gpt-5.5";
   const responseFormat = configuredModel.startsWith("gpt-5")
     ? { type: "json_object" as const }
     : {
@@ -278,6 +278,7 @@ export async function classifyMadisonMessageShadow(input: {
         },
       };
   const response = await invokeLLM({
+    model: configuredModel,
     messages: [
       {
         role: "system",
