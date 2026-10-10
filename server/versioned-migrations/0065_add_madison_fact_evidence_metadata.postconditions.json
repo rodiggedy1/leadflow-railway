@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "table": "madison_conversation_fact_events",
+  "columns": [
+    { "name": "validationStatus", "columnType": "enum('unverified','validated','rejected')", "nullable": false, "default": "unverified" },
+    { "name": "evidenceExcerpt", "columnType": "text", "nullable": true },
+    { "name": "normalizationContext", "columnType": "json", "nullable": true }
+  ],
+  "indexes": []
+}
