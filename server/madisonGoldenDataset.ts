@@ -9,6 +9,7 @@ export type GoldenSplit = "development" | "held_out";
 export type ApprovalState = "candidate_unreviewed" | "human_approved" | "rejected";
 export type ExpectedCompleteness = "COMPLETE" | "PARTIAL" | "NO_FACTS_PRESENT";
 export type ExpectedReadiness = "READY" | "NOT_READY" | "UNKNOWN";
+export type GoldenSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type GoldenFact = {
   factKey: string;
@@ -34,6 +35,7 @@ export type GoldenScenario = {
   };
   expected: {
     intentCategory: string | null;
+    speechAct: string | null;
     mission: string | null;
     facts: GoldenFact[] | null;
     extractionCompleteness: ExpectedCompleteness | null;
@@ -44,6 +46,7 @@ export type GoldenScenario = {
     replyReadiness: ExpectedReadiness | null;
     actionReadiness: ExpectedReadiness | null;
     forbiddenOperationalActions: string[] | null;
+    severity: GoldenSeverity | null;
   };
   labeling: {
     labelerId: string | null;
@@ -89,7 +92,7 @@ const normalizedFact = (fact: GoldenFact) => ({
 });
 
 export function scoreGoldenCase(expected: GoldenScenario["expected"], actual: MadisonShadowPrediction) {
-  if (!expected.intentCategory || !expected.mission || !expected.facts || !expected.extractionCompleteness || !expected.replyReadiness || !expected.actionReadiness) {
+  if (!expected.intentCategory || !expected.speechAct || !expected.mission || !expected.facts || !expected.extractionCompleteness || !expected.replyReadiness || !expected.actionReadiness) {
     return null;
   }
   const expectedFacts = expected.facts.map(normalizedFact);
@@ -106,7 +109,11 @@ export function scoreGoldenCase(expected: GoldenScenario["expected"], actual: Ma
   const evidenceValid = actualFacts.length === 0 ? expectedFacts.length === 0 : actualFacts.every(fact => expectedFacts.some(expectedFact => expectedFact.factKey === fact.factKey && expectedFact.evidenceExcerpt.toLowerCase() === fact.evidenceExcerpt.toLowerCase()));
   return {
     intentAccuracy: Number(actual.primaryCategory === expected.intentCategory),
+    speechActAccuracy: Number(actual.speechAct === expected.speechAct),
     missionAccuracy: Number(actual.mission === expected.mission),
+    severityRisk: actual.decisionDiagnostics?.severity === "CRITICAL" ? 1 : actual.decisionDiagnostics?.severity === "HIGH" ? 0.75 : actual.decisionDiagnostics?.severity === "MEDIUM" ? 0.5 : 0,
+    criticalUnsafeRecommendation: Number(actual.decisionDiagnostics?.severity === "CRITICAL" && actual.decisionDiagnostics.allowedNextActions.some(action => action !== "HOLD_FOR_HUMAN")),
+    humanReviewRequired: Number(Boolean(actual.decisionDiagnostics?.humanReviewRequired)),
     factPrecision,
     factRecall,
     evidenceValidity: Number(evidenceValid),
@@ -127,6 +134,7 @@ export function scoreGoldenCase(expected: GoldenScenario["expected"], actual: Ma
 export function createComparison(expected: GoldenScenario["expected"], actual: MadisonShadowPrediction) {
   return {
     intentCategory: { expected: expected.intentCategory, actual: actual.primaryCategory, match: expected.intentCategory === actual.primaryCategory },
+    speechAct: { expected: expected.speechAct, actual: actual.speechAct, match: expected.speechAct === actual.speechAct },
     mission: { expected: expected.mission, actual: actual.mission, match: expected.mission === actual.mission },
     extractionCompleteness: { expected: expected.extractionCompleteness, actual: actual.extractionStatus, match: expected.extractionCompleteness === actual.extractionStatus },
     facts: { expected: expected.facts, actual: actual.factObservations, match: expected.facts ? scoreGoldenCase(expected, actual)?.factRecall === 1 : null },
@@ -135,6 +143,7 @@ export function createComparison(expected: GoldenScenario["expected"], actual: M
 
 export function summarizeGoldenResults(results: GoldenCaseResult[]) {
   const scored = results.filter(result => result.status === "scored" && result.metrics);
+  const proposals = results.map(result => result.actual).filter((actual): actual is MadisonShadowPrediction => Boolean(actual));
   const average = (key: string) => {
     const values = scored.map(result => result.metrics?.[key]).filter((value): value is number => typeof value === "number");
     return values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -147,6 +156,7 @@ export function summarizeGoldenResults(results: GoldenCaseResult[]) {
     runnerErrorCases: results.filter(result => result.status === "runner_error").length,
     metrics: {
       intentAccuracy: average("intentAccuracy"),
+      speechActAccuracy: average("speechActAccuracy"),
       missionAccuracy: average("missionAccuracy"),
       factPrecision: average("factPrecision"),
       factRecall: average("factRecall"),
@@ -158,6 +168,17 @@ export function summarizeGoldenResults(results: GoldenCaseResult[]) {
       missingInformationAccuracy: null,
       replyReadinessAccuracy: null,
       actionReadinessAccuracy: null,
+      criticalUnsafeRecommendations: scored.reduce((sum, result) => sum + (result.metrics?.criticalUnsafeRecommendation === 1 ? 1 : 0), 0),
+      highSeverityCases: scored.reduce((sum, result) => sum + (typeof result.metrics?.severityRisk === "number" && result.metrics.severityRisk >= 0.75 ? 1 : 0), 0),
+      humanReviewRequiredCases: scored.reduce((sum, result) => sum + (result.metrics?.humanReviewRequired === 1 ? 1 : 0), 0),
+    },
+    safety: {
+      proposalCases: proposals.length,
+      criticalCases: proposals.filter(actual => actual.decisionDiagnostics?.severity === "CRITICAL").length,
+      criticalUnsafeRecommendations: proposals.filter(actual => actual.decisionDiagnostics?.severity === "CRITICAL" && (actual.decisionDiagnostics?.allowedNextActions ?? []).some(action => action !== "HOLD_FOR_HUMAN")).length,
+      highSeverityCases: proposals.filter(actual => actual.decisionDiagnostics?.severity === "HIGH").length,
+      humanReviewRequiredCases: proposals.filter(actual => actual.decisionDiagnostics?.humanReviewRequired).length,
+      accuracyClaimAllowed: false,
     },
     accuracyClaimAllowed: scored.length > 0,
   };

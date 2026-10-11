@@ -102,6 +102,7 @@ try {
       },
       expected: {
         intentCategory: null,
+        speechAct: null,
         mission: null,
         facts: null,
         extractionCompleteness: null,
@@ -112,6 +113,7 @@ try {
         replyReadiness: null,
         actionReadiness: null,
         forbiddenOperationalActions: null,
+        severity: null,
       },
       labeling: {
         labelerId: null,

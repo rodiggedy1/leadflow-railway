@@ -23,7 +23,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Faiza, no worries at all! We understand things come up. 😊 Your cleaning for tomorrow is canceled. Just let us know when you're ready to reschedule — we're here to make it work for you. Take care and reach out anytime!"
+          "content": "Hi Faiza, no worries at all! We understand things come up. \ud83d\ude0a Your cleaning for tomorrow is canceled. Just let us know when you're ready to reschedule \u2014 we're here to make it work for you. Take care and reach out anytime!"
         },
         {
           "role": "assistant",
@@ -31,7 +31,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Faiza, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+          "content": "Hi Faiza, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -50,7 +50,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -78,11 +80,11 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil! ✨ MaidsPlus just finished your clean — your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>"
+          "content": "Hi Jalil! \u2728 MaidsPlus just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>"
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. 👋  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. ✨ Want me to grab one for you?"
+          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. \ud83d\udc4b  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. \u2728 Want me to grab one for you?"
         },
         {
           "role": "user",
@@ -105,7 +107,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -160,7 +164,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -184,7 +190,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Michael! 😊 Absolutely, we can reschedule your cleaning to next Friday. See you on 10/16/2026 12:30PM - 2:30PM! Looking forward to keeping your home feeling fresh. ✨"
+          "content": "Hi Michael! \ud83d\ude0a Absolutely, we can reschedule your cleaning to next Friday. See you on 10/16/2026 12:30PM - 2:30PM! Looking forward to keeping your home feeling fresh. \u2728"
         },
         {
           "role": "user",
@@ -196,7 +202,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Michael, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+          "content": "Hi Michael, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -215,7 +221,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -239,7 +247,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM — Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM — Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM — Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! 🧹"
+          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM \u2014 Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM \u2014 Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM \u2014 Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! \ud83e\uddf9"
         },
         {
           "role": "assistant",
@@ -251,7 +259,7 @@
         },
         {
           "role": "user",
-          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+          "content": "Hi, sorry\u2014I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
         }
       ],
       "sourceMetadataForLabeler": {
@@ -270,7 +278,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -294,7 +304,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Denise! Thanks for letting us know. We’ve noted that you’re available after 3:30 PM tomorrow."
+          "content": "Hi Denise! Thanks for letting us know. We\u2019ve noted that you\u2019re available after 3:30 PM tomorrow."
         },
         {
           "role": "user",
@@ -325,7 +335,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -353,11 +365,11 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Denise! ✨ JessiCleaning Team just finished your clean — your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>"
+          "content": "Hi Denise! \u2728 JessiCleaning Team just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>"
         },
         {
           "role": "assistant",
-          "content": "Hi Denise, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+          "content": "Hi Denise, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -380,7 +392,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -435,7 +449,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -467,11 +483,11 @@
         },
         {
           "role": "assistant",
-          "content": "Thanks for letting us know. We’ve removed you from the schedule for tomorrow. We completely understand, and whenever you're ready to use your free cleaning, just reach out and we’ll get you set up!"
+          "content": "Thanks for letting us know. We\u2019ve removed you from the schedule for tomorrow. We completely understand, and whenever you're ready to use your free cleaning, just reach out and we\u2019ll get you set up!"
         },
         {
           "role": "assistant",
-          "content": "Hi Caity, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+          "content": "Hi Caity, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -490,7 +506,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -545,7 +563,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -569,7 +589,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Got it, Madi! 🚗 No problem, we'll stick to the original arrival time tomorrow. Looking forward to making your place shine! If you need anything, just let us know. See you soon! 😊"
+          "content": "Got it, Madi! \ud83d\ude97 No problem, we'll stick to the original arrival time tomorrow. Looking forward to making your place shine! If you need anything, just let us know. See you soon! \ud83d\ude0a"
         },
         {
           "role": "assistant",
@@ -600,7 +620,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -636,7 +658,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Riz! Just to clarify, do you want to cancel your booking entirely or are you looking to reschedule to another date and time? Let me know what works best for you, and I'll take care of it right away! 😊"
+          "content": "Hi Riz! Just to clarify, do you want to cancel your booking entirely or are you looking to reschedule to another date and time? Let me know what works best for you, and I'll take care of it right away! \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -655,7 +677,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -683,7 +707,7 @@
         },
         {
           "role": "assistant",
-          "content": "Could you tell me a little more about the home—approximately how many square feet, how many bedrooms and bathrooms, and what type of cleaning you’re looking for (standard, deep, or move-out)? Also, how would you rate the current condition from 1–10? 10 is the dirties"
+          "content": "Could you tell me a little more about the home\u2014approximately how many square feet, how many bedrooms and bathrooms, and what type of cleaning you\u2019re looking for (standard, deep, or move-out)? Also, how would you rate the current condition from 1\u201310? 10 is the dirties"
         },
         {
           "role": "user",
@@ -710,7 +734,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -734,7 +760,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi but you told me you would not do one job. And it was just one job. If it were one job and you would do it I could send one. 😊"
+          "content": "Hi but you told me you would not do one job. And it was just one job. If it were one job and you would do it I could send one. \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -765,7 +791,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -797,11 +825,11 @@
         },
         {
           "role": "assistant",
-          "content": "Hey GoGreen! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+          "content": "Hey GoGreen! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! \ud83e\uddf9"
         },
         {
           "role": "assistant",
-          "content": "Hey GoGreen — you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey GoGreen \u2014 you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -820,7 +848,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -844,7 +874,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Thanks for all the details, Kathleen! 😊 For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me — we can handle everything right here! 🏡✨"
+          "content": "Thanks for all the details, Kathleen! \ud83d\ude0a For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me \u2014 we can handle everything right here! \ud83c\udfe1\u2728"
         },
         {
           "role": "user",
@@ -875,7 +905,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -903,7 +935,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Riz! No worries at all. I've gone ahead and cancelled your service for you. If you need anything else or want to reschedule, just let us know. We're here for you whenever you're ready! 😊"
+          "content": "Hi Riz! No worries at all. I've gone ahead and cancelled your service for you. If you need anything else or want to reschedule, just let us know. We're here for you whenever you're ready! \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -911,7 +943,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Riz! Of course, I can help with that. When would you like to reschedule your service for? Let me know what date and time works best for you, and we’ll make it happen. 😊"
+          "content": "Hi Riz! Of course, I can help with that. When would you like to reschedule your service for? Let me know what date and time works best for you, and we\u2019ll make it happen. \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -930,7 +962,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -966,7 +1000,7 @@
         },
         {
           "role": "assistant",
-          "content": "Absolutely! Text is perfectly fine. 😊 To get you the most accurate quote, could you please send me the following:\n\n-What is the approximate square footage of the home?\n-Is it a house, condo, townhouse, or apartment?\n-How many bedrooms and bathrooms are there?\n-Are there any pets?\n-Is the home currently furnished or empty?\n-On a scale of 1–10, how would you rate the current condition of the home? 1 = very clean, 10 = very dirty."
+          "content": "Absolutely! Text is perfectly fine. \ud83d\ude0a To get you the most accurate quote, could you please send me the following:\n\n-What is the approximate square footage of the home?\n-Is it a house, condo, townhouse, or apartment?\n-How many bedrooms and bathrooms are there?\n-Are there any pets?\n-Is the home currently furnished or empty?\n-On a scale of 1\u201310, how would you rate the current condition of the home? 1 = very clean, 10 = very dirty."
         }
       ],
       "sourceMetadataForLabeler": {
@@ -985,7 +1019,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1009,7 +1045,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi! 😊 To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1–10, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! 😊"
+          "content": "Hi! \ud83d\ude0a To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1\u201310, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -1040,7 +1076,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1064,7 +1102,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Jalil! Your Maids in Black team is on the way and will arrive at 2812 Trotter Park Ln, Lanham, MD Lanham around 8:31 AM. 🚗\n\nTrack their arrival in real time here: <URL>\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here."
+          "content": "Hi Jalil! Your Maids in Black team is on the way and will arrive at 2812 Trotter Park Ln, Lanham, MD Lanham around 8:31 AM. \ud83d\ude97\n\nTrack their arrival in real time here: <URL>\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out \u2014 they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here."
         },
         {
           "role": "user",
@@ -1072,11 +1110,11 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil! ✨ MaidsPlus just finished your clean — your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>"
+          "content": "Hi Jalil! \u2728 MaidsPlus just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>"
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. 👋  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. ✨ Want me to grab one for you?"
+          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. \ud83d\udc4b  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. \u2728 Want me to grab one for you?"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1095,7 +1133,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1150,7 +1190,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1174,19 +1216,19 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Pilar Duarte! Here's your schedule for tomorrow, Saturday, October 10:\n\n1. 12:30 PM — Jill Caiazzo, 5806 Arlington Boulevard, Arlington, VA 22204\n\nPlease reply CONFIRM to let us know you're all set! 🧹"
+          "content": "Hi Pilar Duarte! Here's your schedule for tomorrow, Saturday, October 10:\n\n1. 12:30 PM \u2014 Jill Caiazzo, 5806 Arlington Boulevard, Arlington, VA 22204\n\nPlease reply CONFIRM to let us know you're all set! \ud83e\uddf9"
         },
         {
           "role": "assistant",
-          "content": "Hey Pilar! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+          "content": "Hey Pilar! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! \ud83e\uddf9"
         },
         {
           "role": "assistant",
-          "content": "Hey Pilar — reminder for your cleaning at 12:30 PM.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey Pilar \u2014 reminder for your cleaning at 12:30 PM.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
         },
         {
           "role": "assistant",
-          "content": "Hey — we haven't received your check-in. Is everything okay?\n<URL>"
+          "content": "Hey \u2014 we haven't received your check-in. Is everything okay?\n<URL>"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1205,7 +1247,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1233,7 +1277,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi N, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+          "content": "Hi N, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -1260,7 +1304,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1292,7 +1338,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Denise! Thanks for letting us know. We’ve noted that you’re available after 3:30 PM tomorrow."
+          "content": "Hi Denise! Thanks for letting us know. We\u2019ve noted that you\u2019re available after 3:30 PM tomorrow."
         },
         {
           "role": "user",
@@ -1315,7 +1361,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1351,7 +1399,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi! 😊 To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1–10, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! 😊"
+          "content": "Hi! \ud83d\ude0a To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1\u201310, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1370,7 +1418,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1390,7 +1440,7 @@
       "sourceMessageIdHash": "ecc9755550157804647d1e1b",
       "sourceDraftId": 3061555,
       "sourceCapturedAt": "2026-10-10T19:04:22.299Z",
-      "currentInboundMessage": "I’m not sure I’d say definitely the two bathrooms upstairs and the bathroom upstairs.",
+      "currentInboundMessage": "I\u2019m not sure I\u2019d say definitely the two bathrooms upstairs and the bathroom upstairs.",
       "priorConversationContext": [
         {
           "role": "assistant",
@@ -1425,7 +1475,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1461,7 +1513,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Sean! We have not charged your card. The amount you see is just a temporary pre-authorization hold to verify that the card is valid. Per our policy, we only charge cards after the cleaning service has been completed.\n\nSince your service was cancelled, no charge will take place, and the temporary hold will automatically be released. Depending on your bank's processing time, it usually takes 2–3 business days for the hold to fall off your account."
+          "content": "Hi Sean! We have not charged your card. The amount you see is just a temporary pre-authorization hold to verify that the card is valid. Per our policy, we only charge cards after the cleaning service has been completed.\n\nSince your service was cancelled, no charge will take place, and the temporary hold will automatically be released. Depending on your bank's processing time, it usually takes 2\u20133 business days for the hold to fall off your account."
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1480,7 +1532,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1535,7 +1589,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1590,7 +1646,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1614,7 +1672,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Riz! Sure thing, I can help with rescheduling your service. Just let me know the date and time that would work better for you, and we'll make it happen. 😊"
+          "content": "Hi Riz! Sure thing, I can help with rescheduling your service. Just let me know the date and time that would work better for you, and we'll make it happen. \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -1645,7 +1703,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1669,7 +1729,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Lindsey! Absolutely, the team will be arriving during the 12:30 PM arrival window. , so we'll make sure to stick to that time. Let us know if there's anything else you need. Looking forward to seeing you! 😊"
+          "content": "Hi Lindsey! Absolutely, the team will be arriving during the 12:30 PM arrival window. , so we'll make sure to stick to that time. Let us know if there's anything else you need. Looking forward to seeing you! \ud83d\ude0a"
         },
         {
           "role": "assistant",
@@ -1700,7 +1760,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1724,11 +1786,11 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hey S, — you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey S, \u2014 you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
         },
         {
           "role": "user",
-          "content": "Hola yo mañana no puedo trabajar"
+          "content": "Hola yo ma\u00f1ana no puedo trabajar"
         },
         {
           "role": "assistant",
@@ -1736,7 +1798,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hey S, — you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey S, \u2014 you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1755,7 +1817,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1783,7 +1847,7 @@
         },
         {
           "role": "assistant",
-          "content": "Thanks for all the details, Kathleen! 😊 For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me — we can handle everything right here! 🏡✨"
+          "content": "Thanks for all the details, Kathleen! \ud83d\ude0a For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me \u2014 we can handle everything right here! \ud83c\udfe1\u2728"
         },
         {
           "role": "user",
@@ -1810,7 +1874,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1838,7 +1904,7 @@
         },
         {
           "role": "user",
-          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+          "content": "Hi, sorry\u2014I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
         },
         {
           "role": "user",
@@ -1846,7 +1912,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! \ud83e\uddf9"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1865,7 +1931,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1920,7 +1988,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -1975,7 +2045,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2007,7 +2079,7 @@
         },
         {
           "role": "user",
-          "content": "I was actually being polite; I asked if I should go back so you could pay, but I don't have the authority to collect payment from your clients—that’s something you handle."
+          "content": "I was actually being polite; I asked if I should go back so you could pay, but I don't have the authority to collect payment from your clients\u2014that\u2019s something you handle."
         },
         {
           "role": "user",
@@ -2030,7 +2102,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2085,7 +2159,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2113,7 +2189,7 @@
         },
         {
           "role": "assistant",
-          "content": "Would anyone work tomorrow for a minimum of $400 😊"
+          "content": "Would anyone work tomorrow for a minimum of $400 \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -2140,7 +2216,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2164,7 +2242,7 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I need the funds back on the card because I can’t wait 2-3 business days for services not received"
+          "content": "I need the funds back on the card because I can\u2019t wait 2-3 business days for services not received"
         },
         {
           "role": "assistant",
@@ -2195,7 +2273,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2223,11 +2303,11 @@
         },
         {
           "role": "assistant",
-          "content": "Hey Martha — reminder for your cleaning at 2:30 PM.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey Martha \u2014 reminder for your cleaning at 2:30 PM.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
         },
         {
           "role": "assistant",
-          "content": "Hey — we haven't received your check-in. Is everything okay?\n<URL>"
+          "content": "Hey \u2014 we haven't received your check-in. Is everything okay?\n<URL>"
         },
         {
           "role": "user",
@@ -2250,7 +2330,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2305,7 +2387,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2360,7 +2444,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2415,7 +2501,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2447,7 +2535,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hey Riz! Absolutely, I can help with that. Let's go ahead and cancel your service. If you decide you'd like to reschedule, just let me know anytime — we'll be ready when you are! 😊"
+          "content": "Hey Riz! Absolutely, I can help with that. Let's go ahead and cancel your service. If you decide you'd like to reschedule, just let me know anytime \u2014 we'll be ready when you are! \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -2470,7 +2558,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2494,11 +2584,11 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Liked “Hi Ugo,\n\nI'll check with our management to see what we can do. This isn't something we typically offer, but I'll look into it and get back to you as soon as possible with an answer.\n\nThank you for your patience and understanding.”"
+          "content": "Liked \u201cHi Ugo,\n\nI'll check with our management to see what we can do. This isn't something we typically offer, but I'll look into it and get back to you as soon as possible with an answer.\n\nThank you for your patience and understanding.\u201d"
         },
         {
           "role": "assistant",
-          "content": "Hi Ugo, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+          "content": "Hi Ugo, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -2506,7 +2596,7 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Ugo! 😊 Thanks for confirming your appointment for tomorrow. Just wanted to follow up on your earlier question. For now, we can only charge after the cleaning after a prehold is done.  Appreciate your understanding — we can't wait to make your space shine! See you soon! 🏡✨"
+          "content": "Hi Ugo! \ud83d\ude0a Thanks for confirming your appointment for tomorrow. Just wanted to follow up on your earlier question. For now, we can only charge after the cleaning after a prehold is done.  Appreciate your understanding \u2014 we can't wait to make your space shine! See you soon! \ud83c\udfe1\u2728"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2525,7 +2615,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2549,7 +2641,7 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hello Sabrina,\nJust a quick note—pre-authorization for a card on file is required prior to your scheduled appointment. This allows us to securely confirm your booking and ensure everything is set for your service. Please let us know once your payment method has been updated via this link: <URL> feel free to contact us if you need any assistance.\n\nWe look forward to providing you with a clean, refreshed, and comfortable space."
+          "content": "Hello Sabrina,\nJust a quick note\u2014pre-authorization for a card on file is required prior to your scheduled appointment. This allows us to securely confirm your booking and ensure everything is set for your service. Please let us know once your payment method has been updated via this link: <URL> feel free to contact us if you need any assistance.\n\nWe look forward to providing you with a clean, refreshed, and comfortable space."
         },
         {
           "role": "assistant",
@@ -2580,7 +2672,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2608,7 +2702,7 @@
         },
         {
           "role": "assistant",
-          "content": "8:30 AM sounds perfect, Riz! I've rescheduled your cleaning for then. If anything else comes up or you have more questions, just shoot me a message. We’ve got you covered! 😊"
+          "content": "8:30 AM sounds perfect, Riz! I've rescheduled your cleaning for then. If anything else comes up or you have more questions, just shoot me a message. We\u2019ve got you covered! \ud83d\ude0a"
         },
         {
           "role": "user",
@@ -2616,7 +2710,7 @@
         },
         {
           "role": "assistant",
-          "content": "No worries, Riz! Just let me know which day works better for you, and we'll sort it all out. 😊"
+          "content": "No worries, Riz! Just let me know which day works better for you, and we'll sort it all out. \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2635,7 +2729,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2667,11 +2763,11 @@
         },
         {
           "role": "assistant",
-          "content": "Hi Denise! ✨ JessiCleaning Team just finished your clean — your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>"
+          "content": "Hi Denise! \u2728 JessiCleaning Team just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>"
         },
         {
           "role": "assistant",
-          "content": "Hi Denise, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+          "content": "Hi Denise, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2690,7 +2786,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,
@@ -2710,15 +2808,15 @@
       "sourceMessageIdHash": "1d2576bd0f4af4fa8e54915e",
       "sourceDraftId": 3061615,
       "sourceCapturedAt": "2026-10-10T23:25:55.887Z",
-      "currentInboundMessage": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400.",
+      "currentInboundMessage": "Hi, sorry\u2014I was told my day was set for 400 tomorrow, but I don't see it listed as 400.",
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "​👍​ to “ You said \"I told you he said he paid with card\" . YOU NEVER SAID THAT.! That's the only point I'm making. ”"
+          "content": "\u200b\ud83d\udc4d\u200b to \u201c\u200aYou said \"I told you he said he paid with card\" . YOU NEVER SAID THAT.! That's the only point I'm making.\u200a\u201d"
         },
         {
           "role": "assistant",
-          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM — Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM — Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM — Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! 🧹"
+          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM \u2014 Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM \u2014 Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM \u2014 Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! \ud83e\uddf9"
         },
         {
           "role": "assistant",
@@ -2745,7 +2843,9 @@
         "targetResolutionState": null,
         "replyReadiness": null,
         "actionReadiness": null,
-        "forbiddenOperationalActions": null
+        "forbiddenOperationalActions": null,
+        "speechAct": null,
+        "severity": null
       },
       "labeling": {
         "labelerId": null,

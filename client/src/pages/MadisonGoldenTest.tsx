@@ -13,14 +13,17 @@ function PrettyValue({ value }: { value: unknown }) {
 function qualityScore(actual: any, inbound: string) {
   if (!actual) return null;
   const required = ["primaryCategory", "mission", "missionState", "nextBestAction", "confidence", "extractionStatus"];
-  const structured = required.filter(key => actual[key] !== undefined && actual[key] !== null).length / required.length;
+  const structured = required.filter((key: string) => actual[key] !== undefined && actual[key] !== null).length / required.length;
   const confidence = typeof actual.confidence === "number" ? Math.max(0, Math.min(1, actual.confidence)) : 0;
   const observations = Array.isArray(actual.factObservations) ? actual.factObservations : [];
   const missing = Array.isArray(actual.missingFacts) ? actual.missingFacts.map(String) : [];
   const evidenceValid = observations.length === 0 ? 1 : observations.filter((fact: any) => typeof fact.evidenceExcerpt === "string" && inbound.toLowerCase().includes(fact.evidenceExcerpt.toLowerCase())).length / observations.length;
-  const contradictionFree = observations.every((fact: any) => !missing.some(item => item.toLowerCase() === String(fact.factKey).toLowerCase())) ? 1 : 0;
-  const score = Math.round(structured * 30 + confidence * 30 + evidenceValid * 25 + contradictionFree * 15);
-  return { score, structured: Math.round(structured * 100), confidence: Math.round(confidence * 100), evidenceValid: Math.round(evidenceValid * 100), contradictionFree: Math.round(contradictionFree * 100) };
+  const contradictionFree = observations.every((fact: any) => !missing.some((item: string) => item.toLowerCase() === String(fact.factKey).toLowerCase())) ? 1 : 0;
+  const diagnostics = actual.decisionDiagnostics;
+  const safety = diagnostics?.severity === "CRITICAL" ? 0 : diagnostics?.severity === "HIGH" ? 0.5 : 1;
+  const direction = actual.speechAct && actual.speechAct !== "AMBIGUOUS" ? 1 : 0.5;
+  const score = Math.round(structured * 25 + confidence * 20 + evidenceValid * 20 + contradictionFree * 15 + direction * 10 + safety * 10);
+  return { score, structured: Math.round(structured * 100), confidence: Math.round(confidence * 100), evidenceValid: Math.round(evidenceValid * 100), contradictionFree: Math.round(contradictionFree * 100), direction: Math.round(direction * 100), safety: Math.round(safety * 100), severity: diagnostics?.severity ?? "UNKNOWN" };
 }
 
 function issueFlags(actual: any, inbound: string) {
@@ -29,10 +32,14 @@ function issueFlags(actual: any, inbound: string) {
   const observations = Array.isArray(actual.factObservations) ? actual.factObservations : [];
   const missing = Array.isArray(actual.missingFacts) ? actual.missingFacts.map(String) : [];
   const observedKeys = observations.map((fact: any) => String(fact.factKey));
-  if (observedKeys.some(key => missing.includes(key))) flags.push("Contradiction");
+  if (observedKeys.some((key: string) => missing.includes(key))) flags.push("Contradiction");
   if (observations.some((fact: any) => typeof fact.evidenceExcerpt !== "string" || !inbound.toLowerCase().includes(fact.evidenceExcerpt.toLowerCase()))) flags.push("Evidence review");
   if (typeof actual.confidence !== "number" || actual.confidence < 0.75) flags.push("Low confidence");
   if (actual.extractionStatus !== "COMPLETE") flags.push("Incomplete");
+  if (!actual.speechAct || actual.speechAct === "AMBIGUOUS") flags.push("Direction review");
+  if (actual.decisionDiagnostics?.severity === "CRITICAL") flags.push("CRITICAL SAFETY");
+  else if (actual.decisionDiagnostics?.severity === "HIGH") flags.push("High-risk review");
+  if (actual.decisionDiagnostics?.reasonCodes?.length) flags.push(...actual.decisionDiagnostics.reasonCodes.slice(0, 2));
   if (["CANCELLATION_REQUEST", "RESCHEDULE_REQUEST", "PAYMENT_ISSUE", "REFUND_REQUEST"].includes(String(actual.primaryCategory))) flags.push("Sensitive");
   return flags.length ? flags : ["No flags"];
 }

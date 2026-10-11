@@ -126,6 +126,8 @@ describe("Madison Message Understanding shadow contract", () => {
       "utf8"
     );
     expect(source).toContain('required: ["factKey", "value", "evidenceExcerpt", "sourceMessageId"]');
+    expect(source).toContain('speechAct: { type: "string", enum: [...SPEECH_ACTS] }');
+    expect(source).toContain('"speechAct", "confidence"');
     expect(source).toContain('For “Can you reschedule please”, return at least one factObservation');
     expect(source).toContain('For “Can we reschedule to tomorrow morning then?”, return separate factObservations');
     expect(source).toContain('For “Can you change my booking to monthly”, return separate factObservations');
@@ -141,6 +143,19 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(source).toContain("await persistMadisonMessageShadow");
     expect(source).not.toContain("shadowPrediction.nextBestAction");
     expect(source).not.toContain("executeShadowAction");
+  });
+
+  it("requires the deterministic policy diagnostics to remain observational", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "server/madisonDecisionPolicy.ts"),
+      "utf8"
+    );
+    expect(source).toContain('validatorVersion: "madison-decision-policy-v1"');
+    expect(source).toContain("allowedNextActions");
+    expect(source).toContain("blockedActions");
+    expect(source).toContain("SPEECH_ACT_MISSION_CONFLICT");
+    expect(source).not.toContain("persistMadisonMessageShadow");
+    expect(source).not.toContain("sendSms");
   });
 
   it("keeps Shadow persistence failure stages separate from the Madison draft lifecycle", () => {

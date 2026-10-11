@@ -36,6 +36,12 @@ console.log(JSON.stringify({
   developmentOnly,
   providerPath: "classifyMadisonMessageShadow -> invokeLLM -> direct OpenAI Chat Completions",
   modelContract: "gpt-4o",
+  railwayIdentity: {
+    environmentName: process.env.RAILWAY_ENVIRONMENT_NAME ?? null,
+    serviceName: process.env.RAILWAY_SERVICE_NAME ?? null,
+    deploymentId: process.env.RAILWAY_DEPLOYMENT_ID ?? null,
+    commitSha: process.env.RAILWAY_GIT_COMMIT_SHA ?? null,
+  },
   sideEffects: "none: no persistence, SMS, booking mutation, approval, or production fact events",
 }, null, 2));
 
@@ -58,7 +64,7 @@ for (const scenario of selected) {
       metrics: scored ?? undefined,
     });
     const lowConfidence = actual.confidence < 0.75 || actual.primaryCategory === "AMBIGUOUS" || actual.mission === "UNRESOLVED" || actual.extractionStatus !== "COMPLETE" || actual.factObservations.some(fact => !scenario.currentInboundMessage.toLowerCase().includes(fact.evidenceExcerpt.trim().toLowerCase()));
-    console.log(JSON.stringify({ caseId: scenario.caseId, status: scored ? "scored" : "ai_proposal_unapproved", model: actual.model, confidence: actual.confidence, category: actual.primaryCategory, mission: actual.mission, extractionStatus: actual.extractionStatus, factCount: actual.factObservations.length, reviewPriority: lowConfidence ? "HIGH" : "NORMAL" }, null, 2));
+    console.log(JSON.stringify({ caseId: scenario.caseId, status: scored ? "scored" : "ai_proposal_unapproved", model: actual.model, confidence: actual.confidence, category: actual.primaryCategory, mission: actual.mission, speechAct: actual.speechAct, extractionStatus: actual.extractionStatus, factCount: actual.factObservations.length, severity: actual.decisionDiagnostics?.severity ?? "UNKNOWN", reasonCodes: actual.decisionDiagnostics?.reasonCodes ?? [], criticalUnsafeRecommendation: actual.decisionDiagnostics?.severity === "CRITICAL" && (actual.decisionDiagnostics?.allowedNextActions ?? []).some(action => action !== "HOLD_FOR_HUMAN"), reviewPriority: lowConfidence || actual.decisionDiagnostics?.humanReviewRequired ? "HIGH" : "NORMAL" }, null, 2));
   } catch (error) {
     results.push({
       caseId: scenario.caseId,
@@ -79,6 +85,8 @@ const report = {
     providerPath: "classifyMadisonMessageShadow -> invokeLLM -> https://api.openai.com/v1/chat/completions",
     openAiKeyPresence: process.env.OPENAI_API_KEY ? "present" : "missing",
     environmentName: process.env.RAILWAY_ENVIRONMENT_NAME ?? "local",
+    serviceName: process.env.RAILWAY_SERVICE_NAME ?? "unknown",
+    deploymentId: process.env.RAILWAY_DEPLOYMENT_ID ?? "unknown",
     commitSha: process.env.RAILWAY_GIT_COMMIT_SHA ?? "unknown",
   },
   summary: summarizeGoldenResults(results),
