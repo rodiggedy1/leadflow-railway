@@ -53,10 +53,11 @@
     "expected": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["intentCategory", "speechAct", "mission", "facts", "extractionCompleteness", "taskCompleteness", "missingInformation", "conflictingInformation", "targetResolutionState", "replyReadiness", "actionReadiness", "forbiddenOperationalActions", "severity"],
+      "required": ["intentCategory", "speechAct", "turnRelation", "mission", "facts", "extractionCompleteness", "taskCompleteness", "missingInformation", "conflictingInformation", "targetResolutionState", "replyReadiness", "actionReadiness", "forbiddenOperationalActions", "severity"],
       "properties": {
         "intentCategory": { "type": ["string", "null"] },
         "speechAct": { "type": ["string", "null"] },
+        "turnRelation": { "type": ["string", "null"] },
         "mission": { "type": ["string", "null"] },
         "facts": { "type": ["array", "null"], "items": { "$ref": "#/$defs/fact" } },
         "extractionCompleteness": { "enum": ["COMPLETE", "PARTIAL", "NO_FACTS_PRESENT", null] },

@@ -110,6 +110,7 @@ try {
       expected: {
         intentCategory: null,
         speechAct: null,
+        turnRelation: null,
         mission: null,
         facts: null,
         extractionCompleteness: null,
