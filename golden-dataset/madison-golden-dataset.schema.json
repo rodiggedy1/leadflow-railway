@@ -33,7 +33,9 @@
       "required": ["role", "content"],
       "properties": {
         "role": { "enum": ["user", "assistant"] },
-        "content": { "type": "string", "minLength": 1 }
+        "content": { "type": "string", "minLength": 1 },
+        "actorRole": { "enum": ["customer", "cleaner", "madison", "employee", "system"] },
+        "sourceMessageId": { "type": ["string", "null"] }
       }
     },
     "fact": {
@@ -71,7 +73,7 @@
     "scenario": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["caseId", "split", "approvalState", "sourceMessageIdHash", "sourceCapturedAt", "currentInboundMessage", "priorConversationContext", "sourceMetadataForLabeler", "expected", "labeling", "anonymization"],
+      "required": ["caseId", "split", "approvalState", "sourceMessageIdHash", "sourceCapturedAt", "currentInboundMessage", "currentActorRole", "currentSourceMessageIdHash", "priorConversationContext", "sourceMetadataForLabeler", "expected", "labeling", "anonymization"],
       "properties": {
         "caseId": { "type": "string", "pattern": "^MADISON-[0-9]{3}$" },
         "split": { "enum": ["development", "held_out"] },
@@ -80,6 +82,8 @@
         "sourceDraftId": { "type": "integer" },
         "sourceCapturedAt": { "type": "string", "format": "date-time" },
         "currentInboundMessage": { "type": "string", "minLength": 1 },
+        "currentActorRole": { "enum": ["customer", "cleaner", "madison", "employee", "system"] },
+        "currentSourceMessageIdHash": { "type": "string", "minLength": 12 },
         "priorConversationContext": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/contextMessage" } },
         "sourceMetadataForLabeler": {
           "type": "object",

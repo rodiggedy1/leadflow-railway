@@ -78,6 +78,8 @@ export const SPEECH_ACTS = [
   "AMBIGUOUS",
 ] as const;
 export type MadisonSpeechAct = (typeof SPEECH_ACTS)[number];
+export const MADISON_ACTOR_ROLES = ["customer", "cleaner", "madison", "employee", "system"] as const;
+export type MadisonActorRole = (typeof MADISON_ACTOR_ROLES)[number];
 export type MadisonExtractionStatus = "COMPLETE" | "PARTIAL" | "NO_FACTS_PRESENT" | "EXTRACTION_FAILED" | "VALIDATION_FAILED";
 
 type MadisonDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -231,17 +233,34 @@ export function normalizeShadowPrediction(
 
 export function filterCurrentTurnFactObservations(
   facts: MadisonShadowPrediction["factObservations"],
-  inboundText: string
+  inboundText: string,
+  actorRole: MadisonActorRole = "customer",
+  currentSourceMessageId?: string,
 ) {
+  const stem = (token: string) => token.length > 5 && token.endsWith("ing")
+    ? token.slice(0, -3)
+    : token.length > 4 && token.endsWith("ed")
+      ? token.slice(0, -2)
+      : token.length > 4 && token.endsWith("s") ? token.slice(0, -1) : token;
+  const tokens = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean).map(stem);
   const currentText = inboundText.trim().toLowerCase();
-  return facts.filter(fact =>
-    currentText.includes(fact.evidenceExcerpt.trim().toLowerCase())
-  );
+  const currentTokens = new Set(tokens(inboundText));
+  return facts.filter(fact => {
+    const evidence = fact.evidenceExcerpt.trim().toLowerCase();
+    if (!evidence) return false;
+    if (currentText.includes(evidence)) return true;
+    const evidenceTokens = tokens(evidence).filter(token => token.length > 2);
+    const valueTokens = tokens(fact.value).filter(token => token.length > 2);
+    const evidenceOverlap = evidenceTokens.filter(token => currentTokens.has(token)).length;
+    const valueOverlap = valueTokens.filter(token => currentTokens.has(token)).length;
+    return evidenceOverlap > 0 && (valueTokens.length === 0 || valueOverlap / valueTokens.length >= 0.5);
+  }).map(fact => ({ ...fact, sourceMessageId: currentSourceMessageId ?? fact.sourceMessageId, sourceActorRole: actorRole }));
 }
-
 export async function classifyMadisonMessageShadow(input: {
   inboundText: string;
-  conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
+  sourceMessageId?: string;
+  actorRole?: MadisonActorRole;
+  conversationMessages?: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string }>;
 }): Promise<MadisonShadowPrediction> {
   const configuredModel = "gpt-4o";
   const responseFormat = configuredModel.startsWith("gpt-5")
@@ -303,10 +322,11 @@ export async function classifyMadisonMessageShadow(input: {
         role: "system",
         content: `You are Madison's shadow-only message understanding classifier for a cleaning-service SMS inbox.
 Do not execute actions. Classify the customer's current goal and conversational direction in context.
+The current inbound actor is ${input.actorRole ?? "customer"}. Actor metadata is authoritative; do not treat it as a customer fact. The current source message ID is ${input.sourceMessageId ?? "not supplied"}.
 First identify the current turn's speech act: REQUEST, ANSWER, CONFIRMATION, DENIAL, ACKNOWLEDGMENT, CORRECTION, STATUS_UPDATE, CANCELLATION_OR_DECLINE, or AMBIGUOUS. A speech act describes what the customer is doing, not merely the topic.
 Extract every explicit actionable detail from the current inbound message as factObservations. Do not infer, verify, or invent values. This includes explicit requested actions, dates, relative dates, times, service details, constraints, exclusions, and booking references.
 Conversation history is context only: it may resolve continuity or references, but unrelated historical facts must not become current facts. Use at most the immediately preceding assistant message to interpret a short current reply such as “Yes”; unrelated historical facts must not become current facts or the topic of the reply. For a short reply, determine whether it answers, confirms, denies, acknowledges, or corrects the immediately preceding assistant turn before selecting a mission.
-Every fact observation must include the exact short evidenceExcerpt copied from the current inbound customer message that supports the value. Use sourceMessageId only when the supplied context identifies it.
+Every fact observation must include a short evidenceExcerpt grounded in the current inbound message. Prefer the exact wording, but a concise normalized paraphrase is allowed when it preserves the same meaning (for example, “house cleaning” may support “clean our house”). Never use evidence from an older message. Use sourceMessageId only when the supplied context identifies it.
 Use stable snake_case fact keys such as requested_date, requested_time, requested_service, and customer_provided_booking_reference.
 Set extractionStatus to COMPLETE when all explicit facts in the supplied conversation are captured, PARTIAL when some are captured but another explicit fact may be missing, and NO_FACTS_PRESENT only when the supplied customer messages contain no actionable facts.
 Never return NO_FACTS_PRESENT for a message that contains an explicit request, requested action, date, relative date, time, service detail, constraint, exclusion, or booking reference. The action itself is a fact even when the customer has not supplied a date or time yet.
@@ -324,7 +344,10 @@ Missions: ${CUSTOMER_MISSIONS.join(", ")}
 Mission states: ${MISSION_STATES.join(", ")}
 Next actions: ${NEXT_BEST_ACTIONS.join(", ")}`,
       },
-      ...(input.conversationMessages ?? []).filter(message => message.content.trim().length > 0).slice(-8),
+      ...(input.conversationMessages ?? []).filter(message => message.content.trim().length > 0).slice(-8).map(message => ({
+        role: message.role,
+        content: `[actor=${message.actorRole ?? (message.role === "assistant" ? "madison" : "customer")}${message.sourceMessageId ? ` sourceMessageId=${message.sourceMessageId}` : ""}] ${message.content}`,
+      })),
       { role: "user", content: input.inboundText },
     ],
     response_format: responseFormat,
@@ -350,7 +373,8 @@ export async function persistMadisonMessageShadow(input: {
   draftId?: number;
   sessionId: number;
   inboundText: string;
-  conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
+  actorRole?: MadisonActorRole;
+  conversationMessages?: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string }>;
   resolvedCustomerId?: string | null;
   resolvedBookingId?: number | null;
 }): Promise<MadisonShadowPersistenceResult> {
@@ -383,7 +407,9 @@ export async function persistMadisonMessageShadow(input: {
     );
     const supportedFacts = filterCurrentTurnFactObservations(
       prediction.factObservations,
-      input.inboundText
+      input.inboundText,
+      input.actorRole ?? "customer",
+      input.sourceMessageId,
     );
     const rejectedFactCount = prediction.factObservations.length - supportedFacts.length;
     const extractionStatus = rejectedFactCount > 0 ? "VALIDATION_FAILED" : prediction.extractionStatus;
@@ -452,8 +478,8 @@ export async function persistMadisonMessageShadow(input: {
         draftId: input.draftId ?? null,
         factKey: fact.factKey,
         value: fact.value,
-        sourceType: "customer_message",
-        sourceMessageId: fact.sourceMessageId === input.sourceMessageId ? fact.sourceMessageId : input.sourceMessageId,
+        sourceType: input.actorRole === "employee" || input.actorRole === "madison" ? "employee" : "customer_message",
+        sourceMessageId: input.sourceMessageId,
         status: "current",
         validationStatus: "validated",
         evidenceExcerpt: fact.evidenceExcerpt,

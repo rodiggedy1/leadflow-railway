@@ -90,6 +90,8 @@ async function runShadowForDraft(input: {
   draftId: number;
   sessionId: number;
   inboundText: string;
+  actorRole?: "customer" | "cleaner" | "madison" | "employee" | "system";
+  conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction | null> {
   const shadowResult = await persistMadisonMessageShadow(input);
   if (shadowResult.ok) return shadowResult.prediction;
@@ -227,6 +229,7 @@ export async function triggerMadisonSmsDraft(params: {
         draftId: existingDraft.id,
         sessionId: existingDraft.sessionId,
         inboundText,
+        actorRole: isCleaner ? "cleaner" : "customer",
       });
       return;
     }
@@ -243,6 +246,8 @@ export async function triggerMadisonSmsDraft(params: {
       draftId,
       sessionId,
       inboundText,
+      actorRole: isCleaner ? "cleaner" : "customer",
+      conversationMessages: relevantConversationMessages,
     });
 
     // ── Step 0.5: Phase 1A Deterministic Auto-Reply ────────────────────────────────────────────────────────────────────

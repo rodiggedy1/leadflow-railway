@@ -19,19 +19,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I'm sorry, I need to cancel tmrw"
+          "content": "I'm sorry, I need to cancel tmrw",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Faiza, no worries at all! We understand things come up. \ud83d\ude0a Your cleaning for tomorrow is canceled. Just let us know when you're ready to reschedule \u2014 we're here to make it work for you. Take care and reach out anytime!"
+          "content": "Hi Faiza, no worries at all! We understand things come up. 😊 Your cleaning for tomorrow is canceled. Just let us know when you're ready to reschedule — we're here to make it work for you. Take care and reach out anytime!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Faiza, your next scheduled booking is Thursday 10/01/26 12:30pm arrival window. We look forward to seeing you then."
+          "content": "Hi Faiza, your next scheduled booking is Thursday 10/01/26 12:30pm arrival window. We look forward to seeing you then.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Faiza, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
+          "content": "Hi Faiza, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -63,7 +71,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "81db50cc6d39de12075abe7e"
     },
     {
       "caseId": "MADISON-002",
@@ -76,19 +86,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "GM ok thank you"
+          "content": "GM ok thank you",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil! \u2728 MaidsPlus just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>"
+          "content": "Hi Jalil! ✨ MaidsPlus just finished your clean — your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. \ud83d\udc4b  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. \u2728 Want me to grab one for you?"
+          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. 👋  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. ✨ Want me to grab one for you?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hi are you able to do a house cleaning tomorrow by chance?"
+          "content": "Hi are you able to do a house cleaning tomorrow by chance?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -120,7 +138,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "b3a54e2dc82549af7493cd2d"
     },
     {
       "caseId": "MADISON-003",
@@ -133,19 +153,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Can you cancel service"
+          "content": "Can you cancel service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you reschedule please"
+          "content": "Can you reschedule please",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you reschedule please"
+          "content": "Can you reschedule please",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "What cleaner supplies did you bring?"
+          "content": "What cleaner supplies did you bring?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -177,7 +205,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "99b772a29a22e87762d35d86"
     },
     {
       "caseId": "MADISON-004",
@@ -190,19 +220,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Michael! \ud83d\ude0a Absolutely, we can reschedule your cleaning to next Friday. See you on 10/16/2026 12:30PM - 2:30PM! Looking forward to keeping your home feeling fresh. \u2728"
+          "content": "Hi Michael! 😊 Absolutely, we can reschedule your cleaning to next Friday. See you on 10/16/2026 12:30PM - 2:30PM! Looking forward to keeping your home feeling fresh. ✨",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Perfect thank you!"
+          "content": "Perfect thank you!",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Our pleasure Michael."
+          "content": "Our pleasure Michael.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Michael, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
+          "content": "Hi Michael, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -234,7 +272,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "6a169a38928e83d6667851ee"
     },
     {
       "caseId": "MADISON-005",
@@ -247,19 +287,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM \u2014 Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM \u2014 Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM \u2014 Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! \ud83e\uddf9"
+          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM — Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM — Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM — Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! 🧹",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Please reply CONFIRM to let us know you're all set!"
+          "content": "Please reply CONFIRM to let us know you're all set!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Please reply CONFIRM to let us know you're all set!"
+          "content": "Please reply CONFIRM to let us know you're all set!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hi, sorry\u2014I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -291,7 +339,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "13e9b4f6e3e475224f641c4d"
     },
     {
       "caseId": "MADISON-006",
@@ -304,19 +354,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Denise! Thanks for letting us know. We\u2019ve noted that you\u2019re available after 3:30 PM tomorrow."
+          "content": "Hi Denise! Thanks for letting us know. We’ve noted that you’re available after 3:30 PM tomorrow.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Does that mean that this is my new time slot tomorrow!"
+          "content": "Does that mean that this is my new time slot tomorrow!",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Sorry. I didn't mean the exclamation point. I meant to add a question mark."
+          "content": "Sorry. I didn't mean the exclamation point. I meant to add a question mark.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Yes, we schedule you at 3:30PM"
+          "content": "Yes, we schedule you at 3:30PM",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -348,7 +406,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "148ae7d9db4370255677a6dd"
     },
     {
       "caseId": "MADISON-007",
@@ -361,19 +421,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Denise! Your Maids in Black team has arrived for your cleaning at 3902 14th St Nw Apt 615, Washington, DC 20011.\n\nOpen My Home: <URL>"
+          "content": "Hi Denise! Your Maids in Black team has arrived for your cleaning at 3902 14th St Nw Apt 615, Washington, DC 20011.\n\nOpen My Home: <URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Denise! \u2728 JessiCleaning Team just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>"
+          "content": "Hi Denise! ✨ JessiCleaning Team just finished your clean — your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Denise, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
+          "content": "Hi Denise, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "No"
+          "content": "No",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -405,7 +473,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "eef18f24d83454ad8b2df80b"
     },
     {
       "caseId": "MADISON-008",
@@ -418,19 +488,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I'm looking at my app because it says minus $19."
+          "content": "I'm looking at my app because it says minus $19.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "hi, did you not get paid today in cash?"
+          "content": "hi, did you not get paid today in cash?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "from the client: $220"
+          "content": "from the client: $220",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Noooo"
+          "content": "Noooo",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -462,7 +540,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "28075254d46168b870f6f2d6"
     },
     {
       "caseId": "MADISON-009",
@@ -475,19 +555,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I appreciate the offer for a free cleaning and will take you up on it but not tomorrow. I have done the cleaning myself this week."
+          "content": "I appreciate the offer for a free cleaning and will take you up on it but not tomorrow. I have done the cleaning myself this week.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Please remove me from the schedule tomorrow."
+          "content": "Please remove me from the schedule tomorrow.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Thanks for letting us know. We\u2019ve removed you from the schedule for tomorrow. We completely understand, and whenever you're ready to use your free cleaning, just reach out and we\u2019ll get you set up!"
+          "content": "Thanks for letting us know. We’ve removed you from the schedule for tomorrow. We completely understand, and whenever you're ready to use your free cleaning, just reach out and we’ll get you set up!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Caity, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
+          "content": "Hi Caity, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -519,7 +607,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "4c797c279fc90416ba773d9c"
     },
     {
       "caseId": "MADISON-010",
@@ -532,19 +622,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Michael, we apologize but your team had an emergency earlier and we are still trying to look for a back up team for you today. Is there any way that we can schedule your cleaning tomorrow instead or any days next week?"
+          "content": "Hi Michael, we apologize but your team had an emergency earlier and we are still trying to look for a back up team for you today. Is there any way that we can schedule your cleaning tomorrow instead or any days next week?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Yes"
+          "content": "Yes",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I can schedule for tomorrow"
+          "content": "I can schedule for tomorrow",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Do you prefer same time?"
+          "content": "Do you prefer same time?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -576,7 +674,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "59f1e9a2428594058e7cd10c"
     },
     {
       "caseId": "MADISON-011",
@@ -589,19 +689,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Got it, Madi! \ud83d\ude97 No problem, we'll stick to the original arrival time tomorrow. Looking forward to making your place shine! If you need anything, just let us know. See you soon! \ud83d\ude0a"
+          "content": "Got it, Madi! 🚗 No problem, we'll stick to the original arrival time tomorrow. Looking forward to making your place shine! If you need anything, just let us know. See you soon! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Madi! Your Maids in Black team is confirmed for today. Open My Home: <URL>"
+          "content": "Hi Madi! Your Maids in Black team is confirmed for today. Open My Home: <URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hi, my arrival time was from 12:30-2:30 and it has not noted that my cleaner is on the way or has arrived. I left a note with how to pick up the key for my unit. What can I do?"
+          "content": "Hi, my arrival time was from 12:30-2:30 and it has not noted that my cleaner is on the way or has arrived. I left a note with how to pick up the key for my unit. What can I do?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "One moment, I will check with your team"
+          "content": "One moment, I will check with your team",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -633,7 +741,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "7643db7ece8701fd5459e0a6"
     },
     {
       "caseId": "MADISON-012",
@@ -646,19 +756,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I need to reschedule Service"
+          "content": "I need to reschedule Service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Let's do 8:30 AM"
+          "content": "Let's do 8:30 AM",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you cancel my booking"
+          "content": "Can you cancel my booking",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Riz! Just to clarify, do you want to cancel your booking entirely or are you looking to reschedule to another date and time? Let me know what works best for you, and I'll take care of it right away! \ud83d\ude0a"
+          "content": "Hi Riz! Just to clarify, do you want to cancel your booking entirely or are you looking to reschedule to another date and time? Let me know what works best for you, and I'll take care of it right away! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -690,7 +808,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "e9ff7a99e4473411619f3a1e"
     },
     {
       "caseId": "MADISON-013",
@@ -703,19 +823,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "yes, the 15th works perfectly"
+          "content": "yes, the 15th works perfectly",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Could you tell me a little more about the home\u2014approximately how many square feet, how many bedrooms and bathrooms, and what type of cleaning you\u2019re looking for (standard, deep, or move-out)? Also, how would you rate the current condition from 1\u201310? 10 is the dirties"
+          "content": "Could you tell me a little more about the home—approximately how many square feet, how many bedrooms and bathrooms, and what type of cleaning you’re looking for (standard, deep, or move-out)? Also, how would you rate the current condition from 1–10? 10 is the dirties",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "it's about 2200 sqft but some of the basement does not need to be cleaned (one of the bedrooms we use as storage). top floor is 2 bedrooms,  2 bathrooms,  1 office.  middle floor is kitchen,  dining/ living room,  bathroom.  basement is 1 office, 1 bathroom.  we keep it generally clean but haven't done a deep clean in a while."
+          "content": "it's about 2200 sqft but some of the basement does not need to be cleaned (one of the bedrooms we use as storage). top floor is 2 bedrooms,  2 bathrooms,  1 office.  middle floor is kitchen,  dining/ living room,  bathroom.  basement is 1 office, 1 bathroom.  we keep it generally clean but haven't done a deep clean in a while.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "WHole house deep cleaning  inluding basement is $475 and standard cleaning is $365"
+          "content": "WHole house deep cleaning  inluding basement is $475 and standard cleaning is $365",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -747,7 +875,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "a782a9d42e21feaa9519ed90"
     },
     {
       "caseId": "MADISON-014",
@@ -760,19 +890,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi but you told me you would not do one job. And it was just one job. If it were one job and you would do it I could send one. \ud83d\ude0a"
+          "content": "Hi but you told me you would not do one job. And it was just one job. If it were one job and you would do it I could send one. 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "When we have jobs in our owns we are more than happy to do it we can fill oir day and I just get my other helper that's why I confirm at 6:53 pm"
+          "content": "When we have jobs in our owns we are more than happy to do it we can fill oir day and I just get my other helper that's why I confirm at 6:53 pm",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi team thanks for letting us know. We will inform the management regarding on this. Thanks and Have a great day!"
+          "content": "Hi team thanks for letting us know. We will inform the management regarding on this. Thanks and Have a great day!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "We have jobs tomorrow, trying to reach you early to see, if you respond soon i can send you jobs tomorrow."
+          "content": "We have jobs tomorrow, trying to reach you early to see, if you respond soon i can send you jobs tomorrow.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -804,7 +942,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "cee0ccb7e6fe65fd73abf66b"
     },
     {
       "caseId": "MADISON-015",
@@ -817,19 +957,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Now I see only one brandwaine"
+          "content": "Now I see only one brandwaine",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "one moment team, we'll check"
+          "content": "one moment team, we'll check",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey GoGreen! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! \ud83e\uddf9"
+          "content": "Hey GoGreen! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey GoGreen \u2014 you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey GoGreen — you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -861,7 +1009,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "96e3ab94b0daf5b4c48e787d"
     },
     {
       "caseId": "MADISON-016",
@@ -874,19 +1024,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Thanks for all the details, Kathleen! \ud83d\ude0a For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me \u2014 we can handle everything right here! \ud83c\udfe1\u2728"
+          "content": "Thanks for all the details, Kathleen! 😊 For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me — we can handle everything right here! 🏡✨",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "My roommates are very neat, but their is a dog and cat living at the house.   The roommate with a cat moves out next week, they have lived here for 4 months"
+          "content": "My roommates are very neat, but their is a dog and cat living at the house.   The roommate with a cat moves out next week, they have lived here for 4 months",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "do you service Virginia as well?  22315?"
+          "content": "do you service Virginia as well?  22315?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "what's your availability on October 15 or 16th?"
+          "content": "what's your availability on October 15 or 16th?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -918,7 +1076,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "ae01fb3e00d204c896b35a60"
     },
     {
       "caseId": "MADISON-017",
@@ -931,19 +1091,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Hin, can you cancel my service?"
+          "content": "Hin, can you cancel my service?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Riz! No worries at all. I've gone ahead and cancelled your service for you. If you need anything else or want to reschedule, just let us know. We're here for you whenever you're ready! \ud83d\ude0a"
+          "content": "Hi Riz! No worries at all. I've gone ahead and cancelled your service for you. If you need anything else or want to reschedule, just let us know. We're here for you whenever you're ready! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hi, can you reschedule my service please?"
+          "content": "Hi, can you reschedule my service please?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Riz! Of course, I can help with that. When would you like to reschedule your service for? Let me know what date and time works best for you, and we\u2019ll make it happen. \ud83d\ude0a"
+          "content": "Hi Riz! Of course, I can help with that. When would you like to reschedule your service for? Let me know what date and time works best for you, and we’ll make it happen. 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -975,7 +1143,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "adeb29b9b8b2775acea76370"
     },
     {
       "caseId": "MADISON-018",
@@ -988,19 +1158,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Patricia, are you free for a quick call to discuss your cleaning needs?"
+          "content": "Hi Patricia, are you free for a quick call to discuss your cleaning needs?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Patricia Follett replied to you on Thumbtack.\n\nView the full conversation here: <URL>\n\nOr, use this number to communicate with them directly.\n\nReply STOP to opt out, or HELP for help.\n\n---\n\nNot at this time...\nCan I answer any questions you have via text?"
+          "content": "Patricia Follett replied to you on Thumbtack.\n\nView the full conversation here: <URL>\n\nOr, use this number to communicate with them directly.\n\nReply STOP to opt out, or HELP for help.\n\n---\n\nNot at this time...\nCan I answer any questions you have via text?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Not at this time...\nCan I answer any questions you have via text?"
+          "content": "Not at this time...\nCan I answer any questions you have via text?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Absolutely! Text is perfectly fine. \ud83d\ude0a To get you the most accurate quote, could you please send me the following:\n\n-What is the approximate square footage of the home?\n-Is it a house, condo, townhouse, or apartment?\n-How many bedrooms and bathrooms are there?\n-Are there any pets?\n-Is the home currently furnished or empty?\n-On a scale of 1\u201310, how would you rate the current condition of the home? 1 = very clean, 10 = very dirty."
+          "content": "Absolutely! Text is perfectly fine. 😊 To get you the most accurate quote, could you please send me the following:\n\n-What is the approximate square footage of the home?\n-Is it a house, condo, townhouse, or apartment?\n-How many bedrooms and bathrooms are there?\n-Are there any pets?\n-Is the home currently furnished or empty?\n-On a scale of 1–10, how would you rate the current condition of the home? 1 = very clean, 10 = very dirty.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1032,7 +1210,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "23af7b8aad84c3f96dbb8ddf"
     },
     {
       "caseId": "MADISON-019",
@@ -1045,19 +1225,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi! \ud83d\ude0a To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1\u201310, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! \ud83d\ude0a"
+          "content": "Hi! 😊 To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1–10, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "2800\n4 bedroom 4 bath\nNo pets\n\nSingle Family Home \n6 to 7\nDeep Clean/Standard"
+          "content": "2800\n4 bedroom 4 bath\nNo pets\n\nSingle Family Home \n6 to 7\nDeep Clean/Standard",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "For your 4 beds and 4 baths deep cleaning we charge $420.\nBut if you only want a standard cleaning, we charge $340"
+          "content": "For your 4 beds and 4 baths deep cleaning we charge $420.\nBut if you only want a standard cleaning, we charge $340",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "when would you like to do the cleaning?"
+          "content": "when would you like to do the cleaning?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1089,7 +1277,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "6826b38e0297b291a0b76bd4"
     },
     {
       "caseId": "MADISON-020",
@@ -1102,19 +1292,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Jalil! Your Maids in Black team is on the way and will arrive at 2812 Trotter Park Ln, Lanham, MD Lanham around 8:31 AM. \ud83d\ude97\n\nTrack their arrival in real time here: <URL>\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out \u2014 they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here."
+          "content": "Hi Jalil! Your Maids in Black team is on the way and will arrive at 2812 Trotter Park Ln, Lanham, MD Lanham around 8:31 AM. 🚗\n\nTrack their arrival in real time here: <URL>\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "GM ok thank you"
+          "content": "GM ok thank you",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil! \u2728 MaidsPlus just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>"
+          "content": "Hi Jalil! ✨ MaidsPlus just finished your clean — your home is sparkling!\n\nLeave a 5-star Google review and we'll add a $50 tip to MaidsPlus:\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. \ud83d\udc4b  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. \u2728 Want me to grab one for you?"
+          "content": "Hi Jalil , it's Diane from Maids in Black! Think we've chatted before. 👋  We have a few last-minute openings tomorrow and thought I'd reach out in case. We're offering a discounted clean if you're free. ✨ Want me to grab one for you?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1146,7 +1344,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "1412be3e885c26724ff20d1b"
     },
     {
       "caseId": "MADISON-021",
@@ -1159,19 +1359,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I have a second apartment in Annapolis that I need clean"
+          "content": "I have a second apartment in Annapolis that I need clean",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you cancel service"
+          "content": "Can you cancel service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you cancel service"
+          "content": "Can you cancel service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you reschedule please"
+          "content": "Can you reschedule please",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1203,7 +1411,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "dde6b64b2b54e258c24d89a8"
     },
     {
       "caseId": "MADISON-022",
@@ -1216,19 +1426,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Pilar Duarte! Here's your schedule for tomorrow, Saturday, October 10:\n\n1. 12:30 PM \u2014 Jill Caiazzo, 5806 Arlington Boulevard, Arlington, VA 22204\n\nPlease reply CONFIRM to let us know you're all set! \ud83e\uddf9"
+          "content": "Hi Pilar Duarte! Here's your schedule for tomorrow, Saturday, October 10:\n\n1. 12:30 PM — Jill Caiazzo, 5806 Arlington Boulevard, Arlington, VA 22204\n\nPlease reply CONFIRM to let us know you're all set! 🧹",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey Pilar! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! \ud83e\uddf9"
+          "content": "Hey Pilar! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey Pilar \u2014 reminder for your cleaning at 12:30 PM.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey Pilar — reminder for your cleaning at 12:30 PM.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey \u2014 we haven't received your check-in. Is everything okay?\n<URL>"
+          "content": "Hey — we haven't received your check-in. Is everything okay?\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1260,7 +1478,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "e23d0bdb9a3c32c7c2fa355c"
     },
     {
       "caseId": "MADISON-023",
@@ -1273,19 +1493,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "No worries, I think we can keep your service for tomorrow then."
+          "content": "No worries, I think we can keep your service for tomorrow then.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi N, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
+          "content": "Hi N, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Not flexible are you available to come in the evening"
+          "content": "Not flexible are you available to come in the evening",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi what time in the evening were you thinking, as in last job like 4:30 pm?"
+          "content": "Hi what time in the evening were you thinking, as in last job like 4:30 pm?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1317,7 +1545,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "b44ae4d381bd24ba7c0b3a88"
     },
     {
       "caseId": "MADISON-024",
@@ -1330,19 +1560,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "No"
+          "content": "No",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I can do a visit after 3:30."
+          "content": "I can do a visit after 3:30.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Denise! Thanks for letting us know. We\u2019ve noted that you\u2019re available after 3:30 PM tomorrow."
+          "content": "Hi Denise! Thanks for letting us know. We’ve noted that you’re available after 3:30 PM tomorrow.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Does that mean that this is my new time slot tomorrow!"
+          "content": "Does that mean that this is my new time slot tomorrow!",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1374,7 +1612,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "767707560e0b88173b91a4ef"
     },
     {
       "caseId": "MADISON-025",
@@ -1387,19 +1627,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Stephanie Gilliard replied to you on Thumbtack.\n\nView the full conversation here: <URL>\n\nOr, use this number to communicate with them directly.\n\nReply STOP to opt out, or HELP for help.\n\n---\n\nWhat is the price before you check availability?"
+          "content": "Stephanie Gilliard replied to you on Thumbtack.\n\nView the full conversation here: <URL>\n\nOr, use this number to communicate with them directly.\n\nReply STOP to opt out, or HELP for help.\n\n---\n\nWhat is the price before you check availability?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "What is the price before you check availability?"
+          "content": "What is the price before you check availability?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "6 to 7."
+          "content": "6 to 7.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi! \ud83d\ude0a To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1\u201310, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! \ud83d\ude0a"
+          "content": "Hi! 😊 To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1–10, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1431,7 +1679,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "7ec3d317c8d1ea92c44fe9a2"
     },
     {
       "caseId": "MADISON-026",
@@ -1440,23 +1690,31 @@
       "sourceMessageIdHash": "ecc9755550157804647d1e1b",
       "sourceDraftId": 3061555,
       "sourceCapturedAt": "2026-10-10T19:04:22.299Z",
-      "currentInboundMessage": "I\u2019m not sure I\u2019d say definitely the two bathrooms upstairs and the bathroom upstairs.",
+      "currentInboundMessage": "I’m not sure I’d say definitely the two bathrooms upstairs and the bathroom upstairs.",
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "305 bathroom correct?"
+          "content": "305 bathroom correct?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "3.5"
+          "content": "3.5",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Okay. Yes 3.5 bathroom. So is the  is the freezer extra? Or is it included? What is the final price? Thank you"
+          "content": "Okay. Yes 3.5 bathroom. So is the  is the freezer extra? Or is it included? What is the final price? Thank you",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "how many rooms are there that needs wall cleaning?"
+          "content": "how many rooms are there that needs wall cleaning?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1488,7 +1746,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "ecc9755550157804647d1e1b"
     },
     {
       "caseId": "MADISON-027",
@@ -1501,19 +1761,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi this is Ava from Maids in Black, sorry we missed your call. We'll give you a call back in a few moments. Feel free to shoot us a quick text as well!"
+          "content": "Hi this is Ava from Maids in Black, sorry we missed your call. We'll give you a call back in a few moments. Feel free to shoot us a quick text as well!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Sean, I understand your concerns, and our team will reach out at your preferred time to discuss the refund for your cleaning. Please reply here or call <PHONE>."
+          "content": "Hi Sean, I understand your concerns, and our team will reach out at your preferred time to discuss the refund for your cleaning. Please reply here or call <PHONE>.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi There, I'm sorry your call ended unexpectedly. We'd love to help resolve your refund inquiry. Please reach out at your convenience. Reply here or call <PHONE>."
+          "content": "Hi There, I'm sorry your call ended unexpectedly. We'd love to help resolve your refund inquiry. Please reach out at your convenience. Reply here or call <PHONE>.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Sean! We have not charged your card. The amount you see is just a temporary pre-authorization hold to verify that the card is valid. Per our policy, we only charge cards after the cleaning service has been completed.\n\nSince your service was cancelled, no charge will take place, and the temporary hold will automatically be released. Depending on your bank's processing time, it usually takes 2\u20133 business days for the hold to fall off your account."
+          "content": "Hi Sean! We have not charged your card. The amount you see is just a temporary pre-authorization hold to verify that the card is valid. Per our policy, we only charge cards after the cleaning service has been completed.\n\nSince your service was cancelled, no charge will take place, and the temporary hold will automatically be released. Depending on your bank's processing time, it usually takes 2–3 business days for the hold to fall off your account.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1545,7 +1813,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "18842f190a0a90dcceb6437a"
     },
     {
       "caseId": "MADISON-028",
@@ -1558,19 +1828,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Team, can you ask if they saw a Pink tumbler on Hadja's Property and where could they have placed it."
+          "content": "Hi Team, can you ask if they saw a Pink tumbler on Hadja's Property and where could they have placed it.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Where she's have the glasses by the kitchen window?"
+          "content": "Where she's have the glasses by the kitchen window?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Thanks team"
+          "content": "Thanks team",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Team, can you give us ETA for Sean Haley at 3526 Fryar Loop Unit B, Fort George G Meade, MD 20755"
+          "content": "Hi Team, can you give us ETA for Sean Haley at 3526 Fryar Loop Unit B, Fort George G Meade, MD 20755",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1602,7 +1880,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "002a2dd3dbd326fbd607ccd9"
     },
     {
       "caseId": "MADISON-029",
@@ -1615,19 +1895,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Please help"
+          "content": "Please help",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Sure, we can add the Unit G right now"
+          "content": "Sure, we can add the Unit G right now",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Ok please"
+          "content": "Ok please",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Abby, everything is all set. We have already included Unit G for today's schedule and sent you the email confirmation"
+          "content": "Hi Abby, everything is all set. We have already included Unit G for today's schedule and sent you the email confirmation",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1659,7 +1947,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "ab311ca20fd845b242eef1cb"
     },
     {
       "caseId": "MADISON-030",
@@ -1672,19 +1962,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Riz! Sure thing, I can help with rescheduling your service. Just let me know the date and time that would work better for you, and we'll make it happen. \ud83d\ude0a"
+          "content": "Hi Riz! Sure thing, I can help with rescheduling your service. Just let me know the date and time that would work better for you, and we'll make it happen. 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Saturday oct 10"
+          "content": "Saturday oct 10",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I need to reschedule Service"
+          "content": "I need to reschedule Service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Let's do 8:30 AM"
+          "content": "Let's do 8:30 AM",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1716,7 +2014,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "80b4aa311e732b32cd20027f"
     },
     {
       "caseId": "MADISON-031",
@@ -1729,19 +2029,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Lindsey! Absolutely, the team will be arriving during the 12:30 PM arrival window. , so we'll make sure to stick to that time. Let us know if there's anything else you need. Looking forward to seeing you! \ud83d\ude0a"
+          "content": "Hi Lindsey! Absolutely, the team will be arriving during the 12:30 PM arrival window. , so we'll make sure to stick to that time. Let us know if there's anything else you need. Looking forward to seeing you! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Please note we do have the two hour arrival window to make up for the many things that are outside of our control: Weather, traffic, parking, road closures, and the unpredictability of the homes before your service. We will try our best to be there as close to 12:30 as possible."
+          "content": "Please note we do have the two hour arrival window to make up for the many things that are outside of our control: Weather, traffic, parking, road closures, and the unpredictability of the homes before your service. We will try our best to be there as close to 12:30 as possible.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I had signed up for the 8:30 time.  I cannot do a 12:30 arrival"
+          "content": "I had signed up for the 8:30 time.  I cannot do a 12:30 arrival",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Lindsey, we have it at 8:30 am now, see you then. Thanks so much"
+          "content": "Hi Lindsey, we have it at 8:30 am now, see you then. Thanks so much",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1773,7 +2081,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "b123ef2cd3f932acf0a53d14"
     },
     {
       "caseId": "MADISON-032",
@@ -1786,19 +2096,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hey S, \u2014 you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey S, — you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hola yo ma\u00f1ana no puedo trabajar"
+          "content": "Hola yo mañana no puedo trabajar",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "noted team"
+          "content": "noted team",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey S, \u2014 you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey S, — you've just been assigned a cleaning at 8:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1830,7 +2148,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "58f12bccc11f22cf67563003"
     },
     {
       "caseId": "MADISON-033",
@@ -1843,19 +2163,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Scheduling has started to become difficult with the service I currently use.   On a scale of 1-10 I think the house is an 8"
+          "content": "Scheduling has started to become difficult with the service I currently use.   On a scale of 1-10 I think the house is an 8",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Thanks for all the details, Kathleen! \ud83d\ude0a For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me \u2014 we can handle everything right here! \ud83c\udfe1\u2728"
+          "content": "Thanks for all the details, Kathleen! 😊 For your 3-level townhouse, with the areas you mentioned. We have availability this week week  on scheduling system. The price would be $284.00 for a Standard Cleaning. Let me know if you'd like to secure a spot! Feel free to message me — we can handle everything right here! 🏡✨",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "My roommates are very neat, but their is a dog and cat living at the house.   The roommate with a cat moves out next week, they have lived here for 4 months"
+          "content": "My roommates are very neat, but their is a dog and cat living at the house.   The roommate with a cat moves out next week, they have lived here for 4 months",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "do you service Virginia as well?  22315?"
+          "content": "do you service Virginia as well?  22315?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1887,7 +2215,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "42e7ca91ff5c5fe0a5084c9b"
     },
     {
       "caseId": "MADISON-034",
@@ -1900,19 +2230,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Please reply CONFIRM to let us know you're all set!"
+          "content": "Please reply CONFIRM to let us know you're all set!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hi, sorry\u2014I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "and there is a house in Maryland?"
+          "content": "and there is a house in Maryland?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! \ud83e\uddf9"
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -1944,7 +2282,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "328291790c5215802bf9bb75"
     },
     {
       "caseId": "MADISON-035",
@@ -1957,19 +2297,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Can you cancel service"
+          "content": "Can you cancel service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you cancel service"
+          "content": "Can you cancel service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you reschedule please"
+          "content": "Can you reschedule please",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you reschedule please"
+          "content": "Can you reschedule please",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2001,7 +2349,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "de8174c4dd45ea1c9962f3c8"
     },
     {
       "caseId": "MADISON-036",
@@ -2014,19 +2364,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I would like service for my apartment in Silver Spring, Maryland"
+          "content": "I would like service for my apartment in Silver Spring, Maryland",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I have a second apartment in Annapolis that I need clean"
+          "content": "I have a second apartment in Annapolis that I need clean",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you cancel service"
+          "content": "Can you cancel service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can you cancel service"
+          "content": "Can you cancel service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2058,7 +2416,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "e8df2bca5b64bf302c2673ee"
     },
     {
       "caseId": "MADISON-037",
@@ -2071,19 +2431,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "The text was not clear. Don't worry I will adjust back your payment, but please communicate better that text was very very unclear ."
+          "content": "The text was not clear. Don't worry I will adjust back your payment, but please communicate better that text was very very unclear .",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "And caused the confusion and chances are we will not be paid"
+          "content": "And caused the confusion and chances are we will not be paid",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I was actually being polite; I asked if I should go back so you could pay, but I don't have the authority to collect payment from your clients\u2014that\u2019s something you handle."
+          "content": "I was actually being polite; I asked if I should go back so you could pay, but I don't have the authority to collect payment from your clients—that’s something you handle.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "That is your problem, because you have to ensure that everything is in order before your workers start work."
+          "content": "That is your problem, because you have to ensure that everything is in order before your workers start work.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2115,7 +2483,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "1f65073e346c221e16bb3032"
     },
     {
       "caseId": "MADISON-038",
@@ -2128,19 +2498,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Hello I asked if we can do the move in cleaning that's is for today at 6pm tomorrow"
+          "content": "Hello I asked if we can do the move in cleaning that's is for today at 6pm tomorrow",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "The 6 pm service was moved to an earlier 12:30 today team"
+          "content": "The 6 pm service was moved to an earlier 12:30 today team",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I thought that we were going to do it ? I was waiting for updates since yesterday"
+          "content": "I thought that we were going to do it ? I was waiting for updates since yesterday",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Wait were you wanting to do any jobs on Sunday or am I misunderstanding you.  That other job did not agree to change."
+          "content": "Wait were you wanting to do any jobs on Sunday or am I misunderstanding you.  That other job did not agree to change.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2172,7 +2550,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "d1088b6aa6953e1221c66240"
     },
     {
       "caseId": "MADISON-039",
@@ -2185,19 +2565,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "yes"
+          "content": "yes",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Would anyone work tomorrow for a minimum of $400 \ud83d\ude0a"
+          "content": "Would anyone work tomorrow for a minimum of $400 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Yes"
+          "content": "Yes",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Ok give me a few moments"
+          "content": "Ok give me a few moments",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2229,7 +2617,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "911ab6c4a148a11370642679"
     },
     {
       "caseId": "MADISON-040",
@@ -2242,19 +2632,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "I need the funds back on the card because I can\u2019t wait 2-3 business days for services not received"
+          "content": "I need the funds back on the card because I can’t wait 2-3 business days for services not received",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Sean your card was not charged. There is a pre-auth/hold that has already been reversed you will see the hold drop off usually in one business day. Sometimes instantly but this depends on your bank, it has already been released on our end. Sorry things did not work out."
+          "content": "Sean your card was not charged. There is a pre-auth/hold that has already been reversed you will see the hold drop off usually in one business day. Sometimes instantly but this depends on your bank, it has already been released on our end. Sorry things did not work out.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Sean we could still come out on Monday and perform the service but we do not have control over the actual banking system, it's not within our control. We have already released theh hold on our end. Can send a screenshot to show this if needed."
+          "content": "Hi Sean we could still come out on Monday and perform the service but we do not have control over the actual banking system, it's not within our control. We have already released theh hold on our end. Can send a screenshot to show this if needed.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "I don't wan't the service, I just want the refund"
+          "content": "I don't wan't the service, I just want the refund",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2286,7 +2684,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "f0f2349fee91d5dcd5fb6bc1"
     },
     {
       "caseId": "MADISON-041",
@@ -2299,19 +2699,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "it;s a - MOVE-IN MOVE OUT WITH CLEANING INSIDE FRIDGE clean inside oven, (2) clean interior windows,\nbalcony sweep\nclean inside microwave\n\n\nBEDROOM AREA IS CARPETED KINDLY BRING A NICE VACUUM\nclean thoroughly\nThe house is completely empty\ndeep cleaning needed \n\n- THE CLIENT WILL DO A WALKTHROUGH SO PLEASE MAKE SURE TO INFORM THE CLIENT BEFORE YOU LEAVE"
+          "content": "it;s a - MOVE-IN MOVE OUT WITH CLEANING INSIDE FRIDGE clean inside oven, (2) clean interior windows,\nbalcony sweep\nclean inside microwave\n\n\nBEDROOM AREA IS CARPETED KINDLY BRING A NICE VACUUM\nclean thoroughly\nThe house is completely empty\ndeep cleaning needed \n\n- THE CLIENT WILL DO A WALKTHROUGH SO PLEASE MAKE SURE TO INFORM THE CLIENT BEFORE YOU LEAVE",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey Martha \u2014 reminder for your cleaning at 2:30 PM.\n\nBefore you arrive:\n\u2022 Review notes\n\u2022 Bring full supplies\n\u2022 Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+          "content": "Hey Martha — reminder for your cleaning at 2:30 PM.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey \u2014 we haven't received your check-in. Is everything okay?\n<URL>"
+          "content": "Hey — we haven't received your check-in. Is everything okay?\n<URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "What will be done at the client's location?"
+          "content": "What will be done at the client's location?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2343,7 +2751,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "15949a2bb8967171664390bb"
     },
     {
       "caseId": "MADISON-042",
@@ -2356,19 +2766,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "ok"
+          "content": "ok",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Thank you for your patience!"
+          "content": "Thank you for your patience!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Sean! Your Maids in Black team is on the way and will arrive at 3526 Fryar Loop  Unit B, Fort George G Meade, MD 20755 around 3:39 PM.\n\nOpen My Home: <URL>"
+          "content": "Hi Sean! Your Maids in Black team is on the way and will arrive at 3526 Fryar Loop  Unit B, Fort George G Meade, MD 20755 around 3:39 PM.\n\nOpen My Home: <URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Sean, the team arrived at the location, but only one of the maids was allowed to enter while the other two were denied entry. For safety reasons, our cleaners always work in teams of two or more, so they were unable to perform the service and had to leave."
+          "content": "Hi Sean, the team arrived at the location, but only one of the maids was allowed to enter while the other two were denied entry. For safety reasons, our cleaners always work in teams of two or more, so they were unable to perform the service and had to leave.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2400,7 +2818,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "6dcb7343a45ed86af24f416f"
     },
     {
       "caseId": "MADISON-043",
@@ -2413,19 +2833,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Samantha, the team are on their way to your property now and they will be there in 30 minutes"
+          "content": "Hi Samantha, the team are on their way to your property now and they will be there in 30 minutes",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Thank you for your patience"
+          "content": "Thank you for your patience",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Okay"
+          "content": "Okay",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hello, they are still now here. Can I please have an ETA? We have movers coming today as well."
+          "content": "Hello, they are still now here. Can I please have an ETA? We have movers coming today as well.",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2457,7 +2885,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "77b6ca53108b450e9fc7de17"
     },
     {
       "caseId": "MADISON-044",
@@ -2470,19 +2900,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "We are here on the parking lot"
+          "content": "We are here on the parking lot",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "one moment team I will check"
+          "content": "one moment team I will check",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Just completed unit S"
+          "content": "Just completed unit S",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Can you give us updated ETA for  Samantha?"
+          "content": "Can you give us updated ETA for  Samantha?",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2514,7 +2952,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "9b292572879687edd6f137c5"
     },
     {
       "caseId": "MADISON-045",
@@ -2527,19 +2967,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Can I reschedule?"
+          "content": "Can I reschedule?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Can I cancel my service"
+          "content": "Can I cancel my service",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hey Riz! Absolutely, I can help with that. Let's go ahead and cancel your service. If you decide you'd like to reschedule, just let me know anytime \u2014 we'll be ready when you are! \ud83d\ude0a"
+          "content": "Hey Riz! Absolutely, I can help with that. Let's go ahead and cancel your service. If you decide you'd like to reschedule, just let me know anytime — we'll be ready when you are! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Hi can you cancel my service?"
+          "content": "Hi can you cancel my service?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2571,7 +3019,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "7d436e45a1b37e54133b0c74"
     },
     {
       "caseId": "MADISON-046",
@@ -2584,19 +3034,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "Liked \u201cHi Ugo,\n\nI'll check with our management to see what we can do. This isn't something we typically offer, but I'll look into it and get back to you as soon as possible with an answer.\n\nThank you for your patience and understanding.\u201d"
+          "content": "Liked “Hi Ugo,\n\nI'll check with our management to see what we can do. This isn't something we typically offer, but I'll look into it and get back to you as soon as possible with an answer.\n\nThank you for your patience and understanding.”",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Ugo, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
+          "content": "Hi Ugo, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Yes"
+          "content": "Yes",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Ugo! \ud83d\ude0a Thanks for confirming your appointment for tomorrow. Just wanted to follow up on your earlier question. For now, we can only charge after the cleaning after a prehold is done.  Appreciate your understanding \u2014 we can't wait to make your space shine! See you soon! \ud83c\udfe1\u2728"
+          "content": "Hi Ugo! 😊 Thanks for confirming your appointment for tomorrow. Just wanted to follow up on your earlier question. For now, we can only charge after the cleaning after a prehold is done.  Appreciate your understanding — we can't wait to make your space shine! See you soon! 🏡✨",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2628,7 +3086,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "0f0a12c7d8c1fb72688271ae"
     },
     {
       "caseId": "MADISON-047",
@@ -2641,19 +3101,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hello Sabrina,\nJust a quick note\u2014pre-authorization for a card on file is required prior to your scheduled appointment. This allows us to securely confirm your booking and ensure everything is set for your service. Please let us know once your payment method has been updated via this link: <URL> feel free to contact us if you need any assistance.\n\nWe look forward to providing you with a clean, refreshed, and comfortable space."
+          "content": "Hello Sabrina,\nJust a quick note—pre-authorization for a card on file is required prior to your scheduled appointment. This allows us to securely confirm your booking and ensure everything is set for your service. Please let us know once your payment method has been updated via this link: <URL> feel free to contact us if you need any assistance.\n\nWe look forward to providing you with a clean, refreshed, and comfortable space.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Sabrina we have not gotten the card on file. Please place a card on file, when you enter the card you have to press the button to save the card."
+          "content": "Hi Sabrina we have not gotten the card on file. Please place a card on file, when you enter the card you have to press the button to save the card.",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Yes ! I told my husband . He is going to be doing it in the next 30 mins. He is getting back from work. Thanks"
+          "content": "Yes ! I told my husband . He is going to be doing it in the next 30 mins. He is getting back from work. Thanks",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "payment sent"
+          "content": "payment sent",
+          "actorRole": "customer",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2685,7 +3153,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "a65ed7dd62cd4316e5cd7247"
     },
     {
       "caseId": "MADISON-048",
@@ -2698,19 +3168,27 @@
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "What about 8:30 AM?"
+          "content": "What about 8:30 AM?",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "8:30 AM sounds perfect, Riz! I've rescheduled your cleaning for then. If anything else comes up or you have more questions, just shoot me a message. We\u2019ve got you covered! \ud83d\ude0a"
+          "content": "8:30 AM sounds perfect, Riz! I've rescheduled your cleaning for then. If anything else comes up or you have more questions, just shoot me a message. We’ve got you covered! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "user",
-          "content": "Actually, wait I want to reschedule for another day"
+          "content": "Actually, wait I want to reschedule for another day",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "No worries, Riz! Just let me know which day works better for you, and we'll sort it all out. \ud83d\ude0a"
+          "content": "No worries, Riz! Just let me know which day works better for you, and we'll sort it all out. 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2742,7 +3220,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "37f764aa29c03fd2bbe9a2c1"
     },
     {
       "caseId": "MADISON-049",
@@ -2755,19 +3235,27 @@
       "priorConversationContext": [
         {
           "role": "assistant",
-          "content": "Hi Denise! Your Maids in Black team is on the way and will arrive at 3902 14th St Nw Apt 615, Washington, DC 20011 around 10:06 AM.\n\nOpen My Home: <URL>"
+          "content": "Hi Denise! Your Maids in Black team is on the way and will arrive at 3902 14th St Nw Apt 615, Washington, DC 20011 around 10:06 AM.\n\nOpen My Home: <URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Denise! Your Maids in Black team has arrived for your cleaning at 3902 14th St Nw Apt 615, Washington, DC 20011.\n\nOpen My Home: <URL>"
+          "content": "Hi Denise! Your Maids in Black team has arrived for your cleaning at 3902 14th St Nw Apt 615, Washington, DC 20011.\n\nOpen My Home: <URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Denise! \u2728 JessiCleaning Team just finished your clean \u2014 your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>"
+          "content": "Hi Denise! ✨ JessiCleaning Team just finished your clean — your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to JessiCleaning Team:\n\nOpen My Home: <URL>",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Denise, this is Maids in Black! \ud83d\udda4 Confirming your cleaning appointment tomorrow.\n\n\u2705 Reply YES to confirm\n\ud83d\udd04 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! \ud83d\ude0a"
+          "content": "Hi Denise, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2799,7 +3287,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "a6a96612928a5f43a25d6d51"
     },
     {
       "caseId": "MADISON-050",
@@ -2808,23 +3298,31 @@
       "sourceMessageIdHash": "1d2576bd0f4af4fa8e54915e",
       "sourceDraftId": 3061615,
       "sourceCapturedAt": "2026-10-10T23:25:55.887Z",
-      "currentInboundMessage": "Hi, sorry\u2014I was told my day was set for 400 tomorrow, but I don't see it listed as 400.",
+      "currentInboundMessage": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400.",
       "priorConversationContext": [
         {
           "role": "user",
-          "content": "\u200b\ud83d\udc4d\u200b to \u201c\u200aYou said \"I told you he said he paid with card\" . YOU NEVER SAID THAT.! That's the only point I'm making.\u200a\u201d"
+          "content": "​👍​ to “ You said \"I told you he said he paid with card\" . YOU NEVER SAID THAT.! That's the only point I'm making. ”",
+          "actorRole": "customer",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM \u2014 Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM \u2014 Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM \u2014 Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! \ud83e\uddf9"
+          "content": "Hi Team Alba M! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 8:30 AM — Rita Ruggieri, 3910 Knowles Avenue, Apt 106, Kensington, MD 20895\n2. 9:30 AM — Denise JONES, 3902 14th St Nw Apt 615, Washington, DC 20011\n3. 12:30 PM — Faiza Khan, 437 New York Ave Nw, 904, Washington, Dc, DC 20001\n\nPlease reply CONFIRM to let us know you're all set! 🧹",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Please reply CONFIRM to let us know you're all set!"
+          "content": "Please reply CONFIRM to let us know you're all set!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         },
         {
           "role": "assistant",
-          "content": "Please reply CONFIRM to let us know you're all set!"
+          "content": "Please reply CONFIRM to let us know you're all set!",
+          "actorRole": "madison",
+          "sourceMessageId": null
         }
       ],
       "sourceMetadataForLabeler": {
@@ -2856,7 +3354,9 @@
         "version": "regex-v1-plus-sender-name",
         "replacements": [],
         "piiReviewRequired": true
-      }
+      },
+      "currentActorRole": "customer",
+      "currentSourceMessageIdHash": "1d2576bd0f4af4fa8e54915e"
     }
   ]
 }

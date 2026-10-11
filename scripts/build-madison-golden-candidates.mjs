@@ -49,7 +49,12 @@ function parseHistory(raw, currentMessageId, currentTimestamp) {
       }))
       .filter((message) => message.role && message.content && Number.isFinite(message.timestamp))
       .slice(-4)
-      .map((message) => ({ role: message.role, content: anonymize(message.content).value }));
+      .map((message) => ({
+        role: message.role,
+        content: anonymize(message.content).value,
+        actorRole: message.role === "assistant" ? "madison" : "customer",
+        sourceMessageId: message.opMsgId ?? null,
+      }));
   } catch {
     return [];
   }
@@ -94,6 +99,8 @@ try {
       sourceDraftId: Number(row.id),
       sourceCapturedAt: new Date(row.createdAt).toISOString(),
       currentInboundMessage: inbound.value,
+      currentActorRole: "customer",
+      currentSourceMessageIdHash: hash(row.inboundOpenPhoneId),
       priorConversationContext: context,
       sourceMetadataForLabeler: {
         observedMessageType: row.messageType ?? null,
