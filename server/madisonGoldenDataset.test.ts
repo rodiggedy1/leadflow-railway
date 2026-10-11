@@ -19,6 +19,13 @@ describe("Madison Golden Dataset evaluation system", () => {
     expect(dataset.scenarios.every((scenario: any) => scenario.expected.intentCategory === null)).toBe(true);
   });
 
+  it("keeps the future monthly-booking turn out of the cleaner-supplies context", () => {
+    const dataset = JSON.parse(readFileSync(resolve(process.cwd(), "golden-dataset/candidates.json"), "utf8"));
+    const suppliesCase = dataset.scenarios.find((scenario: any) => scenario.currentInboundMessage === "What cleaner supplies did you bring?");
+    expect(suppliesCase).toBeDefined();
+    expect(suppliesCase.priorConversationContext).not.toContainEqual({ role: "user", content: "Can you change my booking to monthly" });
+  });
+
   it("scores facts by normalized key/value and requires valid current-message evidence", () => {
     const expected = {
       intentCategory: "RESCHEDULE_REQUEST",
