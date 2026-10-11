@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, Check, ChevronLeft, ChevronRight, Lock, Play, RotateCcw, X } from "lucide-react";
+import { AlertCircle, Check, ChevronLeft, ChevronRight, Download, Lock, Play, RotateCcw, X } from "lucide-react";
 
 type Rating = "correct" | "incorrect" | "uncertain";
 const COLORS = { purple: "#5d49f3", ink: "#1a1a2e", muted: "#73788c", border: "#e8e8f6", bg: "#f4f6fb" };
@@ -46,7 +46,15 @@ function flagStyle(flag: string) {
 export default function MadisonGoldenTest() {
   const { data: cases = [], isLoading } = trpc.madison.getGoldenTestCases.useQuery(undefined, { staleTime: 15_000 });
   const [caseIndex, setCaseIndex] = useState(0);
-  const [actualByCase, setActualByCase] = useState<Record<string, any>>({});
+  const [actualByCase, setActualByCase] = useState<Record<string, any>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const saved = window.localStorage.getItem("madison-golden-batch-results-v1");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [notes, setNotes] = useState("");
   const [filter, setFilter] = useState<"development" | "held_out">("development");
   const [runError, setRunError] = useState<string | null>(null);
@@ -72,6 +80,10 @@ export default function MadisonGoldenTest() {
   const reviewedCount = visibleCases.filter(item => item.review?.rating && item.review.rating !== "uncertain").length;
   const runCount = visibleCases.filter(item => actualByCase[item.caseId] || item.review?.actualPrediction).length;
   const score = current && actual ? qualityScore(actual, current.currentInboundMessage) : null;
+
+  useEffect(() => {
+    window.localStorage.setItem("madison-golden-batch-results-v1", JSON.stringify(actualByCase));
+  }, [actualByCase]);
 
   const runOne = async (caseId: string) => {
     const result = await runCase.mutateAsync({ caseId });
@@ -101,6 +113,47 @@ export default function MadisonGoldenTest() {
   const go = (delta: number) => { setCaseIndex(index => Math.max(0, Math.min(visibleCases.length - 1, index + delta))); setNotes(""); setRunError(null); setErrorKind(null); setSaveMessage(null); };
   const rate = (rating: Rating) => { if (!current || !actual) return; saveRating.mutate({ caseId: current.caseId, rating, notes: notes.trim() || null, actualPrediction: actual }); };
 
+  const exportResults = () => {
+    const results = cases.filter(item => item.split === "development").map(item => {
+      const prediction = actualByCase[item.caseId] ?? item.review?.actualPrediction ?? null;
+      return {
+        caseId: item.caseId,
+        split: item.split,
+        currentInboundMessage: item.currentInboundMessage,
+        priorConversationContext: item.priorConversationContext,
+        prediction,
+        qualityScore: prediction ? qualityScore(prediction, item.currentInboundMessage) : null,
+        flags: issueFlags(prediction, item.currentInboundMessage),
+        review: item.review ? {
+          rating: item.review.rating,
+          notes: item.review.notes,
+          reviewedAt: item.review.reviewedAt,
+        } : null,
+      };
+    });
+    const payload = {
+      format: "madison-golden-test-export-v1",
+      exportedAt: new Date().toISOString(),
+      modelPath: "existing Madison GPT-4o Shadow classifier",
+      readOnlyClassification: true,
+      sideEffects: "No SMS, booking mutations, approvals, or fact-event writes",
+      counts: {
+        totalDevelopmentCases: results.length,
+        classified: results.filter(item => item.prediction !== null).length,
+        unclassified: results.filter(item => item.prediction === null).length,
+      },
+      results,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `madison-golden-test-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setSaveMessage(`Exported ${payload.counts.classified} classified cases as JSON.`);
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) return;
@@ -123,8 +176,8 @@ export default function MadisonGoldenTest() {
       </div>
 
       <section style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-        <div><strong style={{ display: "block", fontSize: 16 }}>Batch classification</strong><span style={{ color: COLORS.muted, fontSize: 13 }}>Uses the existing read-only GPT-4o Shadow path. No SMS, bookings, approvals, or fact events.</span>{batchProgress && <div style={{ marginTop: 9, color: batchProgress.running ? COLORS.purple : "#197447", fontWeight: 800, fontSize: 13 }}>{batchProgress.running ? `Classifying ${batchProgress.completed} of ${batchProgress.total}…` : `Completed ${batchProgress.completed} of ${batchProgress.total}`}</div>}</div>
-        <button type="button" onClick={() => void runAllDevelopment()} disabled={Boolean(batchProgress?.running) || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "none", borderRadius: 10, padding: "12px 16px", background: filter === "held_out" ? "#e5e7eb" : COLORS.purple, color: "#fff", fontWeight: 800, cursor: "pointer" }}><RotateCcw size={15} />{batchProgress?.running ? "Running…" : "Run all 40 development cases"}</button>
+        <div><strong style={{ display: "block", fontSize: 16 }}>Batch classification</strong><span style={{ color: COLORS.muted, fontSize: 13 }}>Uses the existing read-only GPT-4o Shadow path. Results recover from this browser and can be exported for full review.</span>{batchProgress && <div style={{ marginTop: 9, color: batchProgress.running ? COLORS.purple : "#197447", fontWeight: 800, fontSize: 13 }}>{batchProgress.running ? `Classifying ${batchProgress.completed} of ${batchProgress.total}…` : `Completed ${batchProgress.completed} of ${batchProgress.total}`}</div>}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button type="button" onClick={exportResults} disabled={runCount === 0} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px 16px", background: runCount === 0 ? "#f1f2f6" : "#fff", color: runCount === 0 ? "#a3a6b2" : COLORS.purple, fontWeight: 800, cursor: "pointer" }}><Download size={15} />Export JSON</button><button type="button" onClick={() => void runAllDevelopment()} disabled={Boolean(batchProgress?.running) || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "none", borderRadius: 10, padding: "12px 16px", background: filter === "held_out" ? "#e5e7eb" : COLORS.purple, color: "#fff", fontWeight: 800, cursor: "pointer" }}><RotateCcw size={15} />{batchProgress?.running ? "Running…" : "Run all 40 development cases"}</button></div>
       </section>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>{(["development", "held_out"] as const).map(item => <button key={item} type="button" onClick={() => selectFilter(item)} style={{ border: `1px solid ${filter === item ? COLORS.purple : COLORS.border}`, background: filter === item ? "#eeeaff" : "#fff", color: filter === item ? COLORS.purple : COLORS.muted, borderRadius: 999, padding: "9px 15px", fontWeight: 800, cursor: "pointer" }}>{item === "development" ? "Development · 40" : "Held-out · 10"}{item === "held_out" && <Lock size={13} style={{ marginLeft: 6, verticalAlign: -2 }} />}</button>)}</div>
