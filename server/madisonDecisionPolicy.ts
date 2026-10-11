@@ -7,13 +7,17 @@ import type {
 export type MadisonDecisionSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type MadisonDecisionDiagnostics = {
-  validatorVersion: "madison-decision-policy-v1";
+  validatorVersion: "madison-decision-policy-v2";
   speechAct: MadisonShadowPrediction["speechAct"];
   contractValid: boolean;
+  policyContractValid: boolean;
   severity: MadisonDecisionSeverity;
   reasonCodes: string[];
   allowedNextActions: NextBestAction[];
   blockedActions: NextBestAction[];
+  modelProposedAction: NextBestAction;
+  finalAction: NextBestAction;
+  actionOverridden: boolean;
   evidenceValid: boolean;
   contextRisk: "LOW" | "MEDIUM" | "HIGH";
   humanReviewRequired: boolean;
@@ -41,6 +45,13 @@ const OPERATIONAL_ACTIONS: NextBestAction[] = [
 
 const unique = <T>(items: T[]) => Array.from(new Set(items));
 
+/**
+ * GPT proposes. Policy disposes.
+ *
+ * The model proposal is retained for audit, but the allowed/blocked action sets
+ * are derived here from the normalized understanding and current-turn evidence.
+ * They are not accepted from, or delegated back to, the model.
+ */
 export function validateMadisonDecision(
   prediction: MadisonShadowPrediction,
   inboundText: string,
@@ -49,6 +60,7 @@ export function validateMadisonDecision(
   const current = inboundText.trim().toLowerCase();
   const reasons: string[] = [];
   const facts = prediction.factObservations;
+  const modelProposedAction = prediction.modelProposedAction ?? prediction.nextBestAction;
   const evidenceValid = facts.every(fact =>
     fact.evidenceExcerpt.trim().length > 0 &&
     current.includes(fact.evidenceExcerpt.trim().toLowerCase())
@@ -63,7 +75,7 @@ export function validateMadisonDecision(
   if (prediction.missionState === "WAITING_CUSTOMER" && prediction.missingFacts.length === 0) {
     reasons.push("WAITING_CUSTOMER_WITHOUT_MISSING_INPUT");
   }
-  if (prediction.missionState === "WAITING_CUSTOMER" && prediction.nextBestAction === "CHECK_AVAILABILITY") {
+  if (prediction.missionState === "WAITING_CUSTOMER" && modelProposedAction === "CHECK_AVAILABILITY") {
     reasons.push("READINESS_ACTION_CONFLICT");
   }
 
@@ -88,17 +100,42 @@ export function validateMadisonDecision(
   const missing = prediction.missingFacts.length > 0;
   const allowed: NextBestAction[] = [];
   const blocked: NextBestAction[] = [];
-  if (reasons.includes("SPEECH_ACT_MISSION_CONFLICT") || reasons.includes("CURRENT_TURN_AMBIGUOUS")) {
+  if (reasons.includes("SPEECH_ACT_MISSION_CONFLICT") || reasons.includes("CURRENT_TURN_AMBIGUOUS") || !evidenceValid) {
     allowed.push("HOLD_FOR_HUMAN");
     blocked.push(...OPERATIONAL_ACTIONS);
   } else if (missing) {
-    allowed.push(prediction.nextBestAction === "CHECK_AVAILABILITY" ? "CLARIFY" : "ASK_CUSTOMER");
+    allowed.push(modelProposedAction === "CHECK_AVAILABILITY" ? "CLARIFY" : "ASK_CUSTOMER");
     blocked.push(...OPERATIONAL_ACTIONS);
   } else if (sensitive) {
     allowed.push("HOLD_FOR_HUMAN");
-    if (OPERATIONAL_ACTIONS.includes(prediction.nextBestAction)) blocked.push(prediction.nextBestAction);
+    blocked.push(...OPERATIONAL_ACTIONS);
   } else {
-    allowed.push(prediction.nextBestAction);
+    allowed.push(modelProposedAction);
+  }
+
+  const allowedActions = unique(allowed);
+  const blockedActions = unique(blocked);
+  const actionSetConflict = allowedActions.some(action => blockedActions.includes(action));
+  if (actionSetConflict) reasons.push("ACTION_SET_CONFLICT");
+
+  const proposalBlocked = blockedActions.includes(modelProposedAction);
+  const proposalOutsideAllowed = allowedActions.length > 0 && !allowedActions.includes(modelProposedAction);
+  if (proposalBlocked) reasons.push("MODEL_ACTION_BLOCKED");
+  if (proposalOutsideAllowed) reasons.push("MODEL_ACTION_NOT_ALLOWED");
+
+  const policyContractValid = allowedActions.length > 0 && !actionSetConflict;
+  if (!policyContractValid) reasons.push("NO_VALID_ACTION_DECLARED");
+
+  // Fail closed. Never insert HOLD_FOR_HUMAN into the model's contract or claim
+  // that the model contract was valid. The safety disposition is separate.
+  const finalAction = !policyContractValid
+    ? "HOLD_FOR_HUMAN"
+    : !proposalBlocked && !proposalOutsideAllowed
+      ? modelProposedAction
+      : allowedActions.find(action => !blockedActions.includes(action)) ?? "HOLD_FOR_HUMAN";
+  const actionOverridden = finalAction !== modelProposedAction;
+  if (actionOverridden && !reasons.includes("MODEL_ACTION_BLOCKED") && !reasons.includes("MODEL_ACTION_NOT_ALLOWED")) {
+    reasons.push("MODEL_ACTION_CONTRACT_INVALID");
   }
 
   const uniqueReasons = unique(reasons);
@@ -110,13 +147,17 @@ export function validateMadisonDecision(
         ? "MEDIUM"
         : "LOW";
   return {
-    validatorVersion: "madison-decision-policy-v1",
+    validatorVersion: "madison-decision-policy-v2",
     speechAct: prediction.speechAct,
     contractValid: uniqueReasons.length === 0,
+    policyContractValid,
     severity,
     reasonCodes: uniqueReasons,
-    allowedNextActions: unique(allowed),
-    blockedActions: unique(blocked),
+    allowedNextActions: allowedActions,
+    blockedActions,
+    modelProposedAction,
+    finalAction,
+    actionOverridden,
     evidenceValid,
     contextRisk: shortReply || priorAssistant ? "MEDIUM" : "LOW",
     humanReviewRequired: severity !== "LOW" || sensitive,
