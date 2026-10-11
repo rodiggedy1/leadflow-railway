@@ -1,0 +1,237 @@
+{
+  "reportVersion": "madison-golden-evaluation-v1",
+  "generatedAt": "2026-10-11T00:52:08.462Z",
+  "datasetPath": "/home/ubuntu/leadflow-schedule-booking-preview-release/golden-dataset/candidates.json",
+  "approvalPolicy": "Only human_approved cases may be scored. Unapproved cases are never used for accuracy claims.",
+  "runtime": {
+    "model": "gpt-4o",
+    "providerPath": "classifyMadisonMessageShadow -> invokeLLM -> https://api.openai.com/v1/chat/completions",
+    "openAiKeyPresence": "present",
+    "environmentName": "local",
+    "commitSha": "unknown"
+  },
+  "summary": {
+    "datasetVersion": "madison-golden-v1",
+    "totalCases": 50,
+    "scoredCases": 0,
+    "unscoredUnapprovedCases": 50,
+    "runnerErrorCases": 0,
+    "metrics": {
+      "intentAccuracy": null,
+      "missionAccuracy": null,
+      "factPrecision": null,
+      "factRecall": null,
+      "evidenceValidity": null,
+      "contextCorrectness": null,
+      "extractionCompletenessAccuracy": null,
+      "structuredOutputSuccess": null,
+      "persistenceReliability": null,
+      "missingInformationAccuracy": null,
+      "replyReadinessAccuracy": null,
+      "actionReadinessAccuracy": null
+    },
+    "accuracyClaimAllowed": false
+  },
+  "results": [
+    {
+      "caseId": "MADISON-001",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-002",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-003",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-004",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-005",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-006",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-007",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-008",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-009",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-010",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-011",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-012",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-013",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-014",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-015",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-016",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-017",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-018",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-019",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-020",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-021",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-022",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-023",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-024",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-025",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-026",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-027",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-028",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-029",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-030",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-031",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-032",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-033",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-034",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-035",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-036",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-037",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-038",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-039",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-040",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-041",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-042",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-043",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-044",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-045",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-046",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-047",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-048",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-049",
+      "status": "unscored_unapproved"
+    },
+    {
+      "caseId": "MADISON-050",
+      "status": "unscored_unapproved"
+    }
+  ]
+}
