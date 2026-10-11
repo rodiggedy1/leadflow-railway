@@ -63,7 +63,8 @@ export function validateMadisonDecision(
   const modelProposedAction = prediction.modelProposedAction ?? prediction.nextBestAction;
   const evidenceValid = facts.every(fact =>
     fact.evidenceExcerpt.trim().length > 0 &&
-    current.includes(fact.evidenceExcerpt.trim().toLowerCase())
+    fact.provenance === "CURRENT_TURN" &&
+    fact.grounded !== false
   );
   if (!evidenceValid) reasons.push("EVIDENCE_NOT_IN_CURRENT_MESSAGE");
   if (facts.some(fact => prediction.missingFacts.some(missing => missing.toLowerCase() === fact.factKey.toLowerCase()))) {
@@ -90,10 +91,12 @@ export function validateMadisonDecision(
   }
 
   const sensitive = SENSITIVE_CATEGORIES.includes(prediction.primaryCategory) || prediction.mission === "CANCEL_BOOKING";
+  if (sensitive && prediction.actor.role === "UNKNOWN") reasons.push("UNKNOWN_ACTOR_REQUIRES_HUMAN");
   const critical = sensitive && (
     reasons.includes("SPEECH_ACT_MISSION_CONFLICT") ||
     reasons.includes("CURRENT_TURN_AMBIGUOUS") ||
-    reasons.includes("EVIDENCE_NOT_IN_CURRENT_MESSAGE")
+    reasons.includes("EVIDENCE_NOT_IN_CURRENT_MESSAGE") ||
+    reasons.includes("UNKNOWN_ACTOR_REQUIRES_HUMAN")
   );
   if (sensitive) reasons.push("SENSITIVE_OPERATION_REQUIRES_HUMAN");
 

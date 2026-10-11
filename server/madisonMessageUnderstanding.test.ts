@@ -37,7 +37,8 @@ describe("Madison Message Understanding shadow contract", () => {
       classifierVersion: "madison-shadow-v1",
       model: "gemini-3.5-flash-lite",
     });
-    expect(prediction.factObservations).toEqual([{ factKey: "requested_date", value: "2026-10-10", evidenceExcerpt: "Saturday October 10th", sourceMessageId: undefined }]);
+    expect(prediction.factObservations).toEqual([{ factKey: "requested_date", value: "2026-10-10", evidenceExcerpt: "Saturday October 10th", sourceMessageId: undefined, provenance: "CURRENT_TURN", grounded: true }]);
+    expect(prediction.actor).toEqual({ role: "UNKNOWN", source: "INFERRED" });
     expect(prediction.extractionStatus).toBe("COMPLETE");
   });
 
@@ -82,8 +83,8 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(prediction.mission).toBe("PROVIDE_TEAM_STATUS");
     expect(prediction.nextBestAction).toBe("CHECK_AVAILABILITY");
     expect(prediction.factObservations).toEqual([
-      { factKey: "requested_date", value: "October 15th", evidenceExcerpt: "October 15th", sourceMessageId: undefined },
-      { factKey: "excluded_teams", value: "Onilda, JessiCleaning", evidenceExcerpt: "outside of Onilda and JessiCleaning", sourceMessageId: undefined },
+      { factKey: "requested_date", value: "October 15th", evidenceExcerpt: "October 15th", sourceMessageId: undefined, provenance: "CURRENT_TURN", grounded: true },
+      { factKey: "excluded_teams", value: "Onilda, JessiCleaning", evidenceExcerpt: "outside of Onilda and JessiCleaning", sourceMessageId: undefined, provenance: "CURRENT_TURN", grounded: true },
     ]);
     expect(prediction.model).toBe("gpt-5.5");
   });
@@ -141,11 +142,40 @@ describe("Madison Message Understanding shadow contract", () => {
     );
     expect(source).toContain('required: ["factKey", "value", "evidenceExcerpt", "sourceMessageId"]');
     expect(source).toContain('speechAct: { type: "string", enum: [...SPEECH_ACTS] }');
-    expect(source).toContain('"speechAct", "confidence"');
+    expect(source).toContain('"speechAct", "turnRelation", "utterances", "confidence"');
     expect(source).toContain('For “Can you reschedule please”, return at least one factObservation');
     expect(source).toContain('For “Can we reschedule to tomorrow morning then?”, return separate factObservations');
     expect(source).toContain('For “Can you change my booking to monthly”, return separate factObservations');
     expect(source).toContain('Never fold an explicit frequency, recurrence, service type, date, time, or constraint into the requested_action value');
+    expect(source).toContain("utterances");
+    expect(source).toContain("turnRelation");
+    expect(source).toContain("actorSource");
+  });
+
+  it("derives missing requirements from normalized facts rather than trusting contradictory model output", () => {
+    const prediction = normalizeShadowPrediction({
+      primaryCategory: "AVAILABILITY_REQUEST",
+      categories: ["AVAILABILITY_REQUEST"],
+      mission: "BOOK_SERVICE",
+      missionState: "NEW",
+      nextBestAction: "CHECK_AVAILABILITY",
+      speechAct: "REQUEST",
+      turnRelation: "STARTS_NEW_REQUEST",
+      actorRole: "CUSTOMER",
+      actorSource: "SYSTEM",
+      utterances: [{ text: "Are you able to clean our house tomorrow?", speechAct: "REQUEST", relation: "STARTS_NEW_REQUEST" }],
+      confidence: 0.95,
+      knownFacts: [],
+      missingFacts: ["requested_service", "requested_date"],
+      factObservations: [
+        { factKey: "requested_service", value: "house cleaning", evidenceExcerpt: "clean our house" },
+        { factKey: "requested_date", value: "tomorrow", evidenceExcerpt: "tomorrow" },
+      ],
+      extractionStatus: "COMPLETE",
+      extractionQualityNote: null,
+    });
+    expect(prediction.missingFacts).toEqual([]);
+    expect(prediction.rawMissingFacts).toEqual(["requested_service", "requested_date"]);
   });
 
   it("does not make shadow predictions part of Madison execution", () => {
