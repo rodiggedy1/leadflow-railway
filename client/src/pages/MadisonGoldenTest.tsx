@@ -98,9 +98,9 @@ export default function MadisonGoldenTest() {
     return result;
   };
 
-  const runAllDevelopment = async () => {
-    const pending = cases.filter(item => item.split === "development" && !actualByCase[item.caseId] && !item.review?.actualPrediction);
-    if (!pending.length) { setSaveMessage("All development cases already have a classification. Review the queue below."); return; }
+  const runAllDevelopment = async (force = false) => {
+    const pending = cases.filter(item => item.split === "development" && (force || (!actualByCase[item.caseId] && !item.review?.actualPrediction)));
+    if (!pending.length) { setSaveMessage("All development cases already have a classification. Review the queue below, or use Re-run all 40 to refresh them."); return; }
     setRunError(null); setErrorKind(null); setSaveMessage(null); setBatchProgress({ completed: 0, total: pending.length, running: true });
     let cursor = 0;
     const worker = async () => {
@@ -113,7 +113,7 @@ export default function MadisonGoldenTest() {
     };
     await Promise.all(Array.from({ length: Math.min(4, pending.length) }, () => worker()));
     setBatchProgress(progress => progress ? { ...progress, running: false } : progress);
-    setSaveMessage(`Finished classifying ${pending.length} development cases. Review flagged cases first.`);
+    setSaveMessage(`${force ? "Finished re-running" : "Finished classifying"} ${pending.length} development cases. Review flagged cases first.`);
   };
 
   const selectFilter = (next: "development" | "held_out") => { setFilter(next); setCaseIndex(0); setNotes(""); setRunError(null); setErrorKind(null); setSaveMessage(null); };
@@ -184,7 +184,7 @@ export default function MadisonGoldenTest() {
 
       <section style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
         <div><strong style={{ display: "block", fontSize: 16 }}>Batch classification</strong><span style={{ color: COLORS.muted, fontSize: 13 }}>Uses the existing read-only GPT-4o Shadow path. Results recover from this browser and can be exported for full review.</span>{batchProgress && <div style={{ marginTop: 9, color: batchProgress.running ? COLORS.purple : "#197447", fontWeight: 800, fontSize: 13 }}>{batchProgress.running ? `Classifying ${batchProgress.completed} of ${batchProgress.total}…` : `Completed ${batchProgress.completed} of ${batchProgress.total}`}</div>}</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button type="button" onClick={exportResults} disabled={runCount === 0} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px 16px", background: runCount === 0 ? "#f1f2f6" : "#fff", color: runCount === 0 ? "#a3a6b2" : COLORS.purple, fontWeight: 800, cursor: "pointer" }}><Download size={15} />Export JSON</button><button type="button" onClick={() => void runAllDevelopment()} disabled={Boolean(batchProgress?.running) || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "none", borderRadius: 10, padding: "12px 16px", background: filter === "held_out" ? "#e5e7eb" : COLORS.purple, color: "#fff", fontWeight: 800, cursor: "pointer" }}><RotateCcw size={15} />{batchProgress?.running ? "Running…" : "Run all 40 development cases"}</button></div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button type="button" onClick={exportResults} disabled={runCount === 0} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px 16px", background: runCount === 0 ? "#f1f2f6" : "#fff", color: runCount === 0 ? "#a3a6b2" : COLORS.purple, fontWeight: 800, cursor: "pointer" }}><Download size={15} />Export JSON</button><button type="button" onClick={() => void runAllDevelopment()} disabled={Boolean(batchProgress?.running) || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "none", borderRadius: 10, padding: "12px 16px", background: filter === "held_out" ? "#e5e7eb" : COLORS.purple, color: "#fff", fontWeight: 800, cursor: "pointer" }}><Play size={15} />{batchProgress?.running ? "Running…" : "Run remaining"}</button><button type="button" onClick={() => void runAllDevelopment(true)} disabled={Boolean(batchProgress?.running) || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 8, border: `1px solid ${COLORS.purple}`, borderRadius: 10, padding: "12px 16px", background: filter === "held_out" ? "#f1f2f6" : "#fff", color: filter === "held_out" ? "#a3a6b2" : COLORS.purple, fontWeight: 800, cursor: "pointer" }}><RotateCcw size={15} />Re-run all 40</button></div>
       </section>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>{(["development", "held_out"] as const).map(item => <button key={item} type="button" onClick={() => selectFilter(item)} style={{ border: `1px solid ${filter === item ? COLORS.purple : COLORS.border}`, background: filter === item ? "#eeeaff" : "#fff", color: filter === item ? COLORS.purple : COLORS.muted, borderRadius: 999, padding: "9px 15px", fontWeight: 800, cursor: "pointer" }}>{item === "development" ? "Development · 40" : "Held-out · 10"}{item === "held_out" && <Lock size={13} style={{ marginLeft: 6, verticalAlign: -2 }} />}</button>)}</div>
