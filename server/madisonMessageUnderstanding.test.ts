@@ -128,6 +128,8 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(source).toContain('required: ["factKey", "value", "evidenceExcerpt", "sourceMessageId"]');
     expect(source).toContain('For “Can you reschedule please”, return at least one factObservation');
     expect(source).toContain('For “Can we reschedule to tomorrow morning then?”, return separate factObservations');
+    expect(source).toContain('For “Can you change my booking to monthly”, return separate factObservations');
+    expect(source).toContain('Never fold an explicit frequency, recurrence, service type, date, time, or constraint into the requested_action value');
   });
 
   it("does not make shadow predictions part of Madison execution", () => {
