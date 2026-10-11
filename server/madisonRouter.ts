@@ -32,6 +32,7 @@ function publicGoldenCase(scenario: GoldenDataset["scenarios"][number], review: 
       reviewer: review.reviewer,
       notes: review.notes,
       actualPrediction: review.actualPrediction,
+      expectedAnnotation: review.expectedAnnotation,
       reviewedAt: review.reviewedAt,
     } : null,
   };
@@ -531,6 +532,7 @@ export const madisonRouter = router({
       rating: z.enum(madisonGoldenReviewRatings),
       notes: z.string().max(2000).nullable().optional(),
       actualPrediction: z.unknown().nullable().optional(),
+      expectedAnnotation: z.unknown().nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -545,6 +547,7 @@ export const madisonRouter = router({
         reviewer: ctx.opsCaller.name,
         notes: input.notes ?? null,
         actualPrediction: input.actualPrediction ?? null,
+        expectedAnnotation: input.expectedAnnotation ?? null,
         reviewedAt: now,
         updatedAt: now,
       }).onDuplicateKeyUpdate({ set: {
@@ -552,10 +555,45 @@ export const madisonRouter = router({
         reviewer: ctx.opsCaller.name,
         notes: input.notes ?? null,
         actualPrediction: input.actualPrediction ?? null,
+        expectedAnnotation: input.expectedAnnotation ?? null,
         reviewedAt: now,
         updatedAt: now,
       } });
       return { ok: true as const, caseId: input.caseId, rating: input.rating };
+    }),
+  saveGoldenTestLabel: opsChatProcedure
+    .input(z.object({
+      caseId: z.string().regex(/^MADISON-\d{3}$/),
+      expectedAnnotation: z.unknown(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const scenario = loadGoldenDataset().scenarios.find(item => item.caseId === input.caseId);
+      if (!scenario) throw new TRPCError({ code: "NOT_FOUND", message: "Golden Test case not found" });
+      if (scenario.split === "held_out") throw new TRPCError({ code: "FORBIDDEN", message: "Held-out cases are locked until development review is complete" });
+      const [existing] = await db.select({ id: madisonGoldenCaseReviews.id })
+        .from(madisonGoldenCaseReviews)
+        .where(eq(madisonGoldenCaseReviews.caseId, input.caseId))
+        .limit(1);
+      const now = new Date();
+      if (existing) {
+        await db.update(madisonGoldenCaseReviews)
+          .set({ expectedAnnotation: input.expectedAnnotation, reviewer: ctx.opsCaller.name, updatedAt: now })
+          .where(eq(madisonGoldenCaseReviews.id, existing.id));
+      } else {
+        await db.insert(madisonGoldenCaseReviews).values({
+          caseId: input.caseId,
+          rating: "uncertain",
+          reviewer: ctx.opsCaller.name,
+          notes: null,
+          actualPrediction: null,
+          expectedAnnotation: input.expectedAnnotation,
+          reviewedAt: now,
+          updatedAt: now,
+        });
+      }
+      return { ok: true as const, caseId: input.caseId };
     }),
   getNextBestActions: opsChatProcedure.query(async () => {
     const candidates = await loadMadisonCandidates();

@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "table": "madison_golden_case_reviews",
+  "columns": [
+    { "name": "expectedAnnotation", "columnType": "json", "nullable": true }
+  ],
+  "indexes": []
+}

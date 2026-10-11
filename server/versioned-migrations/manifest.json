@@ -511,6 +511,14 @@
       "sha256": "360ab62893266f5b08a95e27155cbf51081745950b774f6925ccc3eb559927ab",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0066_create_madison_golden_case_reviews.postconditions.json"
+    },
+    {
+      "id": "0067_add_madison_golden_expected_annotation",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0067_add_madison_golden_expected_annotation.sql",
+      "sha256": "b3e46ab2c15723602deddfe036f265d11f9049bea539a59e993bfaed5d9bdb3e",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0067_add_madison_golden_expected_annotation.postconditions.json"
     }
   ]
 }
