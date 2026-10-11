@@ -97,7 +97,20 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(filterCurrentTurnFactObservations(
       facts,
       "Good morning, are there any cleaning teams available for October 15th, outside of Onilda and JessiCleaning? I'd prefer a different team."
-    )).toEqual([facts[0]]);
+    )).toEqual([{ ...facts[0], sourceActorRole: "customer" }]);
+  });
+
+  it("accepts grounded normalized evidence paraphrases without accepting historical facts", () => {
+    const facts = [
+      { factKey: "requested_service", value: "house cleaning", evidenceExcerpt: "house cleaning", sourceMessageId: undefined },
+      { factKey: "refund_item", value: "mat", evidenceExcerpt: "refund of the mat", sourceMessageId: undefined },
+    ];
+    expect(filterCurrentTurnFactObservations(
+      facts,
+      "Are you able to clean our house tomorrow?",
+      "customer",
+      "msg-current",
+    )).toEqual([{ ...facts[0], sourceMessageId: "msg-current", sourceActorRole: "customer" }]);
   });
 
   it("keeps the taxonomy finite and includes the agreed operational categories", () => {

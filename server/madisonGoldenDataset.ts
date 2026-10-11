@@ -1,4 +1,4 @@
-import type { MadisonShadowPrediction } from "./madisonMessageUnderstanding";
+import type { MadisonActorRole, MadisonShadowPrediction } from "./madisonMessageUnderstanding";
 
 export const GOLDEN_DATASET_VERSION = "madison-golden-v1" as const;
 export const GOLDEN_DATASET_SIZE = 50 as const;
@@ -27,7 +27,9 @@ export type GoldenScenario = {
   sourceDraftId?: number;
   sourceCapturedAt: string;
   currentInboundMessage: string;
-  priorConversationContext: Array<{ role: "user" | "assistant"; content: string }>;
+  currentActorRole: MadisonActorRole;
+  currentSourceMessageIdHash: string;
+  priorConversationContext: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string | null }>;
   sourceMetadataForLabeler?: {
     observedMessageType: string | null;
     observedDraftStatus: string | null;
@@ -106,7 +108,14 @@ export function scoreGoldenCase(expected: GoldenScenario["expected"], actual: Ma
   const truePositiveFacts = actualFacts.filter(fact => expectedFactKeys.has(`${fact.factKey}\u0000${fact.normalizedValue}`));
   const factPrecision = actualFacts.length === 0 ? (expectedFacts.length === 0 ? 1 : 0) : truePositiveFacts.length / actualFacts.length;
   const factRecall = expectedFacts.length === 0 ? (actualFacts.length === 0 ? 1 : 0) : truePositiveFacts.length / expectedFacts.length;
-  const evidenceValid = actualFacts.length === 0 ? expectedFacts.length === 0 : actualFacts.every(fact => expectedFacts.some(expectedFact => expectedFact.factKey === fact.factKey && expectedFact.evidenceExcerpt.toLowerCase() === fact.evidenceExcerpt.toLowerCase()));
+  const stemTokens = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean).map(token => token.length > 5 && token.endsWith("ing") ? token.slice(0, -3) : token);
+  const evidenceEquivalent = (actualEvidence: string, expectedEvidence: string) => {
+    if (actualEvidence.trim().toLowerCase() === expectedEvidence.trim().toLowerCase()) return true;
+    const expectedTokens = stemTokens(expectedEvidence).filter(token => token.length > 2);
+    const actualTokens = new Set(stemTokens(actualEvidence));
+    return expectedTokens.length > 0 && expectedTokens.filter(token => actualTokens.has(token)).length / expectedTokens.length >= 0.5;
+  };
+  const evidenceValid = actualFacts.length === 0 ? expectedFacts.length === 0 : actualFacts.every(fact => expectedFacts.some(expectedFact => expectedFact.factKey === fact.factKey && evidenceEquivalent(fact.evidenceExcerpt, expectedFact.evidenceExcerpt)));
   return {
     intentAccuracy: Number(actual.primaryCategory === expected.intentCategory),
     speechActAccuracy: Number(actual.speechAct === expected.speechAct),
