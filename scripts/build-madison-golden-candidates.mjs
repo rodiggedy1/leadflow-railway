@@ -30,16 +30,24 @@ function anonymize(text, senderName) {
   return { value: value.trim(), replacements };
 }
 
-function parseHistory(raw, currentMessage) {
+function parseHistory(raw, currentMessageId, currentTimestamp) {
   try {
     const messages = JSON.parse(String(raw ?? "[]"));
     if (!Array.isArray(messages)) return [];
-    return messages
+    const cutoff = Number(currentTimestamp);
+    const currentIndex = messages.findIndex(message => message?.opMsgId === currentMessageId);
+    const priorMessages = currentIndex >= 0
+      ? messages.slice(0, currentIndex)
+      : Number.isFinite(cutoff)
+        ? messages.filter(message => Number(message?.ts) < cutoff)
+        : [];
+    return priorMessages
       .map((message) => ({
         role: message?.role === "assistant" ? "assistant" : message?.role === "user" ? "user" : null,
         content: typeof message?.content === "string" ? message.content.trim() : "",
+        timestamp: Number(message?.ts),
       }))
-      .filter((message) => message.role && message.content && message.content !== currentMessage)
+      .filter((message) => message.role && message.content && Number.isFinite(message.timestamp))
       .slice(-4)
       .map((message) => ({ role: message.role, content: anonymize(message.content).value }));
   } catch {
@@ -77,7 +85,7 @@ try {
 
   const scenarios = selected.map((row, index) => {
     const inbound = anonymize(row.originalMessage, row.senderName);
-    const context = parseHistory(row.messageHistory, row.originalMessage);
+    const context = parseHistory(row.messageHistory, row.inboundOpenPhoneId, row.createdAt);
     return {
       caseId: `MADISON-${String(index + 1).padStart(3, "0")}`,
       split: index < DEV_SIZE ? "development" : "held_out",
