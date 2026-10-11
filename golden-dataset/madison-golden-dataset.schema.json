@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://leadflow.local/schemas/madison-golden-dataset-v1.json",
+  "title": "Madison Golden Dataset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["datasetVersion", "createdAt", "approvalPolicy", "provenance", "scenarios"],
+  "properties": {
+    "datasetVersion": { "const": "madison-golden-v1" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "approvalPolicy": { "const": "human_approval_required" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "labels", "generatedText"],
+      "properties": {
+        "source": { "const": "read_only_madison_sms_drafts" },
+        "labels": { "const": "unapproved_until_human_review" },
+        "generatedText": { "const": "none" }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 50,
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/scenario" }
+    }
+  },
+  "$defs": {
+    "contextMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "content"],
+      "properties": {
+        "role": { "enum": ["user", "assistant"] },
+        "content": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["factKey", "normalizedValue", "evidenceExcerpt"],
+      "properties": {
+        "factKey": { "type": "string", "minLength": 1 },
+        "normalizedValue": { "type": "string", "minLength": 1 },
+        "evidenceExcerpt": { "type": "string", "minLength": 1 },
+        "sourceMessageId": { "type": "string" },
+        "conflictGroup": { "type": "string" }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intentCategory", "mission", "facts", "extractionCompleteness", "taskCompleteness", "missingInformation", "conflictingInformation", "targetResolutionState", "replyReadiness", "actionReadiness", "forbiddenOperationalActions"],
+      "properties": {
+        "intentCategory": { "type": ["string", "null"] },
+        "mission": { "type": ["string", "null"] },
+        "facts": { "type": ["array", "null"], "items": { "$ref": "#/$defs/fact" } },
+        "extractionCompleteness": { "enum": ["COMPLETE", "PARTIAL", "NO_FACTS_PRESENT", null] },
+        "taskCompleteness": { "type": ["string", "null"] },
+        "missingInformation": { "type": ["array", "null"], "items": { "type": "string" } },
+        "conflictingInformation": { "type": ["array", "null"], "items": { "type": "string" } },
+        "targetResolutionState": { "type": ["string", "null"] },
+        "replyReadiness": { "enum": ["READY", "NOT_READY", "UNKNOWN", null] },
+        "actionReadiness": { "enum": ["READY", "NOT_READY", "UNKNOWN", null] },
+        "forbiddenOperationalActions": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "split", "approvalState", "sourceMessageIdHash", "sourceCapturedAt", "currentInboundMessage", "priorConversationContext", "sourceMetadataForLabeler", "expected", "labeling", "anonymization"],
+      "properties": {
+        "caseId": { "type": "string", "pattern": "^MADISON-[0-9]{3}$" },
+        "split": { "enum": ["development", "held_out"] },
+        "approvalState": { "enum": ["candidate_unreviewed", "human_approved", "rejected"] },
+        "sourceMessageIdHash": { "type": "string", "minLength": 12 },
+        "sourceDraftId": { "type": "integer" },
+        "sourceCapturedAt": { "type": "string", "format": "date-time" },
+        "currentInboundMessage": { "type": "string", "minLength": 1 },
+        "priorConversationContext": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/contextMessage" } },
+        "sourceMetadataForLabeler": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["observedMessageType", "observedDraftStatus", "sessionIdHash"],
+          "properties": {
+            "observedMessageType": { "type": ["string", "null"] },
+            "observedDraftStatus": { "type": ["string", "null"] },
+            "sessionIdHash": { "type": "string" }
+          }
+        },
+        "expected": { "$ref": "#/$defs/expected" },
+        "labeling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["labelerId", "labeledAt", "reviewNotes"],
+          "properties": {
+            "labelerId": { "type": ["string", "null"] },
+            "labeledAt": { "type": ["string", "null"] },
+            "reviewNotes": { "type": ["string", "null"] }
+          }
+        },
+        "anonymization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "replacements", "piiReviewRequired"],
+          "properties": {
+            "version": { "type": "string" },
+            "replacements": { "type": "array", "items": { "type": "string" } },
+            "piiReviewRequired": { "const": true }
+          }
+        }
+      }
+    }
+  }
+}

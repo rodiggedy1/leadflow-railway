@@ -1,0 +1,237 @@
+{
+  "reportVersion": "madison-golden-evaluation-v1",
+  "generatedAt": "2026-10-11T00:59:24.149Z",
+  "datasetPath": "/home/ubuntu/leadflow-schedule-booking-preview-release/golden-dataset/candidates.json",
+  "approvalPolicy": "Only human_approved cases may be scored. Unapproved cases are never used for accuracy claims.",
+  "runtime": {
+    "model": "gpt-4o",
+    "providerPath": "classifyMadisonMessageShadow -> invokeLLM -> https://api.openai.com/v1/chat/completions",
+    "openAiKeyPresence": "present",
+    "environmentName": "local",
+    "commitSha": "unknown"
+  },
+  "summary": {
+    "datasetVersion": "madison-golden-v1",
+    "totalCases": 40,
+    "scoredCases": 0,
+    "unscoredUnapprovedCases": 0,
+    "runnerErrorCases": 40,
+    "metrics": {
+      "intentAccuracy": null,
+      "missionAccuracy": null,
+      "factPrecision": null,
+      "factRecall": null,
+      "evidenceValidity": null,
+      "contextCorrectness": null,
+      "extractionCompletenessAccuracy": null,
+      "structuredOutputSuccess": null,
+      "persistenceReliability": null,
+      "missingInformationAccuracy": null,
+      "replyReadinessAccuracy": null,
+      "actionReadinessAccuracy": null
+    },
+    "accuracyClaimAllowed": false
+  },
+  "results": [
+    {
+      "caseId": "MADISON-001",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-002",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-003",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-004",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-005",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-006",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-007",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-008",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-009",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-010",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-011",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-012",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-013",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-014",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-015",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-016",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-017",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-018",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-019",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-020",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-021",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-022",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-023",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-024",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-025",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-026",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-027",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-028",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-029",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-030",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-031",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-032",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-033",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-034",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-035",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-036",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-037",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-038",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-039",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    },
+    {
+      "caseId": "MADISON-040",
+      "status": "runner_error",
+      "error": "LLM invoke failed: 401 Unauthorized – {\"message\":\"Incorrect API key provided: sk-3bZAb*************vxv8. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\",\"param\":null}"
+    }
+  ]
+}

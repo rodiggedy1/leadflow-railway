@@ -456,6 +456,7 @@ export default function MadisonFocus() {
                   <div style={{ fontSize: 14, opacity: 0.8, marginTop: 4 }}>Review and act on pending items</div>
                 </div>
               </div>
+              <button type="button" onClick={() => navigate("/admin/madison-golden-test")} style={{ border: "1px solid rgba(255,255,255,.45)", background: "rgba(255,255,255,.14)", color: "#fff", borderRadius: 10, padding: "9px 12px", fontWeight: 800, cursor: "pointer" }}>Open AI Golden Test →</button>
               {isLoading ? (
                 <div style={{ fontSize: 17, opacity: 0.8 }}>Loading…</div>
               ) : cards.length === 0 ? (

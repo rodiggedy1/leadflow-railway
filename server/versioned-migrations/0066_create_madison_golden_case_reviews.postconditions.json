@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "table": "madison_golden_case_reviews",
+  "columns": [
+    { "name": "id", "columnType": "bigint", "nullable": false, "autoIncrement": true },
+    { "name": "caseId", "columnType": "varchar(32)", "nullable": false },
+    { "name": "rating", "columnType": "enum('correct','incorrect','uncertain')", "nullable": false },
+    { "name": "reviewer", "columnType": "varchar(128)", "nullable": false },
+    { "name": "notes", "columnType": "text", "nullable": true },
+    { "name": "actualPrediction", "columnType": "json", "nullable": true },
+    { "name": "reviewedAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "uq_madison_golden_case_review_case", "columns": ["caseId"], "unique": true }
+  ]
+}

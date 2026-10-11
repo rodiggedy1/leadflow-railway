@@ -69,6 +69,7 @@ const ReadinessDashboard = lazy(() => import("./pages/ReadinessDashboard"));
 const MadisonDebugPanel = lazy(() => import("./pages/MadisonDebugPanel"));
 const MadisonDebrief = lazy(() => import("./pages/MadisonDebrief"));
 const MadisonFocus = lazy(() => import("./pages/MadisonFocus"));
+const MadisonGoldenTest = lazy(() => import("./pages/MadisonGoldenTest"));
 const RevenueAgent = lazy(() => import("./pages/RevenueAgent"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
@@ -279,6 +280,7 @@ function Router() {
         <Route path={"/admin/team"} component={AdminTeamExactLiveRoute} />
         <Route path={"/admin/ai-actions"} component={AiActionsControlCenterRoute} />
         <Route path={"/admin/madison-focus"} component={MadisonFocus} />
+        <Route path={"/admin/madison-golden-test"} component={MadisonGoldenTest} />
         <Route path={"/admin/madison-debrief"} component={DebriefRedirect} />
         <Route path={"/madison-debug"} component={MadisonDebugPanel} />
         <Route path={"/welcome/:firstName"} component={WelcomePage} />

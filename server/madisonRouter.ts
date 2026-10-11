@@ -1,5 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { z } from "zod";
 import { conversationSessions, issueEngineTable, issueEngineTimeline, madisonConversationFactEvents, madisonSmsDrafts, opsChatMessages } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -8,6 +10,32 @@ import { broadcastOpsUpdate } from "./sseBroadcast";
 import { buildMadisonActionProposal, madisonSmsActionApprovals } from "./madisonActionApprovalStore";
 import type { MadisonDecisionEvaluation } from "./madisonDecisionEvaluator";
 import { evaluateMadisonSupportTaskForDraft } from "./madisonReplyDecision";
+import type { GoldenDataset } from "./madisonGoldenDataset";
+import { madisonGoldenCaseReviews, madisonGoldenReviewRatings } from "./madisonGoldenReviewStore";
+import { classifyMadisonMessageShadow } from "./madisonMessageUnderstanding";
+
+function loadGoldenDataset(): GoldenDataset {
+  return JSON.parse(readFileSync(resolve(process.cwd(), "golden-dataset/candidates.json"), "utf8")) as GoldenDataset;
+}
+
+function publicGoldenCase(scenario: GoldenDataset["scenarios"][number], review: typeof madisonGoldenCaseReviews.$inferSelect | undefined) {
+  return {
+    caseId: scenario.caseId,
+    split: scenario.split,
+    approvalState: scenario.approvalState,
+    currentInboundMessage: scenario.currentInboundMessage,
+    priorConversationContext: scenario.priorConversationContext,
+    expected: scenario.expected,
+    labeling: scenario.labeling,
+    review: review ? {
+      rating: review.rating,
+      reviewer: review.reviewer,
+      notes: review.notes,
+      actualPrediction: review.actualPrediction,
+      reviewedAt: review.reviewedAt,
+    } : null,
+  };
+}
 
 const SKIP_DEFER_MS = 4 * 60 * 60 * 1000;
 
@@ -416,6 +444,57 @@ export const madisonRouter = router({
         .where(and(eq(opsChatMessages.id, input.messageId), eq(opsChatMessages.cardStatus as any, "active")));
       broadcastOpsUpdate("madison_sms_card_resolved", { messageId: input.messageId });
       return { ok: true as const };
+    }),
+  getGoldenTestCases: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const dataset = loadGoldenDataset();
+    const reviews = await db.select().from(madisonGoldenCaseReviews);
+    const reviewByCase = new Map(reviews.map(review => [review.caseId, review]));
+    return dataset.scenarios.map(scenario => publicGoldenCase(scenario, reviewByCase.get(scenario.caseId)));
+  }),
+  runGoldenTestCase: opsChatProcedure
+    .input(z.object({ caseId: z.string().regex(/^MADISON-\d{3}$/) }))
+    .mutation(async ({ input }) => {
+      const scenario = loadGoldenDataset().scenarios.find(item => item.caseId === input.caseId);
+      if (!scenario) throw new TRPCError({ code: "NOT_FOUND", message: "Golden Test case not found" });
+      const actual = await classifyMadisonMessageShadow({
+        inboundText: scenario.currentInboundMessage,
+        conversationMessages: scenario.priorConversationContext,
+      });
+      return { caseId: scenario.caseId, actual, providerPath: "classifyMadisonMessageShadow -> invokeLLM", model: actual.model };
+    }),
+  saveGoldenTestRating: opsChatProcedure
+    .input(z.object({
+      caseId: z.string().regex(/^MADISON-\d{3}$/),
+      rating: z.enum(madisonGoldenReviewRatings),
+      notes: z.string().max(2000).nullable().optional(),
+      actualPrediction: z.unknown().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const scenario = loadGoldenDataset().scenarios.find(item => item.caseId === input.caseId);
+      if (!scenario) throw new TRPCError({ code: "NOT_FOUND", message: "Golden Test case not found" });
+      if (scenario.split === "held_out") throw new TRPCError({ code: "FORBIDDEN", message: "Held-out cases are locked until development review is complete" });
+      const now = new Date();
+      await db.insert(madisonGoldenCaseReviews).values({
+        caseId: input.caseId,
+        rating: input.rating,
+        reviewer: ctx.opsCaller.name,
+        notes: input.notes ?? null,
+        actualPrediction: input.actualPrediction ?? null,
+        reviewedAt: now,
+        updatedAt: now,
+      }).onDuplicateKeyUpdate({ set: {
+        rating: input.rating,
+        reviewer: ctx.opsCaller.name,
+        notes: input.notes ?? null,
+        actualPrediction: input.actualPrediction ?? null,
+        reviewedAt: now,
+        updatedAt: now,
+      } });
+      return { ok: true as const, caseId: input.caseId, rating: input.rating };
     }),
   getNextBestActions: opsChatProcedure.query(async () => {
     const candidates = await loadMadisonCandidates();

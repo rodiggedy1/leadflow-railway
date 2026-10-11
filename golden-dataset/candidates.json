@@ -1,0 +1,2762 @@
+{
+  "datasetVersion": "madison-golden-v1",
+  "createdAt": "2026-10-11T00:51:05.470Z",
+  "approvalPolicy": "human_approval_required",
+  "provenance": {
+    "source": "read_only_madison_sms_drafts",
+    "labels": "unapproved_until_human_review",
+    "generatedText": "none"
+  },
+  "scenarios": [
+    {
+      "caseId": "MADISON-001",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "99b772a29a22e87762d35d86",
+      "sourceDraftId": 3061622,
+      "sourceCapturedAt": "2026-10-11T00:44:09.773Z",
+      "currentInboundMessage": "Can you change my booking to monthly",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you cancel service"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-002",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "de8174c4dd45ea1c9962f3c8",
+      "sourceDraftId": 3061621,
+      "sourceCapturedAt": "2026-10-11T00:31:36.864Z",
+      "currentInboundMessage": "What cleaner supplies did you bring?",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-003",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "6a169a38928e83d6667851ee",
+      "sourceDraftId": 3061619,
+      "sourceCapturedAt": "2026-10-11T00:03:58.362Z",
+      "currentInboundMessage": "Hello - I don't have a cleaning scheduled for tomorrow",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hi Michael! 😊 Absolutely, we can reschedule your cleaning to next Friday. See you on 10/16/2026 12:30PM - 2:30PM! Looking forward to keeping your home feeling fresh. ✨"
+        },
+        {
+          "role": "user",
+          "content": "Perfect thank you!"
+        },
+        {
+          "role": "assistant",
+          "content": "Our pleasure Michael."
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Michael, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "c4996cef74f2a2d148068d63"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-004",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "328291790c5215802bf9bb75",
+      "sourceDraftId": 3061618,
+      "sourceCapturedAt": "2026-10-11T00:00:35.079Z",
+      "currentInboundMessage": "Ok",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Please reply CONFIRM to let us know you're all set!"
+        },
+        {
+          "role": "user",
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+        },
+        {
+          "role": "user",
+          "content": "and there is a house in Maryland?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "45706befa62191cc843396e4"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-005",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "13e9b4f6e3e475224f641c4d",
+      "sourceDraftId": 3061616,
+      "sourceCapturedAt": "2026-10-10T23:26:16.069Z",
+      "currentInboundMessage": "and there is a house in Maryland?",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Please reply CONFIRM to let us know you're all set!"
+        },
+        {
+          "role": "user",
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        },
+        {
+          "role": "user",
+          "content": "Ok"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "45706befa62191cc843396e4"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-006",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "148ae7d9db4370255677a6dd",
+      "sourceDraftId": 3061614,
+      "sourceCapturedAt": "2026-10-10T23:24:31.287Z",
+      "currentInboundMessage": "Ok. Thank you!",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Does that mean that this is my new time slot tomorrow!"
+        },
+        {
+          "role": "user",
+          "content": "Sorry. I didn't mean the exclamation point. I meant to add a question mark."
+        },
+        {
+          "role": "assistant",
+          "content": "Yes, we schedule you at 3:30PM"
+        },
+        {
+          "role": "assistant",
+          "content": "You are welcome"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "4a951f83a0b4405653963bf1"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-007",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "eef18f24d83454ad8b2df80b",
+      "sourceDraftId": 3061608,
+      "sourceCapturedAt": "2026-10-10T22:31:02.554Z",
+      "currentInboundMessage": "I can do a visit after 3:30.",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Sorry. I didn't mean the exclamation point. I meant to add a question mark."
+        },
+        {
+          "role": "assistant",
+          "content": "Yes, we schedule you at 3:30PM"
+        },
+        {
+          "role": "user",
+          "content": "Ok. Thank you!"
+        },
+        {
+          "role": "assistant",
+          "content": "You are welcome"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "4a951f83a0b4405653963bf1"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-008",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "28075254d46168b870f6f2d6",
+      "sourceDraftId": 3061592,
+      "sourceCapturedAt": "2026-10-10T21:10:44.686Z",
+      "currentInboundMessage": "card payment",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+        },
+        {
+          "role": "user",
+          "content": "and there is a house in Maryland?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        },
+        {
+          "role": "user",
+          "content": "Ok"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "UNKNOWN",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "45706befa62191cc843396e4"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-009",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "4c797c279fc90416ba773d9c",
+      "sourceDraftId": 3061589,
+      "sourceCapturedAt": "2026-10-10T21:06:16.474Z",
+      "currentInboundMessage": "Yes and I'd like to use my complimentary cleaning",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Please remove me from the schedule tomorrow."
+        },
+        {
+          "role": "assistant",
+          "content": "Thanks for letting us know. We’ve removed you from the schedule for tomorrow. We completely understand, and whenever you're ready to use your free cleaning, just reach out and we’ll get you set up!"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Caity, this is Maids in Black! 🖤 Confirming your cleaning appointment tomorrow.\n\n✅ Reply YES to confirm\n🔄 Reply FLEXIBLE or NOT FLEXIBLE to let us know if you’re open to shifting your two-hour arrival window earlier or later\n\nQuick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\nThanks so much, looking forward to seeing you tomorrow! 😊"
+        },
+        {
+          "role": "assistant",
+          "content": "Noted. We'll get everything set up for you."
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "992048912c96d2ce8247b0aa"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-010",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "59f1e9a2428594058e7cd10c",
+      "sourceDraftId": 3061565,
+      "sourceCapturedAt": "2026-10-10T19:23:40.094Z",
+      "currentInboundMessage": "Morning please",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Morning please"
+        },
+        {
+          "role": "assistant",
+          "content": "Sure, How about 9:30 AM?"
+        },
+        {
+          "role": "user",
+          "content": "Yes"
+        },
+        {
+          "role": "assistant",
+          "content": "Great! I will move your schedule tomorrow at 9:30 AM. Thank you so much for your patience. We really appreciate you!"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "UNKNOWN",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "717066c78b3e04c8f48d5892"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-011",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "7643db7ece8701fd5459e0a6",
+      "sourceDraftId": 3061551,
+      "sourceCapturedAt": "2026-10-10T18:56:32.797Z",
+      "currentInboundMessage": "Thank you!",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hi Madi! Your Maids in Black team has arrived for your cleaning at 1150 First St Ne, Apt 1030, Washington, DC 20002.\n\nOpen My Home: <URL>"
+        },
+        {
+          "role": "user",
+          "content": "Thank you! Will they update when it is complete?"
+        },
+        {
+          "role": "assistant",
+          "content": "Sure, We will update you once it's completed"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Madi! ✨ Martha Calderon just finished your clean — your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to Martha Calderon:\n\nOpen My Home: <URL>"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "c91fc8caf3540b817938693f"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-012",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "e9ff7a99e4473411619f3a1e",
+      "sourceDraftId": 3061406,
+      "sourceCapturedAt": "2026-10-10T06:37:56.023Z",
+      "currentInboundMessage": "Cancel entirely",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-013",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "a782a9d42e21feaa9519ed90",
+      "sourceDraftId": 3061255,
+      "sourceCapturedAt": "2026-10-09T01:31:16.731Z",
+      "currentInboundMessage": "thanks! could you just confirm what's included in the deep cleaning and what, approximate,  window you'd have on that Thursday afternoon?",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "thank you for the quick response! I'm reviewing a few quotes and will be making a decision in the morning. I'll plan to reach out then,   thank you again!"
+        },
+        {
+          "role": "assistant",
+          "content": "You're welcome, Christopher! Take all the time you need, and we'll be here ready to assist whenever you decide. Have a great evening! 😊"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Christopher, made you a custom link you can use to hold onto your quote and book when you're ready. We've filled in most of the details in about 60 seconds :) <URL>"
+        },
+        {
+          "role": "assistant",
+          "content": "Hello Christopher,\nWhen you have a moment, could you please provide your home address and email address so we can send your confirmation and finalize the details?\n\nWe can certainly schedule this for tomorrow with an arrival window between 10:30 AM and 12:30 PM.\nThank you, and we look forward to hearing from you."
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "53e0c2a0dad00aad23df4881"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-014",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "cee0ccb7e6fe65fd73abf66b",
+      "sourceDraftId": 3061238,
+      "sourceCapturedAt": "2026-10-08T22:47:00.083Z",
+      "currentInboundMessage": "Sorry my helper can't do it tomorrow",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "I was talking about the move in service"
+        },
+        {
+          "role": "user",
+          "content": "At 6 pm"
+        },
+        {
+          "role": "assistant",
+          "content": "no they didn't do it. can you work tomorrow? Yes. No. For a minimum of $400."
+        },
+        {
+          "role": "user",
+          "content": "For tomorrow none of them can't they said next week they can do 7 days thank you"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "6ef601ef7d753427c2777f62"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-015",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "96e3ab94b0daf5b4c48e787d",
+      "sourceDraftId": 3061026,
+      "sourceCapturedAt": "2026-10-08T00:13:36.318Z",
+      "currentInboundMessage": "We not go to brandywine",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hey GoGreen — reminder for your cleaning at 4:30 PM.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Team, can you give us your ETA for  Michael Murphy at 4835 Cordell Ave Apt 1124, Bethesda, MD 20814"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey — we haven't received your check-in. Is everything okay?\n<URL>"
+        },
+        {
+          "role": "assistant",
+          "content": "Would anyone work tomorrow for a minimum of $400 😊"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "UNKNOWN",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "74d8f0e55977b0cfecc66b16"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-016",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "ae01fb3e00d204c896b35a60",
+      "sourceDraftId": 3060800,
+      "sourceCapturedAt": "2026-10-06T18:35:17.493Z",
+      "currentInboundMessage": "I think I answered yours in Thumbtack. What time are you available on October 15 or 16th",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Thank you for your help.   I went with another vendor.   I'll keep you in mind for future jobs.   Thank you again for your time"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Kathleen, thanks so much for letting us know! 😊 We totally understand and appreciate you considering us. If you ever need a clean in the future, we’ll be ready to help. Wishing you a great day! 🏡✨"
+        },
+        {
+          "role": "user",
+          "content": "Thank you so much!"
+        },
+        {
+          "role": "assistant",
+          "content": "You are most welcome"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "FAILED",
+        "sessionIdHash": "5a8cd28775e3623c80e54c2e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-017",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "adeb29b9b8b2775acea76370",
+      "sourceDraftId": 3060759,
+      "sourceCapturedAt": "2026-10-06T13:52:30.303Z",
+      "currentInboundMessage": "I want to reschedule for tomorrow, the fifth",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "FAILED",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-018",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "23af7b8aad84c3f96dbb8ddf",
+      "sourceDraftId": 3060752,
+      "sourceCapturedAt": "2026-10-06T12:35:05.878Z",
+      "currentInboundMessage": "1700, 3 bedrooms and 2 bathrooms, townhouse, no pets, 6-7",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Are you moving in/out? what is the reason why you're needing this cleaning done?"
+        },
+        {
+          "role": "user",
+          "content": "No. This is for my son and he has 4 small children. Cleaning is the one thing he really needs help with..."
+        },
+        {
+          "role": "assistant",
+          "content": "Absolutely, we understand! With four small children, a deep cleaning would be a great option to give him a fresh start and take some of that stress off his plate. The price for the deep cleaning would be $448. \n\nWhen would you like us to schedule the cleaning?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Patricia, we have a spot for tomorrow,. would you like to take it?"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": null,
+        "observedDraftStatus": "RECEIVED",
+        "sessionIdHash": "ad3236c0ae4367662d2d3304"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-019",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "dde6b64b2b54e258c24d89a8",
+      "sourceDraftId": 3061620,
+      "sourceCapturedAt": "2026-10-11T00:04:07.996Z",
+      "currentInboundMessage": "Can you reschedule please",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you cancel service"
+        },
+        {
+          "role": "user",
+          "content": "Can you cancel service"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-020",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "1d2576bd0f4af4fa8e54915e",
+      "sourceDraftId": 3061615,
+      "sourceCapturedAt": "2026-10-10T23:25:55.887Z",
+      "currentInboundMessage": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400.",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Please reply CONFIRM to let us know you're all set!"
+        },
+        {
+          "role": "user",
+          "content": "and there is a house in Maryland?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        },
+        {
+          "role": "user",
+          "content": "Ok"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "45706befa62191cc843396e4"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-021",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "e23d0bdb9a3c32c7c2fa355c",
+      "sourceDraftId": 3061609,
+      "sourceCapturedAt": "2026-10-10T22:40:20.120Z",
+      "currentInboundMessage": "I don't have any job today",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hi Pilar Duarte! Here's your schedule for tomorrow, Saturday, October 10:\n\n1. 12:30 PM — Jill Caiazzo, 5806 Arlington Boulevard, Arlington, VA 22204\n\nPlease reply CONFIRM to let us know you're all set! 🧹"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Pilar! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Pilar — reminder for your cleaning at 12:30 PM.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey — we haven't received your check-in. Is everything okay?\n<URL>"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "64783210c1bc846e270d3820"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-022",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "a6a96612928a5f43a25d6d51",
+      "sourceDraftId": 3061607,
+      "sourceCapturedAt": "2026-10-10T22:30:33.489Z",
+      "currentInboundMessage": "No",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Sorry. I didn't mean the exclamation point. I meant to add a question mark."
+        },
+        {
+          "role": "assistant",
+          "content": "Yes, we schedule you at 3:30PM"
+        },
+        {
+          "role": "user",
+          "content": "Ok. Thank you!"
+        },
+        {
+          "role": "assistant",
+          "content": "You are welcome"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "4a951f83a0b4405653963bf1"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-023",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "b44ae4d381bd24ba7c0b3a88",
+      "sourceDraftId": 3061613,
+      "sourceCapturedAt": "2026-10-10T23:05:39.217Z",
+      "currentInboundMessage": "What link?",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Not flexible are you available to come in the evening"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi what time in the evening were you thinking, as in last job like 4:30 pm?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi what time in the evening were you thinking, as in last job like 4:30 pm?"
+        },
+        {
+          "role": "assistant",
+          "content": "To secure your cleaning appointment, we just need a card on file via our secure Stripe link:\n\n<URL>\n\n🔒 100% secure – no one on our team sees or stores your card info\n\n✅ Pre-auth only – you're NOT charged yet\n\n💳 Payment only processed after your cleaning is complete\n\nReply if you have any questions! 🧹✨"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "c60af09c86cd755f54a4230e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-024",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "767707560e0b88173b91a4ef",
+      "sourceDraftId": 3061611,
+      "sourceCapturedAt": "2026-10-10T22:47:35.141Z",
+      "currentInboundMessage": "Sorry. I didn't mean the exclamation point. I meant to add a question mark.",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Sorry. I didn't mean the exclamation point. I meant to add a question mark."
+        },
+        {
+          "role": "assistant",
+          "content": "Yes, we schedule you at 3:30PM"
+        },
+        {
+          "role": "user",
+          "content": "Ok. Thank you!"
+        },
+        {
+          "role": "assistant",
+          "content": "You are welcome"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "4a951f83a0b4405653963bf1"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-025",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "7ec3d317c8d1ea92c44fe9a2",
+      "sourceDraftId": 3061606,
+      "sourceCapturedAt": "2026-10-10T22:25:30.739Z",
+      "currentInboundMessage": "2800\n4 bedroom 4 bath\nNo pets\n\nSingle Family Home \n6 to 7\nDeep Clean/Standard",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "6 to 7."
+        },
+        {
+          "role": "assistant",
+          "content": "Hi! 😊 To help us provide an accurate quote, could you please share a few details about your home?\n\nSquare footage: Approximately how many square feet is your home?\nBedrooms and bathrooms: How many of each?\nPets: Do you have any pets?\nProperty type: Is it a single-family home, townhouse, condo, or apartment?\nCondition: On a scale of 1–10, with 10 being the dirtiest, how would you rate your home's current condition?\nOccupancy: Is the home empty or furnished?\nType of cleaning: Are you looking for a standard cleaning, deep cleaning, move-in cleaning, or move-out cleaning?\n\nOnce I have these details, I'll be happy to provide you with a quote! 😊"
+        },
+        {
+          "role": "assistant",
+          "content": "For your 4 beds and 4 baths deep cleaning we charge $420.\nBut if you only want a standard cleaning, we charge $340"
+        },
+        {
+          "role": "assistant",
+          "content": "when would you like to do the cleaning?"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "c127a7c47f2eb31d0e5cf6f8"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-026",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "ecc9755550157804647d1e1b",
+      "sourceDraftId": 3061555,
+      "sourceCapturedAt": "2026-10-10T19:04:22.299Z",
+      "currentInboundMessage": "I’m not sure I’d say definitely the two bathrooms upstairs and the bathroom upstairs.",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hi what time in the evening were you thinking, as in last job like 4:30 pm?"
+        },
+        {
+          "role": "user",
+          "content": "What link?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi what time in the evening were you thinking, as in last job like 4:30 pm?"
+        },
+        {
+          "role": "assistant",
+          "content": "To secure your cleaning appointment, we just need a card on file via our secure Stripe link:\n\n<URL>\n\n🔒 100% secure – no one on our team sees or stores your card info\n\n✅ Pre-auth only – you're NOT charged yet\n\n💳 Payment only processed after your cleaning is complete\n\nReply if you have any questions! 🧹✨"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "UNKNOWN",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "c60af09c86cd755f54a4230e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-027",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "18842f190a0a90dcceb6437a",
+      "sourceDraftId": 3061580,
+      "sourceCapturedAt": "2026-10-10T20:21:02.547Z",
+      "currentInboundMessage": "I need a refund",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hi Sean we could still come out on Monday and perform the service but we do not have control over the actual banking system, it's not within our control. We have already released theh hold on our end. Can send a screenshot to show this if needed."
+        },
+        {
+          "role": "user",
+          "content": "I don't wan't the service, I just want the refund"
+        },
+        {
+          "role": "user",
+          "content": "payment was reversed, no issues"
+        },
+        {
+          "role": "assistant",
+          "content": "Thank you for the update"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "5b74b95497c8ea4fbfa1cb31"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-028",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "002a2dd3dbd326fbd607ccd9",
+      "sourceDraftId": 3061547,
+      "sourceCapturedAt": "2026-10-10T18:53:06.947Z",
+      "currentInboundMessage": "4:20",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "So you already went there but the 2 ladies were not allowed to enter, right?"
+        },
+        {
+          "role": "user",
+          "content": "Correct"
+        },
+        {
+          "role": "assistant",
+          "content": "noted team"
+        },
+        {
+          "role": "assistant",
+          "content": "Would anyone work tomorrow for a minimum of $400 😊"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "UNKNOWN",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "d59a4afa54e139799db39d4c"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-029",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "ab311ca20fd845b242eef1cb",
+      "sourceDraftId": 3061535,
+      "sourceCapturedAt": "2026-10-10T18:24:44.354Z",
+      "currentInboundMessage": "Ok thank you",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Ok thank you"
+        },
+        {
+          "role": "assistant",
+          "content": "You're welcome! 😊"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Abiy! Your Maids in Black team has arrived for your cleaning at 5608 Kansas Ave Nw Suite G, Washington, DC 20011.\n\nOpen My Home: <URL>"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Abiy! ✨ MaidsPlus just finished your clean — your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to MaidsPlus:\n\nOpen My Home: <URL>"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "4c3eb180a93fd4b9092e138b"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-030",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "80b4aa311e732b32cd20027f",
+      "sourceDraftId": 3061405,
+      "sourceCapturedAt": "2026-10-10T06:30:56.787Z",
+      "currentInboundMessage": "Can you cancel my booking",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-031",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "b123ef2cd3f932acf0a53d14",
+      "sourceDraftId": 3061171,
+      "sourceCapturedAt": "2026-10-08T19:07:32.460Z",
+      "currentInboundMessage": "And I understand there is the two hour window, but if the crew has not started by 10:30 I will not be able to have a cleaning at all tomorrow",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "I was very clear I needed the cleaning to be started no later than 1030.  An arrival time of 12 o'clock is unacceptable"
+        },
+        {
+          "role": "assistant",
+          "content": "Hello Lindsey, I’m sorry for the confusion. The team arrived at 8:30 and has already completed the job. We apologize for the mix-up; they accidentally updated the wrong job. They meant to say that they were heading to the next job. Thank you for your understanding!"
+        },
+        {
+          "role": "user",
+          "content": "Thank you for clarifying"
+        },
+        {
+          "role": "assistant",
+          "content": "Thank you for everything and Enjoy the weekend."
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "bd3de2520aea4d9239060b65"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-032",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "58f12bccc11f22cf67563003",
+      "sourceDraftId": 3061192,
+      "sourceCapturedAt": "2026-10-08T20:19:12.372Z",
+      "currentInboundMessage": "Yo no estoy en Virginia estoy en Miami por eso no puedo trabajar te aviso cuando regrese a Virginia",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Noted team"
+        },
+        {
+          "role": "user",
+          "content": "Gracias"
+        },
+        {
+          "role": "assistant",
+          "content": "You're welcome"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey S, — you've just been assigned a cleaning at 12:30 PM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "c79f55e9ce258655dca9d72f"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-033",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "42e7ca91ff5c5fe0a5084c9b",
+      "sourceDraftId": 3060799,
+      "sourceCapturedAt": "2026-10-06T18:33:29.895Z",
+      "currentInboundMessage": "what's your availability on October 15 or 16th?",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Thank you for your help.   I went with another vendor.   I'll keep you in mind for future jobs.   Thank you again for your time"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Kathleen, thanks so much for letting us know! 😊 We totally understand and appreciate you considering us. If you ever need a clean in the future, we’ll be ready to help. Wishing you a great day! 🏡✨"
+        },
+        {
+          "role": "user",
+          "content": "Thank you so much!"
+        },
+        {
+          "role": "assistant",
+          "content": "You are most welcome"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "FAILED",
+        "sessionIdHash": "5a8cd28775e3623c80e54c2e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-034",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "e8df2bca5b64bf302c2673ee",
+      "sourceDraftId": 3061617,
+      "sourceCapturedAt": "2026-10-10T23:48:33.037Z",
+      "currentInboundMessage": "Can you reschedule please",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you cancel service"
+        },
+        {
+          "role": "user",
+          "content": "Can you cancel service"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-035",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "4edeaa652fd8083665527683",
+      "sourceDraftId": 3061610,
+      "sourceCapturedAt": "2026-10-10T22:47:08.687Z",
+      "currentInboundMessage": "Does that mean that this is my new time slot tomorrow!",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Sorry. I didn't mean the exclamation point. I meant to add a question mark."
+        },
+        {
+          "role": "assistant",
+          "content": "Yes, we schedule you at 3:30PM"
+        },
+        {
+          "role": "user",
+          "content": "Ok. Thank you!"
+        },
+        {
+          "role": "assistant",
+          "content": "You are welcome"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "4a951f83a0b4405653963bf1"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-036",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "1f65073e346c221e16bb3032",
+      "sourceDraftId": 3061601,
+      "sourceCapturedAt": "2026-10-10T21:24:24.707Z",
+      "currentInboundMessage": "I did my work.",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+        },
+        {
+          "role": "user",
+          "content": "and there is a house in Maryland?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        },
+        {
+          "role": "user",
+          "content": "Ok"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "45706befa62191cc843396e4"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-037",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "66b0ae17b5c7f4e549b626e2",
+      "sourceDraftId": 3061605,
+      "sourceCapturedAt": "2026-10-10T22:10:39.868Z",
+      "currentInboundMessage": "Yes",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hey JessiCleaning — you've just been assigned a cleaning at 10:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi JessiCleaning Team! Here's your schedule for tomorrow, Sunday, October 11:\n\n1. 9:30 AM — Michael Murphy, 4835 Cordell Ave Apt 1124, Bethesda, MD 20814\n2. 10:30 AM — Adam Tanenbaum, 18520 Boysenberry Dr Unit #230, Montgomery Village, MD 20879\n\nPlease reply CONFIRM to let us know you're all set! 🧹"
+        },
+        {
+          "role": "assistant",
+          "content": "Please reply CONFIRM to let us know you're all set!"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey JessiCleaning! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "a5f30a7ee3024d41ce618858"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-038",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "d1088b6aa6953e1221c66240",
+      "sourceDraftId": 3061576,
+      "sourceCapturedAt": "2026-10-10T20:07:19.287Z",
+      "currentInboundMessage": "No tomorrow I was referring to do the move in service tomorrow instead of today at night time  \n\nWould it be possible for us to work Monday through Sunday this coming week? Thank you!",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "I was talking about the move in service"
+        },
+        {
+          "role": "user",
+          "content": "At 6 pm"
+        },
+        {
+          "role": "assistant",
+          "content": "no they didn't do it. can you work tomorrow? Yes. No. For a minimum of $400."
+        },
+        {
+          "role": "user",
+          "content": "For tomorrow none of them can't they said next week they can do 7 days thank you"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "6ef601ef7d753427c2777f62"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-039",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "911ab6c4a148a11370642679",
+      "sourceDraftId": 3061588,
+      "sourceCapturedAt": "2026-10-10T20:59:13.688Z",
+      "currentInboundMessage": "Okay",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+        },
+        {
+          "role": "user",
+          "content": "and there is a house in Maryland?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        },
+        {
+          "role": "user",
+          "content": "Ok"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "45706befa62191cc843396e4"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-040",
+      "split": "development",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "f0f2349fee91d5dcd5fb6bc1",
+      "sourceDraftId": 3061583,
+      "sourceCapturedAt": "2026-10-10T20:38:29.817Z",
+      "currentInboundMessage": "payment was reversed, no issues",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Sean your card was not charged. There is a pre-auth/hold that has already been reversed you will see the hold drop off usually in one business day. Sometimes instantly but this depends on your bank, it has already been released on our end. Sorry things did not work out."
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Sean we could still come out on Monday and perform the service but we do not have control over the actual banking system, it's not within our control. We have already released theh hold on our end. Can send a screenshot to show this if needed."
+        },
+        {
+          "role": "user",
+          "content": "I don't wan't the service, I just want the refund"
+        },
+        {
+          "role": "assistant",
+          "content": "Thank you for the update"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "5b74b95497c8ea4fbfa1cb31"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-041",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "15949a2bb8967171664390bb",
+      "sourceDraftId": 3061543,
+      "sourceCapturedAt": "2026-10-10T18:47:01.268Z",
+      "currentInboundMessage": "Madi Poulin",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Are you at the property now?"
+        },
+        {
+          "role": "user",
+          "content": "Yes"
+        },
+        {
+          "role": "assistant",
+          "content": "thanks team"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Martha — you've just been assigned a cleaning at 9:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "UNKNOWN",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "3c021170d8edcfa8bf2bffca"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-042",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "6dcb7343a45ed86af24f416f",
+      "sourceDraftId": 3061579,
+      "sourceCapturedAt": "2026-10-10T20:18:22.201Z",
+      "currentInboundMessage": "can you refund my money",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "Hi Sean we could still come out on Monday and perform the service but we do not have control over the actual banking system, it's not within our control. We have already released theh hold on our end. Can send a screenshot to show this if needed."
+        },
+        {
+          "role": "user",
+          "content": "I don't wan't the service, I just want the refund"
+        },
+        {
+          "role": "user",
+          "content": "payment was reversed, no issues"
+        },
+        {
+          "role": "assistant",
+          "content": "Thank you for the update"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "5b74b95497c8ea4fbfa1cb31"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-043",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "77b6ca53108b450e9fc7de17",
+      "sourceDraftId": 3061538,
+      "sourceCapturedAt": "2026-10-10T18:35:58.222Z",
+      "currentInboundMessage": "Not",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "So they won't be here until after 3:30pm? That's over 3 hours from the originally scheduled cleaning. Why did no one update me of this as soon as they realized the mix up? \n\nAt 2:30 you said they were on their way and they were 30 minutes away. \n\nThis is extremely frustrating as we are moving and have been waiting around with false or no communication at all from you guys."
+        },
+        {
+          "role": "user",
+          "content": "We would like to cancel our cleaning"
+        },
+        {
+          "role": "user",
+          "content": "We unfortunately no longer have time to continue to wait. Thank you."
+        },
+        {
+          "role": "assistant",
+          "content": "I am so sorry for the delay—I just saw your message. I also want to clarify that 3:30 PM is the team's estimated arrival time to get started, not when they will be finished. I completely understand how frustrating this is, especially during a move. As requested, I have processed the cancellation of your cleaning service. Again, we sincerely apologize for the miscommunication and all the inconvenience caused to you today!"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "UNKNOWN",
+        "observedDraftStatus": "DISMISSED",
+        "sessionIdHash": "2fea91b339605e3e0fd93dc9"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-044",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "9b292572879687edd6f137c5",
+      "sourceDraftId": 3061529,
+      "sourceCapturedAt": "2026-10-10T18:19:35.859Z",
+      "currentInboundMessage": "Thank you",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Oh no guys"
+        },
+        {
+          "role": "assistant",
+          "content": "No worries team"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey MaidsPlus — you've just been assigned a cleaning at 10:30 AM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey MaidsPlus — you've just been assigned a cleaning at 2:30 PM today.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n<URL>"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "CONVERSATION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "51fd6b6c066fa38716685f28"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-045",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "7d436e45a1b37e54133b0c74",
+      "sourceDraftId": 3061401,
+      "sourceCapturedAt": "2026-10-10T02:21:13.200Z",
+      "currentInboundMessage": "Hi, can you reschedule my service?",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-046",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "0f0a12c7d8c1fb72688271ae",
+      "sourceDraftId": 3061169,
+      "sourceCapturedAt": "2026-10-08T19:03:25.347Z",
+      "currentInboundMessage": "What does a prehold entail?",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "The ladies did an awesome job. I look forward to using you in the future"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Ugo! 🌟 Thank you so much for your kind words. We're thrilled to hear the team did an awesome job for you. Whenever you're ready to have us back, just let us know. We’d love to keep that fresh, clean feeling for you. Have a wonderful day! 😊💛"
+        },
+        {
+          "role": "user",
+          "content": "Will it be the same ladies?"
+        },
+        {
+          "role": "assistant",
+          "content": "Yes! We can set them as your preferred team so they'll handle all your cleaning appointments. If they ever take a day off, we'll let you know ahead of time so you can choose to either wait for their return or have a backup team step in."
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "3bf9b33f0261bcfe155dfdb1"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-047",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "a65ed7dd62cd4316e5cd7247",
+      "sourceDraftId": 3060854,
+      "sourceCapturedAt": "2026-10-06T23:31:21.889Z",
+      "currentInboundMessage": "My husband just updated it",
+      "priorConversationContext": [
+        {
+          "role": "assistant",
+          "content": "You can also relay your instructions here and we'll make sure to inform the team about it."
+        },
+        {
+          "role": "user",
+          "content": "I am driving back home"
+        },
+        {
+          "role": "assistant",
+          "content": "Drive safe! Whenever you get home or have a moment, just send any instructions over and I'll make sure to pass them along to the team"
+        },
+        {
+          "role": "assistant",
+          "content": "Hi Sabrina! ✨ Consuelo Alba just finished your clean — your home is sparkling!\n\nLeave a 5-star Thumbtack review and we'll add a $50 tip to Consuelo Alba:\n\nOpen My Home: <URL>"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "INFORMATION",
+        "observedDraftStatus": "SENT",
+        "sessionIdHash": "8ee172a425205687e39d2e9a"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-048",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "37f764aa29c03fd2bbe9a2c1",
+      "sourceDraftId": 3060791,
+      "sourceCapturedAt": "2026-10-06T18:20:26.606Z",
+      "currentInboundMessage": "I would like a quote for a cleaning",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "FAILED",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-049",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "7c2e3b3f744d96393f09a3b0",
+      "sourceDraftId": 3061612,
+      "sourceCapturedAt": "2026-10-10T22:52:02.469Z",
+      "currentInboundMessage": "Can you cancel service",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "Can you reschedule please"
+        },
+        {
+          "role": "user",
+          "content": "What cleaner supplies did you bring?"
+        },
+        {
+          "role": "user",
+          "content": "Can you change my booking to monthly"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "ACTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "60cf9ed1c15133b0dccff09e"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    },
+    {
+      "caseId": "MADISON-050",
+      "split": "held_out",
+      "approvalState": "candidate_unreviewed",
+      "sourceMessageIdHash": "27f55fd22cc45d435f9367b0",
+      "sourceDraftId": 3061596,
+      "sourceCapturedAt": "2026-10-10T21:19:10.622Z",
+      "currentInboundMessage": "I asked you if I could leave and check if I had already paid.",
+      "priorConversationContext": [
+        {
+          "role": "user",
+          "content": "Hi, sorry—I was told my day was set for 400 tomorrow, but I don't see it listed as 400."
+        },
+        {
+          "role": "user",
+          "content": "and there is a house in Maryland?"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Team! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹"
+        },
+        {
+          "role": "user",
+          "content": "Ok"
+        }
+      ],
+      "sourceMetadataForLabeler": {
+        "observedMessageType": "QUESTION",
+        "observedDraftStatus": "DRAFT_READY",
+        "sessionIdHash": "45706befa62191cc843396e4"
+      },
+      "expected": {
+        "intentCategory": null,
+        "mission": null,
+        "facts": null,
+        "extractionCompleteness": null,
+        "taskCompleteness": null,
+        "missingInformation": null,
+        "conflictingInformation": null,
+        "targetResolutionState": null,
+        "replyReadiness": null,
+        "actionReadiness": null,
+        "forbiddenOperationalActions": null
+      },
+      "labeling": {
+        "labelerId": null,
+        "labeledAt": null,
+        "reviewNotes": null
+      },
+      "anonymization": {
+        "version": "regex-v1-plus-sender-name",
+        "replacements": [],
+        "piiReviewRequired": true
+      }
+    }
+  ]
+}
