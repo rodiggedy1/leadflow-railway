@@ -28,6 +28,8 @@ export type GoldenScenario = {
   sourceCapturedAt: string;
   currentInboundMessage: string;
   currentActorRole: MadisonActorRole;
+  currentActorSource?: "SYSTEM" | "PHONE_DIRECTORY" | "INFERRED";
+  currentActorIdentityHash?: string | null;
   currentSourceMessageIdHash: string;
   priorConversationContext: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string | null }>;
   sourceMetadataForLabeler?: {

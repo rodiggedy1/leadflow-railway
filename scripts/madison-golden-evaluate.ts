@@ -62,6 +62,11 @@ for (const scenario of selected) {
     const actual = await classifyMadisonMessageShadow({
       inboundText: scenario.currentInboundMessage,
       actorRole: scenario.currentActorRole,
+      actor: {
+        role: scenario.currentActorRole === "cleaner" ? "CLEANER" : scenario.currentActorRole === "employee" || scenario.currentActorRole === "madison" ? "STAFF" : "CUSTOMER",
+        source: scenario.currentActorSource ?? "SYSTEM",
+        ...(scenario.currentActorIdentityHash ? { identityHash: scenario.currentActorIdentityHash } : {}),
+      },
       conversationMessages: scenario.priorConversationContext,
     });
     const scored = scenario.approvalState === "human_approved" ? scoreGoldenCase(scenario.expected, actual) : null;

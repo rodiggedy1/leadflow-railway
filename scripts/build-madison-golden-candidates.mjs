@@ -63,7 +63,7 @@ function parseHistory(raw, currentMessageId, currentTimestamp) {
 const db = await mysql.createConnection(process.env.DATABASE_URL);
 try {
   const [rows] = await db.query(`
-    SELECT d.id, d.inboundOpenPhoneId, d.sessionId, d.senderName, d.originalMessage,
+    SELECT d.id, d.inboundOpenPhoneId, d.sessionId, d.senderName, d.fromPhone, d.senderType, d.originalMessage,
            d.createdAt, d.messageType, d.status, s.messageHistory
     FROM madison_sms_drafts d
     LEFT JOIN conversation_sessions s ON s.id = d.sessionId
@@ -99,7 +99,9 @@ try {
       sourceDraftId: Number(row.id),
       sourceCapturedAt: new Date(row.createdAt).toISOString(),
       currentInboundMessage: inbound.value,
-      currentActorRole: "customer",
+      currentActorRole: row.senderType === "cleaner" ? "cleaner" : "customer",
+      currentActorSource: row.senderType === "cleaner" ? "PHONE_DIRECTORY" : "SYSTEM",
+      currentActorIdentityHash: row.senderType === "cleaner" && row.fromPhone ? hash(row.fromPhone.replace(/\D/g, "").slice(-10)) : null,
       currentSourceMessageIdHash: hash(row.inboundOpenPhoneId),
       priorConversationContext: context,
       sourceMetadataForLabeler: {

@@ -460,6 +460,12 @@ export const madisonRouter = router({
       if (!scenario) throw new TRPCError({ code: "NOT_FOUND", message: "Golden Test case not found" });
       const actual = await classifyMadisonMessageShadow({
         inboundText: scenario.currentInboundMessage,
+        actorRole: scenario.currentActorRole,
+        actor: {
+          role: scenario.currentActorRole === "cleaner" ? "CLEANER" : scenario.currentActorRole === "employee" || scenario.currentActorRole === "madison" ? "STAFF" : "CUSTOMER",
+          source: scenario.currentActorSource ?? "SYSTEM",
+          ...(scenario.currentActorIdentityHash ? { identityHash: scenario.currentActorIdentityHash } : {}),
+        },
         conversationMessages: scenario.priorConversationContext,
       });
       return { caseId: scenario.caseId, actual, providerPath: "classifyMadisonMessageShadow -> invokeLLM", model: actual.model };
