@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { madisonConversationFactEvents, madisonMessageUnderstanding } from "../drizzle/schema";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
+import { validateMadisonDecision, type MadisonDecisionDiagnostics } from "./madisonDecisionPolicy";
 
 export const MESSAGE_CATEGORIES = [
   "NEW_BOOKING",
@@ -61,10 +62,22 @@ export const NEXT_BEST_ACTIONS = [
   "HOLD_FOR_HUMAN",
 ] as const;
 
-type MessageCategory = (typeof MESSAGE_CATEGORIES)[number];
+export type MessageCategory = (typeof MESSAGE_CATEGORIES)[number];
 type CustomerMission = (typeof CUSTOMER_MISSIONS)[number];
 type MissionState = (typeof MISSION_STATES)[number];
-type NextBestAction = (typeof NEXT_BEST_ACTIONS)[number];
+export type NextBestAction = (typeof NEXT_BEST_ACTIONS)[number];
+export const SPEECH_ACTS = [
+  "REQUEST",
+  "ANSWER",
+  "CONFIRMATION",
+  "DENIAL",
+  "ACKNOWLEDGMENT",
+  "CORRECTION",
+  "STATUS_UPDATE",
+  "CANCELLATION_OR_DECLINE",
+  "AMBIGUOUS",
+] as const;
+export type MadisonSpeechAct = (typeof SPEECH_ACTS)[number];
 export type MadisonExtractionStatus = "COMPLETE" | "PARTIAL" | "NO_FACTS_PRESENT" | "EXTRACTION_FAILED" | "VALIDATION_FAILED";
 
 type MadisonDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -75,6 +88,7 @@ export type MadisonShadowPrediction = {
   mission: CustomerMission;
   missionState: MissionState;
   nextBestAction: NextBestAction;
+  speechAct: MadisonSpeechAct;
   confidence: number;
   knownFacts: string[];
   missingFacts: string[];
@@ -83,6 +97,7 @@ export type MadisonShadowPrediction = {
   extractionQualityNote: string | null;
   model: string;
   classifierVersion: string;
+  decisionDiagnostics?: MadisonDecisionDiagnostics;
 };
 
 export type MadisonShadowPersistenceResult =
@@ -113,7 +128,7 @@ const enumArray = <T extends string>(
     (item): item is T =>
       typeof item === "string" && (allowed as readonly string[]).includes(item)
   );
-  return values.length > 0 ? [...new Set(values)] : [fallback];
+  return values.length > 0 ? Array.from(new Set(values)) : [fallback];
 };
 
 const boundedConfidence = (value: unknown): number => {
@@ -175,6 +190,7 @@ export function normalizeShadowPrediction(
       NEXT_BEST_ACTIONS,
       "HOLD_FOR_HUMAN"
     ),
+    speechAct: enumOr(raw.speechAct, SPEECH_ACTS, "AMBIGUOUS"),
     confidence: boundedConfidence(raw.confidence),
     knownFacts: Array.isArray(raw.knownFacts)
       ? raw.knownFacts
@@ -244,6 +260,7 @@ export async function classifyMadisonMessageShadow(input: {
               mission: { type: "string", enum: [...CUSTOMER_MISSIONS] },
               missionState: { type: "string", enum: [...MISSION_STATES] },
               nextBestAction: { type: "string", enum: [...NEXT_BEST_ACTIONS] },
+              speechAct: { type: "string", enum: [...SPEECH_ACTS] },
               confidence: { type: "number", minimum: 0, maximum: 1 },
               knownFacts: { type: "array", items: { type: "string" }, maxItems: 20 },
               missingFacts: { type: "array", items: { type: "string" }, maxItems: 20 },
@@ -270,7 +287,7 @@ export async function classifyMadisonMessageShadow(input: {
             },
             required: [
               "primaryCategory", "categories", "mission", "missionState", "nextBestAction",
-              "confidence", "knownFacts", "missingFacts", "factObservations", "extractionStatus",
+              "speechAct", "confidence", "knownFacts", "missingFacts", "factObservations", "extractionStatus",
               "extractionQualityNote",
             ],
             additionalProperties: false,
@@ -282,9 +299,10 @@ export async function classifyMadisonMessageShadow(input: {
       {
         role: "system",
         content: `You are Madison's shadow-only message understanding classifier for a cleaning-service SMS inbox.
-Do not execute actions. Classify the customer's current goal in context.
+Do not execute actions. Classify the customer's current goal and conversational direction in context.
+First identify the current turn's speech act: REQUEST, ANSWER, CONFIRMATION, DENIAL, ACKNOWLEDGMENT, CORRECTION, STATUS_UPDATE, CANCELLATION_OR_DECLINE, or AMBIGUOUS. A speech act describes what the customer is doing, not merely the topic.
 Extract every explicit actionable detail from the current inbound message as factObservations. Do not infer, verify, or invent values. This includes explicit requested actions, dates, relative dates, times, service details, constraints, exclusions, and booking references.
-Conversation history is context only: it may resolve continuity or references, but unrelated historical facts must not become current facts.
+Conversation history is context only: it may resolve continuity or references, but unrelated historical facts must not become current facts. Use at most the immediately preceding assistant message to interpret a short current reply such as “Yes”; unrelated historical facts must not become current facts or the topic of the reply. For a short reply, determine whether it answers, confirms, denies, acknowledges, or corrects the immediately preceding assistant turn before selecting a mission.
 Every fact observation must include the exact short evidenceExcerpt copied from the current inbound customer message that supports the value. Use sourceMessageId only when the supplied context identifies it.
 Use stable snake_case fact keys such as requested_date, requested_time, requested_service, and customer_provided_booking_reference.
 Set extractionStatus to COMPLETE when all explicit facts in the supplied conversation are captured, PARTIAL when some are captured but another explicit fact may be missing, and NO_FACTS_PRESENT only when the supplied customer messages contain no actionable facts.
@@ -292,6 +310,9 @@ Never return NO_FACTS_PRESENT for a message that contains an explicit request, r
 For “Can you reschedule please”, return at least one factObservation with factKey “requested_action”, value “reschedule”, and evidenceExcerpt copied exactly as “reschedule”. Set extractionStatus to COMPLETE.
 For “Can we reschedule to tomorrow morning then?”, return separate factObservations for requested action “reschedule”, requested date “tomorrow”, and requested time “morning”, with exact evidence excerpts “reschedule”, “tomorrow”, and “morning”. Set extractionStatus to COMPLETE.
 For “Can you change my booking to monthly”, return separate factObservations for requested action “change” and requested frequency “monthly”, with exact evidence excerpts “change” and “monthly”. Never fold an explicit frequency, recurrence, service type, date, time, or constraint into the requested_action value. Set extractionStatus to COMPLETE.
+For “Yes” after an assistant confirmation question, return speechAct CONFIRMATION and do not reuse an older cancellation, reschedule, or booking request as the current mission.
+For “4:20” after an assistant asks for an arrival time or ETA, return speechAct ANSWER and extract the time only; do not classify the current turn as a new ETA request.
+For “Okay” or “Thanks” after the assistant has answered the customer, return speechAct ACKNOWLEDGMENT unless the current turn contains a new request.
 For example, the message “I am going to need to cancel this and reschedule for tomorrow morning.” has actionable facts for the cancellation/reschedule request, the relative date “tomorrow,” and the time period “morning”; it must not be returned as NO_FACTS_PRESENT.
 Use only the supplied enum values. The quote agent is disabled, so QUOTE_REQUEST may be predicted but must not cause quote calculation or link creation.
 Return JSON only. Prefer AMBIGUOUS, UNRESOLVED, and HOLD_FOR_HUMAN when context is insufficient.
@@ -310,6 +331,11 @@ Next actions: ${NEXT_BEST_ACTIONS.join(", ")}`,
   const prediction = normalizeShadowPrediction(
     typeof content === "string" ? JSON.parse(content) : content,
     { model: response.model, classifierVersion: "madison-shadow-v1" }
+  );
+  prediction.decisionDiagnostics = validateMadisonDecision(
+    prediction,
+    input.inboundText,
+    input.conversationMessages ?? []
   );
   return prediction;
 }
@@ -346,15 +372,27 @@ export async function persistMadisonMessageShadow(input: {
   );
 
   try {
+    const decisionDiagnostics = prediction.decisionDiagnostics ?? validateMadisonDecision(
+      prediction,
+      input.inboundText,
+      input.conversationMessages ?? []
+    );
     const supportedFacts = filterCurrentTurnFactObservations(
       prediction.factObservations,
       input.inboundText
     );
     const rejectedFactCount = prediction.factObservations.length - supportedFacts.length;
     const extractionStatus = rejectedFactCount > 0 ? "VALIDATION_FAILED" : prediction.extractionStatus;
-    const extractionQualityNote = rejectedFactCount > 0
-      ? `${rejectedFactCount} historical or unsupported fact observation(s) were not added to the current fact ledger because the evidence excerpt was not found in the current inbound message.`
-      : prediction.extractionQualityNote;
+    const validationNotes = [
+      rejectedFactCount > 0
+        ? `${rejectedFactCount} historical or unsupported fact observation(s) were not added to the current fact ledger because the evidence excerpt was not found in the current inbound message.`
+        : null,
+      decisionDiagnostics.reasonCodes.length > 0
+        ? `Decision policy: ${decisionDiagnostics.reasonCodes.join(", ")}.`
+        : null,
+      prediction.extractionQualityNote,
+    ].filter((note): note is string => Boolean(note));
+    const extractionQualityNote = validationNotes.length > 0 ? validationNotes.join(" ").slice(0, 2000) : null;
     await input.db
       .insert(madisonMessageUnderstanding)
       .values({
@@ -401,7 +439,8 @@ export async function persistMadisonMessageShadow(input: {
             )
           );
       });
-    for (const [index, fact] of supportedFacts.entries()) {
+    for (let index = 0; index < supportedFacts.length; index += 1) {
+      const fact = supportedFacts[index];
       const eventId = `${input.sourceMessageId}:${prediction.classifierVersion}:${index}`;
       await input.db.insert(madisonConversationFactEvents).values({
         eventId,

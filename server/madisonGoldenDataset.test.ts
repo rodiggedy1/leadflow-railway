@@ -29,6 +29,7 @@ describe("Madison Golden Dataset evaluation system", () => {
   it("scores facts by normalized key/value and requires valid current-message evidence", () => {
     const expected = {
       intentCategory: "RESCHEDULE_REQUEST",
+      speechAct: "REQUEST",
       mission: "MODIFY_BOOKING",
       facts: [
         { factKey: "requested_action", normalizedValue: "reschedule", evidenceExcerpt: "reschedule" },
@@ -42,6 +43,7 @@ describe("Madison Golden Dataset evaluation system", () => {
       replyReadiness: "READY" as const,
       actionReadiness: "NOT_READY" as const,
       forbiddenOperationalActions: ["do not reschedule"],
+      severity: "HIGH" as const,
     };
     const actual: MadisonShadowPrediction = {
       primaryCategory: "RESCHEDULE_REQUEST",
@@ -49,6 +51,7 @@ describe("Madison Golden Dataset evaluation system", () => {
       mission: "MODIFY_BOOKING",
       missionState: "WAITING_CUSTOMER",
       nextBestAction: "ASK_CUSTOMER",
+      speechAct: "REQUEST",
       confidence: 0.9,
       knownFacts: [],
       missingFacts: ["exact time"],
@@ -64,6 +67,7 @@ describe("Madison Golden Dataset evaluation system", () => {
     const score = scoreGoldenCase(expected, actual);
     expect(score).toMatchObject({
       intentAccuracy: 1,
+      speechActAccuracy: 1,
       missionAccuracy: 1,
       factPrecision: 1,
       factRecall: 1,
