@@ -27,7 +27,7 @@ import { sendSms } from "./openphone";
 import { resolveMadisonContext, getMadisonEtaProgress, getMadisonBookingPayment } from "./madisonContext";
 import type { MadisonResolvedContext } from "./madisonContext";
 import { persistMadisonDecision } from "./madisonDecisionWriter";
-import { persistMadisonMessageShadow, type MadisonShadowPrediction } from "./madisonMessageUnderstanding";
+import { hashMadisonActorIdentity, persistMadisonMessageShadow, type MadisonActor, type MadisonShadowPrediction } from "./madisonMessageUnderstanding";
 import { getSmsReplyPolicy } from "./aiActionPolicy";
 import { guardMadisonDraftAgainstUnverifiedBookingChange } from "./madisonReplyDecision";
 
@@ -91,6 +91,7 @@ async function runShadowForDraft(input: {
   sessionId: number;
   inboundText: string;
   actorRole?: "customer" | "cleaner" | "madison" | "employee" | "system";
+  actor?: MadisonActor;
   conversationMessages?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<MadisonShadowPrediction | null> {
   const shadowResult = await persistMadisonMessageShadow(input);
@@ -298,6 +299,7 @@ export async function triggerMadisonSmsDraft(params: {
         sessionId: existingDraft.sessionId,
         inboundText,
         actorRole: isCleaner ? "cleaner" : "customer",
+        actor: isCleaner ? { role: "CLEANER", source: "PHONE_DIRECTORY", identityHash: hashMadisonActorIdentity(fromPhone) } : { role: "CUSTOMER", source: "SYSTEM" },
       });
       return;
     }
@@ -342,6 +344,7 @@ export async function triggerMadisonSmsDraft(params: {
       sessionId,
       inboundText,
       actorRole: isCleaner ? "cleaner" : "customer",
+      actor: isCleaner ? { role: "CLEANER", source: "PHONE_DIRECTORY", identityHash: hashMadisonActorIdentity(fromPhone) } : { role: "CUSTOMER", source: "SYSTEM" },
       conversationMessages: relevantConversationMessages,
     });
 

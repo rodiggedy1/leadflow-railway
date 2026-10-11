@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { madisonConversationFactEvents, madisonMessageUnderstanding } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -82,7 +83,14 @@ export const MADISON_ACTOR_ROLES = ["customer", "cleaner", "madison", "employee"
 export type MadisonActorRole = (typeof MADISON_ACTOR_ROLES)[number];
 export const MADISON_ACTOR_CONTRACT_ROLES = ["CUSTOMER", "CLEANER", "TEAM", "LEAD", "STAFF", "UNKNOWN"] as const;
 export type MadisonActorContractRole = (typeof MADISON_ACTOR_CONTRACT_ROLES)[number];
-export type MadisonActor = { role: MadisonActorContractRole; source: "SYSTEM" | "INFERRED" };
+export type MadisonActorSource = "SYSTEM" | "PHONE_DIRECTORY" | "INFERRED";
+export type MadisonActor = { role: MadisonActorContractRole; source: MadisonActorSource; identityHash?: string };
+
+export function hashMadisonActorIdentity(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const normalized = digits.length >= 10 ? digits.slice(-10) : digits;
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 24);
+}
 export const TURN_RELATIONS = ["ANSWERS_PREVIOUS_QUESTION", "CONFIRMS_PREVIOUS_PROPOSAL", "REJECTS_PREVIOUS_PROPOSAL", "CORRECTS_PREVIOUS_MESSAGE", "CONTINUES_ACTIVE_REQUEST", "ADDS_NEW_REQUEST", "STARTS_NEW_REQUEST", "ACKNOWLEDGES_ONLY", "UNCLEAR"] as const;
 export type MadisonTurnRelation = (typeof TURN_RELATIONS)[number];
 export type MadisonFactProvenance = "CURRENT_TURN" | "PRIOR_CUSTOMER_TURN" | "PRIOR_MADISON_TURN" | "LEADFLOW" | "DERIVED";
@@ -214,7 +222,7 @@ export function normalizeShadowPrediction(
   );
   const actor: MadisonActor = {
     role: enumOr(raw.actorRole, MADISON_ACTOR_CONTRACT_ROLES, "UNKNOWN"),
-    source: raw.actorSource === "SYSTEM" ? "SYSTEM" : "INFERRED",
+    source: raw.actorSource === "PHONE_DIRECTORY" ? "PHONE_DIRECTORY" : raw.actorSource === "SYSTEM" ? "SYSTEM" : "INFERRED",
   };
   const utterances = Array.isArray(raw.utterances)
     ? raw.utterances.filter(item => Boolean(item) && typeof item === "object").map(item => {
@@ -311,9 +319,10 @@ export async function classifyMadisonMessageShadow(input: {
   sourceMessageId?: string;
   actorRole?: MadisonActorRole;
   actor?: MadisonActor;
-  conversationMessages?: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string }>;
+  conversationMessages?: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string | null }>;
 }): Promise<MadisonShadowPrediction> {
   const effectiveActorRole = input.actorRole ?? (input.actor?.role === "CLEANER" ? "cleaner" : input.actor?.role === "STAFF" ? "employee" : "customer");
+  const effectiveActorSource = input.actor?.source ?? "SYSTEM";
   const configuredModel = "gpt-4o";
   const responseFormat = configuredModel.startsWith("gpt-5")
     ? { type: "json_object" as const }
@@ -326,7 +335,7 @@ export async function classifyMadisonMessageShadow(input: {
             type: "object",
             properties: {
               actorRole: { type: "string", enum: [...MADISON_ACTOR_CONTRACT_ROLES] },
-              actorSource: { type: "string", enum: ["SYSTEM", "INFERRED"] },
+              actorSource: { type: "string", enum: ["SYSTEM", "PHONE_DIRECTORY", "INFERRED"] },
               primaryCategory: { type: "string", enum: [...MESSAGE_CATEGORIES] },
               categories: {
                 type: "array",
@@ -391,7 +400,7 @@ export async function classifyMadisonMessageShadow(input: {
         role: "system",
         content: `You are Madison's shadow-only message understanding classifier for a cleaning-service SMS inbox.
 Do not execute actions. Classify the current actor's current goal and conversational direction in context.
-The system-supplied inbound actor is ${effectiveActorRole}. Return actorRole as ${effectiveActorRole === "cleaner" ? "CLEANER" : effectiveActorRole === "employee" || effectiveActorRole === "madison" ? "STAFF" : "CUSTOMER"} and actorSource as SYSTEM. Actor metadata is authoritative; do not treat it as a customer fact. The current source message ID is ${input.sourceMessageId ?? "not supplied"}.
+The system-supplied inbound actor is ${effectiveActorRole}. Return actorRole as ${effectiveActorRole === "cleaner" ? "CLEANER" : effectiveActorRole === "employee" || effectiveActorRole === "madison" ? "STAFF" : "CUSTOMER"} and actorSource as ${effectiveActorSource}. Actor metadata is authoritative; never override it from message wording or conversation context, and do not treat it as a customer fact. The current source message ID is ${input.sourceMessageId ?? "not supplied"}.
 Decompose compound messages into utterances. “Yes and I'd like to use my complimentary cleaning” must produce a CONFIRMATION utterance for “Yes” and a REQUEST utterance for the complimentary-cleaning request; the request must drive the mission.
 Return one explicit turnRelation describing what the current message does relative to the immediately preceding relevant assistant turn. “Thank you!” is ACKNOWLEDGES_ONLY and must not inherit an old operational mission. A short answer may use context to resolve the object, but context alone cannot create a new mission.
 First identify the current turn's speech act: REQUEST, ANSWER, CONFIRMATION, DENIAL, ACKNOWLEDGMENT, CORRECTION, STATUS_UPDATE, CANCELLATION_OR_DECLINE, or AMBIGUOUS. A speech act describes what the customer is doing, not merely the topic.
@@ -430,7 +439,7 @@ Next actions: ${NEXT_BEST_ACTIONS.join(", ")}`,
     typeof content === "string" ? JSON.parse(content) : content,
     { model: response.model, classifierVersion: "madison-shadow-v1" }
   );
-  prediction.actor = input.actor ?? {
+    prediction.actor = input.actor ?? {
     role: effectiveActorRole === "cleaner" ? "CLEANER" : effectiveActorRole === "employee" || effectiveActorRole === "madison" ? "STAFF" : "CUSTOMER",
     source: "SYSTEM",
   };
@@ -455,7 +464,8 @@ export async function persistMadisonMessageShadow(input: {
   sessionId: number;
   inboundText: string;
   actorRole?: MadisonActorRole;
-  conversationMessages?: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string }>;
+  actor?: MadisonActor;
+  conversationMessages?: Array<{ role: "user" | "assistant"; content: string; actorRole?: MadisonActorRole; sourceMessageId?: string | null }>;
   resolvedCustomerId?: string | null;
   resolvedBookingId?: number | null;
 }): Promise<MadisonShadowPersistenceResult> {

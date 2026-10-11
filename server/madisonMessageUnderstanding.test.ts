@@ -7,6 +7,7 @@ import {
   MISSION_STATES,
   NEXT_BEST_ACTIONS,
   filterCurrentTurnFactObservations,
+  hashMadisonActorIdentity,
   normalizeShadowPrediction,
 } from "./madisonMessageUnderstanding";
 import { validateMadisonDecision } from "./madisonDecisionPolicy";
@@ -64,6 +65,18 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(prediction.missingFacts).toEqual([]);
     expect(prediction.factObservations).toEqual([]);
     expect(prediction.extractionStatus).toBe("NO_FACTS_PRESENT");
+  });
+
+  it("preserves authoritative phone-directory actor provenance without storing a raw phone", () => {
+    const prediction = normalizeShadowPrediction({
+      actorRole: "CLEANER",
+      actorSource: "PHONE_DIRECTORY",
+      factObservations: [],
+    });
+
+    expect(prediction.actor).toEqual({ role: "CLEANER", source: "PHONE_DIRECTORY" });
+    expect(hashMadisonActorIdentity("+1 (202) 555-0100")).toBe(hashMadisonActorIdentity("2025550100"));
+    expect(hashMadisonActorIdentity("+1 (202) 555-0100")).toHaveLength(24);
   });
 
   it("adapts valid OpenAI JSON-object aliases without heuristic extraction", () => {
