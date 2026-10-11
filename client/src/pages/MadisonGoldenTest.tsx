@@ -4,88 +4,41 @@ import { trpc } from "@/lib/trpc";
 import { AlertCircle, Check, ChevronLeft, ChevronRight, Lock, Play, X } from "lucide-react";
 
 type Rating = "correct" | "incorrect" | "uncertain";
-
 const COLORS = { purple: "#5d49f3", ink: "#1a1a2e", muted: "#73788c", border: "#e8e8f6", bg: "#f4f6fb" };
-
-function PrettyValue({ value }: { value: unknown }) {
-  return <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", font: "12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace", color: "#4c465e" }}>{JSON.stringify(value, null, 2)}</pre>;
+function PrettyValue({ value }: { value: unknown }) { return <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", font: "12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace", color: "#4c465e" }}>{JSON.stringify(value, null, 2)}</pre>; }
+function qualityScore(actual: any, inbound: string) {
+  if (!actual) return null;
+  const required = ["primaryCategory", "mission", "missionState", "nextBestAction", "confidence", "extractionStatus"];
+  const structured = required.filter(key => actual[key] !== undefined && actual[key] !== null).length / required.length;
+  const confidence = typeof actual.confidence === "number" ? Math.max(0, Math.min(1, actual.confidence)) : 0;
+  const observations = Array.isArray(actual.factObservations) ? actual.factObservations : [];
+  const missing = Array.isArray(actual.missingFacts) ? actual.missingFacts.map(String) : [];
+  const evidenceValid = observations.length === 0 ? 1 : observations.filter((fact: any) => typeof fact.evidenceExcerpt === "string" && inbound.toLowerCase().includes(fact.evidenceExcerpt.toLowerCase())).length / observations.length;
+  const contradictionFree = observations.every((fact: any) => !missing.some(item => item.toLowerCase() === String(fact.factKey).toLowerCase())) ? 1 : 0;
+  const score = Math.round(structured * 30 + confidence * 30 + evidenceValid * 25 + contradictionFree * 15);
+  return { score, structured: Math.round(structured * 100), confidence: Math.round(confidence * 100), evidenceValid: Math.round(evidenceValid * 100), contradictionFree: Math.round(contradictionFree * 100), accuracyAvailable: false };
 }
-
 export default function MadisonGoldenTest() {
   const { data: cases = [], isLoading } = trpc.madison.getGoldenTestCases.useQuery(undefined, { staleTime: 15_000 });
-  const [caseIndex, setCaseIndex] = useState(0);
-  const [actualByCase, setActualByCase] = useState<Record<string, any>>({});
-  const [notes, setNotes] = useState("");
-  const [filter, setFilter] = useState<"development" | "held_out">("development");
-  const [runError, setRunError] = useState<string | null>(null);
-  const runCase = trpc.madison.runGoldenTestCase.useMutation({
-    onMutate: () => setRunError(null),
-    onSuccess: result => setActualByCase(previous => ({ ...previous, [result.caseId]: result.actual })),
-    onError: error => setRunError(error.message),
-  });
-  const saveRating = trpc.madison.saveGoldenTestRating.useMutation({
-    onSuccess: () => void utils.madison.getGoldenTestCases.invalidate(),
-    onError: error => setRunError(error.message),
-  });
+  const [caseIndex, setCaseIndex] = useState(0); const [actualByCase, setActualByCase] = useState<Record<string, any>>({}); const [notes, setNotes] = useState(""); const [filter, setFilter] = useState<"development" | "held_out">("development"); const [runError, setRunError] = useState<string | null>(null);
   const utils = trpc.useUtils();
-  const visibleCases = useMemo(() => cases.filter(item => item.split === filter), [cases, filter]);
-  const current = visibleCases[caseIndex];
-  const actual = current ? actualByCase[current.caseId] ?? current.review?.actualPrediction : null;
-  const reviewedCount = visibleCases.filter(item => item.review?.rating).length;
-
-  const selectFilter = (next: "development" | "held_out") => {
-    setFilter(next);
-    setCaseIndex(0);
-    setNotes("");
-  };
-  const go = (delta: number) => {
-    setCaseIndex(index => Math.max(0, Math.min(visibleCases.length - 1, index + delta)));
-    setNotes("");
-  };
-  const rate = (rating: Rating) => {
-    if (!current || !actual) return;
-    saveRating.mutate({ caseId: current.caseId, rating, notes: notes.trim() || null, actualPrediction: actual });
-  };
-
-  return (
-    <div style={{ minHeight: "100vh", background: COLORS.bg, fontFamily: "Inter, Arial, sans-serif", color: COLORS.ink }}>
-      <AdminHeader activeTab="madison-focus" />
-      <div style={{ maxWidth: 1020, margin: "0 auto", padding: "34px 24px 70px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 22, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, color: COLORS.purple }}>MADISON · REVIEW TOOLS</div>
-            <h1 style={{ font: "700 34px Georgia, serif", margin: "8px 0 7px" }}>AI Golden Test</h1>
-            <p style={{ margin: 0, color: COLORS.muted, fontSize: 15 }}>Review how Shadow Understanding classifies real anonymized message scenarios. This page cannot send SMS or change bookings.</p>
-          </div>
-          <div style={{ padding: "12px 15px", background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 14, fontSize: 13, fontWeight: 700 }}>
-            {reviewedCount} of {visibleCases.length} reviewed
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-          {(["development", "held_out"] as const).map(item => (
-            <button key={item} type="button" onClick={() => selectFilter(item)} style={{ border: `1px solid ${filter === item ? COLORS.purple : COLORS.border}`, background: filter === item ? "#eeeaff" : "#fff", color: filter === item ? COLORS.purple : COLORS.muted, borderRadius: 999, padding: "9px 15px", fontWeight: 800, cursor: "pointer" }}>
-              {item === "development" ? "Development · 40" : "Held-out · 10"}{item === "held_out" && <Lock size={13} style={{ marginLeft: 6, verticalAlign: -2 }} />}
-            </button>
-          ))}
-        </div>
-
-        {isLoading ? <div style={{ background: "#fff", borderRadius: 20, padding: 36 }}>Loading Golden Test cases…</div> : !current ? <div style={{ background: "#fff", borderRadius: 20, padding: 36 }}>No cases are available.</div> : (
-          <div style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 22, boxShadow: "0 12px 34px rgba(35,27,77,.07)", overflow: "hidden" }}>
-            <div style={{ padding: "18px 22px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <strong>{current.caseId}</strong><span style={{ color: COLORS.muted, fontSize: 13 }}>{caseIndex + 1} of {visibleCases.length}</span>
-            </div>
-            <div style={{ padding: 22, display: "grid", gap: 16 }}>
-              <section style={{ background: "#fffaf4", border: "1px solid #f0dfcc", borderRadius: 14, padding: 16 }}><span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: "#9b6d4b" }}>CURRENT INBOUND MESSAGE</span><p style={{ fontSize: 21, lineHeight: 1.4, margin: "8px 0 0", fontWeight: 700 }}>{current.currentInboundMessage}</p></section>
-              <details><summary style={{ cursor: "pointer", fontWeight: 800, color: COLORS.purple }}>Show bounded prior context ({current.priorConversationContext.length} messages)</summary><div style={{ marginTop: 10, display: "grid", gap: 7 }}>{current.priorConversationContext.map((message, index) => <div key={index} style={{ padding: "9px 11px", borderRadius: 9, background: message.role === "assistant" ? "#f3f0ff" : "#f4f6fb", fontSize: 13 }}><b>{message.role === "assistant" ? "Madison" : "Customer"}:</b> {message.content}</div>)}</div></details>
-              <section style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 16 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}><span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: COLORS.muted }}>SHADOW UNDERSTANDING · GPT-4O</span><button type="button" onClick={() => runCase.mutate({ caseId: current.caseId })} disabled={runCase.isPending || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 7, border: "none", borderRadius: 10, padding: "9px 13px", background: filter === "held_out" ? "#e5e7eb" : COLORS.purple, color: "#fff", fontWeight: 800, cursor: filter === "held_out" ? "not-allowed" : "pointer" }}><Play size={14} />{runCase.isPending ? "Running…" : actual ? "Run again" : "Run classification"}</button></div>{filter === "held_out" ? <div style={{ color: COLORS.muted, display: "flex", alignItems: "center", gap: 7 }}><Lock size={15} /> Held-out cases are locked while development labeling is in progress.</div> : actual ? <PrettyValue value={actual} /> : <div style={{ color: COLORS.muted }}>Run the existing read-only Shadow classifier to see the output.</div>}{runError && <div role="alert" style={{ marginTop: 12, padding: "11px 12px", borderRadius: 10, background: "#fff3f3", border: "1px solid #f2caca", color: "#9e3030", display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13 }}><AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} /><span><b>Classification failed:</b> {runError}</span></div>}</section>
-              <section><label style={{ display: "block", fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: COLORS.muted, marginBottom: 7 }}>REVIEW NOTE (OPTIONAL)</label><textarea value={notes} onChange={event => setNotes(event.target.value)} rows={3} placeholder="What was right or wrong? Note the exact field or evidence issue." style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 11, font: "inherit", resize: "vertical" }} /></section>
-              <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}><button type="button" onClick={() => rate("correct")} disabled={!actual || saveRating.isPending || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "11px 15px", borderRadius: 10, border: "1px solid #b7e5cf", background: "#edfbf3", color: "#197447", fontWeight: 800, cursor: !actual ? "not-allowed" : "pointer" }}><Check size={15} /> Correct</button><button type="button" onClick={() => rate("incorrect")} disabled={!actual || saveRating.isPending || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "11px 15px", borderRadius: 10, border: "1px solid #f2caca", background: "#fff3f3", color: "#a53b3b", fontWeight: 800, cursor: !actual ? "not-allowed" : "pointer" }}><X size={15} /> Incorrect</button><button type="button" onClick={() => rate("uncertain")} disabled={!actual || saveRating.isPending || filter === "held_out"} style={{ padding: "11px 15px", borderRadius: 10, border: `1px solid ${COLORS.border}`, background: "#fff", color: COLORS.muted, fontWeight: 800, cursor: !actual ? "not-allowed" : "pointer" }}>Uncertain</button>{current.review?.rating && <span style={{ alignSelf: "center", color: COLORS.muted, fontSize: 13 }}>Saved as <b>{current.review.rating}</b>{current.review.reviewer ? ` by ${current.review.reviewer}` : ""}.</span>}</div>
-            </div>
-            <div style={{ padding: "15px 22px", borderTop: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", gap: 10 }}><button type="button" onClick={() => go(-1)} disabled={caseIndex === 0} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${COLORS.border}`, borderRadius: 10, background: "#fff", padding: "10px 13px", fontWeight: 700, color: COLORS.muted }}><ChevronLeft size={15} /> Previous</button><button type="button" onClick={() => go(1)} disabled={caseIndex === visibleCases.length - 1} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${COLORS.border}`, borderRadius: 10, background: "#fff", padding: "10px 13px", fontWeight: 700, color: COLORS.muted }}>Next <ChevronRight size={15} /></button></div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const runCase = trpc.madison.runGoldenTestCase.useMutation({ onMutate: () => setRunError(null), onSuccess: result => setActualByCase(previous => ({ ...previous, [result.caseId]: result.actual })), onError: error => setRunError(error.message) });
+  const saveRating = trpc.madison.saveGoldenTestRating.useMutation({ onSuccess: () => void utils.madison.getGoldenTestCases.invalidate(), onError: error => setRunError(error.message) });
+  const visibleCases = useMemo(() => cases.filter(item => item.split === filter), [cases, filter]); const current = visibleCases[caseIndex]; const actual = current ? actualByCase[current.caseId] ?? current.review?.actualPrediction : null; const reviewedCount = visibleCases.filter(item => item.review?.rating && item.review.rating !== "uncertain").length; const score = current && actual ? qualityScore(actual, current.currentInboundMessage) : null;
+  const selectFilter = (next: "development" | "held_out") => { setFilter(next); setCaseIndex(0); setNotes(""); setRunError(null); };
+  const go = (delta: number) => { setCaseIndex(index => Math.max(0, Math.min(visibleCases.length - 1, index + delta))); setNotes(""); setRunError(null); };
+  const rate = (rating: Rating) => { if (!current || !actual) return; saveRating.mutate({ caseId: current.caseId, rating, notes: notes.trim() || null, actualPrediction: actual }); };
+  return <div style={{ minHeight: "100vh", background: COLORS.bg, fontFamily: "Inter, Arial, sans-serif", color: COLORS.ink }}><AdminHeader activeTab="madison-focus" /><div style={{ maxWidth: 1020, margin: "0 auto", padding: "34px 24px 70px" }}>
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 22, flexWrap: "wrap" }}><div><div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, color: COLORS.purple }}>MADISON · REVIEW TOOLS</div><h1 style={{ font: "700 34px Georgia, serif", margin: "8px 0 7px" }}>AI Golden Test</h1><p style={{ margin: 0, color: COLORS.muted, fontSize: 15 }}>Run Shadow Understanding, inspect its automatic quality score, then approve or deny the classification. No manual labels required.</p></div><div style={{ padding: "12px 15px", background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 14, fontSize: 13, fontWeight: 700 }}>{reviewedCount} of {visibleCases.length} approved or denied</div></div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>{(["development", "held_out"] as const).map(item => <button key={item} type="button" onClick={() => selectFilter(item)} style={{ border: `1px solid ${filter === item ? COLORS.purple : COLORS.border}`, background: filter === item ? "#eeeaff" : "#fff", color: filter === item ? COLORS.purple : COLORS.muted, borderRadius: 999, padding: "9px 15px", fontWeight: 800, cursor: "pointer" }}>{item === "development" ? "Development · 40" : "Held-out · 10"}{item === "held_out" && <Lock size={13} style={{ marginLeft: 6, verticalAlign: -2 }} />}</button>)}</div>
+    {isLoading ? <div style={{ background: "#fff", borderRadius: 20, padding: 36 }}>Loading Golden Test cases…</div> : !current ? <div style={{ background: "#fff", borderRadius: 20, padding: 36 }}>No cases are available.</div> : <div style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 22, boxShadow: "0 12px 34px rgba(35,27,77,.07)", overflow: "hidden" }}>
+      <div style={{ padding: "18px 22px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between" }}><strong>{current.caseId}</strong><span style={{ color: COLORS.muted, fontSize: 13 }}>{caseIndex + 1} of {visibleCases.length}</span></div><div style={{ padding: 22, display: "grid", gap: 16 }}>
+        <section style={{ background: "#fffaf4", border: "1px solid #f0dfcc", borderRadius: 14, padding: 16 }}><span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: "#9b6d4b" }}>CURRENT INBOUND MESSAGE</span><p style={{ fontSize: 21, lineHeight: 1.4, margin: "8px 0 0", fontWeight: 700 }}>{current.currentInboundMessage}</p></section>
+        <details><summary style={{ cursor: "pointer", fontWeight: 800, color: COLORS.purple }}>Show bounded prior context ({current.priorConversationContext.length} messages)</summary><div style={{ marginTop: 10, display: "grid", gap: 7 }}>{current.priorConversationContext.map((message, index) => <div key={index} style={{ padding: "9px 11px", borderRadius: 9, background: message.role === "assistant" ? "#f3f0ff" : "#f4f6fb", fontSize: 13 }}><b>{message.role === "assistant" ? "Madison" : "Customer"}:</b> {message.content}</div>)}</div></details>
+        <section style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 16 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}><div><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: COLORS.muted }}>SHADOW UNDERSTANDING · GPT-4O</div><div style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>Existing read-only Shadow classifier path.</div></div><button type="button" onClick={() => runCase.mutate({ caseId: current.caseId })} disabled={runCase.isPending || filter === "held_out"} style={{ display: "inline-flex", alignItems: "center", gap: 7, border: "none", borderRadius: 10, padding: "9px 13px", background: filter === "held_out" ? "#e5e7eb" : COLORS.purple, color: "#fff", fontWeight: 800 }}><Play size={14} />{runCase.isPending ? "Running…" : actual ? "Run again" : "Run classification"}</button></div>{filter === "held_out" ? <div style={{ color: COLORS.muted }}><Lock size={15} /> Held-out cases are locked while development review is in progress.</div> : actual ? <PrettyValue value={actual} /> : <div style={{ color: COLORS.muted }}>Run classification to see the result and score.</div>}{runError && <div role="alert" style={{ marginTop: 12, padding: "11px 12px", borderRadius: 10, background: "#fff3f3", border: "1px solid #f2caca", color: "#9e3030", display: "flex", gap: 8, fontSize: 13 }}><AlertCircle size={16} /><span><b>Classification failed:</b> {runError}</span></div>}</section>
+        {score && <section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 16, background: "#fbfbff" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}><div><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: COLORS.purple }}>AUTOMATIC QUALITY SCORE</div><div style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>Quality of the structured response—not accuracy. Accuracy starts after your verdict.</div></div><strong style={{ font: "700 30px Georgia, serif", color: score.score >= 75 ? "#197447" : score.score >= 50 ? "#9b6d4b" : "#a53b3b" }}>{score.score}/100</strong></div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8 }}>{[["Structured output", score.structured, 30], ["Confidence", score.confidence, 30], ["Evidence valid", score.evidenceValid, 25], ["No contradictions", score.contradictionFree, 15]].map(([label, value, weight]) => <div key={String(label)} style={{ padding: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 9 }}><div style={{ fontSize: 11, color: COLORS.muted }}>{label} · weight {weight}</div><b style={{ fontSize: 18 }}>{value}%</b></div>)}</div><div style={{ marginTop: 12, color: COLORS.muted, fontSize: 12 }}>This is not a ground-truth accuracy score because the candidate dataset is still unreviewed.</div></section>}
+        <section><label style={{ display: "block", fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: COLORS.muted, marginBottom: 7 }}>REVIEW NOTE (OPTIONAL)</label><textarea value={notes} onChange={event => setNotes(event.target.value)} rows={3} placeholder="Why are you approving or denying this classification?" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 11, font: "inherit", resize: "vertical" }} /></section>
+        <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}><button type="button" onClick={() => rate("correct")} disabled={!actual || saveRating.isPending || filter === "held_out"} style={{ display: "inline-flex", gap: 7, alignItems: "center", padding: "12px 17px", borderRadius: 10, border: "1px solid #b7e5cf", background: "#edfbf3", color: "#197447", fontWeight: 800 }}><Check size={15} /> Approve classification</button><button type="button" onClick={() => rate("incorrect")} disabled={!actual || saveRating.isPending || filter === "held_out"} style={{ display: "inline-flex", gap: 7, alignItems: "center", padding: "12px 17px", borderRadius: 10, border: "1px solid #f2caca", background: "#fff3f3", color: "#a53b3b", fontWeight: 800 }}><X size={15} /> Deny classification</button>{current.review?.rating && <span style={{ alignSelf: "center", color: COLORS.muted, fontSize: 13 }}>Saved verdict: <b>{current.review.rating === "correct" ? "approved" : current.review.rating === "incorrect" ? "denied" : "uncertain"}</b>.</span>}</div>
+      </div><div style={{ padding: "15px 22px", borderTop: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between" }}><button type="button" onClick={() => go(-1)} disabled={caseIndex === 0} style={{ display: "inline-flex", gap: 6, alignItems: "center", border: `1px solid ${COLORS.border}`, borderRadius: 10, background: "#fff", padding: "10px 13px", fontWeight: 700, color: COLORS.muted }}><ChevronLeft size={15} /> Previous</button><button type="button" onClick={() => go(1)} disabled={caseIndex === visibleCases.length - 1} style={{ display: "inline-flex", gap: 6, alignItems: "center", border: `1px solid ${COLORS.border}`, borderRadius: 10, background: "#fff", padding: "10px 13px", fontWeight: 700, color: COLORS.muted }}>Next <ChevronRight size={15} /></button></div></div>}
+  </div></div>;
 }
