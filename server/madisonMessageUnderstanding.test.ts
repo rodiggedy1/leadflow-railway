@@ -9,6 +9,7 @@ import {
   filterCurrentTurnFactObservations,
   normalizeShadowPrediction,
 } from "./madisonMessageUnderstanding";
+import { validateMadisonDecision } from "./madisonDecisionPolicy";
 
 describe("Madison Message Understanding shadow contract", () => {
   it("normalizes an expanded multi-layer prediction into controlled values", () => {
@@ -150,9 +151,12 @@ describe("Madison Message Understanding shadow contract", () => {
       resolve(process.cwd(), "server/madisonDecisionPolicy.ts"),
       "utf8"
     );
-    expect(source).toContain('validatorVersion: "madison-decision-policy-v1"');
+    expect(source).toContain('validatorVersion: "madison-decision-policy-v2"');
     expect(source).toContain("allowedNextActions");
     expect(source).toContain("blockedActions");
+    expect(source).toContain("modelProposedAction");
+    expect(source).toContain("finalAction");
+    expect(source).toContain("policyContractValid");
     expect(source).toContain("SPEECH_ACT_MISSION_CONFLICT");
     expect(source).not.toContain("persistMadisonMessageShadow");
     expect(source).not.toContain("sendSms");
@@ -171,5 +175,52 @@ describe("Madison Message Understanding shadow contract", () => {
     expect(source).toContain('stage: "persisted"');
     expect(agentSource).toContain("shadowResult.stage");
     expect(agentSource).toContain('errorStage: `shadow_${shadowResult.stage}`');
+  });
+
+  it("preserves the GPT proposal but overrides a blocked sensitive action", () => {
+    const prediction = normalizeShadowPrediction({
+      primaryCategory: "CANCELLATION_REQUEST",
+      categories: ["CANCELLATION_REQUEST"],
+      mission: "CANCEL_BOOKING",
+      missionState: "READY_FOR_REVIEW",
+      nextBestAction: "RESOLVE_BOOKING",
+      speechAct: "REQUEST",
+      confidence: 0.95,
+      knownFacts: [],
+      missingFacts: [],
+      factObservations: [{ factKey: "requested_action", value: "cancel", evidenceExcerpt: "cancel" }],
+      extractionStatus: "COMPLETE",
+      extractionQualityNote: null,
+    });
+    const diagnostics = validateMadisonDecision(prediction, "Please cancel");
+
+    expect(diagnostics.modelProposedAction).toBe("RESOLVE_BOOKING");
+    expect(diagnostics.finalAction).toBe("HOLD_FOR_HUMAN");
+    expect(diagnostics.actionOverridden).toBe(true);
+    expect(diagnostics.policyContractValid).toBe(true);
+    expect(diagnostics.blockedActions).toContain("RESOLVE_BOOKING");
+    expect(diagnostics.reasonCodes).toContain("MODEL_ACTION_BLOCKED");
+  });
+
+  it("fails closed without rewriting an invalid policy contract", () => {
+    const prediction = normalizeShadowPrediction({
+      primaryCategory: "AMBIGUOUS",
+      categories: ["AMBIGUOUS"],
+      mission: "UNRESOLVED",
+      missionState: "UNRESOLVED",
+      nextBestAction: "RESOLVE_BOOKING",
+      speechAct: "AMBIGUOUS",
+      confidence: 0.2,
+      knownFacts: [],
+      missingFacts: [],
+      factObservations: [],
+      extractionStatus: "PARTIAL",
+      extractionQualityNote: null,
+    });
+    const diagnostics = validateMadisonDecision(prediction, "What?");
+    expect(diagnostics.finalAction).toBe("HOLD_FOR_HUMAN");
+    expect(diagnostics.policyContractValid).toBe(true);
+    expect(diagnostics.modelProposedAction).toBe("RESOLVE_BOOKING");
+    expect(diagnostics.reasonCodes).toContain("MODEL_ACTION_NOT_ALLOWED");
   });
 });

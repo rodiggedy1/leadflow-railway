@@ -87,6 +87,7 @@ export type MadisonShadowPrediction = {
   categories: MessageCategory[];
   mission: CustomerMission;
   missionState: MissionState;
+  modelProposedAction: NextBestAction;
   nextBestAction: NextBestAction;
   speechAct: MadisonSpeechAct;
   confidence: number;
@@ -180,16 +181,18 @@ export function normalizeShadowPrediction(
   );
   if (!categories.includes(primaryCategory))
     categories.unshift(primaryCategory);
+  const modelProposedAction = enumOr(
+    raw.nextBestAction,
+    NEXT_BEST_ACTIONS,
+    "HOLD_FOR_HUMAN"
+  );
   return {
     primaryCategory,
     categories,
     mission: enumOr(raw.mission, CUSTOMER_MISSIONS, "UNRESOLVED"),
     missionState: enumOr(raw.missionState, MISSION_STATES, "UNRESOLVED"),
-    nextBestAction: enumOr(
-      raw.nextBestAction,
-      NEXT_BEST_ACTIONS,
-      "HOLD_FOR_HUMAN"
-    ),
+    modelProposedAction,
+    nextBestAction: modelProposedAction,
     speechAct: enumOr(raw.speechAct, SPEECH_ACTS, "AMBIGUOUS"),
     confidence: boundedConfidence(raw.confidence),
     knownFacts: Array.isArray(raw.knownFacts)
@@ -337,6 +340,7 @@ Next actions: ${NEXT_BEST_ACTIONS.join(", ")}`,
     input.inboundText,
     input.conversationMessages ?? []
   );
+  prediction.nextBestAction = prediction.decisionDiagnostics.finalAction;
   return prediction;
 }
 
