@@ -216,6 +216,8 @@ export function buildMadisonRelevantConversationContext(
  */
 export async function triggerMadisonSmsDraft(params: {
   inboundOpenPhoneId: string;
+  /** Stable message-history/provider ID used to bind the current turn. */
+  inboundMessageId?: string;
   sessionId: number;
   fromPhone: string;
   senderName?: string;
@@ -224,7 +226,7 @@ export async function triggerMadisonSmsDraft(params: {
   /** Minutes the customer has been waiting unanswered — set by the unanswered alarm cron */
   unansweredMinutes?: number;
 }): Promise<void> {
-  const { inboundOpenPhoneId, sessionId, fromPhone, senderName, isCleaner, inboundText, unansweredMinutes } = params;
+  const { inboundOpenPhoneId, inboundMessageId, sessionId, fromPhone, senderName, isCleaner, inboundText, unansweredMinutes } = params;
 
   // Skip empty messages
   if (!inboundText?.trim()) return;
@@ -341,7 +343,7 @@ export async function triggerMadisonSmsDraft(params: {
         relevantConversationMessages = buildMadisonRelevantConversationContext(
           conversationMessages,
           inboundText,
-          inboundOpenPhoneId,
+          inboundMessageId ?? inboundOpenPhoneId,
         );
       }
     } catch (err) {

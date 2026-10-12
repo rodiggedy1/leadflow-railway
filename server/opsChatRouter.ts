@@ -44,7 +44,7 @@ import {
   focusPoints,
   gmailThreadMeta,
 } from "../drizzle/schema";
-import { retrySmsDraft } from "./madisonSmsAgent";
+import { retrySmsDraft, triggerMadisonSmsDraft } from "./madisonSmsAgent";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
@@ -57,6 +57,8 @@ import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+const madisonReconciliationAttempts = new Map<string, number>();
 
 function todayDateString(): string {
   const now = new Date();
@@ -6262,14 +6264,30 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       }
       const completedSmsDraftIds = new Set<number>();
       const persistedSmsSessionIds = new Set<number>();
+      const fallbackSmsSessionIds = new Set<number>();
       if (smsCardDraftIds.length > 0) {
         const draftRows = await db
-          .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
+          .select({
+            id: madisonSmsDrafts.id,
+            status: madisonSmsDrafts.status,
+            sessionId: madisonSmsDrafts.sessionId,
+            generatedDraft: madisonSmsDrafts.generatedDraft,
+            observations: madisonSmsDrafts.observations,
+          })
           .from(madisonSmsDrafts)
           .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
         for (const d of draftRows) {
           if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') {
             completedSmsDraftIds.add(d.id);
+          }
+          let observations = "";
+          try { observations = JSON.stringify(d.observations ?? ""); } catch { /* ignore malformed legacy JSON */ }
+          if (
+            d.status === "FAILED" ||
+            d.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." ||
+            observations.includes("Draft generation failed")
+          ) {
+            fallbackSmsSessionIds.add(Number(d.sessionId));
           }
         }
         const draftSessionRows = await db
@@ -6351,13 +6369,97 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         const candidateTs = candidate.lastMessageTs ?? 0;
         return candidateTs > currentTs ? candidate : current;
       }));
-      const projectedSmsCards = canonicalGreenDotSessions
+      const projectedSessionCandidates = canonicalGreenDotSessions
         .map((session) => ({
           session,
           lastMsgTs: session.lastMessageTs && session.lastMessageTs > 0 ? session.lastMessageTs : session.updatedAt.getTime(),
         }))
         .filter(({ session, lastMsgTs }) => session.lastMessageRole === "user" && lastMsgTs >= cutoff)
-        .filter(({ session }) => !persistedSmsSessionIds.has(Number(session.id)))
+        .filter(({ session }) => !persistedSmsSessionIds.has(Number(session.id)));
+
+      const fallbackSessionCandidates = canonicalGreenDotSessions
+        .map((session) => ({
+          session,
+          lastMsgTs: session.lastMessageTs && session.lastMessageTs > 0 ? session.lastMessageTs : session.updatedAt.getTime(),
+        }))
+        .filter(({ session, lastMsgTs }) => session.lastMessageRole === "user" && lastMsgTs >= cutoff)
+        .filter(({ session }) => fallbackSmsSessionIds.has(Number(session.id)));
+      const reconciliationCandidates = [
+        ...projectedSessionCandidates,
+        ...fallbackSessionCandidates.filter(({ session }) => !projectedSessionCandidates.some(candidate => Number(candidate.session.id) === Number(session.id))),
+      ];
+
+      // Reconcile an eligible session through the same canonical Madison entry
+      // point used by webhooks. The projection remains in the response until
+      // the canonical draft card is written, preserving green-dot inclusion
+      // while preventing a second card implementation.
+      for (const { session, lastMsgTs } of reconciliationCandidates) {
+        let history: Array<{ role?: string; content?: string; ts?: number; opMsgId?: string }> = [];
+        try {
+          const parsed = JSON.parse(session.messageHistory ?? "[]");
+          if (Array.isArray(parsed)) history = parsed;
+        } catch { /* malformed history remains visible as a projection */ }
+        const currentInbound = [...history].reverse().find(message =>
+          message.role === "user" && message.content?.trim() === session.lastMessageText?.trim()
+        );
+        const sourceMessageId = currentInbound?.opMsgId || `projected_session_${session.id}_${lastMsgTs}`;
+        const reconciliationKey = `${session.id}:${lastMsgTs}:${session.lastMessageText ?? ""}`;
+        const lastAttempt = madisonReconciliationAttempts.get(reconciliationKey) ?? 0;
+        if (Date.now() - lastAttempt < 120_000) continue;
+        madisonReconciliationAttempts.set(reconciliationKey, Date.now());
+        void (async () => {
+          const [existingDraft] = await db
+            .select({ id: madisonSmsDrafts.id })
+            .from(madisonSmsDrafts)
+            .where(and(
+              eq(madisonSmsDrafts.sessionId, Number(session.id)),
+              eq(madisonSmsDrafts.originalMessage, session.lastMessageText ?? ""),
+            ))
+            .orderBy(desc(madisonSmsDrafts.createdAt))
+            .limit(1);
+          if (existingDraft) {
+            const [draft] = await db
+              .select({ status: madisonSmsDrafts.status, generatedDraft: madisonSmsDrafts.generatedDraft, observations: madisonSmsDrafts.observations })
+              .from(madisonSmsDrafts)
+              .where(eq(madisonSmsDrafts.id, existingDraft.id))
+              .limit(1);
+            let observations = "";
+            try { observations = JSON.stringify(draft?.observations ?? ""); } catch { /* ignore malformed legacy JSON */ }
+            const isFallback = draft?.status === "FAILED" || draft?.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." || observations.includes("Draft generation failed");
+            if (!isFallback) return;
+            if (draft?.status !== "FAILED") {
+              await db.update(madisonSmsDrafts)
+                .set({ status: "FAILED", errorStage: "pipeline", errorCode: "fallback_repair", errorMessage: "Repairing generic fallback draft", updatedAt: new Date() })
+                .where(and(eq(madisonSmsDrafts.id, existingDraft.id), eq(madisonSmsDrafts.status, draft?.status ?? "DRAFT_READY")));
+            }
+            await retrySmsDraft(existingDraft.id);
+            return;
+          }
+
+          const phoneDigits = (session.leadPhone ?? "").replace(/\D/g, "").slice(-10);
+          const [cleaner] = phoneDigits.length === 10
+            ? await db
+                .select({ name: cleanerProfiles.name })
+                .from(cleanerProfiles)
+                .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${phoneDigits} AND ${cleanerProfiles.isActive} = 1`)
+                .limit(1)
+            : [];
+
+          await triggerMadisonSmsDraft({
+            inboundOpenPhoneId: sourceMessageId,
+            inboundMessageId: currentInbound?.opMsgId,
+            sessionId: Number(session.id),
+            fromPhone: session.leadPhone!,
+            senderName: cleaner?.name ?? session.leadName ?? undefined,
+            isCleaner: Boolean(cleaner),
+            inboundText: session.lastMessageText!,
+          });
+        })().catch(error => {
+          console.error(`[MadisonSMS] projected session reconciliation failed for ${session.id}:`, error);
+        });
+      }
+
+      const projectedSmsCards = projectedSessionCandidates
         .map(({ session, lastMsgTs }) => ({
           id: -Number(session.id),
           ts: Number(lastMsgTs),
