@@ -44,7 +44,7 @@ import {
   focusPoints,
   gmailThreadMeta,
 } from "../drizzle/schema";
-import { retrySmsDraft, triggerMadisonSmsDraft } from "./madisonSmsAgent";
+import { retrySmsDraft } from "./madisonSmsAgent";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
@@ -5779,83 +5779,6 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         senderName: m.senderName ?? undefined,
       }));
     }),
-  /** Read-only conversation history for a green-dot session awaiting Madison draft creation. */
-  getSessionConversation: opsChatProcedure
-    .input(z.object({ sessionId: z.number().int().positive(), limit: z.number().int().min(1).max(20).default(20) }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return [];
-      const [session] = await db
-        .select({ messageHistory: conversationSessions.messageHistory })
-        .from(conversationSessions)
-        .where(eq(conversationSessions.id, input.sessionId))
-        .limit(1);
-      if (!session) return [];
-      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
-      try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { /* ignore malformed history */ }
-      return history.slice(-input.limit).map(m => ({
-        role: m.role as "user" | "assistant",
-        content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
-        ts: m.ts ?? 0,
-        senderName: m.senderName ?? undefined,
-      }));
-    }),
-  /** Create the canonical Madison draft for a projected green-dot session. */
-  ensureMadisonDraftForSession: opsChatProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return { ok: false, reason: "no_db" as const };
-
-      const [session] = await db
-        .select({
-          id: conversationSessions.id,
-          leadPhone: conversationSessions.leadPhone,
-          leadName: conversationSessions.leadName,
-          lastMessageText: conversationSessions.lastMessageText,
-          lastMessageTs: conversationSessions.lastMessageTs,
-          lastMessageRole: conversationSessions.lastMessageRole,
-        })
-        .from(conversationSessions)
-        .where(eq(conversationSessions.id, input.sessionId))
-        .limit(1);
-      if (!session?.leadPhone || session.lastMessageRole !== "user" || !session.lastMessageText?.trim()) {
-        return { ok: false, reason: "not_unanswered" as const };
-      }
-
-      const [existingDraft] = await db
-        .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
-        .from(madisonSmsDrafts)
-        .where(and(
-          eq(madisonSmsDrafts.sessionId, input.sessionId),
-          eq(madisonSmsDrafts.originalMessage, session.lastMessageText),
-        ))
-        .orderBy(desc(madisonSmsDrafts.createdAt))
-        .limit(1);
-      if (existingDraft) {
-        if (existingDraft.status === "FAILED") await retrySmsDraft(existingDraft.id);
-        return { ok: true, draftId: existingDraft.id, existing: true };
-      }
-
-      const phoneDigits = session.leadPhone.replace(/\D/g, "").slice(-10);
-      const [cleaner] = phoneDigits.length === 10
-        ? await db
-            .select({ name: cleanerProfiles.name })
-            .from(cleanerProfiles)
-            .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${phoneDigits} AND ${cleanerProfiles.isActive} = 1`)
-            .limit(1)
-        : [];
-
-      await triggerMadisonSmsDraft({
-        inboundOpenPhoneId: `projected_session_${input.sessionId}_${session.lastMessageTs ?? session.lastMessageText}`,
-        sessionId: input.sessionId,
-        fromPhone: session.leadPhone,
-        senderName: cleaner?.name ?? session.leadName ?? undefined,
-        isCleaner: Boolean(cleaner),
-        inboundText: session.lastMessageText,
-      });
-      return { ok: true, existing: false };
-    }),
 
   /**
    * Approve a draft and send the SMS.
@@ -6309,6 +6232,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
          m.quickAction === 'madison_email_draft' ||
          m.quickAction === 'madison_call_summary')
       );
+      if (madisonMsgs.length === 0) return [];
 
       // Step 3: apply the exact same draft-status filter as listChannelMessages
       // SMS
@@ -6317,7 +6241,6 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
       }
       const completedSmsDraftIds = new Set<number>();
-      const persistedSmsSessionIds = new Set<number>();
       if (smsCardDraftIds.length > 0) {
         const draftRows = await db
           .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
@@ -6328,15 +6251,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
             completedSmsDraftIds.add(d.id);
           }
         }
-        const draftSessionRows = await db
-          .select({ sessionId: madisonSmsDrafts.sessionId })
-          .from(madisonSmsDrafts)
-          .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
-        for (const row of draftSessionRows) persistedSmsSessionIds.add(Number(row.sessionId));
       }
-      // A FAILED/partial Madison draft can exist without an active card. Do not let
-      // that row suppress the session projection; deduplication is based only on the
-      // active Madison cards collected above.
 
       // Email
       const emailCardDraftIds: number[] = [];
@@ -6370,61 +6285,8 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         return true;
       });
 
-      // Step 5: project every current Command Chat green-dot session into the
-      // same queue. A missing Madison draft must not hide an unanswered SMS.
-      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      const greenDotSessions = await db
-        .select({
-          id: conversationSessions.id,
-          leadName: conversationSessions.leadName,
-          leadPhone: conversationSessions.leadPhone,
-          messageHistory: conversationSessions.messageHistory,
-          lastMessageText: conversationSessions.lastMessageText,
-          lastMessageTs: conversationSessions.lastMessageTs,
-          lastMessageRole: conversationSessions.lastMessageRole,
-          updatedAt: conversationSessions.updatedAt,
-        })
-        .from(conversationSessions)
-        .where(and(
-          or(
-            sql`(
-              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
-              OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
-            )`,
-            eq(conversationSessions.csQueue as any, "CS"),
-          ),
-          isNull(conversationSessions.csResolvedAt),
-        ));
-      const sessionsByPhone = new Map<string, typeof greenDotSessions>();
-      for (const session of greenDotSessions) {
-        const phone = session.leadPhone?.trim() || "__no_phone__";
-        const group = sessionsByPhone.get(phone) ?? [];
-        group.push(session);
-        sessionsByPhone.set(phone, group);
-      }
-      const canonicalGreenDotSessions = Array.from(sessionsByPhone.values()).map((group) => group.reduce((current, candidate) => {
-        const currentTs = current.lastMessageTs ?? 0;
-        const candidateTs = candidate.lastMessageTs ?? 0;
-        return candidateTs > currentTs ? candidate : current;
-      }));
-      const projectedSmsCards = canonicalGreenDotSessions
-        .map((session) => ({
-          session,
-          lastMsgTs: session.lastMessageTs && session.lastMessageTs > 0 ? session.lastMessageTs : session.updatedAt.getTime(),
-        }))
-        .filter(({ session, lastMsgTs }) => session.lastMessageRole === "user" && lastMsgTs >= cutoff)
-        .filter(({ session }) => !persistedSmsSessionIds.has(Number(session.id)))
-        .map(({ session, lastMsgTs }) => ({
-          id: -Number(session.id),
-          ts: Number(lastMsgTs),
-          quickAction: "madison_sms_draft" as const,
-          body: session.lastMessageText || "",
-          metadata: JSON.stringify({ sessionId: Number(session.id), senderName: session.leadName ?? null, pendingMadison: true }),
-          mediaUrl: null,
-        }));
-
-      // Step 6: sort by lastActivityAt desc (same as badge cycling order)
-      return [...unresolvedCards
+      // Step 5: sort by lastActivityAt desc (same as badge cycling order)
+      return unresolvedCards
         .sort((a, b) => {
           const tsA = Number(a.lastActivityAt ?? new Date(a.createdAt as Date).getTime());
           const tsB = Number(b.lastActivityAt ?? new Date(b.createdAt as Date).getTime());
@@ -6437,7 +6299,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           body: m.body,
           metadata: m.metadata ?? null,
           mediaUrl: m.mediaUrl ?? null,
-        })), ...projectedSmsCards].sort((a, b) => b.ts - a.ts || b.id - a.id);
+        }));
     }),
 
   /**

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -196,10 +196,9 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
   const [showEvidence, setShowEvidence] = useState(false);
   const [editingReply, setEditingReply] = useState(false);
   const [editedReply, setEditedReply] = useState("");
-  let metadata: { draftId?: number; sessionId?: number; senderName?: string | null; autoSentAt?: string; autoReply?: string; pendingMadison?: boolean } = {};
+  let metadata: { draftId?: number; autoSentAt?: string; autoReply?: string } = {};
   try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* malformed legacy card */ }
   const draftId = metadata.draftId;
-  const sessionId = metadata.sessionId;
   const autoSent = Boolean(metadata.autoSentAt);
   const { data: shadowPrediction, isLoading: shadowLoading, isError: shadowError } = trpc.activity.getShadowPrediction.useQuery(
     { draftId: draftId! },
@@ -213,10 +212,6 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     { draftId: draftId!, limit: 20 },
     { enabled: Boolean(draftId) && showConversation, refetchOnWindowFocus: false },
   );
-  const { data: pendingConversation = [], isLoading: pendingConversationLoading } = trpc.opsChat.getSessionConversation.useQuery(
-    { sessionId: sessionId!, limit: 20 },
-    { enabled: Boolean(sessionId) && !draftId && showConversation, refetchOnWindowFocus: false },
-  );
   const approveReply = trpc.opsChat.approveSmsDraft.useMutation({
     onSuccess: result => {
       if (result.ok) {
@@ -225,20 +220,6 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
         onChanged();
       } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
     },
-  });
-  const sendPendingReply = trpc.leads.sendMessage.useMutation({
-    onSuccess: () => { toast.success("Reply sent."); setEditingReply(false); setEditedReply(""); onChanged(); },
-    onError: error => toast.error(`Reply was not sent: ${error.message}`),
-  });
-  const ensureMadisonDraft = trpc.opsChat.ensureMadisonDraftForSession.useMutation({
-    onSuccess: result => {
-      if (result.ok) {
-        void utils.opsChat.getFocusCards.invalidate();
-      } else if (result.reason !== "not_unanswered") {
-        toast.error(`Madison could not prepare this reply: ${result.reason}`);
-      }
-    },
-    onError: error => toast.error(`Madison could not prepare this reply: ${error.message}`),
   });
   const { data: actionApproval } = trpc.madison.getActionApproval.useQuery(
     { draftId: draftId! },
@@ -262,39 +243,25 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     },
     onError: error => toast.error(error.message),
   });
-  const pendingMadison = !draftId && Boolean(sessionId);
-  useEffect(() => {
-    if (pendingMadison && sessionId && !ensureMadisonDraft.isPending) {
-      ensureMadisonDraft.mutate({ sessionId });
-    }
-  }, [pendingMadison, sessionId]);
-  if (!draftId && !pendingMadison) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
-  if (!pendingMadison && (isLoading || !draft)) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
-  const proposal = draft ? actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "") : null;
+  if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
+  if (!draft) return null;
+  const proposal = actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "");
   const decisionEvaluation = proposal
     ? unifiedReview?.actionEvaluation ?? actionApproval?.decisionEvaluation
     : unifiedReview?.replyEvaluation ?? replyDecisionEvaluation;
   const factEvidence = unifiedReview?.facts ?? [];
   const factEvidenceLoading = unifiedReviewLoading;
-  const customerName = draft?.senderName ?? metadata.senderName ?? "Customer";
+  const customerName = draft.senderName ?? "Customer";
   const latestCardTime = formatConversationTime(card.ts);
-  const originalMessage = draft?.originalMessage ?? card.body;
-  const generatedReply = draft?.generatedDraft ?? "";
+  const generatedReply = draft.generatedDraft ?? "";
   const approveText = editingReply ? editedReply.trim() : generatedReply;
-  const activeConversation = draftId ? conversation : pendingConversation;
-  const activeConversationLoading = draftId ? conversationLoading : pendingConversationLoading;
-  const displayedReply = draft
-    ? (autoSent ? metadata.autoReply ?? draft.approvedText ?? draft.generatedDraft : draft.generatedDraft ?? "Draft is still being prepared.")
-    : editingReply
-      ? editedReply
-      : "No Madison draft has been created yet. Edit this reply to prepare it for human approval.";
   return (
     <article className="ai-team-need-card">
       <div className="ai-team-need-icon"><MessageSquare size={17} /></div>
       <div className="ai-team-need-copy">
         <strong>{autoSent ? "Madison sent reply" : proposal?.title ?? "Madison reply approval"}</strong>
-        <p>{customerName}: “{originalMessage}”{latestCardTime && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {latestCardTime}</time>}</p>
-        <em>{autoSent ? "This reply was sent automatically by Madison." : proposal ? <><b>Recommended task:</b> {proposal.task}<br /><span>Madison recommends: {proposal.recommendation}</span></> : pendingMadison ? "Human approval is required. Madison has not created a draft for this message yet." : "Approve the drafted reply below."}</em>
+        <p>{customerName}: “{draft.originalMessage}”{latestCardTime && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {latestCardTime}</time>}</p>
+        <em>{autoSent ? "This reply was sent automatically by Madison." : proposal ? <><b>Recommended task:</b> {proposal.task}<br /><span>Madison recommends: {proposal.recommendation}</span></> : "Approve the drafted reply below."}</em>
         {editingReply ? <textarea
           aria-label="Edit Madison reply"
           value={editedReply}
@@ -302,8 +269,8 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
           rows={5}
           maxLength={1600}
           style={{ marginTop: 10, width: "100%", resize: "vertical", border: "1px solid #cdb79f", borderRadius: 10, padding: 10, color: "#4f473f", font: "inherit", lineHeight: 1.45, background: "#fffdf9" }}
-        /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{displayedReply}</div>}
-        <div className="ai-team-policy-note"><b>SMS policy:</b> {draft?.sendPolicyEnabled === 0 ? "Disabled" : draft?.sendPolicyMode === "automatic" ? "Automatic policy selected · approval still required in this rollout" : draft?.sendPolicyMode === "suggest_only" ? "Suggest only" : "Approval required"}</div>
+        /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{autoSent ? metadata.autoReply ?? draft.approvedText ?? draft.generatedDraft : draft.generatedDraft ?? "Draft is still being prepared."}</div>}
+        <div className="ai-team-policy-note"><b>SMS policy:</b> {draft.sendPolicyEnabled === 0 ? "Disabled" : draft.sendPolicyMode === "automatic" ? "Automatic policy selected · approval still required in this rollout" : draft.sendPolicyMode === "suggest_only" ? "Suggest only" : "Approval required"}</div>
         {decisionEvaluation && <div className={`ai-team-decision-summary is-${decisionEvaluation.outcome}`}>
           <div><b>{decisionEvaluation.actionKey === "send_sms_reply" ? "Reply readiness" : "Action readiness"}</b><strong>{formatDecisionOutcome(decisionEvaluation.actionKey === "send_sms_reply" ? decisionEvaluation.replyReadiness : decisionEvaluation.actionReadiness)}</strong></div>
           <span>{decisionEvaluation.confidenceBand ? `${formatShadowValue(decisionEvaluation.confidenceBand)} confidence` : "Confidence unavailable"} · {decisionEvaluation.actionKey === "send_sms_reply" ? `Reply evaluation: ${formatShadowValue(decisionEvaluation.replyEvaluationStatus)}` : `Prediction: ${formatShadowValue(decisionEvaluation.predictionState)}`} · {decisionEvaluation.reasonCodes.length > 0 ? decisionEvaluation.reasonCodes.map(formatDecisionOutcome).join(" · ") : "All review gates passed"}</span>
@@ -330,16 +297,16 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
         {editingReply && <small style={{ display: "block", marginTop: 4, color: "#8b8177" }}>{editedReply.length}/1600 characters · Original Madison draft is preserved.</small>}
         <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
         {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">
-          {activeConversationLoading ? <span>Loading conversation…</span> : activeConversation.length === 0 ? <span>No conversation history is available.</span> : activeConversation.map((message, index) => { const messageTime = formatConversationTime(message.ts); return <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" || message.role === "customer" ? customerName : "Madison")}</small>{messageTime && <time dateTime={new Date(message.ts).toISOString()}>{messageTime}</time>}</div><p>{message.content}</p></div>; })}
+          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => { const messageTime = formatConversationTime(message.ts); return <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small>{messageTime && <time dateTime={new Date(message.ts).toISOString()}>{messageTime}</time>}</div><p>{message.content}</p></div>; })}
         </div>}
       </div>
       <div className="ai-team-need-actions">
-        {!autoSent && !editingReply && <button type="button" className="is-quiet" onClick={() => { setEditedReply(generatedReply); setEditingReply(true); }} disabled={pendingMadison ? false : !generatedReply}>Edit reply</button>}
+        {!autoSent && !editingReply && <button type="button" className="is-quiet" onClick={() => { setEditedReply(generatedReply); setEditingReply(true); }} disabled={!generatedReply}>Edit reply</button>}
         {!autoSent && editingReply && <>
-          {pendingMadison ? <button type="button" onClick={() => sendPendingReply.mutate({ sessionId: sessionId!, message: editedReply.trim(), source: "cs_inbox" })} disabled={sendPendingReply.isPending || !editedReply.trim()}>{sendPendingReply.isPending ? "Sending…" : "Approve edited reply"}</button> : <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: approveText, approvedBy: agentName })} disabled={approveReply.isPending || !approveText}>{approveReply.isPending ? "Sending…" : "Approve edited reply"}</button>}
+          <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: approveText, approvedBy: agentName })} disabled={approveReply.isPending || !approveText}>{approveReply.isPending ? "Sending…" : "Approve edited reply"}</button>
           <button type="button" className="is-quiet" onClick={() => { setEditingReply(false); setEditedReply(generatedReply); }} disabled={approveReply.isPending}>Cancel edit</button>
         </>}
-        {!autoSent && !editingReply && draftId && <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: generatedReply, approvedBy: agentName })} disabled={approveReply.isPending || !generatedReply}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>}
+        {!autoSent && !editingReply && <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: generatedReply, approvedBy: agentName })} disabled={approveReply.isPending || !generatedReply}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>}
         {!autoSent && proposal && <button type="button" className="is-quiet" onClick={() => approveActionTask.mutate({ draftId, approvedBy: agentName ?? "Owner" })} disabled={approveActionTask.isPending || actionApproval?.status === "APPROVED" || actionApproval?.status === "APPROVING"}>{actionApproval?.status === "APPROVED" ? "Task approved" : actionApproval?.status === "APPROVING" || approveActionTask.isPending ? "Approving…" : "Approve task"}</button>}
       </div>
     </article>
