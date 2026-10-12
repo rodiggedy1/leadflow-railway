@@ -6484,7 +6484,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         })
         .map(m => ({
           id: m.id,
-          ts: new Date(m.createdAt as Date).getTime(),
+          ts: Number(m.lastActivityAt ?? new Date(m.createdAt as Date).getTime()),
           quickAction: m.quickAction,
           body: m.body,
           metadata: m.metadata ?? null,
