@@ -217,7 +217,6 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
       if (result.ok) {
         toast.success("Madison's reply was approved and sent.");
         void utils.opsChat.getFocusCards.invalidate();
-        void utils.madison.getActiveSmsQueue.invalidate();
         onChanged();
       } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
     },
@@ -243,29 +242,6 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
       } else toast.error(`Task was not approved: ${result.reason}`);
     },
     onError: error => toast.error(error.message),
-  });
-  const resolveCard = trpc.madison.resolveSmsCard.useMutation({
-    onMutate: async ({ messageId }) => {
-      await utils.madison.getActiveSmsQueue.cancel();
-      const previous = utils.madison.getActiveSmsQueue.getData();
-      utils.madison.getActiveSmsQueue.setData(undefined, cards => cards?.filter(card => card.id !== messageId));
-      return { previous };
-    },
-    onSuccess: result => {
-      if (result.ok) {
-        toast.success("Removed from the active queue. No message was sent and the booking was unchanged.");
-      } else {
-        toast.error(result.reason === "already_resolved" ? "This request was already resolved." : "Unable to resolve this request.");
-      }
-    },
-    onError: (error, _variables, context) => {
-      if (context?.previous) utils.madison.getActiveSmsQueue.setData(undefined, context.previous);
-      toast.error(error.message);
-    },
-    onSettled: () => {
-      void utils.madison.getActiveSmsQueue.invalidate();
-      onChanged();
-    },
   });
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
@@ -332,7 +308,6 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
         </>}
         {!autoSent && !editingReply && <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: generatedReply, approvedBy: agentName })} disabled={approveReply.isPending || !generatedReply}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>}
         {!autoSent && proposal && <button type="button" className="is-quiet" onClick={() => approveActionTask.mutate({ draftId, approvedBy: agentName ?? "Owner" })} disabled={approveActionTask.isPending || actionApproval?.status === "APPROVED" || actionApproval?.status === "APPROVING"}>{actionApproval?.status === "APPROVED" ? "Task approved" : actionApproval?.status === "APPROVING" || approveActionTask.isPending ? "Approving…" : "Approve task"}</button>}
-        <button type="button" className="is-resolve" onClick={() => resolveCard.mutate({ messageId: card.id, resolutionReason: autoSent ? "handled_elsewhere" : "no_reply_needed" })} disabled={resolveCard.isPending}>{resolveCard.isPending ? "Dismissing…" : autoSent ? "Dismiss" : "No reply needed"}</button>
       </div>
     </article>
   );
@@ -347,12 +322,12 @@ export default function AiTeamReview() {
   const [resolved, setResolved] = useState<string[]>([]);
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
-  const { data: focusCards = [], isLoading: focusLoading } = trpc.madison.getActiveSmsQueue.useQuery(undefined, { refetchInterval: 5_000, refetchOnWindowFocus: false });
+  const { data: focusCards = [], isLoading: focusLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const { data: activityFeed } = trpc.activity.getFeed.useQuery({ limit: 100, sinceDays: 30 }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const { data: dashboardStats } = trpc.commandCenter.getDashboardStats.useQuery({ range: "today" }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   useOpsStream({
     onNewMessage: channel => {
-      if (channel === "command") void utils.madison.getActiveSmsQueue.invalidate();
+      if (channel === "command") void utils.opsChat.getFocusCards.invalidate();
     },
   }, { label: "ai-team-madison-queue" });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
@@ -365,7 +340,7 @@ export default function AiTeamReview() {
     audit: item.meta as ActivityAudit,
   }));
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
-  const refreshLiveQueue = () => { void utils.madison.getActiveSmsQueue.invalidate(); };
+  const refreshLiveQueue = () => { void utils.opsChat.getFocusCards.invalidate(); };
 
   const actionPreview = (id: string, action: string) => {
     setResolved(items => items.includes(id) ? items : [...items, id]);
