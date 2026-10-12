@@ -6265,41 +6265,9 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         }
       }
 
-      // SMS cards are actionable only while the latest real conversation message
-      // is inbound. An active draft card can outlive a reply sent from another
-      // surface, so draft status alone is not enough to keep it in Focus.
-      const smsSessionIds = Array.from(new Set(
-        madisonMsgs
-          .filter(m => m.quickAction === 'madison_sms_draft' && m.sessionId != null)
-          .map(m => m.sessionId as number),
-      ));
-      const latestSmsRoleBySession = new Map<number, string | null>();
-      if (smsSessionIds.length > 0) {
-        const sessionRows = await db
-          .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })
-          .from(conversationSessions)
-          .where(inArray(conversationSessions.id, smsSessionIds));
-        for (const row of sessionRows) {
-          let latestRole: string | null = null;
-          try {
-            const history = JSON.parse(row.messageHistory ?? '[]') as Array<{ role?: unknown }>;
-            for (let i = history.length - 1; i >= 0; i -= 1) {
-              const role = history[i]?.role;
-              if (role === 'user' || role === 'customer' || role === 'assistant' || role === 'agent') {
-                latestRole = String(role);
-                break;
-              }
-            }
-          } catch { /* preserve legacy card behavior when history is malformed */ }
-          latestSmsRoleBySession.set(row.id, latestRole);
-        }
-      }
-
       // Step 4: filter out completed cards — same predicate as listChannelMessages
       const unresolvedCards = madisonMsgs.filter(m => {
         if (m.quickAction === 'madison_sms_draft') {
-          const latestRole = m.sessionId == null ? null : latestSmsRoleBySession.get(m.sessionId);
-          if (latestRole === 'assistant' || latestRole === 'agent') return false;
           try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedSmsDraftIds.has(meta.draftId); } catch { return true; }
         }
         if (m.quickAction === 'madison_email_draft') {
