@@ -190,23 +190,18 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
   );
 }
 
-function InboundSmsNeedCard({ card }: { card: { id: number; ts: number; metadata: string | null; body: string } }) {
-  let metadata: { senderName?: string | null; inboundText?: string; messageId?: string } = {};
-  try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* malformed legacy card */ }
-  const sender = metadata.senderName ?? "Customer";
-  const message = metadata.inboundText ?? card.body;
-  const receivedAt = formatConversationTime(card.ts);
+function LeadReplyNeedCard({ lead }: { lead: { id: number; leadName: string; lastInboundAt: number; lastMessagePreview: string | null } }) {
+  const receivedAt = formatConversationTime(lead.lastInboundAt);
   return <article className="ai-team-need-card">
     <div className="ai-team-need-icon"><MessageSquare size={17} /></div>
     <div className="ai-team-need-copy">
-      <strong>Received SMS · awaiting reply</strong>
-      <p>{sender}: “{message}”{receivedAt && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {receivedAt}</time>}</p>
-      <em>This card is created from the received message itself. Madison drafting or Shadow classification is not required for visibility.</em>
+      <strong>Customer SMS · awaiting reply</strong>
+      <p>{lead.leadName}: “{lead.lastMessagePreview ?? "New customer message"}"{receivedAt && <time className="ai-team-card-time" dateTime={new Date(lead.lastInboundAt).toISOString()}>Received {receivedAt}</time>}</p>
+      <em>This is the same lead-reply source used by Command Chat. It is shown because the latest real message is from the customer and is within 30 days.</em>
       <div className="ai-team-policy-note"><b>SMS policy:</b> Human reply required. No message was sent automatically.</div>
     </div>
   </article>;
 }
-
 function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
   const utils = trpc.useUtils();
   const [showConversation, setShowConversation] = useState(false);
@@ -339,15 +334,15 @@ export default function AiTeamReview() {
   const [resolved, setResolved] = useState<string[]>([]);
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
-  const { data: focusCards = [], isLoading: focusLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: leadReplies = [], isLoading: focusLoading } = trpc.leads.getLeadReplies.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const { data: activityFeed } = trpc.activity.getFeed.useQuery({ limit: 100, sinceDays: 30 }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const { data: dashboardStats } = trpc.commandCenter.getDashboardStats.useQuery({ range: "today" }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   useOpsStream({
     onNewMessage: channel => {
-      if (channel === "command") void utils.opsChat.getFocusCards.invalidate();
+      if (channel === "command") void utils.leads.getLeadReplies.invalidate();
     },
   }, { label: "ai-team-madison-queue" });
-  const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft" || card.quickAction === "inbound_sms_unanswered");
+  const liveSmsCards = leadReplies;
   const activityItems: ActivityItem[] = (activityFeed?.items ?? []).map(item => ({
     id: item.id,
     ts: new Date(item.createdAt).getTime(),
@@ -356,8 +351,7 @@ export default function AiTeamReview() {
     kind: "madison",
     audit: item.meta as ActivityAudit,
   }));
-  const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
-  const refreshLiveQueue = () => { void utils.opsChat.getFocusCards.invalidate(); };
+  const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(lead => getIssueCategory(lead.lastMessagePreview ?? "") === issueFilter);
 
   const actionPreview = (id: string, action: string) => {
     setResolved(items => items.includes(id) ? items : [...items, id]);
@@ -374,9 +368,7 @@ export default function AiTeamReview() {
 
       {tab === "overview" && <>
         <section className="ai-team-summary"><div><strong>{activityFeed ? activityFeed.todayActions : "—"}</strong><span>actions handled today</span></div><div><strong>{activityFeed ? activityFeed.todayLeadsAnswered : "—"}</strong><span>leads answered</span></div><div><strong>{dashboardStats ? dashboardStats.bookedJobs : "—"}</strong><span>bookings made</span></div><div><strong>{dashboardStats ? `$${dashboardStats.bookedRevenue.toLocaleString()}` : "—"}</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
-        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => card.quickAction === "inbound_sms_unanswered"
-              ? <InboundSmsNeedCard key={card.id} card={card} />
-              : <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
+        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(lead => getIssueCategory(lead.lastMessagePreview ?? "") === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(lead => <LeadReplyNeedCard key={lead.id} lead={lead} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
         <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact items={activityItems} onOpen={setSelectedActivity} /></section>
       </>}
