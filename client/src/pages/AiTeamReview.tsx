@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { MadisonSmsDraftCard } from "@/components/CommandChat";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import "./ai-team-review.css";
@@ -165,6 +164,25 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
   );
 }
 
+function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sessionId: number; leadName: string | null; leadPhone: string; body: string; ts: number; draft: { id: number; status: string; generatedDraft: string | null } | null }; callerName: string; onActed: () => void }) {
+  const [showConversation, setShowConversation] = useState(false);
+  const [reply, setReply] = useState(card.draft?.generatedDraft ?? "");
+  const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSessionConversation.useQuery({ sessionId: card.sessionId, limit: 20 }, { enabled: showConversation, refetchOnWindowFocus: false });
+  const approve = trpc.opsChat.approveSmsDraft.useMutation({ onSuccess: onActed });
+  const dismiss = trpc.opsChat.dismissSmsDraft.useMutation({ onSuccess: onActed });
+  const draftReady = card.draft?.status === "DRAFT_READY" && Boolean(card.draft.id);
+  return <article className="ai-team-sms-card">
+    <div className="ai-team-sms-card__top"><MessageSquare size={18} /><span>UNANSWERED SMS</span><time>{formatConversationTime(card.ts)}</time></div>
+    <h3>{card.leadName || card.leadPhone}</h3>
+    <div className="ai-team-sms-card__inbound">“{card.body}”</div>
+    <div className="ai-team-sms-card__status">{draftReady ? "Madison draft ready for human approval." : "Madison draft is not ready yet."}</div>
+    {draftReady ? <textarea aria-label="Madison reply" value={reply} onChange={event => setReply(event.target.value)} /> : <p className="ai-team-sms-card__warning">This message remains visible until Madison produces a reviewable draft.</p>}
+    <div className="ai-team-sms-card__links"><button type="button" onClick={() => setShowConversation(value => !value)}>{showConversation ? "Hide conversation" : "View conversation"}</button></div>
+    {showConversation && <div className="ai-team-sms-card__conversation">{conversationLoading ? "Loading conversation…" : conversation.map((message, index) => <div key={`${message.ts}-${index}`} className={`ai-team-sms-card__message ai-team-sms-card__message--${message.role}`}><small>{message.senderName || message.role}</small><p>{message.content}</p></div>)}</div>}
+    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !reply.trim() || approve.isPending} onClick={() => approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => card.draft && dismiss.mutate({ draftId: card.draft.id, dismissedBy: callerName })} disabled={!draftReady || dismiss.isPending}>Dismiss</button></div>
+  </article>;
+}
+
 export default function AiTeamReview() {
   const [tab, setTab] = useState<Tab>("overview");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -189,6 +207,10 @@ export default function AiTeamReview() {
     const draft = session.madisonDraft;
     return {
       id: draft?.id ?? session.id,
+      sessionId: session.id,
+      leadName: session.leadName,
+      leadPhone: session.leadPhone,
+      draft,
       ts: Date.now() - session.ageMs,
       body: session.lastMessagePreview,
       metadata: JSON.stringify({
@@ -226,7 +248,7 @@ export default function AiTeamReview() {
 
       {tab === "overview" && <>
         <section className="ai-team-summary"><div><strong>{activityFeed ? activityFeed.todayActions : "—"}</strong><span>actions handled today</span></div><div><strong>{activityFeed ? activityFeed.todayLeadsAnswered : "—"}</strong><span>leads answered</span></div><div><strong>{dashboardStats ? dashboardStats.bookedJobs : "—"}</strong><span>bookings made</span></div><div><strong>{dashboardStats ? `$${dashboardStats.bookedRevenue.toLocaleString()}` : "—"}</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
-        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-needs-grid">{unansweredLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : liveSmsCards.map(card => <MadisonSmsDraftCard key={card.id} msg={{ id: card.id, body: card.body, metadata: card.metadata, createdAt: new Date(card.ts) }} callerName={agentName ?? "Owner"} onActed={refreshLiveQueue} />)}</div></section>
+        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-needs-grid">{unansweredLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : liveSmsCards.map(card => <AiTeamSmsCard key={`${card.sessionId}-${card.id}`} card={card} callerName={agentName ?? "Owner"} onActed={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
         <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact items={activityItems} onOpen={setSelectedActivity} /></section>
       </>}
