@@ -176,6 +176,7 @@ export async function triggerMadisonSmsDraft(params: {
 
   const now = new Date();
   let draftId: number | undefined;
+  let relevantConversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
 
   try {
     // ── Step 0: Create draft record (RECEIVED) ────────────────────────────────
