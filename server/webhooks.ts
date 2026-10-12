@@ -2157,6 +2157,24 @@ Be specific and actionable. Reference actual moments from the transcript. No flu
 // In-memory dedup for CS inbound: prevents double-appends from OpenPhone at-least-once delivery.
 const csMessageDedup = new Map<string, number>();
 
+async function upsertInboundSmsUnansweredCard(params: {
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  sessionId: number; messageId: string; fromPhone: string; senderName: string | null;
+  inboundText: string; mediaUrl?: string | null;
+}): Promise<void> {
+  const { db, sessionId, messageId, fromPhone, senderName, inboundText, mediaUrl } = params;
+  const eventTs = Date.now();
+  const dedupKey = `inbound_sms_unanswered:${messageId}`;
+  const metadata = JSON.stringify({ sessionId, messageId, fromPhone, senderName, inboundText, receivedAt: new Date(eventTs).toISOString() });
+  await db.insert(opsChatMessages).values({
+    channel: "command", authorName: senderName ?? fromPhone, authorRole: "system",
+    body: `Received SMS · ${senderName ?? fromPhone}\n\"${inboundText}\"`, mediaUrl: mediaUrl ?? null,
+    quickAction: "inbound_sms_unanswered", metadata, sessionId, lastActivityAt: eventTs,
+    cardStatus: "active", activeDedupKey: dedupKey,
+  }).onDuplicateKeyUpdate({ set: { metadata, lastActivityAt: eventTs, cardStatus: "active", activeDedupKey: dedupKey } });
+  console.log(`[CS] Persisted AI Team inbound SMS card messageId=${messageId} sessionId=${sessionId}`);
+}
+
 async function handleCsInboundMessage(msg: any) {
   const db = await getDb();
   if (!db) {
@@ -2373,6 +2391,7 @@ async function handleCsInboundMessage(msg: any) {
     .orderBy(desc(conversationSessions.updatedAt))
     .limit(1);
 
+  let persistedSessionId: number | undefined = existingSession?.id;
   if (existingSession) {
     // Append to existing session.
     // Re-read history fresh from DB to avoid a race condition where the agent
@@ -2451,6 +2470,7 @@ async function handleCsInboundMessage(msg: any) {
       .orderBy(desc(conversationSessions.updatedAt))
       .limit(1);
     if (hiringSession) {
+      persistedSessionId = hiringSession.id;
       // Append to the hiring session so the full conversation stays in one place
       const [freshHiring] = await db
         .select({ messageHistory: conversationSessions.messageHistory })
@@ -2497,11 +2517,21 @@ async function handleCsInboundMessage(msg: any) {
           createdAt: new Date(),
           updatedAt: new Date(),
         } as any);
-      const sessionId = (result as any).insertId;
+      const sessionId = (result as any).insertId as number;
+      persistedSessionId = sessionId;
       console.log(`[CS] Created new ${sessionSource} session ${sessionId} for ${fromPhone}${resolvedName ? ` (${resolvedName})` : ""}`);
     }
   }
 
+  // Persist the inbox card before Madison/Shadow enrichment.
+  const inboundSessionId = persistedSessionId ?? existingSession?.id;
+  if (inboundSessionId && messageId && (inboundText.trim() || mediaUrls.length > 0)) {
+    await upsertInboundSmsUnansweredCard({
+      db, sessionId: inboundSessionId, messageId, fromPhone,
+      senderName: resolvedName ?? existingSession?.leadName ?? null,
+      inboundText, mediaUrl: mediaUrls[0] ?? null,
+    });
+  }
   // Broadcast SSE so CS inbox updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("lead_update");
@@ -2918,7 +2948,7 @@ async function handleCsOutboundMessage(msg: any) {
     await db.execute(
       sql`UPDATE ops_chat_messages
           SET cardStatus = 'dismissed', activeDedupKey = NULL
-          WHERE quickAction = 'unanswered_alarm'
+          WHERE quickAction IN ('unanswered_alarm', 'inbound_sms_unanswered')
             AND cardStatus = 'active'
             AND JSON_EXTRACT(metadata, '$.sessionId') = ${session.id}`
     );
@@ -3004,7 +3034,7 @@ async function handleSyncedOutboundReply(
     await db.execute(
       sql`UPDATE ops_chat_messages
           SET cardStatus = 'dismissed', activeDedupKey = NULL
-          WHERE quickAction = 'unanswered_alarm'
+          WHERE quickAction IN ('unanswered_alarm', 'inbound_sms_unanswered')
             AND cardStatus = 'active'
             AND JSON_EXTRACT(metadata, '$.sessionId') = ${sessionId}`
     );
