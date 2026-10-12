@@ -201,7 +201,21 @@ function InboundSmsNeedCard({ card }: { card: { id: number; ts: number; metadata
     <div className="ai-team-need-copy">
       <strong>Received SMS · awaiting reply</strong>
       <p>{sender}: “{message}”{receivedAt && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {receivedAt}</time>}</p>
-      <em>This card is created from the received message itself. Madison drafting or Shadow classification is not required for visibility.</em>
+      <em>Human review is required. Madison has not created a reply draft for this message yet.</em>
+      <div className="ai-team-decision-summary is-recommendation_only">
+        <div><b>Reply readiness</b><strong>Waiting for draft</strong></div>
+        <span>Confidence unavailable · Reply evaluation not started · No draft persisted</span>
+      </div>
+      <div className="ai-team-card-shadow">
+        <span>SHADOW UNDERSTANDING · READ ONLY</span>
+        <p>No prediction recorded for this message yet. Visibility comes directly from the Command Chat inbox.</p>
+      </div>
+      <div className="ai-team-card-evidence">
+        <div className="ai-team-evidence-toggle" aria-label="Facts and evidence unavailable">
+          <span>FACTS &amp; EVIDENCE</span><strong>Not available yet</strong>
+        </div>
+        <div className="ai-team-evidence-body"><p>No persisted facts are available until Madison classifies this message.</p></div>
+      </div>
       <div className="ai-team-policy-note"><b>SMS policy:</b> Human reply required. No message was sent automatically.</div>
     </div>
   </article>;
