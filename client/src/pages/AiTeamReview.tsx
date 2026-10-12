@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -340,14 +340,49 @@ export default function AiTeamReview() {
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
   const { data: focusCards = [], isLoading: focusLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: commandChatInbox = [], isLoading: commandChatInboxLoading } = trpc.commandCenter.listCommandChatInbox.useQuery(undefined, { refetchInterval: 15_000, refetchOnWindowFocus: false });
   const { data: activityFeed } = trpc.activity.getFeed.useQuery({ limit: 100, sinceDays: 30 }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const { data: dashboardStats } = trpc.commandCenter.getDashboardStats.useQuery({ range: "today" }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   useOpsStream({
     onNewMessage: channel => {
       if (channel === "command") void utils.opsChat.getFocusCards.invalidate();
+      if (channel === "command") void utils.commandCenter.listCommandChatInbox.invalidate();
     },
+    onLeadUpdate: () => void utils.commandCenter.listCommandChatInbox.invalidate(),
   }, { label: "ai-team-madison-queue" });
-  const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft" || card.quickAction === "inbound_sms_unanswered");
+  const sessionInboundCards = useMemo(() => {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const persistedSessionIds = new Set<number>();
+    for (const card of focusCards) {
+      try {
+        const metadata = JSON.parse(card.metadata ?? "{}");
+        if (typeof metadata.sessionId === "number") persistedSessionIds.add(metadata.sessionId);
+      } catch { /* malformed legacy card */ }
+    }
+    return commandChatInbox
+      .filter((conversation) => {
+        const lastMessageTs = Number(conversation.lastMsgTs ?? 0);
+        return conversation.hasUnanswered
+          && Boolean(conversation.leadPhone)
+          && lastMessageTs >= thirtyDaysAgo
+          && !persistedSessionIds.has(conversation.id);
+      })
+      .map((conversation) => ({
+        id: -conversation.id,
+        ts: Number(conversation.lastMsgTs),
+        quickAction: "inbound_sms_unanswered" as const,
+        body: `Received SMS · ${conversation.leadName ?? conversation.leadPhone}\n“${conversation.lastMessageText ?? ""}”`,
+        metadata: JSON.stringify({
+          sessionId: conversation.id,
+          senderName: conversation.leadName ?? conversation.leadPhone,
+          inboundText: conversation.lastMessageText ?? "",
+          receivedAt: new Date(Number(conversation.lastMsgTs)).toISOString(),
+          source: "command_chat_session",
+        }),
+        mediaUrl: null,
+      }));
+  }, [commandChatInbox, focusCards]);
+  const liveSmsCards = [...focusCards, ...sessionInboundCards].filter(card => card.quickAction === "madison_sms_draft" || card.quickAction === "inbound_sms_unanswered");
   const activityItems: ActivityItem[] = (activityFeed?.items ?? []).map(item => ({
     id: item.id,
     ts: new Date(item.createdAt).getTime(),
@@ -357,7 +392,10 @@ export default function AiTeamReview() {
     audit: item.meta as ActivityAudit,
   }));
   const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
-  const refreshLiveQueue = () => { void utils.opsChat.getFocusCards.invalidate(); };
+  const refreshLiveQueue = () => {
+    void utils.opsChat.getFocusCards.invalidate();
+    void utils.commandCenter.listCommandChatInbox.invalidate();
+  };
 
   const actionPreview = (id: string, action: string) => {
     setResolved(items => items.includes(id) ? items : [...items, id]);
@@ -374,7 +412,7 @@ export default function AiTeamReview() {
 
       {tab === "overview" && <>
         <section className="ai-team-summary"><div><strong>{activityFeed ? activityFeed.todayActions : "—"}</strong><span>actions handled today</span></div><div><strong>{activityFeed ? activityFeed.todayLeadsAnswered : "—"}</strong><span>leads answered</span></div><div><strong>{dashboardStats ? dashboardStats.bookedJobs : "—"}</strong><span>bookings made</span></div><div><strong>{dashboardStats ? `$${dashboardStats.bookedRevenue.toLocaleString()}` : "—"}</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
-        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => card.quickAction === "inbound_sms_unanswered"
+        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading || commandChatInboxLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => card.quickAction === "inbound_sms_unanswered"
               ? <InboundSmsNeedCard key={card.id} card={card} />
               : <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
