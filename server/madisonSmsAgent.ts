@@ -304,7 +304,7 @@ export async function triggerMadisonSmsDraft(params: {
       }
       await runShadowForDraft({
         db,
-        sourceMessageId: inboundOpenPhoneId,
+        sourceMessageId: inboundMessageId ?? inboundOpenPhoneId,
         draftId: existingDraft.id,
         sessionId: existingDraft.sessionId,
         inboundText,
@@ -365,7 +365,7 @@ export async function triggerMadisonSmsDraft(params: {
     // send path.
     const shadowPrediction = await runShadowForDraft({
       db,
-      sourceMessageId: inboundOpenPhoneId,
+      sourceMessageId: inboundMessageId ?? inboundOpenPhoneId,
       draftId,
       sessionId,
       inboundText,
