@@ -164,24 +164,22 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
   );
 }
 
-function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sessionId: number; leadName: string | null; leadPhone: string; body: string; ts: number; currentDraftId: number | null }; callerName: string; onActed: () => void }) {
+function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sessionId: number; leadName: string | null; leadPhone: string; body: string; ts: number; draft: { id: number; status: string; generatedDraft: string | null } | null }; callerName: string; onActed: () => void }) {
   const [showConversation, setShowConversation] = useState(false);
-  const [reply, setReply] = useState("");
-  const { data: draft } = trpc.opsChat.getSmsDraft.useQuery({ draftId: card.currentDraftId! }, { enabled: !!card.currentDraftId, refetchOnWindowFocus: false });
-  const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSmsDraftConversation.useQuery({ draftId: card.currentDraftId!, limit: 20 }, { enabled: !!card.currentDraftId && showConversation, refetchOnWindowFocus: false });
+  const [reply, setReply] = useState(card.draft?.generatedDraft ?? "");
+  const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSessionConversation.useQuery({ sessionId: card.sessionId, limit: 20 }, { enabled: showConversation, refetchOnWindowFocus: false });
   const approve = trpc.opsChat.approveSmsDraft.useMutation({ onSuccess: onActed });
   const dismiss = trpc.opsChat.dismissSmsDraft.useMutation({ onSuccess: onActed });
-  const draftReady = draft?.status === "DRAFT_READY" && Boolean(draft.id);
-  const generatedDraft = draft?.generatedDraft ?? "";
+  const draftReady = card.draft?.status === "DRAFT_READY" && Boolean(card.draft.id);
   return <article className="ai-team-sms-card">
     <div className="ai-team-sms-card__top"><MessageSquare size={18} /><span>UNANSWERED SMS</span><time>{formatConversationTime(card.ts)}</time></div>
     <h3>{card.leadName || card.leadPhone}</h3>
     <div className="ai-team-sms-card__inbound">“{card.body}”</div>
     <div className="ai-team-sms-card__status">{draftReady ? "Madison draft ready for human approval." : "Madison draft is not ready yet."}</div>
-    {draftReady ? <textarea aria-label="Madison reply" value={reply || generatedDraft} onChange={event => setReply(event.target.value)} /> : <p className="ai-team-sms-card__warning">This message remains visible until Madison produces a reviewable draft.</p>}
+    {draftReady ? <textarea aria-label="Madison reply" value={reply} onChange={event => setReply(event.target.value)} /> : <p className="ai-team-sms-card__warning">This message remains visible until Madison produces a reviewable draft.</p>}
     <div className="ai-team-sms-card__links"><button type="button" onClick={() => setShowConversation(value => !value)}>{showConversation ? "Hide conversation" : "View conversation"}</button></div>
     {showConversation && <div className="ai-team-sms-card__conversation">{conversationLoading ? "Loading conversation…" : conversation.map((message, index) => <div key={`${message.ts}-${index}`} className={`ai-team-sms-card__message ai-team-sms-card__message--${message.role}`}><small>{message.senderName || message.role}</small><p>{message.content}</p></div>)}</div>}
-    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !(reply || generatedDraft).trim() || approve.isPending} onClick={() => approve.mutate({ draftId: draft!.id, approvedText: (reply || generatedDraft).trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => draft && dismiss.mutate({ draftId: draft.id, dismissedBy: callerName })} disabled={!draftReady || dismiss.isPending}>Dismiss</button></div>
+    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !reply.trim() || approve.isPending} onClick={() => approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => card.draft && dismiss.mutate({ draftId: card.draft.id, dismissedBy: callerName })} disabled={!draftReady || dismiss.isPending}>Dismiss</button></div>
   </article>;
 }
 
@@ -206,19 +204,20 @@ export default function AiTeamReview() {
     },
   }, { label: "ai-team-madison-queue" });
   const liveSmsCards = (unansweredSms?.sessions ?? []).map(session => {
+    const draft = session.madisonDraft;
     return {
-      id: session.id,
+      id: draft?.id ?? session.id,
       sessionId: session.id,
       leadName: session.leadName,
       leadPhone: session.leadPhone,
-      currentDraftId: session.currentDraftId,
+      draft,
       ts: Date.now() - session.ageMs,
-      body: session.latestInboundMessage,
+      body: session.lastMessagePreview,
       metadata: JSON.stringify({
         sessionId: session.id,
-        draftId: session.currentDraftId,
+        draftId: draft?.id ?? null,
         leadName: session.leadName,
-        inboundText: session.latestInboundMessage,
+        inboundText: session.lastMessagePreview,
       }),
     };
   });
