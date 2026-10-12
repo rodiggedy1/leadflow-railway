@@ -6278,11 +6278,9 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
         for (const row of draftSessionRows) persistedSmsSessionIds.add(Number(row.sessionId));
       }
-      const activeDraftSessionRows = await db
-        .select({ sessionId: madisonSmsDrafts.sessionId })
-        .from(madisonSmsDrafts)
-        .where(notInArray(madisonSmsDrafts.status, ["SENT", "DISMISSED", "DELIVERED"]));
-      for (const row of activeDraftSessionRows) persistedSmsSessionIds.add(Number(row.sessionId));
+      // A FAILED/partial Madison draft can exist without an active card. Do not let
+      // that row suppress the session projection; deduplication is based only on the
+      // active Madison cards collected above.
 
       // Email
       const emailCardDraftIds: number[] = [];
