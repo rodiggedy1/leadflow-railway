@@ -6323,22 +6323,48 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         .select({
           id: conversationSessions.id,
           leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+          messageHistory: conversationSessions.messageHistory,
           lastMessageText: conversationSessions.lastMessageText,
           lastMessageTs: conversationSessions.lastMessageTs,
+          lastMessageRole: conversationSessions.lastMessageRole,
+          updatedAt: conversationSessions.updatedAt,
         })
         .from(conversationSessions)
         .where(and(
-          eq(conversationSessions.lastMessageRole, "user"),
-          gte(conversationSessions.lastMessageTs, cutoff),
+          or(
+            sql`(
+              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+              OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
+            )`,
+            eq(conversationSessions.csQueue as any, "CS"),
+          ),
           isNull(conversationSessions.csResolvedAt),
         ));
-      const projectedSmsCards = greenDotSessions
-        .filter(session => !persistedSmsSessionIds.has(Number(session.id)))
-        .map(session => ({
+      const sessionsByPhone = new Map<string, typeof greenDotSessions>();
+      for (const session of greenDotSessions) {
+        const phone = session.leadPhone?.trim() || "__no_phone__";
+        const group = sessionsByPhone.get(phone) ?? [];
+        group.push(session);
+        sessionsByPhone.set(phone, group);
+      }
+      const canonicalGreenDotSessions = Array.from(sessionsByPhone.values()).map((group) => group.reduce((current, candidate) => {
+        const currentTs = current.lastMessageTs ?? 0;
+        const candidateTs = candidate.lastMessageTs ?? 0;
+        return candidateTs > currentTs ? candidate : current;
+      }));
+      const projectedSmsCards = canonicalGreenDotSessions
+        .map((session) => ({
+          session,
+          lastMsgTs: session.lastMessageTs && session.lastMessageTs > 0 ? session.lastMessageTs : session.updatedAt.getTime(),
+        }))
+        .filter(({ session, lastMsgTs }) => session.lastMessageRole === "user" && lastMsgTs >= cutoff)
+        .filter(({ session }) => !persistedSmsSessionIds.has(Number(session.id)))
+        .map(({ session, lastMsgTs }) => ({
           id: -Number(session.id),
-          ts: Number(session.lastMessageTs ?? cutoff),
+          ts: Number(lastMsgTs),
           quickAction: "madison_sms_draft" as const,
-          body: session.lastMessageText ?? "",
+          body: session.lastMessageText || "",
           metadata: JSON.stringify({ sessionId: Number(session.id), senderName: session.leadName ?? null, pendingMadison: true }),
           mediaUrl: null,
         }));
