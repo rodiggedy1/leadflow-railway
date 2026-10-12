@@ -6334,7 +6334,10 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       // Step 4: filter out completed cards — same predicate as listChannelMessages
       const unresolvedCards = madisonMsgs.filter(m => {
         if (m.quickAction === 'madison_sms_draft') {
-          try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedSmsDraftIds.has(meta.draftId); } catch { return true; }
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return Boolean(meta.draftId) && !completedSmsDraftIds.has(meta.draftId);
+          } catch { return false; }
         }
         if (m.quickAction === 'madison_email_draft') {
           try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedEmailDraftIds.has(meta.draftId); } catch { return true; }
@@ -6472,18 +6475,8 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         });
       }
 
-      const projectedSmsCards = projectedSessionCandidates
-        .map(({ session, lastMsgTs }) => ({
-          id: -Number(session.id),
-          ts: Number(lastMsgTs),
-          quickAction: "madison_sms_draft" as const,
-          body: session.lastMessageText || "",
-          metadata: JSON.stringify({ sessionId: Number(session.id), senderName: session.leadName ?? null, pendingMadison: true }),
-          mediaUrl: null,
-        }));
-
       // Step 6: sort by lastActivityAt desc (same as badge cycling order)
-      return [...unresolvedCards
+      return unresolvedCards
         .sort((a, b) => {
           const tsA = Number(a.lastActivityAt ?? new Date(a.createdAt as Date).getTime());
           const tsB = Number(b.lastActivityAt ?? new Date(b.createdAt as Date).getTime());
@@ -6496,7 +6489,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           body: m.body,
           metadata: m.metadata ?? null,
           mediaUrl: m.mediaUrl ?? null,
-        })), ...projectedSmsCards].sort((a, b) => b.ts - a.ts || b.id - a.id);
+        })).sort((a, b) => b.ts - a.ts || b.id - a.id);
     }),
 
   /**
