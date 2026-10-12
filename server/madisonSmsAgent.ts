@@ -1197,7 +1197,10 @@ async function postAutoSentCard(params: {
  * Resume a FAILED pipeline from the last successful stage.
  * Called by the retrySmsDraft tRPC procedure.
  */
-export async function retrySmsDraft(draftId: number): Promise<{ ok: boolean; reason?: string }> {
+export async function retrySmsDraft(
+  draftId: number,
+  options?: { inboundMessageId?: string; allowReadyRetry?: boolean },
+): Promise<{ ok: boolean; reason?: string }> {
   const db = await getDb();
   if (!db) return { ok: false, reason: "no_db" };
 
@@ -1208,7 +1211,9 @@ export async function retrySmsDraft(draftId: number): Promise<{ ok: boolean; rea
     .limit(1);
 
   if (!draft) return { ok: false, reason: "not_found" };
-  if (draft.status !== "FAILED") return { ok: false, reason: "not_failed" };
+  const observations = JSON.stringify(draft.observations ?? "");
+  const isGenericFallback = draft.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." || observations.includes("Draft generation failed");
+  if (draft.status !== "FAILED" && !isGenericFallback && !options?.allowReadyRetry) return { ok: false, reason: "not_failed" };
 
   // Re-trigger from scratch — the UNIQUE constraint on inboundOpenPhoneId will prevent
   // duplicate processing if somehow the original succeeded
@@ -1219,6 +1224,7 @@ export async function retrySmsDraft(draftId: number): Promise<{ ok: boolean; rea
   // Re-run the pipeline
   triggerMadisonSmsDraft({
     inboundOpenPhoneId: `retry_${draftId}_${Date.now()}`, // new ID to bypass unique constraint
+    inboundMessageId: options?.inboundMessageId,
     sessionId: draft.sessionId as number,
     fromPhone: draft.fromPhone,
     senderName: draft.senderName ?? undefined,

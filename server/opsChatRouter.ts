@@ -39,6 +39,7 @@ import {
   issueEngineTable,
   issueEngineTimeline,
   madisonSmsDrafts,
+  madisonMessageUnderstanding,
   madisonSmsDraftEdits,
   madisonEmailDrafts,
   focusPoints,
@@ -5972,7 +5973,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
   retrySmsDraft: opsChatProcedure
     .input(z.object({ draftId: z.number().int().positive() }))
     .mutation(async ({ input }) => {
-      return retrySmsDraft(input.draftId);
+      return retrySmsDraft(input.draftId, { allowReadyRetry: true });
     }),
 
   // ── Email draft procedures (mirrors SMS draft procedures exactly) ─────────
@@ -6265,6 +6266,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       const completedSmsDraftIds = new Set<number>();
       const persistedSmsSessionIds = new Set<number>();
       const fallbackSmsSessionIds = new Set<number>();
+      const missingShadowDraftIds = new Set<number>();
       if (smsCardDraftIds.length > 0) {
         const draftRows = await db
           .select({
@@ -6295,6 +6297,17 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           .from(madisonSmsDrafts)
           .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
         for (const row of draftSessionRows) persistedSmsSessionIds.add(Number(row.sessionId));
+        const shadowRows = await db
+          .select({ draftId: madisonMessageUnderstanding.draftId })
+          .from(madisonMessageUnderstanding)
+          .where(inArray(madisonMessageUnderstanding.draftId, smsCardDraftIds));
+        const shadowDraftIds = new Set(shadowRows.map(row => Number(row.draftId)).filter(Boolean));
+        for (const draftId of smsCardDraftIds) {
+          if (!completedSmsDraftIds.has(draftId) && !shadowDraftIds.has(draftId)) missingShadowDraftIds.add(draftId);
+        }
+        for (const d of draftRows) {
+          if (missingShadowDraftIds.has(d.id)) fallbackSmsSessionIds.add(Number(d.sessionId));
+        }
       }
       // A FAILED/partial Madison draft can exist without an active card. Do not let
       // that row suppress the session projection; deduplication is based only on the
@@ -6425,14 +6438,14 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
               .limit(1);
             let observations = "";
             try { observations = JSON.stringify(draft?.observations ?? ""); } catch { /* ignore malformed legacy JSON */ }
-            const isFallback = draft?.status === "FAILED" || draft?.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." || observations.includes("Draft generation failed");
+            const isFallback = draft?.status === "FAILED" || draft?.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." || observations.includes("Draft generation failed") || missingShadowDraftIds.has(existingDraft.id);
             if (!isFallback) return;
             if (draft?.status !== "FAILED") {
               await db.update(madisonSmsDrafts)
                 .set({ status: "FAILED", errorStage: "pipeline", errorCode: "fallback_repair", errorMessage: "Repairing generic fallback draft", updatedAt: new Date() })
                 .where(and(eq(madisonSmsDrafts.id, existingDraft.id), eq(madisonSmsDrafts.status, draft?.status ?? "DRAFT_READY")));
             }
-            await retrySmsDraft(existingDraft.id);
+            await retrySmsDraft(existingDraft.id, { inboundMessageId: currentInbound?.opMsgId, allowReadyRetry: true });
             return;
           }
 
