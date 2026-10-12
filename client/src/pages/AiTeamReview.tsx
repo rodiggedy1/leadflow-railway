@@ -193,17 +193,11 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
 function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
   const utils = trpc.useUtils();
   const [showConversation, setShowConversation] = useState(false);
-  const [showEvidence, setShowEvidence] = useState(false);
   const [editingReply, setEditingReply] = useState(false);
   const [editedReply, setEditedReply] = useState("");
-  let metadata: { draftId?: number; autoSentAt?: string; autoReply?: string } = {};
-  try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* malformed legacy card */ }
+  let metadata: { draftId?: number } = {};
+  try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* ignore malformed legacy card */ }
   const draftId = metadata.draftId;
-  const autoSent = Boolean(metadata.autoSentAt);
-  const { data: shadowPrediction, isLoading: shadowLoading, isError: shadowError } = trpc.activity.getShadowPrediction.useQuery(
-    { draftId: draftId! },
-    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
-  );
   const { data: draft, isLoading } = trpc.opsChat.getSmsDraft.useQuery(
     { draftId: draftId! },
     { enabled: Boolean(draftId), refetchOnWindowFocus: false },
@@ -217,65 +211,29 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
       if (result.ok) {
         toast.success("Madison's reply was approved and sent.");
         void utils.opsChat.getFocusCards.invalidate();
+        void utils.opsChat.getSmsDraft.invalidate({ draftId });
         onChanged();
       } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
     },
   });
-  const retryDraft = trpc.opsChat.retrySmsDraft.useMutation({
-    onSuccess: result => {
-      if (result.ok) {
-        toast.success("Madison retry started.");
-        void utils.opsChat.getFocusCards.invalidate();
-        onChanged();
-      } else toast.error(`Madison retry was not started: ${result.reason ?? "draft is not retryable"}`);
-    },
-    onError: error => toast.error(error.message),
-  });
-  const { data: actionApproval } = trpc.madison.getActionApproval.useQuery(
-    { draftId: draftId! },
-    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
-  );
-  const { data: replyDecisionEvaluation } = trpc.madison.getReplyDecisionEvaluation.useQuery(
-    { draftId: draftId! },
-    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
-  );
-  const { data: unifiedReview, isLoading: unifiedReviewLoading } = trpc.madison.getUnifiedReview.useQuery(
-    { draftId: draftId! },
-    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
-  );
-  const approveActionTask = trpc.madison.approveActionTask.useMutation({
-    onSuccess: result => {
-      if (result.ok) {
-        toast.success(result.alreadyApproved ? "This customer-care task was already approved." : "Customer-care task approved. The booking was not changed.");
-        void utils.madison.getActionApproval.invalidate({ draftId });
-        onChanged();
-      } else toast.error(`Task was not approved: ${result.reason}`);
-    },
-    onError: error => toast.error(error.message),
-  });
-  if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
+  if (!draftId || isLoading) {
+    return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
+  }
   if (!draft) return null;
-  const proposal = actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "");
-  const decisionEvaluation = proposal
-    ? unifiedReview?.actionEvaluation ?? actionApproval?.decisionEvaluation
-    : unifiedReview?.replyEvaluation ?? replyDecisionEvaluation;
-  const factEvidence = unifiedReview?.facts ?? [];
-  const factEvidenceLoading = unifiedReviewLoading;
+
   const customerName = draft.senderName ?? "Customer";
   const latestCardTime = formatConversationTime(card.ts);
   const generatedReply = draft.generatedDraft ?? "";
-  const isGenericFallback = generatedReply === "Hi! I received your message. Let me check on that and get back to you shortly.";
-  const shadowUnavailable = !shadowLoading && (shadowError || !shadowPrediction);
-  const isRetryableFailure = !autoSent && (draft.status !== "DRAFT_READY" || isGenericFallback || shadowUnavailable);
-  const approvalBlocked = isRetryableFailure || shadowLoading;
+  const draftReady = draft.status === "DRAFT_READY" && Boolean(generatedReply);
   const approveText = editingReply ? editedReply.trim() : generatedReply;
+
   return (
     <article className="ai-team-need-card">
       <div className="ai-team-need-icon"><MessageSquare size={17} /></div>
       <div className="ai-team-need-copy">
-        <strong>{autoSent ? "Madison sent reply" : proposal?.title ?? "Madison reply approval"}</strong>
-        <p>{customerName}: “{draft.originalMessage}”{latestCardTime && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {latestCardTime}</time>}</p>
-        <em>{isRetryableFailure ? "Madison did not complete a valid draft. This card remains retryable and cannot be approved." : autoSent ? "This reply was sent automatically by Madison." : proposal ? <><b>Recommended task:</b> {proposal.task}<br /><span>Madison recommends: {proposal.recommendation}</span></> : "Approve the drafted reply below."}</em>
+        <strong>Madison reply approval</strong>
+        <p>{customerName}: “{draft.originalMessage ?? card.body}”{latestCardTime && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {latestCardTime}</time>}</p>
+        {draftReady ? <em>Approve the Madison-generated reply below.</em> : <em>Madison is still preparing this reply. Human approval is required before sending.</em>}
         {editingReply ? <textarea
           aria-label="Edit Madison reply"
           value={editedReply}
@@ -283,46 +241,23 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
           rows={5}
           maxLength={1600}
           style={{ marginTop: 10, width: "100%", resize: "vertical", border: "1px solid #cdb79f", borderRadius: 10, padding: 10, color: "#4f473f", font: "inherit", lineHeight: 1.45, background: "#fffdf9" }}
-        /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{isRetryableFailure ? "Madison draft unavailable. Retry the canonical Madison pipeline; no message can be sent from this state." : autoSent ? metadata.autoReply ?? draft.approvedText ?? draft.generatedDraft : draft.generatedDraft ?? "Draft is still being prepared."}</div>}
-        <div className="ai-team-policy-note"><b>SMS policy:</b> {draft.sendPolicyEnabled === 0 ? "Disabled" : draft.sendPolicyMode === "automatic" ? "Automatic policy selected · approval still required in this rollout" : draft.sendPolicyMode === "suggest_only" ? "Suggest only" : "Approval required"}</div>
-        {decisionEvaluation && <div className={`ai-team-decision-summary is-${decisionEvaluation.outcome}`}>
-          <div><b>{decisionEvaluation.actionKey === "send_sms_reply" ? "Reply readiness" : "Action readiness"}</b><strong>{formatDecisionOutcome(decisionEvaluation.actionKey === "send_sms_reply" ? decisionEvaluation.replyReadiness : decisionEvaluation.actionReadiness)}</strong></div>
-          <span>{decisionEvaluation.confidenceBand ? `${formatShadowValue(decisionEvaluation.confidenceBand)} confidence` : "Confidence unavailable"} · {decisionEvaluation.actionKey === "send_sms_reply" ? `Reply evaluation: ${formatShadowValue(decisionEvaluation.replyEvaluationStatus)}` : `Prediction: ${formatShadowValue(decisionEvaluation.predictionState)}`} · {decisionEvaluation.reasonCodes.length > 0 ? decisionEvaluation.reasonCodes.map(formatDecisionOutcome).join(" · ") : "All review gates passed"}</span>
-        </div>}
-        <div className="ai-team-card-shadow"><span>SHADOW UNDERSTANDING · READ ONLY</span>{shadowLoading ? <p>Loading prediction…</p> : shadowError ? <p>Prediction could not be loaded. Check Preview logs for the failure stage.</p> : shadowPrediction ? <><div className="ai-team-shadow-grid"><p><b>Category</b><strong>{formatShadowValue(shadowPrediction.primaryCategory)}</strong></p><p><b>Mission</b><strong>{formatShadowValue(shadowPrediction.mission)}</strong></p><p><b>State</b><strong>{formatShadowValue(shadowPrediction.missionState)}</strong></p><p><b>Next action</b><strong>{formatShadowValue(shadowPrediction.nextBestAction)}</strong></p><p className="ai-team-shadow-confidence"><b>Confidence</b><span><strong>{Math.round(Number(shadowPrediction.confidence) * 100)}% confidence</strong><i aria-hidden="true" style={{ width: `${Math.round(Number(shadowPrediction.confidence) * 100)}%` }} /></span></p></div><p><b>Known:</b> {Array.isArray(shadowPrediction.knownFacts) && shadowPrediction.knownFacts.length > 0 ? shadowPrediction.knownFacts.join(" · ") : "None recorded"}</p><p><b>Missing:</b> {Array.isArray(shadowPrediction.missingFacts) && shadowPrediction.missingFacts.length > 0 ? shadowPrediction.missingFacts.join(" · ") : "None recorded"}</p></> : <p>No prediction recorded for this card yet. New Preview messages will report the exact classifier/persistence stage in server logs.</p>}</div>
-        {shadowPrediction?.extractionStatus && <div className="ai-team-extraction-note"><b>Extraction:</b> {formatShadowValue(shadowPrediction.extractionStatus)}{shadowPrediction.extractionQualityNote ? ` · ${shadowPrediction.extractionQualityNote}` : ""}</div>}
-        <div className={`ai-team-card-evidence ${showEvidence ? "is-open" : ""}`}>
-          <button type="button" className="ai-team-evidence-toggle" onClick={() => setShowEvidence(value => !value)} aria-expanded={showEvidence}>
-            <span>FACTS &amp; EVIDENCE</span><strong>{showEvidence ? "Hide details" : "Show details"}</strong><ChevronRight size={14} />
-          </button>
-          {showEvidence && <div className="ai-team-evidence-body">
-            {factEvidenceLoading ? <p>Loading recorded evidence…</p> : factEvidence.length === 0 ? <p>No persisted fact observations for this draft.</p> : factEvidence.map(fact => {
-              const confidence = fact.confidence === null ? null : Math.round(Number(fact.confidence) * 100);
-              const observedAt = fact.observedAt ? new Date(fact.observedAt).getTime() : 0;
-              return <div className="ai-team-evidence-item" key={fact.eventId}>
-                <div className="ai-team-evidence-fact"><b>{formatShadowValue(fact.factKey)}</b><strong>{formatFactValue(fact.value)}</strong></div>
-                <div className="ai-team-evidence-excerpt">“{fact.evidenceExcerpt ?? "Source excerpt unavailable"}”</div>
-                <div className="ai-team-evidence-meta"><span>{formatShadowValue(fact.sourceType)}{fact.sourceMessageId ? ` · ${fact.sourceMessageId}` : ""}</span><span>{formatShadowValue(fact.validationStatus ?? "unverified")} · {formatShadowValue(fact.status)}{confidence !== null ? ` · ${confidence}% confidence` : ""}{observedAt ? ` · ${formatConversationTime(observedAt)}` : ""}</span></div>
-              </div>;
-            })}
-            <small>Evidence is read-only. Use View conversation below to inspect the source messages.</small>
-          </div>}
-        </div>
-        {editingReply && <small style={{ display: "block", marginTop: 4, color: "#8b8177" }}>{editedReply.length}/1600 characters · Original Madison draft is preserved.</small>}
+        /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{generatedReply || "Madison draft is not available yet."}</div>}
+        <div className="ai-team-policy-note"><b>SMS policy:</b> Approval required</div>
         <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
         {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">
-          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => { const messageTime = formatConversationTime(message.ts); return <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small>{messageTime && <time dateTime={new Date(message.ts).toISOString()}>{messageTime}</time>}</div><p>{message.content}</p></div>; })}
+          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => {
+            const messageTime = formatConversationTime(message.ts);
+            return <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small>{messageTime && <time dateTime={new Date(message.ts).toISOString()}>{messageTime}</time>}</div><p>{message.content}</p></div>;
+          })}
         </div>}
       </div>
       <div className="ai-team-need-actions">
-        {isRetryableFailure && <button type="button" onClick={() => retryDraft.mutate({ draftId })} disabled={retryDraft.isPending}>{retryDraft.isPending ? "Retrying Madison…" : "Retry Madison draft"}</button>}
-        {!approvalBlocked && !autoSent && !editingReply && <button type="button" className="is-quiet" onClick={() => { setEditedReply(generatedReply); setEditingReply(true); }} disabled={!generatedReply}>Edit reply</button>}
-        {!approvalBlocked && !autoSent && editingReply && <>
-          <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: approveText, approvedBy: agentName })} disabled={approveReply.isPending || !approveText}>{approveReply.isPending ? "Sending…" : "Approve edited reply"}</button>
-          <button type="button" className="is-quiet" onClick={() => { setEditingReply(false); setEditedReply(generatedReply); }} disabled={approveReply.isPending}>Cancel edit</button>
+        {draftReady && !editingReply && <button type="button" className="is-quiet" onClick={() => { setEditedReply(generatedReply); setEditingReply(true); }}>Edit</button>}
+        {draftReady && editingReply && <>
+          <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: approveText, approvedBy: agentName })} disabled={approveReply.isPending || !approveText}>{approveReply.isPending ? "Sending…" : "Approve & Send"}</button>
+          <button type="button" className="is-quiet" onClick={() => { setEditingReply(false); setEditedReply(generatedReply); }} disabled={approveReply.isPending}>Cancel</button>
         </>}
-        {!approvalBlocked && !autoSent && !editingReply && <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: generatedReply, approvedBy: agentName })} disabled={approveReply.isPending || !generatedReply}>{approveReply.isPending ? "Sending…" : "Approve reply"}</button>}
-        {!approvalBlocked && !autoSent && proposal && <button type="button" className="is-quiet" onClick={() => approveActionTask.mutate({ draftId, approvedBy: agentName ?? "Owner" })} disabled={approveActionTask.isPending || actionApproval?.status === "APPROVED" || actionApproval?.status === "APPROVING"}>{actionApproval?.status === "APPROVED" ? "Task approved" : actionApproval?.status === "APPROVING" || approveActionTask.isPending ? "Approving…" : "Approve task"}</button>}
+        {draftReady && !editingReply && <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: generatedReply, approvedBy: agentName })} disabled={approveReply.isPending}>{approveReply.isPending ? "Sending…" : "Approve & Send"}</button>}
       </div>
     </article>
   );
@@ -346,14 +281,11 @@ export default function AiTeamReview() {
         void utils.opsChat.getFocusCards.invalidate();
         void utils.opsChat.getSmsDraft.invalidate();
         void utils.opsChat.getSmsDraftConversation.invalidate();
-        void utils.activity.getShadowPrediction.invalidate();
-        void utils.madison.getUnifiedReview.invalidate();
-        void utils.madison.getReplyDecisionEvaluation.invalidate();
-        void utils.madison.getActionApproval.invalidate();
       }
     },
   }, { label: "ai-team-madison-queue" });
-  const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft" && card.ts >= thirtyDaysAgo);
   const activityItems: ActivityItem[] = (activityFeed?.items ?? []).map(item => ({
     id: item.id,
     ts: new Date(item.createdAt).getTime(),
