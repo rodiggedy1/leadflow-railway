@@ -223,10 +223,12 @@ export async function triggerMadisonSmsDraft(params: {
   senderName?: string;
   isCleaner: boolean;
   inboundText: string;
+  /** Existing canonical draft to retry in place; prevents duplicate lifecycle rows. */
+  existingDraftId?: number;
   /** Minutes the customer has been waiting unanswered — set by the unanswered alarm cron */
   unansweredMinutes?: number;
 }): Promise<void> {
-  const { inboundOpenPhoneId, inboundMessageId, sessionId, fromPhone, senderName, isCleaner, inboundText, unansweredMinutes } = params;
+  const { inboundOpenPhoneId, inboundMessageId, sessionId, fromPhone, senderName, isCleaner, inboundText, existingDraftId, unansweredMinutes } = params;
 
   // Skip empty messages
   if (!inboundText?.trim()) return;
@@ -250,7 +252,13 @@ export async function triggerMadisonSmsDraft(params: {
   try {
     // ── Step 0: Create draft record (RECEIVED) ────────────────────────────────
     const smsReplyPolicy = await getSmsReplyPolicy(db);
-    const insertResult = await db.insert(madisonSmsDrafts).values({
+    let insertResult: any = null;
+    if (existingDraftId) {
+      draftId = existingDraftId;
+      await db.update(madisonSmsDrafts)
+        .set({ status: "RECEIVED", errorStage: null, errorCode: null, errorMessage: null, updatedAt: now })
+        .where(eq(madisonSmsDrafts.id, existingDraftId));
+    } else insertResult = await db.insert(madisonSmsDrafts).values({
       inboundOpenPhoneId,
       sessionId,
       fromPhone,
@@ -275,7 +283,7 @@ export async function triggerMadisonSmsDraft(params: {
       throw err;
     });
 
-    if (!insertResult) {
+    if (!existingDraftId && !insertResult) {
       // Production and Preview share the Madison database. If the other
       // environment created this draft first, this environment must still run
       // its read-only Shadow classifier instead of exiting at the duplicate
@@ -305,12 +313,13 @@ export async function triggerMadisonSmsDraft(params: {
       });
       return;
     }
-    const [insertHeader] = insertResult as any;
-    draftId = insertHeader.insertId as number;
-    // Publish the canonical Madison card immediately. It is backed by the
-    // draft row from the first moment, then updated in place when the pipeline
-    // finishes. This prevents a second lightweight inbound-SMS card.
-    await postDraftCardToCommandChat({
+    if (!existingDraftId) {
+      const [insertHeader] = insertResult as any;
+      draftId = insertHeader.insertId as number;
+    }
+    // Publish the canonical Madison card immediately for a new draft. Retries
+    // reuse the existing card and update it only after the pipeline completes.
+    if (!existingDraftId) await postDraftCardToCommandChat({
       draftId,
       sessionId,
       fromPhone,
@@ -1223,13 +1232,14 @@ export async function retrySmsDraft(
 
   // Re-run the pipeline
   triggerMadisonSmsDraft({
-    inboundOpenPhoneId: `retry_${draftId}_${Date.now()}`, // new ID to bypass unique constraint
+    inboundOpenPhoneId: draft.inboundOpenPhoneId,
     inboundMessageId: options?.inboundMessageId,
     sessionId: draft.sessionId as number,
     fromPhone: draft.fromPhone,
     senderName: draft.senderName ?? undefined,
     isCleaner: draft.senderType === "cleaner",
     inboundText: draft.originalMessage,
+    existingDraftId: draftId,
   }).catch(console.error);
 
   return { ok: true };
