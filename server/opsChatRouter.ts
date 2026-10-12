@@ -5779,6 +5779,27 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         senderName: m.senderName ?? undefined,
       }));
     }),
+  /** Read-only conversation history for a green-dot session awaiting Madison draft creation. */
+  getSessionConversation: opsChatProcedure
+    .input(z.object({ sessionId: z.number().int().positive(), limit: z.number().int().min(1).max(20).default(20) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const [session] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session) return [];
+      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+      try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { /* ignore malformed history */ }
+      return history.slice(-input.limit).map(m => ({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+        ts: m.ts ?? 0,
+        senderName: m.senderName ?? undefined,
+      }));
+    }),
 
   /**
    * Approve a draft and send the SMS.
@@ -6232,7 +6253,6 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
          m.quickAction === 'madison_email_draft' ||
          m.quickAction === 'madison_call_summary')
       );
-      if (madisonMsgs.length === 0) return [];
 
       // Step 3: apply the exact same draft-status filter as listChannelMessages
       // SMS
@@ -6241,6 +6261,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
       }
       const completedSmsDraftIds = new Set<number>();
+      const persistedSmsSessionIds = new Set<number>();
       if (smsCardDraftIds.length > 0) {
         const draftRows = await db
           .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
@@ -6251,7 +6272,17 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
             completedSmsDraftIds.add(d.id);
           }
         }
+        const draftSessionRows = await db
+          .select({ sessionId: madisonSmsDrafts.sessionId })
+          .from(madisonSmsDrafts)
+          .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
+        for (const row of draftSessionRows) persistedSmsSessionIds.add(Number(row.sessionId));
       }
+      const activeDraftSessionRows = await db
+        .select({ sessionId: madisonSmsDrafts.sessionId })
+        .from(madisonSmsDrafts)
+        .where(notInArray(madisonSmsDrafts.status, ["SENT", "DISMISSED", "DELIVERED"]));
+      for (const row of activeDraftSessionRows) persistedSmsSessionIds.add(Number(row.sessionId));
 
       // Email
       const emailCardDraftIds: number[] = [];
@@ -6285,8 +6316,35 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         return true;
       });
 
-      // Step 5: sort by lastActivityAt desc (same as badge cycling order)
-      return unresolvedCards
+      // Step 5: project every current Command Chat green-dot session into the
+      // same queue. A missing Madison draft must not hide an unanswered SMS.
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const greenDotSessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          lastMessageText: conversationSessions.lastMessageText,
+          lastMessageTs: conversationSessions.lastMessageTs,
+        })
+        .from(conversationSessions)
+        .where(and(
+          eq(conversationSessions.lastMessageRole, "user"),
+          gte(conversationSessions.lastMessageTs, cutoff),
+          isNull(conversationSessions.csResolvedAt),
+        ));
+      const projectedSmsCards = greenDotSessions
+        .filter(session => !persistedSmsSessionIds.has(Number(session.id)))
+        .map(session => ({
+          id: -Number(session.id),
+          ts: Number(session.lastMessageTs ?? cutoff),
+          quickAction: "madison_sms_draft" as const,
+          body: session.lastMessageText ?? "",
+          metadata: JSON.stringify({ sessionId: Number(session.id), senderName: session.leadName ?? null, pendingMadison: true }),
+          mediaUrl: null,
+        }));
+
+      // Step 6: sort by lastActivityAt desc (same as badge cycling order)
+      return [...unresolvedCards
         .sort((a, b) => {
           const tsA = Number(a.lastActivityAt ?? new Date(a.createdAt as Date).getTime());
           const tsB = Number(b.lastActivityAt ?? new Date(b.createdAt as Date).getTime());
@@ -6299,7 +6357,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           body: m.body,
           metadata: m.metadata ?? null,
           mediaUrl: m.mediaUrl ?? null,
-        }));
+        })), ...projectedSmsCards].sort((a, b) => b.ts - a.ts || b.id - a.id);
     }),
 
   /**

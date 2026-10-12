@@ -196,9 +196,10 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
   const [showEvidence, setShowEvidence] = useState(false);
   const [editingReply, setEditingReply] = useState(false);
   const [editedReply, setEditedReply] = useState("");
-  let metadata: { draftId?: number; autoSentAt?: string; autoReply?: string } = {};
+  let metadata: { draftId?: number; sessionId?: number; senderName?: string | null; autoSentAt?: string; autoReply?: string; pendingMadison?: boolean } = {};
   try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* malformed legacy card */ }
   const draftId = metadata.draftId;
+  const sessionId = metadata.sessionId;
   const autoSent = Boolean(metadata.autoSentAt);
   const { data: shadowPrediction, isLoading: shadowLoading, isError: shadowError } = trpc.activity.getShadowPrediction.useQuery(
     { draftId: draftId! },
@@ -212,6 +213,10 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     { draftId: draftId!, limit: 20 },
     { enabled: Boolean(draftId) && showConversation, refetchOnWindowFocus: false },
   );
+  const { data: pendingConversation = [], isLoading: pendingConversationLoading } = trpc.opsChat.getSessionConversation.useQuery(
+    { sessionId: sessionId!, limit: 20 },
+    { enabled: Boolean(sessionId) && !draftId && showConversation, refetchOnWindowFocus: false },
+  );
   const approveReply = trpc.opsChat.approveSmsDraft.useMutation({
     onSuccess: result => {
       if (result.ok) {
@@ -220,6 +225,10 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
         onChanged();
       } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
     },
+  });
+  const sendPendingReply = trpc.leads.sendMessage.useMutation({
+    onSuccess: () => { toast.success("Reply sent."); setEditingReply(false); setEditedReply(""); onChanged(); },
+    onError: error => toast.error(`Reply was not sent: ${error.message}`),
   });
   const { data: actionApproval } = trpc.madison.getActionApproval.useQuery(
     { draftId: draftId! },
@@ -243,6 +252,22 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     },
     onError: error => toast.error(error.message),
   });
+  if (!draftId && sessionId) {
+    const latestInbound = pendingConversation.filter(message => message.role === "user").at(-1);
+    return <article className="ai-team-need-card">
+      <div className="ai-team-need-icon"><MessageSquare size={17} /></div>
+      <div className="ai-team-need-copy">
+        <strong>Madison reply approval</strong>
+        <p>{metadata.senderName ?? "Customer"}: “{latestInbound?.content ?? card.body}”<time className="ai-team-card-time">Received {formatConversationTime(card.ts)}</time></p>
+        <em>Human review is required. Madison has not created a reply draft for this message yet.</em>
+        <div className="ai-team-card-shadow"><span>SHADOW UNDERSTANDING · READ ONLY</span><p>No prediction recorded for this message yet. Madison drafting or Shadow classification is not required for queue visibility.</p></div>
+        <div className="ai-team-card-evidence"><button type="button" className="ai-team-evidence-toggle" disabled><span>FACTS &amp; EVIDENCE</span><strong>Not available yet</strong></button><div className="ai-team-evidence-body"><p>No persisted fact observations are available until Madison classifies this message.</p></div></div>
+        <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
+        {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">{pendingConversationLoading ? <span>Loading conversation…</span> : pendingConversation.length === 0 ? <span>No conversation history is available.</span> : pendingConversation.map((message, index) => <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" ? metadata.senderName ?? "Customer" : "Madison")}</small>{message.ts ? <time>{formatConversationTime(message.ts)}</time> : null}</div><p>{message.content}</p></div>)}</div>}
+      </div>
+      <div className="ai-team-need-actions"><button type="button" className="is-quiet" onClick={() => setEditingReply(true)} disabled={editingReply}>Edit reply</button>{editingReply && <><textarea aria-label="Write reply" value={editedReply} onChange={event => setEditedReply(event.target.value)} rows={4} maxLength={1600} /><button type="button" onClick={() => sendPendingReply.mutate({ sessionId, message: editedReply.trim(), source: "cs_inbox" })} disabled={sendPendingReply.isPending || !editedReply.trim()}>{sendPendingReply.isPending ? "Sending…" : "Approve reply"}</button></>}</div>
+    </article>;
+  }
   if (!draftId || isLoading) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!draft) return null;
   const proposal = actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "");
