@@ -3845,6 +3845,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .select({
             id: madisonSmsDrafts.id,
             sessionId: madisonSmsDrafts.sessionId,
+            inboundOpenPhoneId: madisonSmsDrafts.inboundOpenPhoneId,
             status: madisonSmsDrafts.status,
             senderName: madisonSmsDrafts.senderName,
             originalMessage: madisonSmsDrafts.originalMessage,
@@ -3856,9 +3857,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .where(inArray(madisonSmsDrafts.sessionId, sessionIds))
           .orderBy(desc(madisonSmsDrafts.updatedAt))
         : [];
-      const draftBySessionId = new Map<number, (typeof draftRows)[number]>();
+      const draftByInboundMessageId = new Map<string, (typeof draftRows)[number]>();
       for (const draft of draftRows) {
-        if (!draftBySessionId.has(draft.sessionId)) draftBySessionId.set(draft.sessionId, draft);
+        draftByInboundMessageId.set(draft.inboundOpenPhoneId, draft);
       }
       const now = Date.now();
       const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -3869,15 +3870,21 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
       let warningCount = 0;
       const unansweredSessions: Array<{
         id: number;
+        sessionId: number;
         leadName: string | null;
         leadPhone: string;
+        latestInboundMessage: string;
+        latestInboundTimestamp: number;
+        latestInboundMessageId: string | null;
+        unanswered: true;
+        currentDraftId: number | null;
         lastMessagePreview: string;
         ageMs: number;
         madisonDraft: (typeof draftRows)[number] | null;
       }> = [];
       for (const s of sessions) {
         try {
-          const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
+          const history: Array<{ role: string; ts?: number; content?: string; opMsgId?: string }> = JSON.parse(s.messageHistory ?? "[]");
           // Find last real message (skip notes/system)
           const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
           if (!lastReal || lastReal.role !== "user") continue; // last message is from agent — answered
@@ -3896,13 +3903,25 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           const preview = typeof lastReal.content === "string"
             ? lastReal.content.slice(0, 80)
             : "";
+          const latestInboundMessageId = typeof lastReal.opMsgId === "string" && lastReal.opMsgId.trim()
+            ? lastReal.opMsgId
+            : null;
+          const currentDraft = latestInboundMessageId
+            ? draftByInboundMessageId.get(latestInboundMessageId) ?? null
+            : null;
           unansweredSessions.push({
             id: s.id,
+            sessionId: s.id,
             leadName: s.leadName ?? null,
             leadPhone: s.leadPhone,
+            latestInboundMessage: typeof lastReal.content === "string" ? lastReal.content : "",
+            latestInboundTimestamp: resolvedTs,
+            latestInboundMessageId,
+            unanswered: true,
+            currentDraftId: currentDraft?.id ?? null,
             lastMessagePreview: preview,
             ageMs: age,
-            madisonDraft: draftBySessionId.get(s.id) ?? null,
+            madisonDraft: currentDraft,
           });
         } catch { /* skip malformed */ }
       }
