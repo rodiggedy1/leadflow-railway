@@ -6432,7 +6432,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
                 .set({ status: "FAILED", errorStage: "pipeline", errorCode: "fallback_repair", errorMessage: "Repairing generic fallback draft", updatedAt: new Date() })
                 .where(and(eq(madisonSmsDrafts.id, existingDraft.id), eq(madisonSmsDrafts.status, draft?.status ?? "DRAFT_READY")));
             }
-            await retrySmsDraft(existingDraft.id, { inboundMessageId: currentInbound?.opMsgId });
+            await retrySmsDraft(existingDraft.id);
             return;
           }
 

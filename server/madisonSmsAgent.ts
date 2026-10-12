@@ -1197,10 +1197,7 @@ async function postAutoSentCard(params: {
  * Resume a FAILED pipeline from the last successful stage.
  * Called by the retrySmsDraft tRPC procedure.
  */
-export async function retrySmsDraft(
-  draftId: number,
-  options?: { inboundMessageId?: string },
-): Promise<{ ok: boolean; reason?: string }> {
+export async function retrySmsDraft(draftId: number): Promise<{ ok: boolean; reason?: string }> {
   const db = await getDb();
   if (!db) return { ok: false, reason: "no_db" };
 
@@ -1222,7 +1219,6 @@ export async function retrySmsDraft(
   // Re-run the pipeline
   triggerMadisonSmsDraft({
     inboundOpenPhoneId: `retry_${draftId}_${Date.now()}`, // new ID to bypass unique constraint
-    inboundMessageId: options?.inboundMessageId,
     sessionId: draft.sessionId as number,
     fromPhone: draft.fromPhone,
     senderName: draft.senderName ?? undefined,
