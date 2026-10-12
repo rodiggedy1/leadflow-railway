@@ -58,6 +58,7 @@ import { computeSessionSummary } from "./sessionSummary";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+
 function todayDateString(): string {
   const now = new Date();
   const y = now.getFullYear();
@@ -5779,6 +5780,27 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         senderName: m.senderName ?? undefined,
       }));
     }),
+  /** Read-only conversation history for a green-dot session awaiting Madison draft creation. */
+  getSessionConversation: opsChatProcedure
+    .input(z.object({ sessionId: z.number().int().positive(), limit: z.number().int().min(1).max(20).default(20) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const [session] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session) return [];
+      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+      try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { /* ignore malformed history */ }
+      return history.slice(-input.limit).map(m => ({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+        ts: m.ts ?? 0,
+        senderName: m.senderName ?? undefined,
+      }));
+    }),
 
   /**
    * Approve a draft and send the SMS.
@@ -6195,8 +6217,8 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       };
     }),
   /**
-   * getFocusCards — returns unresolved Madison cards from the same 500-row command
-   * channel window that the badge uses, with the same draft-status filter.
+   * getFocusCards — returns unresolved Madison cards plus direct received-SMS
+   * work items from the same 500-row command channel window.
    * This guarantees badge count === Focus count at all times.
    */
   getFocusCards: opsChatProcedure
@@ -6204,11 +6226,23 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       const db = await getDb();
       if (!db) return [];
 
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
       // Step 1: fetch the same 500-row window as listChannelMessages for 'command'
       const msgs = await db
         .select()
         .from(opsChatMessages)
-        .where(eq(opsChatMessages.channel, 'command'))
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          or(
+            gte(opsChatMessages.createdAt, thirtyDaysAgo),
+            and(
+              eq(opsChatMessages.quickAction, 'madison_sms_draft'),
+              eq(opsChatMessages.cardStatus, 'active'),
+              gte(opsChatMessages.lastActivityAt, thirtyDaysAgo.getTime()),
+            ),
+          ),
+        ))
         .orderBy(
           desc(sql`CASE
             WHEN ${opsChatMessages.quickAction} = 'madison_sms_draft'
@@ -6219,20 +6253,19 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         )
         .limit(500);
 
-      // Step 2: narrow to active madison cards only
+      // Step 2: narrow to active AI Team work items. SMS visibility comes from
+      // the canonical Madison draft card, created at pipeline entry.
       const madisonMsgs = msgs.filter(m =>
         m.cardStatus === 'active' &&
         (m.quickAction === 'madison_sms_draft' ||
          m.quickAction === 'madison_email_draft' ||
          m.quickAction === 'madison_call_summary')
       );
-      if (madisonMsgs.length === 0) return [];
 
-      // Step 3: apply the exact same draft-status filter as listChannelMessages
-      // SMS
+      // Step 3: apply the persisted draft-status filter.
       const smsCardDraftIds: number[] = [];
       for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_sms_draft')) {
-        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore malformed metadata */ }
       }
       const completedSmsDraftIds = new Set<number>();
       if (smsCardDraftIds.length > 0) {
@@ -6241,12 +6274,9 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           .from(madisonSmsDrafts)
           .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
         for (const d of draftRows) {
-          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') {
-            completedSmsDraftIds.add(d.id);
-          }
+          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') completedSmsDraftIds.add(d.id);
         }
       }
-
       // Email
       const emailCardDraftIds: number[] = [];
       for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_email_draft')) {
@@ -6268,7 +6298,10 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       // Step 4: filter out completed cards — same predicate as listChannelMessages
       const unresolvedCards = madisonMsgs.filter(m => {
         if (m.quickAction === 'madison_sms_draft') {
-          try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedSmsDraftIds.has(meta.draftId); } catch { return true; }
+          try {
+            const meta = JSON.parse(m.metadata ?? '{}');
+            return Boolean(meta.draftId) && !completedSmsDraftIds.has(meta.draftId);
+          } catch { return false; }
         }
         if (m.quickAction === 'madison_email_draft') {
           try { const meta = JSON.parse(m.metadata ?? '{}'); return !completedEmailDraftIds.has(meta.draftId); } catch { return true; }
@@ -6279,7 +6312,9 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         return true;
       });
 
-      // Step 5: sort by lastActivityAt desc (same as badge cycling order)
+      // Step 5: sort persisted canonical cards by latest activity. This read
+      // has no Madison, LLM, Shadow, retry, or reconciliation side effects.
+
       return unresolvedCards
         .sort((a, b) => {
           const tsA = Number(a.lastActivityAt ?? new Date(a.createdAt as Date).getTime());
@@ -6288,12 +6323,12 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         })
         .map(m => ({
           id: m.id,
-          ts: new Date(m.createdAt as Date).getTime(),
+          ts: Number(m.lastActivityAt ?? new Date(m.createdAt as Date).getTime()),
           quickAction: m.quickAction,
           body: m.body,
           metadata: m.metadata ?? null,
           mediaUrl: m.mediaUrl ?? null,
-        }));
+        })).sort((a, b) => b.ts - a.ts || b.id - a.id);
     }),
 
   /**

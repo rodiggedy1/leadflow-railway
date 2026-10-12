@@ -3839,6 +3839,27 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         })
         .from(conversationSessions)
         .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)));
+      const sessionIds = sessions.map(s => s.id);
+      const draftRows = sessionIds.length
+        ? await db
+          .select({
+            id: madisonSmsDrafts.id,
+            sessionId: madisonSmsDrafts.sessionId,
+            status: madisonSmsDrafts.status,
+            senderName: madisonSmsDrafts.senderName,
+            originalMessage: madisonSmsDrafts.originalMessage,
+            generatedDraft: madisonSmsDrafts.generatedDraft,
+            approvedText: madisonSmsDrafts.approvedText,
+            updatedAt: madisonSmsDrafts.updatedAt,
+          })
+          .from(madisonSmsDrafts)
+          .where(inArray(madisonSmsDrafts.sessionId, sessionIds))
+          .orderBy(desc(madisonSmsDrafts.updatedAt))
+        : [];
+      const draftBySessionId = new Map<number, (typeof draftRows)[number]>();
+      for (const draft of draftRows) {
+        if (!draftBySessionId.has(draft.sessionId)) draftBySessionId.set(draft.sessionId, draft);
+      }
       const now = Date.now();
       const ONE_HOUR_MS = 60 * 60 * 1000;
       const FIFTEEN_MIN_MS = 15 * 60 * 1000;
@@ -3852,6 +3873,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         leadPhone: string;
         lastMessagePreview: string;
         ageMs: number;
+        madisonDraft: (typeof draftRows)[number] | null;
       }> = [];
       for (const s of sessions) {
         try {
@@ -3880,6 +3902,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             leadPhone: s.leadPhone,
             lastMessagePreview: preview,
             ageMs: age,
+            madisonDraft: draftBySessionId.get(s.id) ?? null,
           });
         } catch { /* skip malformed */ }
       }
