@@ -6195,8 +6195,8 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       };
     }),
   /**
-   * getFocusCards — returns unresolved Madison cards from the same 500-row command
-   * channel window that the badge uses, with the same draft-status filter.
+   * getFocusCards — returns unresolved Madison cards plus direct received-SMS
+   * work items from the same 500-row command channel window.
    * This guarantees badge count === Focus count at all times.
    */
   getFocusCards: opsChatProcedure
@@ -6204,11 +6204,16 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       const db = await getDb();
       if (!db) return [];
 
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
       // Step 1: fetch the same 500-row window as listChannelMessages for 'command'
       const msgs = await db
         .select()
         .from(opsChatMessages)
-        .where(eq(opsChatMessages.channel, 'command'))
+        .where(and(
+          eq(opsChatMessages.channel, 'command'),
+          gte(opsChatMessages.createdAt, thirtyDaysAgo),
+        ))
         .orderBy(
           desc(sql`CASE
             WHEN ${opsChatMessages.quickAction} = 'madison_sms_draft'
@@ -6219,10 +6224,12 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         )
         .limit(500);
 
-      // Step 2: narrow to active madison cards only
+      // Step 2: narrow to active AI Team work items. A received SMS card is
+      // independent of Madison draft/Shadow success and must remain visible.
       const madisonMsgs = msgs.filter(m =>
         m.cardStatus === 'active' &&
-        (m.quickAction === 'madison_sms_draft' ||
+        (m.quickAction === 'inbound_sms_unanswered' ||
+         m.quickAction === 'madison_sms_draft' ||
          m.quickAction === 'madison_email_draft' ||
          m.quickAction === 'madison_call_summary')
       );

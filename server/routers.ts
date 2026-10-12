@@ -5489,32 +5489,33 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
     }),
 
     /**
-     * leads.getLeadReplies — returns one row per conversation whose latest real
-     * message is customer-sent and occurred within the last 30 days.
+     * leads.getLeadReplies — returns unread leads matching the exact same criteria
+     * as the Unreads badge on the leads page (leads.list + hasPhoneFilter + hasUnread).
      * Uses raw SQL to avoid Drizzle filter composition issues.
      */
     getLeadReplies: opsChatProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
 
-      // Raw SQL: use the denormalized latest-message fields as the authoritative queue predicate.
-      // Read/unread state is intentionally not used: a customer message remains visible until an outbound reply changes the latest role.
+      // Raw SQL: find all sessions where the last SMS is from the customer and not yet read.
       // Only real phone numbers. Excludes internal sources (cs-inbound, hiring, schedule_confirm, review).
       const nonLeadSourceList = NON_LEAD_SOURCES.map((s: string) => `'${s}'`).join(',');
       const rawRows = await db.execute(sql`
         SELECT
           id, leadName, leadPhone, leadSource, stage,
-          assignedAgentName, messageHistory, lastMessageRole, lastMessageTs, lastCustomerReplyAt, createdAt
+          assignedAgentName, messageHistory, lastReadAt, lastCustomerReplyAt, createdAt
         FROM conversation_sessions
         WHERE
           leadPhone IS NOT NULL
           AND leadPhone NOT REGEXP '[a-zA-Z]'
           AND LENGTH(REGEXP_REPLACE(leadPhone, '[^0-9]', '')) >= 10
           AND (leadSource IS NULL OR leadSource NOT IN (${sql.raw(nonLeadSourceList)}))
-          AND lastMessageRole IN ('user', 'customer')
-          AND lastMessageTs IS NOT NULL
-          AND lastMessageTs >= ${Date.now() - 30 * 24 * 60 * 60 * 1000}
-        ORDER BY lastMessageTs DESC
+          AND lastCustomerReplyAt IS NOT NULL
+          AND (
+            lastReadAt IS NULL
+            OR lastCustomerReplyAt > lastReadAt
+          )
+        ORDER BY lastCustomerReplyAt DESC
         LIMIT 200
       `);
 
@@ -5526,15 +5527,14 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         stage: string;
         assignedAgentName: string | null;
         messageHistory: string | null;
-        lastMessageRole: string | null;
-        lastMessageTs: number | null;
+        lastReadAt: number | null;
         lastCustomerReplyAt: number | null;
         createdAt: Date;
       }>;
 
       const now = Date.now();
       const results = rows.map(r => {
-        const lastInboundAt = r.lastMessageTs ?? r.lastCustomerReplyAt ?? 0;
+        const lastInboundAt = r.lastCustomerReplyAt ?? 0;
         // Parse last user message from history for preview text
         let lastMessagePreview: string | null = null;
         try {
