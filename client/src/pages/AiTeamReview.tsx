@@ -342,7 +342,15 @@ export default function AiTeamReview() {
   const { data: dashboardStats } = trpc.commandCenter.getDashboardStats.useQuery({ range: "today" }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   useOpsStream({
     onNewMessage: channel => {
-      if (channel === "command") void utils.opsChat.getFocusCards.invalidate();
+      if (channel === "command") {
+        void utils.opsChat.getFocusCards.invalidate();
+        void utils.opsChat.getSmsDraft.invalidate();
+        void utils.opsChat.getSmsDraftConversation.invalidate();
+        void utils.activity.getShadowPrediction.invalidate();
+        void utils.madison.getUnifiedReview.invalidate();
+        void utils.madison.getReplyDecisionEvaluation.invalidate();
+        void utils.madison.getActionApproval.invalidate();
+      }
     },
   }, { label: "ai-team-madison-queue" });
   const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft");

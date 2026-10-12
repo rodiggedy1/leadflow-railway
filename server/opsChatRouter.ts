@@ -6234,7 +6234,14 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         .from(opsChatMessages)
         .where(and(
           eq(opsChatMessages.channel, 'command'),
-          gte(opsChatMessages.createdAt, thirtyDaysAgo),
+          or(
+            gte(opsChatMessages.createdAt, thirtyDaysAgo),
+            and(
+              eq(opsChatMessages.quickAction, 'madison_sms_draft'),
+              eq(opsChatMessages.cardStatus, 'active'),
+              gte(opsChatMessages.lastActivityAt, thirtyDaysAgo.getTime()),
+            ),
+          ),
         ))
         .orderBy(
           desc(sql`CASE
