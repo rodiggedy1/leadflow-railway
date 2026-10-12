@@ -39,13 +39,12 @@ import {
   issueEngineTable,
   issueEngineTimeline,
   madisonSmsDrafts,
-  madisonMessageUnderstanding,
   madisonSmsDraftEdits,
   madisonEmailDrafts,
   focusPoints,
   gmailThreadMeta,
 } from "../drizzle/schema";
-import { retrySmsDraft, triggerMadisonSmsDraft } from "./madisonSmsAgent";
+import { retrySmsDraft } from "./madisonSmsAgent";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
@@ -59,7 +58,6 @@ import { computeSessionSummary } from "./sessionSummary";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-const madisonReconciliationAttempts = new Map<string, number>();
 
 function todayDateString(): string {
   const now = new Date();
@@ -6257,62 +6255,21 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
          m.quickAction === 'madison_call_summary')
       );
 
-      // Step 3: apply the exact same draft-status filter as listChannelMessages
-      // SMS
+      // Step 3: apply the persisted draft-status filter.
       const smsCardDraftIds: number[] = [];
       for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_sms_draft')) {
-        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore */ }
+        try { const meta = JSON.parse(m.metadata ?? '{}'); if (meta.draftId) smsCardDraftIds.push(meta.draftId); } catch { /* ignore malformed metadata */ }
       }
       const completedSmsDraftIds = new Set<number>();
-      const persistedSmsSessionIds = new Set<number>();
-      const fallbackSmsSessionIds = new Set<number>();
-      const missingShadowDraftIds = new Set<number>();
       if (smsCardDraftIds.length > 0) {
         const draftRows = await db
-          .select({
-            id: madisonSmsDrafts.id,
-            status: madisonSmsDrafts.status,
-            sessionId: madisonSmsDrafts.sessionId,
-            generatedDraft: madisonSmsDrafts.generatedDraft,
-            observations: madisonSmsDrafts.observations,
-          })
+          .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
           .from(madisonSmsDrafts)
           .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
         for (const d of draftRows) {
-          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') {
-            completedSmsDraftIds.add(d.id);
-          }
-          let observations = "";
-          try { observations = JSON.stringify(d.observations ?? ""); } catch { /* ignore malformed legacy JSON */ }
-          if (
-            d.status === "FAILED" ||
-            d.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." ||
-            observations.includes("Draft generation failed")
-          ) {
-            fallbackSmsSessionIds.add(Number(d.sessionId));
-          }
-        }
-        const draftSessionRows = await db
-          .select({ sessionId: madisonSmsDrafts.sessionId })
-          .from(madisonSmsDrafts)
-          .where(inArray(madisonSmsDrafts.id, smsCardDraftIds));
-        for (const row of draftSessionRows) persistedSmsSessionIds.add(Number(row.sessionId));
-        const shadowRows = await db
-          .select({ draftId: madisonMessageUnderstanding.draftId })
-          .from(madisonMessageUnderstanding)
-          .where(inArray(madisonMessageUnderstanding.draftId, smsCardDraftIds));
-        const shadowDraftIds = new Set(shadowRows.map(row => Number(row.draftId)).filter(Boolean));
-        for (const draftId of smsCardDraftIds) {
-          if (!completedSmsDraftIds.has(draftId) && !shadowDraftIds.has(draftId)) missingShadowDraftIds.add(draftId);
-        }
-        for (const d of draftRows) {
-          if (missingShadowDraftIds.has(d.id)) fallbackSmsSessionIds.add(Number(d.sessionId));
+          if (d.status === 'SENT' || d.status === 'DISMISSED' || d.status === 'DELIVERED') completedSmsDraftIds.add(d.id);
         }
       }
-      // A FAILED/partial Madison draft can exist without an active card. Do not let
-      // that row suppress the session projection; deduplication is based only on the
-      // active Madison cards collected above.
-
       // Email
       const emailCardDraftIds: number[] = [];
       for (const m of madisonMsgs.filter(m => m.quickAction === 'madison_email_draft')) {
@@ -6348,134 +6305,9 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         return true;
       });
 
-      // Step 5: project every current Command Chat green-dot session into the
-      // same queue. A missing Madison draft must not hide an unanswered SMS.
-      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      const greenDotSessions = await db
-        .select({
-          id: conversationSessions.id,
-          leadName: conversationSessions.leadName,
-          leadPhone: conversationSessions.leadPhone,
-          messageHistory: conversationSessions.messageHistory,
-          lastMessageText: conversationSessions.lastMessageText,
-          lastMessageTs: conversationSessions.lastMessageTs,
-          lastMessageRole: conversationSessions.lastMessageRole,
-          updatedAt: conversationSessions.updatedAt,
-        })
-        .from(conversationSessions)
-        .where(and(
-          or(
-            sql`(
-              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
-              OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
-            )`,
-            eq(conversationSessions.csQueue as any, "CS"),
-          ),
-          isNull(conversationSessions.csResolvedAt),
-        ));
-      const sessionsByPhone = new Map<string, typeof greenDotSessions>();
-      for (const session of greenDotSessions) {
-        const phone = session.leadPhone?.trim() || "__no_phone__";
-        const group = sessionsByPhone.get(phone) ?? [];
-        group.push(session);
-        sessionsByPhone.set(phone, group);
-      }
-      const canonicalGreenDotSessions = Array.from(sessionsByPhone.values()).map((group) => group.reduce((current, candidate) => {
-        const currentTs = current.lastMessageTs ?? 0;
-        const candidateTs = candidate.lastMessageTs ?? 0;
-        return candidateTs > currentTs ? candidate : current;
-      }));
-      const projectedSessionCandidates = canonicalGreenDotSessions
-        .map((session) => ({
-          session,
-          lastMsgTs: session.lastMessageTs && session.lastMessageTs > 0 ? session.lastMessageTs : session.updatedAt.getTime(),
-        }))
-        .filter(({ session, lastMsgTs }) => session.lastMessageRole === "user" && lastMsgTs >= cutoff)
-        .filter(({ session }) => !persistedSmsSessionIds.has(Number(session.id)));
+      // Step 5: sort persisted canonical cards by latest activity. This read
+      // has no Madison, LLM, Shadow, retry, or reconciliation side effects.
 
-      const fallbackSessionCandidates = canonicalGreenDotSessions
-        .map((session) => ({
-          session,
-          lastMsgTs: session.lastMessageTs && session.lastMessageTs > 0 ? session.lastMessageTs : session.updatedAt.getTime(),
-        }))
-        .filter(({ session, lastMsgTs }) => session.lastMessageRole === "user" && lastMsgTs >= cutoff)
-        .filter(({ session }) => fallbackSmsSessionIds.has(Number(session.id)));
-      const reconciliationCandidates = [
-        ...projectedSessionCandidates,
-        ...fallbackSessionCandidates.filter(({ session }) => !projectedSessionCandidates.some(candidate => Number(candidate.session.id) === Number(session.id))),
-      ];
-
-      // Reconcile an eligible session through the same canonical Madison entry
-      // point used by webhooks. The projection remains in the response until
-      // the canonical draft card is written, preserving green-dot inclusion
-      // while preventing a second card implementation.
-      for (const { session, lastMsgTs } of reconciliationCandidates) {
-        let history: Array<{ role?: string; content?: string; ts?: number; opMsgId?: string }> = [];
-        try {
-          const parsed = JSON.parse(session.messageHistory ?? "[]");
-          if (Array.isArray(parsed)) history = parsed;
-        } catch { /* malformed history remains visible as a projection */ }
-        const currentInbound = [...history].reverse().find(message =>
-          message.role === "user" && message.content?.trim() === session.lastMessageText?.trim()
-        );
-        const sourceMessageId = currentInbound?.opMsgId || `projected_session_${session.id}_${lastMsgTs}`;
-        const reconciliationKey = `${session.id}:${lastMsgTs}:${session.lastMessageText ?? ""}`;
-        const lastAttempt = madisonReconciliationAttempts.get(reconciliationKey) ?? 0;
-        if (Date.now() - lastAttempt < 120_000) continue;
-        madisonReconciliationAttempts.set(reconciliationKey, Date.now());
-        void (async () => {
-          const [existingDraft] = await db
-            .select({ id: madisonSmsDrafts.id })
-            .from(madisonSmsDrafts)
-            .where(and(
-              eq(madisonSmsDrafts.sessionId, Number(session.id)),
-              eq(madisonSmsDrafts.originalMessage, session.lastMessageText ?? ""),
-            ))
-            .orderBy(desc(madisonSmsDrafts.createdAt))
-            .limit(1);
-          if (existingDraft) {
-            const [draft] = await db
-              .select({ status: madisonSmsDrafts.status, generatedDraft: madisonSmsDrafts.generatedDraft, observations: madisonSmsDrafts.observations })
-              .from(madisonSmsDrafts)
-              .where(eq(madisonSmsDrafts.id, existingDraft.id))
-              .limit(1);
-            let observations = "";
-            try { observations = JSON.stringify(draft?.observations ?? ""); } catch { /* ignore malformed legacy JSON */ }
-            const isFallback = draft?.status === "FAILED" || draft?.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." || observations.includes("Draft generation failed") || missingShadowDraftIds.has(existingDraft.id);
-            if (!isFallback) return;
-            if (draft?.status !== "FAILED") {
-              await db.update(madisonSmsDrafts)
-                .set({ status: "FAILED", errorStage: "pipeline", errorCode: "fallback_repair", errorMessage: "Repairing generic fallback draft", updatedAt: new Date() })
-                .where(and(eq(madisonSmsDrafts.id, existingDraft.id), eq(madisonSmsDrafts.status, draft?.status ?? "DRAFT_READY")));
-            }
-            await retrySmsDraft(existingDraft.id, { inboundMessageId: currentInbound?.opMsgId, allowReadyRetry: true });
-            return;
-          }
-
-          const phoneDigits = (session.leadPhone ?? "").replace(/\D/g, "").slice(-10);
-          const [cleaner] = phoneDigits.length === 10
-            ? await db
-                .select({ name: cleanerProfiles.name })
-                .from(cleanerProfiles)
-                .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${phoneDigits} AND ${cleanerProfiles.isActive} = 1`)
-                .limit(1)
-            : [];
-
-          await triggerMadisonSmsDraft({
-            inboundOpenPhoneId: sourceMessageId,
-            inboundMessageId: currentInbound?.opMsgId,
-            sessionId: Number(session.id),
-            fromPhone: session.leadPhone!,
-            senderName: cleaner?.name ?? session.leadName ?? undefined,
-            isCleaner: Boolean(cleaner),
-            inboundText: session.lastMessageText!,
-          });
-        })().catch(error => {
-          console.error(`[MadisonSMS] projected session reconciliation failed for ${session.id}:`, error);
-        });
-      }
-
-      // Step 6: sort by lastActivityAt desc (same as badge cycling order)
       return unresolvedCards
         .sort((a, b) => {
           const tsA = Number(a.lastActivityAt ?? new Date(a.createdAt as Date).getTime());
