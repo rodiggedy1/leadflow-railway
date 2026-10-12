@@ -44,7 +44,7 @@ import {
   focusPoints,
   gmailThreadMeta,
 } from "../drizzle/schema";
-import { retrySmsDraft } from "./madisonSmsAgent";
+import { retrySmsDraft, triggerMadisonSmsDraft } from "./madisonSmsAgent";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
@@ -5799,6 +5799,62 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         ts: m.ts ?? 0,
         senderName: m.senderName ?? undefined,
       }));
+    }),
+  /** Create the canonical Madison draft for a projected green-dot session. */
+  ensureMadisonDraftForSession: opsChatProcedure
+    .input(z.object({ sessionId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false, reason: "no_db" as const };
+
+      const [session] = await db
+        .select({
+          id: conversationSessions.id,
+          leadPhone: conversationSessions.leadPhone,
+          leadName: conversationSessions.leadName,
+          lastMessageText: conversationSessions.lastMessageText,
+          lastMessageTs: conversationSessions.lastMessageTs,
+          lastMessageRole: conversationSessions.lastMessageRole,
+        })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session?.leadPhone || session.lastMessageRole !== "user" || !session.lastMessageText?.trim()) {
+        return { ok: false, reason: "not_unanswered" as const };
+      }
+
+      const [existingDraft] = await db
+        .select({ id: madisonSmsDrafts.id, status: madisonSmsDrafts.status })
+        .from(madisonSmsDrafts)
+        .where(and(
+          eq(madisonSmsDrafts.sessionId, input.sessionId),
+          eq(madisonSmsDrafts.originalMessage, session.lastMessageText),
+        ))
+        .orderBy(desc(madisonSmsDrafts.createdAt))
+        .limit(1);
+      if (existingDraft) {
+        if (existingDraft.status === "FAILED") await retrySmsDraft(existingDraft.id);
+        return { ok: true, draftId: existingDraft.id, existing: true };
+      }
+
+      const phoneDigits = session.leadPhone.replace(/\D/g, "").slice(-10);
+      const [cleaner] = phoneDigits.length === 10
+        ? await db
+            .select({ name: cleanerProfiles.name })
+            .from(cleanerProfiles)
+            .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${phoneDigits} AND ${cleanerProfiles.isActive} = 1`)
+            .limit(1)
+        : [];
+
+      await triggerMadisonSmsDraft({
+        inboundOpenPhoneId: `projected_session_${input.sessionId}_${session.lastMessageTs ?? session.lastMessageText}`,
+        sessionId: input.sessionId,
+        fromPhone: session.leadPhone,
+        senderName: cleaner?.name ?? session.leadName ?? undefined,
+        isCleaner: Boolean(cleaner),
+        inboundText: session.lastMessageText,
+      });
+      return { ok: true, existing: false };
     }),
 
   /**

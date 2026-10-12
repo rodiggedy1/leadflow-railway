@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -230,6 +230,16 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     onSuccess: () => { toast.success("Reply sent."); setEditingReply(false); setEditedReply(""); onChanged(); },
     onError: error => toast.error(`Reply was not sent: ${error.message}`),
   });
+  const ensureMadisonDraft = trpc.opsChat.ensureMadisonDraftForSession.useMutation({
+    onSuccess: result => {
+      if (result.ok) {
+        void utils.opsChat.getFocusCards.invalidate();
+      } else if (result.reason !== "not_unanswered") {
+        toast.error(`Madison could not prepare this reply: ${result.reason}`);
+      }
+    },
+    onError: error => toast.error(`Madison could not prepare this reply: ${error.message}`),
+  });
   const { data: actionApproval } = trpc.madison.getActionApproval.useQuery(
     { draftId: draftId! },
     { enabled: Boolean(draftId), refetchOnWindowFocus: false },
@@ -253,6 +263,11 @@ function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: 
     onError: error => toast.error(error.message),
   });
   const pendingMadison = !draftId && Boolean(sessionId);
+  useEffect(() => {
+    if (pendingMadison && sessionId && !ensureMadisonDraft.isPending) {
+      ensureMadisonDraft.mutate({ sessionId });
+    }
+  }, [pendingMadison, sessionId]);
   if (!draftId && !pendingMadison) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   if (!pendingMadison && (isLoading || !draft)) return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
   const proposal = draft ? actionApproval ?? getCustomerCareProposal(draft.originalMessage ?? "") : null;
