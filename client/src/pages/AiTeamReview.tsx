@@ -16,12 +16,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { MadisonSmsDraftCard } from "@/components/CommandChat";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import "./ai-team-review.css";
 
 type Tab = "overview" | "agents" | "activity";
-type IssueCategory = "Reschedule" | "Cancellation" | "Service issue" | "Refund / credit" | "General question" | "Booking request";
 type ActivityAudit = {
   kind: "madison_reply" | "madison_task";
   draftId?: number | null;
@@ -40,7 +40,6 @@ type ActivityAudit = {
   issueId?: number | null;
 };
 type ActivityItem = { id: number; ts: number; title: string; detail: string; kind: "madison"; audit: ActivityAudit };
-const ISSUE_CATEGORIES: IssueCategory[] = ["Reschedule", "Cancellation", "Service issue", "Refund / credit", "General question", "Booking request"];
 type Agent = {
   id: string;
   name: string;
@@ -110,30 +109,6 @@ const ACTIVITY = [
   ["1:12 PM", "Madison sent follow-up", "Lead had not responded for 2 hours", "madison"],
 ] as const;
 
-function getCustomerCareProposal(message: string) {
-  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
-  if (/(^|\b)(cancel|cancellation|call off|don'?t need the clean)(\b|$)/.test(normalized)) {
-    return { title: "Cancellation request", task: "Verify the customer’s request, then cancel the booking", recommendation: "Do not change the booking until the request is verified." };
-  }
-  if (/(^|\b)(reschedule|reschedul|move my|change my|different date|different time|another day)(\b|$)/.test(normalized)) {
-    return { title: "Reschedule request", task: "Verify the requested date/time, check openings, then reschedule", recommendation: "Do not change the booking until availability is verified." };
-  }
-  if (/(^|\b)(problem|issue|missed|complaint|not happy|broken|damaged|refund|credit|special request|extra instruction)(\b|$)/.test(normalized)) {
-    return { title: "Customer-care request", task: "Review the issue and decide the appropriate customer resolution", recommendation: "Human follow-up is required before offering a credit, refund, or return visit." };
-  }
-  return null;
-}
-
-function getIssueCategory(message: string): IssueCategory {
-  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
-  if (/(^|\b)(reschedule|reschedul|move my|change my|different date|different time|another day)(\b|$)/.test(normalized)) return "Reschedule";
-  if (/(^|\b)(cancel|cancellation|call off|don'?t need the clean)(\b|$)/.test(normalized)) return "Cancellation";
-  if (/(^|\b)(refund|credit|money back|charged twice|charge me)(\b|$)/.test(normalized)) return "Refund / credit";
-  if (/(^|\b)(problem|issue|missed|complaint|not happy|broken|damaged|dirty|didn'?t clean)(\b|$)/.test(normalized)) return "Service issue";
-  if (/(^|\b)(book|booking|quote|price|estimate|availability|available|schedule a clean|start service)(\b|$)/.test(normalized)) return "Booking request";
-  return "General question";
-}
-
 function formatConversationTime(ts: number | null | undefined): string | null {
   if (!ts) return null;
   const milliseconds = ts < 1_000_000_000_000 ? ts * 1000 : ts;
@@ -190,82 +165,8 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
   );
 }
 
-function LiveNeedCard({ card, agentName, onChanged }: { card: { id: number; ts: number; metadata: string | null; body: string }; agentName: string; onChanged: () => void }) {
-  const utils = trpc.useUtils();
-  const [showConversation, setShowConversation] = useState(false);
-  const [editingReply, setEditingReply] = useState(false);
-  const [editedReply, setEditedReply] = useState("");
-  let metadata: { draftId?: number } = {};
-  try { metadata = JSON.parse(card.metadata ?? "{}"); } catch { /* ignore malformed legacy card */ }
-  const draftId = metadata.draftId;
-  const { data: draft, isLoading } = trpc.opsChat.getSmsDraft.useQuery(
-    { draftId: draftId! },
-    { enabled: Boolean(draftId), refetchOnWindowFocus: false },
-  );
-  const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSmsDraftConversation.useQuery(
-    { draftId: draftId!, limit: 20 },
-    { enabled: Boolean(draftId) && showConversation, refetchOnWindowFocus: false },
-  );
-  const approveReply = trpc.opsChat.approveSmsDraft.useMutation({
-    onSuccess: result => {
-      if (result.ok) {
-        toast.success("Madison's reply was approved and sent.");
-        void utils.opsChat.getFocusCards.invalidate();
-        void utils.opsChat.getSmsDraft.invalidate({ draftId });
-        onChanged();
-      } else toast.error(`Reply was not sent: ${result.reason ?? "already handled"}`);
-    },
-  });
-  if (!draftId || isLoading) {
-    return <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison request…</strong></div></article>;
-  }
-  if (!draft) return null;
-
-  const customerName = draft.senderName ?? "Customer";
-  const latestCardTime = formatConversationTime(card.ts);
-  const generatedReply = draft.generatedDraft ?? "";
-  const draftReady = draft.status === "DRAFT_READY" && Boolean(generatedReply);
-  const approveText = editingReply ? editedReply.trim() : generatedReply;
-
-  return (
-    <article className="ai-team-need-card">
-      <div className="ai-team-need-icon"><MessageSquare size={17} /></div>
-      <div className="ai-team-need-copy">
-        <strong>Madison reply approval</strong>
-        <p>{customerName}: “{draft.originalMessage ?? card.body}”{latestCardTime && <time className="ai-team-card-time" dateTime={new Date(card.ts).toISOString()}>Received {latestCardTime}</time>}</p>
-        {draftReady ? <em>Approve the Madison-generated reply below.</em> : <em>Madison is still preparing this reply. Human approval is required before sending.</em>}
-        {editingReply ? <textarea
-          aria-label="Edit Madison reply"
-          value={editedReply}
-          onChange={event => setEditedReply(event.target.value)}
-          rows={5}
-          maxLength={1600}
-          style={{ marginTop: 10, width: "100%", resize: "vertical", border: "1px solid #cdb79f", borderRadius: 10, padding: 10, color: "#4f473f", font: "inherit", lineHeight: 1.45, background: "#fffdf9" }}
-        /> : <div style={{ marginTop: 10, color: "#6f675e", fontSize: 12, lineHeight: 1.45 }}>{generatedReply || "Madison draft is not available yet."}</div>}
-        <div className="ai-team-policy-note"><b>SMS policy:</b> Approval required</div>
-        <button type="button" className="ai-team-conversation-button" onClick={() => setShowConversation(value => !value)}><MessageSquare size={13} /> {showConversation ? "Hide conversation" : "View conversation"}</button>
-        {showConversation && <div className="ai-team-conversation" aria-label="Madison conversation history">
-          {conversationLoading ? <span>Loading conversation…</span> : conversation.length === 0 ? <span>No conversation history is available.</span> : conversation.map((message, index) => {
-            const messageTime = formatConversationTime(message.ts);
-            return <div className={`ai-team-conversation-message is-${message.role}`} key={`${message.ts ?? 0}-${index}`}><div className="ai-team-conversation-meta"><small>{message.senderName ?? (message.role === "user" ? customerName : "Madison")}</small>{messageTime && <time dateTime={new Date(message.ts).toISOString()}>{messageTime}</time>}</div><p>{message.content}</p></div>;
-          })}
-        </div>}
-      </div>
-      <div className="ai-team-need-actions">
-        {draftReady && !editingReply && <button type="button" className="is-quiet" onClick={() => { setEditedReply(generatedReply); setEditingReply(true); }}>Edit</button>}
-        {draftReady && editingReply && <>
-          <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: approveText, approvedBy: agentName })} disabled={approveReply.isPending || !approveText}>{approveReply.isPending ? "Sending…" : "Approve & Send"}</button>
-          <button type="button" className="is-quiet" onClick={() => { setEditingReply(false); setEditedReply(generatedReply); }} disabled={approveReply.isPending}>Cancel</button>
-        </>}
-        {draftReady && !editingReply && <button type="button" onClick={() => approveReply.mutate({ draftId, approvedText: generatedReply, approvedBy: agentName })} disabled={approveReply.isPending}>{approveReply.isPending ? "Sending…" : "Approve & Send"}</button>}
-      </div>
-    </article>
-  );
-}
-
 export default function AiTeamReview() {
   const [tab, setTab] = useState<Tab>("overview");
-  const [issueFilter, setIssueFilter] = useState<IssueCategory | "All issues">("All issues");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null);
   const [autonomy, setAutonomy] = useState("assist");
@@ -294,7 +195,6 @@ export default function AiTeamReview() {
     kind: "madison",
     audit: item.meta as ActivityAudit,
   }));
-  const filteredSmsCards = issueFilter === "All issues" ? liveSmsCards : liveSmsCards.filter(card => getIssueCategory(card.body) === issueFilter);
   const refreshLiveQueue = () => {
     void utils.opsChat.getFocusCards.invalidate();
   };
@@ -314,7 +214,7 @@ export default function AiTeamReview() {
 
       {tab === "overview" && <>
         <section className="ai-team-summary"><div><strong>{activityFeed ? activityFeed.todayActions : "—"}</strong><span>actions handled today</span></div><div><strong>{activityFeed ? activityFeed.todayLeadsAnswered : "—"}</strong><span>leads answered</span></div><div><strong>{dashboardStats ? dashboardStats.bookedJobs : "—"}</strong><span>bookings made</span></div><div><strong>{dashboardStats ? `$${dashboardStats.bookedRevenue.toLocaleString()}` : "—"}</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
-        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-issue-pills" aria-label="Filter Madison queue by issue"><button type="button" className={issueFilter === "All issues" ? "is-active" : ""} onClick={() => setIssueFilter("All issues")}>All issues <b>{liveSmsCards.length}</b></button>{ISSUE_CATEGORIES.map(category => <button type="button" key={category} className={issueFilter === category ? "is-active" : ""} onClick={() => setIssueFilter(category)}>{category} <b>{liveSmsCards.filter(card => getIssueCategory(card.body) === category).length}</b></button>)}</div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : filteredSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>No {issueFilter.toLowerCase()} requests</strong><p>Choose another issue pill to view the active Madison queue.</p></div></article> : filteredSmsCards.map(card => <LiveNeedCard key={card.id} card={card} agentName={agentName ?? "Owner"} onChanged={refreshLiveQueue} />)}</div></section>
+        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : liveSmsCards.map(card => <MadisonSmsDraftCard key={card.id} msg={{ id: card.id, body: card.body, metadata: card.metadata, createdAt: new Date(card.ts) }} callerName={agentName ?? "Owner"} onActed={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
         <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact items={activityItems} onOpen={setSelectedActivity} /></section>
       </>}
