@@ -305,6 +305,21 @@ export async function triggerMadisonSmsDraft(params: {
     }
     const [insertHeader] = insertResult as any;
     draftId = insertHeader.insertId as number;
+    // Publish the canonical Madison card immediately. It is backed by the
+    // draft row from the first moment, then updated in place when the pipeline
+    // finishes. This prevents a second lightweight inbound-SMS card.
+    await postDraftCardToCommandChat({
+      draftId,
+      sessionId,
+      fromPhone,
+      senderName,
+      isCleaner,
+      inboundText,
+      draft: "Madison is preparing a reply…",
+      observations: ["Inbound message received. Madison is preparing the reviewable response."],
+      leadCategory: null,
+      db,
+    });
 
     try {
       const [sessionRow] = await db

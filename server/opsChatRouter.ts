@@ -6224,12 +6224,11 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         )
         .limit(500);
 
-      // Step 2: narrow to active AI Team work items. A received SMS card is
-      // independent of Madison draft/Shadow success and must remain visible.
+      // Step 2: narrow to active AI Team work items. SMS visibility comes from
+      // the canonical Madison draft card, created at pipeline entry.
       const madisonMsgs = msgs.filter(m =>
         m.cardStatus === 'active' &&
-        (m.quickAction === 'inbound_sms_unanswered' ||
-         m.quickAction === 'madison_sms_draft' ||
+        (m.quickAction === 'madison_sms_draft' ||
          m.quickAction === 'madison_email_draft' ||
          m.quickAction === 'madison_call_summary')
       );

@@ -2157,24 +2157,6 @@ Be specific and actionable. Reference actual moments from the transcript. No flu
 // In-memory dedup for CS inbound: prevents double-appends from OpenPhone at-least-once delivery.
 const csMessageDedup = new Map<string, number>();
 
-async function upsertInboundSmsUnansweredCard(params: {
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
-  sessionId: number; messageId: string; fromPhone: string; senderName: string | null;
-  inboundText: string; mediaUrl?: string | null;
-}): Promise<void> {
-  const { db, sessionId, messageId, fromPhone, senderName, inboundText, mediaUrl } = params;
-  const eventTs = Date.now();
-  const dedupKey = `inbound_sms_unanswered:${messageId}`;
-  const metadata = JSON.stringify({ sessionId, messageId, fromPhone, senderName, inboundText, receivedAt: new Date(eventTs).toISOString() });
-  await db.insert(opsChatMessages).values({
-    channel: "command", authorName: senderName ?? fromPhone, authorRole: "system",
-    body: `Received SMS · ${senderName ?? fromPhone}\n\"${inboundText}\"`, mediaUrl: mediaUrl ?? null,
-    quickAction: "inbound_sms_unanswered", metadata, sessionId, lastActivityAt: eventTs,
-    cardStatus: "active", activeDedupKey: dedupKey,
-  }).onDuplicateKeyUpdate({ set: { metadata, lastActivityAt: eventTs, cardStatus: "active", activeDedupKey: dedupKey } });
-  console.log(`[CS] Persisted AI Team inbound SMS card messageId=${messageId} sessionId=${sessionId}`);
-}
-
 async function handleCsInboundMessage(msg: any) {
   const db = await getDb();
   if (!db) {
@@ -2523,15 +2505,6 @@ async function handleCsInboundMessage(msg: any) {
     }
   }
 
-  // Persist the inbox card before Madison/Shadow enrichment.
-  const inboundSessionId = persistedSessionId ?? existingSession?.id;
-  if (inboundSessionId && messageId && (inboundText.trim() || mediaUrls.length > 0)) {
-    await upsertInboundSmsUnansweredCard({
-      db, sessionId: inboundSessionId, messageId, fromPhone,
-      senderName: resolvedName ?? existingSession?.leadName ?? null,
-      inboundText, mediaUrl: mediaUrls[0] ?? null,
-    });
-  }
   // Broadcast SSE so CS inbox updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("lead_update");
