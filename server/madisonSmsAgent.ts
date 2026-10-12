@@ -292,6 +292,8 @@ export async function triggerMadisonSmsDraft(params: {
         .select({
           id: madisonSmsDrafts.id,
           sessionId: madisonSmsDrafts.sessionId,
+          generatedDraft: madisonSmsDrafts.generatedDraft,
+          observations: madisonSmsDrafts.observations,
         })
         .from(madisonSmsDrafts)
         .where(eq(madisonSmsDrafts.inboundOpenPhoneId, inboundOpenPhoneId))
@@ -310,6 +312,22 @@ export async function triggerMadisonSmsDraft(params: {
         inboundText,
         actorRole: isCleaner ? "cleaner" : "customer",
         actor: isCleaner ? { role: "CLEANER", source: "PHONE_DIRECTORY", identityHash: hashMadisonActorIdentity(fromPhone) } : { role: "CUSTOMER", source: "SYSTEM" },
+      });
+      const duplicateObservations = Array.isArray(existingDraft.observations)
+        ? existingDraft.observations.map(String)
+        : ["Inbound message received. Madison is preparing the reviewable response."];
+      await postDraftCardToCommandChat({
+        draftId: existingDraft.id,
+        sessionId: existingDraft.sessionId,
+        fromPhone,
+        senderName,
+        isCleaner,
+        inboundText,
+        draft: existingDraft.generatedDraft ?? "Madison is preparing a reply…",
+        observations: duplicateObservations,
+        leadCategory: null,
+        db,
+        currentInboundMessageId: inboundMessageId ?? inboundOpenPhoneId,
       });
       return;
     }
@@ -330,6 +348,7 @@ export async function triggerMadisonSmsDraft(params: {
       observations: ["Inbound message received. Madison is preparing the reviewable response."],
       leadCategory: null,
       db,
+      currentInboundMessageId: inboundMessageId ?? inboundOpenPhoneId,
     });
 
     try {
@@ -543,6 +562,7 @@ export async function triggerMadisonSmsDraft(params: {
       leadCategory,
       unansweredMinutes,
       db,
+      currentInboundMessageId: inboundMessageId ?? inboundOpenPhoneId,
     });
 
     console.log(`[MadisonSMS] Draft ${draftId} posted for ${fromPhone} (${intent ?? classification.type})`);
@@ -1058,11 +1078,12 @@ async function postDraftCardToCommandChat(params: {
   draft: string;
   observations: string[];
   leadCategory: LeadCategory | null;
+  currentInboundMessageId: string;
   /** Minutes the customer has been waiting unanswered — shown as red banner in the card */
   unansweredMinutes?: number;
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
 }): Promise<void> {
-  const { draftId, sessionId, fromPhone, senderName, isCleaner, inboundText, draft, observations, leadCategory, unansweredMinutes, db } = params;
+  const { draftId, sessionId, fromPhone, senderName, isCleaner, inboundText, draft, observations, leadCategory, unansweredMinutes, currentInboundMessageId, db } = params;
 
   const displayName = senderName ?? fromPhone;
   const senderLabel = isCleaner ? "🧹 Cleaner" : "👤 Customer";
@@ -1101,6 +1122,7 @@ async function postDraftCardToCommandChat(params: {
     draftId,
     quickActionVersion: 1,
     sessionId,
+    currentInboundMessageId,
     isCleaner,
     ...(leadCategory !== null ? { leadCategory } : {}),
     ...(unansweredMinutes !== undefined ? { unansweredMinutes } : {}),
