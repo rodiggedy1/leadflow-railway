@@ -1224,6 +1224,26 @@ export async function retrySmsDraft(
   const isGenericFallback = draft.generatedDraft === "Hi! I received your message. Let me check on that and get back to you shortly." || observations.includes("Draft generation failed");
   if (draft.status !== "FAILED" && !isGenericFallback && !options?.allowReadyRetry) return { ok: false, reason: "not_failed" };
 
+  let retryInboundMessageId = options?.inboundMessageId;
+  if (!retryInboundMessageId) {
+    const [session] = await db
+      .select({ messageHistory: conversationSessions.messageHistory })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.id, draft.sessionId as number))
+      .limit(1);
+    try {
+      const history = JSON.parse((session?.messageHistory as string) ?? "[]");
+      if (Array.isArray(history)) {
+        const matchingUserMessage = [...history].reverse().find(
+          (message: any) => message?.role === "user" && message?.content?.trim() === draft.originalMessage?.trim(),
+        );
+        retryInboundMessageId = matchingUserMessage?.opMsgId;
+      }
+    } catch {
+      // Fall back to the draft's original source ID when legacy history is malformed.
+    }
+  }
+
   // Re-trigger from scratch — the UNIQUE constraint on inboundOpenPhoneId will prevent
   // duplicate processing if somehow the original succeeded
   await db.update(madisonSmsDrafts)
@@ -1233,7 +1253,7 @@ export async function retrySmsDraft(
   // Re-run the pipeline
   triggerMadisonSmsDraft({
     inboundOpenPhoneId: draft.inboundOpenPhoneId,
-    inboundMessageId: options?.inboundMessageId,
+    inboundMessageId: retryInboundMessageId,
     sessionId: draft.sessionId as number,
     fromPhone: draft.fromPhone,
     senderName: draft.senderName ?? undefined,
