@@ -200,7 +200,7 @@ export default function AiTeamReview() {
     return {
       id: card?.id ?? session.id,
       ts: Date.now() - session.ageMs,
-      body: `${session.leadName ?? "Customer"}\n${session.lastMessagePreview}`,
+      body: session.lastMessagePreview,
       metadata: card?.metadata ?? JSON.stringify({ sessionId: session.id }),
     };
   });
