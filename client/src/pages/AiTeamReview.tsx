@@ -174,19 +174,36 @@ export default function AiTeamReview() {
   const { agentName } = useAgentPermissions();
   const utils = trpc.useUtils();
   const { data: focusCards = [], isLoading: focusLoading } = trpc.opsChat.getFocusCards.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
+  const { data: unansweredSms, isLoading: unansweredLoading } = trpc.leads.getUnansweredCsCount.useQuery(undefined, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const { data: activityFeed } = trpc.activity.getFeed.useQuery({ limit: 100, sinceDays: 30 }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   const { data: dashboardStats } = trpc.commandCenter.getDashboardStats.useQuery({ range: "today" }, { refetchInterval: 30_000, refetchOnWindowFocus: false });
   useOpsStream({
     onNewMessage: channel => {
       if (channel === "command") {
         void utils.opsChat.getFocusCards.invalidate();
+        void utils.leads.getUnansweredCsCount.invalidate();
         void utils.opsChat.getSmsDraft.invalidate();
         void utils.opsChat.getSmsDraftConversation.invalidate();
       }
     },
   }, { label: "ai-team-madison-queue" });
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const liveSmsCards = focusCards.filter(card => card.quickAction === "madison_sms_draft" && card.ts >= thirtyDaysAgo);
+  const cardBySessionId = new Map<number, (typeof focusCards)[number]>();
+  for (const card of focusCards) {
+    if (card.quickAction !== "madison_sms_draft") continue;
+    try {
+      const sessionId = Number((JSON.parse(card.metadata ?? "{}").sessionId));
+      if (Number.isFinite(sessionId)) cardBySessionId.set(sessionId, card);
+    } catch { /* ignore malformed card metadata */ }
+  }
+  const liveSmsCards = (unansweredSms?.sessions ?? []).map(session => {
+    const card = cardBySessionId.get(session.id);
+    return {
+      id: card?.id ?? session.id,
+      ts: Date.now() - session.ageMs,
+      body: `${session.leadName ?? "Customer"}\n${session.lastMessagePreview}`,
+      metadata: card?.metadata ?? JSON.stringify({ sessionId: session.id }),
+    };
+  });
   const activityItems: ActivityItem[] = (activityFeed?.items ?? []).map(item => ({
     id: item.id,
     ts: new Date(item.createdAt).getTime(),
@@ -197,6 +214,7 @@ export default function AiTeamReview() {
   }));
   const refreshLiveQueue = () => {
     void utils.opsChat.getFocusCards.invalidate();
+    void utils.leads.getUnansweredCsCount.invalidate();
   };
 
   const actionPreview = (id: string, action: string) => {
@@ -214,7 +232,7 @@ export default function AiTeamReview() {
 
       {tab === "overview" && <>
         <section className="ai-team-summary"><div><strong>{activityFeed ? activityFeed.todayActions : "—"}</strong><span>actions handled today</span></div><div><strong>{activityFeed ? activityFeed.todayLeadsAnswered : "—"}</strong><span>leads answered</span></div><div><strong>{dashboardStats ? dashboardStats.bookedJobs : "—"}</strong><span>bookings made</span></div><div><strong>{dashboardStats ? `$${dashboardStats.bookedRevenue.toLocaleString()}` : "—"}</strong><span>booked today</span></div><div><strong>{liveSmsCards.length}</strong><span>need you</span></div></section>
-        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-needs-grid">{focusLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : liveSmsCards.map(card => <MadisonSmsDraftCard key={card.id} msg={{ id: card.id, body: card.body, metadata: card.metadata, createdAt: new Date(card.ts) }} callerName={agentName ?? "Owner"} onActed={refreshLiveQueue} />)}</div></section>
+        <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>SUPERVISE THE COMPANY</span><h2>Needs you <b>{liveSmsCards.length}</b></h2></div><p>AI escalates only the decisions outside its authority.</p></div><div className="ai-team-needs-grid">{focusLoading || unansweredLoading ? <article className="ai-team-need-card"><div className="ai-team-need-copy"><strong>Loading Madison’s queue…</strong></div></article> : liveSmsCards.length === 0 ? <article className="ai-team-need-card"><div className="ai-team-need-icon"><ShieldCheck size={17} /></div><div className="ai-team-need-copy"><strong>You’re all caught up</strong><p>No active Madison SMS approvals are waiting.</p></div></article> : liveSmsCards.map(card => <MadisonSmsDraftCard key={card.id} msg={{ id: card.id, body: card.body, metadata: card.metadata, createdAt: new Date(card.ts) }} callerName={agentName ?? "Owner"} onActed={refreshLiveQueue} />)}</div></section>
         <section className="ai-team-section"><div className="ai-team-section-heading"><div><span>YOUR AI TEAM</span><h2>Who is handling what</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("agents")}>View all agents <ArrowRight size={14} /></button></div><div className="ai-team-agent-grid">{AGENTS.map(agent => <AgentCard key={agent.id} agent={agent} onOpen={setSelectedAgent} />)}</div></section>
         <section className="ai-team-section ai-team-activity-section"><div className="ai-team-section-heading"><div><span>LIVE ACTIVITY</span><h2>What is happening right now</h2></div><button type="button" className="ai-team-text-button" onClick={() => setTab("activity")}>See all activity <ArrowRight size={14} /></button></div><ActivityList compact items={activityItems} onOpen={setSelectedActivity} /></section>
       </>}
