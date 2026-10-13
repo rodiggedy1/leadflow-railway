@@ -519,6 +519,14 @@
       "sha256": "b3e46ab2c15723602deddfe036f265d11f9049bea539a59e993bfaed5d9bdb3e",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0067_add_madison_golden_expected_annotation.postconditions.json"
+    },
+    {
+      "id": "0068_create_madison_live_golden_reviews",
+      "mode": "create-table",
+      "sqlFile": "0068_create_madison_live_golden_reviews.sql",
+      "sha256": "79adc821a9f09d7f737cb820107e5645c5f2eafd3a6d3f4e581259146816b744",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0068_create_madison_live_golden_reviews.postconditions.json"
     }
   ]
 }
