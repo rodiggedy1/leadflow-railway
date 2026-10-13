@@ -63,7 +63,7 @@
 .ai-team-sms-card__status { margin-top:14px; color:#8f6849; font-size:14px; font-weight:700; }
 .ai-team-sms-card__warning { color:#8f6849; line-height:1.5; }
 .ai-team-sms-card textarea { width:100%; min-height:110px; margin-top:12px; box-sizing:border-box; padding:12px; border:1px solid #dfd1c7; border-radius:10px; background:#fff; color:#30251f; resize:vertical; font:inherit; }
-.ai-team-sms-card__links { margin-top:14px; }
+.ai-team-sms-card__links { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; margin-top:14px; }
 .ai-team-sms-card button { border:0; background:none; color:#8f5c35; font-weight:800; cursor:pointer; }
 .ai-team-sms-card button:disabled { cursor:not-allowed; opacity:.45; }
 .ai-team-sms-card__conversation { display:grid; gap:8px; max-height:240px; overflow:auto; margin-top:12px; padding:10px; border-radius:10px; background:#f8f1ec; }
