@@ -114,6 +114,21 @@ export async function deactivateOpsSmsCard(draftId: number): Promise<void> {
   }
 }
 
+/** Delete the presentation card for a Madison SMS draft after human dismissal. */
+export async function deleteOpsSmsCard(draftId: number): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(
+      sql`DELETE FROM ops_chat_messages
+          WHERE quickAction = 'madison_sms_draft'
+            AND JSON_EXTRACT(metadata, '$.draftId') = ${draftId}`
+    );
+  } catch (err) {
+    console.error('[deleteOpsSmsCard] failed for draftId', draftId, err);
+  }
+}
+
 
 /**
  * Deactivate the active ops_chat_messages card for a madison_email_draft.
@@ -5881,7 +5896,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       await db.update(madisonSmsDrafts)
         .set({ status: "DISMISSED", dismissedBy: input.dismissedBy, dismissedAt: new Date(), updatedAt: new Date() })
         .where(and(eq(madisonSmsDrafts.id, input.draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
-      await deactivateOpsSmsCard(input.draftId);
+      await deleteOpsSmsCard(input.draftId);
       broadcastOpsUpdate("sms_draft_dismissed", { draftId: input.draftId });
       return { ok: true };
     }),

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock3,
   MessageSquare,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Users,
@@ -39,6 +40,8 @@ type ActivityAudit = {
   issueId?: number | null;
 };
 type ActivityItem = { id: number; ts: number; title: string; detail: string; kind: "madison"; audit: ActivityAudit };
+const GOLDEN_FAILURE_TAGS = ["missing context", "wrong customer/cleaner identification", "incorrect Shadow understanding", "unsafe policy decision", "weak wording or lack of specificity"] as const;
+type GoldenFailureTag = typeof GOLDEN_FAILURE_TAGS[number];
 type Agent = {
   id: string;
   name: string;
@@ -167,9 +170,20 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
 function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sessionId: number; leadName: string | null; leadPhone: string; body: string; ts: number; draft: { id: number; status: string; generatedDraft: string | null } | null }; callerName: string; onActed: () => void }) {
   const [showConversation, setShowConversation] = useState(false);
   const [reply, setReply] = useState(card.draft?.generatedDraft ?? "");
+  const [showGoldenReview, setShowGoldenReview] = useState(false);
   const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSessionConversation.useQuery({ sessionId: card.sessionId, limit: 20 }, { enabled: showConversation, refetchOnWindowFocus: false });
   const approve = trpc.opsChat.approveSmsDraft.useMutation({ onSuccess: onActed });
   const dismiss = trpc.opsChat.dismissSmsDraft.useMutation({ onSuccess: onActed });
+  const regenerate = trpc.opsChat.retrySmsDraft.useMutation({
+    onSuccess: () => {
+      onActed();
+      toast.success("Madison is regenerating the reply");
+    },
+    onError: () => toast.error("Madison could not regenerate this reply"),
+  });
+  useEffect(() => {
+    setReply(card.draft?.generatedDraft ?? "");
+  }, [card.draft?.id, card.draft?.generatedDraft]);
   const draftReady = card.draft?.status === "DRAFT_READY" && Boolean(card.draft.id);
   return <article className="ai-team-sms-card">
     <div className="ai-team-sms-card__top"><MessageSquare size={18} /><span>UNANSWERED SMS</span><time>{formatConversationTime(card.ts)}</time></div>
@@ -177,10 +191,43 @@ function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sess
     <div className="ai-team-sms-card__inbound">“{card.body}”</div>
     <div className="ai-team-sms-card__status">{draftReady ? "Madison draft ready for human approval." : "Madison draft is not ready yet."}</div>
     {draftReady ? <textarea aria-label="Madison reply" value={reply} onChange={event => setReply(event.target.value)} /> : <p className="ai-team-sms-card__warning">This message remains visible until Madison produces a reviewable draft.</p>}
-    <div className="ai-team-sms-card__links"><button type="button" onClick={() => setShowConversation(value => !value)}>{showConversation ? "Hide conversation" : "View conversation"}</button></div>
+    <div className="ai-team-sms-card__links"><button type="button" onClick={() => setShowConversation(value => !value)}>{showConversation ? "Hide conversation" : "View conversation"}</button><button type="button" onClick={() => setShowGoldenReview(true)}>Compare Golden response</button></div>
     {showConversation && <div className="ai-team-sms-card__conversation">{conversationLoading ? "Loading conversation…" : conversation.map((message, index) => <div key={`${message.ts}-${index}`} className={`ai-team-sms-card__message ai-team-sms-card__message--${message.role}`}><small>{message.senderName || message.role}</small><p>{message.content}</p></div>)}</div>}
-    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !reply.trim() || approve.isPending} onClick={() => approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => card.draft && dismiss.mutate({ draftId: card.draft.id, dismissedBy: callerName })} disabled={!draftReady || dismiss.isPending}>Dismiss</button></div>
+    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !reply.trim() || approve.isPending} onClick={() => approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => card.draft && dismiss.mutate({ draftId: card.draft.id, dismissedBy: callerName })} disabled={!draftReady || dismiss.isPending}>Dismiss</button><button type="button" onClick={() => card.draft && regenerate.mutate({ draftId: card.draft.id })} disabled={!card.draft || regenerate.isPending || approve.isPending || dismiss.isPending}><RefreshCw size={14} className={regenerate.isPending ? "animate-spin" : ""} />{regenerate.isPending ? "Regenerating…" : "Regenerate"}</button></div>
+    {showGoldenReview && <GoldenReviewDialog sessionId={card.sessionId} inboundMessage={card.body} standardResponse={reply} onClose={() => setShowGoldenReview(false)} />}
   </article>;
+}
+
+function GoldenReviewDialog({ sessionId, inboundMessage, standardResponse, onClose }: { sessionId: number; inboundMessage: string; standardResponse: string; onClose: () => void }) {
+  const [goldenResponse, setGoldenResponse] = useState<string | null>(null);
+  const [score, setScore] = useState<number | null>(null);
+  const [tags, setTags] = useState<GoldenFailureTag[]>([]);
+  const [notes, setNotes] = useState("");
+  const run = trpc.madison.runGoldenReplyPreview.useMutation({ onSuccess: result => setGoldenResponse(result.reply), onError: error => toast.error(error.message) });
+  const reviewKey = `madison-golden-reply-review-v2:${sessionId}:${inboundMessage}`;
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(reviewKey) ?? "null");
+      if (saved) { setScore(saved.score ?? null); setTags(saved.tags ?? []); setNotes(saved.notes ?? ""); }
+    } catch { /* local review recovery is best effort */ }
+  }, [reviewKey]);
+  const toggleTag = (tag: GoldenFailureTag) => setTags(current => current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag]);
+  const saveReview = () => {
+    if (score === null) { toast.error("Score this live SMS comparison first"); return; }
+    window.localStorage.setItem(reviewKey, JSON.stringify({ sessionId, inboundMessage, score, tags, notes, savedAt: new Date().toISOString() }));
+    toast.success("Golden review saved in this browser");
+  };
+  return <div className="ai-team-golden-backdrop" role="presentation" onClick={onClose}><section className="ai-team-golden-dialog" role="dialog" aria-modal="true" aria-label="Golden response review" onClick={event => event.stopPropagation()}>
+    <button type="button" className="ai-team-golden-close" onClick={onClose} aria-label="Close Golden review"><X size={18} /></button>
+    <span className="ai-team-golden-kicker">MADISON · LIVE GOLDEN REVIEW</span><h2>Review this live response</h2><p className="ai-team-golden-note">This comparison is attached to the current inbound SMS. It is read-only and does not create a draft, send SMS, or change the live card.</p>
+    <div className="ai-team-golden-inbound"><b>CURRENT INBOUND SMS · SESSION {sessionId}</b><span>“{inboundMessage}”</span></div>
+    <div className="ai-team-golden-columns"><div><b>STANDARD RESPONSE</b><p>{standardResponse || "No live draft loaded."}</p></div><div><b>GOLDEN RESPONSE</b>{goldenResponse ? <p>{goldenResponse}</p> : <p className="is-muted">Generate a comparison for this live SMS.</p>}</div></div>
+    <button type="button" className="ai-team-golden-run" disabled={run.isPending} onClick={() => run.mutate({ sessionId, inboundMessage })}>{run.isPending ? "Generating…" : "Generate comparison response"}</button>
+    <div className="ai-team-golden-score"><b>YOUR SCORE</b><div>{[1, 2, 3, 4, 5].map(value => <button key={value} type="button" className={score === value ? "is-selected" : ""} onClick={() => setScore(value)}>{value}</button>)}</div><small>1 = much worse · 3 = comparable · 5 = much better</small></div>
+    <div className="ai-team-golden-tags"><b>FAILURE TAGS</b><div>{GOLDEN_FAILURE_TAGS.map(tag => <label key={tag}><input type="checkbox" checked={tags.includes(tag)} onChange={() => toggleTag(tag)} />{tag}</label>)}</div></div>
+    <label className="ai-team-golden-label">Notes<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="What should improve?" /></label>
+    <div className="ai-team-golden-footer"><button type="button" onClick={onClose}>Close</button><button type="button" className="is-primary" onClick={saveReview}>Save review</button></div>
+  </section></div>;
 }
 
 export default function AiTeamReview() {

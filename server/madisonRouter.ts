@@ -13,6 +13,7 @@ import { evaluateMadisonReplyForDraft, evaluateMadisonSupportTaskForDraft } from
 import type { GoldenDataset } from "./madisonGoldenDataset";
 import { madisonGoldenCaseReviews, madisonGoldenReviewRatings } from "./madisonGoldenReviewStore";
 import { classifyMadisonMessageShadow } from "./madisonMessageUnderstanding";
+import { generateCommandChatReply } from "./commandChatReply";
 
 function loadGoldenDataset(): GoldenDataset {
   return JSON.parse(readFileSync(resolve(process.cwd(), "golden-dataset/candidates.json"), "utf8")) as GoldenDataset;
@@ -531,6 +532,33 @@ export const madisonRouter = router({
         conversationMessages: scenario.priorConversationContext,
       });
       return { caseId: scenario.caseId, actual, providerPath: "classifyMadisonMessageShadow -> invokeLLM", model: actual.model };
+    }),
+  runGoldenReplyPreview: opsChatProcedure
+    .input(z.object({ sessionId: z.number().int().positive(), inboundMessage: z.string().min(1).max(4000) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [session] = await db.select({ messageHistory: conversationSessions.messageHistory, leadName: conversationSessions.leadName, serviceType: conversationSessions.serviceType, address: conversationSessions.address, quotedPrice: conversationSessions.quotedPrice }).from(conversationSessions).where(eq(conversationSessions.id, input.sessionId)).limit(1);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Live SMS session not found" });
+      let parsedHistory: unknown = [];
+      try { parsedHistory = JSON.parse(session.messageHistory || "[]"); } catch { parsedHistory = []; }
+      const history = Array.isArray(parsedHistory)
+        ? parsedHistory.filter((message): message is { role: "user" | "assistant"; content: string } => Boolean(message && typeof message === "object" && ((message as any).role === "user" || (message as any).role === "assistant") && typeof (message as any).content === "string")).map(message => ({ role: message.role, content: message.content }))
+        : [];
+      const jobContext = [session.serviceType && `Service: ${session.serviceType}`, session.address && `Address: ${session.address}`, session.quotedPrice && `Quoted price: ${session.quotedPrice}`].filter(Boolean).join("\n");
+      const result = await generateCommandChatReply({
+        history,
+        customerName: session.leadName ?? undefined,
+        jobContext: jobContext || undefined,
+        scenario: `Current inbound SMS: "${input.inboundMessage}". Write the reply to this current turn using the conversation history and verified session context above.`,
+      });
+      return {
+        sessionId: input.sessionId,
+        inboundMessage: input.inboundMessage,
+        reply: result.reply,
+        providerPath: "generateCommandChatReply -> invokeLLM",
+        readOnly: true,
+      };
     }),
   saveGoldenTestRating: opsChatProcedure
     .input(z.object({
