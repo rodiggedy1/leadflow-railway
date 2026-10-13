@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -167,6 +167,9 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
 function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sessionId: number; leadName: string | null; leadPhone: string; body: string; ts: number; draft: { id: number; status: string; generatedDraft: string | null } | null }; callerName: string; onActed: () => void }) {
   const [showConversation, setShowConversation] = useState(false);
   const [reply, setReply] = useState(card.draft?.generatedDraft ?? "");
+  useEffect(() => {
+    setReply(card.draft?.generatedDraft ?? "");
+  }, [card.draft?.id, card.draft?.generatedDraft]);
   const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSessionConversation.useQuery({ sessionId: card.sessionId, limit: 20 }, { enabled: showConversation, refetchOnWindowFocus: false });
   const approve = trpc.opsChat.approveSmsDraft.useMutation({ onSuccess: onActed });
   const dismiss = trpc.opsChat.dismissSmsDraft.useMutation({ onSuccess: onActed });
