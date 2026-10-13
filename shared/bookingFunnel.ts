@@ -24,8 +24,8 @@ export type CustomerBookingLinkPricing = z.infer<typeof customerBookingLinkPrici
 export const createCustomerBookingLinkInputSchema = z.object({
   customerName: z.string().trim().min(2).max(255),
   customerPhone: z.string().trim().min(7).max(40),
-  customerEmail: z.string().trim().email().max(320),
-  address: z.string().trim().min(5).max(500),
+  customerEmail: z.string().trim().email().max(320).optional(),
+  address: z.string().trim().min(5).max(500).optional(),
   requestedLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   requestedLocalTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   pricing: customerBookingLinkPricingSchema,
