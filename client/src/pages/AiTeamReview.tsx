@@ -171,12 +171,16 @@ function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sess
   const [showConversation, setShowConversation] = useState(false);
   const [reply, setReply] = useState(card.draft?.generatedDraft ?? "");
   const [showGoldenReview, setShowGoldenReview] = useState(false);
-  useEffect(() => {
-    setReply(card.draft?.generatedDraft ?? "");
-  }, [card.draft?.id, card.draft?.generatedDraft]);
+  const [dismissedLocally, setDismissedLocally] = useState(false);
   const { data: conversation = [], isLoading: conversationLoading } = trpc.opsChat.getSessionConversation.useQuery({ sessionId: card.sessionId, limit: 20 }, { enabled: showConversation, refetchOnWindowFocus: false });
   const approve = trpc.opsChat.approveSmsDraft.useMutation({ onSuccess: onActed });
-  const dismiss = trpc.opsChat.dismissSmsDraft.useMutation({ onSuccess: onActed });
+  const dismiss = trpc.opsChat.dismissSmsDraft.useMutation({
+    onSuccess: onActed,
+    onError: error => {
+      setDismissedLocally(false);
+      toast.error(`Could not dismiss this SMS: ${error.message}`);
+    },
+  });
   const regenerate = trpc.opsChat.retrySmsDraft.useMutation({
     onSuccess: () => {
       onActed();
@@ -184,7 +188,11 @@ function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sess
     },
     onError: () => toast.error("Madison could not regenerate this reply"),
   });
+  useEffect(() => {
+    setReply(card.draft?.generatedDraft ?? "");
+  }, [card.draft?.id, card.draft?.generatedDraft]);
   const draftReady = card.draft?.status === "DRAFT_READY" && Boolean(card.draft.id);
+  if (dismissedLocally) return null;
   return <article className="ai-team-sms-card">
     <div className="ai-team-sms-card__top"><MessageSquare size={18} /><span>UNANSWERED SMS</span><time>{formatConversationTime(card.ts)}</time></div>
     <h3>{card.leadName || card.leadPhone}</h3>
@@ -193,7 +201,14 @@ function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sess
     {draftReady ? <textarea aria-label="Madison reply" value={reply} onChange={event => setReply(event.target.value)} /> : <p className="ai-team-sms-card__warning">This message remains visible until Madison produces a reviewable draft.</p>}
     <div className="ai-team-sms-card__links"><button type="button" onClick={() => setShowConversation(value => !value)}>{showConversation ? "Hide conversation" : "View conversation"}</button><button type="button" onClick={() => setShowGoldenReview(true)}>Compare Golden response</button></div>
     {showConversation && <div className="ai-team-sms-card__conversation">{conversationLoading ? "Loading conversation…" : conversation.map((message, index) => <div key={`${message.ts}-${index}`} className={`ai-team-sms-card__message ai-team-sms-card__message--${message.role}`}><small>{message.senderName || message.role}</small><p>{message.content}</p></div>)}</div>}
-    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !reply.trim() || approve.isPending} onClick={() => approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => dismiss.mutate({ draftId: card.draft?.id, sessionId: card.sessionId, inboundMessageId: card.latestInboundMessageId, inboundTimestamp: card.latestInboundTimestamp, inboundText: card.body, dismissedBy: callerName })} disabled={dismiss.isPending}>Dismiss</button><button type="button" onClick={() => card.draft && regenerate.mutate({ draftId: card.draft.id })} disabled={!card.draft || regenerate.isPending || approve.isPending || dismiss.isPending}><RefreshCw size={14} className={regenerate.isPending ? "animate-spin" : ""} />{regenerate.isPending ? "Regenerating…" : "Regenerate"}</button></div>
+    <div className="ai-team-sms-card__actions">
+      {draftReady && <>
+        <button type="button">Edit</button>
+        <button type="button" className="is-primary" onClick={() => { if (!reply.trim()) { toast.error("Enter a reply before approving"); return; } if (approve.isPending) return; approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName }); }}>{approve.isPending ? "Sending…" : "Approve & Send"}</button>
+        <button type="button" onClick={() => { if (regenerate.isPending || approve.isPending || dismiss.isPending) return; regenerate.mutate({ draftId: card.draft!.id }); }}><RefreshCw size={14} className={regenerate.isPending ? "animate-spin" : ""} />{regenerate.isPending ? "Regenerating…" : "Regenerate"}</button>
+      </>}
+      <button type="button" onClick={() => { if (dismiss.isPending) return; setDismissedLocally(true); dismiss.mutate({ draftId: card.draft?.id, sessionId: card.sessionId, inboundMessageId: card.latestInboundMessageId, inboundTimestamp: card.latestInboundTimestamp, inboundText: card.body, dismissedBy: callerName }); }}>{dismiss.isPending ? "Dismissing…" : "Dismiss"}</button>
+    </div>
     {showGoldenReview && <GoldenReviewDialog sessionId={card.sessionId} inboundMessage={card.body} standardResponse={reply} onClose={() => setShowGoldenReview(false)} />}
   </article>;
 }
@@ -220,6 +235,7 @@ function GoldenReviewDialog({ sessionId, inboundMessage, standardResponse, onClo
   }, [savedReview.data]);
   const toggleTag = (tag: GoldenFailureTag) => setTags(current => current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag]);
   const saveReview = () => {
+    if (save.isPending) return;
     if (score === null) { toast.error("Score this live SMS comparison first"); return; }
     save.mutate({ sessionId, inboundMessage, standardResponse, goldenResponse, score, failureTags: tags, notes: notes.trim() || null });
   };
@@ -228,11 +244,11 @@ function GoldenReviewDialog({ sessionId, inboundMessage, standardResponse, onClo
     <span className="ai-team-golden-kicker">MADISON · LIVE GOLDEN REVIEW</span><h2>Review this live response</h2><p className="ai-team-golden-note">This comparison is attached to the current inbound SMS. It is read-only and does not create a draft, send SMS, or change the live card.</p>
     <div className="ai-team-golden-inbound"><b>CURRENT INBOUND SMS · SESSION {sessionId}</b><span>“{inboundMessage}”</span></div>
     <div className="ai-team-golden-columns"><div><b>STANDARD RESPONSE</b><p>{standardResponse || "No live draft loaded."}</p></div><div><b>GOLDEN RESPONSE</b>{goldenResponse ? <p>{goldenResponse}</p> : <p className="is-muted">Generate a comparison for this live SMS.</p>}</div></div>
-    <button type="button" className="ai-team-golden-run" disabled={run.isPending} onClick={() => run.mutate({ sessionId, inboundMessage })}>{run.isPending ? "Generating…" : "Generate comparison response"}</button>
+    <button type="button" className="ai-team-golden-run" onClick={() => { if (run.isPending) return; run.mutate({ sessionId, inboundMessage }); }}>{run.isPending ? "Generating…" : "Generate comparison response"}</button>
     <div className="ai-team-golden-score"><b>YOUR SCORE</b><div>{[1, 2, 3, 4, 5].map(value => <button key={value} type="button" className={score === value ? "is-selected" : ""} onClick={() => setScore(value)}>{value}</button>)}</div><small>1 = much worse · 3 = comparable · 5 = much better</small></div>
     <div className="ai-team-golden-tags"><b>FAILURE TAGS</b><div>{GOLDEN_FAILURE_TAGS.map(tag => <label key={tag}><input type="checkbox" checked={tags.includes(tag)} onChange={() => toggleTag(tag)} />{tag}</label>)}</div></div>
     <label className="ai-team-golden-label">Notes<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="What should improve?" /></label>
-    <div className="ai-team-golden-footer"><button type="button" onClick={onClose}>Close</button><button type="button" className="is-primary" disabled={save.isPending} onClick={saveReview}>{save.isPending ? "Saving…" : "Save review"}</button></div>
+    <div className="ai-team-golden-footer"><button type="button" onClick={onClose}>Close</button><button type="button" className="is-primary" onClick={saveReview}>{save.isPending ? "Saving…" : "Save review"}</button></div>
   </section></div>;
 }
 
