@@ -3860,6 +3860,25 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
       for (const draft of draftRows) {
         if (!draftBySessionId.has(draft.sessionId)) draftBySessionId.set(draft.sessionId, draft);
       }
+      const dismissalRows = sessionIds.length
+        ? await db
+          .select({ sessionId: opsChatMessages.sessionId, metadata: opsChatMessages.metadata })
+          .from(opsChatMessages)
+          .where(and(
+            inArray(opsChatMessages.sessionId, sessionIds),
+            eq(opsChatMessages.quickAction, "madison_sms_dismissed"),
+          ))
+        : [];
+      const dismissedTurnsBySession = new Map<number, Array<{ inboundMessageId?: string | null; inboundTimestamp?: number | null; inboundText?: string | null }>>();
+      for (const row of dismissalRows) {
+        if (!row.sessionId) continue;
+        try {
+          const metadata = JSON.parse(row.metadata ?? "{}");
+          const turns = dismissedTurnsBySession.get(row.sessionId) ?? [];
+          turns.push(metadata);
+          dismissedTurnsBySession.set(row.sessionId, turns);
+        } catch { /* ignore malformed marker metadata */ }
+      }
       const now = Date.now();
       const ONE_HOUR_MS = 60 * 60 * 1000;
       const FIFTEEN_MIN_MS = 15 * 60 * 1000;
@@ -3873,11 +3892,13 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         leadPhone: string;
         lastMessagePreview: string;
         ageMs: number;
+        latestInboundMessageId: string | null;
+        latestInboundTimestamp: number | null;
         madisonDraft: (typeof draftRows)[number] | null;
       }> = [];
       for (const s of sessions) {
         try {
-          const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
+          const history: Array<{ role: string; ts?: number; content?: string; opMsgId?: string; inboundOpenPhoneId?: string; providerMessageId?: string; messageId?: string; id?: string }> = JSON.parse(s.messageHistory ?? "[]");
           // Find last real message (skip notes/system)
           const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
           if (!lastReal || lastReal.role !== "user") continue; // last message is from agent — answered
@@ -3896,6 +3917,14 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           const preview = typeof lastReal.content === "string"
             ? lastReal.content.slice(0, 80)
             : "";
+          const latestInboundMessageId = lastReal.opMsgId ?? lastReal.inboundOpenPhoneId ?? lastReal.providerMessageId ?? lastReal.messageId ?? lastReal.id ?? null;
+          const latestInboundTimestamp = resolvedTs;
+          const dismissedTurn = (dismissedTurnsBySession.get(s.id) ?? []).some(turn =>
+            (latestInboundMessageId && turn.inboundMessageId === latestInboundMessageId) ||
+            (turn.inboundTimestamp && turn.inboundTimestamp === latestInboundTimestamp) ||
+            (!latestInboundMessageId && !turn.inboundMessageId && turn.inboundText === lastReal.content),
+          );
+          if (dismissedTurn) continue;
           const sessionDraft = draftBySessionId.get(s.id) ?? null;
           // Only expose a draft for the current inbound turn. A terminal
           // draft must not keep its session visible after human dismissal,
@@ -3910,6 +3939,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             leadPhone: s.leadPhone,
             lastMessagePreview: preview,
             ageMs: age,
+            latestInboundMessageId,
+            latestInboundTimestamp,
             madisonDraft: currentDraft,
           });
         } catch { /* skip malformed */ }
