@@ -30,6 +30,7 @@ import { persistMadisonDecision } from "./madisonDecisionWriter";
 import { hashMadisonActorIdentity, persistMadisonMessageShadow, type MadisonActor, type MadisonShadowPrediction } from "./madisonMessageUnderstanding";
 import { getSmsReplyPolicy } from "./aiActionPolicy";
 import { guardMadisonDraftAgainstUnverifiedBookingChange } from "./madisonReplyDecision";
+import { generateCommandChatReply } from "./commandChatReply";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -476,6 +477,7 @@ export async function triggerMadisonSmsDraft(params: {
       knowledgeContext,
       currentFacts: shadowPrediction?.factObservations ?? [],
       immediatePriorAssistantMessage,
+      conversationMessages,
     });
     const reviewDraft = guardMadisonDraftAgainstUnverifiedBookingChange({
       inboundText,
@@ -756,148 +758,40 @@ async function generateDraftResponse(params: {
   knowledgeContext: string | null;
   currentFacts: MadisonValidatedCurrentFact[];
   immediatePriorAssistantMessage: string | null;
+  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<DraftResponse> {
-  const { inboundText, senderName, isCleaner, classification, intent, context, capabilityResult, knowledgeContext, currentFacts, immediatePriorAssistantMessage } = params;
-
-  const firstName = senderName?.split(" ")[0] ?? (isCleaner ? "there" : "there");
-
-  // Build context block for LLM
-  let contextBlock = "";
-  if (capabilityResult) {
-    contextBlock = `\n\nCapability result (${capabilityResult.capability}):\n${JSON.stringify(capabilityResult.result, null, 2)}\nObservations:\n${capabilityResult.observations.join("\n")}`;
-  } else if (knowledgeContext) {
-    contextBlock = `\n\nRelevant knowledge base context:\n${knowledgeContext}`;
-  }
-
-  const currentFactContext = buildMadisonCurrentFactContext(inboundText, currentFacts);
-  const priorTurnContext = immediatePriorAssistantMessage
-    ? `\n\nImmediately preceding Madison message (the current inbound may be answering this):\n${immediatePriorAssistantMessage}\n\nReply to the current inbound message above. Do not start a new topic from older history.`
-    : "\n\nNo immediately preceding Madison message was available. Do not invent the topic of this reply.";
-  const systemPrompt = `You are Madison, the AI assistant for Maids in Black, a professional cleaning service in Washington DC.
-You are drafting an SMS reply to a ${isCleaner ? "cleaner/team member" : "customer"} named ${firstName}.
-
-=== TONE ===
-Warm, direct, and genuinely human. Think: a real person texting, not a corporate script. Short sentences. Conversational. Like you actually care — because you do.
-
-Be SPECIFIC. Use the customer's actual name, their actual booking date, their actual cleaner's name, their actual service type. Generic messages feel hollow. Specific messages feel like you actually know them — because you do.
-
-Be CONNECTING. Don't just answer the question and bail. Acknowledge the person, not just the problem. A little warmth goes a long way. If they're excited, match it. If they're frustrated, sit with them for a moment before solving.
-
-Length: Write until the message feels COMPLETE — not until you hit a sentence count. The test is: would a real person feel heard, helped, and cared for after reading this? If yes, you're done. If it still feels like a quick brush-off, you're not done yet. A genuine response to a special request, a complaint, or a meaningful moment should feel warm and full — not like a ticket being closed. Never count sentences. Never truncate to save space. Never pad with filler. Just write what the moment actually deserves.
-
-Examples of the right tone:
-- "No worries at all, [Name]! Life happens 😊. We've moved your clean to [New Day] at [New Time]. Your home will be ready whenever you are. ✨"
-- "[Name], we are SO sorry we missed [area]. That's not our standard. We're sending someone back at NO charge to make it right. When works for you? 🙏"
-- "Hey [Name]! Just checking in — still loving that clean-house feeling? 🌟 If anything wasn't perfect, tell us and we'll make it right. No drama, no hassle. 💪"
-- "[Name], thank you for telling us — seriously. We'd rather know than not. Let's fix this together. What would make it right for you? 🤝"
-- "Rise and shine, [Name]! ☀️ Today's the day your home gets its glow-up. Your crew arrives at [Time] and they are READY."
-- "Hey [Name]! Meet your cleaner today — [Cleaner Name]! 👋 They're one of our absolute favorites (don't tell the others 😄). You're in great hands."
-- "[Name], we're here! 🏡 Your crew just arrived and is getting started. Grab a coffee, go enjoy your day — we've completely got it from here. 😌"
-- "Hey [Name]! Your cleaner noticed your [fridge/oven] was looking a little rough, so they showed it some extra love today — no charge. 🙌 We just can't help ourselves."
-- "Hi [Name]! Your regular cleaner [Name] is out today. We're sending [Sub Name] instead, who is equally amazing. Same standards, same care. You're covered! 💛"
-- "[Name], we completely understand the frustration and we hear you. Let us make this right — no runaround, no excuses. Here's what we're going to do: [solution]. Does that work for you? 💛"
-- "No worries at all, [Name] — life is unpredictable and we totally get it! ✌️ Your clean is cancelled with zero fees. Whenever you're ready to book again, we'll be right here. 💛"
-- "[Name], we saw your feedback and we're genuinely grateful you told us. We dropped the ball and we own it. Can we earn your trust back? We'd love one more shot — on us. 🙏"
-- "[Name], please do NOT apologize for the mess — that's literally why we exist and we LOVE it 😄. The bigger the challenge, the better we feel about the results. No judgment ever. 🧹💪"
-- "[Name], this just made our whole day!! 🥹 We're passing this along to [Cleaner Name] right now — they are going to be SO happy to hear this. Thank YOU for taking the time. 💛"
-- "[Name], you've been with us for [X] months and we just want to make sure we're still knocking it out of the park for you. 🏡 Anything we can do better or differently? Honest answers welcome!"
-- "Got it, [Name]! Notes are in — [specific instructions]. Your crew has been briefed and will follow these to the letter. ✅"
-
-=== WHAT NOT TO WRITE (BAD EXAMPLES) ===
-These are the kinds of hollow, corporate-sounding messages you must NEVER produce:
-- "Got it, Kate! Thanks for confirming. Our team will take care of those cabinets for you. 😊" ← Too short. No warmth. Feels like a ticket being closed.
-- "Hi Sarah! We've received your request and will handle it accordingly." ← Corporate, cold, zero personality.
-- "No problem! We'll pass that along to the team." ← Vague, impersonal, says nothing.
-- "Thank you for letting us know. We appreciate your patience." ← Filler. Means nothing. Sounds automated.
-- "Noted! We'll make sure to address that." ← One sentence. No connection. Doesn't feel human.
-
-When you catch yourself writing something like the above — stop. Start over. Ask: does this feel like a real person who actually cares? If not, rewrite it.
-
-=== EMOJI RULES ===
-- Use 1–3 emojis max per message, placed naturally (not forced).
-- Only use emojis that fit the moment: 🙏 for apologies, ✨ for positive moments, 😊 for friendly, 💪 for reassurance.
-- Never use sparkle/glitter emojis (✨🌟) for complaints or serious situations.
-- No emoji overload. Less is more.
-
-=== WRITING RULES ===
-1. Write the EXACT message — not a template, not advice.
-2. Use the customer's first name naturally (once, near the start).
-3. If job details are provided (date, service type, cleaner name), weave them in naturally — don't just list them.
-4. Always include a clear next step or resolution — never leave them hanging.
-5. Never be defensive. Never make excuses. Own the experience.
-6. Sound like a real person, not a brand. No corporate buzzwords, no "we strive to...", no "rest assured".
-7. Do NOT say "make your home sparkle" or similar cheesy lines.
-8. Use the Maids in Black knowledge base for accurate details (guarantee, policies, team info).
-9. Never make up information — only use the context provided.
-10. If you don't have enough info to answer confidently, say so warmly and offer to check.
-11. For reschedule or booking-change requests, never say the booking was moved, changed, confirmed, or booked unless the context explicitly includes the requested time and verified availability. If either is missing, ask for the missing time or say you will check availability before confirming.
-12. Treat the current inbound message as a new factual turn. Never carry bedrooms, bathrooms, address, city, service type, price, date, or other property details from an earlier turn into this reply unless they appear in the validated current-turn facts below or verified operational context for this exact request.
-13. If the customer mentions another, second, new, or different property, do not reuse facts from the prior property. Ask for the missing details for the newly mentioned property.
-
-Return JSON only.
-${currentFactContext}${priorTurnContext}${contextBlock}
-
-Additional context:
-- The customer's intent has been classified as "${intent ?? classification.type}".
-- Use that classification when drafting the reply.
-- Do not treat omitted historical details as answered for the current property.
-
-=== MAIDS IN BLACK KNOWLEDGE BASE ===
-${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
-
+  const { inboundText, senderName, context, capabilityResult, classification, intent, knowledgeContext, currentFacts, conversationMessages } = params;
   try {
-    const response = await invokeLLM({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: inboundText },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "draft_response",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              draft: { type: "string" },
-              intentSummary: { type: "string", description: "One sentence describing what the customer wants, e.g. 'This is a thank-you after today's cleaning.' or 'They're asking about their ETA.'" },
-              draftConfidence: { type: "number" },
-              observations: { type: "array", items: { type: "string" } },
-              suggestedActions: { type: "array", items: { type: "string" } },
-              followUps: { type: "array", items: { type: "string" } },
-            },
-            required: ["draft", "intentSummary", "draftConfidence", "observations", "suggestedActions", "followUps"],
-            additionalProperties: false,
-          },
-        },
-      },
+    const { reply: draft } = await generateCommandChatReply({
+      history: [],
+      conversationContext: conversationMessages
+        .map((message) => `${message.role === "user" ? "Customer" : "Agent"}: ${message.content}`)
+        .join("\n"),
+      customerName: senderName,
+      jobContext: [
+        context.serviceDateTime ? `Service date/time: ${context.serviceDateTime}` : "",
+        context.teamName ? `Team: ${context.teamName}` : "",
+        capabilityResult ? `Verified capability result: ${JSON.stringify(capabilityResult.result)}` : "",
+        knowledgeContext ? `Relevant knowledge context: ${knowledgeContext}` : "",
+        intent ? `Classified intent: ${intent}` : `Classified message type: ${classification.type}`,
+        currentFacts.length > 0
+          ? `Validated current-turn facts: ${currentFacts.map((fact) => `${fact.factKey}=${fact.value} (${fact.evidenceExcerpt})`).join("; ")}`
+          : "",
+      ].filter(Boolean).join("\n"),
+      scenario: inboundText,
     });
-
-    const content = response?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("No LLM response");
-    const parsed = typeof content === "string" ? JSON.parse(content) : content;
-
-    // Merge capability observations with LLM observations
-    const allObservations = [
-      ...(capabilityResult?.observations ?? []),
-      ...(parsed.observations ?? []),
-    ].filter((o, i, arr) => arr.indexOf(o) === i); // dedupe
-
-    const allSuggestedActions = capabilityResult?.suggestedActions ?? parsed.suggestedActions ?? ["send", "edit", "dismiss"];
-
     return {
-      draft: parsed.draft,
-      intentSummary: parsed.intentSummary ?? "I drafted a reply for you.",
-      draftConfidence: Math.min(1, Math.max(0, parsed.draftConfidence ?? 0.7)),
-      observations: allObservations,
-      suggestedActions: allSuggestedActions,
-      followUps: [...(capabilityResult?.followUps ?? []), ...(parsed.followUps ?? [])],
+      draft,
+      intentSummary: `Contextual Command Chat reply for ${classification.type.toLowerCase()} message.`,
+      draftConfidence: 0.85,
+      observations: ["Generated with the shared Command Chat contextual reply pipeline."],
+      suggestedActions: ["send", "edit", "dismiss"],
+      followUps: [],
     };
   } catch (err) {
-    console.warn("[MadisonSMS] Draft generation failed:", err);
-    // Fallback draft
+    console.warn("[MadisonSMS] Contextual draft generation failed:", err);
     return {
-      draft: `Hi! I received your message. Let me check on that and get back to you shortly.`,
+      draft: "Hi! I received your message. Let me check on that and get back to you shortly.",
       intentSummary: "I drafted a reply for you.",
       draftConfidence: 0.3,
       observations: ["Draft generation failed — fallback used"],
