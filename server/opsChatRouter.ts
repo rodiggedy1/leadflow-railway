@@ -5887,17 +5887,44 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
    */
   dismissSmsDraft: opsChatProcedure
     .input(z.object({
-      draftId: z.number().int().positive(),
+      draftId: z.number().int().positive().optional(),
+      sessionId: z.number().int().positive().optional(),
+      inboundMessageId: z.string().nullable().optional(),
+      inboundTimestamp: z.number().int().positive().nullable().optional(),
+      inboundText: z.string().optional(),
       dismissedBy: z.string(),
-    }))
+    }).refine(input => input.draftId || input.sessionId, { message: "draftId or sessionId is required" }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return { ok: false, reason: "no_db" };
-      await db.update(madisonSmsDrafts)
-        .set({ status: "DISMISSED", dismissedBy: input.dismissedBy, dismissedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(madisonSmsDrafts.id, input.draftId), eq(madisonSmsDrafts.status, "DRAFT_READY")));
-      await deleteOpsSmsCard(input.draftId);
-      broadcastOpsUpdate("sms_draft_dismissed", { draftId: input.draftId });
+      if (input.draftId) {
+        await db.update(madisonSmsDrafts)
+          .set({ status: "DISMISSED", dismissedBy: input.dismissedBy, dismissedAt: new Date(), updatedAt: new Date() })
+          .where(eq(madisonSmsDrafts.id, input.draftId));
+        await deleteOpsSmsCard(input.draftId);
+      }
+      if (input.sessionId) {
+        await db.insert(opsChatMessages).values({
+          channel: null,
+          authorName: input.dismissedBy,
+          authorRole: "system",
+          body: "Madison SMS turn dismissed",
+          quickAction: "madison_sms_dismissed",
+          metadata: JSON.stringify({
+            sessionId: input.sessionId,
+            inboundMessageId: input.inboundMessageId ?? null,
+            inboundTimestamp: input.inboundTimestamp ?? null,
+            inboundText: input.inboundText ?? null,
+            dismissedBy: input.dismissedBy,
+            dismissedAt: new Date().toISOString(),
+          }),
+          sessionId: input.sessionId,
+          lastActivityAt: Date.now(),
+          cardStatus: "dismissed",
+          activeDedupKey: null,
+        });
+      }
+      broadcastOpsUpdate("sms_draft_dismissed", { draftId: input.draftId ?? null, sessionId: input.sessionId ?? null });
       return { ok: true };
     }),
 

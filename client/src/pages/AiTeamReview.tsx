@@ -167,7 +167,7 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
   );
 }
 
-function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sessionId: number; leadName: string | null; leadPhone: string; body: string; ts: number; draft: { id: number; status: string; generatedDraft: string | null } | null }; callerName: string; onActed: () => void }) {
+function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sessionId: number; leadName: string | null; leadPhone: string; body: string; ts: number; latestInboundMessageId: string | null; latestInboundTimestamp: number | null; draft: { id: number; status: string; generatedDraft: string | null } | null }; callerName: string; onActed: () => void }) {
   const [showConversation, setShowConversation] = useState(false);
   const [reply, setReply] = useState(card.draft?.generatedDraft ?? "");
   const [showGoldenReview, setShowGoldenReview] = useState(false);
@@ -193,7 +193,7 @@ function AiTeamSmsCard({ card, callerName, onActed }: { card: { id: number; sess
     {draftReady ? <textarea aria-label="Madison reply" value={reply} onChange={event => setReply(event.target.value)} /> : <p className="ai-team-sms-card__warning">This message remains visible until Madison produces a reviewable draft.</p>}
     <div className="ai-team-sms-card__links"><button type="button" onClick={() => setShowConversation(value => !value)}>{showConversation ? "Hide conversation" : "View conversation"}</button><button type="button" onClick={() => setShowGoldenReview(true)}>Compare Golden response</button></div>
     {showConversation && <div className="ai-team-sms-card__conversation">{conversationLoading ? "Loading conversation…" : conversation.map((message, index) => <div key={`${message.ts}-${index}`} className={`ai-team-sms-card__message ai-team-sms-card__message--${message.role}`}><small>{message.senderName || message.role}</small><p>{message.content}</p></div>)}</div>}
-    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !reply.trim() || approve.isPending} onClick={() => approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => card.draft && dismiss.mutate({ draftId: card.draft.id, dismissedBy: callerName })} disabled={!draftReady || dismiss.isPending}>Dismiss</button><button type="button" onClick={() => card.draft && regenerate.mutate({ draftId: card.draft.id })} disabled={!card.draft || regenerate.isPending || approve.isPending || dismiss.isPending}><RefreshCw size={14} className={regenerate.isPending ? "animate-spin" : ""} />{regenerate.isPending ? "Regenerating…" : "Regenerate"}</button></div>
+    <div className="ai-team-sms-card__actions"><button type="button" disabled={!draftReady}>Edit</button><button type="button" className="is-primary" disabled={!draftReady || !reply.trim() || approve.isPending} onClick={() => approve.mutate({ draftId: card.draft!.id, approvedText: reply.trim(), approvedBy: callerName })}>{approve.isPending ? "Sending…" : "Approve & Send"}</button><button type="button" onClick={() => dismiss.mutate({ draftId: card.draft?.id, sessionId: card.sessionId, inboundMessageId: card.latestInboundMessageId, inboundTimestamp: card.latestInboundTimestamp, inboundText: card.body, dismissedBy: callerName })} disabled={dismiss.isPending}>Dismiss</button><button type="button" onClick={() => card.draft && regenerate.mutate({ draftId: card.draft.id })} disabled={!card.draft || regenerate.isPending || approve.isPending || dismiss.isPending}><RefreshCw size={14} className={regenerate.isPending ? "animate-spin" : ""} />{regenerate.isPending ? "Regenerating…" : "Regenerate"}</button></div>
     {showGoldenReview && <GoldenReviewDialog sessionId={card.sessionId} inboundMessage={card.body} standardResponse={reply} onClose={() => setShowGoldenReview(false)} />}
   </article>;
 }
@@ -265,6 +265,8 @@ export default function AiTeamReview() {
       leadPhone: session.leadPhone,
       draft,
       ts: Date.now() - session.ageMs,
+      latestInboundMessageId: session.latestInboundMessageId,
+      latestInboundTimestamp: session.latestInboundTimestamp,
       body: session.lastMessagePreview,
       metadata: JSON.stringify({
         sessionId: session.id,
