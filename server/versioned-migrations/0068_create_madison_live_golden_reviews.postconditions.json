@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "table": "madison_live_golden_reviews",
+  "columns": [
+    { "name": "id", "columnType": "bigint", "nullable": false, "autoIncrement": true },
+    { "name": "reviewKey", "columnType": "varchar(64)", "nullable": false },
+    { "name": "sessionId", "columnType": "bigint", "nullable": false },
+    { "name": "inboundMessage", "columnType": "text", "nullable": false },
+    { "name": "standardResponse", "columnType": "text", "nullable": false },
+    { "name": "goldenResponse", "columnType": "text", "nullable": true },
+    { "name": "score", "columnType": "bigint", "nullable": false },
+    { "name": "failureTags", "columnType": "json", "nullable": false },
+    { "name": "notes", "columnType": "text", "nullable": true },
+    { "name": "reviewer", "columnType": "varchar(128)", "nullable": false },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "uq_madison_live_golden_review_key", "columns": ["reviewKey"], "unique": true },
+    { "name": "idx_madison_live_golden_review_session", "columns": ["sessionId"], "unique": false }
+  ]
+}

@@ -204,18 +204,24 @@ function GoldenReviewDialog({ sessionId, inboundMessage, standardResponse, onClo
   const [tags, setTags] = useState<GoldenFailureTag[]>([]);
   const [notes, setNotes] = useState("");
   const run = trpc.madison.runGoldenReplyPreview.useMutation({ onSuccess: result => setGoldenResponse(result.reply), onError: error => toast.error(error.message) });
-  const reviewKey = `madison-golden-reply-review-v2:${sessionId}:${inboundMessage}`;
+  const savedReview = trpc.madison.getLiveGoldenReview.useQuery({ sessionId, inboundMessage });
+  const save = trpc.madison.saveLiveGoldenReview.useMutation({
+    onSuccess: () => toast.success("Golden review saved"),
+    onError: error => toast.error(error.message),
+  });
   useEffect(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(reviewKey) ?? "null");
-      if (saved) { setScore(saved.score ?? null); setTags(saved.tags ?? []); setNotes(saved.notes ?? ""); }
-    } catch { /* local review recovery is best effort */ }
-  }, [reviewKey]);
+    const saved = savedReview.data;
+    if (saved) {
+      setGoldenResponse(saved.goldenResponse ?? null);
+      setScore(saved.score);
+      setTags((saved.failureTags ?? []) as GoldenFailureTag[]);
+      setNotes(saved.notes ?? "");
+    }
+  }, [savedReview.data]);
   const toggleTag = (tag: GoldenFailureTag) => setTags(current => current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag]);
   const saveReview = () => {
     if (score === null) { toast.error("Score this live SMS comparison first"); return; }
-    window.localStorage.setItem(reviewKey, JSON.stringify({ sessionId, inboundMessage, score, tags, notes, savedAt: new Date().toISOString() }));
-    toast.success("Golden review saved in this browser");
+    save.mutate({ sessionId, inboundMessage, standardResponse, goldenResponse, score, failureTags: tags, notes: notes.trim() || null });
   };
   return <div className="ai-team-golden-backdrop" role="presentation" onClick={onClose}><section className="ai-team-golden-dialog" role="dialog" aria-modal="true" aria-label="Golden response review" onClick={event => event.stopPropagation()}>
     <button type="button" className="ai-team-golden-close" onClick={onClose} aria-label="Close Golden review"><X size={18} /></button>
@@ -226,7 +232,7 @@ function GoldenReviewDialog({ sessionId, inboundMessage, standardResponse, onClo
     <div className="ai-team-golden-score"><b>YOUR SCORE</b><div>{[1, 2, 3, 4, 5].map(value => <button key={value} type="button" className={score === value ? "is-selected" : ""} onClick={() => setScore(value)}>{value}</button>)}</div><small>1 = much worse · 3 = comparable · 5 = much better</small></div>
     <div className="ai-team-golden-tags"><b>FAILURE TAGS</b><div>{GOLDEN_FAILURE_TAGS.map(tag => <label key={tag}><input type="checkbox" checked={tags.includes(tag)} onChange={() => toggleTag(tag)} />{tag}</label>)}</div></div>
     <label className="ai-team-golden-label">Notes<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="What should improve?" /></label>
-    <div className="ai-team-golden-footer"><button type="button" onClick={onClose}>Close</button><button type="button" className="is-primary" onClick={saveReview}>Save review</button></div>
+    <div className="ai-team-golden-footer"><button type="button" onClick={onClose}>Close</button><button type="button" className="is-primary" disabled={save.isPending} onClick={saveReview}>{save.isPending ? "Saving…" : "Save review"}</button></div>
   </section></div>;
 }
 

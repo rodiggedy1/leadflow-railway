@@ -1,4 +1,4 @@
-import { bigint, datetime, json, mysqlEnum, mysqlTable, text, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, datetime, index, json, mysqlEnum, mysqlTable, text, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 export const madisonGoldenReviewRatings = ["correct", "incorrect", "uncertain"] as const;
 
@@ -17,3 +17,25 @@ export const madisonGoldenCaseReviews = mysqlTable("madison_golden_case_reviews"
 
 export type MadisonGoldenCaseReview = typeof madisonGoldenCaseReviews.$inferSelect;
 export type InsertMadisonGoldenCaseReview = typeof madisonGoldenCaseReviews.$inferInsert;
+
+/** Human review of a live AI Team SMS comparison. One review per live inbound turn. */
+export const madisonLiveGoldenReviews = mysqlTable("madison_live_golden_reviews", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  reviewKey: varchar("reviewKey", { length: 64 }).notNull(),
+  sessionId: bigint("sessionId", { mode: "number" }).notNull(),
+  inboundMessage: text("inboundMessage").notNull(),
+  standardResponse: text("standardResponse").notNull(),
+  goldenResponse: text("goldenResponse"),
+  score: bigint("score", { mode: "number" }).notNull(),
+  failureTags: json("failureTags").$type<string[]>().notNull(),
+  notes: text("notes"),
+  reviewer: varchar("reviewer", { length: 128 }).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (table) => [
+  uniqueIndex("uq_madison_live_golden_review_key").on(table.reviewKey),
+  index("idx_madison_live_golden_review_session").on(table.sessionId),
+]);
+
+export type MadisonLiveGoldenReview = typeof madisonLiveGoldenReviews.$inferSelect;
+export type InsertMadisonLiveGoldenReview = typeof madisonLiveGoldenReviews.$inferInsert;

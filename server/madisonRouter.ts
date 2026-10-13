@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
@@ -11,12 +12,15 @@ import { buildMadisonActionProposal, madisonSmsActionApprovals } from "./madison
 import type { MadisonDecisionEvaluation } from "./madisonDecisionEvaluator";
 import { evaluateMadisonSupportTaskForDraft } from "./madisonReplyDecision";
 import type { GoldenDataset } from "./madisonGoldenDataset";
-import { madisonGoldenCaseReviews, madisonGoldenReviewRatings } from "./madisonGoldenReviewStore";
+import { madisonGoldenCaseReviews, madisonGoldenReviewRatings, madisonLiveGoldenReviews } from "./madisonGoldenReviewStore";
 import { classifyMadisonMessageShadow } from "./madisonMessageUnderstanding";
 import { generateCommandChatReply } from "./commandChatReply";
 
 function loadGoldenDataset(): GoldenDataset {
   return JSON.parse(readFileSync(resolve(process.cwd(), "golden-dataset/candidates.json"), "utf8")) as GoldenDataset;
+}
+function liveGoldenReviewKey(sessionId: number, inboundMessage: string): string {
+  return createHash("sha256").update(`${sessionId}\n${inboundMessage}`).digest("hex");
 }
 
 function publicGoldenCase(scenario: GoldenDataset["scenarios"][number], review: typeof madisonGoldenCaseReviews.$inferSelect | undefined) {
@@ -497,6 +501,54 @@ export const madisonRouter = router({
         providerPath: "generateCommandChatReply -> invokeLLM",
         readOnly: true,
       };
+    }),
+  getLiveGoldenReview: opsChatProcedure
+    .input(z.object({ sessionId: z.number().int().positive(), inboundMessage: z.string().min(1).max(4000) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [review] = await db.select().from(madisonLiveGoldenReviews)
+        .where(eq(madisonLiveGoldenReviews.reviewKey, liveGoldenReviewKey(input.sessionId, input.inboundMessage)))
+        .limit(1);
+      return review ?? null;
+    }),
+  saveLiveGoldenReview: opsChatProcedure
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      inboundMessage: z.string().min(1).max(4000),
+      standardResponse: z.string().max(8000),
+      goldenResponse: z.string().max(8000).nullable(),
+      score: z.number().int().min(1).max(5),
+      failureTags: z.array(z.string().max(96)).max(10),
+      notes: z.string().max(4000).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const now = new Date();
+      const reviewKey = liveGoldenReviewKey(input.sessionId, input.inboundMessage);
+      await db.insert(madisonLiveGoldenReviews).values({
+        reviewKey,
+        sessionId: input.sessionId,
+        inboundMessage: input.inboundMessage,
+        standardResponse: input.standardResponse,
+        goldenResponse: input.goldenResponse,
+        score: input.score,
+        failureTags: input.failureTags,
+        notes: input.notes ?? null,
+        reviewer: ctx.opsCaller.name,
+        createdAt: now,
+        updatedAt: now,
+      }).onDuplicateKeyUpdate({ set: {
+        standardResponse: input.standardResponse,
+        goldenResponse: input.goldenResponse,
+        score: input.score,
+        failureTags: input.failureTags,
+        notes: input.notes ?? null,
+        reviewer: ctx.opsCaller.name,
+        updatedAt: now,
+      } });
+      return { ok: true as const, reviewKey };
     }),
   saveGoldenTestRating: opsChatProcedure
     .input(z.object({
