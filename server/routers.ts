@@ -3896,13 +3896,21 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           const preview = typeof lastReal.content === "string"
             ? lastReal.content.slice(0, 80)
             : "";
+          const sessionDraft = draftBySessionId.get(s.id) ?? null;
+          // Only expose a draft for the current inbound turn. A terminal
+          // draft must not keep its session visible after human dismissal,
+          // and an older terminal draft must not mask a newer inbound SMS.
+          const currentDraft = sessionDraft?.originalMessage === lastReal.content
+            ? sessionDraft
+            : null;
+          if (currentDraft && ["SENT", "DISMISSED", "DELIVERED"].includes(currentDraft.status)) continue;
           unansweredSessions.push({
             id: s.id,
             leadName: s.leadName ?? null,
             leadPhone: s.leadPhone,
             lastMessagePreview: preview,
             ageMs: age,
-            madisonDraft: draftBySessionId.get(s.id) ?? null,
+            madisonDraft: currentDraft,
           });
         } catch { /* skip malformed */ }
       }
