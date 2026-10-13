@@ -87,8 +87,8 @@ export default function CustomerBookingLinksAdmin() {
       const result = await create.mutateAsync({
         customerName: name,
         customerPhone: phone,
-        customerEmail: email,
-        address,
+        ...(email.trim() ? { customerEmail: email.trim() } : {}),
+        ...(address.trim() ? { address: address.trim() } : {}),
         requestedLocalDate: date,
         requestedLocalTime: time,
         pricing: { ...pricing, extras: [...pricing.extras] },
@@ -114,8 +114,8 @@ export default function CustomerBookingLinksAdmin() {
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Customer name" required value={name} onChange={setName} placeholder="Sarah Johnson" />
               <Field label="Phone number" required value={phone} onChange={setPhone} placeholder="302-981-6191" />
-              <Field label="Email address" required type="email" value={email} onChange={setEmail} placeholder="sarah@example.com" />
-              <Field label="Service address" required value={address} onChange={setAddress} placeholder="123 Main Street, Bethesda, MD" />
+              <Field label="Email address" type="email" value={email} onChange={setEmail} placeholder="sarah@example.com (optional)" />
+              <Field label="Service address" value={address} onChange={setAddress} placeholder="123 Main Street, Bethesda, MD (optional)" />
             </div>
           </section>
 
