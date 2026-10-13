@@ -528,6 +528,5 @@
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0068_create_madison_live_golden_reviews.postconditions.json"
     }
-    }
   ]
 }
