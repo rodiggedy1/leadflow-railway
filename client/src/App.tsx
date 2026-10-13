@@ -73,6 +73,7 @@ const MadisonGoldenTest = lazy(() => import("./pages/MadisonGoldenTest"));
 const RevenueAgent = lazy(() => import("./pages/RevenueAgent"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const NativeBookings = lazy(() => import("./pages/NativeBookings"));
+const QuotesWorkspace = lazy(() => import("./pages/QuotesWorkspace"));
 const CsInbox2 = lazy(() => import("./components/CsInbox2"));
 const TeamExactLive = lazy(() => import("./pages/TeamExactLive"));
 const DayBoardExactLive = lazy(() => import("./pages/DayBoardExactLive"));
@@ -158,6 +159,10 @@ function AdminBookingsCRMExactReviewRoute() {
   return <AdminPageGuard pageId="bookings"><ReviewWorkspaceFrame navActivePath="/review/bookings-crm"><NativeBookings /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AdminQuotesWorkspaceRoute() {
+  return <AdminPageGuard pageId="bookings"><ReviewWorkspaceFrame navActivePath="/review/quotes"><QuotesWorkspace /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
+
 function AdminCustomerProfileExactReviewRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/customer-profile"><CustomerProfileExactLive /></ReviewWorkspaceFrame>;
 }
@@ -240,6 +245,7 @@ function Router() {
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
+        <Route path={"/admin/quotes"} component={AdminQuotesWorkspaceRoute} />
         <Route path={"/admin/customer-booking-links"} component={CustomerBookingLinksAdmin} />
         <Route path={"/admin/customer-profile"} component={AdminCustomerProfileExactReviewRoute} />
         <Route path={"/admin/settings"} component={AdminSettingsReviewRoute} />

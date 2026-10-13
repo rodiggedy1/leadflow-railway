@@ -542,12 +542,14 @@ function BookingListRow({
 
 export default function NativeBookingsWorkspace({
   realtimeEnabled,
+  initialView = "bookings",
   render,
 }: {
   realtimeEnabled: boolean;
+  initialView?: "bookings" | "leads" | "quotes";
   render?: (model: any) => ReactNode;
 }) {
-  const [view, setView] = useState<"bookings" | "leads" | "quotes">("bookings");
+  const [view, setView] = useState<"bookings" | "leads" | "quotes">(initialView);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [date, setDate] = useState(businessDate);
   const [query, setQuery] = useState("");
