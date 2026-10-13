@@ -2220,11 +2220,12 @@ async function handleCsInboundMessage(msg: any) {
   // 6. OpenPhone contacts API (fallback for contacts known to OpenPhone but not in DB)
   const fromPhoneDigits = fromPhone.replace(/^\+1/, "").replace(/[^\d]/g, "");
 
-  // 1. cleanerProfiles
+  // 1. cleanerProfiles — match normalized last 10 digits so directory entries
+  // stored as 10-digit, formatted, or E.164 phones all resolve the same role.
   const [cleanerProfile] = await db
     .select({ name: cleanerProfiles.name })
     .from(cleanerProfiles)
-    .where(eq(cleanerProfiles.phone, fromPhoneDigits))
+    .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${fromPhoneDigits.slice(-10)}`)
     .limit(1);
   const isCleaner = !!cleanerProfile;
 
