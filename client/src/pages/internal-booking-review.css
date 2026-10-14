@@ -31,3 +31,9 @@
 /* Keep the review summary in view while the longer form column scrolls. */
 .ibr-sidebar{position:sticky;top:18px;align-self:start;max-height:calc(100vh - 72px);overflow-y:auto;scrollbar-width:thin}
 @media(max-width:900px){.ibr-sidebar{position:static;max-height:none;overflow:visible}}
+
+/* Keep arrival-window labels readable inside each compact card. */
+.ibr-availability-grid button>span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ibr-availability-grid strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.2}
+.ibr-availability-grid small{display:block;font-size:9px;line-height:1.2;white-space:normal}
+.ibr-availability-grid em{display:block;font-size:9px;line-height:1.2;white-space:nowrap}
