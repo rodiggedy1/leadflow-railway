@@ -31,7 +31,14 @@ const dollars = (cents: number | null) => `$${Math.round((cents ?? 0) / 100).toL
 const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
 const addDays = (value: string, amount: number) => { const d = new Date(`${value}T12:00:00`); d.setDate(d.getDate() + amount); return d.toISOString().slice(0, 10); };
 const timeLabel = (value: string) => value === "08:30" ? "8:30 AM" : value === "13:00" ? "1:00 PM" : formatTime(value);
-const timeOfDayLabel = (value: string) => Number(value.split(":")[0]) >= 12 ? "Afternoon" : "Morning";
+const timeOfDayLabel = (value: string) => {
+  const normalized = value.trim().toUpperCase();
+  const match = normalized.match(/^(\d{1,2})(?::\d{2})?\s*(AM|PM)?$/);
+  if (!match) return "Morning";
+  const hour = Number(match[1]);
+  const hour24 = match[2] === "PM" ? (hour === 12 ? 12 : hour + 12) : match[2] === "AM" ? (hour === 12 ? 0 : hour) : hour;
+  return hour24 >= 12 ? "Afternoon" : "Morning";
+};
 
 type Recurrence = "one-time" | "biweekly" | "monthly";
 
