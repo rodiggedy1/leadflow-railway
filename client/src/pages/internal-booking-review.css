@@ -37,3 +37,8 @@
 .ibr-availability-grid strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.2}
 .ibr-availability-grid small{display:block;font-size:9px;line-height:1.2;white-space:normal}
 .ibr-availability-grid em{display:block;font-size:9px;line-height:1.2;white-space:nowrap}
+
+/* Give the guidance rail and working area a quiet visual separation. */
+.ibr-section-label{padding-right:24px;border-right:1px solid #e8e0d8}
+.ibr-section-content{padding-left:2px}
+@media(max-width:900px){.ibr-section-label{padding-right:0;border-right:0}.ibr-section-content{padding-left:0}}
