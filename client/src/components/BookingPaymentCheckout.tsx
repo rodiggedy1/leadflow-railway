@@ -23,8 +23,6 @@ type BookingPaymentCheckoutProps = {
   /** Shows the Stripe fields immediately; other legacy surfaces retain their existing consent interstitial. */
   directCardEntry?: boolean;
   deferConfirmation?: boolean;
-  /** Allows the card UI to render before the pending booking is created. */
-  setupReady?: boolean;
   onComplete: (result: {
     bookingId: number;
     cardBrand: string;
@@ -236,7 +234,6 @@ export function BookingPaymentCheckout({
   externalSavedCardError = "",
   directCardEntry = false,
   deferConfirmation = false,
-  setupReady = true,
   onComplete,
 }: BookingPaymentCheckoutProps) {
   const startSetup = trpc.bookingPayments.startSetup.useMutation();
@@ -295,7 +292,6 @@ export function BookingPaymentCheckout({
   useEffect(() => {
     if (
       !directCardEntry ||
-      !setupReady ||
       (paymentChoice === "saved" && savedCard) ||
       clientSecret
     )
@@ -310,7 +306,6 @@ export function BookingPaymentCheckout({
     mutationToken,
     paymentChoice,
     publicFunnelNumber,
-    setupReady,
     savedCard,
   ]);
 
@@ -360,7 +355,7 @@ export function BookingPaymentCheckout({
       );
     }
 
-    if (!setupReady || checkoutError) {
+    if (checkoutError) {
       return (
         <PremiumCardReviewForm
           customerName={customerName}
