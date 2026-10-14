@@ -54,6 +54,7 @@ export default function CustomerBookingLinkLive() {
   const [bookingId, setBookingId] = useState<number | null>(null);
   const bookingAttemptIdRef = useRef(crypto.randomUUID());
   const autoPrepareStartedRef = useRef(false);
+  const pendingRecurrenceRef = useRef<Recurrence | null>(null);
   const pricing = data?.priceSnapshot && typeof data.priceSnapshot === "object" ? (data.priceSnapshot as { input: { pricingMode: "home" | "hourly"; serviceId: "standard" | "deep" | "moveout"; bedrooms: number; bathrooms: number; homeType: "House" | "Apartment" | "Townhome" | "Condo"; condition: number; maidCount: number; hourCount: number; extras: { id: string; quantity: number }[]; recurrence: "one-time" | "weekly" | "biweekly" | "monthly"; customPriceCents?: number } }).input : null;
   const [showChat, setShowChat] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,17 +112,35 @@ export default function CustomerBookingLinkLive() {
   const monthlyPrice = recurringPrices?.monthly.futureVisitTotalCents ?? data?.firstCleaningTotalCents ?? 0;
   const biweeklySavings = Math.max(0, (data?.firstCleaningTotalCents ?? 0) - biweeklyPrice);
   const monthlySavings = Math.max(0, (data?.firstCleaningTotalCents ?? 0) - monthlyPrice);
-  const changeRecurrence = async (next: Recurrence) => {
-    const previous = recurrence;
-    setRecurrence(next);
-    if (!bookingId || !data?.mutationToken || previous === next) return;
+  const persistRecurrence = async (next: Recurrence, rollbackTo: Recurrence) => {
+    if (!bookingId || !data?.mutationToken) {
+      pendingRecurrenceRef.current = next;
+      return;
+    }
     try {
       await updateQuote.mutateAsync({ token, mutationToken: data.mutationToken, recurrence: next });
+      if (pendingRecurrenceRef.current === next) pendingRecurrenceRef.current = null;
     } catch (cause) {
-      setRecurrence(previous);
+      if (pendingRecurrenceRef.current === next) pendingRecurrenceRef.current = null;
+      setRecurrence(rollbackTo);
       setError(cause instanceof Error ? cause.message : "We could not update your recurring preference. Please try again.");
     }
   };
+  const changeRecurrence = (next: Recurrence) => {
+    const previous = recurrence;
+    if (previous === next) return;
+    setRecurrence(next);
+    if (!bookingId || !data?.mutationToken) {
+      pendingRecurrenceRef.current = next;
+      return;
+    }
+    void persistRecurrence(next, previous);
+  };
+  useEffect(() => {
+    const pendingRecurrence = pendingRecurrenceRef.current;
+    if (!pendingRecurrence || !bookingId || !data?.mutationToken) return;
+    void persistRecurrence(pendingRecurrence, recurrence);
+  }, [bookingId, data?.mutationToken]);
   const submitDetails = async () => {
     if (!data || !pricing) return;
     if (!name.trim() || !phone.trim() || !email.trim() || !address.trim()) {
