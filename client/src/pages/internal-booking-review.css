@@ -45,3 +45,13 @@
 
 /* The sidebar stays sticky but must not become a second scroll container. */
 .ibr-sidebar{max-height:none;overflow:visible}
+
+/* Compact count steppers for bedrooms and bathrooms. */
+.ibr-stepper-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ibr-stepper-field>span{font-size:11px;font-weight:700}
+.ibr-stepper-field>span b{color:#bb3e27}
+.ibr-stepper{display:grid;grid-template-columns:38px minmax(0,1fr) 38px;align-items:center;height:37px;border:1px solid #dcd8d3;border-radius:6px;background:#fff;color:#312a25;overflow:hidden}
+.ibr-stepper button{display:grid;place-items:center;align-self:stretch;border:0;background:transparent;color:#59311f;cursor:pointer}
+.ibr-stepper button:hover{background:#fcf8f3}
+.ibr-stepper button:focus-visible{outline:2px solid #8d5e48;outline-offset:-2px}
+.ibr-stepper strong{text-align:center;font-size:12px;font-weight:600;white-space:nowrap}
