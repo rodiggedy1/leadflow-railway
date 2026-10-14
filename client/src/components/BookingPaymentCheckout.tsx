@@ -177,7 +177,7 @@ export function PremiumCardSetupForm({
 }
 
 /** Preview has no Stripe credentials. This mirrors the production form without accepting or submitting card data. */
-export function PremiumCardReviewForm({
+function PremiumCardReviewForm({
   customerName,
   authorizationCopy,
 }: Pick<SetupFormProps, "customerName" | "authorizationCopy">) {
