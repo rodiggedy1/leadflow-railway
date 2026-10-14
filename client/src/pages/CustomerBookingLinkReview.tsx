@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { BedDouble, House, ShowerHead } from "lucide-react";
 import "./customer-booking-link-review.css";
 import teamPhoto from "../assets/book-now-review/maids-in-black-team-shirt-index2.jpg";
 import testimonialPhoto from "../assets/book-now-review/SmilingHomeInteriorSelfie.png";
@@ -21,7 +20,7 @@ function WistiaPlayer() {
 }
 
 const dates = [
-  { label: "Wednesday, Oct 14", detail: "Reserved for you" },
+  { label: "Tomorrow", detail: "2 teams available" },
   { label: "Tuesday", detail: "4 openings" },
   { label: "Wednesday", detail: "3 openings" },
 ];
@@ -29,12 +28,9 @@ const times = [
   { label: "8:30 AM", detail: "Morning", availability: "1 team left" },
   { label: "1:00 PM", detail: "Afternoon", availability: "Available" },
 ];
-const finalQuotePrice = 324;
-const crossedOutQuotePrice = Math.round(finalQuotePrice / 0.81);
-const formatQuotePrice = (value: number) => `$${value.toLocaleString("en-US")}`;
 
 export default function CustomerBookingLinkReview() {
-  const [selectedDate, setSelectedDate] = useState("Wednesday, Oct 14");
+  const [selectedDate, setSelectedDate] = useState("Tomorrow");
   const [selectedTime, setSelectedTime] = useState("8:30 AM");
   const [customDate, setCustomDate] = useState("2026-10-05");
   const [holdSeconds, setHoldSeconds] = useState(10 * 60);
@@ -87,21 +83,13 @@ export default function CustomerBookingLinkReview() {
                 <div className="customer-link-heading"><p className="customer-link-eyebrow">Almost there</p><h1>Hi Sarah <span aria-hidden="true">👋</span><br />Let’s get you booked.</h1><p>We’ve already filled in the details you gave us. Just choose a time.</p></div>
                 <div className="customer-link-video-wrap"><WistiaPlayer /><p className="customer-link-video-caption">See how we work — 60 seconds</p></div>
                 <div className="customer-link-rating"><span>★★★★★</span><b>4.9 on Google</b><em>· Trusted by local homeowners</em></div>
-                <section className="customer-link-generated-offer" aria-label="Generated quote summary">
-                  <div className="customer-link-generated-details">
-                    <span className="customer-link-generated-badge">Most Popular</span>
-                    <h2>Standard</h2>
-                    <p>2 bedrooms <b aria-hidden="true">•</b> 2 bathrooms</p>
-                    <div className="customer-link-generated-features"><span><BedDouble aria-hidden="true" size={28} strokeWidth={1.7} /> 2 beds</span><span><ShowerHead aria-hidden="true" size={28} strokeWidth={1.7} /> 2 baths</span><span><House aria-hidden="true" size={28} strokeWidth={1.7} /> Standard clean</span></div>
-                  </div>
-                  <div className="customer-link-generated-price"><div><s>{formatQuotePrice(crossedOutQuotePrice)}</s><b>Save 19%</b></div><strong>{formatQuotePrice(finalQuotePrice)}</strong><span>Limited time price</span></div>
-                </section>
+                <div className="customer-link-summary" aria-label="Booking summary"><span>Deep Cleaning</span><span>3 bedrooms</span><span>2 bathrooms</span><strong>$369</strong></div>
                 <div className="customer-link-benefits"><span>✓ Supplies included</span><span>✓ Background-checked team</span><span>✓ Insured</span><span>✓ Satisfaction guaranteed</span></div>
               </>}
               {step === "booking" ? (
                 <>
                   <div className="customer-link-section-heading"><h2>When should we come?</h2><p>Madison found these openings for you.</p></div>
-                  <div className="customer-link-options customer-link-date-options">{dates.map((date, index) => <button key={date.label} type="button" className={`customer-link-option ${selectedDate === date.label ? "is-selected" : ""}`} onClick={() => setSelectedDate(date.label)}>{index === 0 && <span className="customer-link-option-badge">★ Best option</span>}<b>{date.label}</b><small>{date.detail}</small></button>)}</div>
+                  <div className="customer-link-options customer-link-date-options">{dates.map((date) => <button key={date.label} type="button" className={`customer-link-option ${selectedDate === date.label ? "is-selected" : ""}`} onClick={() => setSelectedDate(date.label)}><b>{date.label}</b><small>{date.detail}</small></button>)}</div>
                   <div className="customer-link-date-picker"><label htmlFor="customer-link-custom-date">Or choose another date</label><input id="customer-link-custom-date" type="date" min="2026-10-05" value={customDate} onClick={(event) => event.currentTarget.showPicker?.()} onChange={(event) => { setCustomDate(event.target.value); setSelectedDate(formatCustomDate(event.target.value)); }} /><small>Tap the calendar to choose another available date.</small></div>
                   <div className="customer-link-section-heading customer-link-time-heading"><h2>Choose a time</h2></div>
                   <div className="customer-link-options customer-link-time-options">{times.map((time) => <button key={time.label} type="button" className={`customer-link-option ${selectedTime === time.label ? "is-selected" : ""}`} onClick={() => setSelectedTime(time.label)}><b>{time.label}</b><small>{time.detail}</small><em>{time.availability}</em></button>)}</div>
