@@ -126,3 +126,36 @@
 
 /* The whole date field is the calendar target, not only the browser icon. */
 .customer-link-step-booking .customer-link-date-picker input[type="date"]{cursor:pointer}
+
+/* Preview-only quote section: presentation changes are scoped to the booking step. */
+.customer-link-step-booking .customer-link-generated-offer{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(205px,.85fr);gap:22px;align-items:center;margin:20px 0 0;padding:16px 20px 18px;border:1px solid #eadfd9;border-radius:22px;background:linear-gradient(115deg,#fffdfa 0%,#fff8f4 100%);box-shadow:0 10px 24px rgba(94,46,29,.07)}
+.customer-link-generated-details{min-width:0}
+.customer-link-generated-badge,.customer-link-generated-price>div b{display:inline-flex;align-items:center;border-radius:999px;background:#ffe0d9;color:#bd3b23;font-weight:800}
+.customer-link-generated-badge{padding:7px 12px;font-size:12px}
+.customer-link-generated-details h2{margin:9px 0 3px;color:#191412;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:34px;font-weight:800;line-height:1;letter-spacing:-.045em}
+.customer-link-generated-details p{margin:0;color:#766b66;font-size:16px;font-weight:600;white-space:nowrap}
+.customer-link-generated-details p b{margin:0 6px;color:#bbada6}
+.customer-link-generated-features{display:flex;flex-wrap:nowrap;align-items:center;margin-top:20px;overflow:hidden}
+.customer-link-generated-features span{display:inline-flex;align-items:center;gap:5px;padding:0 10px;border-right:1px solid #e6d8d1;color:#4e403b;font-size:11px;font-weight:600;line-height:1;white-space:nowrap}
+.customer-link-generated-features span:first-child{padding-left:0}
+.customer-link-generated-features span:last-child{border-right:0}
+.customer-link-generated-features span svg{width:22px;height:22px;flex:0 0 auto;color:#70402d}
+.customer-link-generated-price{min-width:0;padding-left:22px;border-left:1px solid #e8dcd5;text-align:center}
+.customer-link-generated-price>div{display:flex;align-items:center;justify-content:center;gap:9px}
+.customer-link-generated-price>div s{color:#776b67;font-size:19px}
+.customer-link-generated-price>div b{padding:8px 10px;font-size:12px;white-space:nowrap}
+.customer-link-generated-price>strong{display:block;margin:3px 0 0;color:#c73921;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:clamp(48px,7vw,68px);font-weight:900;letter-spacing:-.08em;line-height:.95}
+.customer-link-generated-price>span{display:block;margin-top:9px;color:#756963;font-size:13px}
+.customer-link-step-booking .customer-link-benefits{border-top:0!important}
+.customer-link-date-options .customer-link-option:first-child{min-height:104px;padding:20px 14px 12px;border:2px solid #684326;border-radius:18px;background:#fff8f1}
+.customer-link-date-options .customer-link-option:first-child b{font-size:18px;line-height:1.15;text-align:center;white-space:nowrap;letter-spacing:-.02em}
+.customer-link-date-options .customer-link-option:first-child small{margin-top:8px;color:#c04020;font-size:15px;font-weight:700;text-align:center}
+.customer-link-option-badge{display:block;width:max-content;margin:-15px auto 10px;padding:6px 12px;border-radius:999px;background:#8b3f1f;color:#fff;font-size:12px;font-weight:800;line-height:1;white-space:nowrap}
+@media(max-width:620px){
+  .customer-link-step-booking .customer-link-generated-offer{grid-template-columns:1fr;gap:18px;padding:16px}
+  .customer-link-generated-price{padding:16px 0 0;border-top:1px solid #e8dcd5;border-left:0}
+  .customer-link-generated-price>strong{font-size:60px}
+  .customer-link-generated-features{gap:0}
+  .customer-link-generated-features span{padding:0 10px;font-size:12px}
+  .customer-link-generated-details h2{font-size:31px}
+}
