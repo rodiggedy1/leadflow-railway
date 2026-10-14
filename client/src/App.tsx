@@ -18,6 +18,7 @@ const Book = lazy(() => import("./pages/Book"));
 const BookWidget = lazy(() => import("./pages/BookWidget"));
 const BookNow = lazy(() => import("./pages/BookNow"));
 const CustomerBookingLinkReview = lazy(() => import("./pages/CustomerBookingLinkReview"));
+const InternalBookingReview = lazy(() => import("./pages/InternalBookingReview"));
 const CustomerBookingLinkLive = lazy(() => import("./pages/CustomerBookingLinkLive"));
 const CustomerBookingLinksAdmin = lazy(() => import("./pages/CustomerBookingLinksAdmin"));
 const CustomerPortal = lazy(() => import("./pages/CustomerPortal"));
@@ -217,6 +218,7 @@ function Router() {
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/review/customer-booking-link"} component={CustomerBookingLinkReview} />
+        <Route path={"/review/internal-booking"} component={InternalBookingReview} />
         <Route path={"/review/ai-team"} component={AiTeamReviewRoute} />
         <Route path={"/review/ai-actions"} component={AiActionsControlCenterRoute} />
         <Route path={"/book/:token"} component={CustomerBookingLinkLive} />
