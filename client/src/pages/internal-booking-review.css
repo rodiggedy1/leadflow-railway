@@ -42,3 +42,6 @@
 .ibr-section-label{padding-right:24px;border-right:1px solid #e8e0d8}
 .ibr-section-content{padding-left:2px}
 @media(max-width:900px){.ibr-section-label{padding-right:0;border-right:0}.ibr-section-content{padding-left:0}}
+
+/* The sidebar stays sticky but must not become a second scroll container. */
+.ibr-sidebar{max-height:none;overflow:visible}
