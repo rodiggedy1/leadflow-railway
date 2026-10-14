@@ -59,7 +59,7 @@ export default function QuotesWorkspace() {
               <section className="quotes-grid" aria-label="Sent quotes">
                 {quoteRows.map((quote) => (
                   <article className="quote-card" key={quote.key}>
-                    <div className="quote-card-topline"><span className="quote-number">{quote.publicNumber}</span><span className={`quote-status quote-status--${quote.status}`}>{statusLabel(quote.status)}</span></div>
+                    <div className="quote-card-topline"><Link className="quote-number quote-number-link" href={`/book/${quote.publicNumber}`} aria-label={`Open quote ${quote.publicNumber}`}>{quote.publicNumber}</Link><span className={`quote-status quote-status--${quote.status}`}>{statusLabel(quote.status)}</span></div>
                     <div className="quote-customer"><div className="quote-avatar">{String(quote.customerName || "?").trim().charAt(0).toUpperCase()}</div><div><h2>{quote.customerName || "Unnamed customer"}</h2><p>{quote.customerPhone || quote.customerEmail || "No contact details"}</p></div></div>
                     <div className="quote-details"><div><span>Service</span><strong>{quote.serviceName || "Home cleaning"}</strong></div><div><span>First cleaning</span><strong>{money(quote.firstCleaningTotalCents)}</strong></div><div><span>Address</span><strong>{quote.address || "Address pending"}</strong></div></div>
                     <div className="quote-card-footer"><span>{quote.requestedLocalDate || "Date pending"}{quote.requestedLocalTime ? ` · ${quote.requestedLocalTime}` : ""}</span><Link href="/admin/bookings" className="quote-open-link">View CRM <ArrowUpRight size={15} /></Link></div>
