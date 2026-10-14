@@ -27,3 +27,7 @@
 .ibr-card-setup>button{display:inline-flex;align-items:center;justify-content:center;justify-self:start;gap:7px;height:34px;padding:0 13px;border:0;border-radius:6px;background:#482719;color:#fff;font:700 11px inherit;cursor:pointer}
 @media(max-width:1200px){.ibr-card-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.ibr-payment-grid{grid-template-columns:1fr}.ibr-card-fields{grid-template-columns:1fr}}
+
+/* Keep the review summary in view while the longer form column scrolls. */
+.ibr-sidebar{position:sticky;top:18px;align-self:start;max-height:calc(100vh - 72px);overflow-y:auto;scrollbar-width:thin}
+@media(max-width:900px){.ibr-sidebar{position:static;max-height:none;overflow:visible}}
