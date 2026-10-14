@@ -155,7 +155,14 @@
   .customer-link-step-booking .customer-link-generated-offer{grid-template-columns:1fr;gap:18px;padding:16px}
   .customer-link-generated-price{padding:16px 0 0;border-top:1px solid #e8dcd5;border-left:0}
   .customer-link-generated-price>strong{font-size:60px}
-  .customer-link-generated-features{gap:0}
+  .customer-link-generated-features{flex-wrap:wrap;gap:12px 0;overflow:visible}
   .customer-link-generated-features span{padding:0 10px;font-size:12px}
+  .customer-link-generated-features span:nth-child(1),
+  .customer-link-generated-features span:nth-child(2){flex:1 1 50%;box-sizing:border-box}
+  .customer-link-generated-features span:nth-child(2){border-right:0}
+  .customer-link-generated-features span:nth-child(3){flex:1 1 100%;padding-left:0}
   .customer-link-generated-details h2{font-size:31px}
+  .customer-link-step-booking .customer-link-date-options{grid-template-columns:minmax(0,1fr);width:100%}
+  .customer-link-step-booking .customer-link-date-options .customer-link-option{box-sizing:border-box;width:100%;min-width:0}
+  .customer-link-step-booking .customer-link-date-options .customer-link-option:first-child b{white-space:normal}
 }
