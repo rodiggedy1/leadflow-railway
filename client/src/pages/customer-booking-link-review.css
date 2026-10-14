@@ -147,9 +147,9 @@
 .customer-link-generated-price>strong{display:block;margin:3px 0 0;color:#c73921;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:clamp(48px,7vw,68px);font-weight:900;letter-spacing:-.08em;line-height:.95}
 .customer-link-generated-price>span{display:block;margin-top:9px;color:#756963;font-size:13px}
 .customer-link-step-booking .customer-link-benefits{border-top:0!important}
-.customer-link-date-options .customer-link-option:first-child{min-height:104px;padding:20px 14px 12px;border:2px solid #684326;border-radius:18px;background:#fff8f1}
-.customer-link-date-options .customer-link-option:first-child b{font-size:18px;line-height:1.15;text-align:center;white-space:nowrap;letter-spacing:-.02em}
-.customer-link-date-options .customer-link-option:first-child small{margin-top:8px;color:#c04020;font-size:15px;font-weight:700;text-align:center}
+.customer-link-date-options .customer-link-option:first-child.is-selected{min-height:104px;padding:20px 14px 12px;border:2px solid #684326;border-radius:18px;background:#fff8f1}
+.customer-link-date-options .customer-link-option:first-child.is-selected b{font-size:18px;line-height:1.15;text-align:center;white-space:nowrap;letter-spacing:-.02em}
+.customer-link-date-options .customer-link-option:first-child.is-selected small{margin-top:8px;color:#c04020;font-size:15px;font-weight:700;text-align:center}
 .customer-link-option-badge{display:block;width:max-content;margin:-15px auto 10px;padding:6px 12px;border-radius:999px;background:#8b3f1f;color:#fff;font-size:12px;font-weight:800;line-height:1;white-space:nowrap}
 @media(max-width:620px){
   .customer-link-step-booking .customer-link-generated-offer{grid-template-columns:1fr;gap:18px;padding:16px}
@@ -164,5 +164,5 @@
   .customer-link-generated-details h2{font-size:31px}
   .customer-link-step-booking .customer-link-date-options{grid-template-columns:minmax(0,1fr);width:100%}
   .customer-link-step-booking .customer-link-date-options .customer-link-option{box-sizing:border-box;width:100%;min-width:0}
-  .customer-link-step-booking .customer-link-date-options .customer-link-option:first-child b{white-space:normal}
+  .customer-link-step-booking .customer-link-date-options .customer-link-option:first-child.is-selected b{white-space:normal}
 }
