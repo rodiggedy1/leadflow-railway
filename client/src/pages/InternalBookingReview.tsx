@@ -68,9 +68,8 @@ const extras = [
   { id: "inside-fridge", label: "Inside Fridge", price: 30 },
   { id: "inside-oven", label: "Inside Oven", price: 30 },
   { id: "interior-windows", label: "Interior Windows", price: 25 },
-  { id: "laundry", label: "Laundry (1 load)", price: 25 },
-  { id: "organizing", label: "Organizing", price: 30 },
-  { id: "other", label: "Other (specify)", price: 0 },
+  { id: "laundry-load", label: "Laundry (1 load)", price: 25 },
+  { id: "organizing-hour", label: "Organizing", price: 30 },
 ];
 const standardTimes = ["08:30", "10:30", "12:30", "14:30", "16:30", "18:30"] as const;
 const recommendableTimes = standardTimes.filter(value => value !== "18:30");
