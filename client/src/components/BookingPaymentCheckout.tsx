@@ -25,6 +25,7 @@ type BookingPaymentCheckoutProps = {
   deferConfirmation?: boolean;
   /** Allows the card UI to render before the pending booking is created. */
   setupReady?: boolean;
+  submitLabel?: string;
   onComplete: (result: {
     bookingId: number;
     cardBrand: string;
@@ -40,6 +41,7 @@ type SetupFormProps = {
   customerName: string;
   authorizationCopy?: string;
   dark?: boolean;
+  submitLabel?: string;
   onConfirm: (paymentMethodId: string) => Promise<void>;
 };
 
@@ -111,6 +113,7 @@ export function PremiumCardSetupForm({
   customerName,
   authorizationCopy,
   dark = false,
+  submitLabel,
   onConfirm,
 }: SetupFormProps) {
   const { stripeReady, name, setName, cardError, loading, handleSubmit } =
@@ -167,7 +170,7 @@ export function PremiumCardSetupForm({
         className="booking-card-acceptance-submit"
       >
         <LockKeyhole className="h-4 w-4" />
-        {loading ? "Saving secure card…" : "Save card to reserve →"}
+        {loading ? "Saving secure card…" : `${submitLabel ?? "Save card to reserve"} →`}
       </button>
       {authorizationCopy && (
         <p className="booking-card-acceptance-terms">{authorizationCopy}</p>
@@ -237,6 +240,7 @@ export function BookingPaymentCheckout({
   directCardEntry = false,
   deferConfirmation = false,
   setupReady = true,
+  submitLabel,
   onComplete,
 }: BookingPaymentCheckoutProps) {
   const startSetup = trpc.bookingPayments.startSetup.useMutation();
@@ -354,6 +358,7 @@ export function BookingPaymentCheckout({
             clientSecret={clientSecret}
             customerName={customerName}
             authorizationCopy={authorizationCopy}
+            submitLabel={submitLabel}
             onConfirm={completeCardCollection}
           />
         </Elements>

@@ -24,7 +24,7 @@
 .ibr-card-fields label span{font-size:10px;font-weight:700;color:#4f4741}
 .ibr-card-fields input{width:100%;height:36px;box-sizing:border-box;padding:0 10px;border:1px solid #dcd8d3;border-radius:6px;background:#fff;color:#312a25;font:500 12px inherit;outline:none}
 .ibr-card-fields input:focus{border-color:#8d5e48;box-shadow:0 0 0 2px #8d5e4816}
-.ibr-card-setup>button{display:inline-flex;align-items:center;justify-content:center;justify-self:start;gap:7px;height:34px;padding:0 13px;border:0;border-radius:6px;background:#482719;color:#fff;font:700 11px inherit;cursor:pointer}
+.ibr-card-setup>button{display:inline-flex;align-items:center;justify-content:center;justify-self:start;gap:7px;height:34px;padding:0 13px;border:0;border-radius:6px;background:#482719;color:#fff;font:700 11px inherit;cursor:pointer}.ibr-field.has-error input,.ibr-input-with-icon.has-error{border-color:#b75445;box-shadow:0 0 0 2px #b7544514}.ibr-field-error{display:block;margin-top:4px;color:#a84437;font-size:10px;line-height:1.25}.ibr-address-error{margin:5px 0 0 27px}
 @media(max-width:1200px){.ibr-card-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.ibr-payment-grid{grid-template-columns:1fr}.ibr-card-fields{grid-template-columns:1fr}}
 
