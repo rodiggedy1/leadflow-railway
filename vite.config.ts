@@ -157,14 +157,22 @@ function vitePluginManusDebugCollector(): Plugin {
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
 
-export default defineConfig({
-  plugins,
-  define: {
-    __GIT_COMMIT__: JSON.stringify(GIT_COMMIT),
-    "import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY": JSON.stringify(
-      process.env.VITE_STRIPE_PUBLISHABLE_KEY ?? process.env.STRIPE_PUBLISHABLE_KEY ?? ""
-    ),
-  },
+export default defineConfig(({ mode }) => {
+  const stripePublishableKey =
+    process.env.VITE_STRIPE_PUBLISHABLE_KEY ?? process.env.STRIPE_PUBLISHABLE_KEY ?? "";
+
+  if (mode === "production" && !/^pk_(test|live)_/.test(stripePublishableKey)) {
+    throw new Error(
+      "Stripe publishable key is required for production builds. Set STRIPE_PUBLISHABLE_KEY (or VITE_STRIPE_PUBLISHABLE_KEY) to a valid pk_test_ or pk_live_ key.",
+    );
+  }
+
+  return {
+    plugins,
+    define: {
+      __GIT_COMMIT__: JSON.stringify(GIT_COMMIT),
+      "import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY": JSON.stringify(stripePublishableKey),
+    },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -235,7 +243,7 @@ export default defineConfig({
       },
     },
   },
-  server: {
+    server: {
     host: true,
     hmr: {
       clientPort: 443,
@@ -254,5 +262,6 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
-  },
+    },
+  };
 });
