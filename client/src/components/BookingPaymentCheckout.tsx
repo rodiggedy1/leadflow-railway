@@ -49,6 +49,7 @@ type InternalCardSetupFormProps = {
   customerName: string;
   onCreateBooking?: () => void;
   creatingBooking?: boolean;
+  awaitingSetup?: boolean;
   onConfirm: (paymentMethodId: string) => Promise<void>;
 };
 
@@ -192,6 +193,7 @@ export function InternalCardSetupForm({
   customerName,
   onCreateBooking,
   creatingBooking = false,
+  awaitingSetup = false,
   onConfirm,
 }: InternalCardSetupFormProps) {
   const stripe = useStripe();
@@ -199,9 +201,9 @@ export function InternalCardSetupForm({
   const [name, setName] = useState(customerName);
   const [cardError, setCardError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const autoConfirmKey = useRef<string | null>(null);
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function confirmCard() {
     if (!clientSecret) {
       setCardError(null);
       onCreateBooking?.();
@@ -235,8 +237,14 @@ export function InternalCardSetupForm({
     }
   }
 
+  useEffect(() => {
+    if (!clientSecret || !awaitingSetup || !stripe || !elements || autoConfirmKey.current === clientSecret) return;
+    autoConfirmKey.current = clientSecret;
+    void confirmCard();
+  }, [awaitingSetup, clientSecret, elements, stripe]);
+
   return (
-    <form onSubmit={handleSubmit} className="booking-card-acceptance">
+    <form onSubmit={event => { event.preventDefault(); void confirmCard(); }} className="booking-card-acceptance">
       <header className="booking-card-acceptance-head">
         <span className="booking-card-acceptance-mark"><LockKeyhole /></span>
         <span>
@@ -258,7 +266,7 @@ export function InternalCardSetupForm({
       {cardError && <p role="alert" className="booking-card-acceptance-error">{cardError}</p>}
       <button type="submit" disabled={loading || creatingBooking || Boolean(clientSecret && (!stripe || !elements))} className="booking-card-acceptance-submit">
         <LockKeyhole className="h-4 w-4" />
-        {loading ? "Saving secure card…" : clientSecret ? "Save card to reserve →" : "Create booking to save card →"}
+        {loading ? "Saving secure card…" : clientSecret ? "Save card to reserve →" : awaitingSetup ? "Preparing secure card…" : "Create booking & save card →"}
       </button>
     </form>
   );
