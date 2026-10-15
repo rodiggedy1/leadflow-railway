@@ -247,7 +247,7 @@ export function InternalCardSetupForm({
         </label>
         <label>
           <span>Card details</span>
-          <span className="booking-card-element-shell"><CardElement options={CARD_ELEMENT_OPTIONS} /></span>
+          <span className="booking-card-element-shell"><CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" /></span>
         </label>
       </div>
       {cardError && <p role="alert" className="booking-card-acceptance-error">{cardError}</p>}
