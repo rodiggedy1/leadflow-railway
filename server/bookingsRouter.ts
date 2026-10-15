@@ -127,6 +127,7 @@ const internalPublicBookingInputSchema = z.object({
       condition: z.number().int().min(1).max(10),
       maidCount: z.number().int().min(1).max(4),
       hourCount: z.number().int().min(1).max(8),
+      customPriceCents: z.number().int().min(1).max(1_000_000).optional(),
       extras: z
         .array(
           z.object({

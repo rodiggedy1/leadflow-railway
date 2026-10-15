@@ -75,6 +75,8 @@ export function useCanonicalBookingFlow({ stepCount, overrides = {} }: Canonical
     setMaidCount: (value: number) => setField("maidCount", value),
     hourCount: draft.hourCount,
     setHourCount: (value: number) => setField("hourCount", value),
+    customPriceCents: draft.customPriceCents,
+    setCustomPriceCents: (value: number | undefined) => setField("customPriceCents", value),
     condition: draft.condition,
     setCondition: (value: number) => setField("condition", value),
     frequency: draft.frequency,
