@@ -20,7 +20,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { BookingPaymentCheckout } from "@/components/BookingPaymentCheckout";
+import { PremiumCardSetupForm } from "@/components/BookingPaymentCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import {
   easternDateIsoFromDate,
@@ -38,7 +38,6 @@ import {
   PUBLIC_BOOKING_PRICING_VERSION,
   type PublicBookingHomeType,
 } from "@shared/publicBookingPricing";
-import type { BookingFunnelPublicResult } from "@shared/bookingFunnel";
 import "./internal-booking-review.css";
 
 type ServiceId = (typeof CANONICAL_SERVICE_IDS)[number];
@@ -107,16 +106,12 @@ export default function InternalBookingReview() {
   const [cardSetupIntentId, setCardSetupIntentId] = useState<string | null>(null);
   const [cardSaved, setCardSaved] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [funnelRecord, setFunnelRecord] = useState<BookingFunnelPublicResult | null>(null);
-  const [cardOnFile, setCardOnFile] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const customerNameRef = useRef<HTMLInputElement>(null);
   const customerPhoneRef = useRef<HTMLInputElement>(null);
   const customerEmailRef = useRef<HTMLInputElement>(null);
   const addressRef = useRef<HTMLInputElement>(null);
 
-  const beginFunnel = trpc.bookingFunnel.begin.useMutation();
-  const reserveFunnel = trpc.bookingFunnel.reserve.useMutation();
   const timeCountsQuery = trpc.bookings.standardTimeCounts.useQuery({ date }, { enabled: step === 6 && Boolean(date), staleTime: 30_000 });
   const timeCounts = useMemo(() => new Map((timeCountsQuery.data ?? []).map(row => [row.time, Number(row.count)])), [timeCountsQuery.data]);
   const recommendedTime = useMemo(() => {
@@ -182,39 +177,6 @@ export default function InternalBookingReview() {
     setError(null);
     return true;
   };
-  const prepareCardCheckout = async () => {
-    if (funnelRecord) return true;
-    if (!validateBookingDetails()) return false;
-    try {
-      const idempotencyKey = crypto.randomUUID();
-      const started = await beginFunnel.mutateAsync({ idempotencyKey, source: "widget-popup", customerName: customerName.trim(), customerPhone: customerPhone.trim() });
-      const reserved = await reserveFunnel.mutateAsync({
-        publicFunnelNumber: started.publicFunnelNumber,
-        mutationToken: started.mutationToken,
-        expectedVersion: started.version,
-        patch: {
-          customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim() || null, address: address.trim(),
-          serviceId, serviceName: getPublicBookingServiceName(serviceId), bedrooms, bathrooms,
-          extras: Object.entries(extraQuantities).filter(([, quantity]) => quantity > 0).map(([id, quantity]) => ({ id, quantity })),
-          specialRequestNotes: notes.trim() ? [notes.trim()] : [], requestedLocalDate: easternDateIsoFromDate(parseEasternDate(date)), requestedLocalTime: time, requestedTimeZone: "America/New_York", recurrence: frequency,
-          pricingVersion: PUBLIC_BOOKING_PRICING_VERSION, firstCleaningTotalCents: pricing.firstCleaningTotalCents, priceSnapshot: { input: pricingInput, breakdown: pricing },
-        },
-      });
-      setFunnelRecord(reserved as BookingFunnelPublicResult);
-      setError(null);
-      return true;
-    } catch {
-      setError("We couldn't prepare secure card entry. Please review the required fields and try again.");
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    if (payment !== "card" || funnelRecord || beginFunnel.isPending || reserveFunnel.isPending) return;
-    if (customerName.trim().length < 2 || customerPhone.trim().length < 7 || !/^\S+@\S+\.\S+$/.test(customerEmail.trim()) || address.trim().length < 5) return;
-    void prepareCardCheckout();
-  }, [address, customerEmail, customerName, customerPhone, funnelRecord, payment]);
-
   const submit = () => {
     setError(null);
     if (!validateBookingDetails()) return;
@@ -248,7 +210,7 @@ export default function InternalBookingReview() {
   const serviceTitle = getPublicBookingServiceName(serviceId);
   const homeDetail = pricingMode === "hourly" ? `${maidCount} ${maidCount === 1 ? "maid" : "maids"} · ${hourCount} ${hourCount === 1 ? "hour" : "hours"}` : `${bedrooms === 0 ? "Studio" : `${bedrooms} bed`} · ${bathrooms} bath · ${homeType}`;
   const total = pricing.firstCleaningTotalCents + extraTotal;
-  const busy = createBooking.isPending || startCardSetup.isPending || confirmCardSetup.isPending || switchPayment.isPending || updateAdditionalServices.isPending || beginFunnel.isPending || reserveFunnel.isPending;
+  const busy = createBooking.isPending || startCardSetup.isPending || confirmCardSetup.isPending || switchPayment.isPending || updateAdditionalServices.isPending;
   const completed = new Set<number>();
   if (customerName.trim() && customerPhone.trim() && customerEmail.trim()) completed.add(1);
   completed.add(2);
@@ -283,8 +245,8 @@ export default function InternalBookingReview() {
         <Section number={5} title="Date & Time" prompt="What day works best for you? We have these times available." state={sectionState(5)}><div className="ibr-fields-2"><div className="ibr-field ibr-calendar-field"><span>Date</span><button type="button" className="ibr-input-with-icon ibr-date-trigger" onClick={() => setCalendarOpen(open => !open)}><CalendarDays size={16} /><span>{easternDateLabel(date)}</span><ChevronDown size={15} /></button>{calendarOpen && <div className="ibr-calendar-popover"><div className="ibr-calendar-header"><strong>Choose a date</strong></div><input className="field" type="date" value={date} onChange={event => chooseDate(event.target.value)} /></div>}</div><div className="ibr-field"><span>Arrival window</span><div className="ibr-input-with-icon"><Clock3 size={16} /><span>{timeLabel(time)} – {timeLabel(`${String((Number(time.slice(0, 2)) + 2) % 24).padStart(2, "0")}:${time.slice(3)}`)}</span><ChevronDown size={15} /></div></div></div><div className="ibr-availability"><div className="ibr-availability-heading"><span>Available arrival windows</span><small>Live schedule preview</small></div><div className="ibr-availability-grid">{standardTimes.slice(0, 4).map(value => { const count = timeCounts.get(value) ?? 0; const recommended = value === recommendedTime; return <button type="button" key={value} className={time === value ? "is-selected" : ""} onClick={() => setTime(value)}><span><strong>{timeLabel(value)} – {timeLabel(`${String((Number(value.slice(0, 2)) + 2) % 24).padStart(2, "0")}:${value.slice(3)}`)}</strong><small>{timeCountsQuery.isLoading ? "Loading schedule…" : timeCountsQuery.isError ? "Schedule counts unavailable" : `${count} open${recommended ? " · Recommended" : ""}`}</small></span>{recommended && <em>Best option</em>}</button>; })}</div></div><div className="ibr-info-note"><Info size={16} /> We provide a 2-hour arrival window. You’ll get a text when the team is on the way.</div></Section>
         <Section number={6} title="Address" prompt="What’s the cleaning address?" state={sectionState(6)}><div className={`ibr-input-with-icon ibr-wide-input${fieldErrors.address ? " has-error" : ""}`}><MapPin size={17} /><input ref={addressRef} value={address} onChange={event => { setAddress(event.target.value); setFieldErrors(current => ({ ...current, address: "" })); }} placeholder="Street, city, state, ZIP" aria-required="true" aria-invalid={Boolean(fieldErrors.address)} /></div>{fieldErrors.address && <small className="ibr-field-error ibr-address-error" role="alert">{fieldErrors.address}</small>}</Section>
         <Section number={7} title="Recurring" optional prompt="Would you like to set this up as a recurring service? You’ll save 15% on future cleanings." state={sectionState(7)}><div className="ibr-frequency-grid">{(CANONICAL_FREQUENCIES as readonly Frequency[]).map(value => <button type="button" key={value} className={`ibr-frequency ${frequency === value ? "is-selected" : ""}`} onClick={() => setFrequency(value)}><span className="ibr-radio" /><span><strong>{frequencyLabel(value)}</strong>{value !== "one-time" && <small>Save 15%</small>}</span></button>)}</div></Section>
-        <Section number={8} title="Payment" prompt="How would you like to collect payment? Choose card, Cash App, or invoice." state={sectionState(8)}><div className="ibr-payment-grid">{([{ id: "card", label: "Card", icon: CreditCard }, { id: "cashapp", label: "Cash App", icon: WalletCards }, { id: "invoice", label: "Invoice", icon: Landmark }] as const).map(item => { const Icon = item.icon; return <button type="button" key={item.id} className={`ibr-payment ${payment === item.id ? "is-selected" : ""}`} disabled={busy} onClick={async () => { if (createdBooking) { switchPayment.mutate({ bookingId: createdBooking.bookingId, paymentMethod: item.id }); return; } setPayment(item.id); }}><Icon size={18} /><span><strong>{item.label}</strong></span></button>; })}</div>{payment === "card" && funnelRecord ? <div className="ibr-card-setup"><BookingPaymentCheckout publicFunnelNumber={funnelRecord.publicFunnelNumber} mutationToken={funnelRecord.mutationToken} customerName={customerName} amountCents={pricing.firstCleaningTotalCents} directCardEntry setupReady submitLabel="Book service" onComplete={result => { setCardOnFile(true); setCardSaved(true); setCreatedBooking({ bookingId: result.bookingId, publicBookingNumber: "Booking created" }); setSuccess("Card saved securely and booking created."); }} /></div> : payment === "card" ? <div className="ibr-card-setup"><strong>Card selected</strong><small>Complete the required booking details to open secure card entry.</small></div> : <div className="ibr-card-setup"><strong>{payment === "cashapp" ? "Cash App selected" : "Invoice selected"}</strong><small>Payment will be collected according to the existing Internal Booking workflow.</small></div>}</Section>
-      </div><aside className="ibr-sidebar"><section className="ibr-summary-card"><div className="ibr-side-heading"><div><small className="ibr-summary-kicker">REVIEW BEFORE CREATING</small><h2>Booking Summary</h2></div><button type="button" onClick={() => setStep(1)}>✎ Edit</button></div><div className="ibr-summary-service"><Home size={24} /><div><strong>{serviceTitle}</strong><span>{homeDetail}</span></div></div><div className="ibr-price-lines"><div><span>First cleaning</span><b>{money(pricing.firstCleaningTotalCents)}</b></div>{selectedExtras.map(extra => <div key={extra.id}><span>{extra.label}</span><b>{money(extra.price * 100 * (extraQuantities[extra.id] ?? 0))}</b></div>)}<div className="ibr-total"><span>Estimated Total</span><b>{money(total)}</b></div></div><div className="ibr-summary-details"><div><CalendarDays size={17} /><span>{easternDateLabel(date)}</span></div><div><Clock3 size={17} /><span>{timeLabel(time)} arrival window</span></div><div><MapPin size={17} /><span>{address || "Service address not entered"}</span></div></div><div className="ibr-success-note"><Check size={16} /><span>Price will be shown to customer and booking will be created in LeadFlow.</span></div></section><section className="ibr-side-card ibr-notes-card"><div className="ibr-side-heading"><div><h2>Booking notes</h2><small>Keep the important details in one place.</small></div><span>{notes.length}/500</span></div><textarea value={notes} maxLength={500} onChange={event => setNotes(event.target.value)} placeholder="Add notes for the team…" /></section><button type="button" className="ibr-sidebar-book-button ibr-create-button" disabled={busy || payment === "card"} onClick={() => { if (step < 8) { if (!validateBookingDetails()) return; setStep(8); submit(); } else if (step === 8 && !createdBooking) submit(); else if (step === 8 && payment === "card" && !cardSaved) setError("Save the card before continuing."); else if (step < 10) setStep(step + 1); else submit(); }}><span>{busy ? "Preparing secure payment…" : payment === "card" && funnelRecord && !cardOnFile ? "Save card to create booking" : createdBooking ? "Continue" : "Create booking"}</span><ArrowRight size={15} /></button></aside></div>
+        <Section number={8} title="Payment" prompt="How would you like to collect payment? Choose card, Cash App, or invoice." state={sectionState(8)}><div className="ibr-payment-grid">{([{ id: "card", label: "Card", icon: CreditCard }, { id: "cashapp", label: "Cash App", icon: WalletCards }, { id: "invoice", label: "Invoice", icon: Landmark }] as const).map(item => { const Icon = item.icon; return <button type="button" key={item.id} className={`ibr-payment ${payment === item.id ? "is-selected" : ""}`} disabled={busy} onClick={() => { if (createdBooking) { switchPayment.mutate({ bookingId: createdBooking.bookingId, paymentMethod: item.id }); } else { setPayment(item.id); } }}><Icon size={18} /><span><strong>{item.label}</strong></span></button>; })}</div>{payment === "card" && createdBooking && cardClientSecret && cardSetupIntentId ? <div className="ibr-card-setup"><Elements stripe={stripePromise} options={{ clientSecret: cardClientSecret, appearance: { theme: "stripe" } }}><PremiumCardSetupForm customerName={customerName} clientSecret={cardClientSecret} onConfirm={paymentMethodId => confirmCardSetup.mutateAsync({ bookingId: createdBooking.bookingId, setupIntentId: cardSetupIntentId, paymentMethodId }).then(() => undefined)} /></Elements></div> : payment === "card" && createdBooking ? <div className="ibr-card-setup"><strong>Preparing secure card entry…</strong></div> : payment === "card" ? <div className="ibr-card-setup"><strong>Card setup begins after Book service.</strong><small>This matches the existing Internal Booking workflow.</small></div> : <div className="ibr-card-setup"><strong>{payment === "cashapp" ? "Cash App selected" : "Invoice selected"}</strong><small>Payment will be collected according to the existing Internal Booking workflow.</small></div>}</Section>
+      </div><aside className="ibr-sidebar"><section className="ibr-summary-card"><div className="ibr-side-heading"><div><small className="ibr-summary-kicker">REVIEW BEFORE CREATING</small><h2>Booking Summary</h2></div><button type="button" onClick={() => setStep(1)}>✎ Edit</button></div><div className="ibr-summary-service"><Home size={24} /><div><strong>{serviceTitle}</strong><span>{homeDetail}</span></div></div><div className="ibr-price-lines"><div><span>First cleaning</span><b>{money(pricing.firstCleaningTotalCents)}</b></div>{selectedExtras.map(extra => <div key={extra.id}><span>{extra.label}</span><b>{money(extra.price * 100 * (extraQuantities[extra.id] ?? 0))}</b></div>)}<div className="ibr-total"><span>Estimated Total</span><b>{money(total)}</b></div></div><div className="ibr-summary-details"><div><CalendarDays size={17} /><span>{easternDateLabel(date)}</span></div><div><Clock3 size={17} /><span>{timeLabel(time)} arrival window</span></div><div><MapPin size={17} /><span>{address || "Service address not entered"}</span></div></div><div className="ibr-success-note"><Check size={16} /><span>Price will be shown to customer and booking will be created in LeadFlow.</span></div></section><section className="ibr-side-card ibr-notes-card"><div className="ibr-side-heading"><div><h2>Booking notes</h2><small>Keep the important details in one place.</small></div><span>{notes.length}/500</span></div><textarea value={notes} maxLength={500} onChange={event => setNotes(event.target.value)} placeholder="Add notes for the team…" /></section><button type="button" className="ibr-sidebar-book-button ibr-create-button" disabled={busy} onClick={() => { if (step < 8) { if (!validateBookingDetails()) return; setStep(8); submit(); } else if (step === 8 && !createdBooking) submit(); else if (step === 8 && payment === "card" && !cardSaved) setError("Save the card before continuing."); else if (step < 10) setStep(step + 1); else submit(); }}><span>{busy ? "Preparing secure payment…" : createdBooking ? "Continue" : "Create booking"}</span><ArrowRight size={15} /></button></aside></div>
       {error && <div className="ibr-error" role="alert">{error}</div>}
     </main></div></div></div>}
   </div>;
