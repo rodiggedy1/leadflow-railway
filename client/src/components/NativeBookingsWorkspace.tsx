@@ -1293,7 +1293,7 @@ export default function NativeBookingsWorkspace({
           <button
             type="button"
             className="bookings-new-booking"
-            onClick={() => setNewBookingOpen(true)}
+            onClick={() => window.location.assign("/review/internal-booking")}
           >
             <Plus />
             New booking
