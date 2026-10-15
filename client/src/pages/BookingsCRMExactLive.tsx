@@ -1520,7 +1520,7 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
             <button
               type="button"
               className="bcr-new-booking"
-              onClick={() => setNewBookingOpen(true)}
+              onClick={() => window.location.assign("/review/internal-booking")}
             >
               <Plus size={14} />
               New booking
