@@ -58,7 +58,8 @@ type BookingResult = {
   publicBookingNumber: string;
 };
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 const homeTypes: PublicBookingHomeType[] = [
   "House",
   "Apartment",

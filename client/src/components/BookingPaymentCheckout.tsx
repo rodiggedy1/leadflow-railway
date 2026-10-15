@@ -6,9 +6,8 @@ import { BOOKING_PAYMENT_CONSENT_TEXT } from "@shared/bookingPayment";
 import { trpc } from "@/lib/trpc";
 import { CARD_ELEMENT_OPTIONS, useStripeCardSetup } from "./useStripeCardSetup";
 
-const stripePromise = loadStripe(
-  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string
-);
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 type BookingPaymentCheckoutProps = {
   publicFunnelNumber: string;

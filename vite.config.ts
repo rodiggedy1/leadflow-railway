@@ -160,8 +160,10 @@ const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(
 export default defineConfig(({ mode }) => {
   const stripePublishableKey =
     process.env.VITE_STRIPE_PUBLISHABLE_KEY ?? process.env.STRIPE_PUBLISHABLE_KEY ?? "";
+  const isRailwayProduction = process.env.RAILWAY_ENVIRONMENT_NAME === "production";
+  const enforceStripeKey = mode === "production" && (isRailwayProduction || !process.env.RAILWAY_ENVIRONMENT_NAME);
 
-  if (mode === "production" && !/^pk_(test|live)_/.test(stripePublishableKey)) {
+  if (enforceStripeKey && !/^pk_(test|live)_/.test(stripePublishableKey)) {
     throw new Error(
       "Stripe publishable key is required for production builds. Set STRIPE_PUBLISHABLE_KEY (or VITE_STRIPE_PUBLISHABLE_KEY) to a valid pk_test_ or pk_live_ key.",
     );
