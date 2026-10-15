@@ -57,7 +57,7 @@
 .ibr-stepper strong{text-align:center;font-size:12px;font-weight:600;white-space:nowrap}
 
 /* Direct-open review calendar: same month grid interaction as the approved public review. */
-.ibr-date-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(180px,.75fr);gap:12px;width:100%}
+.ibr-date-layout{display:grid;grid-template-columns:1fr;gap:12px;width:100%}
 .ibr-calendar{min-width:0;padding:14px;border:1px solid #e3dfda;border-radius:8px;background:#fffdfb}
 .ibr-calendar>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;color:#302923}
 .ibr-calendar>header strong{font-size:14px}
