@@ -13,7 +13,7 @@ import {
 } from "./useCanonicalBookingDraft";
 
 export type CanonicalBookingFlowOptions = {
-  stepCount: 8 | 9;
+  stepCount: 8 | 9 | 10;
   overrides?: Partial<CanonicalBookingDraft>;
 };
 
