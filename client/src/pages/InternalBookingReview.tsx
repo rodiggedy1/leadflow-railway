@@ -72,11 +72,11 @@ const services = [
   { id: "moveout" as const, title: "Move-out Clean", copy: "Thorough cleaning for move-outs", icon: FileText },
 ];
 const extras = [
-  { id: "inside-fridge", label: "Inside Fridge", price: 30 },
-  { id: "inside-oven", label: "Inside Oven", price: 30 },
-  { id: "interior-windows", label: "Interior Windows", price: 25 },
+  { id: "inside-fridge", label: "Inside Fridge", price: 45 },
+  { id: "inside-oven", label: "Inside Oven", price: 45 },
+  { id: "interior-windows", label: "Interior Windows", price: 10 },
   { id: "laundry-load", label: "Laundry (1 load)", price: 25 },
-  { id: "organizing-hour", label: "Organizing", price: 30 },
+  { id: "organizing-hour", label: "Organizing", price: 70 },
 ];
 const standardTimes = ["08:30", "10:30", "12:30", "14:30", "16:30", "18:30"] as const;
 const recommendableTimes = standardTimes.filter(value => value !== "18:30");
@@ -240,10 +240,9 @@ export default function InternalBookingReview() {
   };
   const back = () => { setError(null); setStep(Math.max(1, step - 1)); };
   const selectedExtras = extras.filter(extra => (extraQuantities[extra.id] ?? 0) > 0);
-  const extraTotal = selectedExtras.reduce((sum, extra) => sum + extra.price * (extraQuantities[extra.id] ?? 0), 0) * 100;
   const serviceTitle = getPublicBookingServiceName(serviceId);
   const homeDetail = pricingMode === "hourly" ? `${maidCount} ${maidCount === 1 ? "maid" : "maids"} · ${hourCount} ${hourCount === 1 ? "hour" : "hours"}` : `${bedrooms === 0 ? "Studio" : `${bedrooms} bed`} · ${bathrooms} bath · ${homeType}`;
-  const total = pricing.firstCleaningTotalCents + extraTotal;
+  const total = pricing.firstCleaningTotalCents;
   const busy = createBooking.isPending || startCardSetup.isPending || confirmCardSetup.isPending || switchPayment.isPending || updateAdditionalServices.isPending;
   const completed = new Set<number>();
   if (customerName.trim() && customerPhone.trim() && customerEmail.trim()) completed.add(1);
