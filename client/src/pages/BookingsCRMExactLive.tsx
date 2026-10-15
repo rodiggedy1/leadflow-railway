@@ -1527,14 +1527,6 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
             </button>
             <button
               type="button"
-              className="bcr-new-quote"
-              onClick={() => setNewQuoteOpen(true)}
-            >
-              <Plus size={14} />
-              New quote
-            </button>
-            <button
-              type="button"
               className="bcr-header-button"
               disabled={model.refreshLeadflowJobDetails.isPending}
               onClick={() =>
