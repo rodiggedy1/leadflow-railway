@@ -161,6 +161,9 @@ export default defineConfig({
   plugins,
   define: {
     __GIT_COMMIT__: JSON.stringify(GIT_COMMIT),
+    "import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY": JSON.stringify(
+      process.env.VITE_STRIPE_PUBLISHABLE_KEY ?? process.env.STRIPE_PUBLISHABLE_KEY ?? ""
+    ),
   },
   resolve: {
     alias: {
