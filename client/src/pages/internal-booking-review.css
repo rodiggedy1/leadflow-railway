@@ -115,3 +115,12 @@
 .ibr-completion-actions button.secondary{border:1px solid #d8c9bd;background:#fff;color:#59311f}
 .ibr-completion-actions button.tertiary{grid-column:1/-1;min-height:34px;background:transparent;color:#765541}
 @media(max-width:620px){.ibr-date-layout{grid-template-columns:1fr}.ibr-completion-backdrop{align-items:start;padding:10px}.ibr-completion-modal{max-height:calc(100vh - 20px);padding:24px 16px 16px}.ibr-completion-service-grid{grid-template-columns:1fr}.ibr-completion-actions{grid-template-columns:1fr}.ibr-completion-actions button.tertiary{grid-column:auto}}
+
+
+/* Optional agent-entered first-cleaning total. */
+.ibr-custom-price{display:grid;gap:6px;margin-top:13px;padding:11px;border:1px solid #e3dfda;border-radius:7px;background:#fffdfb;color:#4f4741;font-size:11px;font-weight:700}
+.ibr-custom-price>span{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ibr-custom-price em{color:#82776e;font-style:normal;font-weight:500}
+.ibr-custom-price input{width:100%;height:35px;padding:0 10px;border:1px solid #dcd8d3;border-radius:6px;background:#fff;color:#312a25;font:500 12px inherit;outline:none;box-sizing:border-box}
+.ibr-custom-price input:focus{border-color:#8d5e48;box-shadow:0 0 0 2px #8d5e4816}
+.ibr-custom-price small{color:#82776e;font-size:10px;font-weight:500;line-height:1.35}
