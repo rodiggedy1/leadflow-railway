@@ -47,6 +47,8 @@ type SetupFormProps = {
 type InternalCardSetupFormProps = {
   clientSecret: string | null;
   customerName: string;
+  onCreateBooking?: () => void;
+  creatingBooking?: boolean;
   onConfirm: (paymentMethodId: string) => Promise<void>;
 };
 
@@ -188,6 +190,8 @@ export function PremiumCardSetupForm({
 export function InternalCardSetupForm({
   clientSecret,
   customerName,
+  onCreateBooking,
+  creatingBooking = false,
   onConfirm,
 }: InternalCardSetupFormProps) {
   const stripe = useStripe();
@@ -199,7 +203,8 @@ export function InternalCardSetupForm({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!clientSecret) {
-      setCardError("Create the booking first, then save the card.");
+      setCardError(null);
+      onCreateBooking?.();
       return;
     }
     if (!stripe || !elements) {
@@ -251,7 +256,7 @@ export function InternalCardSetupForm({
         </label>
       </div>
       {cardError && <p role="alert" className="booking-card-acceptance-error">{cardError}</p>}
-      <button type="submit" disabled={loading || !stripe || !elements || !clientSecret} className="booking-card-acceptance-submit">
+      <button type="submit" disabled={loading || creatingBooking || Boolean(clientSecret && (!stripe || !elements))} className="booking-card-acceptance-submit">
         <LockKeyhole className="h-4 w-4" />
         {loading ? "Saving secure card…" : clientSecret ? "Save card to reserve →" : "Create booking to save card →"}
       </button>
