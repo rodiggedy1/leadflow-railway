@@ -75,6 +75,7 @@ export type CanonicalBookingDraft = {
   homeType: PublicBookingHomeType;
   maidCount: number;
   hourCount: number;
+  customPriceCents?: number;
   condition: number;
   frequency: BookingWidgetRecurringFrequency;
   extras: CanonicalExtraQuantities;
@@ -107,6 +108,7 @@ export function createCanonicalPricingInput(
     | "condition"
     | "maidCount"
     | "hourCount"
+    | "customPriceCents"
     | "extras"
     | "frequency"
   >
@@ -120,6 +122,9 @@ export function createCanonicalPricingInput(
     condition: draft.condition,
     maidCount: draft.maidCount,
     hourCount: draft.hourCount,
+    ...(draft.customPriceCents !== undefined
+      ? { customPriceCents: draft.customPriceCents }
+      : {}),
     extras: selectedCanonicalExtras(draft.extras),
     recurrence: draft.frequency,
   };

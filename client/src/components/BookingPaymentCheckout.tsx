@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Elements, CardElement } from "@stripe/react-stripe-js";
+import { Elements, CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { CreditCard, LockKeyhole, ShieldCheck } from "lucide-react";
 import { BOOKING_PAYMENT_CONSENT_TEXT } from "@shared/bookingPayment";
 import { trpc } from "@/lib/trpc";
 import { CARD_ELEMENT_OPTIONS, useStripeCardSetup } from "./useStripeCardSetup";
 
-const stripePromise = loadStripe(
-  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string
-);
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 type BookingPaymentCheckoutProps = {
   publicFunnelNumber: string;
@@ -42,6 +41,15 @@ type SetupFormProps = {
   authorizationCopy?: string;
   dark?: boolean;
   submitLabel?: string;
+  onConfirm: (paymentMethodId: string) => Promise<void>;
+};
+
+type InternalCardSetupFormProps = {
+  clientSecret: string | null;
+  customerName: string;
+  onCreateBooking?: () => void;
+  creatingBooking?: boolean;
+  awaitingSetup?: boolean;
   onConfirm: (paymentMethodId: string) => Promise<void>;
 };
 
@@ -175,6 +183,91 @@ export function PremiumCardSetupForm({
       {authorizationCopy && (
         <p className="booking-card-acceptance-terms">{authorizationCopy}</p>
       )}
+    </form>
+  );
+}
+
+/** The Internal Booking card fields stay mounted before booking creation. */
+export function InternalCardSetupForm({
+  clientSecret,
+  customerName,
+  onCreateBooking,
+  creatingBooking = false,
+  awaitingSetup = false,
+  onConfirm,
+}: InternalCardSetupFormProps) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [name, setName] = useState(customerName);
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const autoConfirmKey = useRef<string | null>(null);
+
+  async function confirmCard() {
+    if (!clientSecret) {
+      setCardError(null);
+      onCreateBooking?.();
+      return;
+    }
+    if (!stripe || !elements) {
+      setCardError("Secure card entry is still loading. Please try again.");
+      return;
+    }
+    setLoading(true);
+    setCardError(null);
+    try {
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) throw new Error("Card element not found");
+      const { setupIntent, error } = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: { card: cardElement, billing_details: { name } },
+      });
+      if (error) {
+        setCardError(error.message ?? "Card declined. Please try a different card.");
+        return;
+      }
+      if (!setupIntent?.payment_method) {
+        setCardError("Something went wrong. Please try again.");
+        return;
+      }
+      await onConfirm(setupIntent.payment_method as string);
+    } catch (error: unknown) {
+      setCardError(error instanceof Error ? error.message : "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!clientSecret || !awaitingSetup || !stripe || !elements || autoConfirmKey.current === clientSecret) return;
+    autoConfirmKey.current = clientSecret;
+    void confirmCard();
+  }, [awaitingSetup, clientSecret, elements, stripe]);
+
+  return (
+    <form onSubmit={event => { event.preventDefault(); void confirmCard(); }} className="booking-card-acceptance">
+      <header className="booking-card-acceptance-head">
+        <span className="booking-card-acceptance-mark"><LockKeyhole /></span>
+        <span>
+          <small>SECURE CARD DETAILS</small>
+          <strong>Add your card</strong>
+          <em>Your card is stored securely and charged only after service.</em>
+        </span>
+      </header>
+      <div className="booking-card-acceptance-fields">
+        <label>
+          <span>Name on card</span>
+          <input required value={name} onChange={event => setName(event.target.value)} autoComplete="cc-name" placeholder="Name as it appears on your card" />
+        </label>
+        <label>
+          <span>Card details</span>
+          <span className="booking-card-element-shell"><CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" /></span>
+        </label>
+      </div>
+      {cardError && <p role="alert" className="booking-card-acceptance-error">{cardError}</p>}
+      <button type="submit" disabled={loading || creatingBooking || Boolean(clientSecret && (!stripe || !elements))} className="booking-card-acceptance-submit">
+        <LockKeyhole className="h-4 w-4" />
+        {loading ? "Saving secure card…" : clientSecret ? "Save card to reserve →" : awaitingSetup ? "Preparing secure card…" : "Create booking & save card →"}
+      </button>
     </form>
   );
 }
