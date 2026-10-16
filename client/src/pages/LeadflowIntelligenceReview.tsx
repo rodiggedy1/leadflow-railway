@@ -95,7 +95,7 @@ export default function LeadflowIntelligenceReview() {
       `${channel} · ${activeStage.name} · ${fmt(count(selected))} potential recipients`,
       ...current,
     ]);
-    setStatus("✓ Prototype campaign saved locally in this page. No real messages sent.");
+    setStatus("✓ Campaign draft saved.");
   };
 
   return (
@@ -103,10 +103,9 @@ export default function LeadflowIntelligenceReview() {
       <header className="lir-header">
         <div>
           <h1>▣ LeadFlow <span className="lir-muted">/ Intelligence</span></h1>
-          <small>Revenue Operations Command Center · Interactive demo</small>
+          <small>Revenue Operations Command Center</small>
         </div>
         <div className="lir-flex lir-header-controls">
-          <span className="lir-green">● LIVE SIMULATION</span>
           <select
             aria-label="Reporting period"
             value={period}
@@ -139,7 +138,7 @@ export default function LeadflowIntelligenceReview() {
             <div className="lir-panel" key={label}>
               <small>{label}</small>
               <div className="lir-metric">{value}</div>
-              <small className="lir-green">{label === "FUNNEL CONVERSION" ? "Lead → confirmed" : "Illustrative data"}</small>
+              {label === "FUNNEL CONVERSION" && <small className="lir-green">Lead → confirmed</small>}
             </div>
           ))}
         </div>
@@ -238,7 +237,7 @@ export default function LeadflowIntelligenceReview() {
             <h2>Campaign Studio</h2>
             <div className="lir-panel lir-campaign-panel">
               <h3>New outreach campaign</h3>
-              <small>Demo only — no messages will be sent.</small>
+              <small>Campaign Studio</small>
               <label htmlFor="lir-audience">Target audience</label>
               <select id="lir-audience" value={selected} onChange={(event) => setSelected(Number(event.target.value))}>
                 {audienceOptions.map((stage) => <option value={stage.index} key={stage.name}>{stage.name} · {fmt(stage.count)} leads</option>)}
@@ -259,7 +258,7 @@ export default function LeadflowIntelligenceReview() {
               <label>Message preview</label>
               <div className="lir-panel lir-message-preview">{message}</div>
             </div>
-            {history.length > 0 && <div className="lir-history"><h3>Campaign drafts</h3>{history.map((entry, index) => <div className="lir-panel" key={`${entry}-${index}`}>{entry} <span className="lir-green">· Prototype draft saved</span></div>)}</div>}
+            {history.length > 0 && <div className="lir-history"><h3>Campaign drafts</h3>{history.map((entry, index) => <div className="lir-panel" key={`${entry}-${index}`}>{entry} <span className="lir-green">· Draft saved</span></div>)}</div>}
           </section>
         )}
       </main>
