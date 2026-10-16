@@ -35,7 +35,7 @@ const NAV_GROUPS: Array<{ label: string; items: ReviewDestination[] }> = [
 
 export default function ReviewWorkspaceNav({ activePath }: { activePath?: string }) {
   const [location] = useLocation();
-  const defaultOpenRoutes = ["/review/operations-dashboard", "/review/ai-team", "/review/ai-actions", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/quotes", "/review/revenue-agent", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
+  const defaultOpenRoutes = ["/review/operations-dashboard", "/review/leadflow-intelligence", "/review/ai-team", "/review/ai-actions", "/review/leads-crm", "/review/operations-crm", "/review/settings", "/review/customer-profile", "/review/bookings-crm", "/review/quotes", "/review/revenue-agent", "/review/schedule-crm", "/review/day-board-crm", "/review/confirmation-calls", "/review/sms", "/review/emails", "/review/ai-calls-transcript", "/review/invoices", "/review/payments", "/review/team", "/review/reviews-quality", "/review/payroll-summary", "/review/hiring-admin"];
   const routeKey = activePath ?? location;
   const useLiveDestinations = activePath !== undefined;
   const settingsHref = useLiveDestinations ? "/admin/settings" : "/review/settings";
