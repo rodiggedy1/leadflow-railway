@@ -24,7 +24,7 @@
 .ibr-card-fields label span{font-size:10px;font-weight:700;color:#4f4741}
 .ibr-card-fields input{width:100%;height:36px;box-sizing:border-box;padding:0 10px;border:1px solid #dcd8d3;border-radius:6px;background:#fff;color:#312a25;font:500 12px inherit;outline:none}
 .ibr-card-fields input:focus{border-color:#8d5e48;box-shadow:0 0 0 2px #8d5e4816}
-.ibr-card-setup>button{display:inline-flex;align-items:center;justify-content:center;justify-self:start;gap:7px;height:34px;padding:0 13px;border:0;border-radius:6px;background:#482719;color:#fff;font:700 11px inherit;cursor:pointer}
+.ibr-card-setup>button{display:inline-flex;align-items:center;justify-content:center;justify-self:start;gap:7px;height:34px;padding:0 13px;border:0;border-radius:6px;background:#482719;color:#fff;font:700 11px inherit;cursor:pointer}.ibr-field.has-error input,.ibr-input-with-icon.has-error{border-color:#b75445;box-shadow:0 0 0 2px #b7544514}.ibr-field-error{display:block;margin-top:4px;color:#a84437;font-size:10px;line-height:1.25}.ibr-address-error{margin:5px 0 0 27px}
 @media(max-width:1200px){.ibr-card-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.ibr-payment-grid{grid-template-columns:1fr}.ibr-card-fields{grid-template-columns:1fr}}
 
@@ -55,3 +55,72 @@
 .ibr-stepper button:hover{background:#fcf8f3}
 .ibr-stepper button:focus-visible{outline:2px solid #8d5e48;outline-offset:-2px}
 .ibr-stepper strong{text-align:center;font-size:12px;font-weight:600;white-space:nowrap}
+
+/* Direct-open review calendar: same month grid interaction as the approved public review. */
+.ibr-date-layout{display:grid;grid-template-columns:1fr;gap:12px;width:100%}
+.ibr-calendar{min-width:0;padding:14px;border:1px solid #e3dfda;border-radius:8px;background:#fffdfb}
+.ibr-calendar>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;color:#302923}
+.ibr-calendar>header strong{font-size:14px}
+.ibr-calendar>header button{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:#302923;cursor:pointer}
+.ibr-calendar>header button:hover:not(:disabled){background:#f4ede5}
+.ibr-calendar>header button:disabled{color:#c7c0b8;cursor:not-allowed}
+.ibr-calendar-week,.ibr-calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;text-align:center}
+.ibr-calendar-week{margin-bottom:5px;color:#82776e;font-size:10px;font-weight:700}
+.ibr-calendar-days>span{height:31px}
+.ibr-calendar-days button{position:relative;display:grid;place-items:center;height:31px;padding:0;border:0;border-radius:6px;background:transparent;color:#3f3a35;font:600 11px inherit;cursor:pointer}
+.ibr-calendar-days button:hover:not(:disabled){background:#f4ede5}
+.ibr-calendar-days button.selected{background:#171613;color:#fff;font-weight:800}
+.ibr-calendar-days button.muted{color:#c7c0b8;cursor:not-allowed}
+.ibr-calendar-dot{position:absolute;bottom:3px;left:50%;width:3px;height:3px;border-radius:50%;background:#c7a884;transform:translateX(-50%)}
+.ibr-calendar-quick-dates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px}
+.ibr-calendar-quick-dates button{display:flex;align-items:center;justify-content:space-between;gap:4px;min-width:0;padding:7px 8px;border:1px solid #e3dfda;border-radius:6px;background:#fff;color:#4f4741;text-align:left;cursor:pointer}
+.ibr-calendar-quick-dates button.selected{border-color:#7a4a22;background:#f8f0e7}
+.ibr-calendar-quick-dates button>span{display:grid;gap:2px;min-width:0}
+.ibr-calendar-quick-dates strong{font-size:10px;white-space:nowrap}
+.ibr-calendar-quick-dates small{color:#82776e;font-size:9px;white-space:nowrap}
+.ibr-calendar-quick-dates svg{flex:none;color:#7b422b}
+.ibr-date-side{display:grid;align-content:start;gap:10px}
+.ibr-date-side .ibr-input-with-icon{min-height:38px;box-sizing:border-box}
+
+/* Completion is a real popup with booking details and optional post-booking services. */
+.ibr-completion-launcher{padding:0}
+.ibr-completion-backdrop{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:20px;background:#211812aa;backdrop-filter:blur(5px);overflow:auto}
+.ibr-completion-modal{position:relative;width:min(620px,100%);max-height:calc(100vh - 40px);overflow:auto;padding:28px 30px 24px;border:1px solid #eadfd5;border-radius:16px;background:#fffdfb;box-shadow:0 24px 80px #21181242;text-align:left}
+.ibr-completion-close{position:absolute;top:14px;right:15px;display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid #e5dbd1;border-radius:50%;background:#fff;color:#5e4334;font-size:20px;line-height:1;cursor:pointer}
+.ibr-completion-close:hover{background:#f6eee7}
+.ibr-success-icon{display:grid;place-items:center;width:48px;height:48px;margin:0 auto 12px;border-radius:50%;background:#e8f5e9;color:#4c9d5c}
+.ibr-completion-modal>.ey,.ibr-completion-modal>h1,.ibr-completion-modal>.ibr-success-lede{text-align:center}
+.ibr-completion-modal>.ey{margin:0;color:#9a7358;font-size:10px;font-weight:800;letter-spacing:.12em}
+.ibr-completion-modal h1{margin:5px 0 7px;color:#302923;font:700 28px/1.1 Georgia,serif;letter-spacing:-.04em}
+.ibr-success-lede{margin:0;color:#6f6761;font-size:12px;line-height:1.45}
+.ibr-completion-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:20px;padding:14px;border:1px solid #eee5dd;border-radius:10px;background:#fff}
+.ibr-completion-details>div{display:grid;gap:3px;min-width:0}
+.ibr-completion-details span,.ibr-completion-section-kicker{color:#a1846e;font-size:9px;font-weight:800;letter-spacing:.1em}
+.ibr-completion-details strong{overflow:hidden;color:#302923;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.ibr-completion-detail-wide{grid-column:1/-1}
+.ibr-completion-upsells{margin-top:16px;padding:15px;border:1px solid #eadfd5;border-radius:10px;background:#faf5ef}
+.ibr-completion-upsells h2{margin:3px 0 3px;color:#302923;font:700 17px/1.1 Georgia,serif}
+.ibr-completion-upsells>div:first-child p{margin:0;color:#756b63;font-size:11px}
+.ibr-completion-service-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.ibr-completion-service{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px;min-width:0;padding:9px 10px;border:1px solid #e3d8ce;border-radius:8px;background:#fff}
+.ibr-completion-service.is-selected{border-color:#7b5039;background:#fffaf5;box-shadow:0 0 0 1px #7b503922}
+.ibr-completion-service .ibr-service-toggle{min-width:0}
+.ibr-completion-service .ibr-service-toggle strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ibr-completion-service .ibr-service-toggle small{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ibr-completion-service .ibr-service-quantity{gap:5px}
+.ibr-completion-service .ibr-service-quantity button{width:22px;height:22px}
+.ibr-save-upsells{margin-top:12px}
+.ibr-completion-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.ibr-completion-actions button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 12px;border:0;border-radius:7px;background:#482719;color:#fff;font:700 12px inherit;cursor:pointer}
+.ibr-completion-actions button.secondary{border:1px solid #d8c9bd;background:#fff;color:#59311f}
+.ibr-completion-actions button.tertiary{grid-column:1/-1;min-height:34px;background:transparent;color:#765541}
+@media(max-width:620px){.ibr-date-layout{grid-template-columns:1fr}.ibr-completion-backdrop{align-items:start;padding:10px}.ibr-completion-modal{max-height:calc(100vh - 20px);padding:24px 16px 16px}.ibr-completion-service-grid{grid-template-columns:1fr}.ibr-completion-actions{grid-template-columns:1fr}.ibr-completion-actions button.tertiary{grid-column:auto}}
+
+
+/* Optional agent-entered first-cleaning total. */
+.ibr-custom-price{display:grid;gap:6px;margin-top:13px;padding:11px;border:1px solid #e3dfda;border-radius:7px;background:#fffdfb;color:#4f4741;font-size:11px;font-weight:700}
+.ibr-custom-price>span{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ibr-custom-price em{color:#82776e;font-style:normal;font-weight:500}
+.ibr-custom-price input{width:100%;height:35px;padding:0 10px;border:1px solid #dcd8d3;border-radius:6px;background:#fff;color:#312a25;font:500 12px inherit;outline:none;box-sizing:border-box}
+.ibr-custom-price input:focus{border-color:#8d5e48;box-shadow:0 0 0 2px #8d5e4816}
+.ibr-custom-price small{color:#82776e;font-size:10px;font-weight:500;line-height:1.35}

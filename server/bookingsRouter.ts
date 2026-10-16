@@ -127,6 +127,7 @@ const internalPublicBookingInputSchema = z.object({
       condition: z.number().int().min(1).max(10),
       maidCount: z.number().int().min(1).max(4),
       hourCount: z.number().int().min(1).max(8),
+      customPriceCents: z.number().int().min(1).max(1_000_000).optional(),
       extras: z
         .array(
           z.object({
@@ -244,6 +245,8 @@ async function persistPreparedBooking(
   options: {
     createAtomicPaymentProfile?: boolean;
     paymentMethod?: "card" | "cashapp" | "invoice";
+    funnelSource?: "book-page" | "customer-booking-link" | "internal";
+    bookingSource?: PreparedNativeBooking["source"] | "customer-booking-link";
     bookedByAgentId?: number;
     bookedByAgentName?: string;
     companyNotes?: string | null;
@@ -251,6 +254,8 @@ async function persistPreparedBooking(
 ) {
   const result = await persistCanonicalBooking(db, prepared, {
     paymentMethod: options.paymentMethod,
+    funnelSource: options.funnelSource,
+    bookingSource: options.bookingSource,
     bookedByAgentId: options.bookedByAgentId,
     bookedByAgentName: options.bookedByAgentName,
     companyNotes: options.companyNotes,
@@ -457,6 +462,8 @@ export const bookingsRouter = router({
         const persisted = await persistPreparedBooking(db, built.prepared, {
           createAtomicPaymentProfile: true,
           paymentMethod: input.paymentMethod,
+          funnelSource: "internal",
+          bookingSource: "popup",
           bookedByAgentId: ctx.agent.agentId,
           bookedByAgentName: ctx.agent.agentName,
           companyNotes: input.companyNotes,

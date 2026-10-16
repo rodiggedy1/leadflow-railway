@@ -18,6 +18,7 @@ const Book = lazy(() => import("./pages/Book"));
 const BookWidget = lazy(() => import("./pages/BookWidget"));
 const BookNow = lazy(() => import("./pages/BookNow"));
 const CustomerBookingLinkReview = lazy(() => import("./pages/CustomerBookingLinkReview"));
+const InternalBookingReview = lazy(() => import("./pages/InternalBookingReview"));
 const CustomerBookingLinkLive = lazy(() => import("./pages/CustomerBookingLinkLive"));
 const CustomerBookingLinksAdmin = lazy(() => import("./pages/CustomerBookingLinksAdmin"));
 const CustomerPortal = lazy(() => import("./pages/CustomerPortal"));
@@ -90,6 +91,7 @@ const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));
 const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
 const AiActionsControlCenter = lazy(() => import("./pages/AiActionsControlCenter"));
+const LeadflowIntelligenceReview = lazy(() => import("./pages/LeadflowIntelligenceReview"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -190,6 +192,10 @@ function AiActionsControlCenterRoute() {
   return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/review/ai-actions"><AiActionsControlCenter /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function LeadflowIntelligenceReviewRoute() {
+  return <ReviewWorkspaceFrame navActivePath="/review/leadflow-intelligence"><LeadflowIntelligenceReview /></ReviewWorkspaceFrame>;
+}
+
 function AdminPayrollSummaryExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>;
 }
@@ -217,8 +223,10 @@ function Router() {
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/review/customer-booking-link"} component={CustomerBookingLinkReview} />
+        <Route path={"/review/internal-booking"} component={InternalBookingReview} />
         <Route path={"/review/ai-team"} component={AiTeamReviewRoute} />
         <Route path={"/review/ai-actions"} component={AiActionsControlCenterRoute} />
+        <Route path={"/review/leadflow-intelligence"} component={LeadflowIntelligenceReviewRoute} />
         <Route path={"/book/:token"} component={CustomerBookingLinkLive} />
         <Route path={"/my-home"} component={CustomerPortal} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />

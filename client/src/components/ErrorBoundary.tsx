@@ -21,6 +21,19 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error) {
+    const message = `${error.name}: ${error.message}`;
+    const isStaleDynamicImport =
+      message.includes("Failed to fetch dynamically imported module") ||
+      message.includes("Importing a module script failed");
+    const recoveryKey = "leadflow-stale-chunk-recovery";
+
+    if (isStaleDynamicImport && !sessionStorage.getItem(recoveryKey)) {
+      sessionStorage.setItem(recoveryKey, "1");
+      window.location.reload();
+    }
+  }
+
   render() {
     if (this.state.hasError) {
       return (
