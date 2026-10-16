@@ -435,7 +435,7 @@ export const bookingFunnelRouter = router({
       if (!existing || !verifyBookingFunnelMutationToken(ENV.cookieSecret, input.mutationToken, existing.publicFunnelNumber, existing.idempotencyKey)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Booking record not found." });
       }
-      if (existing.stage === "booked" || (existing.stage === "payment_incomplete" && existing.bookingId)) {
+      if (existing.stage === "payment_incomplete" || existing.stage === "booked") {
         return {
           publicFunnelNumber: existing.publicFunnelNumber,
           mutationToken: input.mutationToken,
@@ -444,68 +444,15 @@ export const bookingFunnelRouter = router({
           created: false,
         };
       }
-      if (existing.stage !== "lead" && existing.stage !== "payment_incomplete") {
-        throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_STAGE_CONFLICT" });
-      }
+      if (existing.stage !== "lead") throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_STAGE_CONFLICT" });
       if (existing.version !== input.expectedVersion) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });
       const patch = normalizedPatchOrThrow(input.patch);
-      const candidate = { ...existing, ...patch };
-      if (
-        !candidate.customerEmail ||
-        !candidate.serviceId ||
-        candidate.bedrooms === null ||
-        candidate.bathrooms === null ||
-        !Array.isArray(candidate.extras) ||
-        !candidate.address ||
-        !candidate.requestedLocalDate ||
-        !candidate.requestedLocalTime ||
-        !candidate.recurrence ||
-        !candidate.pricingVersion ||
-        candidate.firstCleaningTotalCents === null ||
-        !isPublicBookingPriceSnapshot(candidate.priceSnapshot)
-      ) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Complete the reservation details before reserving." });
-      }
-      const built = buildPreparedCanonicalBooking({
-        idempotencyKey: existing.idempotencyKey,
-        surface: existing.source === "book-page" ? "full_page" : "popup",
-        customer: {
-          fullName: candidate.customerName,
-          phone: candidate.customerPhone,
-          email: candidate.customerEmail,
-        },
-        service: {
-          serviceId: candidate.serviceId as "standard" | "deep" | "moveout",
-          bedrooms: candidate.bedrooms,
-          bathrooms: candidate.bathrooms,
-          extras: candidate.extras as Array<{ id: string; quantity: number }>,
-          specialRequestNotes: Array.isArray(candidate.specialRequestNotes) ? candidate.specialRequestNotes : [],
-        },
-        address: candidate.address,
-        requestedSchedule: {
-          localDate: candidate.requestedLocalDate,
-          localTime: candidate.requestedLocalTime,
-        },
-        recurrence: candidate.recurrence as "one-time" | "weekly" | "biweekly" | "monthly",
-        acceptedPricing: {
-          version: PUBLIC_BOOKING_PRICING_VERSION,
-          totalCents: candidate.firstCleaningTotalCents,
-        },
-        pricing: candidate.priceSnapshot.input,
-      }, { nowMs: Date.now(), timeZone: candidate.requestedTimeZone ?? "America/New_York" });
-      if (built.type === "price_changed") {
-        throw new TRPCError({ code: "CONFLICT", message: "The quoted price changed. Please review your booking." });
-      }
-      const persisted = await persistCanonicalBooking(db, built.prepared, {
-        funnelRecordId: existing.id,
-        initialBookingStatus: "pending_payment",
-      });
       const result = await db
         .update(bookingFunnelRecords)
-        .set({ ...patch, bookingId: persisted.bookingId, stage: "payment_incomplete", version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
+        .set({ ...patch, stage: "payment_incomplete", version: sql`${bookingFunnelRecords.version} + 1`, updatedAt: new Date() })
         .where(and(
           eq(bookingFunnelRecords.id, existing.id),
-          eq(bookingFunnelRecords.stage, existing.stage),
+          eq(bookingFunnelRecords.stage, "lead"),
           eq(bookingFunnelRecords.version, input.expectedVersion),
         ));
       if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "BOOKING_FUNNEL_VERSION_CONFLICT" });

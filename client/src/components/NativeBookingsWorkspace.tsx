@@ -857,6 +857,9 @@ export default function NativeBookingsWorkspace({
         };
       });
     const scheduledRows = [
+      ...funnelRows.filter(
+        row => row.status !== "lead" && !isCancelledBookingStatus(row.status)
+      ),
       ...bookingRows,
       ...importedRows,
     ]
@@ -1290,7 +1293,7 @@ export default function NativeBookingsWorkspace({
           <button
             type="button"
             className="bookings-new-booking"
-            onClick={() => window.location.assign("/review/internal-booking")}
+            onClick={() => setNewBookingOpen(true)}
           >
             <Plus />
             New booking

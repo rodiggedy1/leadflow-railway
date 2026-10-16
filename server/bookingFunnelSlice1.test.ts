@@ -89,13 +89,12 @@ describe("native booking funnel slice 1", () => {
     expect(sharedSource).toContain("customerPhone:");
     expect(routerSource).toContain("verifyBookingFunnelMutationToken");
     expect(routerSource).toContain("normalizedPatchOrThrow(input.patch)");
-    expect(routerSource).toContain('existing.stage === "booked" || (existing.stage === "payment_incomplete" && existing.bookingId)');
-    expect(routerSource).toContain('if (existing.stage !== "lead" && existing.stage !== "payment_incomplete")');
+    expect(routerSource).toContain('existing.stage === "payment_incomplete" || existing.stage === "booked"');
+    expect(routerSource).toContain('if (existing.stage !== "lead")');
     expect(routerSource).toContain('stage: "payment_incomplete"');
     expect(routerSource).toContain("...patch");
-    expect(routerSource).toContain("buildPreparedCanonicalBooking");
-    expect(routerSource).toContain("persistCanonicalBooking");
     expect(routerSource).toContain("eq(bookingFunnelRecords.version, input.expectedVersion)");
+    expect(routerSource).not.toContain("prepareNativeBooking");
     expect(routerSource).not.toContain("stripePaymentMethod");
   });
 
@@ -107,10 +106,10 @@ describe("native booking funnel slice 1", () => {
     expect(streamSource).toContain("onBookingFunnelUpdate?: () => void");
     expect(streamSource).toContain('case "booking_funnel_update"');
     expect(routerSource).toContain('if (created) broadcastOpsUpdate("booking_funnel_update")');
-    expect(routerSource.match(/broadcastOpsUpdate\("booking_funnel_update"\)/g)).toHaveLength(8);
+    expect(routerSource.match(/broadcastOpsUpdate\("booking_funnel_update"\)/g)).toHaveLength(4);
     expect(routerSource).toContain('if (created && input.portalLeadCard)');
     expect(routerSource.indexOf('if (affectedRows(result) !== 1')).toBeLessThan(routerSource.indexOf('broadcastOpsUpdate("booking_funnel_update")', routerSource.indexOf('update: publicProcedure')));
-    expect(routerSource.indexOf('existing.stage === "booked" || (existing.stage === "payment_incomplete" && existing.bookingId)')).toBeLessThan(routerSource.lastIndexOf('broadcastOpsUpdate("booking_funnel_update")'));
+    expect(routerSource.indexOf('existing.stage === "payment_incomplete" || existing.stage === "booked"')).toBeLessThan(routerSource.lastIndexOf('broadcastOpsUpdate("booking_funnel_update")'));
   });
 
   it("registers one checksum-locked, additive-only create-table migration", () => {
