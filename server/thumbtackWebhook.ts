@@ -85,6 +85,64 @@ export interface ThumbTackZapierPayload {
   details?: string;
   message?: string;
   job_description?: string;
+  native_requested_dates?: string;
+  native_property_type?: string;
+  native_extras?: string[];
+}
+
+/**
+ * Native Thumbtack self-service webhook payload. This is intentionally adapted
+ * into the existing Zapier-shaped contract so both sources share one lifecycle.
+ */
+export interface ThumbTackNativePayload {
+  event?: { eventType?: string; webhookID?: string; triggeredAt?: string };
+  data?: {
+    negotiationID?: string;
+    customer?: { firstName?: string; lastName?: string; phone?: string };
+    request?: {
+      category?: string | { name?: string };
+      description?: string;
+      location?: { city?: string; state?: string; zipCode?: string } | string;
+      details?: Array<{ question?: string; answer?: string }>;
+    };
+  };
+}
+
+export function normalizeNativeThumbTackPayload(body: ThumbTackNativePayload): ThumbTackZapierPayload {
+  const data = body.data ?? {};
+  const customer = data.customer ?? {};
+  const request = data.request ?? {};
+  const category = typeof request.category === "string" ? request.category : request.category?.name;
+  const location = typeof request.location === "string"
+    ? request.location
+    : [request.location?.city, request.location?.state, request.location?.zipCode].filter(Boolean).join(", ");
+  const detailText = (request.details ?? [])
+    .map((detail) => [detail.question, detail.answer].filter(Boolean).join(": "))
+    .filter(Boolean)
+    .join("\n");
+  const detailAnswer = (question: string) => request.details?.find((detail) => detail.question?.toLowerCase().includes(question))?.answer;
+  const description = [request.description, detailText, location ? `Location: ${location}` : ""]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    customer_name: [customer.firstName, customer.lastName].filter(Boolean).join(" ") || undefined,
+    customer_phone: customer.phone,
+    lead_id: data.negotiationID,
+    service_name: category,
+    location,
+    request_description: description,
+    native_requested_dates: detailAnswer("schedul") ?? undefined,
+    native_property_type: detailAnswer("property") ?? detailAnswer("home type") ?? undefined,
+    native_extras: (request.details ?? [])
+      .filter((detail) => /extra|anything else|special|pet/i.test(detail.question ?? ""))
+      .map((detail) => detail.answer)
+      .filter((answer): answer is string => Boolean(answer?.trim())),
+  };
+}
+
+export async function handleNativeThumbTackLead(body: ThumbTackNativePayload): Promise<void> {
+  await handleThumbTackLead(normalizeNativeThumbTackPayload(body));
 }
 
 /**
@@ -424,6 +482,14 @@ export async function handleThumbTackLead(body: ThumbTackZapierPayload): Promise
       leadName: name,
       leadPhone: normalizedPhone,
       serviceType,
+      location: body.location ?? null,
+      requestedDates: body.native_requested_dates ?? null,
+      propertyType: body.native_property_type ?? null,
+      extras: body.native_extras ?? [],
+      bedrooms: extracted.bedrooms,
+      bathrooms: extracted.bathrooms,
+      frequency: extracted.frequency,
+      summary: extracted.summary,
       size: sizeDisplay,
       price,
       utmSource: "thumbtack",

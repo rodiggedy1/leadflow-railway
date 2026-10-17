@@ -7,6 +7,7 @@ import {
   AudioLines,
   Bell,
   CalendarClock,
+  CalendarDays,
   CarFront,
   Check,
   ChevronDown,
@@ -14,8 +15,11 @@ import {
   CircleCheck,
   CircleDot,
   CircleDollarSign,
+  ClipboardList,
+  Copy,
   Heart,
   Headphones,
+  Home,
   MapPin,
   Mail,
   Loader2,
@@ -96,6 +100,16 @@ type CommandLead = {
   priceLabel: string | null;
   ts: number;
   queue: "web" | "incoming";
+  serviceType: string | null;
+  location: string | null;
+  requestedDates: string | null;
+  bedrooms: string | null;
+  bathrooms: string | null;
+  rooms: string | null;
+  propertyType: string | null;
+  frequency: string | null;
+  extras: string[];
+  summary: string | null;
 };
 
 type ConfirmationReplyAlert = {
@@ -414,10 +428,20 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   const phone = getText("leadPhone").trim() || null;
   const address = getText("serviceAddress").trim() || getText("address").trim() || null;
   const claimedBy = getText("claimedBy").trim() || null;
+  const serviceType = getText("serviceType").trim() || null;
+  const location = getText("location").trim() || address;
+  const requestedDates = getText("requestedDates").trim() || getText("requestedDate").trim() || null;
+  const bedrooms = getText("bedrooms").trim() || null;
+  const bathrooms = getText("bathrooms").trim() || null;
+  const rooms = getText("rooms").trim() || null;
+  const propertyType = getText("propertyType").trim() || null;
+  const frequency = getText("frequency").trim() || null;
+  const extras = Array.isArray(metadata.extras) ? metadata.extras.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+  const summary = getText("summary").trim() || getText("description").trim() || null;
   const rawSessionId = metadata.sessionId;
   const parsedSessionId = typeof rawSessionId === "number" ? rawSessionId : typeof rawSessionId === "string" && /^\d+$/.test(rawSessionId) ? Number(rawSessionId) : null;
   const sessionId = parsedSessionId !== null && Number.isSafeInteger(parsedSessionId) && parsedSessionId > 0 ? parsedSessionId : null;
-  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web" };
+  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web", serviceType, location, requestedDates, bedrooms, bathrooms, rooms, propertyType, frequency, extras, summary };
 }
 
 function leadHref(lead: CommandLead) {
@@ -445,22 +469,42 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
 function LeadQueue({ title, description, leads, claimPending, onClaim, onOpenSms }: { title: string; description: string; leads: CommandLead[]; claimPending: boolean; onClaim: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [primaryLead, ...remainingLeads] = orderedLeads;
+  const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
+  const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
   return (
     <article className={`ccc-context-card ccc-live-lead-queue ${primaryLead ? "has-leads" : ""}`}>
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
       {primaryLead ? <div className="ccc-live-lead-list">
-        <section className="ccc-live-lead-primary">
+        <section className="ccc-live-lead-primary" role="button" tabIndex={0} onClick={() => setSelectedLead(primaryLead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(primaryLead); } }}>
           <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(primaryLead.name)} alt={`Client portrait illustration for ${primaryLead.name}`} /><span><strong>{primaryLead.name}</strong><small>{primaryLead.queue === "web" ? `Quote requested · ${primaryLead.sourceLabel}` : `${primaryLead.sourceLabel} · ${primaryLead.detail}`}</small><em><i />New inquiry · {formatRelative(primaryLead.ts)}</em></span>{primaryLead.priceLabel && <b>{primaryLead.priceLabel}</b>}</div>
-          {primaryLead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{primaryLead.phone}</span><div><button type="button" aria-label={`Open text conversation with ${primaryLead.name}`} title={primaryLead.sessionId ? "Open text conversation" : "Text conversation is not available yet"} disabled={!primaryLead.sessionId} onClick={() => onOpenSms(primaryLead)}><MessageSquare /></button><a href={`tel:${primaryLead.phone}`} aria-label={`Call ${primaryLead.name}`}><Phone /></a></div></div>}
-          {primaryLead.address && <p className="ccc-live-lead-primary-detail"><MapPin />{primaryLead.address}</p>}
-          <p className="ccc-live-lead-primary-detail"><Sparkles />{primaryLead.detail}</p>
-          <footer><button type="button" className={primaryLead.claimedBy ? "is-claimed" : ""} disabled={Boolean(primaryLead.claimedBy) || claimPending} onClick={() => onClaim(primaryLead)}>{primaryLead.claimedBy ? <><Check />{primaryLead.claimedBy}</> : <><Users />Claim lead</>}</button><a href={leadHref(primaryLead)}>View <ChevronRight /></a></footer>
+          {primaryLead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{primaryLead.phone}</span><div><button type="button" aria-label={`Copy ${primaryLead.name} phone`} title="Copy phone" onClick={(event) => { event.stopPropagation(); copyPhone(primaryLead.phone!); }}><Copy /></button><button type="button" aria-label={`Open text conversation with ${primaryLead.name}`} title={primaryLead.sessionId ? "Open text conversation" : "Text conversation is not available yet"} disabled={!primaryLead.sessionId} onClick={(event) => { event.stopPropagation(); onOpenSms(primaryLead); }}><MessageSquare /></button><a href={`tel:${primaryLead.phone}`} aria-label={`Call ${primaryLead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
+          {primaryLead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{primaryLead.location}</p>}
+          <p className="ccc-live-lead-primary-detail"><Sparkles />{primaryLead.serviceType || primaryLead.detail}</p>
+          <div className="ccc-live-lead-chip-row">{[primaryLead.requestedDates, primaryLead.bedrooms && primaryLead.bathrooms ? `${primaryLead.bedrooms} Bed · ${primaryLead.bathrooms} Bath` : primaryLead.rooms, primaryLead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
+          <footer><button type="button" className={primaryLead.claimedBy ? "is-claimed" : ""} disabled={Boolean(primaryLead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(primaryLead); }}>{primaryLead.claimedBy ? <><Check />{primaryLead.claimedBy}</> : <><Users />Claim lead</>}</button><button type="button" className="ccc-live-lead-view-button" onClick={(event) => { event.stopPropagation(); setSelectedLead(primaryLead); }}>View <ChevronRight /></button></footer>
         </section>
-        {remainingLeads.slice(0, 2).map((lead) => <a href={leadHref(lead)} key={lead.id} className="ccc-live-lead-row"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.phone || lead.detail}</small><em><i />New inquiry · {formatRelative(lead.ts)}</em></span>{lead.claimedBy ? <b>{lead.claimedBy}</b> : lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></a>)}
+        {remainingLeads.slice(0, 2).map((lead) => <button type="button" key={lead.id} className="ccc-live-lead-row" onClick={() => setSelectedLead(lead)}><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.phone || lead.serviceType || lead.detail}</small><em><i />New inquiry · {formatRelative(lead.ts)}</em></span>{lead.claimedBy ? <b>{lead.claimedBy}</b> : lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></button>)}
       </div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
+      {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} claimPending={claimPending} onOpenSms={onOpenSms} onCopyPhone={copyPhone} />}
     </article>
   );
+}
+
+function LeadDetailPanel({ lead, onClose, onClaim, claimPending, onOpenSms, onCopyPhone }: { lead: CommandLead; onClose: () => void; onClaim: (lead: CommandLead) => void; claimPending: boolean; onOpenSms: (lead: CommandLead) => void; onCopyPhone: (phone: string) => void }) {
+  return <div className="ccc-lead-detail-backdrop" role="presentation" onMouseDown={onClose}>
+    <aside className="ccc-lead-detail-panel" role="dialog" aria-modal="true" aria-label={`${lead.name} lead details`} onMouseDown={(event) => event.stopPropagation()}>
+      <header><div><small>LEAD DETAILS</small><h2>{lead.name}</h2><p>{lead.sourceLabel} · {formatRelative(lead.ts)}</p></div><button type="button" aria-label="Close lead details" onClick={onClose}><X /></button></header>
+      <div className="ccc-lead-detail-scroll">
+        <div className="ccc-lead-detail-hero"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><div><strong>{lead.serviceType || lead.detail}</strong><span><i />New inquiry</span></div></div>
+        {lead.phone && <div className="ccc-lead-detail-phone"><div><Phone /><strong>{lead.phone}</strong><small>Customer phone · Provided by {lead.sourceLabel}</small></div><span><button type="button" aria-label="Copy phone" onClick={() => onCopyPhone(lead.phone!)}><Copy /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`}><Phone /></a></span></div>}
+        <div className="ccc-live-lead-chip-row">{[lead.serviceType, lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.propertyType, lead.frequency, ...lead.extras].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
+        <section className="ccc-lead-detail-section"><h3><ClipboardList />Lead info</h3><dl>{lead.location && <><dt><MapPin />Location</dt><dd>{lead.location}</dd></>}{lead.requestedDates && <><dt><CalendarDays />Requested cleaning dates</dt><dd>{lead.requestedDates}</dd></>}{lead.address && lead.address !== lead.location && <><dt><Home />Address</dt><dd>{lead.address}</dd></>}</dl></section>
+        {lead.summary && <section className="ccc-lead-detail-section"><h3><Sparkles />Customer request summary</h3><p className="ccc-lead-detail-summary">{lead.summary}</p></section>}
+      </div>
+      <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim lead</>}</button>{lead.sessionId && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
+    </aside>
+  </div>;
 }
 
 function ServiceAlertPanel({ alerts }: { alerts: ChannelMessage[] }) {
