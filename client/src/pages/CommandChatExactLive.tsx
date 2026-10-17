@@ -468,24 +468,21 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
 
 function LeadQueue({ title, description, leads, claimPending, onClaim, onOpenSms }: { title: string; description: string; leads: CommandLead[]; claimPending: boolean; onClaim: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
-  const [primaryLead, ...remainingLeads] = orderedLeads;
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
+  const renderLeadCard = (lead: CommandLead) => <section className="ccc-live-lead-primary" key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
+    <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em><i />New inquiry · {formatRelative(lead.ts)}</em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
+    {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{lead.phone}</span><div><button type="button" aria-label={`Copy ${lead.name} phone`} title="Copy phone" onClick={(event) => { event.stopPropagation(); copyPhone(lead.phone!); }}><Copy /></button><button type="button" aria-label={`Open text conversation with ${lead.name}`} title={lead.sessionId ? "Open text conversation" : "Text conversation is not available yet"} disabled={!lead.sessionId} onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
+    {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
+    <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
+    <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
+    <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(lead); }}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim lead</>}</button><button type="button" className="ccc-live-lead-view-button" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}>View <ChevronRight /></button></footer>
+  </section>;
   return (
-    <article className={`ccc-context-card ccc-live-lead-queue ${primaryLead ? "has-leads" : ""}`}>
+    <article className={`ccc-context-card ccc-live-lead-queue ${orderedLeads.length ? "has-leads" : ""}`}>
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
-      {primaryLead ? <div className="ccc-live-lead-list">
-        <section className="ccc-live-lead-primary" role="button" tabIndex={0} onClick={() => setSelectedLead(primaryLead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(primaryLead); } }}>
-          <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(primaryLead.name)} alt={`Client portrait illustration for ${primaryLead.name}`} /><span><strong>{primaryLead.name}</strong><small>{primaryLead.queue === "web" ? `Quote requested · ${primaryLead.sourceLabel}` : `${primaryLead.sourceLabel} · ${primaryLead.detail}`}</small><em><i />New inquiry · {formatRelative(primaryLead.ts)}</em></span>{primaryLead.priceLabel && <b>{primaryLead.priceLabel}</b>}</div>
-          {primaryLead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{primaryLead.phone}</span><div><button type="button" aria-label={`Copy ${primaryLead.name} phone`} title="Copy phone" onClick={(event) => { event.stopPropagation(); copyPhone(primaryLead.phone!); }}><Copy /></button><button type="button" aria-label={`Open text conversation with ${primaryLead.name}`} title={primaryLead.sessionId ? "Open text conversation" : "Text conversation is not available yet"} disabled={!primaryLead.sessionId} onClick={(event) => { event.stopPropagation(); onOpenSms(primaryLead); }}><MessageSquare /></button><a href={`tel:${primaryLead.phone}`} aria-label={`Call ${primaryLead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
-          {primaryLead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{primaryLead.location}</p>}
-          <p className="ccc-live-lead-primary-detail"><Sparkles />{primaryLead.serviceType || primaryLead.detail}</p>
-          <div className="ccc-live-lead-chip-row">{[primaryLead.requestedDates, primaryLead.bedrooms && primaryLead.bathrooms ? `${primaryLead.bedrooms} Bed · ${primaryLead.bathrooms} Bath` : primaryLead.rooms, primaryLead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
-          <footer><button type="button" className={primaryLead.claimedBy ? "is-claimed" : ""} disabled={Boolean(primaryLead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(primaryLead); }}>{primaryLead.claimedBy ? <><Check />{primaryLead.claimedBy}</> : <><Users />Claim lead</>}</button><button type="button" className="ccc-live-lead-view-button" onClick={(event) => { event.stopPropagation(); setSelectedLead(primaryLead); }}>View <ChevronRight /></button></footer>
-        </section>
-        {remainingLeads.slice(0, 2).map((lead) => <button type="button" key={lead.id} className="ccc-live-lead-row" onClick={() => setSelectedLead(lead)}><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.phone || lead.serviceType || lead.detail}</small><em><i />New inquiry · {formatRelative(lead.ts)}</em></span>{lead.claimedBy ? <b>{lead.claimedBy}</b> : lead.priceLabel && <b>{lead.priceLabel}</b>}<ChevronRight /></button>)}
-      </div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
+      {orderedLeads.length ? <div className="ccc-live-lead-list">{orderedLeads.map(renderLeadCard)}</div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
       {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} claimPending={claimPending} onOpenSms={onOpenSms} onCopyPhone={copyPhone} />}
     </article>
   );
@@ -508,17 +505,21 @@ function LeadDetailPanel({ lead, onClose, onClaim, claimPending, onOpenSms, onCo
 }
 
 function ServiceAlertPanel({ alerts }: { alerts: ChannelMessage[] }) {
+  const [open, setOpen] = useState(false);
   if (!alerts.length) return null;
-  return <article className="ccc-context-card ccc-live-service-alerts">
-    <header><span><Activity />Service alerts</span><b>{alerts.length}</b></header>
-    <p className="ccc-live-service-alerts-description">Latest field check-in notices</p>
-    <div className="ccc-live-service-alert-scroll" aria-label="Service alert history">
-      {alerts.map((alert) => <div className="ccc-live-service-alert" key={alert.id}>
-        <div><span className={alert.quickAction === "possible_noshow" ? "is-critical" : ""}>{alert.quickAction === "possible_noshow" ? "Possible no-show" : "Overdue check-in"}</span><time>{formatTime(alert.ts)}</time></div>
-        <p>{alert.body}</p>
-      </div>)}
-    </div>
-  </article>;
+  return <div className="ccc-live-service-alert-control">
+    <button type="button" className={open ? "is-open" : ""} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((value) => !value)}><Activity />Alerts <b>{alerts.length}</b></button>
+    {open && <div className="ccc-live-service-alert-popover" role="dialog" aria-label="Service alerts">
+      <header><span><Activity />Service alerts</span><button type="button" aria-label="Close service alerts" onClick={() => setOpen(false)}><X /></button></header>
+      <p>Latest field check-in notices</p>
+      <div className="ccc-live-service-alert-scroll" aria-label="Service alert history">
+        {alerts.map((alert) => <div className="ccc-live-service-alert" key={alert.id}>
+          <div><span className={alert.quickAction === "possible_noshow" ? "is-critical" : ""}>{alert.quickAction === "possible_noshow" ? "Possible no-show" : "Overdue check-in"}</span><time>{formatTime(alert.ts)}</time></div>
+          <p>{alert.body}</p>
+        </div>)}
+      </div>
+    </div>}
+  </div>;
 }
 
 function LoginGate({ onSuccess }: { onSuccess: () => void }) {
@@ -1140,7 +1141,7 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><a href="/admin/leads">Open CRM <ChevronRight /></a></div><LeadQueue title="Web & Quote Form" description="Direct form submissions" leads={webAndQuoteLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /><LeadQueue title="Other Incoming Leads" description="Marketplace and partner inquiries" leads={incomingLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /><ServiceAlertPanel alerts={serviceAlerts} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="Quote Leads" description="Direct form submissions" leads={webAndQuoteLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /><LeadQueue title="Thumbtack Leads" description="Marketplace inquiries · newest first" leads={incomingLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
           </aside>
         </div>
       </section>
