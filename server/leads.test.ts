@@ -135,7 +135,7 @@ describe("leads.list", () => {
 function buildStatsMockDb(
   stageRows: { stage: string; count: number | string }[],
   bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null; leadSource?: string | null }[] = [],
-  contactSessions: { id: number; createdAt: Date; messageHistory: string; quoteSlug?: string | null }[] = [],
+  contactSessions: { id: number; createdAt: Date; leadPhone: string; messageHistory: string; quoteSlug?: string | null }[] = [],
 ) {
   // Stage query chain: select → from → where → groupBy
   const makeStageChain = () => {
@@ -327,11 +327,12 @@ describe("leads.stats", () => {
     expect(result.organic.bookedRevenue).toBe(1063);
   });
 
-  it("counts Engaged from an inbound user reply independently of stage totals", async () => {
+  it("counts any inbound SMS once per normalized lead phone number, independently of stage totals", async () => {
     const fakeRows = [{ stage: "AVAILABILITY", count: 2 }];
     const contactSessions = [
-      { id: 1, createdAt: new Date("2026-03-01T10:00:00Z"), quoteSlug: "lead-one-abc", messageHistory: JSON.stringify([{ role: "assistant", content: "Hello", ts: 1_000 }, { role: "user", content: "Yes", ts: 2_000 }]) },
-      { id: 2, createdAt: new Date("2026-03-01T10:00:00Z"), quoteSlug: null, messageHistory: JSON.stringify([{ role: "assistant", content: "View your quote: https://quote.maidinblack.com/welcome/lead-two?x=1", ts: 1_000 }]) },
+      { id: 1, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+1 (202) 555-0101", quoteSlug: "lead-one-abc", messageHistory: JSON.stringify([{ role: "assistant", content: "Hello", ts: 1_000 }, { role: "user", content: "Yes", ts: 2_000 }]) },
+      { id: 2, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+12025550101", quoteSlug: null, messageHistory: JSON.stringify([{ role: "user", content: "Another message", ts: 3_000 }, { role: "assistant", content: "View your quote: https://quote.maidinblack.com/welcome/lead-two?x=1", ts: 4_000 }]) },
+      { id: 3, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+1 (202) 555-0102", quoteSlug: null, messageHistory: JSON.stringify([{ role: "user", content: "I need a quote", ts: 1_000 }, { role: "assistant", content: "Thanks", ts: 2_000 }]) },
     ];
 
     mockGetDb.mockResolvedValue(buildStatsMockDb(fakeRows, [], contactSessions));
@@ -339,7 +340,7 @@ describe("leads.stats", () => {
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
 
-    expect(result.engagedCount).toBe(1);
+    expect(result.engagedCount).toBe(2);
     expect(result.quotedCount).toBe(2);
     expect(result.byStage.AVAILABILITY).toBe(4);
   });

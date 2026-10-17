@@ -716,6 +716,7 @@ export const appRouter = router({
         const contactSessions = await db!
           .select({
             id: conversationSessions.id,
+            leadPhone: conversationSessions.leadPhone,
             createdAt: conversationSessions.createdAt,
             messageHistory: conversationSessions.messageHistory,
             quoteSlug: conversationSessions.quoteSlug,
@@ -723,7 +724,7 @@ export const appRouter = router({
           .from(conversationSessions)
           .where(conditions ? and(conditions, listVisibilityFilter, hasPhoneFilter) : and(listVisibilityFilter, hasPhoneFilter));
         const contactedSessionIds = new Set<number>();
-        const engagedSessionIds = new Set<number>();
+        const engagedPhoneNumbers = new Set<string>();
         const quotedSessionIds = new Set<number>();
         const contactSessionIds = contactSessions.map(session => session.id);
         if (contactSessionIds.length > 0) {
@@ -743,10 +744,12 @@ export const appRouter = router({
             if (history.some(message => message.role === "assistant" && typeof message.ts === "number" && message.ts >= createdAtMs)) {
               contactedSessionIds.add(session.id);
             }
-            // Engaged uses the existing LeadFlow reply contract: any inbound
-            // customer message marks the session as actively engaged.
+            // Engaged means any inbound SMS from a visible lead number.
+            // Count each normalized phone number once, even when it has multiple
+            // conversation sessions in the reporting window.
             if (history.some(message => message.role === "user")) {
-              engagedSessionIds.add(session.id);
+              const phoneNumber = session.leadPhone.replace(/[^\d]/g, "").slice(-10);
+              if (phoneNumber) engagedPhoneNumbers.add(phoneNumber);
             }
             if (session.quoteSlug?.trim() || history.some(message =>
               message.role === "assistant" && typeof message.content === "string" &&
@@ -759,7 +762,7 @@ export const appRouter = router({
           }
         }
         const contactedCount = contactedSessionIds.size;
-        const engagedCount = engagedSessionIds.size;
+        const engagedCount = engagedPhoneNumbers.size;
         const quotedCount = quotedSessionIds.size;
         return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, engagedCount, quotedCount, revenueBySource, organic, campaign, bookedList, leadList };
       }),
