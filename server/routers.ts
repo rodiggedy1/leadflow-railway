@@ -45,6 +45,7 @@ import { schedulingRouter } from "./schedulingRouter";
 import { leadflowScheduleRouter } from "./leadflowScheduleRouter";
 import { leadflowScheduleCallsRouter } from "./leadflowScheduleCallsRouter";
 import { opsChatRouter } from "./opsChatRouter";
+import { thumbtackLeadRouter } from "./thumbtackLeadRouter";
 import { madisonMovesRouter } from "./madisonsMovesRouter";
 import { madisonRouter } from "./madisonRouter";
 import { aiActionsRouter } from "./aiActionsRouter";
@@ -138,6 +139,7 @@ export const appRouter = router({
   applicantPortal: applicantPortalRouter,
   customerPortalReview: customerPortalReviewRouter,
   leadflowJobs: leadflowJobsRouter,
+  thumbtackLead: thumbtackLeadRouter,
   leadflowConfirmationCalls: leadflowConfirmationCallsRouter,
   cleanerPortalReadOnly: cleanerPortalReadOnlyRouter,
   cleanerPortalProgress: cleanerPortalProgressRouter,

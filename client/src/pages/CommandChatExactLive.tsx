@@ -1,4 +1,4 @@
-import { FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, FormEvent, memo, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CommandChatEmailDetail from "./CommandChatEmailDetail";
 import {
@@ -105,12 +105,33 @@ type CommandLead = {
   requestedDates: string | null;
   bedrooms: string | null;
   bathrooms: string | null;
+  homeSize: string | null;
   rooms: string | null;
   propertyType: string | null;
   frequency: string | null;
   extras: string[];
   summary: string | null;
+  description: string | null;
+  negotiationId: string | null;
+  requestId: string | null;
+  customerId: string | null;
+  category: string | null;
+  categoryId: string | null;
+  pets: string | null;
+  travelPreferences: string[];
+  nativeDetails: Array<{ question?: string; answer?: string }>;
+  proposedTimes: Array<{ start?: string; end?: string }>;
+  status: string | null;
+  leadPrice: string | null;
+  leadPriceBreakdown: unknown;
+  estimate: unknown;
+  createdAt: string | null;
+  requestReviewLink: string | null;
+  refundRequestLink: string | null;
+  attachments: unknown[];
 };
+
+type NativeThumbtackLead = Omit<CommandLead, "id" | "sourceLabel" | "detail" | "claimedBy" | "priceLabel" | "ts" | "queue">;
 
 type ConfirmationReplyAlert = {
   intent: "cancellation" | "unclear";
@@ -441,7 +462,39 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   const rawSessionId = metadata.sessionId;
   const parsedSessionId = typeof rawSessionId === "number" ? rawSessionId : typeof rawSessionId === "string" && /^\d+$/.test(rawSessionId) ? Number(rawSessionId) : null;
   const sessionId = parsedSessionId !== null && Number.isSafeInteger(parsedSessionId) && parsedSessionId > 0 ? parsedSessionId : null;
-  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web", serviceType, location, requestedDates, bedrooms, bathrooms, rooms, propertyType, frequency, extras, summary };
+  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web", serviceType, location, requestedDates, bedrooms, bathrooms, homeSize: null, rooms, propertyType, frequency, extras, summary, description: null, negotiationId: null, requestId: null, customerId: null, category: null, categoryId: null, pets: null, travelPreferences: [], nativeDetails: [], proposedTimes: [], status: null, leadPrice: null, leadPriceBreakdown: null, estimate: null, createdAt: null, requestReviewLink: null, refundRequestLink: null, attachments: [] };
+}
+
+function normalizedLeadPhone(value: string | null) {
+  return value?.replace(/\D/g, "").slice(-10) || "";
+}
+
+function nativeValue(value: unknown) {
+  if (value == null || value === "") return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+}
+
+function mergeNativeThumbtackLead(lead: CommandLead, nativeLeads: NativeThumbtackLead[]) {
+  if (lead.queue !== "incoming") return lead;
+  const leadPhone = normalizedLeadPhone(lead.phone);
+  const leadName = lead.name.trim().toLowerCase();
+  const native = nativeLeads.find((candidate) => (
+    (leadPhone && normalizedLeadPhone(candidate.phone) === leadPhone)
+    || (leadName && candidate.name.trim().toLowerCase() === leadName)
+  ));
+  if (!native) return lead;
+  return {
+    ...lead,
+    ...native,
+    id: lead.id,
+    sourceLabel: "Thumbtack",
+    detail: [native.serviceType, native.homeSize].filter(Boolean).join(" · ") || lead.detail,
+    claimedBy: lead.claimedBy,
+    priceLabel: native.leadPrice ? native.leadPrice : lead.priceLabel,
+    ts: lead.ts,
+    queue: lead.queue,
+  };
 }
 
 function leadHref(lead: CommandLead) {
@@ -495,9 +548,26 @@ function LeadDetailPanel({ lead, onClose, onClaim, claimPending, onOpenSms, onCo
       <div className="ccc-lead-detail-scroll">
         <div className="ccc-lead-detail-hero"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><div><strong>{lead.serviceType || lead.detail}</strong><span><i />New inquiry</span></div></div>
         {lead.phone && <div className="ccc-lead-detail-phone"><div><Phone /><strong>{lead.phone}</strong><small>Customer phone · Provided by {lead.sourceLabel}</small></div><span><button type="button" aria-label="Copy phone" onClick={() => onCopyPhone(lead.phone!)}><Copy /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`}><Phone /></a></span></div>}
-        <div className="ccc-live-lead-chip-row">{[lead.serviceType, lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.propertyType, lead.frequency, ...lead.extras].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
-        <section className="ccc-lead-detail-section"><h3><ClipboardList />Lead info</h3><dl>{lead.location && <><dt><MapPin />Location</dt><dd>{lead.location}</dd></>}{lead.requestedDates && <><dt><CalendarDays />Requested cleaning dates</dt><dd>{lead.requestedDates}</dd></>}{lead.address && lead.address !== lead.location && <><dt><Home />Address</dt><dd>{lead.address}</dd></>}</dl></section>
+        <div className="ccc-live-lead-chip-row">{[lead.serviceType, lead.requestedDates, lead.homeSize || (lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms), lead.propertyType, lead.frequency, lead.status, lead.leadPrice, lead.negotiationId && `Negotiation ${lead.negotiationId}`, ...lead.extras].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
+        <section className="ccc-lead-detail-section"><h3><ClipboardList />Lead info</h3><dl>
+          {lead.negotiationId && <><dt>Negotiation ID</dt><dd>{lead.negotiationId}</dd></>}
+          {lead.requestId && <><dt>Request ID</dt><dd>{lead.requestId}</dd></>}
+          {lead.customerId && <><dt>Customer ID</dt><dd>{lead.customerId}</dd></>}
+          {lead.category && <><dt>Category</dt><dd>{lead.category}{lead.categoryId ? ` (${lead.categoryId})` : ""}</dd></>}
+          {lead.status && <><dt>Status</dt><dd>{lead.status}</dd></>}
+          {lead.leadPrice && <><dt>Thumbtack lead price</dt><dd>{lead.leadPrice}{nativeValue(lead.leadPriceBreakdown) ? ` · ${nativeValue(lead.leadPriceBreakdown)}` : ""}</dd></>}
+          {lead.location && <><dt><MapPin />Location</dt><dd>{lead.location}</dd></>}
+          {lead.address && lead.address !== lead.location && <><dt><Home />Address</dt><dd>{lead.address}</dd></>}
+          {lead.requestedDates && <><dt><CalendarDays />Requested cleaning dates</dt><dd>{lead.requestedDates}</dd></>}
+          {lead.travelPreferences.length > 0 && <><dt>Travel preferences</dt><dd>{lead.travelPreferences.join(", ")}</dd></>}
+          {lead.pets && <><dt>Pets</dt><dd>{lead.pets}</dd></>}
+          {lead.createdAt && <><dt>Thumbtack created at</dt><dd>{new Date(lead.createdAt).toLocaleString()}</dd></>}
+        </dl></section>
         {lead.summary && <section className="ccc-lead-detail-section"><h3><Sparkles />Customer request summary</h3><p className="ccc-lead-detail-summary">{lead.summary}</p></section>}
+        {lead.description && lead.description !== lead.summary && <section className="ccc-lead-detail-section"><h3>Original customer request</h3><p className="ccc-lead-detail-summary">{lead.description}</p></section>}
+        {lead.proposedTimes.length > 0 && <section className="ccc-lead-detail-section"><h3><CalendarDays />Proposed time windows</h3><ul className="ccc-lead-detail-list">{lead.proposedTimes.map((time, index) => <li key={`${time.start}-${time.end}-${index}`}>{time.start ? new Date(time.start).toLocaleString() : ""}{time.end ? ` – ${new Date(time.end).toLocaleString()}` : ""}</li>)}</ul></section>}
+        {lead.nativeDetails.length > 0 && <section className="ccc-lead-detail-section"><h3>All Thumbtack request fields</h3><dl>{lead.nativeDetails.map((detail, index) => <Fragment key={`${detail.question}-${index}`}><dt>{detail.question || "Request detail"}</dt><dd>{detail.answer || "—"}</dd></Fragment>)}</dl></section>}
+        {(lead.estimate || lead.attachments.length > 0 || lead.requestReviewLink || lead.refundRequestLink) && <section className="ccc-lead-detail-section"><h3>Native payload references</h3><dl>{lead.estimate && <><dt>Estimate</dt><dd>{nativeValue(lead.estimate)}</dd></>}{lead.attachments.length > 0 && <><dt>Attachments</dt><dd>{nativeValue(lead.attachments)}</dd></>}{lead.requestReviewLink && <><dt>Review link</dt><dd><a href={lead.requestReviewLink} target="_blank" rel="noreferrer">Open Thumbtack review</a></dd></>}{lead.refundRequestLink && <><dt>Refund link</dt><dd><a href={lead.refundRequestLink} target="_blank" rel="noreferrer">Open refund request</a></dd></>}</dl></section>}
       </div>
       <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim lead</>}</button>{lead.sessionId && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
     </aside>
@@ -632,6 +702,11 @@ export default function CommandChatExactLive() {
     { channel },
     { enabled: isAuthenticated, refetchInterval: 30_000, refetchIntervalInBackground: false },
   );
+  const { data: nativeThumbtackLeads = [] } = trpc.thumbtackLead.listNative.useQuery(undefined, {
+    enabled: isAuthenticated,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
   const { playSound, muted: notifMuted } = useNotificationSound();
   const { isLeader: isNotifLeader } = useTabLeader();
   const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: isAuthenticated, refetchInterval: 30_000 });
@@ -805,7 +880,9 @@ export default function CommandChatExactLive() {
     ))),
     [pendingOutgoingMessages, rootMessages],
   );
-  const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null), [rootMessages]);
+  const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage)
+    .filter((lead): lead is CommandLead => lead !== null)
+    .map((lead) => mergeNativeThumbtackLead(lead, nativeThumbtackLeads as NativeThumbtackLead[])), [nativeThumbtackLeads, rootMessages]);
   const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
   const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
   const serviceAlerts = useMemo(
