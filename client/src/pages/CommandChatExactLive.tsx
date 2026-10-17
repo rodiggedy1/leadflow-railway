@@ -614,7 +614,7 @@ function LeadDetailPanel({ lead, onClose, onClaim, claimPending, bookingPending,
         {lead.nativeDetails.length > 0 && <section className="ccc-lead-detail-section"><h3>All Thumbtack request fields</h3><dl>{lead.nativeDetails.map((detail, index) => <Fragment key={`${detail.question}-${index}`}><dt>{detail.question || "Request detail"}</dt><dd>{detail.answer || "—"}</dd></Fragment>)}</dl></section>}
         {(lead.estimate || lead.attachments.length > 0 || lead.requestReviewLink || lead.refundRequestLink) && <section className="ccc-lead-detail-section"><h3>Native payload references</h3><dl>{lead.estimate && <><dt>Estimate</dt><dd>{nativeValue(lead.estimate)}</dd></>}{lead.attachments.length > 0 && <><dt>Attachments</dt><dd>{nativeValue(lead.attachments)}</dd></>}{lead.requestReviewLink && <><dt>Review link</dt><dd><a href={lead.requestReviewLink} target="_blank" rel="noreferrer">Open Thumbtack review</a></dd></>}{lead.refundRequestLink && <><dt>Refund link</dt><dd><a href={lead.refundRequestLink} target="_blank" rel="noreferrer">Open refund request</a></dd></>}</dl></section>}
       </div>
-      <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={() => onMarkBooked(lead)}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button>{lead.sessionId && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
+      <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={() => onMarkBooked(lead)}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button>{lead.phone && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
     </aside>
   </div>;
 }
@@ -712,6 +712,7 @@ export default function CommandChatExactLive() {
   const [bookingAmount, setBookingAmount] = useState("");
   const [bookingNote, setBookingNote] = useState("");
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
+  const [selectedLeadCardPhone, setSelectedLeadCardPhone] = useState<string | null>(null);
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
@@ -738,6 +739,7 @@ export default function CommandChatExactLive() {
     if (selectedEmailThreadId) {
       setMadisonOpen(false);
       setSelectedSmsConversation(null);
+      setSelectedLeadCardPhone(null);
     }
   }, [selectedEmailThreadId]);
 
@@ -1038,12 +1040,13 @@ export default function CommandChatExactLive() {
       (lead.sessionId !== null && conversation.id === lead.sessionId)
       || (lead.phone && normalizedLeadPhone(conversation.leadPhone) === normalizedLeadPhone(lead.phone))
     ));
-    if (!inboxConversation && !lead.sessionId) {
+    if (!inboxConversation && !lead.phone) {
       showNotice("A Command Chat text conversation is not available for this lead yet.");
       return;
     }
+    setSelectedLeadCardPhone(lead.phone);
     setSelectedSmsConversation(inboxConversation ?? {
-      id: lead.sessionId!,
+      id: lead.sessionId ?? 0,
       leadName: lead.name,
       leadPhone: lead.phone,
       lastMessageText: null,
@@ -1274,7 +1277,7 @@ export default function CommandChatExactLive() {
                   {visibleEmailInbox.map((thread) => <EmailInboxRow thread={thread} key={thread.threadId} onOpen={() => setSelectedEmailThreadId(thread.threadId)} />)}
                   {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
                 </div> : <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
-                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => setSelectedSmsConversation(conversation)} />)}
+                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedSmsConversation(conversation); }} />)}
                   {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
                 </div>}
               </div>
@@ -1287,7 +1290,7 @@ export default function CommandChatExactLive() {
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
               <div className="ccc-message-stream" ref={messageStreamRef} onScroll={trackCommandFeedScroll}>
-                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} teamSmsConversations={teamSmsConversations} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={setSelectedSmsConversation} />
+                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedSmsConversation(conversation); }} />
               </div>
               {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
               <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
@@ -1309,7 +1312,7 @@ export default function CommandChatExactLive() {
           </aside>
         </div>
       </section>
-      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} onClose={() => setSelectedSmsConversation(null)} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} onNotice={showNotice} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); }} />}
       {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
@@ -1843,7 +1846,7 @@ function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; o
   </div>;
 }
 
-function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; onClose: () => void }) {
+function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, onNotice, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; onNotice: (message: string) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
   const utils = trpc.useUtils();
   const isTeamConversation = conversation.personType === "team";
   const contextPhone = conversation.leadPhone || "0000000";
@@ -2030,9 +2033,25 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
     },
   });
+  const sendWorkspaceMessage = trpc.leads.sendWorkspaceMessage.useMutation({
+    onSuccess: (result, variables) => {
+      setDraft("");
+      scrollAfterSendRef.current = true;
+      setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now() }]);
+      void utils.commandCenter.listCommandChatInbox.invalidate();
+      void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
+      if (leadCardPhone && result.sessionId > 0) onSessionResolved(result.sessionId);
+      if (!result.success) onNotice("Message was not sent.");
+    },
+    onError: (error) => onNotice(error.message || "Message could not be sent."),
+  });
   const submit = () => {
     const message = draft.trim();
     if (!message) return;
+    if (leadCardPhone) {
+      sendWorkspaceMessage.mutate({ phone: leadCardPhone, message, name: conversation.leadName ?? undefined });
+      return;
+    }
     sendReply.mutate({
       sessionId: conversation.id,
       message,
@@ -2054,7 +2073,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     <footer>
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
       {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></article>}
-      <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+      <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
   </aside></div>;
 }
