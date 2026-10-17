@@ -12,6 +12,7 @@ import {
   bookings,
   customerPortalServiceRequests,
   cleanerProfiles,
+  conversationSessions,
   leadflowJobs,
   schedulingTeams,
 } from "../drizzle/schema";
@@ -54,6 +55,7 @@ import {
 } from "./bookingUpsellEngine";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import { normalizePhone } from "./utils/phone";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import {
   NATIVE_BOOKING_OPERATIONAL_ORIGIN,
@@ -366,6 +368,7 @@ export const bookingsRouter = router({
       .select({
         status: bookings.status,
         customerName: bookings.customerName,
+        customerPhone: bookings.customerPhone,
         bookedByAgentName: bookings.bookedByAgentName,
         totalCents: bookings.firstCleaningTotalCents,
       })
@@ -376,16 +379,47 @@ export const bookingsRouter = router({
           lt(bookings.createdAt, startOfTomorrow)
         )
       );
-    const activeRows = rows.filter((row) => !["cancelled", "canceled"].includes(row.status));
-    return {
-      bookedCount: activeRows.length,
-      bookedRevenue: activeRows.reduce((sum, row) => sum + Math.round(Number(row.totalCents ?? 0) / 100), 0),
-      bookingDetails: activeRows.map((row) => ({
-        customerName: row.customerName,
-        bookedByAgentName: row.bookedByAgentName,
-        totalCents: row.totalCents,
-      })),
-    };
+      const activeRows = rows.filter((row) => !["cancelled", "canceled"].includes(row.status));
+      const sessionRows = await db
+        .select({
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+          bookedByAgentName: conversationSessions.bookedByAgentName,
+          bookedAmount: conversationSessions.bookedAmount,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.isBooked, 1),
+            gte(conversationSessions.bookedAt, startOfToday),
+            lt(conversationSessions.bookedAt, startOfTomorrow)
+          )
+        );
+      const seenPhones = new Set<string>();
+      const bookingDetails = [
+        ...activeRows.map((row) => ({
+          customerName: row.customerName,
+          bookedByAgentName: row.bookedByAgentName,
+          totalCents: row.totalCents,
+          phone: normalizePhone(row.customerPhone),
+        })),
+        ...sessionRows.map((row) => ({
+          customerName: row.leadName,
+          bookedByAgentName: row.bookedByAgentName,
+          totalCents: row.bookedAmount == null ? null : Math.round(Number(row.bookedAmount) * 100),
+          phone: normalizePhone(row.leadPhone),
+        })),
+      ].filter((row) => {
+        const phone = row.phone || `unknown:${row.customerName ?? "customer"}`;
+        if (seenPhones.has(phone)) return false;
+        seenPhones.add(phone);
+        return true;
+      });
+      return {
+        bookedCount: bookingDetails.length,
+        bookedRevenue: bookingDetails.reduce((sum, row) => sum + Math.round(Number(row.totalCents ?? 0) / 100), 0),
+        bookingDetails: bookingDetails.map(({ customerName, bookedByAgentName, totalCents }) => ({ customerName, bookedByAgentName, totalCents })),
+      };
   }),
   getPublicWidgetConfig: publicProcedure.query(async () => {
     const db = await getDb();

@@ -53,6 +53,15 @@ function metadataSessionId(metadata: string | null): number | null {
   }
 }
 
+function metadataClaimedBy(metadata: string | null): string | null {
+  try {
+    const value = (JSON.parse(metadata ?? "{}") as Record<string, unknown>).claimedBy;
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export const thumbtackLeadRouter = router({
   listNative: opsChatProcedure.query(async () => {
     const db = await getDb();
@@ -96,13 +105,15 @@ export const thumbtackLeadRouter = router({
         } catch { return false; }
       });
       const linkedSessionId = linkedMessage ? metadataSessionId(linkedMessage.metadata) : null;
+      const linkedClaimedBy = linkedMessage ? metadataClaimedBy(linkedMessage.metadata) : null;
       const sessionRows = phone
         ? (await db.execute(sql`
-            SELECT id FROM conversation_sessions
+            SELECT id, isBooked, bookedByAgentName FROM conversation_sessions
             WHERE leadPhone LIKE ${`%${phone.replace(/[^0-9]/g, "").slice(-10)}`}
             ORDER BY id DESC LIMIT 1
-          `) as any)[0] as Array<{ id: number }>
+          `) as any)[0] as Array<{ id: number; isBooked: number; bookedByAgentName: string | null }>
         : [];
+      const linkedSession = sessionRows[0] ?? null;
       leads.push({
         negotiationId,
         requestId: request.requestID ?? null,
@@ -133,9 +144,11 @@ export const thumbtackLeadRouter = router({
         requestReviewLink: data?.requestReviewLink ?? null,
         refundRequestLink: data?.refundRequestLink ?? null,
         attachments: request.attachments ?? [],
-        sessionId: linkedSessionId ?? sessionRows[0]?.id ?? null,
+        sessionId: linkedSessionId ?? linkedSession?.id ?? null,
         messageId: linkedMessage?.id ?? null,
-        claimedBy: null,
+        claimedBy: linkedClaimedBy,
+        isBooked: linkedSession?.isBooked === 1,
+        bookedByAgentName: linkedSession?.bookedByAgentName ?? null,
       });
     }
     return leads;

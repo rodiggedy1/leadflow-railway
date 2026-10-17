@@ -97,6 +97,8 @@ type CommandLead = {
   phone: string | null;
   address: string | null;
   claimedBy: string | null;
+  isBooked: boolean;
+  bookedByAgentName: string | null;
   priceLabel: string | null;
   ts: number;
   queue: "web" | "incoming";
@@ -132,7 +134,7 @@ type CommandLead = {
   messageId: number | null;
 };
 
-type NativeThumbtackLead = Omit<CommandLead, "id" | "sourceLabel" | "detail" | "claimedBy" | "priceLabel" | "ts" | "queue">;
+type NativeThumbtackLead = Omit<CommandLead, "id" | "sourceLabel" | "detail" | "priceLabel" | "ts" | "queue">;
 
 type ConfirmationReplyAlert = {
   intent: "cancellation" | "unclear";
@@ -469,7 +471,7 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   const rawSessionId = metadata.sessionId;
   const parsedSessionId = typeof rawSessionId === "number" ? rawSessionId : typeof rawSessionId === "string" && /^\d+$/.test(rawSessionId) ? Number(rawSessionId) : null;
   const sessionId = parsedSessionId !== null && Number.isSafeInteger(parsedSessionId) && parsedSessionId > 0 ? parsedSessionId : null;
-  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web", serviceType, location, requestedDates, bedrooms, bathrooms, homeSize: null, rooms, propertyType, frequency, extras, summary, description: null, negotiationId: null, requestId: null, customerId: null, category: null, categoryId: null, pets: null, travelPreferences: [], nativeDetails: [], proposedTimes: [], status: null, leadPrice: null, leadPriceBreakdown: null, estimate: null, createdAt: null, requestReviewLink: null, refundRequestLink: null, attachments: [], messageId: null };
+  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, isBooked: false, bookedByAgentName: null, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web", serviceType, location, requestedDates, bedrooms, bathrooms, homeSize: null, rooms, propertyType, frequency, extras, summary, description: null, negotiationId: null, requestId: null, customerId: null, category: null, categoryId: null, pets: null, travelPreferences: [], nativeDetails: [], proposedTimes: [], status: null, leadPrice: null, leadPriceBreakdown: null, estimate: null, createdAt: null, requestReviewLink: null, refundRequestLink: null, attachments: [], messageId: null };
 }
 
 function normalizedLeadPhone(value: string | null) {
@@ -529,7 +531,7 @@ function nativeLeadToCommandLead(native: NativeThumbtackLead): CommandLead {
     id: native.messageId ?? fallbackId,
     sourceLabel: "Thumbtack",
     detail: [native.serviceType, native.homeSize].filter(Boolean).join(" · ") || "New inquiry",
-    claimedBy: null,
+    claimedBy: native.claimedBy,
     priceLabel: native.leadPrice,
     ts: native.createdAt ? Date.parse(native.createdAt) : Date.now(),
     queue: "incoming",
@@ -554,9 +556,12 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
   return photoUrl ? <img className={className} src={photoUrl} alt={`${name} profile`} /> : <span className={className}>{initials(name)}</span>;
 }
 
-function LeadQueue({ title, description, leads, claimPending, onClaim, onOpenSms }: { title: string; description: string; leads: CommandLead[]; claimPending: boolean; onClaim: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
+function LeadQueue({ title, description, leads, claimPending, bookingPending, onClaim, onMarkBooked, onOpenSms }: { title: string; description: string; leads: CommandLead[]; claimPending: boolean; bookingPending: boolean; onClaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
+  useEffect(() => {
+    setSelectedLead((current) => current ? leads.find((lead) => lead.id === current.id) ?? current : current);
+  }, [leads]);
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
   const renderLeadCard = (lead: CommandLead) => <section className="ccc-live-lead-primary" key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
     <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em><i />New inquiry · {formatRelative(lead.ts)}</em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
@@ -564,19 +569,19 @@ function LeadQueue({ title, description, leads, claimPending, onClaim, onOpenSms
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
     <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
-    <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(lead); }}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim lead</>}</button><button type="button" className="ccc-live-lead-view-button" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}>View <ChevronRight /></button></footer>
+    <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(lead); }}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim lead</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={(event) => { event.stopPropagation(); onMarkBooked(lead); }}>{lead.isBooked ? <><Check />Booked{lead.bookedByAgentName ? ` · ${lead.bookedByAgentName}` : ""}</> : "Mark booked"}</button><button type="button" className="ccc-live-lead-view-button" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}>View <ChevronRight /></button></footer>
   </section>;
   return (
     <article className={`ccc-context-card ccc-live-lead-queue ${orderedLeads.length ? "has-leads" : ""}`}>
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
       {orderedLeads.length ? <div className="ccc-live-lead-list">{orderedLeads.map(renderLeadCard)}</div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
-      {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} claimPending={claimPending} onOpenSms={onOpenSms} onCopyPhone={copyPhone} />}
+      {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} claimPending={claimPending} bookingPending={bookingPending} onMarkBooked={onMarkBooked} onOpenSms={onOpenSms} onCopyPhone={copyPhone} />}
     </article>
   );
 }
 
-function LeadDetailPanel({ lead, onClose, onClaim, claimPending, onOpenSms, onCopyPhone }: { lead: CommandLead; onClose: () => void; onClaim: (lead: CommandLead) => void; claimPending: boolean; onOpenSms: (lead: CommandLead) => void; onCopyPhone: (phone: string) => void }) {
+function LeadDetailPanel({ lead, onClose, onClaim, claimPending, bookingPending, onMarkBooked, onOpenSms, onCopyPhone }: { lead: CommandLead; onClose: () => void; onClaim: (lead: CommandLead) => void; claimPending: boolean; bookingPending: boolean; onMarkBooked: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void; onCopyPhone: (phone: string) => void }) {
   return <div className="ccc-lead-detail-backdrop" role="presentation" onMouseDown={onClose}>
     <aside className="ccc-lead-detail-panel" role="dialog" aria-modal="true" aria-label={`${lead.name} lead details`} onMouseDown={(event) => event.stopPropagation()}>
       <header><div><small>LEAD DETAILS</small><h2>{lead.name}</h2><p>{lead.sourceLabel} · {formatRelative(lead.ts)}</p></div><button type="button" aria-label="Close lead details" onClick={onClose}><X /></button></header>
@@ -604,7 +609,7 @@ function LeadDetailPanel({ lead, onClose, onClaim, claimPending, onOpenSms, onCo
         {lead.nativeDetails.length > 0 && <section className="ccc-lead-detail-section"><h3>All Thumbtack request fields</h3><dl>{lead.nativeDetails.map((detail, index) => <Fragment key={`${detail.question}-${index}`}><dt>{detail.question || "Request detail"}</dt><dd>{detail.answer || "—"}</dd></Fragment>)}</dl></section>}
         {(lead.estimate || lead.attachments.length > 0 || lead.requestReviewLink || lead.refundRequestLink) && <section className="ccc-lead-detail-section"><h3>Native payload references</h3><dl>{lead.estimate && <><dt>Estimate</dt><dd>{nativeValue(lead.estimate)}</dd></>}{lead.attachments.length > 0 && <><dt>Attachments</dt><dd>{nativeValue(lead.attachments)}</dd></>}{lead.requestReviewLink && <><dt>Review link</dt><dd><a href={lead.requestReviewLink} target="_blank" rel="noreferrer">Open Thumbtack review</a></dd></>}{lead.refundRequestLink && <><dt>Refund link</dt><dd><a href={lead.refundRequestLink} target="_blank" rel="noreferrer">Open refund request</a></dd></>}</dl></section>}
       </div>
-      <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim lead</>}</button>{lead.sessionId && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
+      <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim lead</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={() => onMarkBooked(lead)}>{lead.isBooked ? <><Check />Booked{lead.bookedByAgentName ? ` · ${lead.bookedByAgentName}` : ""}</> : "Mark booked"}</button>{lead.sessionId && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
     </aside>
   </div>;
 }
@@ -879,6 +884,7 @@ export default function CommandChatExactLive() {
   const setReminder = trpc.opsChat.setReminder.useMutation({ onSuccess: () => { setModal(null); setReminderBody(""); showNotice("Reminder scheduled."); } });
   const pinNote = trpc.opsChat.pinNote.useMutation({ onSuccess: () => { setModal(null); setPinBody(""); void utils.opsChat.getChannelPin.invalidate({ channel }); } });
   const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: () => { setModal(null); setBookingPerson(""); setBookingAmount(""); setBookingNote(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); } });
+  const markLeadBookedMutation = trpc.agents.markBooked.useMutation();
   const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
     onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),
@@ -915,13 +921,28 @@ export default function CommandChatExactLive() {
     ))),
     [pendingOutgoingMessages, rootMessages],
   );
-  const commandLeads = useMemo(() => {
+  const rawCommandLeads = useMemo(() => {
     const parsedLeads = rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null);
     const nativeLeads = nativeThumbtackLeads as NativeThumbtackLead[];
     const nativeCards = nativeThumbtackLoading ? [] : nativeLeads.map(nativeLeadToCommandLead);
     const nonThumbtackLegacyLeads = parsedLeads.filter((lead) => lead.queue !== "incoming" || lead.sourceLabel.trim().toLowerCase() !== "thumbtack");
     return [...nonThumbtackLegacyLeads, ...nativeCards];
   }, [nativeThumbtackLeads, nativeThumbtackLoading, rootMessages]);
+  const commandLeadSessionIds = useMemo(
+    () => rawCommandLeads.map((lead) => lead.sessionId).filter((id): id is number => id !== null),
+    [rawCommandLeads],
+  );
+  const { data: leadSessionStatuses = [] } = trpc.opsChat.getLeadSessionStatuses.useQuery(
+    { sessionIds: commandLeadSessionIds },
+    { enabled: isAuthenticated && commandLeadSessionIds.length > 0, refetchInterval: 30_000, refetchIntervalInBackground: false },
+  );
+  const commandLeads = useMemo(() => {
+    const statusById = new Map(leadSessionStatuses.map((status) => [status.id, status]));
+    return rawCommandLeads.map((lead) => {
+      const status = lead.sessionId ? statusById.get(lead.sessionId) : undefined;
+      return status ? { ...lead, isBooked: status.isBooked, bookedByAgentName: status.bookedByAgentName } : lead;
+    });
+  }, [leadSessionStatuses, rawCommandLeads]);
   const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
   const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
   const serviceAlerts = useMemo(
@@ -988,6 +1009,26 @@ export default function CommandChatExactLive() {
     if (lead.claimedBy || claimCommandLead.isPending) return;
     claimCommandLead.mutate({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}) });
   }, [claimCommandLead, claimCommandLead.isPending]);
+  const markLeadBookedFromQueue = useCallback(async (lead: CommandLead) => {
+    if (lead.isBooked || !lead.sessionId || markLeadBookedMutation.isPending) return;
+    let marked = false;
+    try {
+      await markLeadBookedMutation.mutateAsync({ sessionId: lead.sessionId });
+      marked = true;
+      void utils.bookings.todayStats.invalidate();
+      void utils.opsChat.getLeadSessionStatuses.invalidate({ sessionIds: commandLeadSessionIds });
+      void utils.thumbtackLead.listNative.invalidate();
+      await announceBooking.mutateAsync({
+        channel: "command",
+        personName: lead.name,
+        ...(lead.priceLabel ? { amount: lead.priceLabel } : {}),
+        authorName: profile?.name || callerName,
+      });
+      showNotice(`${lead.name} marked as booked and announced.`);
+    } catch (error) {
+      showNotice(marked ? "Lead marked booked, but the Command Chat announcement failed." : error instanceof Error ? `Booking update failed: ${error.message}` : "Booking update failed.");
+    }
+  }, [announceBooking, callerName, commandLeadSessionIds, markLeadBookedMutation, profile?.name, showNotice, utils]);
   const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
     const inboxConversation = smsInbox.find((conversation) => (
       (lead.sessionId !== null && conversation.id === lead.sessionId)
@@ -1260,7 +1301,7 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="Quote Leads" description="Direct form submissions" leads={webAndQuoteLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /><LeadQueue title="Thumbtack Leads" description="Marketplace inquiries · newest first" leads={incomingLeads} claimPending={claimCommandLead.isPending} onClaim={claimLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="Quote Leads" description="Direct form submissions" leads={webAndQuoteLeads} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onClaim={claimLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /><LeadQueue title="Thumbtack Leads" description="Marketplace inquiries · newest first" leads={incomingLeads} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onClaim={claimLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
           </aside>
         </div>
       </section>
