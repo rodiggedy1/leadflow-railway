@@ -126,8 +126,9 @@ describe("leads.list", () => {
  *   calls 1-2 → organic/campaign stage-count queries (select → from → where → groupBy)
  *   calls 3-5 → booked-rows queries (select → from → where)
  *   call 6 → lead-list query (select → from → where → orderBy)
- *   call 7 → Contacted/Engaged session query (select → from → where)
- *   call 8 → outgoing-call query (select → from → where)
+ *   call 7 → persisted quote-lead query (select → from → where)
+ *   call 8 → Contacted/Engaged session query (select → from → where)
+ *   call 9 → outgoing-call query (select → from → where)
  *
  * For simplicity in tests, all stage queries return the same stageRows and
  * all booked queries return the same bookedRows.
@@ -136,6 +137,7 @@ function buildStatsMockDb(
   stageRows: { stage: string; count: number | string }[],
   bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null; leadSource?: string | null }[] = [],
   contactSessions: { id: number; createdAt: Date; leadPhone: string; messageHistory: string; quoteSlug?: string | null }[] = [],
+  quoteLeadRows: { phone: string }[] = [],
 ) {
   // Stage query chain: select → from → where → groupBy
   const makeStageChain = () => {
@@ -172,15 +174,24 @@ function buildStatsMockDb(
     if (callCount <= 2) return makeStageChain();
     // calls 3, 4, 5 are booked breakdown queries
     if (callCount <= 5) return makeBookedChain();
-    // call 6 is the lead list; call 7 is the Contacted/Engaged session query
+    // call 6 is the lead list; call 7 is the persisted quote-lead query
     if (callCount === 6) return makeLeadListChain();
     if (callCount === 7) {
+      const mockWhere = vi.fn().mockResolvedValue(quoteLeadRows);
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      return { from: mockFrom };
+    }
+    // call 8 is the Contacted/Engaged session query
+    if (callCount === 8) {
       const mockWhere = vi.fn().mockResolvedValue(contactSessions);
       const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
       return { from: mockFrom };
     }
-    // call 8 is the outgoing-call query
-    return makeEmptyRowsChain();
+    // call 9 is the outgoing-call query; call 10 is the cross-session response query
+    if (callCount === 9) return makeEmptyRowsChain();
+    const mockWhere = vi.fn().mockResolvedValue(contactSessions);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    return { from: mockFrom };
   });
 
   return { select: mockSelect } as never;
@@ -329,17 +340,23 @@ describe("leads.stats", () => {
 
   it("counts any inbound SMS once per normalized lead phone number, independently of stage totals", async () => {
     const fakeRows = [{ stage: "AVAILABILITY", count: 2 }];
+    const quoteLeadRows = [
+      { phone: "+1 (202) 555-0103" },
+      { phone: "+12025550103" },
+      { phone: "+1 (202) 555-0104" },
+    ];
     const contactSessions = [
-      { id: 1, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+1 (202) 555-0101", quoteSlug: "lead-one-abc", messageHistory: JSON.stringify([{ role: "assistant", content: "Hello", ts: 1_000 }, { role: "user", content: "Yes", ts: 2_000 }]) },
-      { id: 2, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+12025550101", quoteSlug: null, messageHistory: JSON.stringify([{ role: "user", content: "Another message", ts: 3_000 }, { role: "assistant", content: "View your quote: https://quote.maidinblack.com/welcome/lead-two?x=1", ts: 4_000 }]) },
-      { id: 3, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+1 (202) 555-0102", quoteSlug: null, messageHistory: JSON.stringify([{ role: "user", content: "I need a quote", ts: 1_000 }, { role: "assistant", content: "Thanks", ts: 2_000 }]) },
+      { id: 1, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+1 (202) 555-0101", quoteSlug: "lead-one-abc", messageHistory: JSON.stringify([{ role: "assistant", content: "Hello", ts: Date.parse("2026-03-01T10:01:00Z") }, { role: "user", content: "Yes", ts: Date.parse("2026-03-01T10:02:00Z") }]) },
+      { id: 2, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+12025550101", quoteSlug: null, messageHistory: JSON.stringify([{ role: "user", content: "Another message", ts: Date.parse("2026-03-01T10:03:00Z") }, { role: "assistant", content: "View your quote: https://quote.maidinblack.com/welcome/lead-two?x=1", ts: Date.parse("2026-03-01T10:04:00Z") }]) },
+      { id: 3, createdAt: new Date("2026-03-01T10:00:00Z"), leadPhone: "+1 (202) 555-0102", quoteSlug: null, messageHistory: JSON.stringify([{ role: "user", content: "I need a quote", ts: Date.parse("2026-03-01T10:01:00Z") }, { role: "assistant", content: "Thanks", ts: Date.parse("2026-03-01T10:02:00Z") }]) },
     ];
 
-    mockGetDb.mockResolvedValue(buildStatsMockDb(fakeRows, [], contactSessions));
+    mockGetDb.mockResolvedValue(buildStatsMockDb(fakeRows, [], contactSessions, quoteLeadRows));
 
     const caller = appRouter.createCaller(createPublicContext());
-    const result = await caller.leads.stats();
+    const result = await caller.leads.stats({ dateFrom: "2026-03-01", dateTo: "2026-03-31" });
 
+    expect(result.contactedCount).toBe(2);
     expect(result.engagedCount).toBe(2);
     expect(result.quotedCount).toBe(2);
     expect(result.byStage.AVAILABILITY).toBe(4);

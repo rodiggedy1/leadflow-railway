@@ -9,7 +9,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns, reactivationContacts, reactivationCampaigns } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns, reactivationContacts, reactivationCampaigns, bookingFunnelRecords } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -709,6 +709,19 @@ export const appRouter = router({
           isBooked: r.isBooked === 1,
         }));
 
+        // Quoted is based on persisted quote submissions, not conversation
+        // stage names or message-history URL text. Count each real customer
+        // phone once in the selected reporting window.
+        const quoteLeadRows = await db!
+          .select({ phone: quoteLeads.phone })
+          .from(quoteLeads)
+          .where(buildQuoteLeadDateConditions(input?.dateFrom, input?.dateTo));
+        const quotedPhoneNumbers = new Set<string>();
+        for (const quoteLead of quoteLeadRows) {
+          const phoneNumber = quoteLead.phone.replace(/[^\d]/g, "").slice(-10);
+          if (phoneNumber.length === 10) quotedPhoneNumbers.add(phoneNumber);
+        }
+
         // Contacted is event-backed, not an inferred remainder of the funnel.
         // A session counts once when it has either an outbound SMS in its stored
         // history or an outgoing OpenPhone call linked to that session. Only
@@ -723,9 +736,14 @@ export const appRouter = router({
           })
           .from(conversationSessions)
           .where(conditions ? and(conditions, listVisibilityFilter, hasPhoneFilter) : and(listVisibilityFilter, hasPhoneFilter));
+        const reportToMs = input?.dateTo
+          ? new Date(`${input.dateTo}T23:59:59.999Z`).getTime()
+          : Date.now();
+        const reportFromMs = input?.dateFrom
+          ? new Date(`${input.dateFrom}T00:00:00.000Z`).getTime()
+          : reportToMs - (30 * 24 * 60 * 60 * 1000);
         const contactedSessionIds = new Set<number>();
-        const engagedPhoneNumbers = new Set<string>();
-        const quotedSessionIds = new Set<number>();
+        const contactedPhoneNumbers = new Set<string>();
         const contactSessionIds = contactSessions.map(session => session.id);
         if (contactSessionIds.length > 0) {
           const outgoingCalls = await db!
@@ -741,29 +759,50 @@ export const appRouter = router({
           try {
             const history: Array<{ role?: string; content?: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
             const createdAtMs = new Date(session.createdAt).getTime();
-            if (history.some(message => message.role === "assistant" && typeof message.ts === "number" && message.ts >= createdAtMs)) {
+            const wasContacted = history.some(message =>
+              message.role === "assistant" &&
+              typeof message.ts === "number" &&
+              message.ts >= createdAtMs &&
+              message.ts >= reportFromMs &&
+              message.ts <= reportToMs
+            ) || contactedSessionIds.has(session.id);
+            if (wasContacted) {
               contactedSessionIds.add(session.id);
-            }
-            // Engaged means any inbound SMS from a visible lead number.
-            // Count each normalized phone number once, even when it has multiple
-            // conversation sessions in the reporting window.
-            if (history.some(message => message.role === "user")) {
               const phoneNumber = session.leadPhone.replace(/[^\d]/g, "").slice(-10);
-              if (phoneNumber) engagedPhoneNumbers.add(phoneNumber);
-            }
-            if (session.quoteSlug?.trim() || history.some(message =>
-              message.role === "assistant" && typeof message.content === "string" &&
-              message.content.includes("quote.maidinblack.com/welcome/")
-            )) {
-              quotedSessionIds.add(session.id);
+              if (phoneNumber) contactedPhoneNumbers.add(phoneNumber);
             }
           } catch {
             // Invalid message history is excluded rather than guessed.
           }
         }
-        const contactedCount = contactedSessionIds.size;
+        // Engaged means a phone number LeadFlow contacted that later sent an
+        // inbound SMS. The response may be persisted in a separate cs-inbound
+        // session, so match across all dated real-phone sessions by phone.
+        const engagedPhoneNumbers = new Set<string>();
+        if (contactedPhoneNumbers.size > 0) {
+          const responseSessions = await db!
+            .select({ leadPhone: conversationSessions.leadPhone, messageHistory: conversationSessions.messageHistory })
+            .from(conversationSessions)
+            .where(hasPhoneFilter);
+          for (const session of responseSessions) {
+            const phoneNumber = session.leadPhone.replace(/[^\d]/g, "").slice(-10);
+            if (!phoneNumber || !contactedPhoneNumbers.has(phoneNumber)) continue;
+            try {
+              const history: Array<{ role?: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
+              if (history.some(message =>
+                message.role === "user" &&
+                typeof message.ts === "number" &&
+                message.ts >= reportFromMs &&
+                message.ts <= reportToMs
+              )) engagedPhoneNumbers.add(phoneNumber);
+            } catch {
+              // Invalid message history cannot prove a response.
+            }
+          }
+        }
+        const contactedCount = contactedPhoneNumbers.size;
         const engagedCount = engagedPhoneNumbers.size;
-        const quotedCount = quotedSessionIds.size;
+        const quotedCount = quotedPhoneNumbers.size;
         return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, engagedCount, quotedCount, revenueBySource, organic, campaign, bookedList, leadList };
       }),
 
@@ -8553,6 +8592,37 @@ function buildDateConditions(dateFrom?: string, dateTo?: string) {
   }
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
+
+function buildQuoteLeadDateConditions(dateFrom?: string, dateTo?: string) {
+  const conditions = [];
+  if (dateFrom) {
+    const midnightUtc = new Date(dateFrom + "T00:00:00.000Z");
+    const from = new Date(midnightUtc.getTime() - estOffsetMs(midnightUtc));
+    conditions.push(gte(quoteLeads.createdAt, from));
+  }
+  if (dateTo) {
+    const endUtc = new Date(dateTo + "T23:59:59.999Z");
+    const to = new Date(endUtc.getTime() - estOffsetMs(endUtc));
+    conditions.push(lte(quoteLeads.createdAt, to));
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+function buildBookingFunnelDateConditions(dateFrom?: string, dateTo?: string) {
+  const conditions = [];
+  if (dateFrom) {
+    const midnightUtc = new Date(dateFrom + "T00:00:00.000Z");
+    const from = new Date(midnightUtc.getTime() - estOffsetMs(midnightUtc));
+    conditions.push(gte(bookingFunnelRecords.createdAt, from));
+  }
+  if (dateTo) {
+    const endUtc = new Date(dateTo + "T23:59:59.999Z");
+    const to = new Date(endUtc.getTime() - estOffsetMs(endUtc));
+    conditions.push(lte(bookingFunnelRecords.createdAt, to));
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
 /** Same as buildDateConditions but filters on bookedAt instead of createdAt.
  *  Used for booked-revenue queries so "today" means booked today, not created today.
  */
