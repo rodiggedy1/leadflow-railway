@@ -129,6 +129,7 @@ type CommandLead = {
   requestReviewLink: string | null;
   refundRequestLink: string | null;
   attachments: unknown[];
+  messageId: number | null;
 };
 
 type NativeThumbtackLead = Omit<CommandLead, "id" | "sourceLabel" | "detail" | "claimedBy" | "priceLabel" | "ts" | "queue">;
@@ -462,7 +463,7 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   const rawSessionId = metadata.sessionId;
   const parsedSessionId = typeof rawSessionId === "number" ? rawSessionId : typeof rawSessionId === "string" && /^\d+$/.test(rawSessionId) ? Number(rawSessionId) : null;
   const sessionId = parsedSessionId !== null && Number.isSafeInteger(parsedSessionId) && parsedSessionId > 0 ? parsedSessionId : null;
-  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web", serviceType, location, requestedDates, bedrooms, bathrooms, homeSize: null, rooms, propertyType, frequency, extras, summary, description: null, negotiationId: null, requestId: null, customerId: null, category: null, categoryId: null, pets: null, travelPreferences: [], nativeDetails: [], proposedTimes: [], status: null, leadPrice: null, leadPriceBreakdown: null, estimate: null, createdAt: null, requestReviewLink: null, refundRequestLink: null, attachments: [] };
+  return { id: message.id, sessionId, name, sourceLabel, detail, phone, address, claimedBy, priceLabel, ts: message.ts, queue: isIncoming ? "incoming" : "web", serviceType, location, requestedDates, bedrooms, bathrooms, homeSize: null, rooms, propertyType, frequency, extras, summary, description: null, negotiationId: null, requestId: null, customerId: null, category: null, categoryId: null, pets: null, travelPreferences: [], nativeDetails: [], proposedTimes: [], status: null, leadPrice: null, leadPriceBreakdown: null, estimate: null, createdAt: null, requestReviewLink: null, refundRequestLink: null, attachments: [], messageId: null };
 }
 
 function normalizedLeadPhone(value: string | null) {
@@ -475,13 +476,21 @@ function nativeValue(value: unknown) {
   try { return JSON.stringify(value, null, 2); } catch { return String(value); }
 }
 
+function leadNamesMatch(legacyName: string, nativeName: string) {
+  const legacyParts = legacyName.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  const nativeParts = nativeName.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  if (legacyParts.length < 2 || nativeParts.length < 2) return false;
+  return legacyParts[0] === nativeParts[0]
+    && (legacyParts[1] === nativeParts[1] || legacyParts[1][0] === nativeParts[1][0]);
+}
+
 function mergeNativeThumbtackLead(lead: CommandLead, nativeLeads: NativeThumbtackLead[]) {
   if (lead.queue !== "incoming") return lead;
   const leadPhone = normalizedLeadPhone(lead.phone);
   const leadName = lead.name.trim().toLowerCase();
   const native = nativeLeads.find((candidate) => (
     (leadPhone && normalizedLeadPhone(candidate.phone) === leadPhone)
-    || (leadName && candidate.name.trim().toLowerCase() === leadName)
+    || (leadName && (candidate.name.trim().toLowerCase() === leadName || leadNamesMatch(leadName, candidate.name)))
   ));
   if (!native) return lead;
   return {
@@ -499,6 +508,26 @@ function mergeNativeThumbtackLead(lead: CommandLead, nativeLeads: NativeThumbtac
 
 function leadHref(lead: CommandLead) {
   return lead.sessionId ? `/admin/leads?leadId=${lead.sessionId}` : `/admin/leads?search=${encodeURIComponent(lead.name)}`;
+}
+
+function nativeMatchesLead(lead: CommandLead, native: NativeThumbtackLead) {
+  const phoneMatches = Boolean(normalizedLeadPhone(lead.phone) && normalizedLeadPhone(lead.phone) === normalizedLeadPhone(native.phone));
+  const nameMatches = lead.name.trim().toLowerCase() === native.name.trim().toLowerCase() || leadNamesMatch(lead.name, native.name);
+  return phoneMatches || nameMatches;
+}
+
+function nativeLeadToCommandLead(native: NativeThumbtackLead): CommandLead {
+  const fallbackId = -Math.abs(native.negotiationId.split("").reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0));
+  return {
+    ...native,
+    id: native.messageId ?? fallbackId,
+    sourceLabel: "Thumbtack",
+    detail: [native.serviceType, native.homeSize].filter(Boolean).join(" · ") || "New inquiry",
+    claimedBy: null,
+    priceLabel: native.leadPrice,
+    ts: native.createdAt ? Date.parse(native.createdAt) : Date.now(),
+    queue: "incoming",
+  };
 }
 
 function isHiddenCommandNotification(message: ChannelMessage) {
@@ -702,7 +731,7 @@ export default function CommandChatExactLive() {
     { channel },
     { enabled: isAuthenticated, refetchInterval: 30_000, refetchIntervalInBackground: false },
   );
-  const { data: nativeThumbtackLeads = [] } = trpc.thumbtackLead.listNative.useQuery(undefined, {
+  const { data: nativeThumbtackLeads = [], isLoading: nativeThumbtackLoading } = trpc.thumbtackLead.listNative.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -880,9 +909,13 @@ export default function CommandChatExactLive() {
     ))),
     [pendingOutgoingMessages, rootMessages],
   );
-  const commandLeads = useMemo(() => rootMessages.map(leadFromCommandMessage)
-    .filter((lead): lead is CommandLead => lead !== null)
-    .map((lead) => mergeNativeThumbtackLead(lead, nativeThumbtackLeads as NativeThumbtackLead[])), [nativeThumbtackLeads, rootMessages]);
+  const commandLeads = useMemo(() => {
+    const parsedLeads = rootMessages.map(leadFromCommandMessage).filter((lead): lead is CommandLead => lead !== null);
+    const nativeLeads = nativeThumbtackLeads as NativeThumbtackLead[];
+    const nativeCards = nativeThumbtackLoading ? [] : nativeLeads.map(nativeLeadToCommandLead);
+    const nonThumbtackLegacyLeads = parsedLeads.filter((lead) => lead.queue !== "incoming" || lead.sourceLabel.trim().toLowerCase() !== "thumbtack");
+    return [...nonThumbtackLegacyLeads, ...nativeCards];
+  }, [nativeThumbtackLeads, nativeThumbtackLoading, rootMessages]);
   const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
   const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
   const serviceAlerts = useMemo(
