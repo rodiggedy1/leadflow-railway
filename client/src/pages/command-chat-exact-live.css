@@ -191,3 +191,9 @@
 .ccc-live .ccc-live-lead-primary footer>button:nth-child(2):hover:not(:disabled){border-color:#58b88d;background:#245340;color:#c2f0d7}
 .ccc-lead-detail-panel>footer>button:nth-child(2){border-color:#2d7258;background:#1c3b31;color:#a3e4c6}
 .ccc-lead-detail-panel>footer>button:nth-child(2):hover:not(:disabled){border-color:#58b88d;background:#245340;color:#c2f0d7}
+
+/* Compact claimant identity and details affordance. */
+.ccc-live .ccc-live-lead-primary footer{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 42px}
+.ccc-live .ccc-live-lead-primary footer .ccc-live-lead-claim-pill{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ccc-live .ccc-live-lead-primary footer .ccc-live-lead-view-icon{width:42px;padding:0;border-radius:9px}
+.ccc-live .ccc-live-lead-primary footer .ccc-live-lead-view-icon svg{width:16px;height:16px}
