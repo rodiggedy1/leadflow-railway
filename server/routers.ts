@@ -502,7 +502,7 @@ export const appRouter = router({
         const db = await getDb();
         const emptyBreakdown = { total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
         if (!db) return {
-          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0,
+          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0, engagedCount: 0, quotedCount: 0,
           revenueBySource: { form: 0, widget: 0, reactivation: 0 },
           organic: emptyBreakdown,
           campaign: emptyBreakdown,
@@ -718,10 +718,13 @@ export const appRouter = router({
             id: conversationSessions.id,
             createdAt: conversationSessions.createdAt,
             messageHistory: conversationSessions.messageHistory,
+            quoteSlug: conversationSessions.quoteSlug,
           })
           .from(conversationSessions)
           .where(conditions ? and(conditions, listVisibilityFilter, hasPhoneFilter) : and(listVisibilityFilter, hasPhoneFilter));
         const contactedSessionIds = new Set<number>();
+        const engagedSessionIds = new Set<number>();
+        const quotedSessionIds = new Set<number>();
         const contactSessionIds = contactSessions.map(session => session.id);
         if (contactSessionIds.length > 0) {
           const outgoingCalls = await db!
@@ -735,17 +738,30 @@ export const appRouter = router({
         }
         for (const session of contactSessions) {
           try {
-            const history: Array<{ role?: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
+            const history: Array<{ role?: string; content?: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
             const createdAtMs = new Date(session.createdAt).getTime();
             if (history.some(message => message.role === "assistant" && typeof message.ts === "number" && message.ts >= createdAtMs)) {
               contactedSessionIds.add(session.id);
+            }
+            // Engaged uses the existing LeadFlow reply contract: any inbound
+            // customer message marks the session as actively engaged.
+            if (history.some(message => message.role === "user")) {
+              engagedSessionIds.add(session.id);
+            }
+            if (session.quoteSlug?.trim() || history.some(message =>
+              message.role === "assistant" && typeof message.content === "string" &&
+              message.content.includes("quote.maidinblack.com/welcome/")
+            )) {
+              quotedSessionIds.add(session.id);
             }
           } catch {
             // Invalid message history is excluded rather than guessed.
           }
         }
         const contactedCount = contactedSessionIds.size;
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, revenueBySource, organic, campaign, bookedList, leadList };
+        const engagedCount = engagedSessionIds.size;
+        const quotedCount = quotedSessionIds.size;
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, engagedCount, quotedCount, revenueBySource, organic, campaign, bookedList, leadList };
       }),
 
     /**
