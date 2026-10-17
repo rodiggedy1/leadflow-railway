@@ -33,16 +33,16 @@ export default function LeadflowIntelligenceReview() {
   const booked = Number(stats?.bookedCount ?? 0);
   const bookedRevenue = Number(stats?.bookedRevenue ?? 0);
   const contacted = Number(stats?.contactedCount ?? 0);
+  const engaged = Number(stats?.engagedCount ?? 0);
 
   // These boundaries intentionally mirror the existing Leads/Command Center grouping.
   const stages: Stage[] = useMemo(() => {
-    const engaged = (byStage.AVAILABILITY ?? 0) + (byStage.SLOT_CHOICE ?? 0) + (byStage.TIME_PREF ?? 0);
     const quoted = engaged + (byStage.ADDRESS ?? 0) + (byStage.CONFIRMATION ?? 0) + (byStage.CALL_SCHEDULED ?? 0) + (byStage.BOOKED ?? 0);
     const bookingIntent = (byStage.ADDRESS ?? 0) + (byStage.CONFIRMATION ?? 0) + (byStage.CALL_SCHEDULED ?? 0) + (byStage.BOOKED ?? 0);
     return [
       ["New Leads", total], ["Contacted", contacted], ["Engaged", engaged], ["Quoted", quoted], ["Booking Intent", bookingIntent], ["Booked", booked],
     ].map(([name, value], index) => ({ name: name as string, value: Number(value), color: STAGE_COLORS[index] }));
-  }, [byStage, booked, contacted, total]);
+  }, [byStage, booked, contacted, engaged, total]);
 
   const count = (index: number) => stages[index]?.value ?? 0;
   const conversion = (index: number) => index ? `${(count(index - 1) > 0 ? (count(index) / count(index - 1)) * 100 : 0).toFixed(1)}%` : "Entry";
