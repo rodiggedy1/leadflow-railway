@@ -267,6 +267,12 @@ function formatRelative(value: number) {
   return dateLabel(value);
 }
 
+function formatPhoneDisplay(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const local = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  return local.length === 10 ? `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}` : value;
+}
+
 function dateLabel(value: number) {
   return new Date(value).toLocaleDateString([], { month: "short", day: "numeric" });
 }
@@ -554,7 +560,7 @@ function LeadQueue({ title, description, leads, claimPending, onClaim, onOpenSms
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
   const renderLeadCard = (lead: CommandLead) => <section className="ccc-live-lead-primary" key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
     <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em><i />New inquiry · {formatRelative(lead.ts)}</em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
-    {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{lead.phone}</span><div><button type="button" aria-label={`Copy ${lead.name} phone`} title="Copy phone" onClick={(event) => { event.stopPropagation(); copyPhone(lead.phone!); }}><Copy /></button><button type="button" aria-label={`Open text conversation with ${lead.name}`} title={lead.sessionId ? "Open text conversation" : "Text conversation is not available yet"} disabled={!lead.sessionId} onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
+    {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Copy ${lead.name} phone`} title="Copy phone" onClick={(event) => { event.stopPropagation(); copyPhone(lead.phone!); }}><Copy /></button><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
     <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
@@ -576,7 +582,7 @@ function LeadDetailPanel({ lead, onClose, onClaim, claimPending, onOpenSms, onCo
       <header><div><small>LEAD DETAILS</small><h2>{lead.name}</h2><p>{lead.sourceLabel} · {formatRelative(lead.ts)}</p></div><button type="button" aria-label="Close lead details" onClick={onClose}><X /></button></header>
       <div className="ccc-lead-detail-scroll">
         <div className="ccc-lead-detail-hero"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><div><strong>{lead.serviceType || lead.detail}</strong><span><i />New inquiry</span></div></div>
-        {lead.phone && <div className="ccc-lead-detail-phone"><div><Phone /><strong>{lead.phone}</strong><small>Customer phone · Provided by {lead.sourceLabel}</small></div><span><button type="button" aria-label="Copy phone" onClick={() => onCopyPhone(lead.phone!)}><Copy /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`}><Phone /></a></span></div>}
+        {lead.phone && <div className="ccc-lead-detail-phone"><div><Phone /><strong>{formatPhoneDisplay(lead.phone)}</strong><small>Customer phone · Provided by {lead.sourceLabel}</small></div><span><button type="button" aria-label="Copy phone" onClick={() => onCopyPhone(lead.phone!)}><Copy /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`}><Phone /></a></span></div>}
         <div className="ccc-live-lead-chip-row">{[lead.serviceType, lead.requestedDates, lead.homeSize || (lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms), lead.propertyType, lead.frequency, lead.status, lead.leadPrice, lead.negotiationId && `Negotiation ${lead.negotiationId}`, ...lead.extras].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
         <section className="ccc-lead-detail-section"><h3><ClipboardList />Lead info</h3><dl>
           {lead.negotiationId && <><dt>Negotiation ID</dt><dd>{lead.negotiationId}</dd></>}
