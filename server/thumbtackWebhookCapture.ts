@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
+import { handleNativeThumbTackLead, type ThumbTackNativePayload } from "./thumbtackWebhook";
 
 export type ThumbTackWebhookCapture = {
   eventType: string | null;
@@ -109,8 +110,8 @@ export function summarizeThumbTackWebhook(body: unknown): ThumbTackWebhookCaptur
 }
 
 /**
- * Diagnostic-only endpoint for observing and retaining Thumbtack webhook payloads.
- * It does not create/update LeadFlow records or send messages.
+ * Retains every Thumbtack webhook delivery. NegotiationCreatedV4 deliveries also
+ * trigger the existing Thumbtack lead lifecycle after durable persistence.
  */
 export function registerThumbTackWebhookCaptureRoute(app: Express): void {
   app.get("/api/webhooks/thumbtack-capture/events", async (req, res) => {
@@ -194,9 +195,10 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
     const summary = summarizeThumbTackWebhook(req.body);
     const body = isRecord(req.body) ? req.body : {};
     const eventId = firstStringAtPaths(body, [
-      "data.negotiationID",
-      "data.messageID",
       "event.webhookID",
+      "event.webhookId",
+      "data.messageID",
+      "data.negotiationID",
     ]);
     const eventType = firstStringAtPaths(body, [
       "event.eventType",
@@ -218,6 +220,22 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
       );
       console.log("[ThumbTackCapture] persisted payload summary", JSON.stringify(summary));
       res.status(200).json({ received: true, summary, persisted: true });
+
+      // Native Lead details are now the active Thumbtack trigger. Keep this
+      // after the response so Thumbtack receives a fast acknowledgement, and
+      // only process the full lead event—not message/status notifications.
+      if (eventType === "NegotiationCreatedV4" && eventId) {
+        const prior = await db.execute(
+          sql`SELECT id FROM webhook_events WHERE source = ${"thumbtack"} AND event_id = ${eventId} ORDER BY id ASC LIMIT 2`
+        );
+        const priorRows = (prior as any)[0] as any[];
+        if (priorRows.length === 1) {
+          await handleNativeThumbTackLead(req.body as ThumbTackNativePayload);
+          await db.execute(sql`UPDATE webhook_events SET processed = 1, processed_at = NOW() WHERE id = ${priorRows[0].id}`);
+        } else {
+          console.log(`[ThumbTackCapture] skipped duplicate native lead event ${eventId}`);
+        }
+      }
     } catch (error) {
       console.error("[ThumbTackCapture] failed to persist payload:", error);
       res.status(500).json({ received: false, persisted: false });
