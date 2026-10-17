@@ -1542,6 +1542,21 @@ function StepFinalApproval({
 const DEFAULT_MESSAGE = "Hi {{first_name}}, this is Madison from Maid in Black 😊 We have a few openings near {{area}} this week and wanted to see if you'd like help with a cleaning. Want me to send available times?";
 
 function SmsCampaignsContent() {
+  const cohortBrief = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const labels: Record<string, string> = {
+      "all-new-leads": "All new leads",
+      "contacted-not-responded": "Contacted · not responded",
+      "responded-not-quoted": "Responded · not quoted",
+      "quoted-not-booked": "Quoted · not booked",
+      booked: "Booked",
+    };
+    const cohort = params.get("cohort");
+    const period = params.get("period");
+    return cohort && labels[cohort]
+      ? `${labels[cohort]}${period ? ` · Leads Intelligence window: last ${period} days` : ""}`
+      : null;
+  }, []);
   const [step, setStep] = useState<Step>(1);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [campaignName, setCampaignName] = useState("");
@@ -1783,6 +1798,11 @@ function SmsCampaignsContent() {
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-black text-gray-900" style={{ letterSpacing: "-0.03em" }}>SMS Campaign Command Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Build the safest possible audience before anyone can send anything.</p>
+          {cohortBrief && (
+            <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+              <strong>Leads Intelligence targeting brief:</strong> {cohortBrief}. Build and verify the audience below; the existing consent, opt-out, duplicate, recent-contact, freeze, and approval controls remain authoritative.
+            </div>
+          )}
         </div>
       </div>
 
