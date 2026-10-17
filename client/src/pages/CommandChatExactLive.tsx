@@ -989,13 +989,16 @@ export default function CommandChatExactLive() {
     claimCommandLead.mutate({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}) });
   }, [claimCommandLead, claimCommandLead.isPending]);
   const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
-    if (!lead.sessionId) {
+    const inboxConversation = smsInbox.find((conversation) => (
+      (lead.sessionId !== null && conversation.id === lead.sessionId)
+      || (lead.phone && normalizedLeadPhone(conversation.leadPhone) === normalizedLeadPhone(lead.phone))
+    ));
+    if (!inboxConversation && !lead.sessionId) {
       showNotice("A Command Chat text conversation is not available for this lead yet.");
       return;
     }
-    const inboxConversation = smsInbox.find((conversation) => conversation.id === lead.sessionId);
     setSelectedSmsConversation(inboxConversation ?? {
-      id: lead.sessionId,
+      id: lead.sessionId!,
       leadName: lead.name,
       leadPhone: lead.phone,
       lastMessageText: null,

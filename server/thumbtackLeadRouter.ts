@@ -43,6 +43,16 @@ function namesMatch(left: string, right: string) {
   return a.length >= 2 && b.length >= 2 && a[0] === b[0] && (a[1] === b[1] || a[1][0] === b[1][0]);
 }
 
+function metadataSessionId(metadata: string | null): number | null {
+  try {
+    const value = (JSON.parse(metadata ?? "{}") as Record<string, unknown>).sessionId;
+    const id = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : null;
+    return id && Number.isSafeInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export const thumbtackLeadRouter = router({
   listNative: opsChatProcedure.query(async () => {
     const db = await getDb();
@@ -85,11 +95,11 @@ export const thumbtackLeadRouter = router({
             || (cardName && namesMatch(cardName, [customer.firstName, customer.lastName].filter(Boolean).join(" ")));
         } catch { return false; }
       });
+      const linkedSessionId = linkedMessage ? metadataSessionId(linkedMessage.metadata) : null;
       const sessionRows = phone
         ? (await db.execute(sql`
             SELECT id FROM conversation_sessions
             WHERE leadPhone LIKE ${`%${phone.replace(/[^0-9]/g, "").slice(-10)}`}
-              AND leadSource IN (${"thumbtack"}, ${"thumbtack-sms"})
             ORDER BY id DESC LIMIT 1
           `) as any)[0] as Array<{ id: number }>
         : [];
@@ -123,7 +133,7 @@ export const thumbtackLeadRouter = router({
         requestReviewLink: data?.requestReviewLink ?? null,
         refundRequestLink: data?.refundRequestLink ?? null,
         attachments: request.attachments ?? [],
-        sessionId: sessionRows[0]?.id ?? null,
+        sessionId: linkedSessionId ?? sessionRows[0]?.id ?? null,
         messageId: linkedMessage?.id ?? null,
         claimedBy: null,
       });
