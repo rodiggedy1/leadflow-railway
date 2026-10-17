@@ -17,6 +17,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   Copy,
+  Eye,
   Heart,
   Headphones,
   Home,
@@ -273,6 +274,10 @@ function formatPhoneDisplay(value: string) {
   const digits = value.replace(/\D/g, "");
   const local = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
   return local.length === 10 ? `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}` : value;
+}
+
+function firstName(value: string | null) {
+  return value?.trim().split(/\s+/)[0] || "Claimed";
 }
 
 function dateLabel(value: number) {
@@ -569,7 +574,7 @@ function LeadQueue({ title, description, leads, claimPending, bookingPending, on
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
     <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
-    <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(lead); }}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={(event) => { event.stopPropagation(); onMarkBooked(lead); }}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button><button type="button" className="ccc-live-lead-view-button" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}>View <ChevronRight /></button></footer>
+    <footer><button type="button" className={lead.claimedBy ? "is-claimed ccc-live-lead-claim-pill" : "ccc-live-lead-claim-pill"} title={lead.claimedBy ? `Claimed by ${lead.claimedBy}` : "Claim lead"} aria-label={lead.claimedBy ? `Claimed by ${lead.claimedBy}` : "Claim lead"} disabled={Boolean(lead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(lead); }}>{lead.claimedBy ? <><Check />{firstName(lead.claimedBy)}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={(event) => { event.stopPropagation(); onMarkBooked(lead); }}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button><button type="button" className="ccc-live-lead-view-button ccc-live-lead-view-icon" aria-label={`View details for ${lead.name}`} title="View lead details" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}><Eye /></button></footer>
   </section>;
   return (
     <article className={`ccc-context-card ccc-live-lead-queue ${orderedLeads.length ? "has-leads" : ""}`}>
