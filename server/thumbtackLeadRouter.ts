@@ -37,6 +37,12 @@ function numberFromHomeSize(value: string | null, unit: "bedrooms" | "bathrooms"
   return match?.[1] ?? null;
 }
 
+function namesMatch(left: string, right: string) {
+  const a = left.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  const b = right.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  return a.length >= 2 && b.length >= 2 && a[0] === b[0] && (a[1] === b[1] || a[1][0] === b[1][0]);
+}
+
 export const thumbtackLeadRouter = router({
   listNative: opsChatProcedure.query(async () => {
     const db = await getDb();
@@ -48,6 +54,12 @@ export const thumbtackLeadRouter = router({
       ORDER BY id DESC
       LIMIT 100
     `) as any)[0] as Array<{ raw_payload: string }>;
+    const messageRows = (await db.execute(sql`
+      SELECT id, metadata, sessionId
+      FROM ops_chat_messages
+      WHERE channel = ${"command"} AND quickAction = ${"new_lead"}
+      ORDER BY id DESC LIMIT 500
+    `) as any)[0] as Array<{ id: number; metadata: string | null; sessionId: number | null }>;
     const seen = new Set<string>();
     const leads: Array<Record<string, unknown>> = [];
 
@@ -64,6 +76,15 @@ export const thumbtackLeadRouter = router({
       const location = request.location;
       const homeSize = answer(details, /home size|number of bedrooms|number of bathrooms/i);
       const phone = customer.phone?.trim() || null;
+      const linkedMessage = messageRows.find((message) => {
+        try {
+          const metadata = JSON.parse(message.metadata ?? "{}") as Record<string, unknown>;
+          const cardPhone = typeof metadata.leadPhone === "string" ? metadata.leadPhone : "";
+          const cardName = typeof metadata.leadName === "string" ? metadata.leadName : "";
+          return (phone && cardPhone.replace(/\D/g, "").slice(-10) === phone.replace(/\D/g, "").slice(-10))
+            || (cardName && namesMatch(cardName, [customer.firstName, customer.lastName].filter(Boolean).join(" ")));
+        } catch { return false; }
+      });
       const sessionRows = phone
         ? (await db.execute(sql`
             SELECT id FROM conversation_sessions
@@ -103,6 +124,8 @@ export const thumbtackLeadRouter = router({
         refundRequestLink: data?.refundRequestLink ?? null,
         attachments: request.attachments ?? [],
         sessionId: sessionRows[0]?.id ?? null,
+        messageId: linkedMessage?.id ?? null,
+        claimedBy: null,
       });
     }
     return leads;
