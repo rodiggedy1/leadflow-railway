@@ -134,9 +134,7 @@ describe("leads.list", () => {
  */
 function buildStatsMockDb(
   stageRows: { stage: string; count: number | string }[],
-  bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null; leadSource?: string | null }[] = [],
-  contactSessions: Array<{ id: number; createdAt: Date; messageHistory: string }> = [],
-  callRows: Array<{ sessionId: number; direction: "incoming" | "outgoing"; durationSeconds: number | null; callStartedAt: Date }> = [],
+  bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null; leadSource?: string | null }[] = []
 ) {
   // Stage query chain: select → from → where → groupBy
   const makeStageChain = () => {
@@ -160,8 +158,8 @@ function buildStatsMockDb(
     return { from: mockFrom };
   };
 
-  const makeRowsChain = (rows: unknown[]) => {
-    const mockWhere = vi.fn().mockResolvedValue(rows);
+  const makeEmptyRowsChain = () => {
+    const mockWhere = vi.fn().mockResolvedValue([]);
     const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
     return { from: mockFrom };
   };
@@ -173,10 +171,9 @@ function buildStatsMockDb(
     if (callCount <= 2) return makeStageChain();
     // calls 3, 4, 5 are booked breakdown queries
     if (callCount <= 5) return makeBookedChain();
-    // call 6 is the lead list; calls 7-8 are Contacted/Engaged queries
+    // call 6 is the lead list; calls 7-8 are Contacted queries
     if (callCount === 6) return makeLeadListChain();
-    if (callCount === 7) return makeRowsChain(contactSessions);
-    return makeRowsChain(callRows);
+    return makeEmptyRowsChain();
   });
 
   return { select: mockSelect } as never;
@@ -188,7 +185,7 @@ describe("leads.stats", () => {
   });
 
   const emptyBreakdown = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
-  const emptyResult = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0, engagedCount: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 }, organic: emptyBreakdown, campaign: emptyBreakdown, bookedList: [], leadList: [] };
+  const emptyResult = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 }, organic: emptyBreakdown, campaign: emptyBreakdown, bookedList: [], leadList: [] };
 
   it("returns zero totals when the database is unavailable", async () => {
     mockGetDb.mockResolvedValue(null as never);
@@ -321,39 +318,5 @@ describe("leads.stats", () => {
     expect(result.organic.bookedCount).toBe(3);
     // 500 (override) + 264 (234 + 30 extras) + 299 = 1063
     expect(result.organic.bookedRevenue).toBe(1063);
-  });
-
-  it("counts meaningful replies and completed two-way calls once per session", async () => {
-    const createdAt = new Date("2026-03-01T12:00:00.000Z");
-    const contactSessions = [
-      {
-        id: 1,
-        createdAt,
-        messageHistory: JSON.stringify([
-          { role: "assistant", content: "Hi", ts: createdAt.getTime() + 1_000 },
-          { role: "user", content: "Yes, what is the price?", ts: createdAt.getTime() + 2_000 },
-        ]),
-      },
-      {
-        id: 2,
-        createdAt,
-        messageHistory: JSON.stringify([
-          { role: "assistant", content: "Hi", ts: createdAt.getTime() + 1_000 },
-          { role: "user", content: "STOP", ts: createdAt.getTime() + 2_000 },
-        ]),
-      },
-      { id: 3, createdAt, messageHistory: "[]" },
-    ];
-    const callRows = [
-      { sessionId: 3, direction: "outgoing" as const, durationSeconds: 0, callStartedAt: new Date(createdAt.getTime() + 1_000) },
-      { sessionId: 3, direction: "incoming" as const, durationSeconds: 45, callStartedAt: new Date(createdAt.getTime() + 2_000) },
-    ];
-    mockGetDb.mockResolvedValue(buildStatsMockDb([], [], contactSessions, callRows));
-
-    const caller = appRouter.createCaller(createPublicContext());
-    const result = await caller.leads.stats();
-
-    expect(result.contactedCount).toBe(3);
-    expect(result.engagedCount).toBe(2);
   });
 });

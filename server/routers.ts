@@ -502,7 +502,7 @@ export const appRouter = router({
         const db = await getDb();
         const emptyBreakdown = { total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
         if (!db) return {
-          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0, engagedCount: 0,
+          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0,
           revenueBySource: { form: 0, widget: 0, reactivation: 0 },
           organic: emptyBreakdown,
           campaign: emptyBreakdown,
@@ -722,55 +722,30 @@ export const appRouter = router({
           .from(conversationSessions)
           .where(conditions ? and(conditions, listVisibilityFilter, hasPhoneFilter) : and(listVisibilityFilter, hasPhoneFilter));
         const contactedSessionIds = new Set<number>();
-        const engagedSessionIds = new Set<number>();
-        const contactSessionById = new Map(contactSessions.map(session => [session.id, session]));
         const contactSessionIds = contactSessions.map(session => session.id);
         if (contactSessionIds.length > 0) {
           const outgoingCalls = await db!
-            .select({
-              sessionId: openphoneCallRecordings.sessionId,
-              direction: openphoneCallRecordings.direction,
-              durationSeconds: openphoneCallRecordings.durationSeconds,
-              callStartedAt: openphoneCallRecordings.callStartedAt,
-            })
+            .select({ sessionId: openphoneCallRecordings.sessionId })
             .from(openphoneCallRecordings)
-            .where(inArray(openphoneCallRecordings.sessionId, contactSessionIds));
-          for (const call of outgoingCalls) {
-            const session = contactSessionById.get(call.sessionId);
-            const callAfterLead = session && new Date(call.callStartedAt).getTime() >= new Date(session.createdAt).getTime();
-            if (!callAfterLead) continue;
-            if (call.direction === "outgoing") contactedSessionIds.add(call.sessionId);
-            // A completed call with a positive duration is verified two-way phone engagement.
-            if ((call.durationSeconds ?? 0) > 0) engagedSessionIds.add(call.sessionId);
-          }
+            .where(and(
+              inArray(openphoneCallRecordings.sessionId, contactSessionIds),
+              eq(openphoneCallRecordings.direction, "outgoing"),
+            ));
+          for (const call of outgoingCalls) contactedSessionIds.add(call.sessionId);
         }
         for (const session of contactSessions) {
           try {
-            const history: Array<{ role?: string; content?: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
+            const history: Array<{ role?: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
             const createdAtMs = new Date(session.createdAt).getTime();
-            let outboundSeen = false;
-            let meaningfulInbound = false;
-            for (const message of history) {
-              if (message.role === "assistant" && typeof message.ts === "number" && message.ts >= createdAtMs) {
-                outboundSeen = true;
-              }
-              const inboundText = message.content?.trim().toLowerCase() ?? "";
-              const isNonEngagementReply = /^(stop|unsubscribe|cancel|wrong number|wrong person|automated reply|out of office)\b/.test(inboundText);
-              if (outboundSeen && message.role === "user" && inboundText.length >= 2 && !isNonEngagementReply) {
-                meaningfulInbound = true;
-              }
-            }
             if (history.some(message => message.role === "assistant" && typeof message.ts === "number" && message.ts >= createdAtMs)) {
               contactedSessionIds.add(session.id);
             }
-            if (meaningfulInbound) engagedSessionIds.add(session.id);
           } catch {
             // Invalid message history is excluded rather than guessed.
           }
         }
         const contactedCount = contactedSessionIds.size;
-        const engagedCount = engagedSessionIds.size;
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, engagedCount, revenueBySource, organic, campaign, bookedList, leadList };
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, revenueBySource, organic, campaign, bookedList, leadList };
       }),
 
     /**
