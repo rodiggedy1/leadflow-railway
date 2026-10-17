@@ -197,3 +197,8 @@
 .ccc-live .ccc-live-lead-primary footer .ccc-live-lead-claim-pill{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .ccc-live .ccc-live-lead-primary footer .ccc-live-lead-view-icon{width:42px;padding:0;border-radius:9px}
 .ccc-live .ccc-live-lead-primary footer .ccc-live-lead-view-icon svg{width:16px;height:16px}
+
+/* Keep the relative lead time visible; only the descriptive status may truncate. */
+.ccc-live .ccc-live-lead-primary-identity em>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ccc-live .ccc-live-lead-primary-identity em>time{flex:0 0 auto;white-space:nowrap}
+.ccc-live .ccc-live-lead-primary-identity em>time::before{content:"·";margin:0 4px}
