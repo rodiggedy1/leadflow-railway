@@ -174,3 +174,11 @@
 .ccc-lead-detail-list{display:grid;gap:7px;margin:0;padding:0;list-style:none;color:#d7d7dd;font-size:12px;line-height:1.45}
 .ccc-lead-detail-list li{padding:8px 10px;border-radius:8px;background:#2b2b30}
 .ccc-lead-detail-section dd{overflow-wrap:anywhere}
+
+/* Shared lead booking action: uses the existing jade success treatment once persisted. */
+.ccc-live .ccc-live-lead-primary footer{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)}
+.ccc-live .ccc-live-lead-primary footer button.is-booked,
+.ccc-lead-detail-panel>footer button.is-booked{border-color:#2d7258;background:#1c3b31;color:#a3e4c6}
+.ccc-live .ccc-live-lead-primary footer button.is-booked:hover:not(:disabled),
+.ccc-lead-detail-panel>footer button.is-booked:hover:not(:disabled){border-color:#58b88d;background:#245340;color:#c2f0d7}
+.ccc-lead-detail-panel>footer button.is-booked{flex:1}
