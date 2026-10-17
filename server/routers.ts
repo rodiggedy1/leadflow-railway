@@ -6689,7 +6689,7 @@ Return JSON with exactly these fields:
         const { broadcastOpsUpdate: bcastWs } = await import("./sseBroadcast");
         bcastWs("lead_update", { sessionId });
 
-        return { success: true, ts };
+        return { success: true, ts, sessionId };
       }),
 
     /**
