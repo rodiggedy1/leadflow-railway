@@ -58,9 +58,24 @@ function firstStringAtPaths(value: unknown, candidates: string[]): string | null
   return null;
 }
 
-function isStatusAuthorized(req: { query: Record<string, unknown> }): boolean {
+function isStatusAuthorized(req: { query: Record<string, unknown>; get: (name: string) => string | undefined }): boolean {
   const secret = process.env.CRON_SECRET;
-  return Boolean(secret && req.query.secret === secret);
+  if (!secret) return false;
+  const querySecret = typeof req.query.secret === "string" ? req.query.secret : undefined;
+  const headerSecret = req.get("x-cron-secret");
+  const authorization = req.get("authorization");
+  const bearerSecret = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
+  return querySecret === secret || headerSecret === secret || bearerSecret === secret;
+}
+
+function parsePayload(rawPayload: unknown): Record<string, unknown> {
+  if (typeof rawPayload !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(rawPayload);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export function summarizeThumbTackWebhook(body: unknown): ThumbTackWebhookCapture {
@@ -98,6 +113,48 @@ export function summarizeThumbTackWebhook(body: unknown): ThumbTackWebhookCaptur
  * It does not create/update LeadFlow records or send messages.
  */
 export function registerThumbTackWebhookCaptureRoute(app: Express): void {
+  app.get("/api/webhooks/thumbtack-capture/events", async (req, res) => {
+    if (!isStatusAuthorized(req)) {
+      res.status(403).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const negotiationId = typeof req.query.negotiationId === "string" ? req.query.negotiationId : null;
+    const eventType = typeof req.query.eventType === "string" ? req.query.eventType : null;
+
+    try {
+      const db = await getDb();
+      if (!db) {
+        res.status(503).json({ error: "Database unavailable" });
+        return;
+      }
+
+      const filters = [sql`source = ${"thumbtack"}`];
+      if (negotiationId) filters.push(sql`JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.data.negotiationID')) = ${negotiationId}`);
+      if (eventType) filters.push(sql`event_type = ${eventType}`);
+      const where = sql.join(filters, sql` AND `);
+      const rows = await db.execute(
+        sql`SELECT id, event_type, event_id, created_at, raw_payload FROM webhook_events WHERE ${where} ORDER BY id DESC LIMIT 100`
+      );
+      const records = ((rows as any)[0] as any[]).map((row: any) => {
+        const payload = parsePayload(row.raw_payload);
+        return {
+          id: row.id,
+          eventType: firstStringAtPaths(payload, ["event.eventType", "event.type", "eventType", "type"]) ?? row.event_type,
+          webhookId: firstStringAtPaths(payload, ["event.webhookID", "event.webhookId", "webhookID", "webhookId"]),
+          negotiationId: firstStringAtPaths(payload, ["data.negotiationID", "data.negotiationId", "negotiationID", "negotiationId"]),
+          timestamp: row.created_at,
+          payload,
+        };
+      });
+
+      res.status(200).json({ count: records.length, limit: 100, filters: { negotiationId, eventType }, events: records });
+    } catch (error) {
+      console.error("[ThumbTackCapture] failed to read event history:", error);
+      res.status(500).json({ error: "Failed to read event history" });
+    }
+  });
+
   app.get("/api/webhooks/thumbtack-capture/status", async (req, res) => {
     if (!isStatusAuthorized(req)) {
       res.status(403).json({ error: "Unauthorized" });
@@ -124,7 +181,7 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
         latestCapture: {
           id: latest.id,
           receivedAt: latest.created_at,
-          payload: JSON.parse(latest.raw_payload),
+          payload: parsePayload(latest.raw_payload),
         },
       });
     } catch (error) {
@@ -167,5 +224,5 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
     }
   });
 
-  console.log("[ThumbTackCapture] Routes registered: POST /api/webhooks/thumbtack-capture; GET /api/webhooks/thumbtack-capture/status");
+  console.log("[ThumbTackCapture] Routes registered: POST /api/webhooks/thumbtack-capture; GET /api/webhooks/thumbtack-capture/status; GET /api/webhooks/thumbtack-capture/events");
 }
