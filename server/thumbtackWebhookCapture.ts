@@ -9,6 +9,8 @@ export type ThumbTackWebhookCapture = {
   phoneValuesPresent: boolean;
 };
 
+let latestCapture: { receivedAt: string; summary: ThumbTackWebhookCapture } | null = null;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -91,8 +93,13 @@ export function summarizeThumbTackWebhook(body: unknown): ThumbTackWebhookCaptur
  * It deliberately does not create/update LeadFlow records or send messages.
  */
 export function registerThumbTackWebhookCaptureRoute(app: Express): void {
+  app.get("/api/webhooks/thumbtack-capture/status", (_req, res) => {
+    res.status(200).json({ latestCapture });
+  });
+
   app.post("/api/webhooks/thumbtack-capture", (req, res) => {
     const summary = summarizeThumbTackWebhook(req.body);
+    latestCapture = { receivedAt: new Date().toISOString(), summary };
     console.log("[ThumbTackCapture] received payload summary", JSON.stringify(summary));
     res.status(200).json({ received: true, summary });
   });
