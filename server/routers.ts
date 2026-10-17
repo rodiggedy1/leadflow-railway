@@ -502,7 +502,7 @@ export const appRouter = router({
         const db = await getDb();
         const emptyBreakdown = { total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
         if (!db) return {
-          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0,
+          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0,
           revenueBySource: { form: 0, widget: 0, reactivation: 0 },
           organic: emptyBreakdown,
           campaign: emptyBreakdown,
@@ -708,7 +708,44 @@ export const appRouter = router({
           leadPhone: r.leadPhone ?? '',
           isBooked: r.isBooked === 1,
         }));
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign, bookedList, leadList };
+
+        // Contacted is event-backed, not an inferred remainder of the funnel.
+        // A session counts once when it has either an outbound SMS in its stored
+        // history or an outgoing OpenPhone call linked to that session. Only
+        // sessions in the same visible, dated, real-phone population count.
+        const contactSessions = await db!
+          .select({
+            id: conversationSessions.id,
+            createdAt: conversationSessions.createdAt,
+            messageHistory: conversationSessions.messageHistory,
+          })
+          .from(conversationSessions)
+          .where(conditions ? and(conditions, listVisibilityFilter, hasPhoneFilter) : and(listVisibilityFilter, hasPhoneFilter));
+        const contactedSessionIds = new Set<number>();
+        const contactSessionIds = contactSessions.map(session => session.id);
+        if (contactSessionIds.length > 0) {
+          const outgoingCalls = await db!
+            .select({ sessionId: openphoneCallRecordings.sessionId })
+            .from(openphoneCallRecordings)
+            .where(and(
+              inArray(openphoneCallRecordings.sessionId, contactSessionIds),
+              eq(openphoneCallRecordings.direction, "outgoing"),
+            ));
+          for (const call of outgoingCalls) contactedSessionIds.add(call.sessionId);
+        }
+        for (const session of contactSessions) {
+          try {
+            const history: Array<{ role?: string; ts?: number }> = JSON.parse(session.messageHistory ?? "[]");
+            const createdAtMs = new Date(session.createdAt).getTime();
+            if (history.some(message => message.role === "assistant" && typeof message.ts === "number" && message.ts >= createdAtMs)) {
+              contactedSessionIds.add(session.id);
+            }
+          } catch {
+            // Invalid message history is excluded rather than guessed.
+          }
+        }
+        const contactedCount = contactedSessionIds.size;
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, revenueBySource, organic, campaign, bookedList, leadList };
       }),
 
     /**

@@ -125,6 +125,9 @@ describe("leads.list", () => {
  * Helper: build a mock DB that handles the parallel queries in leads.stats:
  *   calls 1-2 → organic/campaign stage-count queries (select → from → where → groupBy)
  *   calls 3-5 → booked-rows queries (select → from → where)
+ *   call 6 → lead-list query (select → from → where → orderBy)
+ *   call 7 → Contacted session query (select → from → where)
+ *   call 8 → outgoing-call query (select → from → where)
  *
  * For simplicity in tests, all stage queries return the same stageRows and
  * all booked queries return the same bookedRows.
@@ -148,13 +151,29 @@ function buildStatsMockDb(
     return { from: mockFrom };
   };
 
+  const makeLeadListChain = () => {
+    const mockOrderBy = vi.fn().mockResolvedValue([]);
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    return { from: mockFrom };
+  };
+
+  const makeEmptyRowsChain = () => {
+    const mockWhere = vi.fn().mockResolvedValue([]);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    return { from: mockFrom };
+  };
+
   let callCount = 0;
   const mockSelect = vi.fn().mockImplementation(() => {
     callCount++;
     // calls 1 & 2 are stage breakdown queries (organic + campaign)
     if (callCount <= 2) return makeStageChain();
     // calls 3, 4, 5 are booked breakdown queries
-    return makeBookedChain();
+    if (callCount <= 5) return makeBookedChain();
+    // call 6 is the lead list; calls 7-8 are Contacted queries
+    if (callCount === 6) return makeLeadListChain();
+    return makeEmptyRowsChain();
   });
 
   return { select: mockSelect } as never;
@@ -166,7 +185,7 @@ describe("leads.stats", () => {
   });
 
   const emptyBreakdown = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
-  const emptyResult = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 }, organic: emptyBreakdown, campaign: emptyBreakdown };
+  const emptyResult = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 }, organic: emptyBreakdown, campaign: emptyBreakdown, bookedList: [], leadList: [] };
 
   it("returns zero totals when the database is unavailable", async () => {
     mockGetDb.mockResolvedValue(null as never);
