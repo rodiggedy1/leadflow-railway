@@ -585,6 +585,38 @@ export const smsCampaignRouter = router({
     }),
 
   /**
+   * skipRecipientsByPhone — apply the Leads Intelligence member review to a
+   * frozen campaign using the same SKIPPED/MANUAL_EXCLUSION semantics as the
+   * individual recipient action.
+   */
+  skipRecipientsByPhone: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      phoneNumbers: z.array(z.string().min(10)).max(500),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const campaignRows = await db.select({ status: smsCampaigns.status }).from(smsCampaigns).where(eq(smsCampaigns.id, input.campaignId)).limit(1);
+      if (campaignRows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found" });
+      if (campaignRows[0].status !== "FROZEN") throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot skip recipients in status "${campaignRows[0].status}"` });
+      const normalized = input.phoneNumbers.map((phone) => {
+        const digits = phone.replace(/\D/g, "").slice(-10);
+        return digits.length === 10 ? `+1${digits}` : null;
+      }).filter((phone): phone is string => Boolean(phone));
+      if (normalized.length === 0) return { skippedCount: 0 };
+      const result = await db.update(smsCampaignRecipients)
+        .set({ status: "SKIPPED", skipReason: "MANUAL_EXCLUSION" })
+        .where(and(
+          eq(smsCampaignRecipients.campaignId, input.campaignId),
+          inArray(smsCampaignRecipients.phoneNormalized, normalized),
+          ne(smsCampaignRecipients.status, "SKIPPED"),
+        ));
+      console.info(`[smsCampaignRouter] ${result[0].affectedRows} cohort recipients excluded from campaign ${input.campaignId} by ${ctx.agent.agentName}`);
+      return { skippedCount: Number(result[0].affectedRows ?? 0) };
+    }),
+
+  /**
    * unskipRecipient — undo a manual exclusion (status=PENDING, skipReason=null).
    * Only works on MANUAL_EXCLUSION rows while campaign is FROZEN.
    */

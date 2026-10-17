@@ -624,6 +624,7 @@ export const appRouter = router({
           })(),
           db!.select({
             customerName: leadflowJobs.customerName,
+            customerPhone: leadflowJobs.customerPhone,
             jobTotalCents: leadflowJobs.jobTotalCents,
             createdAt: leadflowJobs.createdAt,
           }).from(leadflowJobs).where(and(
@@ -634,6 +635,7 @@ export const appRouter = router({
           )),
           db!.select({
             customerName: bookings.customerName,
+            customerPhone: bookings.customerPhone,
             firstCleaningTotalCents: bookings.firstCleaningTotalCents,
             createdAt: bookings.createdAt,
           }).from(bookings).where(and(
@@ -745,7 +747,7 @@ export const appRouter = router({
           .from(conversationSessions)
           .where(conditions ? and(conditions, leadListSourceFilter, hasPhoneFilter) : and(leadListSourceFilter, hasPhoneFilter))
           .orderBy(sql`${conversationSessions.createdAt} DESC`);
-        const leadList = leadListRows.map(r => ({
+        let leadList = leadListRows.map(r => ({
           leadName: r.leadName ?? 'Unknown',
           leadPhone: r.leadPhone ?? '',
           isBooked: r.isBooked === 1,
@@ -845,6 +847,27 @@ export const appRouter = router({
         const contactedCount = contactedPhoneNumbers.size;
         const engagedCount = engagedPhoneNumbers.size;
         const quotedCount = quotedPhoneNumbers.size;
+        const newBookingPhones = new Set<string>();
+        for (const booking of [...newLaunch27Bookings, ...newNativeBookings]) {
+          const phoneNumber = String(booking.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+          if (phoneNumber.length === 10) newBookingPhones.add(phoneNumber);
+        }
+        // Attach the same evidence-backed cohort memberships to each lead row so
+        // the Intelligence page can show the complete reviewable cohort, rather
+        // than the former four-row activity sample.
+        leadList = leadList.map((lead) => {
+          const phoneNumber = lead.leadPhone.replace(/[^\d]/g, "").slice(-10);
+          const cohortIds = ["all-new-leads"];
+          const isContacted = contactedPhoneNumbers.has(phoneNumber);
+          const isResponded = engagedPhoneNumbers.has(phoneNumber);
+          const isQuoted = quotedPhoneNumbers.has(phoneNumber);
+          const isBooked = lead.isBooked || newBookingPhones.has(phoneNumber);
+          if (isContacted && !isResponded) cohortIds.push("contacted-not-responded");
+          if (isResponded && !isQuoted) cohortIds.push("responded-not-quoted");
+          if (isQuoted && !isBooked) cohortIds.push("quoted-not-booked");
+          if (isBooked) cohortIds.push("booked");
+          return { ...lead, cohortIds };
+        });
         return { total, byStage, bookedCount: reportedBookedCount, bookedRevenue: reportedBookedRevenue, conversionRate: reportedConversionRate, newBookingCount: reportedBookedCount, newBookingRevenue: reportedBookedRevenue, contactedCount, engagedCount, quotedCount, revenueBySource, organic, campaign, bookedList: newBookingList, newBookingList, leadList };
       }),
 

@@ -1542,6 +1542,10 @@ function StepFinalApproval({
 const DEFAULT_MESSAGE = "Hi {{first_name}}, this is Madison from Maid in Black 😊 We have a few openings near {{area}} this week and wanted to see if you'd like help with a cleaning. Want me to send available times?";
 
 function SmsCampaignsContent() {
+  const handoffExcludedPhones = useMemo(() => {
+    const raw = new URLSearchParams(window.location.search).get("excluded") ?? "";
+    return raw.split(",").map((phone) => phone.trim()).filter((phone) => phone.length >= 10);
+  }, []);
   const cohortBrief = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const labels: Record<string, string> = {
@@ -1621,6 +1625,16 @@ function SmsCampaignsContent() {
     onError: (err) => toast.error(err.message),
   });
 
+  const applyHandoffExclusionsMutation = trpc.smsCampaign.skipRecipientsByPhone.useMutation({
+    onSuccess: (result) => {
+      if (result.skippedCount > 0) {
+        setFrozenCount((current) => Math.max(0, current - result.skippedCount));
+        toast.success(`${result.skippedCount} reviewed cohort member${result.skippedCount === 1 ? "" : "s"} excluded from this campaign`);
+      }
+    },
+    onError: (err) => toast.error(`Cohort exclusions could not be applied: ${err.message}`),
+  });
+
   const freezeAudienceMutation = trpc.smsCampaign.freezeAudience.useMutation({
     onSuccess: (result) => {
       setCampaignStatus("FROZEN");
@@ -1693,6 +1707,13 @@ function SmsCampaignsContent() {
     if (count === 0) { toast.error("Audience is empty — add rules or select a preset"); return; }
     freezeAudienceMutation.mutate({ campaignId });
   };
+
+  const handoffExclusionsApplied = useRef(false);
+  useEffect(() => {
+    if (!campaignId || campaignStatus !== "FROZEN" || handoffExcludedPhones.length === 0 || handoffExclusionsApplied.current) return;
+    handoffExclusionsApplied.current = true;
+    applyHandoffExclusionsMutation.mutate({ campaignId, phoneNumbers: handoffExcludedPhones });
+  }, [campaignId, campaignStatus, handoffExcludedPhones, applyHandoffExclusionsMutation]);
 
   const hasAudience = selectedPresets.size > 0 || rules.length > 0;
 
@@ -1800,7 +1821,7 @@ function SmsCampaignsContent() {
           <p className="text-sm text-gray-500 mt-0.5">Build the safest possible audience before anyone can send anything.</p>
           {cohortBrief && (
             <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
-              <strong>Leads Intelligence targeting brief:</strong> {cohortBrief}. Build and verify the audience below; the existing consent, opt-out, duplicate, recent-contact, freeze, and approval controls remain authoritative.
+              <strong>Leads Intelligence targeting brief:</strong> {cohortBrief}. {handoffExcludedPhones.length > 0 ? `${handoffExcludedPhones.length} member${handoffExcludedPhones.length === 1 ? "" : "s"} marked not to send; they will be excluded when the audience is frozen.` : "Review the full recipient list before freezing."} Build and verify the audience below; the existing consent, opt-out, duplicate, recent-contact, freeze, and approval controls remain authoritative.
             </div>
           )}
         </div>
