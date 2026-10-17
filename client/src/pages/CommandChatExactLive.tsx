@@ -948,8 +948,7 @@ export default function CommandChatExactLive() {
       return status ? { ...lead, isBooked: status.isBooked, bookedByAgentName: status.bookedByAgentName } : lead;
     });
   }, [leadSessionStatuses, rawCommandLeads]);
-  const webAndQuoteLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "web"), [commandLeads]);
-  const incomingLeads = useMemo(() => commandLeads.filter((lead) => lead.queue === "incoming"), [commandLeads]);
+  const allLeads = useMemo(() => commandLeads, [commandLeads]);
   const serviceAlerts = useMemo(
     () => rootMessages.filter(isServiceAlert).sort((left, right) => right.ts - left.ts),
     [rootMessages],
@@ -1306,7 +1305,7 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="Quote Leads" description="Direct form submissions" leads={webAndQuoteLeads} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onClaim={claimLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /><LeadQueue title="Thumbtack Leads" description="Marketplace inquiries · newest first" leads={incomingLeads} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onClaim={claimLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onClaim={claimLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
           </aside>
         </div>
       </section>
