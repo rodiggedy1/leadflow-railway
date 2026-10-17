@@ -20,44 +20,54 @@ function sourceLabel(source: string | null | undefined) {
 
 export default function LeadflowIntelligenceReview() {
   const [selected, setSelected] = useState(2);
-  const [period, setPeriod] = useState(30);
+  const [period, setPeriod] = useState<number | "today" | "yesterday">(30);
   const [channel, setChannel] = useState<"SMS" | "Email">("SMS");
   const [tab, setTab] = useState<"funnel" | "cohorts" | "campaigns">("funnel");
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [status, setStatus] = useState("");
 
-  const dateRange = useMemo(() => ({ dateFrom: etDateDaysAgo(Math.max(0, period - 1)), dateTo: etDateDaysAgo(0) }), [period]);
+  const dateRange = useMemo(() => {
+    if (period === "today") {
+      const today = etDateDaysAgo(0);
+      return { dateFrom: today, dateTo: today };
+    }
+    if (period === "yesterday") {
+      const yesterday = etDateDaysAgo(1);
+      return { dateFrom: yesterday, dateTo: yesterday };
+    }
+    return { dateFrom: etDateDaysAgo(Math.max(0, period - 1)), dateTo: etDateDaysAgo(0) };
+  }, [period]);
   const statsQuery = trpc.leads.stats.useQuery(dateRange, { refetchOnWindowFocus: false, refetchInterval: 60_000, staleTime: 30_000 });
   const stats = statsQuery.data;
   const total = Number(stats?.total ?? 0);
-  const booked = Number(stats?.bookedCount ?? 0);
-  const bookedRevenue = Number(stats?.bookedRevenue ?? 0);
+  const newBookings = Number(stats?.bookedCount ?? 0);
+  const newBookingRevenue = Number(stats?.bookedRevenue ?? 0);
   const contacted = Number(stats?.contactedCount ?? 0);
   const responded = Number(stats?.engagedCount ?? 0);
   const quoted = Number(stats?.quotedCount ?? 0);
 
   const stages: Stage[] = useMemo(() => {
     return [
-      ["New Leads", total], ["Contacted", contacted], ["Responded", responded], ["Quoted", quoted], ["Booked", booked],
+      ["New Leads", total], ["Contacted", contacted], ["Responded", responded], ["Quoted", quoted], ["Booked", newBookings],
     ].map(([name, value], index) => ({ name: name as string, value: Number(value), color: STAGE_COLORS[index] }));
-  }, [booked, contacted, responded, quoted, total]);
+  }, [newBookings, contacted, responded, quoted, total]);
 
   const count = (index: number) => stages[index]?.value ?? 0;
   const conversion = (index: number) => index ? `${(total > 0 ? (count(index) / total) * 100 : 0).toFixed(1)}%` : "Entry";
   const activeStage = stages[selected] ?? stages[0];
-  const exactConversion = total > 0 ? (booked / total) * 100 : 0;
+  const exactConversion = total > 0 ? (newBookings / total) * 100 : 0;
   const metrics: Metric[] = [
-    ["TOTAL LEADS", fmt(total)], ["BOOKINGS", fmt(booked)],
+    ["TOTAL LEADS", fmt(total)], ["BOOKINGS", fmt(newBookings)],
     ["FUNNEL CONVERSION", `${exactConversion.toFixed(1)}%`],
-    ["BOOKED VALUE", `$${fmt(Math.round(bookedRevenue))}`],
+    ["BOOKED VALUE", `$${fmt(Math.round(newBookingRevenue))}`],
   ];
   const audienceOptions = useMemo<CohortOption[]>(() => [
     { id: "all-new-leads", label: "All new leads", description: "Every lead in the selected reporting window.", count: total },
     { id: "contacted-not-responded", label: "Contacted · not responded", description: "Contacted leads who have not responded yet.", count: Math.max(0, contacted - responded) },
     { id: "responded-not-quoted", label: "Responded · not quoted", description: "Responded leads without a persisted quote.", count: Math.max(0, responded - quoted) },
-    { id: "quoted-not-booked", label: "Quoted · not booked", description: "Quoted leads without a confirmed booking.", count: Math.max(0, quoted - booked) },
-    { id: "booked", label: "Booked", description: "Leads with a confirmed booking.", count: booked },
-  ], [booked, contacted, quoted, responded, total]);
+    { id: "quoted-not-booked", label: "Quoted · not booked", description: "Quoted leads without a confirmed booking.", count: Math.max(0, quoted - newBookings) },
+    { id: "booked", label: "Booked", description: "Leads with a confirmed booking.", count: newBookings },
+  ], [newBookings, contacted, quoted, responded, total]);
   const sampleLeads = (stats?.leadList ?? []).slice(0, 4);
   const selectTab = (nextTab: typeof tab) => { setTab(nextTab); setStatus(""); };
   const reset = () => { setSelected(2); setPeriod(30); setChannel("SMS"); setTab("funnel"); setMessage(DEFAULT_MESSAGE); setStatus(""); };
@@ -72,7 +82,7 @@ export default function LeadflowIntelligenceReview() {
 
   return (
     <div className="leadflow-intelligence-review">
-      <header className="lir-header"><div><h1>▣ LeadFlow <span className="lir-muted">/ Intelligence</span></h1><small>Revenue Operations Command Center</small></div><div className="lir-flex lir-header-controls"><select aria-label="Reporting period" value={period} onChange={(event) => setPeriod(Number(event.target.value))}><option value={30}>Last 30 days</option><option value={7}>Last 7 days</option><option value={90}>Last 90 days</option></select><button type="button" onClick={reset}>↻ Reset</button><button type="button" onClick={() => document.documentElement.requestFullscreen?.()}>⛶ Fullscreen</button></div></header>
+      <header className="lir-header"><div><h1>▣ LeadFlow <span className="lir-muted">/ Intelligence</span></h1><small>Revenue Operations Command Center</small></div><div className="lir-flex lir-header-controls"><select aria-label="Reporting period" value={period} onChange={(event) => { const value = event.target.value; setPeriod(value === "today" || value === "yesterday" ? value : Number(value)); }}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option></select><button type="button" onClick={reset}>↻ Reset</button><button type="button" onClick={() => document.documentElement.requestFullscreen?.()}>⛶ Fullscreen</button></div></header>
       <nav className="lir-tabs" aria-label="Intelligence sections">{([["funnel", "◈ Funnel Intelligence"], ["cohorts", "◎ Cohort Explorer"], ["campaigns", "↗ Campaigns"]] as const).map(([value, label]) => <button key={value} type="button" className={tab === value ? "active" : ""} onClick={() => selectTab(value)}>{label}</button>)}</nav>
       <main className="lir-main">
         <div className="lir-metrics">{metrics.map(([label, value]) => <div className="lir-panel" key={label}><small>{label}</small><div className="lir-metric">{statsQuery.isLoading ? "—" : value}</div>{label === "FUNNEL CONVERSION" && <small className="lir-green">Lead → confirmed</small>}</div>)}</div>

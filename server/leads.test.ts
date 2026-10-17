@@ -125,10 +125,12 @@ describe("leads.list", () => {
  * Helper: build a mock DB that handles the parallel queries in leads.stats:
  *   calls 1-2 → organic/campaign stage-count queries (select → from → where → groupBy)
  *   calls 3-5 → booked-rows queries (select → from → where)
- *   call 6 → lead-list query (select → from → where → orderBy)
- *   call 7 → persisted quote-lead query (select → from → where)
- *   call 8 → Contacted/Engaged session query (select → from → where)
- *   call 9 → outgoing-call query (select → from → where)
+ *   calls 6-7 → new Launch27/native booking queries (select → from → where)
+ *   call 8 → lead-list query (select → from → where → orderBy)
+ *   call 9 → persisted quote-lead query (select → from → where)
+ *   call 10 → Contacted/Engaged session query (select → from → where)
+ *   call 11 → outgoing-call query (select → from → where)
+ *   call 12 → cross-session response query (select → from → where)
  *
  * For simplicity in tests, all stage queries return the same stageRows and
  * all booked queries return the same bookedRows.
@@ -138,6 +140,8 @@ function buildStatsMockDb(
   bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null; leadSource?: string | null }[] = [],
   contactSessions: { id: number; createdAt: Date; leadPhone: string; messageHistory: string; quoteSlug?: string | null }[] = [],
   quoteLeadRows: { phone: string }[] = [],
+  launch27Rows: { customerName: string; jobTotalCents: number; createdAt: Date }[] = [],
+  nativeBookingRows: { customerName: string; firstCleaningTotalCents: number; createdAt: Date }[] = [],
 ) {
   // Stage query chain: select → from → where → groupBy
   const makeStageChain = () => {
@@ -174,21 +178,32 @@ function buildStatsMockDb(
     if (callCount <= 2) return makeStageChain();
     // calls 3, 4, 5 are booked breakdown queries
     if (callCount <= 5) return makeBookedChain();
-    // call 6 is the lead list; call 7 is the persisted quote-lead query
-    if (callCount === 6) return makeLeadListChain();
+    // calls 6-7 are the new Launch27/native booking queries
+    if (callCount === 6) {
+      const mockWhere = vi.fn().mockResolvedValue(launch27Rows);
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      return { from: mockFrom };
+    }
     if (callCount === 7) {
+      const mockWhere = vi.fn().mockResolvedValue(nativeBookingRows);
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      return { from: mockFrom };
+    }
+    // call 8 is the lead list; call 9 is the persisted quote-lead query
+    if (callCount === 8) return makeLeadListChain();
+    if (callCount === 9) {
       const mockWhere = vi.fn().mockResolvedValue(quoteLeadRows);
       const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
       return { from: mockFrom };
     }
-    // call 8 is the Contacted/Engaged session query
-    if (callCount === 8) {
+    // call 10 is the Contacted/Engaged session query
+    if (callCount === 10) {
       const mockWhere = vi.fn().mockResolvedValue(contactSessions);
       const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
       return { from: mockFrom };
     }
-    // call 9 is the outgoing-call query; call 10 is the cross-session response query
-    if (callCount === 9) return makeEmptyRowsChain();
+    // call 11 is the outgoing-call query; call 12 is the cross-session response query
+    if (callCount === 11) return makeEmptyRowsChain();
     const mockWhere = vi.fn().mockResolvedValue(contactSessions);
     const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
     return { from: mockFrom };
@@ -203,7 +218,7 @@ describe("leads.stats", () => {
   });
 
   const emptyBreakdown = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
-  const emptyResult = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0, engagedCount: 0, quotedCount: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 }, organic: emptyBreakdown, campaign: emptyBreakdown, bookedList: [], leadList: [] };
+  const emptyResult = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, newBookingCount: 0, newBookingRevenue: 0, contactedCount: 0, engagedCount: 0, quotedCount: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 }, organic: emptyBreakdown, campaign: emptyBreakdown, bookedList: [], newBookingList: [], leadList: [] };
 
   it("returns zero totals when the database is unavailable", async () => {
     mockGetDb.mockResolvedValue(null as never);
@@ -242,6 +257,25 @@ describe("leads.stats", () => {
     expect(result.organic.conversionRate).toBe(0);
     // Combined total is organic + campaign
     expect(result.total).toBe(18);
+  });
+
+  it("counts new Launch27 imports plus native bookings", async () => {
+    const fakeRows = [{ stage: "AVAILABILITY", count: 2 }];
+    mockGetDb.mockResolvedValue(buildStatsMockDb(
+      fakeRows,
+      [],
+      [],
+      [],
+      [{ customerName: "Launch27 customer", jobTotalCents: 12500, createdAt: new Date("2026-03-10T12:00:00Z") }],
+      [{ customerName: "Native customer", firstCleaningTotalCents: 25000, createdAt: new Date("2026-03-11T12:00:00Z") }],
+    ));
+    const caller = appRouter.createCaller(createPublicContext());
+    const result = await caller.leads.stats({ dateFrom: "2026-03-01", dateTo: "2026-03-31" });
+    expect(result.bookedCount).toBe(2);
+    expect(result.bookedRevenue).toBe(375);
+    expect(result.newBookingCount).toBe(2);
+    expect(result.newBookingRevenue).toBe(375);
+    expect(result.newBookingList).toHaveLength(2);
   });
 
   it("handles numeric string counts from MySQL", async () => {

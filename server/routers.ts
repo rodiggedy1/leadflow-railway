@@ -9,7 +9,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns, reactivationContacts, reactivationCampaigns, bookingFunnelRecords } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns, reactivationContacts, reactivationCampaigns, bookingFunnelRecords, leadflowJobs, bookings } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -502,11 +502,12 @@ export const appRouter = router({
         const db = await getDb();
         const emptyBreakdown = { total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
         if (!db) return {
-          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, contactedCount: 0, engagedCount: 0, quotedCount: 0,
+          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, newBookingCount: 0, newBookingRevenue: 0, contactedCount: 0, engagedCount: 0, quotedCount: 0,
           revenueBySource: { form: 0, widget: 0, reactivation: 0 },
           organic: emptyBreakdown,
           campaign: emptyBreakdown,
           bookedList: [] as Array<{ leadName: string; bookedByAgentName: string | null; amount: number; bookedAt: number | null }>,
+          newBookingList: [] as Array<{ leadName: string; bookedByAgentName: string | null; amount: number; bookedAt: number | null }>,
           leadList: [] as Array<{ leadName: string; leadPhone: string; isBooked: boolean }>,
         };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
@@ -597,6 +598,7 @@ export const appRouter = router({
           organicStages, campaignStages,
           organicBooked, campaignBooked,
           allBooked,
+          newLaunch27Bookings, newNativeBookings,
         ] = await Promise.all([
           stageBreakdown(organicFilter),
           stageBreakdown(campaignFilter),
@@ -620,6 +622,24 @@ export const appRouter = router({
               bookedAt: conversationSessions.bookedAt,
             }).from(conversationSessions).where(baseWhere);
           })(),
+          db!.select({
+            customerName: leadflowJobs.customerName,
+            jobTotalCents: leadflowJobs.jobTotalCents,
+            createdAt: leadflowJobs.createdAt,
+          }).from(leadflowJobs).where(and(
+            buildDateRangeConditions(leadflowJobs.createdAt, input?.dateFrom, input?.dateTo),
+            eq(leadflowJobs.origin, "launch27_import"),
+            isNotNull(leadflowJobs.launch27BookingId),
+            eq(leadflowJobs.bookingStatus, "new"),
+          )),
+          db!.select({
+            customerName: bookings.customerName,
+            firstCleaningTotalCents: bookings.firstCleaningTotalCents,
+            createdAt: bookings.createdAt,
+          }).from(bookings).where(and(
+            buildDateRangeConditions(bookings.createdAt, input?.dateFrom, input?.dateTo),
+            notInArray(bookings.status, ["cancelled", "canceled", "expired"]),
+          )),
         ]);
 
         // Build organic breakdown
@@ -658,6 +678,28 @@ export const appRouter = router({
           amount: calcBookedRevenue(r),
           bookedAt: r.bookedAt instanceof Date ? r.bookedAt.getTime() : r.bookedAt ? new Date(r.bookedAt as string).getTime() : null,
         })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
+
+        const newBookingList = [
+          ...newLaunch27Bookings.map(row => ({
+            leadName: row.customerName,
+            bookedByAgentName: null,
+            amount: Number(row.jobTotalCents ?? 0) / 100,
+            bookedAt: row.createdAt instanceof Date ? row.createdAt.getTime() : new Date(row.createdAt as string).getTime(),
+          })),
+          ...newNativeBookings.map(row => ({
+            leadName: row.customerName,
+            bookedByAgentName: null,
+            amount: Number(row.firstCleaningTotalCents ?? 0) / 100,
+            bookedAt: row.createdAt instanceof Date ? row.createdAt.getTime() : new Date(row.createdAt as string).getTime(),
+          })),
+        ].sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
+        const newBookingCount = newBookingList.length;
+        const newBookingRevenue = newBookingList.reduce((sum, row) => sum + row.amount, 0);
+        // The shared top-level booking fields feed Command Chat and Leads Intelligence.
+        // Keep the source-specific organic/campaign breakdowns above unchanged.
+        const reportedBookedCount = newBookingCount;
+        const reportedBookedRevenue = newBookingRevenue;
+        const reportedConversionRate = total > 0 ? Math.round((reportedBookedCount / total) * 100) : 0;
 
 
         // Build lead list using the EXACT same sourceFilter as leads.list (Lead Ops page)
@@ -803,7 +845,7 @@ export const appRouter = router({
         const contactedCount = contactedPhoneNumbers.size;
         const engagedCount = engagedPhoneNumbers.size;
         const quotedCount = quotedPhoneNumbers.size;
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate, contactedCount, engagedCount, quotedCount, revenueBySource, organic, campaign, bookedList, leadList };
+        return { total, byStage, bookedCount: reportedBookedCount, bookedRevenue: reportedBookedRevenue, conversionRate: reportedConversionRate, newBookingCount: reportedBookedCount, newBookingRevenue: reportedBookedRevenue, contactedCount, engagedCount, quotedCount, revenueBySource, organic, campaign, bookedList: newBookingList, newBookingList, leadList };
       }),
 
     /**
@@ -8589,6 +8631,19 @@ function buildDateConditions(dateFrom?: string, dateTo?: string) {
     const endUtc = new Date(dateTo + "T23:59:59.999Z");
     const to = new Date(endUtc.getTime() - estOffsetMs(endUtc));
     conditions.push(lte(conversationSessions.createdAt, to));
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+function buildDateRangeConditions(column: any, dateFrom?: string, dateTo?: string) {
+  const conditions = [];
+  if (dateFrom) {
+    const midnightUtc = new Date(dateFrom + "T00:00:00.000Z");
+    conditions.push(gte(column, new Date(midnightUtc.getTime() - estOffsetMs(midnightUtc))));
+  }
+  if (dateTo) {
+    const endUtc = new Date(dateTo + "T23:59:59.999Z");
+    conditions.push(lte(column, new Date(endUtc.getTime() - estOffsetMs(endUtc))));
   }
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
