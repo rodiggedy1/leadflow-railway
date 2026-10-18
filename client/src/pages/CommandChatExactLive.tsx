@@ -1427,7 +1427,7 @@ export default function CommandChatExactLive() {
                   {visibleEmailInbox.map((thread) => <EmailInboxRow thread={thread} key={thread.threadId} onOpen={() => setSelectedEmailThreadId(thread.threadId)} />)}
                   {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
                 </div> : <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
-                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} lead={leadForConversation(conversation, allLeads)} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />)}
+                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />)}
                   {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
                 </div>}
               </div>
@@ -1656,15 +1656,14 @@ function ThreadPanel({ thread, callerName, draft, pending, photoMap, onDraft, on
   return <section className="ccc-live-thread-panel" aria-label="Command thread"><header><div><MessageSquare /><span><strong>Thread</strong><small>Command discussion</small></span></div><button type="button" aria-label="Close command thread" onClick={onClose}><X /></button></header><div className="ccc-live-thread-messages">{!thread?.parent ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading thread…</div> : <><LiveThreadEntry entry={thread.parent} mine={thread.parent.from === callerName} photo={photoMap[thread.parent.from] ?? null} root />{thread.replies.map((entry) => <LiveThreadEntry entry={entry} key={entry.id} mine={entry.from === callerName} photo={photoMap[entry.from] ?? null} />)}</>}</div><footer><textarea value={draft} onChange={(event) => onDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSend(); } }} placeholder="Reply in thread…" /><button type="button" disabled={!draft.trim() || pending} onClick={onSend}>{pending ? <Loader2 className="animate-spin" /> : <Send />}</button></footer></section>;
 }
 
-function SmsInboxRow({ conversation, lead, onOpen }: { conversation: SmsInboxConversation; lead: CommandLead | null; onOpen: () => void }) {
+function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversation; onOpen: () => void }) {
   const name = smsConversationName(conversation);
   const timestamp = smsInboxTimestamp(conversation);
   const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";
   const time = timestamp && Date.now() - timestamp < 86_400_000 ? formatTime(timestamp) : timestamp ? dateLabel(timestamp) : "";
-  const source = conversation.personType === "team" ? null : lead?.sourceLabel || displayLeadSource(conversation.leadSource);
   return <button type="button" className="ccc-live-sms-row" onClick={onOpen}>
     {conversation.personType === "team" ? <span className="ccc-live-sms-team-avatar"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}
-    <span className="ccc-live-sms-row-copy"><strong>{name}{source && <em className="ccc-live-sms-row-source">{source}</em>}</strong><small>{preview}</small></span>
+    <span className="ccc-live-sms-row-copy"><strong>{name}</strong><small>{preview}</small></span>
     <span className="ccc-live-sms-row-meta"><time>{time}</time><i className={conversation.hasUnanswered ? "is-unread" : ""} /></span>
   </button>;
 }
