@@ -2187,7 +2187,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     if (smsComposerRef.current) resizeSmsComposer(smsComposerRef.current);
   }, [draft, resizeSmsComposer]);
   useEffect(() => {
-    if (conversation.id > 0 && !detail && !leadDraft?.scenario && !leadDraft?.jobContext) return;
+    if (conversation.id > 0 && !detail) return;
     if (messages.length === 0 && !leadDraft?.scenario && !leadDraft?.jobContext) return;
     void streamSmsAutoDraft();
   }, [conversation.id, detail, leadDraft?.jobContext, leadDraft?.scenario, messages.length, streamSmsAutoDraft]);
