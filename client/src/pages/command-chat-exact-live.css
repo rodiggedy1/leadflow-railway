@@ -207,3 +207,15 @@
 .ccc-live .ccc-live-lead-primary.is-unclaimed{animation:ccc-live-lead-unclaimed-shake 4.2s ease-in-out infinite}
 @keyframes ccc-live-lead-unclaimed-shake{0%,78%,100%{transform:translateX(0)}80%{transform:translateX(-2px)}82%{transform:translateX(2px)}84%{transform:translateX(-1px)}86%{transform:translateX(0)}}
 @media (prefers-reduced-motion:reduce){.ccc-live .ccc-live-lead-primary.is-unclaimed{animation:none}}
+
+
+/* Conversation lead context: source stays beside the customer name and the eye reuses the full lead detail panel. */
+.ccc-live .ccc-live-sms-drawer-header-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.ccc-live .ccc-live-sms-drawer-header-actions button{display:grid;place-items:center;width:28px;height:28px;border:1px solid #414146;border-radius:7px;background:#29292c;color:#c0c0c6}
+.ccc-live .ccc-live-sms-drawer-header-actions button:hover{border-color:#5b5b63;background:#35353a;color:#fff}
+.ccc-live .ccc-live-sms-drawer-header-actions .ccc-live-sms-drawer-detail{border-color:#2d7258;background:#1c3b31;color:#a3e4c6}
+.ccc-live .ccc-live-sms-drawer-header-actions button svg{width:14px}
+.ccc-live .ccc-live-sms-drawer header strong{display:flex;align-items:center;gap:6px;min-width:0}
+.ccc-live .ccc-live-sms-drawer-source{overflow:hidden;color:#77d8b0;font-size:9px;font-style:normal;font-weight:750;letter-spacing:.02em;text-overflow:ellipsis;white-space:nowrap}
+.ccc-live .ccc-live-sms-row-copy>strong{display:flex;align-items:center;gap:6px;min-width:0}
+.ccc-live .ccc-live-sms-row-source{flex:0 0 auto;color:#77d8b0;font-size:9px;font-style:normal;font-weight:750}
