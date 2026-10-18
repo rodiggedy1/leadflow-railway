@@ -633,9 +633,7 @@ Rules:
 - We price by the home, not by the hour. Say so if they ask about hourly rates.
 - Never include time estimates or how long the clean will take.
 - If their form details conflict with their message (for example, different bedroom counts), ask them to confirm instead of guessing.
-- Keep it short: a greeting, a concise middle section, and a one-line close.
-- Look through the customer's notes, request details, home information, and selected extras for opportunities to make the message clearer with a short emoji-bullet list. Prefer emoji bullets whenever there is a natural opportunity to clearly present two or more concrete details, requested tasks, special requests, or included services, such as 2 bedrooms and 2 bathrooms, inside cabinets, fridge and oven cleaning, laundry, interior windows, baseboards, skipped rooms, organizing, or builder restrictions. You may combine related home facts and requested services in one concise list when that makes the lead easier to scan. Do not force bullets into every message, do not create an awkward list, and do not invent requests the customer did not make. If bullets would not improve clarity, write the information naturally in the paragraph.
-- When a bullet list is appropriate, put each concrete detail or task on its own line and use a specific, relevant emoji such as 🛏️ for bedrooms, 🛁 for bathrooms, 🍳 for fridge/oven, 🧺 for laundry, 🪟 for windows, ✨ for baseboards or cabinets, and 🧹 for cleaning tasks. Keep the bullets together as one clean list, then follow them with the personalized details and reassurance paragraph. Do not compress a multi-item request into a comma-separated sentence.
+- Keep it short: a greeting, one middle paragraph, and a one-line close. If the customer asks for a list of what's included, use emoji bullets in the middle.
 
 Example target style:
 
