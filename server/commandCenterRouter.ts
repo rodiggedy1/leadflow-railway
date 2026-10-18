@@ -236,6 +236,7 @@ export const commandCenterRouter = router({
           id: conversationSessions.id,
           leadPhone: conversationSessions.leadPhone,
           leadName: conversationSessions.leadName,
+          leadSource: conversationSessions.leadSource,
           csQueue: conversationSessions.csQueue,
           aiSummary: conversationSessions.aiSummary,
           lastInboundPhoneNumberId: conversationSessions.lastInboundPhoneNumberId,

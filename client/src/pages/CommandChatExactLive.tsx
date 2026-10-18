@@ -158,6 +158,7 @@ type SmsInboxConversation = {
   id: number;
   leadName: string | null;
   leadPhone: string | null;
+  leadSource: string | null;
   lastMessageText: string | null;
   lastMsgTs: number | null;
   lastMessageTs: number | null;
@@ -483,6 +484,16 @@ function normalizedLeadPhone(value: string | null) {
   return value?.replace(/\D/g, "").slice(-10) || "";
 }
 
+function displayLeadSource(source: string | null | undefined) {
+  const normalized = source?.trim().toLowerCase() ?? "";
+  if (!normalized || ["form", "quote", "quoteform", "quote_form", "widget", "widget-popup", "webform"].includes(normalized)) return "Quote";
+  if (normalized.includes("thumbtack")) return "Thumbtack";
+  if (normalized === "bark") return "Bark.com";
+  if (normalized === "yelp") return "Yelp";
+  if (normalized === "email") return "Email";
+  return normalized.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function nativeValue(value: unknown) {
   if (value == null || value === "") return null;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
@@ -495,6 +506,63 @@ function leadNamesMatch(legacyName: string, nativeName: string) {
   if (legacyParts.length < 2 || nativeParts.length < 2) return false;
   return legacyParts[0] === nativeParts[0]
     && (legacyParts[1] === nativeParts[1] || legacyParts[1][0] === nativeParts[1][0]);
+}
+
+function leadForConversation(conversation: SmsInboxConversation, leads: CommandLead[]) {
+  if (conversation.personType === "team") return null;
+  const phone = normalizedLeadPhone(conversation.leadPhone);
+  const name = conversation.leadName?.trim().toLowerCase() ?? "";
+  const matched = leads.find((lead) => (
+    (conversation.id > 0 && lead.sessionId === conversation.id)
+    || (phone && normalizedLeadPhone(lead.phone) === phone)
+    || (name && (lead.name.trim().toLowerCase() === name || leadNamesMatch(name, lead.name)))
+  ));
+  if (matched) return matched;
+  return {
+    id: conversation.id,
+    sessionId: conversation.id > 0 ? conversation.id : null,
+    name: conversation.leadName?.trim() || "Customer conversation",
+    sourceLabel: displayLeadSource(conversation.leadSource),
+    detail: "Conversation",
+    phone: conversation.leadPhone,
+    address: null,
+    claimedBy: null,
+    isBooked: false,
+    bookedByAgentName: null,
+    priceLabel: null,
+    ts: smsInboxTimestamp(conversation) || Date.now(),
+    queue: displayLeadSource(conversation.leadSource) === "Thumbtack" ? "incoming" as const : "web" as const,
+    serviceType: null,
+    location: null,
+    requestedDates: null,
+    bedrooms: null,
+    bathrooms: null,
+    homeSize: null,
+    rooms: null,
+    propertyType: null,
+    frequency: null,
+    extras: [],
+    summary: null,
+    description: null,
+    negotiationId: null,
+    requestId: null,
+    customerId: null,
+    category: null,
+    categoryId: null,
+    pets: null,
+    travelPreferences: [],
+    nativeDetails: [],
+    proposedTimes: [],
+    status: null,
+    leadPrice: null,
+    leadPriceBreakdown: null,
+    estimate: null,
+    createdAt: null,
+    requestReviewLink: null,
+    refundRequestLink: null,
+    attachments: [],
+    messageId: null,
+  } satisfies CommandLead;
 }
 
 function mergeNativeThumbtackLead(lead: CommandLead, nativeLeads: NativeThumbtackLead[]) {
@@ -777,6 +845,7 @@ export default function CommandChatExactLive() {
   const [bookingAmount, setBookingAmount] = useState("");
   const [bookingNote, setBookingNote] = useState("");
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
+  const [selectedLeadDetail, setSelectedLeadDetail] = useState<CommandLead | null>(null);
   const [selectedLeadCardPhone, setSelectedLeadCardPhone] = useState<string | null>(null);
   const [selectedLeadCardDraft, setSelectedLeadCardDraft] = useState<{ scenario: string; jobContext: string } | null>(null);
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
@@ -800,6 +869,10 @@ export default function CommandChatExactLive() {
       setSelectedEmailThreadId(null);
     }
   }, [selectedSmsConversation]);
+
+  useEffect(() => {
+    setSelectedLeadDetail(null);
+  }, [selectedSmsConversation?.id]);
 
   useEffect(() => {
     if (selectedEmailThreadId) {
@@ -1018,6 +1091,10 @@ export default function CommandChatExactLive() {
     });
   }, [leadSessionStatuses, rawCommandLeads]);
   const allLeads = useMemo(() => commandLeads, [commandLeads]);
+  const selectedConversationLead = useMemo(
+    () => selectedSmsConversation ? leadForConversation(selectedSmsConversation, allLeads) : null,
+    [allLeads, selectedSmsConversation],
+  );
   const serviceAlerts = useMemo(
     () => rootMessages.filter(isServiceAlert).sort((left, right) => right.ts - left.ts),
     [rootMessages],
@@ -1121,6 +1198,7 @@ export default function CommandChatExactLive() {
       id: lead.sessionId ?? 0,
       leadName: lead.name,
       leadPhone: lead.phone,
+      leadSource: lead.sourceLabel === "Thumbtack" ? "thumbtack" : null,
       lastMessageText: null,
       lastMsgTs: null,
       lastMessageTs: null,
@@ -1384,7 +1462,8 @@ export default function CommandChatExactLive() {
           </aside>
         </div>
       </section>
-      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} onNotice={showNotice} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); }} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
+      {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
       {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
@@ -1582,9 +1661,10 @@ function SmsInboxRow({ conversation, onOpen }: { conversation: SmsInboxConversat
   const timestamp = smsInboxTimestamp(conversation);
   const preview = conversation.aiSummary?.trim() || conversation.lastMessageText?.trim() || "No message preview available.";
   const time = timestamp && Date.now() - timestamp < 86_400_000 ? formatTime(timestamp) : timestamp ? dateLabel(timestamp) : "";
+  const source = conversation.personType === "team" ? null : displayLeadSource(conversation.leadSource);
   return <button type="button" className="ccc-live-sms-row" onClick={onOpen}>
     {conversation.personType === "team" ? <span className="ccc-live-sms-team-avatar"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}
-    <span className="ccc-live-sms-row-copy"><strong>{name}</strong><small>{preview}</small></span>
+    <span className="ccc-live-sms-row-copy"><strong>{name}{source && <em className="ccc-live-sms-row-source">{source}</em>}</strong><small>{preview}</small></span>
     <span className="ccc-live-sms-row-meta"><time>{time}</time><i className={conversation.hasUnanswered ? "is-unread" : ""} /></span>
   </button>;
 }
@@ -1918,7 +1998,7 @@ function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; o
   </div>;
 }
 
-function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, onNotice, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; onNotice: (message: string) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
+function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, lead, onNotice, onOpenLeadDetails, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; lead: CommandLead | null; onNotice: (message: string) => void; onOpenLeadDetails: (lead: CommandLead) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
   const utils = trpc.useUtils();
   const isTeamConversation = conversation.personType === "team";
   const contextPhone = conversation.leadPhone || "0000000";
@@ -2133,7 +2213,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     });
   };
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
-    <header><div>{isTeamConversation ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}</strong><small>{isTeamConversation ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></header>
+    <header><div>{isTeamConversation ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}{!isTeamConversation && <em className="ccc-live-sms-drawer-source">{lead?.sourceLabel || displayLeadSource(conversation.leadSource)}</em>}</strong><small>{isTeamConversation ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><div className="ccc-live-sms-drawer-header-actions">{!isTeamConversation && lead && <button type="button" className="ccc-live-sms-drawer-detail" aria-label={`View lead details for ${name}`} title="View lead details" onClick={() => onOpenLeadDetails(lead)}><Eye /></button>}<button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></div></header>
     {!isTeamConversation && clientProfile?.upcoming && (() => { const isToday = clientProfile.upcoming.date === businessDate; const etaLabel = teamRouteEtaLabel(clientProfile.upcoming.jobStatus, clientProfile.upcoming.etaTimestamp); return <section className="ccc-live-sms-booking-context" aria-label="Client's next booking"><div><CalendarClock /><span><b>Next booking</b><small>{bookingDateLabel(clientProfile.upcoming.date, businessDate)}</small></span></div><strong>{clientProfile.upcoming.serviceName || "Scheduled service"}</strong><small>{clientProfile.upcoming.teamName || "Team pending"}</small>{isToday && <span className={`ccc-live-sms-job-status ccc-live-sms-booking-status ${teamRouteStatusClass(clientProfile.upcoming.jobStatus)}`}><TeamRouteStatusIcon status={clientProfile.upcoming.jobStatus} /><b>{teamRouteStatusLabel(clientProfile.upcoming.jobStatus)}</b>{etaLabel && <small>{etaLabel}</small>}</span>}</section>; })()}
     {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => { const etaLabel = teamRouteEtaLabel(job.jobStatus, job.etaTimestamp); return <li key={job.id}><time>{scheduleTimeLabel(job.serviceDateTime)}</time><strong>{job.customerName || "Customer"}</strong><span className={`ccc-live-sms-job-status ${teamRouteStatusClass(job.jobStatus)}`}><TeamRouteStatusIcon status={job.jobStatus} /><b>{teamRouteStatusLabel(job.jobStatus)}</b>{etaLabel && <small>{etaLabel}</small>}</span></li>; })}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
