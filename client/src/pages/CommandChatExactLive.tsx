@@ -631,7 +631,7 @@ function LeadQueue({ title, description, leads, claimPending, bookingPending, on
     setSelectedLead((current) => current ? leads.find((lead) => lead.id === current.id) ?? current : current);
   }, [leads]);
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
-  const renderLeadCard = (lead: CommandLead) => <section className="ccc-live-lead-primary" key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
+  const renderLeadCard = (lead: CommandLead) => <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
     <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em><i /><span>New inquiry</span><time>{formatRelative(lead.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
     {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Copy ${lead.name} phone`} title="Copy phone" onClick={(event) => { event.stopPropagation(); copyPhone(lead.phone!); }}><Copy /></button><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
@@ -1073,6 +1073,7 @@ export default function CommandChatExactLive() {
       }
       showNotice(`Lead claimed by ${result.claimedBy}`);
       void utils.opsChat.listChannelMessages.invalidate({ channel });
+      void utils.thumbtackLead.listNative.invalidate();
     },
     onError: (error) => showNotice(`Lead claim failed: ${error.message}`),
   });
