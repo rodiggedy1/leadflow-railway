@@ -219,3 +219,22 @@
 .ccc-live .ccc-live-sms-drawer-source{overflow:hidden;color:#77d8b0;font-size:9px;font-style:normal;font-weight:750;letter-spacing:.02em;text-overflow:ellipsis;white-space:nowrap}
 .ccc-live .ccc-live-sms-row-copy>strong{display:flex;align-items:center;gap:6px;min-width:0}
 .ccc-live .ccc-live-sms-row-source{flex:0 0 auto;color:#77d8b0;font-size:9px;font-style:normal;font-weight:750}
+
+/* Exact SMS new-message modal structure */
+.ccc-live .cic-modal-backdrop{position:fixed;z-index:80;inset:0;display:grid;place-items:center;padding:20px;background:#000a;backdrop-filter:blur(3px)}
+.ccc-live .cic-modal{width:min(430px,100%);border:1px solid #464646;border-radius:11px;background:#1c1c1c;box-shadow:0 25px 70px #000}
+.ccc-live .cic-modal>header{display:flex;align-items:center;justify-content:space-between;padding:13px;border-bottom:1px solid #333}
+.ccc-live .cic-modal>header span{display:flex;align-items:center;gap:6px;color:#eee;font-size:13px;font-weight:600}
+.ccc-live .cic-modal>header span svg{width:15px;color:#ae9dff}
+.ccc-live .cic-modal>header button{border:0;background:transparent;color:#888}
+.ccc-live .cic-modal>nav{display:flex;gap:6px;padding:10px 13px 0}
+.ccc-live .cic-modal>nav button{padding:5px 7px;border:0;border-radius:6px;background:transparent;color:#888;font-size:10px}
+.ccc-live .cic-modal>nav button.is-active{background:#302950;color:#c7bbff}
+.ccc-live .cic-modal>label{display:grid;gap:5px;padding:9px 13px 0;color:#999;font-size:10px}
+.ccc-live .cic-modal input,.ccc-live .cic-modal textarea{width:100%;padding:8px;border:1px solid #3c3c3c;border-radius:7px;outline:0;background:#171717;color:#eee;font:inherit;font-size:11px}
+.ccc-live .cic-modal textarea{min-height:76px;resize:vertical}
+.ccc-live .cic-modal footer{display:flex;justify-content:flex-end;gap:7px;padding:13px}
+.ccc-live .cic-modal footer>button{height:28px;padding:0 9px;border:1px solid #3e3e3e;border-radius:7px;background:#252525;color:#ddd;font-size:10px}
+.ccc-live .cic-modal footer .cic-send{border:0}
+.ccc-live .cic-modal button:disabled{cursor:not-allowed;opacity:.55}
+.ccc-live .cic-live-new-message{max-height:min(720px,calc(100dvh - 40px));overflow:auto}
