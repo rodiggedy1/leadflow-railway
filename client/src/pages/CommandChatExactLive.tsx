@@ -23,6 +23,7 @@ import {
   Home,
   MapPin,
   Mail,
+  MessageCircle,
   Loader2,
   Megaphone,
   MessageSquare,
@@ -32,6 +33,7 @@ import {
   Phone,
   Pin,
   Play,
+  Plus,
   RefreshCw,
   Send,
   Search,
@@ -845,6 +847,7 @@ export default function CommandChatExactLive() {
   const [bookingAmount, setBookingAmount] = useState("");
   const [bookingNote, setBookingNote] = useState("");
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
+  const [showNewMessage, setShowNewMessage] = useState(false);
   const [selectedLeadDetail, setSelectedLeadDetail] = useState<CommandLead | null>(null);
   const [selectedLeadCardPhone, setSelectedLeadCardPhone] = useState<string | null>(null);
   const [selectedLeadCardDraft, setSelectedLeadCardDraft] = useState<{ scenario: string; jobContext: string } | null>(null);
@@ -1470,7 +1473,7 @@ export default function CommandChatExactLive() {
                 <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />
               </div>
               {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
-              <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
+              <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setShowNewMessage(true)}><Plus />Start new SMS</button><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
               <CommandComposer
                 authorName={profile?.name || callerName}
                 mentionNames={mentionNames}
@@ -1557,7 +1560,58 @@ export default function CommandChatExactLive() {
         />
       </button>}
       {notice && <div className="ccc-notice" role="status"><CircleDot />{notice}</div>}
+      {showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void utils.commandCenter.listCommandChatInbox.invalidate(); }} />}
     </main>
+  );
+}
+
+function LiveNewMessageModal({ close, refresh }: { close: () => void; refresh: () => void }) {
+  const [tab, setTab] = useState<"customer" | "lead">("customer");
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [leadDetails, setLeadDetails] = useState("");
+  const [leadDraft, setLeadDraft] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadName, setLeadName] = useState("");
+  const [stage, setStage] = useState<"paste" | "review">("paste");
+  const sendWorkspaceMessage = trpc.leads.sendWorkspaceMessage.useMutation({ onSuccess: () => { refresh(); close(); } });
+  const generateFirstMessage = trpc.tools.generateFirstMessage.useMutation({
+    onSuccess: result => { setLeadDraft(result.message ?? ""); setStage("review"); },
+  });
+  const sendCustomer = () => {
+    if (!phone.trim() || !message.trim()) return;
+    sendWorkspaceMessage.mutate({ phone: phone.trim(), message: message.trim(), name: name.trim() || undefined });
+  };
+  const analyseLead = () => {
+    if (!leadDetails.trim()) return;
+    generateFirstMessage.mutate({ bookingDetails: leadDetails.trim() });
+  };
+  const sendLead = () => {
+    if (!leadPhone.trim() || !leadDraft.trim()) return;
+    sendWorkspaceMessage.mutate({ phone: leadPhone.trim(), message: leadDraft.trim(), name: leadName.trim() || undefined });
+  };
+  return (
+    <div className="cic-modal-backdrop" role="dialog" aria-modal="true" aria-label="New message">
+      <section className="cic-modal cic-live-new-message">
+        <header><span><MessageCircle />New Message</span><button type="button" onClick={close} aria-label="Close"><X /></button></header>
+        <nav><button type="button" className={tab === "customer" ? "is-active" : ""} onClick={() => setTab("customer")}>Customer</button><button type="button" className={tab === "lead" ? "is-active" : ""} onClick={() => setTab("lead")}>Lead</button></nav>
+        {tab === "customer" ? <>
+          <label>Customer phone<input value={phone} onChange={event => setPhone(event.target.value)} placeholder="(202) 555-0000" /></label>
+          <label>Customer name<input value={name} onChange={event => setName(event.target.value)} placeholder="Customer name" /></label>
+          <label>Message<textarea value={message} onChange={event => setMessage(event.target.value)} placeholder="Write a message…" /></label>
+          <footer><button type="button" onClick={close}>Cancel</button><button className="cic-send" type="button" onClick={sendCustomer} disabled={sendWorkspaceMessage.isPending || !phone.trim() || !message.trim()}>{sendWorkspaceMessage.isPending ? "Sending…" : "Send"}<Send size={13} /></button></footer>
+        </> : stage === "paste" ? <>
+          <label>Paste lead details<textarea value={leadDetails} onChange={event => setLeadDetails(event.target.value)} placeholder="Paste the lead exactly as received. Madison will extract the details and prepare the first message." /></label>
+          <footer><button type="button" onClick={close}>Cancel</button><button className="cic-send" type="button" onClick={analyseLead} disabled={generateFirstMessage.isPending || !leadDetails.trim()}>{generateFirstMessage.isPending ? "Analyzing…" : "Analyze lead"}<Sparkles size={13} /></button></footer>
+        </> : <>
+          <label>Customer phone<input value={leadPhone} onChange={event => setLeadPhone(event.target.value)} placeholder="(202) 555-0000" /></label>
+          <label>Customer name<input value={leadName} onChange={event => setLeadName(event.target.value)} placeholder="Customer name" /></label>
+          <label>First message<textarea value={leadDraft} onChange={event => setLeadDraft(event.target.value)} placeholder="Write a message…" /></label>
+          <footer><button type="button" onClick={() => setStage("paste")}>Back</button><button className="cic-send" type="button" onClick={sendLead} disabled={sendWorkspaceMessage.isPending || !leadPhone.trim() || !leadDraft.trim()}>{sendWorkspaceMessage.isPending ? "Sending…" : "Send & create"}<Send size={13} /></button></footer>
+        </>}
+      </section>
+    </div>
   );
 }
 
