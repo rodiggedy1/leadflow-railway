@@ -202,3 +202,8 @@
 .ccc-live .ccc-live-lead-primary-identity em>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ccc-live .ccc-live-lead-primary-identity em>time{flex:0 0 auto;white-space:nowrap}
 .ccc-live .ccc-live-lead-primary-identity em>time::before{content:"·";margin:0 4px}
+
+/* Unclaimed leads receive a restrained attention cue; the class disappears as soon as the persisted claimant is hydrated. */
+.ccc-live .ccc-live-lead-primary.is-unclaimed{animation:ccc-live-lead-unclaimed-shake 4.2s ease-in-out infinite}
+@keyframes ccc-live-lead-unclaimed-shake{0%,78%,100%{transform:translateX(0)}80%{transform:translateX(-2px)}82%{transform:translateX(2px)}84%{transform:translateX(-1px)}86%{transform:translateX(0)}}
+@media (prefers-reduced-motion:reduce){.ccc-live .ccc-live-lead-primary.is-unclaimed{animation:none}}
