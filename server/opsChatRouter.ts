@@ -3148,7 +3148,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
    */
   csReply: opsChatProcedure
     .input(z.object({
-      scenario: z.string().max(6000).optional().default(""),
+      scenario: z.string().max(10000).optional().default(""),
       history: z.array(z.object({
         role: z.enum(["user", "assistant"]),
         content: z.string(),
