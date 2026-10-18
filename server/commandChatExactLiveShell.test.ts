@@ -341,7 +341,7 @@ describe("Command Chat exact live shell", () => {
     expect(smsDrawer).toContain('message.role === "user" ? "Customer" : "Agent"');
     expect(smsDrawer).toContain('const smsAutoDraft = trpc.opsChat.csReply.useMutation');
     expect(smsDrawer).toContain('fetch("/api/cs-reply-stream", {');
-    expect(smsDrawer).toContain('const request = { conversationContext: smsConversationContext, customerName: name, jobContext: "" };');
+    expect(smsDrawer).toContain('const request = { conversationContext: smsConversationContext, customerName: name, jobContext: leadDraft?.jobContext ?? "", scenario: leadDraft?.scenario ?? "" };');
     expect(smsDrawer).toContain('setSmsAutoDraftText(accumulated);');
     expect(smsDrawer).toContain('setSmsAutoDraftText(replyText);');
     expect(smsDrawer).not.toContain('setDraft(accumulated);');

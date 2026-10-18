@@ -543,6 +543,69 @@ function nativeLeadToCommandLead(native: NativeThumbtackLead): CommandLead {
   };
 }
 
+const THUMBTACK_FIRST_RESPONSE_PROMPT = `You write first-response texts for inbound cleaning leads (Thumbtack and similar) for Maids in Black, a house cleaning business serving the DMV. I will paste a lead. Reply with ONLY the copy-paste message, with no notes, commentary, or explanations before or after it.
+
+Voice: warm, upbeat, friendly. Sign as Madison from Maids in Black. No em dashes.
+
+Structure:
+
+1. Greeting: "Hey [first name]! 👋 Madison from Maids in Black here. Happy to help [get/keep] your [X]bd/[X]ba [home type] [fresh/fully refreshed/spotless]!" Match the line to the cleaning type (move out: spotless for your move out; move in: spotless before you move in; post-construction: fresh after the construction; recurring: keep fresh).
+2. Middle paragraph, in this order:
+   - Name the cleaning type and list ONLY the extras they selected (fridge, oven, interior windows, baseboards, cabinets, laundry, basement).
+   - Address anything specific in their message (skipped rooms, special requests, organizing, builder restrictions). If something is unusual or unclear, say we'll confirm it when we send pricing.
+   - If the frequency is recurring: "[Weekly/Every 2 weeks/Monthly] is a great routine for keeping the home consistently fresh, and recurring clients get our best rate."
+   - "We've cleaned hundreds of homes in [city], and our whole team is background checked and insured, so you can feel completely comfortable having us in your space."
+   - If pets: "Pets are no problem at all."
+3. Close: ask them to send their phone number so we can text a quote and time options (Thumbtack's routing number can be unreliable). Otherwise ask: "Want me to check our team's availability [for their dates] and text you a couple of time options, or send pricing first?"
+
+Rules:
+
+- Never offer to call the customer. No one is available to call.
+- If their dates are today or this week, acknowledge the timing ("Since you're looking at this week..."). If they have a deadline, say we'll do our best to get them on the schedule before it.
+- We price by the home, not by the hour. Say so if they ask about hourly rates.
+- Never include time estimates or how long the clean will take.
+- If their form details conflict with their message (for example, different bedroom counts), ask them to confirm instead of guessing.
+- Keep it short: a greeting, one middle paragraph, and a one-line close. If the customer asks for a list of what's included, use emoji bullets in the middle.
+
+Example target style:
+
+Hey Peter! 👋 Madison from Maids in Black here. Happy to help get your new 5bd/4ba Frederick home spotless before the furniture comes in!
+
+Here’s what your move in deep clean would include:
+
+🗄️ Cabinets and drawers, inside and out
+🍳 Fridge, oven, dishwasher, and microwave
+🪟 Window sills and tracks
+✨ Baseboards and light fixtures
+🧹 Vacuuming and mopping on all three levels
+
+We price by the home instead of by the hour, so you get one clear total, and we’ll size the team to your 4,300 sq ft. Our whole team is background checked and insured, and we’ve cleaned hundreds of homes in Frederick.
+
+Could you send over your phone number? We’ll text you a quote and availability for Oct 30 or 31 right away.`;
+
+function buildThumbtackLeadDraftContext(lead: CommandLead): string {
+  const details = lead.nativeDetails
+    .map((detail) => `${detail.question ?? "Request detail"}: ${detail.answer ?? ""}`)
+    .filter((detail) => !detail.endsWith(": "))
+    .join("\n");
+  return [
+    `Lead name: ${lead.name}`,
+    `Cleaning type: ${lead.serviceType ?? lead.category ?? "House cleaning"}`,
+    `Location: ${lead.address ?? lead.location ?? "Not provided"}`,
+    `Requested dates/times: ${lead.requestedDates ?? "Not provided"}`,
+    `Bedrooms: ${lead.bedrooms ?? "Not provided"}`,
+    `Bathrooms: ${lead.bathrooms ?? "Not provided"}`,
+    `Home information: ${lead.homeSize ?? lead.rooms ?? lead.propertyType ?? "Not provided"}`,
+    `Frequency: ${lead.frequency ?? "Not provided"}`,
+    `Selected extras: ${lead.extras.length ? lead.extras.join(", ") : "None listed"}`,
+    `Pets: ${lead.pets ?? "Not provided"}`,
+    `Customer request/description: ${lead.description ?? lead.summary ?? "Not provided"}`,
+    `Travel preferences: ${lead.travelPreferences.length ? lead.travelPreferences.join(", ") : "None listed"}`,
+    `Proposed times: ${lead.proposedTimes.length ? JSON.stringify(lead.proposedTimes) : "None listed"}`,
+    details ? `All retained Thumbtack request fields:\n${details}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 function isHiddenCommandNotification(message: ChannelMessage) {
   if (HIDDEN_COMMAND_QUICK_ACTIONS.includes(message.quickAction as (typeof HIDDEN_COMMAND_QUICK_ACTIONS)[number])) return true;
   if (message.quickAction === "sync_watchdog") return true;
@@ -713,6 +776,7 @@ export default function CommandChatExactLive() {
   const [bookingNote, setBookingNote] = useState("");
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsInboxConversation | null>(null);
   const [selectedLeadCardPhone, setSelectedLeadCardPhone] = useState<string | null>(null);
+  const [selectedLeadCardDraft, setSelectedLeadCardDraft] = useState<{ scenario: string; jobContext: string } | null>(null);
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
@@ -740,6 +804,7 @@ export default function CommandChatExactLive() {
       setMadisonOpen(false);
       setSelectedSmsConversation(null);
       setSelectedLeadCardPhone(null);
+      setSelectedLeadCardDraft(null);
     }
   }, [selectedEmailThreadId]);
 
@@ -1045,6 +1110,10 @@ export default function CommandChatExactLive() {
       return;
     }
     setSelectedLeadCardPhone(lead.phone);
+    setSelectedLeadCardDraft(lead.sourceLabel === "Thumbtack" ? {
+      scenario: `${THUMBTACK_FIRST_RESPONSE_PROMPT}\n\nThumbtack lead:\n${buildThumbtackLeadDraftContext(lead)}`,
+      jobContext: buildThumbtackLeadDraftContext(lead),
+    } : null);
     setSelectedSmsConversation(inboxConversation ?? {
       id: lead.sessionId ?? 0,
       leadName: lead.name,
@@ -1277,7 +1346,7 @@ export default function CommandChatExactLive() {
                   {visibleEmailInbox.map((thread) => <EmailInboxRow thread={thread} key={thread.threadId} onOpen={() => setSelectedEmailThreadId(thread.threadId)} />)}
                   {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
                 </div> : <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
-                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedSmsConversation(conversation); }} />)}
+                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />)}
                   {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
                 </div>}
               </div>
@@ -1290,7 +1359,7 @@ export default function CommandChatExactLive() {
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
               <div className="ccc-message-stream" ref={messageStreamRef} onScroll={trackCommandFeedScroll}>
-                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedSmsConversation(conversation); }} />
+                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />
               </div>
               {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
               <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
@@ -1312,7 +1381,7 @@ export default function CommandChatExactLive() {
           </aside>
         </div>
       </section>
-      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} onNotice={showNotice} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); }} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} onNotice={showNotice} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); }} />}
       {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
@@ -1846,7 +1915,7 @@ function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; o
   </div>;
 }
 
-function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, onNotice, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; onNotice: (message: string) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
+function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, onNotice, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; onNotice: (message: string) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
   const utils = trpc.useUtils();
   const isTeamConversation = conversation.personType === "team";
   const contextPhone = conversation.leadPhone || "0000000";
@@ -1864,7 +1933,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const smsAutoDraftSessionIdRef = useRef<number | null>(conversation.id);
   const { data: detail } = trpc.leads.getCsConversation.useQuery(
     { sessionId: conversation.id },
-    { staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
+    { enabled: conversation.id > 0, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
   );
   const { data: clientProfile } = trpc.leadflowJobs.customerProfile.useQuery(
     { phone: contextPhone },
@@ -1916,12 +1985,12 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     },
   });
   const streamSmsAutoDraft = useCallback(async () => {
-    if (!smsConversationContext || autoDraftedForConversationRef.current === conversation.id) return;
+    if ((!smsConversationContext && !leadDraft?.scenario && !leadDraft?.jobContext) || autoDraftedForConversationRef.current === conversation.id) return;
     autoDraftedForConversationRef.current = conversation.id;
     if (smsAutoDraftAbortRef.current) smsAutoDraftAbortRef.current.abort();
     const controller = new AbortController();
     smsAutoDraftAbortRef.current = controller;
-    const request = { conversationContext: smsConversationContext, customerName: name, jobContext: "" };
+    const request = { conversationContext: smsConversationContext, customerName: name, jobContext: leadDraft?.jobContext ?? "", scenario: leadDraft?.scenario ?? "" };
     setSmsAutoDraftText("");
     setSmsAutoDraftReady(false);
     setSmsAutoDraftLoading(true);
@@ -1975,7 +2044,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       setSmsAutoDraftLoading(true);
       smsAutoDraft.mutate(request);
     }
-  }, [conversation.id, name, smsAutoDraft, smsConversationContext]);
+  }, [conversation.id, leadDraft?.jobContext, leadDraft?.scenario, name, smsAutoDraft, smsConversationContext]);
   const regenerateSmsDraft = useCallback(() => {
     autoDraftedForConversationRef.current = null;
     void streamSmsAutoDraft();
@@ -2009,9 +2078,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     if (smsComposerRef.current) resizeSmsComposer(smsComposerRef.current);
   }, [draft, resizeSmsComposer]);
   useEffect(() => {
-    if (!detail || messages.length === 0) return;
+    if (conversation.id > 0 && !detail) return;
+    if (messages.length === 0 && !leadDraft?.scenario && !leadDraft?.jobContext) return;
     void streamSmsAutoDraft();
-  }, [detail, messages.length, streamSmsAutoDraft]);
+  }, [conversation.id, detail, leadDraft?.jobContext, leadDraft?.scenario, messages.length, streamSmsAutoDraft]);
   useEffect(() => {
     if (!detail || (initialBottomScrollDone.current && !scrollAfterSendRef.current)) return;
     const animationFrame = requestAnimationFrame(() => {
