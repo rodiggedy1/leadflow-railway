@@ -848,6 +848,7 @@ export default function CommandChatExactLive() {
   const [selectedLeadDetail, setSelectedLeadDetail] = useState<CommandLead | null>(null);
   const [selectedLeadCardPhone, setSelectedLeadCardPhone] = useState<string | null>(null);
   const [selectedLeadCardDraft, setSelectedLeadCardDraft] = useState<{ scenario: string; jobContext: string } | null>(null);
+  const [optimisticClaimedBy, setOptimisticClaimedBy] = useState<Record<number, string>>({});
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
@@ -1087,9 +1088,11 @@ export default function CommandChatExactLive() {
     const statusById = new Map(leadSessionStatuses.map((status) => [status.id, status]));
     return rawCommandLeads.map((lead) => {
       const status = lead.sessionId ? statusById.get(lead.sessionId) : undefined;
-      return status ? { ...lead, isBooked: status.isBooked, bookedByAgentName: status.bookedByAgentName } : lead;
+      const claimedBy = optimisticClaimedBy[lead.id];
+      const hydrated = status ? { ...lead, isBooked: status.isBooked, bookedByAgentName: status.bookedByAgentName } : lead;
+      return claimedBy ? { ...hydrated, claimedBy } : hydrated;
     });
-  }, [leadSessionStatuses, rawCommandLeads]);
+  }, [leadSessionStatuses, optimisticClaimedBy, rawCommandLeads]);
   const allLeads = useMemo(() => commandLeads, [commandLeads]);
   const selectedConversationLead = useMemo(
     () => selectedSmsConversation ? leadForConversation(selectedSmsConversation, allLeads) : null,
@@ -1145,21 +1148,45 @@ export default function CommandChatExactLive() {
     noticeTimer.current = setTimeout(() => setNotice(""), 3000);
   }, []);
   const claimCommandLead = trpc.opsChat.claimLead.useMutation({
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       if (!result.success) {
+        setOptimisticClaimedBy((current) => ({ ...current, [variables.messageId]: result.alreadyClaimedBy }));
         showNotice(`Already claimed by ${result.alreadyClaimedBy}`);
+        void Promise.all([
+          utils.opsChat.listChannelMessages.invalidate({ channel }),
+          utils.thumbtackLead.listNative.invalidate(),
+        ]).finally(() => setOptimisticClaimedBy((current) => {
+          const next = { ...current };
+          delete next[variables.messageId];
+          return next;
+        }));
         return;
       }
+      setOptimisticClaimedBy((current) => ({ ...current, [variables.messageId]: result.claimedBy }));
       showNotice(`Lead claimed by ${result.claimedBy}`);
-      void utils.opsChat.listChannelMessages.invalidate({ channel });
-      void utils.thumbtackLead.listNative.invalidate();
+      void Promise.all([
+        utils.opsChat.listChannelMessages.invalidate({ channel }),
+        utils.thumbtackLead.listNative.invalidate(),
+      ]).finally(() => setOptimisticClaimedBy((current) => {
+        const next = { ...current };
+        delete next[variables.messageId];
+        return next;
+      }));
     },
-    onError: (error) => showNotice(`Lead claim failed: ${error.message}`),
+    onError: (error, variables) => {
+      setOptimisticClaimedBy((current) => {
+        const next = { ...current };
+        delete next[variables.messageId];
+        return next;
+      });
+      showNotice(`Lead claim failed: ${error.message}`);
+    },
   });
   const claimLeadFromQueue = useCallback((lead: CommandLead) => {
     if (lead.claimedBy || claimCommandLead.isPending) return;
+    setOptimisticClaimedBy((current) => ({ ...current, [lead.id]: callerName }));
     claimCommandLead.mutate({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}) });
-  }, [claimCommandLead, claimCommandLead.isPending]);
+  }, [callerName, claimCommandLead, claimCommandLead.isPending]);
   const markLeadBookedFromQueue = useCallback(async (lead: CommandLead) => {
     if (lead.isBooked || !lead.sessionId || markLeadBookedMutation.isPending) return;
     let marked = false;
@@ -2160,7 +2187,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     if (smsComposerRef.current) resizeSmsComposer(smsComposerRef.current);
   }, [draft, resizeSmsComposer]);
   useEffect(() => {
-    if (conversation.id > 0 && !detail) return;
+    if (conversation.id > 0 && !detail && !leadDraft?.scenario && !leadDraft?.jobContext) return;
     if (messages.length === 0 && !leadDraft?.scenario && !leadDraft?.jobContext) return;
     void streamSmsAutoDraft();
   }, [conversation.id, detail, leadDraft?.jobContext, leadDraft?.scenario, messages.length, streamSmsAutoDraft]);
