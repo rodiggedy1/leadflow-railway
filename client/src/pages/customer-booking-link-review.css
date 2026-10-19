@@ -173,3 +173,14 @@
 
 /* The best-option treatment follows selection; an unselected first date is a regular card. */
 .customer-link-date-options .customer-link-option:first-child:not(.is-selected){border:1px solid #ddd7d0;background:#fff}
+
+/* Keep browser-autofilled reservation fields consistent with the form instead of Chrome's yellow fill. */
+.customer-link-details input:-webkit-autofill,
+.customer-link-details input:-webkit-autofill:hover,
+.customer-link-details input:-webkit-autofill:focus,
+.customer-link-details input:-webkit-autofill:active{
+  -webkit-text-fill-color:#2d2d2d;
+  -webkit-box-shadow:0 0 0 1000px #fff inset;
+  box-shadow:0 0 0 1000px #fff inset;
+  transition:background-color 9999s ease-in-out 0s;
+}

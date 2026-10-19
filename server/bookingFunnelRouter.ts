@@ -239,7 +239,18 @@ export const bookingFunnelRouter = router({
       const rows = await db.select().from(bookingFunnelRecords).where(eq(bookingFunnelRecords.publicFunnelNumber, input.token)).limit(1);
       const funnel = rows[0];
       if (!funnel || !["customer-booking-link", "madison-quote"].includes(funnel.source)) throw new TRPCError({ code: "NOT_FOUND", message: "This booking link is no longer available." });
-      if (funnel.bookingId || funnel.stage === "booked") return { bookingId: funnel.bookingId, publicBookingNumber: null, created: false };
+      if (funnel.bookingId || funnel.stage === "booked") {
+        if (funnel.bookingId && funnel.stage === "payment_incomplete") {
+          const customerName = input.customerName.trim();
+          const customerPhone = normalizePhone(input.customerPhone);
+          const customerEmail = input.customerEmail.trim().toLowerCase();
+          const address = input.address.trim();
+          const updatedAt = new Date();
+          await db.update(bookings).set({ customerName, customerPhone, customerEmail, address, updatedAt }).where(eq(bookings.id, funnel.bookingId));
+          await db.update(bookingFunnelRecords).set({ customerName, customerPhone, customerEmail, address, updatedAt }).where(eq(bookingFunnelRecords.id, funnel.id));
+        }
+        return { bookingId: funnel.bookingId, publicBookingNumber: null, created: false };
+      }
       if (!isPublicBookingPriceSnapshot(funnel.priceSnapshot)) {
         throw new TRPCError({ code: "CONFLICT", message: "This quote is no longer valid. Please ask Madison for a new link." });
       }
