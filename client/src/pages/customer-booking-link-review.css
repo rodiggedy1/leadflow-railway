@@ -170,3 +170,6 @@
   .customer-link-option small{font-size:11px!important;line-height:1.15}
   .customer-link-option-badge{width:100%;max-width:100%;margin:-9px 0 6px;padding:4px 2px;font-size:9px;white-space:normal;text-align:center}
 }
+
+/* The best-option treatment follows selection; an unselected first date is a regular card. */
+.customer-link-date-options .customer-link-option:first-child:not(.is-selected){border:1px solid #ddd7d0;background:#fff}
