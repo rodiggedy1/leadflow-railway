@@ -13,6 +13,7 @@
 
 import { z } from "zod";
 import { adminAgentProcedure, agentPageProcedure, agentProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
   conversationSessions,
@@ -36,6 +37,9 @@ const NON_LEAD_SOURCES = [
 ];
 
 import { invokeLLM } from "./_core/llm";
+import { createQuoteLink } from "./quoteLink";
+import { extractQuoteInputsFromText, resolveVerifiedQuote, type QuoteInputs } from "./madisonMissionStore";
+import { PUBLIC_BOOKING_PRICED_EXTRAS } from "../shared/publicBookingPricing";
 import { sendSms } from "./openphone";
 import { normalizePhone } from "./routers";
 import { normalizePhoneLegacy } from "./utils/phone";
@@ -324,6 +328,126 @@ export const commandCenterRouter = router({
             : "customer" as const,
         }))
         .sort((left, right) => right.lastMsgTs - left.lastMsgTs);
+    }),
+
+  /**
+   * Extract only explicit quote facts from the current SMS/lead context.
+   * This is intentionally review-only: it does not create a quote or send a text.
+   */
+  prepareQuoteAssistant: agentProcedure
+    .input(z.object({
+      conversationContext: z.string().trim().max(12_000),
+      leadFacts: z.string().trim().max(8_000).default(""),
+    }))
+    .mutation(async ({ input }) => {
+      const fallback = extractQuoteInputsFromText(`${input.leadFacts}\n${input.conversationContext}`);
+      const extractionSchema = {
+        type: "object",
+        properties: {
+          bedrooms: { type: ["string", "null"] },
+          bathrooms: { type: ["string", "null"] },
+          serviceType: { type: ["string", "null"] },
+          condition: { type: ["integer", "null"] },
+          extras: {
+            type: ["array", "null"],
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", enum: Object.keys(PUBLIC_BOOKING_PRICED_EXTRAS) },
+                quantity: { type: "integer", minimum: 1, maximum: 50 },
+              },
+              required: ["id", "quantity"],
+              additionalProperties: false,
+            },
+          },
+          extrasConfirmed: { type: "boolean" },
+        },
+        required: ["bedrooms", "bathrooms", "serviceType", "condition", "extras", "extrasConfirmed"],
+        additionalProperties: false,
+      } as const;
+      let extracted: QuoteInputs = fallback;
+      try {
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You extract cleaning-quote facts for an agent review screen. Use only facts explicitly present in the lead context. Never guess bedroom count, bathroom count, service type, home condition, or extras. For extras, return an empty array and extrasConfirmed true only when the context explicitly indicates there are no extras; otherwise return null and extrasConfirmed false when the context is silent. Supported service types are Standard Cleaning, Deep Cleaning, and Move-In / Move-Out Cleaning. Supported extra IDs are: ${Object.keys(PUBLIC_BOOKING_PRICED_EXTRAS).join(", ")}. Output JSON only.`,
+            },
+            { role: "user", content: `Lead facts:\n${input.leadFacts || "(none)"}\n\nConversation:\n${input.conversationContext || "(none)"}` },
+          ],
+          response_format: { type: "json_schema", json_schema: { name: "quote_facts", strict: true, schema: extractionSchema } },
+        });
+        const raw = response.choices?.[0]?.message?.content;
+        if (!raw) throw new Error("Empty quote extraction response");
+        const parsed = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)) as QuoteInputs;
+        extracted = {
+          bedrooms: parsed.bedrooms ?? fallback.bedrooms ?? null,
+          bathrooms: parsed.bathrooms ?? fallback.bathrooms ?? null,
+          serviceType: parsed.serviceType ?? fallback.serviceType ?? null,
+          condition: parsed.condition ?? fallback.condition ?? null,
+          extras: parsed.extras ?? fallback.extras ?? null,
+          extrasConfirmed: parsed.extrasConfirmed || fallback.extrasConfirmed,
+        };
+      } catch (error) {
+        console.warn("[QuoteAssistant] extraction fallback:", error);
+      }
+      const verified = resolveVerifiedQuote(extracted);
+      return {
+        quoteInputs: extracted,
+        missing: verified.missing,
+        priceDollars: verified.quote?.amountDollars ?? null,
+        includedExtras: (verified.quote?.extras ?? []).map((extra) => ({
+          id: extra.id,
+          label: PUBLIC_BOOKING_PRICED_EXTRAS[extra.id]?.label ?? extra.id,
+          quantity: extra.quantity,
+        })),
+      };
+    }),
+
+  /** Creates the quote link only after the agent reviews the extracted fields. */
+  createQuoteAssistant: agentProcedure
+    .input(z.object({
+      customerName: z.string().trim().min(2).max(255),
+      customerPhone: z.string().trim().min(7).max(40),
+      quoteInputs: z.object({
+        bedrooms: z.string().nullable().optional(),
+        bathrooms: z.string().nullable().optional(),
+        serviceType: z.string().nullable().optional(),
+        condition: z.number().int().nullable().optional(),
+        extras: z.array(z.object({ id: z.string(), quantity: z.number().int().min(1).max(50) })).nullable().optional(),
+        extrasConfirmed: z.boolean().optional(),
+      }),
+    }))
+    .mutation(async ({ input }) => {
+      const verified = resolveVerifiedQuote(input.quoteInputs);
+      if (!verified.quote) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Complete these quote fields first: ${verified.missing.join(", ")}.` });
+      }
+      const result = await createQuoteLink({
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+        bedrooms: verified.quote.bedrooms,
+        bathrooms: verified.quote.bathrooms,
+        serviceType: verified.quote.serviceType,
+        frequency: "One-time",
+        price: verified.quote.amountDollars,
+        slots: [],
+        source: "LeadFlow Command Chat AI Quote Assistant",
+        conversationSummary: `Included base cleaning${verified.quote.extras.length ? ` plus ${verified.quote.extras.map((extra) => `${extra.quantity} x ${PUBLIC_BOOKING_PRICED_EXTRAS[extra.id]?.label ?? extra.id}`).join(", ")}` : ""}`,
+      });
+      if (!result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The quote link could not be created." });
+      return {
+        ...result,
+        priceDollars: verified.quote.amountDollars,
+        serviceType: verified.quote.serviceType,
+        bedrooms: verified.quote.bedrooms,
+        bathrooms: verified.quote.bathrooms,
+        includedExtras: verified.quote.extras.map((extra) => ({
+          id: extra.id,
+          label: PUBLIC_BOOKING_PRICED_EXTRAS[extra.id]?.label ?? extra.id,
+          quantity: extra.quantity,
+        })),
+      };
     }),
 
   /**
