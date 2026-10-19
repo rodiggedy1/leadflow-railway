@@ -238,3 +238,14 @@
 .ccc-live .cic-modal footer .cic-send{border:0}
 .ccc-live .cic-modal button:disabled{cursor:not-allowed;opacity:.55}
 .ccc-live .cic-live-new-message{max-height:min(720px,calc(100dvh - 40px));overflow:auto}
+
+/* Lead card status visibility only: no interaction or lifecycle behavior changes. */
+.ccc-live .ccc-live-lead-primary.is-booked{border-color:rgba(88,184,141,.48);background:linear-gradient(145deg,rgba(28,59,49,.72),rgba(31,31,34,.96))}
+.ccc-live .ccc-live-lead-primary-identity em.is-booked{color:#9fe8c3}
+.ccc-live .ccc-live-lead-primary-identity em.is-booked i{background:#58d6a3}
+.ccc-live .ccc-live-lead-primary-identity em.is-texted{color:#b9adff}
+.ccc-live .ccc-live-lead-primary-identity em.is-texted i{background:#9b87ff}
+.ccc-live .ccc-live-lead-primary-identity em.is-replied{color:#77e0b0;font-weight:850}
+.ccc-live .ccc-live-lead-primary-identity em.is-replied i{background:#37d394;box-shadow:0 0 0 3px rgba(55,211,148,.12)}
+.ccc-live .ccc-live-lead-primary-identity em.is-new{color:#b1b1ba}
+.ccc-live .ccc-live-lead-primary-identity em.is-new i{background:#85858e}
