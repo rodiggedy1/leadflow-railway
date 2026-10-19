@@ -961,6 +961,7 @@ export default function CommandChatExactLive() {
   const [selectedLeadCardPhone, setSelectedLeadCardPhone] = useState<string | null>(null);
   const [selectedLeadCardDraft, setSelectedLeadCardDraft] = useState<{ scenario: string; jobContext: string } | null>(null);
   const [optimisticClaimedBy, setOptimisticClaimedBy] = useState<Record<number, string>>({});
+  const [optimisticBookedBySession, setOptimisticBookedBySession] = useState<Record<number, string>>({});
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
@@ -1201,10 +1202,12 @@ export default function CommandChatExactLive() {
     return rawCommandLeads.map((lead) => {
       const status = lead.sessionId ? statusById.get(lead.sessionId) : undefined;
       const claimedBy = optimisticClaimedBy[lead.id];
+      const optimisticBookedBy = lead.sessionId ? optimisticBookedBySession[lead.sessionId] : undefined;
       const hydrated = status ? { ...lead, isBooked: status.isBooked, bookedByAgentName: status.bookedByAgentName } : lead;
-      return claimedBy ? { ...hydrated, claimedBy } : hydrated;
+      const booked = optimisticBookedBy ? { ...hydrated, isBooked: true, bookedByAgentName: optimisticBookedBy } : hydrated;
+      return claimedBy ? { ...booked, claimedBy } : booked;
     });
-  }, [leadSessionStatuses, optimisticClaimedBy, rawCommandLeads]);
+  }, [leadSessionStatuses, optimisticBookedBySession, optimisticClaimedBy, rawCommandLeads]);
   const allLeads = useMemo(() => commandLeads, [commandLeads]);
   const selectedConversationLead = useMemo(
     () => selectedSmsConversation ? leadForConversation(selectedSmsConversation, allLeads) : null,
@@ -1305,6 +1308,7 @@ export default function CommandChatExactLive() {
     try {
       await markLeadBookedMutation.mutateAsync({ sessionId: lead.sessionId });
       marked = true;
+      setOptimisticBookedBySession((current) => ({ ...current, [lead.sessionId!]: callerName }));
       void utils.bookings.todayStats.invalidate();
       void utils.opsChat.getLeadSessionStatuses.invalidate({ sessionIds: commandLeadSessionIds });
       void utils.thumbtackLead.listNative.invalidate();
@@ -1316,6 +1320,13 @@ export default function CommandChatExactLive() {
       });
       showNotice(`${lead.name} marked as booked and announced.`);
     } catch (error) {
+      if (!marked && lead.sessionId) {
+        setOptimisticBookedBySession((current) => {
+          const next = { ...current };
+          delete next[lead.sessionId!];
+          return next;
+        });
+      }
       showNotice(marked ? "Lead marked booked, but the Command Chat announcement failed." : error instanceof Error ? `Booking update failed: ${error.message}` : "Booking update failed.");
     }
   }, [announceBooking, callerName, commandLeadSessionIds, markLeadBookedMutation, profile?.name, showNotice, utils]);

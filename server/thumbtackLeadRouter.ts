@@ -106,13 +106,19 @@ export const thumbtackLeadRouter = router({
       });
       const linkedSessionId = linkedMessage ? metadataSessionId(linkedMessage.metadata) : null;
       const linkedClaimedBy = linkedMessage ? metadataClaimedBy(linkedMessage.metadata) : null;
-      const sessionRows = phone
+      const sessionRows = linkedSessionId
         ? (await db.execute(sql`
             SELECT id, isBooked, bookedByAgentName FROM conversation_sessions
-            WHERE leadPhone LIKE ${`%${phone.replace(/[^0-9]/g, "").slice(-10)}`}
-            ORDER BY id DESC LIMIT 1
+            WHERE id = ${linkedSessionId}
+            LIMIT 1
           `) as any)[0] as Array<{ id: number; isBooked: number; bookedByAgentName: string | null }>
-        : [];
+        : phone
+          ? (await db.execute(sql`
+              SELECT id, isBooked, bookedByAgentName FROM conversation_sessions
+              WHERE leadPhone LIKE ${`%${phone.replace(/[^0-9]/g, "").slice(-10)}`}
+              ORDER BY id DESC LIMIT 1
+            `) as any)[0] as Array<{ id: number; isBooked: number; bookedByAgentName: string | null }>
+          : [];
       const linkedSession = sessionRows[0] ?? null;
       leads.push({
         negotiationId,
