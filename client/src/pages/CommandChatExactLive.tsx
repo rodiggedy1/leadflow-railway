@@ -1144,7 +1144,7 @@ export default function CommandChatExactLive() {
   const setReminder = trpc.opsChat.setReminder.useMutation({ onSuccess: () => { setModal(null); setReminderBody(""); showNotice("Reminder scheduled."); } });
   const pinNote = trpc.opsChat.pinNote.useMutation({ onSuccess: () => { setModal(null); setPinBody(""); void utils.opsChat.getChannelPin.invalidate({ channel }); } });
   const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: () => { setModal(null); setBookingPerson(""); setBookingAmount(""); setBookingNote(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); } });
-  const markLeadBookedMutation = trpc.agents.markBooked.useMutation();
+  const markLeadBookedMutation = trpc.opsChat.markLeadBooked.useMutation();
   const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
     onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),

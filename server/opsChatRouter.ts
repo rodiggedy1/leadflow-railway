@@ -52,6 +52,7 @@ import { sendGmailReply, getInboxEmailAddress } from "./gmailService";
 import { keepLatestEmailThreadPerSender } from "./utils/emailInbox";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { markReactivationContactBooked } from "./campaignRouter";
 import { invokeLLM } from "./_core/llm";
 import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
@@ -2923,6 +2924,30 @@ export const opsChatRouter = router({
         stage: r.stage,
         lostReason: r.lostReason ?? null,
       }));
+    }),
+
+  /**
+   * Mark a Command Chat lead as booked using the same Ops Chat authentication
+   * as the lead card itself.
+   */
+  markLeadBooked: opsChatProcedure
+    .input(z.object({ sessionId: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const now = new Date();
+      await db
+        .update(conversationSessions)
+        .set({
+          isBooked: 1,
+          stage: "BOOKED",
+          bookedAt: now,
+          bookedByAgentName: ctx.opsCaller.name,
+        })
+        .where(eq(conversationSessions.id, input.sessionId));
+      await markReactivationContactBooked(input.sessionId).catch(console.error);
+      broadcastOpsUpdate("lead_update");
+      return { success: true };
     }),
 
   /**
