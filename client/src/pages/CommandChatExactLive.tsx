@@ -321,6 +321,38 @@ function firstName(value: string | null) {
   return value?.trim().split(/\s+/)[0] || "Claimed";
 }
 
+function nextQuoteDate() {
+  const today = new Date();
+  const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function quoteServiceId(value: string | null): "standard" | "deep" | "moveout" {
+  const normalized = value?.toLowerCase() ?? "";
+  if (normalized.includes("deep")) return "deep";
+  if (normalized.includes("move")) return "moveout";
+  return "standard";
+}
+
+function quoteHomeType(value: string | null): "House" | "Apartment" | "Townhome" | "Condo" {
+  const normalized = value?.toLowerCase() ?? "";
+  if (normalized.includes("apartment") || normalized.includes("flat")) return "Apartment";
+  if (normalized.includes("town")) return "Townhome";
+  if (normalized.includes("condo")) return "Condo";
+  return "House";
+}
+
+function quoteRequestedTime(lead: CommandLead | null) {
+  const proposed = lead?.proposedTimes?.[0]?.start;
+  if (proposed) {
+    const parsed = new Date(proposed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(parsed);
+    }
+  }
+  return "10:30";
+}
+
 function dateLabel(value: number) {
   return new Date(value).toLocaleDateString([], { month: "short", day: "numeric" });
 }
@@ -2277,12 +2309,16 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     },
     onError: (error) => setQuoteAssistantError(error.message || "Quote details could not be prepared."),
   });
-  const createQuoteAssistant = trpc.commandCenter.createQuoteAssistant.useMutation({
+  const createQuoteAssistant = trpc.bookingFunnel.createCustomerLink.useMutation({
     onSuccess: (result) => {
-      const extras = result.includedExtras.length
-        ? result.includedExtras.map((extra) => `✨ ${extra.quantity > 1 ? `${extra.quantity} × ` : ""}${extra.label}`).join("\n")
+      const selectedExtras = quoteAssistantFields?.extras ?? [];
+      const extras = selectedExtras.length
+        ? selectedExtras.map((extra) => `✨ ${extra.quantity > 1 ? `${extra.quantity} × ` : ""}${QUOTE_EXTRA_OPTIONS.find(([id]) => id === extra.id)?.[1] ?? extra.id}`).join("\n")
         : "✨ No add-ons selected";
-      const quoteMessage = `Hey ${firstName(name)}! 👋 Madison from Maids in Black here. I put together your ${result.serviceType.toLowerCase()} quote for your ${result.bedrooms.toLowerCase()} / ${result.bathrooms} home.\n\n🧼 Included:\n${extras}\n\nYour first-cleaning quote is $${result.priceDollars.toFixed(0)}. You can review the details and choose your time here:\n${result.url}`;
+      const serviceType = quoteAssistantFields?.serviceType ?? "Home cleaning";
+      const bedrooms = quoteAssistantFields?.bedrooms ?? "your";
+      const bathrooms = quoteAssistantFields?.bathrooms ?? "home";
+      const quoteMessage = `Hey ${firstName(name)}! 👋 Madison from Maids in Black here. I put together your ${serviceType.toLowerCase()} quote for your ${bedrooms.toLowerCase()} / ${bathrooms} home.\n\n🧼 Included:\n${extras}\n\nYour first-cleaning quote is $${(result.firstCleaningTotalCents / 100).toFixed(0)}. You can review the details and choose your time here:\n${result.urlPath}`;
       setDraft(quoteMessage);
       setQuoteAssistantOpen(false);
       setQuoteAssistantError("");
@@ -2401,7 +2437,26 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       pending={createQuoteAssistant.isPending}
       onFieldsChange={setQuoteAssistantFields}
       onClose={() => { setQuoteAssistantOpen(false); setQuoteAssistantError(""); }}
-      onCreate={() => createQuoteAssistant.mutate({ customerName: name, customerPhone: leadCardPhone || conversation.leadPhone || "", quoteInputs: quoteAssistantFields })}
+      onCreate={() => createQuoteAssistant.mutate({
+        customerName: name,
+        customerPhone: leadCardPhone || conversation.leadPhone || "",
+        requestedLocalDate: nextQuoteDate(),
+        requestedLocalTime: quoteRequestedTime(lead),
+        address: lead?.address || undefined,
+        pricing: {
+          pricingMode: "home",
+          serviceId: quoteServiceId(quoteAssistantFields.serviceType),
+          bedrooms: Number.parseInt(quoteAssistantFields.bedrooms || "0", 10),
+          bathrooms: Number.parseInt(quoteAssistantFields.bathrooms || "1", 10),
+          homeType: quoteHomeType(lead?.propertyType || null),
+          condition: quoteAssistantFields.condition || 5,
+          maidCount: 1,
+          hourCount: 1,
+          extras: quoteAssistantFields.extras || [],
+          recurrence: "one-time",
+        },
+        notes: [lead?.summary, lead?.description, lead?.detail].filter((value): value is string => Boolean(value?.trim())),
+      })}
     />}
   </aside></div>;
 }
