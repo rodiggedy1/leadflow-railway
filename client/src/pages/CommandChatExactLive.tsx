@@ -2172,6 +2172,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const [smsAutoDraftLoading, setSmsAutoDraftLoading] = useState(false);
   const [smsAutoDraftReady, setSmsAutoDraftReady] = useState(false);
   const [smsAutoDraftText, setSmsAutoDraftText] = useState("");
+  const [smsAutoDraftMinimized, setSmsAutoDraftMinimized] = useState(false);
   const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
   const [quoteAssistantOpen, setQuoteAssistantOpen] = useState(false);
   const [quoteAssistantFields, setQuoteAssistantFields] = useState<QuoteAssistantFields | null>(null);
@@ -2317,7 +2318,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   }, [smsAutoDraftText]);
   const prepareQuoteAssistant = trpc.commandCenter.prepareQuoteAssistant.useMutation({
     onSuccess: (result) => {
-      setQuoteAssistantFields(result.quoteInputs);
+      setQuoteAssistantFields({ ...result.quoteInputs, condition: result.quoteInputs.condition ?? 5 });
       setQuoteAssistantMissing(result.missing);
       setQuoteAssistantPrice(result.priceDollars);
       setQuoteAssistantError("");
@@ -2361,6 +2362,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setSmsAutoDraftReady(false);
     setSmsAutoDraftText("");
     setSmsAutoDraftLoading(false);
+    setSmsAutoDraftMinimized(false);
     setQuoteAssistantOpen(false);
     setQuoteAssistantFields(null);
     setQuoteAssistantMissing([]);
@@ -2444,7 +2446,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     })}</div>
     <footer>
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
-      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></article>}
+      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className={`ccc-live-sms-ai-draft-card ${smsAutoDraftMinimized ? "is-minimized" : ""}`}><header><span><Sparkles />World-class draft</span><small>Review before sending</small><button type="button" className="ccc-live-sms-ai-draft-toggle" aria-label={smsAutoDraftMinimized ? "Expand world-class draft" : "Minimize world-class draft"} aria-expanded={!smsAutoDraftMinimized} title={smsAutoDraftMinimized ? "Expand draft" : "Minimize draft"} onClick={() => setSmsAutoDraftMinimized((value) => !value)}><ChevronDown /></button></header>{!smsAutoDraftMinimized && <><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></>}</article>}
       <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
     {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal
@@ -2469,7 +2471,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
           bedrooms: Number.parseInt(quoteAssistantFields.bedrooms || "0", 10),
           bathrooms: Number.parseInt(quoteAssistantFields.bathrooms || "1", 10),
           homeType: quoteHomeType(lead?.propertyType || null),
-          condition: quoteAssistantFields.condition || 5,
+          condition: quoteAssistantFields.condition ?? 5,
           maidCount: 1,
           hourCount: 1,
           extras: quoteAssistantFields.extras || [],

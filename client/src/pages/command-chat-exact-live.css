@@ -274,3 +274,11 @@
 .ccc-live-quote-assistant-modal footer .ccc-live-quote-assistant-create { border-color:rgba(103,214,161,.4); background:#267b5f; color:#f2fff8; }
 .ccc-live-quote-assistant-modal footer button:disabled { opacity:.55; cursor:not-allowed; }
 @media (max-width:560px) { .ccc-live-quote-assistant-grid,.ccc-live-quote-assistant-extras { grid-template-columns:1fr; } .ccc-live-quote-assistant-extras legend { grid-column:auto; } .ccc-live-quote-assistant-customer { flex-direction:column; gap:4px; } }
+
+/* World-Class Draft collapse control: display-only, preserves existing draft actions. */
+.ccc-live-sms-ai-draft-card>header{position:relative}
+.ccc-live-sms-ai-draft-toggle{display:grid;place-items:center;width:22px;height:22px;margin-left:auto;padding:0;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:rgba(255,255,255,.05);color:#cfc5ef;cursor:pointer}
+.ccc-live-sms-ai-draft-toggle:hover{background:rgba(255,255,255,.12);color:#fff}
+.ccc-live-sms-ai-draft-toggle svg{width:13px;height:13px;transition:transform .16s ease}
+.ccc-live-sms-ai-draft-card.is-minimized .ccc-live-sms-ai-draft-toggle svg{transform:rotate(-90deg)}
+.ccc-live-sms-ai-draft-card.is-minimized{gap:0}
