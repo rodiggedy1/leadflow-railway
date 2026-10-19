@@ -37,7 +37,6 @@ const NON_LEAD_SOURCES = [
 ];
 
 import { invokeLLM } from "./_core/llm";
-import { createQuoteLink } from "./quoteLink";
 import { extractQuoteInputsFromText, resolveVerifiedQuote, type QuoteInputs } from "./madisonMissionStore";
 import { PUBLIC_BOOKING_PRICED_EXTRAS } from "../shared/publicBookingPricing";
 import { sendSms } from "./openphone";
@@ -403,51 +402,6 @@ export const commandCenterRouter = router({
       };
     }),
 
-  /** Creates the quote link only after the agent reviews the extracted fields. */
-  createQuoteAssistant: agentProcedure
-    .input(z.object({
-      customerName: z.string().trim().min(2).max(255),
-      customerPhone: z.string().trim().min(7).max(40),
-      quoteInputs: z.object({
-        bedrooms: z.string().nullable().optional(),
-        bathrooms: z.string().nullable().optional(),
-        serviceType: z.string().nullable().optional(),
-        condition: z.number().int().nullable().optional(),
-        extras: z.array(z.object({ id: z.string(), quantity: z.number().int().min(1).max(50) })).nullable().optional(),
-        extrasConfirmed: z.boolean().optional(),
-      }),
-    }))
-    .mutation(async ({ input }) => {
-      const verified = resolveVerifiedQuote(input.quoteInputs);
-      if (!verified.quote) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: `Complete these quote fields first: ${verified.missing.join(", ")}.` });
-      }
-      const result = await createQuoteLink({
-        customerName: input.customerName,
-        customerPhone: input.customerPhone,
-        bedrooms: verified.quote.bedrooms,
-        bathrooms: verified.quote.bathrooms,
-        serviceType: verified.quote.serviceType,
-        frequency: "One-time",
-        price: verified.quote.amountDollars,
-        slots: [],
-        source: "LeadFlow Command Chat AI Quote Assistant",
-        conversationSummary: `Included base cleaning${verified.quote.extras.length ? ` plus ${verified.quote.extras.map((extra) => `${extra.quantity} x ${PUBLIC_BOOKING_PRICED_EXTRAS[extra.id]?.label ?? extra.id}`).join(", ")}` : ""}`,
-      });
-      if (!result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The quote link could not be created." });
-      return {
-        ...result,
-        priceDollars: verified.quote.amountDollars,
-        serviceType: verified.quote.serviceType,
-        bedrooms: verified.quote.bedrooms,
-        bathrooms: verified.quote.bathrooms,
-        includedExtras: verified.quote.extras.map((extra) => ({
-          id: extra.id,
-          label: PUBLIC_BOOKING_PRICED_EXTRAS[extra.id]?.label ?? extra.id,
-          quantity: extra.quantity,
-        })),
-      };
-    }),
 
   /**
    * Read-only event source for Command Chat's middle timeline. The client
