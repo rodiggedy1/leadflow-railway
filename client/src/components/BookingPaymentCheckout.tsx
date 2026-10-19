@@ -24,6 +24,8 @@ type BookingPaymentCheckoutProps = {
   deferConfirmation?: boolean;
   /** Allows the card UI to render before the pending booking is created. */
   setupReady?: boolean;
+  onCreateBooking?: () => void | Promise<void>;
+  creatingBooking?: boolean;
   submitLabel?: string;
   onComplete: (result: {
     bookingId: number;
@@ -333,6 +335,8 @@ export function BookingPaymentCheckout({
   directCardEntry = false,
   deferConfirmation = false,
   setupReady = true,
+  onCreateBooking,
+  creatingBooking = false,
   submitLabel,
   onComplete,
 }: BookingPaymentCheckoutProps) {
@@ -441,6 +445,27 @@ export function BookingPaymentCheckout({
   };
 
   if (directCardEntry) {
+    if (onCreateBooking) {
+      return (
+        <>
+          <Elements
+            stripe={stripePromise}
+            options={clientSecret ? { clientSecret, appearance: { theme: "stripe" } } : { appearance: { theme: "stripe" } }}
+          >
+            <InternalCardSetupForm
+              clientSecret={clientSecret}
+              customerName={customerName}
+              onCreateBooking={onCreateBooking}
+              creatingBooking={creatingBooking || startSetup.isPending}
+              awaitingSetup={Boolean(clientSecret)}
+              onConfirm={completeCardCollection}
+            />
+          </Elements>
+          {checkoutError && <p role="alert" className="booking-card-acceptance-error">{checkoutError}</p>}
+        </>
+      );
+    }
+
     if (clientSecret) {
       return (
         <Elements
