@@ -199,6 +199,18 @@ const QUOTE_EXTRA_OPTIONS = [
   ["sweep-garage", "Sweep Garage"],
 ] as const;
 
+const QUOTE_EXTRA_ICONS: Record<string, string> = {
+  "inside-cabinets": "🗄️",
+  "inside-fridge": "🧊",
+  "inside-oven": "🍳",
+  "interior-windows": "🪟",
+  basement: "🏠",
+  "organizing-hour": "🧺",
+  "laundry-load": "🧺",
+  "wipe-walls-room": "🧽",
+  "sweep-garage": "🚗",
+};
+
 type EmailInboxThread = {
   threadId: string;
   senderName: string | null;
@@ -347,7 +359,11 @@ function quoteRequestedTime(lead: CommandLead | null) {
   if (proposed) {
     const parsed = new Date(proposed);
     if (!Number.isNaN(parsed.getTime())) {
-      return new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(parsed);
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: false }).formatToParts(parsed);
+      const hour = Number(parts.find((part) => part.type === "hour")?.value);
+      if (Number.isFinite(hour) && hour >= 7 && hour < 20) {
+        return new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(parsed);
+      }
     }
   }
   return "10:30";
@@ -2329,12 +2345,16 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     onSuccess: (result) => {
       const selectedExtras = quoteAssistantFields?.extras ?? [];
       const extras = selectedExtras.length
-        ? selectedExtras.map((extra) => `✨ ${extra.quantity > 1 ? `${extra.quantity} × ` : ""}${QUOTE_EXTRA_OPTIONS.find(([id]) => id === extra.id)?.[1] ?? extra.id}`).join("\n")
-        : "✨ No add-ons selected";
+        ? selectedExtras.map((extra) => `${QUOTE_EXTRA_ICONS[extra.id] ?? "✨"} ${extra.quantity > 1 ? `${extra.quantity} × ` : ""}${QUOTE_EXTRA_OPTIONS.find(([id]) => id === extra.id)?.[1] ?? extra.id}`).join("\n")
+        : "No add-ons selected";
       const serviceType = quoteAssistantFields?.serviceType ?? "Home cleaning";
       const bedrooms = quoteAssistantFields?.bedrooms ?? "your";
       const bathrooms = quoteAssistantFields?.bathrooms ?? "home";
-      const quoteMessage = `Hey ${firstName(name)}! 👋 Madison from Maids in Black here. I put together your ${serviceType.toLowerCase()} quote for your ${bedrooms.toLowerCase()} / ${bathrooms} home.\n\n🧼 Included:\n${extras}\n\nYour first-cleaning quote is $${(result.firstCleaningTotalCents / 100).toFixed(0)}. You can review the details and choose your time here:\n${result.urlPath}`;
+      const quoteUrl = result.urlPath.startsWith("http") ? result.urlPath : `${window.location.origin}${result.urlPath}`;
+      const bedroomCount = bedrooms.match(/\d+/)?.[0] ?? bedrooms;
+      const homeType = quoteHomeType(lead?.propertyType || null).toLowerCase();
+      const serviceLabel = serviceType.toLowerCase().replace("move-in / move-out cleaning", "move-out cleaning");
+      const quoteMessage = `Hey ${firstName(name)}! 👋 Madison from Maids in Black here. I put together your quote.\n\nHere’s what your ${serviceLabel} quote includes:\n\n🧼 Full ${serviceLabel}\n🏠 ${bedroomCount}-bedroom ${homeType}\n${extras}\n✅ Background-checked and insured team\n\nYour first-cleaning quote is $${(result.firstCleaningTotalCents / 100).toFixed(0)}. You can review the details and choose your time here:\n${quoteUrl}`;
       setDraft(quoteMessage);
       setQuoteAssistantOpen(false);
       setQuoteAssistantError("");
