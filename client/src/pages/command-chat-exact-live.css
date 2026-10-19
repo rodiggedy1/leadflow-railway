@@ -240,15 +240,15 @@
 .ccc-live .cic-live-new-message{max-height:min(720px,calc(100dvh - 40px));overflow:auto}
 
 /* Lead card status visibility only: no interaction or lifecycle behavior changes. */
-.ccc-live .ccc-live-lead-primary.is-booked{border-color:rgba(88,184,141,.48);background:linear-gradient(145deg,rgba(28,59,49,.72),rgba(31,31,34,.96))}
+.ccc-live .ccc-live-lead-primary.is-booked{border-color:rgba(88,184,141,.68);background:linear-gradient(145deg,rgba(28,70,55,.78),rgba(31,38,35,.98));box-shadow:inset 3px 0 0 #58d6a3,0 0 0 1px rgba(88,214,163,.12)}
 .ccc-live .ccc-live-lead-primary-identity em.is-booked{color:#9fe8c3}
 .ccc-live .ccc-live-lead-primary-identity em.is-booked i{background:#58d6a3}
 .ccc-live .ccc-live-lead-primary-identity em.is-texted{color:#b9adff}
 .ccc-live .ccc-live-lead-primary-identity em.is-texted i{background:#9b87ff}
 .ccc-live .ccc-live-lead-primary-identity em.is-replied{color:#77e0b0;font-weight:850}
 .ccc-live .ccc-live-lead-primary-identity em.is-replied i{background:#37d394;box-shadow:0 0 0 3px rgba(55,211,148,.12)}
-.ccc-live .ccc-live-lead-primary-identity em.is-new{color:#b1b1ba}
-.ccc-live .ccc-live-lead-primary-identity em.is-new i{background:#85858e}
+.ccc-live .ccc-live-lead-primary-identity em.is-new{color:#77e0b0;font-weight:800}
+.ccc-live .ccc-live-lead-primary-identity em.is-new i{background:#37d394;box-shadow:0 0 0 3px rgba(55,211,148,.12)}
 /* Quote Assistant — review-only quote creation surface */
 .ccc-live-sms-quote-assistant-trigger { display:inline-flex; align-items:center; gap:7px; margin:10px 14px 0; border:1px solid rgba(117,224,181,.34); border-radius:10px; padding:8px 11px; background:rgba(35,118,92,.18); color:#b8f4d8; font-size:12px; font-weight:700; cursor:pointer; }
 .ccc-live-sms-quote-assistant-trigger:hover { background:rgba(35,118,92,.3); }

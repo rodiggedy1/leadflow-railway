@@ -795,14 +795,14 @@ function leadCardConversation(lead: CommandLead, smsInbox: SmsInboxConversation[
 function leadCardStatus(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
   if (lead.isBooked) return { kind: "booked", label: "Booked", ts: lead.ts } as const;
   const conversation = leadCardConversation(lead, smsInbox);
-  if (!conversation) return { kind: "new", label: "New inquiry", ts: lead.ts } as const;
+  if (!conversation) return { kind: "new", label: "New", ts: lead.ts } as const;
   const replied = conversation.lastSenderRole === "user" || conversation.hasUnanswered;
   const ts = conversation.lastMessageTs ?? conversation.lastMsgTs ?? lead.ts;
   return replied
     ? { kind: "replied", label: "Replied", ts } as const
     : conversation.lastSenderRole === "assistant"
       ? { kind: "texted", label: "Texted", ts } as const
-      : { kind: "new", label: "New inquiry", ts } as const;
+      : { kind: "new", label: "New", ts } as const;
 }
 
 function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, onClaim, onMarkBooked, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; onClaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
