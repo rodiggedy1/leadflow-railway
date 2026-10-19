@@ -178,27 +178,6 @@ type SmsInboxMessage = {
   senderName?: string;
 };
 
-type QuoteAssistantFields = {
-  bedrooms: string | null;
-  bathrooms: string | null;
-  serviceType: string | null;
-  condition: number | null;
-  extras: Array<{ id: string; quantity: number }> | null;
-  extrasConfirmed?: boolean;
-};
-
-const QUOTE_EXTRA_OPTIONS = [
-  ["inside-cabinets", "Inside Cabinets"],
-  ["inside-fridge", "Inside Fridge"],
-  ["inside-oven", "Inside Oven"],
-  ["interior-windows", "Interior Windows"],
-  ["basement", "Basement"],
-  ["organizing-hour", "Organizing"],
-  ["laundry-load", "Laundry"],
-  ["wipe-walls-room", "Wipe Walls"],
-  ["sweep-garage", "Sweep Garage"],
-] as const;
-
 type EmailInboxThread = {
   threadId: string;
   senderName: string | null;
@@ -298,23 +277,6 @@ function formatPhoneDisplay(value: string) {
   const digits = value.replace(/\D/g, "");
   const local = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
   return local.length === 10 ? `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}` : value;
-}
-
-function quoteAssistantLeadFacts(lead: CommandLead | null) {
-  if (!lead) return "";
-  return [
-    `Name: ${lead.name}`,
-    lead.serviceType && `Service: ${lead.serviceType}`,
-    lead.bedrooms && `Bedrooms: ${lead.bedrooms}`,
-    lead.bathrooms && `Bathrooms: ${lead.bathrooms}`,
-    lead.propertyType && `Property type: ${lead.propertyType}`,
-    lead.frequency && `Frequency: ${lead.frequency}`,
-    lead.extras.length ? `Extras: ${lead.extras.join(", ")}` : null,
-    lead.address && `Address: ${lead.address}`,
-    lead.summary && `Summary: ${lead.summary}`,
-    lead.description && `Description: ${lead.description}`,
-    lead.detail && `Lead details: ${lead.detail}`,
-  ].filter((value): value is string => Boolean(value)).join("\n");
 }
 
 function firstName(value: string | null) {
@@ -2148,11 +2110,6 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const [smsAutoDraftReady, setSmsAutoDraftReady] = useState(false);
   const [smsAutoDraftText, setSmsAutoDraftText] = useState("");
   const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
-  const [quoteAssistantOpen, setQuoteAssistantOpen] = useState(false);
-  const [quoteAssistantFields, setQuoteAssistantFields] = useState<QuoteAssistantFields | null>(null);
-  const [quoteAssistantMissing, setQuoteAssistantMissing] = useState<string[]>([]);
-  const [quoteAssistantPrice, setQuoteAssistantPrice] = useState<number | null>(null);
-  const [quoteAssistantError, setQuoteAssistantError] = useState("");
   const messageListRef = useRef<HTMLDivElement>(null);
   const smsComposerRef = useRef<HTMLTextAreaElement>(null);
   const initialBottomScrollDone = useRef(false);
@@ -2283,33 +2240,6 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setDraft(smsAutoDraftText);
     setSmsAutoDraftReady(false);
   }, [smsAutoDraftText]);
-  const prepareQuoteAssistant = trpc.commandCenter.prepareQuoteAssistant.useMutation({
-    onSuccess: (result) => {
-      setQuoteAssistantFields(result.quoteInputs);
-      setQuoteAssistantMissing(result.missing);
-      setQuoteAssistantPrice(result.priceDollars);
-      setQuoteAssistantError("");
-      setQuoteAssistantOpen(true);
-    },
-    onError: (error) => setQuoteAssistantError(error.message || "Quote details could not be prepared."),
-  });
-  const createQuoteAssistant = trpc.commandCenter.createQuoteAssistant.useMutation({
-    onSuccess: (result) => {
-      const extras = result.includedExtras.length
-        ? result.includedExtras.map((extra) => `✨ ${extra.quantity > 1 ? `${extra.quantity} × ` : ""}${extra.label}`).join("\n")
-        : "✨ No add-ons selected";
-      const quoteMessage = `Hey ${firstName(name)}! 👋 Madison from Maids in Black here. I put together your ${result.serviceType.toLowerCase()} quote for your ${result.bedrooms.toLowerCase()} / ${result.bathrooms} home.\n\n🧼 Included:\n${extras}\n\nYour first-cleaning quote is $${result.priceDollars.toFixed(0)}. You can review the details and choose your time here:\n${result.url}`;
-      setDraft(quoteMessage);
-      setQuoteAssistantOpen(false);
-      setQuoteAssistantError("");
-      onNotice("Quote created and added to the SMS composer for review.");
-    },
-    onError: (error) => setQuoteAssistantError(error.message || "Quote link could not be created."),
-  });
-  const openQuoteAssistant = useCallback(() => {
-    setQuoteAssistantError("");
-    prepareQuoteAssistant.mutate({ conversationContext: smsConversationContext, leadFacts: quoteAssistantLeadFacts(lead) });
-  }, [lead, prepareQuoteAssistant, smsConversationContext]);
   const resizeSmsComposer = useCallback((composer: HTMLTextAreaElement) => {
     composer.style.height = "auto";
     composer.style.height = `${Math.min(composer.scrollHeight, 240)}px`;
@@ -2321,11 +2251,6 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setSmsAutoDraftReady(false);
     setSmsAutoDraftText("");
     setSmsAutoDraftLoading(false);
-    setQuoteAssistantOpen(false);
-    setQuoteAssistantFields(null);
-    setQuoteAssistantMissing([]);
-    setQuoteAssistantPrice(null);
-    setQuoteAssistantError("");
     setConfirmedOutgoing([]);
     initialBottomScrollDone.current = false;
     scrollAfterSendRef.current = false;
@@ -2393,7 +2318,6 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
     <header><div>{isTeamConversation ? <span className="ccc-live-sms-drawer-team"><Users /></span> : <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />}<span><strong>{name}{!isTeamConversation && <em className="ccc-live-sms-drawer-source">{lead?.sourceLabel || displayLeadSource(conversation.leadSource)}</em>}</strong><small>{isTeamConversation ? "Team text conversation" : conversation.leadPhone || "Text conversation"}</small></span></div><div className="ccc-live-sms-drawer-header-actions">{!isTeamConversation && lead && <button type="button" className="ccc-live-sms-drawer-detail" aria-label={`View lead details for ${name}`} title="View lead details" onClick={() => onOpenLeadDetails(lead)}><Eye /></button>}<button type="button" aria-label="Close text conversation" onClick={onClose}><X /></button></div></header>
     {!isTeamConversation && clientProfile?.upcoming && (() => { const isToday = clientProfile.upcoming.date === businessDate; const etaLabel = teamRouteEtaLabel(clientProfile.upcoming.jobStatus, clientProfile.upcoming.etaTimestamp); return <section className="ccc-live-sms-booking-context" aria-label="Client's next booking"><div><CalendarClock /><span><b>Next booking</b><small>{bookingDateLabel(clientProfile.upcoming.date, businessDate)}</small></span></div><strong>{clientProfile.upcoming.serviceName || "Scheduled service"}</strong><small>{clientProfile.upcoming.teamName || "Team pending"}</small>{isToday && <span className={`ccc-live-sms-job-status ccc-live-sms-booking-status ${teamRouteStatusClass(clientProfile.upcoming.jobStatus)}`}><TeamRouteStatusIcon status={clientProfile.upcoming.jobStatus} /><b>{teamRouteStatusLabel(clientProfile.upcoming.jobStatus)}</b>{etaLabel && <small>{etaLabel}</small>}</span>}</section>; })()}
-    {!isTeamConversation && <button type="button" className="ccc-live-sms-quote-assistant-trigger" onClick={openQuoteAssistant} disabled={prepareQuoteAssistant.isPending}><Sparkles />{prepareQuoteAssistant.isPending ? "Reading lead details…" : "Create quote with AI"}</button>}
     {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => { const etaLabel = teamRouteEtaLabel(job.jobStatus, job.etaTimestamp); return <li key={job.id}><time>{scheduleTimeLabel(job.serviceDateTime)}</time><strong>{job.customerName || "Customer"}</strong><span className={`ccc-live-sms-job-status ${teamRouteStatusClass(job.jobStatus)}`}><TeamRouteStatusIcon status={job.jobStatus} /><b>{teamRouteStatusLabel(job.jobStatus)}</b>{etaLabel && <small>{etaLabel}</small>}</span></li>; })}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
     <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
@@ -2407,65 +2331,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></article>}
       <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
-    {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal
-      customerName={name}
-      customerPhone={leadCardPhone || conversation.leadPhone || ""}
-      fields={quoteAssistantFields}
-      initialMissing={quoteAssistantMissing}
-      priceDollars={quoteAssistantPrice}
-      error={quoteAssistantError}
-      pending={createQuoteAssistant.isPending}
-      onFieldsChange={setQuoteAssistantFields}
-      onClose={() => { setQuoteAssistantOpen(false); setQuoteAssistantError(""); }}
-      onCreate={() => createQuoteAssistant.mutate({ customerName: name, customerPhone: leadCardPhone || conversation.leadPhone || "", quoteInputs: quoteAssistantFields })}
-    />}
   </aside></div>;
-}
-
-function QuoteAssistantModal({ customerName, customerPhone, fields, initialMissing, priceDollars, error, pending, onFieldsChange, onClose, onCreate }: {
-  customerName: string;
-  customerPhone: string;
-  fields: QuoteAssistantFields;
-  initialMissing: string[];
-  priceDollars: number | null;
-  error: string;
-  pending: boolean;
-  onFieldsChange: (fields: QuoteAssistantFields) => void;
-  onClose: () => void;
-  onCreate: () => void;
-}) {
-  const currentMissing = [
-    !fields.bedrooms && "bedrooms",
-    !fields.bathrooms && "bathrooms",
-    !fields.serviceType && "serviceType",
-    !fields.condition && "condition",
-    !(fields.extrasConfirmed || fields.extras !== null) && "extras",
-  ].filter((value): value is string => Boolean(value));
-  const toggleExtra = (id: string, checked: boolean) => {
-    const extras = fields.extras ?? [];
-    onFieldsChange({
-      ...fields,
-      extras: checked ? [...extras.filter((extra) => extra.id !== id), { id, quantity: 1 }] : extras.filter((extra) => extra.id !== id),
-      extrasConfirmed: true,
-    });
-  };
-  return <div className="ccc-modal-backdrop ccc-live-quote-assistant-backdrop" onMouseDown={onClose}>
-    <section className="ccc-static-modal ccc-live-quote-assistant-modal" onMouseDown={(event) => event.stopPropagation()}>
-      <header><div><Sparkles /><span><strong>Create quote with AI</strong><small>Review the extracted details before creating the link</small></span></div><button type="button" onClick={onClose} aria-label="Close quote assistant"><X /></button></header>
-      <div className="ccc-live-quote-assistant-customer"><strong>{customerName}</strong><span>{formatPhoneDisplay(customerPhone)}</span></div>
-      <div className="ccc-live-quote-assistant-grid">
-        <label>Bedrooms<input value={fields.bedrooms ?? ""} onChange={(event) => onFieldsChange({ ...fields, bedrooms: event.target.value || null })} placeholder="e.g. 2 Bedrooms" /></label>
-        <label>Bathrooms<input value={fields.bathrooms ?? ""} onChange={(event) => onFieldsChange({ ...fields, bathrooms: event.target.value || null })} placeholder="e.g. 1 Bathroom" /></label>
-        <label>Cleaning type<select value={fields.serviceType ?? ""} onChange={(event) => onFieldsChange({ ...fields, serviceType: event.target.value || null })}><option value="">Select type</option><option>Standard Cleaning</option><option>Deep Cleaning</option><option>Move-In / Move-Out Cleaning</option></select></label>
-        <label>Home condition (1–10)<input type="number" min="1" max="10" value={fields.condition ?? ""} onChange={(event) => onFieldsChange({ ...fields, condition: event.target.value ? Number(event.target.value) : null })} placeholder="5" /></label>
-      </div>
-      <fieldset className="ccc-live-quote-assistant-extras"><legend>Included add-ons</legend>{QUOTE_EXTRA_OPTIONS.map(([id, label]) => <label key={id}><input type="checkbox" checked={Boolean(fields.extras?.some((extra) => extra.id === id))} onChange={(event) => toggleExtra(id, event.target.checked)} />{label}</label>)}<label><input type="checkbox" checked={fields.extrasConfirmed === true && fields.extras?.length === 0} onChange={(event) => { if (event.target.checked) onFieldsChange({ ...fields, extras: [], extrasConfirmed: true }); }} />No add-ons</label></fieldset>
-      {priceDollars !== null && currentMissing.length === 0 && <div className="ccc-live-quote-assistant-price">Verified first-cleaning price <strong>${priceDollars.toFixed(0)}</strong></div>}
-      {currentMissing.length > 0 && <p className="ccc-live-quote-assistant-missing">Review required: {currentMissing.join(", ")}. {initialMissing.length > 0 && "AI left these blank because they were not explicit in the conversation."}</p>}
-      {error && <p className="ccc-live-quote-assistant-error" role="alert">{error}</p>}
-      <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="ccc-live-quote-assistant-create" disabled={pending || !customerPhone.trim() || currentMissing.length > 0} onClick={onCreate}>{pending ? <Loader2 className="animate-spin" /> : <Sparkles />}{pending ? "Creating…" : "Create quote & add SMS"}</button></footer>
-    </section>
-  </div>;
 }
 
 function LiveThreadEntry({ entry, mine, photo, root = false }: { entry: { from: string; body: string; ts: number }; mine: boolean; photo: string | null; root?: boolean }) {
