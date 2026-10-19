@@ -782,21 +782,44 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
   return photoUrl ? <img className={className} src={photoUrl} alt={`${name} profile`} /> : <span className={className}>{initials(name)}</span>;
 }
 
-function LeadQueue({ title, description, leads, claimPending, bookingPending, onClaim, onMarkBooked, onOpenSms }: { title: string; description: string; leads: CommandLead[]; claimPending: boolean; bookingPending: boolean; onClaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
+function leadCardConversation(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
+  const phone = normalizedLeadPhone(lead.phone);
+  const name = lead.name.trim().toLowerCase();
+  return smsInbox.find((conversation) => (
+    (lead.sessionId !== null && conversation.id === lead.sessionId)
+    || (phone && normalizedLeadPhone(conversation.leadPhone) === phone)
+    || (name && conversation.leadName?.trim().toLowerCase() === name)
+  )) ?? null;
+}
+
+function leadCardStatus(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
+  if (lead.isBooked) return { kind: "booked", label: "Booked", ts: lead.ts } as const;
+  const conversation = leadCardConversation(lead, smsInbox);
+  if (!conversation) return { kind: "new", label: "New inquiry", ts: lead.ts } as const;
+  const replied = conversation.lastSenderRole === "user" || conversation.hasUnanswered;
+  const ts = conversation.lastMessageTs ?? conversation.lastMsgTs ?? lead.ts;
+  return replied
+    ? { kind: "replied", label: "Replied", ts } as const
+    : conversation.lastSenderRole === "assistant"
+      ? { kind: "texted", label: "Texted", ts } as const
+      : { kind: "new", label: "New inquiry", ts } as const;
+}
+
+function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, onClaim, onMarkBooked, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; onClaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
   useEffect(() => {
     setSelectedLead((current) => current ? leads.find((lead) => lead.id === current.id) ?? current : current);
   }, [leads]);
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
-  const renderLeadCard = (lead: CommandLead) => <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
-    <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em><i /><span>New inquiry</span><time>{formatRelative(lead.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
+  const renderLeadCard = (lead: CommandLead) => { const status = leadCardStatus(lead, smsInbox); return <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}${status.kind === "booked" ? " is-booked" : ""}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
+    <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em className={`is-${status.kind}`}><i /> <span>{status.label}</span><time>{formatRelative(status.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
     {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Copy ${lead.name} phone`} title="Copy phone" onClick={(event) => { event.stopPropagation(); copyPhone(lead.phone!); }}><Copy /></button><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
     <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
     <footer><button type="button" className={lead.claimedBy ? "is-claimed ccc-live-lead-claim-pill" : "ccc-live-lead-claim-pill"} title={lead.claimedBy ? `Claimed by ${lead.claimedBy}` : "Claim lead"} aria-label={lead.claimedBy ? `Claimed by ${lead.claimedBy}` : "Claim lead"} disabled={Boolean(lead.claimedBy) || claimPending} onClick={(event) => { event.stopPropagation(); onClaim(lead); }}>{lead.claimedBy ? <><Check />{firstName(lead.claimedBy)}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={(event) => { event.stopPropagation(); onMarkBooked(lead); }}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button><button type="button" className="ccc-live-lead-view-button ccc-live-lead-view-icon" aria-label={`View details for ${lead.name}`} title="View lead details" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}><Eye /></button></footer>
-  </section>;
+  </section>; };
   return (
     <article className={`ccc-context-card ccc-live-lead-queue ${orderedLeads.length ? "has-leads" : ""}`}>
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
@@ -1574,7 +1597,7 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onClaim={claimLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onClaim={claimLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
           </aside>
         </div>
       </section>
