@@ -282,3 +282,6 @@
 .ccc-live-sms-ai-draft-toggle svg{width:13px;height:13px;transition:transform .16s ease}
 .ccc-live-sms-ai-draft-card.is-minimized .ccc-live-sms-ai-draft-toggle svg{transform:rotate(-90deg)}
 .ccc-live-sms-ai-draft-card.is-minimized{gap:0}
+
+.ccc-live .ccc-live-lead-primary-contact>span { gap:9px; color:#d6eee4; font-size:13px; font-weight:700; letter-spacing:.1px; }
+.ccc-live .ccc-live-lead-primary-contact>span svg { width:19px; height:19px; color:#63d7ad; }
