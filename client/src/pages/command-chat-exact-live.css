@@ -274,3 +274,5 @@
 .ccc-live-quote-assistant-modal footer .ccc-live-quote-assistant-create { border-color:rgba(103,214,161,.4); background:#267b5f; color:#f2fff8; }
 .ccc-live-quote-assistant-modal footer button:disabled { opacity:.55; cursor:not-allowed; }
 @media (max-width:560px) { .ccc-live-quote-assistant-grid,.ccc-live-quote-assistant-extras { grid-template-columns:1fr; } .ccc-live-quote-assistant-extras legend { grid-column:auto; } .ccc-live-quote-assistant-customer { flex-direction:column; gap:4px; } }
+.ccc-live-test-bridge-button { border-color: rgba(74,222,128,.35); color: #b8f7cc; background: rgba(22,101,52,.24); }
+.ccc-live-test-bridge-button:hover:not(:disabled) { border-color: rgba(74,222,128,.6); background: rgba(22,101,52,.38); }

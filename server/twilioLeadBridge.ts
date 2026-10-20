@@ -73,6 +73,38 @@ function safeProviderMessage(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 500) : "provider request failed";
 }
 
+export async function startTwilioLeadBridge(input: { leadPhone: string; leadName: string; sessionId?: number | null }) {
+  const leadPhone = normalizePhoneStrict(input.leadPhone);
+  const leadName = input.leadName.trim() || "Lead";
+  const sessionId = input.sessionId ?? null;
+  if (!leadPhone) throw new Error("A valid lead phone number is required");
+  if (!ENV.twilioBridgeFromNumber) throw new Error("Twilio bridge caller ID is not configured");
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const bridgeId = randomUUID();
+  const idempotencyKey = randomUUID();
+  await db.execute(
+    "INSERT INTO twilio_lead_bridges (bridgeId, idempotencyKey, sessionId, leadPhone, leadName, state, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, 'office_call_starting', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+    [bridgeId, idempotencyKey, sessionId, leadPhone, leadName],
+  );
+  try {
+    const call = await twilioClient().calls.create({
+      to: ENV.twilioBridgeOfficeNumber,
+      from: ENV.twilioBridgeFromNumber,
+      url: callbackUrl("office-answer", bridgeId),
+      statusCallback: callbackUrl("status", bridgeId),
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+      statusCallbackMethod: "POST",
+      timeout: 25,
+    });
+    await updateBridge(bridgeId, { state: "office_ringing", officeCallSid: call.sid }, ["office_call_starting"]);
+    return { success: true, bridgeId, officeCallSid: call.sid, state: "office_ringing" as const };
+  } catch (error) {
+    await updateBridge(bridgeId, { state: "failed", failureCode: "office_call_create_failed", failureMessage: safeProviderMessage(error) }, ["office_call_starting"]);
+    throw new Error("The office call could not be started");
+  }
+}
+
 async function getBridge(bridgeId: string): Promise<BridgeRow | null> {
   const db = await getDb();
   if (!db) return null;
