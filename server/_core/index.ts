@@ -6,6 +6,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerWebhookRoutes } from "../webhooks";
+import { registerTwilioLeadBridgeRoutes } from "../twilioLeadBridge";
 import { registerCronRoutes } from "../cronSync";
 import { registerFollowUpCronRoutes } from "../followUpCron";
 import { registerVapiWebhookRoute } from "../vapiWebhook";
@@ -1649,6 +1650,8 @@ async function startServer() {
   registerOAuthRoutes(app);
   // OpenPhone webhook for inbound SMS replies
   registerWebhookRoutes(app);
+  // Independent Preview-only Twilio office-first lead bridge proof of concept
+  registerTwilioLeadBridgeRoutes(app);
   // Embeddable widget script for external websites
   registerWidgetEmbedRoute(app);
   // One-time customer portal code redemption must happen before the portal app renders.

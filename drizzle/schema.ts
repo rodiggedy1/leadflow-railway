@@ -484,6 +484,32 @@ export const leadCallLogs = mysqlTable("lead_call_logs", {
 export type LeadCallLog = typeof leadCallLogs.$inferSelect;
 export type InsertLeadCallLog = typeof leadCallLogs.$inferInsert;
 
+/** Durable state for the independent Twilio office-first bridge proof of concept. */
+export const twilioLeadBridges = mysqlTable("twilio_lead_bridges", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  bridgeId: varchar("bridgeId", { length: 64 }).notNull().unique(),
+  idempotencyKey: varchar("idempotencyKey", { length: 96 }).notNull().unique(),
+  sessionId: int("sessionId"),
+  leadPhone: varchar("leadPhone", { length: 30 }).notNull(),
+  leadName: varchar("leadName", { length: 255 }).notNull(),
+  state: varchar("state", { length: 40 }).notNull(),
+  officeCallSid: varchar("officeCallSid", { length: 64 }),
+  customerCallSid: varchar("customerCallSid", { length: 64 }),
+  conferenceSid: varchar("conferenceSid", { length: 64 }),
+  customerCallStartedAt: timestamp("customerCallStartedAt"),
+  confirmedAt: timestamp("confirmedAt"),
+  completedAt: timestamp("completedAt"),
+  failureCode: varchar("failureCode", { length: 80 }),
+  failureMessage: varchar("failureMessage", { length: 512 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  idxBridgeState: index("idx_tlb_state").on(table.state),
+  idxBridgeSession: index("idx_tlb_session").on(table.sessionId),
+  idxBridgeCustomerCall: index("idx_tlb_customer_call").on(table.customerCallSid),
+}));
+export type TwilioLeadBridge = typeof twilioLeadBridges.$inferSelect;
+export type InsertTwilioLeadBridge = typeof twilioLeadBridges.$inferInsert;
 /**
  * agents — internal agent accounts (no Manus OAuth required)
  * Created by admins; agents log in with email + password.

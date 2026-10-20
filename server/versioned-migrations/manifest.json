@@ -527,6 +527,14 @@
       "sha256": "79adc821a9f09d7f737cb820107e5645c5f2eafd3a6d3f4e581259146816b744",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0068_create_madison_live_golden_reviews.postconditions.json"
+    },
+    {
+      "id": "0069_create_twilio_lead_bridges",
+      "mode": "create-table",
+      "sqlFile": "0069_create_twilio_lead_bridges.sql",
+      "sha256": "50780f403db132188e4438d48383f74ff5d227b72afaa18e7eef1750a77eaf75",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0069_create_twilio_lead_bridges.postconditions.json"
     }
   ]
 }
