@@ -7,7 +7,6 @@ import { ENV } from "./_core/env";
 import { normalizePhone as normalizePhoneStrict } from "./utils/phone";
 
 const BRIDGE_PATH = "/api/twilio/lead-bridge";
-const CONFIRMATION_TIMEOUT_SECONDS = 12;
 const RECONCILIATION_WINDOW_MINUTES = 5;
 const TERMINAL_STATES = new Set(["completed", "failed", "cancelled"]);
 
@@ -128,11 +127,11 @@ async function updateBridge(bridgeId: string, fields: Record<string, unknown>, f
 
 async function startCustomerLeg(req: Request, bridgeId: string): Promise<void> {
   const bridge = await getBridge(bridgeId);
-  if (!bridge || bridge.state !== "office_confirmed") return;
+  if (!bridge || bridge.state !== "office_answered") return;
   const claimed = await updateBridge(bridgeId, {
     state: "customer_call_starting",
     customerCallStartedAt: new Date(),
-  }, ["office_confirmed"]);
+  }, ["office_answered"]);
   if (!claimed) return;
 
   try {
@@ -154,8 +153,8 @@ async function startCustomerLeg(req: Request, bridgeId: string): Promise<void> {
 
 async function cancelCustomerLegIfOfficeEnded(bridgeId: string): Promise<void> {
   const bridge = await getBridge(bridgeId);
-  if (!bridge?.customerCallSid || !["awaiting_confirmation", "customer_call_starting", "customer_ringing", "failed"].includes(bridge.state)) return;
-  const claimed = await updateBridge(bridgeId, { state: "cancelled", failureCode: "office_hung_up_before_connection" }, ["awaiting_confirmation", "customer_call_starting", "customer_ringing", "failed"]);
+  if (!bridge?.customerCallSid || !["customer_call_starting", "customer_ringing", "failed"].includes(bridge.state)) return;
+  const claimed = await updateBridge(bridgeId, { state: "cancelled", failureCode: "office_hung_up_before_connection" }, ["customer_call_starting", "customer_ringing", "failed"]);
   if (!claimed) return;
   try {
     await twilioClient().calls(bridge.customerCallSid).update({ status: "completed" });
@@ -208,41 +207,15 @@ export function registerTwilioLeadBridgeRoutes(app: Express): void {
     const bridgeId = String(req.query.bridgeId ?? "");
     const bridge = await getBridge(bridgeId);
     if (!bridge || TERMINAL_STATES.has(bridge.state)) return res.status(404).send("Unknown bridge");
-    await updateBridge(bridgeId, { state: "awaiting_confirmation", officeCallSid: req.body.CallSid ?? bridge.officeCallSid }, ["office_ringing", "office_answered", "awaiting_confirmation"]);
+    await updateBridge(bridgeId, { state: "office_answered", officeCallSid: req.body.CallSid ?? bridge.officeCallSid }, ["office_ringing", "office_answered"]);
     const voice = new twilio.twiml.VoiceResponse();
-    const gather = voice.gather({ input: "dtmf", numDigits: 1, finishOnKey: "", timeout: CONFIRMATION_TIMEOUT_SECONDS, action: callbackUrl("confirm-office", bridgeId), method: "POST" });
-    gather.say("Press 1 to connect to this lead. Press any other key or wait to cancel.");
-    voice.say("No confirmation received. The call will now end.");
-    voice.hangup();
-    return twimlResponse(res, voice);
-  });
-
-  app.post(`${BRIDGE_PATH}/confirm-office`, async (req, res) => {
-    if (!verifyTwilioSignature(req, res)) return;
-    const bridgeId = String(req.query.bridgeId ?? "");
-    if (String(req.body?.Digits ?? "") !== "1") {
-      await updateBridge(bridgeId, { state: "cancelled", failureCode: "office_confirmation_invalid_or_timeout" }, ["awaiting_confirmation"]);
-      const voice = new twilio.twiml.VoiceResponse();
-      voice.say("No valid confirmation was received. Goodbye.");
-      voice.hangup();
-      return twimlResponse(res, voice);
-    }
-    const confirmed = await updateBridge(bridgeId, { state: "office_confirmed", confirmedAt: new Date() }, ["awaiting_confirmation"]);
-    if (!confirmed) {
-      const voice = new twilio.twiml.VoiceResponse();
-      voice.say("This call is no longer available. Goodbye.");
-      voice.hangup();
-      return twimlResponse(res, voice);
-    }
     try {
       await startCustomerLeg(req, bridgeId);
     } catch {
-      const voice = new twilio.twiml.VoiceResponse();
       voice.say("We could not connect the lead. Goodbye.");
       voice.hangup();
       return twimlResponse(res, voice);
     }
-    const voice = new twilio.twiml.VoiceResponse();
     voice.say("Connecting you to the lead now.");
     const dial = voice.dial();
     dial.conference({ statusCallback: requestCallbackUrl(req, "conference-status", bridgeId), statusCallbackMethod: "POST" }, bridgeId);
@@ -278,7 +251,7 @@ export function registerTwilioLeadBridgeRoutes(app: Express): void {
       await updateBridge(bridgeId, { customerCallSid: callSid }, ["customer_call_starting", "customer_ringing"]);
     }
     if (isOffice && ["no-answer", "busy", "failed", "canceled"].includes(callStatus)) {
-      await updateBridge(bridgeId, { state: "failed", failureCode: `office_${callStatus}` }, ["office_call_starting", "office_ringing", "office_answered", "awaiting_confirmation"]);
+      await updateBridge(bridgeId, { state: "failed", failureCode: `office_${callStatus}` }, ["office_call_starting", "office_ringing", "office_answered"]);
       await cancelCustomerLegIfOfficeEnded(bridgeId);
     } else if (isOffice && callStatus === "completed") {
       await cancelCustomerLegIfOfficeEnded(bridgeId);
