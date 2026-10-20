@@ -71,7 +71,11 @@ function twimlResponse(res: Response, voice: twilio.twiml.VoiceResponse): void {
 }
 
 function safeProviderMessage(error: unknown): string {
-  return error instanceof Error ? error.message.slice(0, 500) : "provider request failed";
+  if (!(error instanceof Error)) return "provider request failed";
+  const code = typeof (error as { code?: unknown }).code === "string" || typeof (error as { code?: unknown }).code === "number"
+    ? `Twilio ${(error as { code: string | number }).code}: `
+    : "";
+  return `${code}${error.message}`.slice(0, 500);
 }
 
 export async function startTwilioLeadBridge(input: { leadPhone: string; leadName: string; sessionId?: number | null }) {
@@ -98,8 +102,9 @@ export async function startTwilioLeadBridge(input: { leadPhone: string; leadName
     await updateBridge(bridgeId, { state: "office_ringing", officeCallSid: call.sid }, ["office_call_starting"]);
     return { success: true, bridgeId, officeCallSid: call.sid, state: "office_ringing" as const };
   } catch (error) {
-    await updateBridge(bridgeId, { state: "failed", failureCode: "office_call_create_failed", failureMessage: safeProviderMessage(error) }, ["office_call_starting"]);
-    throw new Error("The office call could not be started");
+    const providerMessage = safeProviderMessage(error);
+    await updateBridge(bridgeId, { state: "failed", failureCode: "office_call_create_failed", failureMessage: providerMessage }, ["office_call_starting"]);
+    throw new Error(providerMessage);
   }
 }
 
