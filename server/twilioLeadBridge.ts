@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { ENV } from "./_core/env";
 import { normalizePhone as normalizePhoneStrict } from "./utils/phone";
@@ -83,10 +84,7 @@ export async function startTwilioLeadBridge(input: { leadPhone: string; leadName
   if (!db) throw new Error("Database unavailable");
   const bridgeId = randomUUID();
   const idempotencyKey = randomUUID();
-  await db.execute(
-    "INSERT INTO twilio_lead_bridges (bridgeId, idempotencyKey, sessionId, leadPhone, leadName, state, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, 'office_call_starting', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
-    [bridgeId, idempotencyKey, sessionId, leadPhone, leadName],
-  );
+  await db.execute(sql`INSERT INTO twilio_lead_bridges (bridgeId, idempotencyKey, sessionId, leadPhone, leadName, state, createdAt, updatedAt) VALUES (${bridgeId}, ${idempotencyKey}, ${sessionId}, ${leadPhone}, ${leadName}, 'office_call_starting', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`);
   try {
     const call = await twilioClient().calls.create({
       to: ENV.twilioBridgeOfficeNumber,
@@ -108,10 +106,7 @@ export async function startTwilioLeadBridge(input: { leadPhone: string; leadName
 async function getBridge(bridgeId: string): Promise<BridgeRow | null> {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db.execute(
-    "SELECT id, bridgeId, sessionId, leadPhone, leadName, state, officeCallSid, customerCallSid, conferenceSid, customerCallStartedAt, createdAt FROM twilio_lead_bridges WHERE bridgeId = ? LIMIT 1",
-    [bridgeId],
-  ) as unknown as [BridgeRow[], unknown];
+  const rows = await db.execute(sql`SELECT id, bridgeId, sessionId, leadPhone, leadName, state, officeCallSid, customerCallSid, conferenceSid, customerCallStartedAt, createdAt FROM twilio_lead_bridges WHERE bridgeId = ${bridgeId} LIMIT 1`) as unknown as [BridgeRow[], unknown];
   return rows[0]?.[0] ?? null;
 }
 
@@ -120,11 +115,9 @@ async function updateBridge(bridgeId: string, fields: Record<string, unknown>, f
   if (!db || Object.keys(fields).length === 0) return false;
   const assignments = Object.keys(fields).map((key) => `\`${key}\` = ?`).join(", ");
   const values = Object.values(fields);
-  const stateClause = fromStates?.length ? ` AND state IN (${fromStates.map(() => "?").join(",")})` : "";
-  const result = await db.execute(
-    `UPDATE twilio_lead_bridges SET ${assignments}, updatedAt = CURRENT_TIMESTAMP(3) WHERE bridgeId = ?${stateClause}`,
-    [...values, bridgeId, ...(fromStates ?? [])],
-  ) as any;
+  const assignmentSql = Object.keys(fields).map((key, index) => sql`${sql.raw(`\`${key}\``)} = ${values[index]}`);
+  const stateClause = fromStates?.length ? sql` AND state IN (${sql.join(fromStates.map((state) => sql`${state}`), sql`, `)})` : sql``;
+  const result = await db.execute(sql`UPDATE twilio_lead_bridges SET ${sql.join(assignmentSql, sql`, `)}, updatedAt = CURRENT_TIMESTAMP(3) WHERE bridgeId = ${bridgeId}${stateClause}`) as any;
   return Number(result?.[0]?.affectedRows ?? 0) === 1;
 }
 
@@ -186,10 +179,7 @@ export function registerTwilioLeadBridgeRoutes(app: Express): void {
     if (!db) return res.status(503).json({ error: "Database unavailable" });
     const bridgeId = randomUUID();
     const idempotencyKey = randomUUID();
-    await db.execute(
-      "INSERT INTO twilio_lead_bridges (bridgeId, idempotencyKey, sessionId, leadPhone, leadName, state, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, 'office_call_starting', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
-      [bridgeId, idempotencyKey, sessionId, leadPhone, leadName],
-    );
+    await db.execute(sql`INSERT INTO twilio_lead_bridges (bridgeId, idempotencyKey, sessionId, leadPhone, leadName, state, createdAt, updatedAt) VALUES (${bridgeId}, ${idempotencyKey}, ${sessionId}, ${leadPhone}, ${leadName}, 'office_call_starting', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`);
     try {
       const call = await twilioClient().calls.create({
         to: ENV.twilioBridgeOfficeNumber,
