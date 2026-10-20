@@ -210,7 +210,7 @@ export function registerTwilioLeadBridgeRoutes(app: Express): void {
     if (!bridge || TERMINAL_STATES.has(bridge.state)) return res.status(404).send("Unknown bridge");
     await updateBridge(bridgeId, { state: "awaiting_confirmation", officeCallSid: req.body.CallSid ?? bridge.officeCallSid }, ["office_ringing", "office_answered", "awaiting_confirmation"]);
     const voice = new twilio.twiml.VoiceResponse();
-    const gather = voice.gather({ numDigits: 1, timeout: CONFIRMATION_TIMEOUT_SECONDS, action: callbackUrl("confirm-office", bridgeId), method: "POST" });
+    const gather = voice.gather({ input: "dtmf", numDigits: 1, finishOnKey: "", timeout: CONFIRMATION_TIMEOUT_SECONDS, action: callbackUrl("confirm-office", bridgeId), method: "POST" });
     gather.say("Press 1 to connect to this lead. Press any other key or wait to cancel.");
     voice.say("No confirmation received. The call will now end.");
     voice.hangup();
