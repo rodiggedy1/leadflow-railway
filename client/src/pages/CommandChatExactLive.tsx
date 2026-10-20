@@ -31,7 +31,6 @@ import {
   Paperclip,
   Pencil,
   Phone,
-  PhoneCall,
   Pin,
   Play,
   Plus,
@@ -808,6 +807,7 @@ function leadCardStatus(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
 }
 
 function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, callPending, bridgePending, onClaim, onMarkBooked, onCall, onTestBridge, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; callPending: boolean; bridgePending: boolean; onClaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onCall: (lead: CommandLead) => void; onTestBridge: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
+
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
   useEffect(() => {
@@ -816,7 +816,7 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
   const renderLeadCard = (lead: CommandLead) => { const status = leadCardStatus(lead, smsInbox); return <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}${status.kind === "booked" ? " is-booked" : ""}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
     <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em className={`is-${status.kind}`}><i /> <span>{status.label}</span><time>{formatRelative(status.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
-    {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><button type="button" aria-label={`Call ${lead.name} through office`} title="Call through office" disabled={callPending} onClick={(event) => { event.stopPropagation(); onCall(lead); }}><PhoneCall /></button></div></div>}
+    {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`} onClick={(event) => event.stopPropagation()}><Phone /></a></div></div>}
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
     <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
@@ -1148,8 +1148,9 @@ export default function CommandChatExactLive() {
   const pinNote = trpc.opsChat.pinNote.useMutation({ onSuccess: () => { setModal(null); setPinBody(""); void utils.opsChat.getChannelPin.invalidate({ channel }); } });
   const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: () => { setModal(null); setBookingPerson(""); setBookingAmount(""); setBookingNote(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); } });
   const markLeadBookedMutation = trpc.opsChat.markLeadBooked.useMutation();
-  const callLeadMutation = trpc.commandCenter.callLead.useMutation();
   const testBridgeMutation = trpc.commandCenter.startTwilioLeadBridge.useMutation();
+  const callLeadMutation = testBridgeMutation;
+
   const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
     onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),
@@ -1337,8 +1338,8 @@ export default function CommandChatExactLive() {
   const callLeadFromQueue = useCallback(async (lead: CommandLead) => {
     if (!lead.phone || callLeadMutation.isPending) return;
     try {
-      await callLeadMutation.mutateAsync({ leadPhone: lead.phone, leadName: lead.name, serviceType: lead.serviceType });
-      showNotice(`Calling the office to connect with ${lead.name}.`);
+      await callLeadMutation.mutateAsync({ leadPhone: lead.phone, leadName: lead.name, sessionId: lead.sessionId });
+      showNotice(`Office bridge started for ${lead.name}.`);
     } catch (error) {
       showNotice(error instanceof Error ? `Call could not be started: ${error.message}` : "Call could not be started.");
     }
@@ -1347,11 +1348,12 @@ export default function CommandChatExactLive() {
     if (!lead.phone || testBridgeMutation.isPending) return;
     try {
       await testBridgeMutation.mutateAsync({ leadPhone: lead.phone, leadName: lead.name, sessionId: lead.sessionId });
-      showNotice(`Office bridge started for ${lead.name}. Answer the office call and press 1.`);
+      showNotice(`Office bridge started for ${lead.name}.`);
     } catch (error) {
       showNotice(error instanceof Error ? `Office bridge could not start: ${error.message}` : "Office bridge could not start.");
     }
   }, [showNotice, testBridgeMutation]);
+
   const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
     const inboxConversation = smsInbox.find((conversation) => (
       (lead.sessionId !== null && conversation.id === lead.sessionId)
@@ -1631,6 +1633,7 @@ export default function CommandChatExactLive() {
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
             {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} callPending={callLeadMutation.isPending} bridgePending={testBridgeMutation.isPending} onClaim={claimLeadFromQueue} onCall={callLeadFromQueue} onTestBridge={testBridgeFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
+
           </aside>
         </div>
       </section>
