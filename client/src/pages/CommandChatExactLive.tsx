@@ -185,6 +185,7 @@ type QuoteAssistantFields = {
   condition: number | null;
   extras: Array<{ id: string; quantity: number }> | null;
   extrasConfirmed?: boolean;
+  customPriceDollars?: string;
 };
 
 const QUOTE_EXTRA_OPTIONS = [
@@ -2510,6 +2511,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
           hourCount: 1,
           extras: quoteAssistantFields.extras || [],
           recurrence: "one-time",
+          ...(quoteAssistantFields.customPriceDollars?.trim() ? { customPriceCents: Math.round(Number(quoteAssistantFields.customPriceDollars) * 100) } : {}),
         },
         notes: [lead?.summary, lead?.description, lead?.detail].filter((value): value is string => Boolean(value?.trim())),
       })}
@@ -2536,6 +2538,9 @@ function QuoteAssistantModal({ customerName, customerPhone, fields, initialMissi
     !fields.condition && "condition",
     !(fields.extrasConfirmed || fields.extras !== null) && "extras",
   ].filter((value): value is string => Boolean(value));
+  const customPriceDollars = fields.customPriceDollars?.trim() ?? "";
+  const customPriceCents = customPriceDollars === "" ? undefined : Math.round(Number(customPriceDollars) * 100);
+  const customPriceInvalid = customPriceDollars !== "" && (customPriceCents === undefined || !Number.isFinite(customPriceCents) || customPriceCents < 1 || customPriceCents > 1_000_000);
   const toggleExtra = (id: string, checked: boolean) => {
     const extras = fields.extras ?? [];
     onFieldsChange({
@@ -2553,12 +2558,14 @@ function QuoteAssistantModal({ customerName, customerPhone, fields, initialMissi
         <label>Bathrooms<input value={fields.bathrooms ?? ""} onChange={(event) => onFieldsChange({ ...fields, bathrooms: event.target.value || null })} placeholder="e.g. 1 Bathroom" /></label>
         <label>Cleaning type<select value={fields.serviceType ?? ""} onChange={(event) => onFieldsChange({ ...fields, serviceType: event.target.value || null })}><option value="">Select type</option><option>Standard Cleaning</option><option>Deep Cleaning</option><option>Move-In / Move-Out Cleaning</option></select></label>
         <label>Home condition (1–10)<input type="number" min="1" max="10" value={fields.condition ?? ""} onChange={(event) => onFieldsChange({ ...fields, condition: event.target.value ? Number(event.target.value) : null })} placeholder="5" /></label>
+        <label>Custom first-cleaning amount (optional)<input type="number" min="1" max="10000" step="0.01" value={fields.customPriceDollars ?? ""} onChange={(event) => onFieldsChange({ ...fields, customPriceDollars: event.target.value })} placeholder={priceDollars !== null ? priceDollars.toFixed(2) : "0.00"} /></label>
       </div>
       <fieldset className="ccc-live-quote-assistant-extras"><legend>Included add-ons</legend>{QUOTE_EXTRA_OPTIONS.map(([id, label]) => <label key={id}><input type="checkbox" checked={Boolean(fields.extras?.some((extra) => extra.id === id))} onChange={(event) => toggleExtra(id, event.target.checked)} />{label}</label>)}<label><input type="checkbox" checked={fields.extrasConfirmed === true && fields.extras?.length === 0} onChange={(event) => { if (event.target.checked) onFieldsChange({ ...fields, extras: [], extrasConfirmed: true }); }} />No add-ons</label></fieldset>
-      {priceDollars !== null && currentMissing.length === 0 && <div className="ccc-live-quote-assistant-price">Verified first-cleaning price <strong>${priceDollars.toFixed(0)}</strong></div>}
+      {priceDollars !== null && currentMissing.length === 0 && !customPriceInvalid && <div className="ccc-live-quote-assistant-price">{customPriceCents !== undefined ? "Custom first-cleaning price" : "Verified first-cleaning price"}<strong>${((customPriceCents ?? priceDollars * 100) / 100).toFixed(0)}</strong></div>}
       {currentMissing.length > 0 && <p className="ccc-live-quote-assistant-missing">Review required: {currentMissing.join(", ")}. {initialMissing.length > 0 && "AI left these blank because they were not explicit in the conversation."}</p>}
+      {customPriceInvalid && <p className="ccc-live-quote-assistant-error" role="alert">Enter a valid amount between $1 and $10,000.</p>}
       {error && <p className="ccc-live-quote-assistant-error" role="alert">{error}</p>}
-      <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="ccc-live-quote-assistant-create" disabled={pending || !customerPhone.trim() || currentMissing.length > 0} onClick={onCreate}>{pending ? <Loader2 className="animate-spin" /> : <Sparkles />}{pending ? "Creating…" : "Create quote & add SMS"}</button></footer>
+      <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="ccc-live-quote-assistant-create" disabled={pending || !customerPhone.trim() || currentMissing.length > 0 || customPriceInvalid} onClick={onCreate}>{pending ? <Loader2 className="animate-spin" /> : <Sparkles />}{pending ? "Creating…" : "Create quote & add SMS"}</button></footer>
     </section>
   </div>;
 }
