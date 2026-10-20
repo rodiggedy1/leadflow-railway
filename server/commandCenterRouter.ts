@@ -49,6 +49,7 @@ import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSources";
 import { getBusinessDayStart } from "./businessTime";
 import { ENV } from "./_core/env";
+import { startTwilioLeadBridge } from "./twilioLeadBridge";
 const MANUAL_LEAD_CALL_VAPI_BASE = "https://api.vapi.ai";
 const MANUAL_LEAD_CALL_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473";
 const MANUAL_LEAD_CALL_OFFICE_NUMBER = "+12028885362";
@@ -316,6 +317,14 @@ function sourceLabel(src: string): string {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const commandCenterRouter = router({
+  startTwilioLeadBridge: agentProcedure
+    .input(z.object({
+      leadPhone: z.string().min(1),
+      leadName: z.string().trim().min(1),
+      sessionId: z.number().int().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => startTwilioLeadBridge(input)),
+
   callLead: agentProcedure
     .input(z.object({
       leadPhone: z.string().min(1),

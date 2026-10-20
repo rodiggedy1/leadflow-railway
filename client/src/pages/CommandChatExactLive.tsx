@@ -807,7 +807,7 @@ function leadCardStatus(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
       : { kind: "new", label: "New", ts } as const;
 }
 
-function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, callPending, onClaim, onMarkBooked, onCall, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; callPending: boolean; onClaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onCall: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
+function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, callPending, bridgePending, onClaim, onMarkBooked, onCall, onTestBridge, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; callPending: boolean; bridgePending: boolean; onClaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onCall: (lead: CommandLead) => void; onTestBridge: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
   useEffect(() => {
@@ -827,12 +827,12 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
       {orderedLeads.length ? <div className="ccc-live-lead-list">{orderedLeads.map(renderLeadCard)}</div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
-      {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} claimPending={claimPending} bookingPending={bookingPending} onMarkBooked={onMarkBooked} onOpenSms={onOpenSms} onCopyPhone={copyPhone} />}
+      {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} claimPending={claimPending} bookingPending={bookingPending} onMarkBooked={onMarkBooked} onOpenSms={onOpenSms} onTestBridge={onTestBridge} bridgePending={bridgePending} onCopyPhone={copyPhone} />}
     </article>
   );
 }
 
-function LeadDetailPanel({ lead, onClose, onClaim, claimPending, bookingPending, onMarkBooked, onOpenSms, onCopyPhone }: { lead: CommandLead; onClose: () => void; onClaim: (lead: CommandLead) => void; claimPending: boolean; bookingPending: boolean; onMarkBooked: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void; onCopyPhone: (phone: string) => void }) {
+function LeadDetailPanel({ lead, onClose, onClaim, claimPending, bookingPending, onMarkBooked, onOpenSms, onTestBridge, bridgePending, onCopyPhone }: { lead: CommandLead; onClose: () => void; onClaim: (lead: CommandLead) => void; claimPending: boolean; bookingPending: boolean; onMarkBooked: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void; onTestBridge: (lead: CommandLead) => void; bridgePending: boolean; onCopyPhone: (phone: string) => void }) {
   return <div className="ccc-lead-detail-backdrop" role="presentation" onMouseDown={onClose}>
     <aside className="ccc-lead-detail-panel" role="dialog" aria-modal="true" aria-label={`${lead.name} lead details`} onMouseDown={(event) => event.stopPropagation()}>
       <header><div><small>LEAD DETAILS</small><h2>{lead.name}</h2><p>{lead.sourceLabel} · {formatRelative(lead.ts)}</p></div><button type="button" aria-label="Close lead details" onClick={onClose}><X /></button></header>
@@ -860,7 +860,7 @@ function LeadDetailPanel({ lead, onClose, onClaim, claimPending, bookingPending,
         {lead.nativeDetails.length > 0 && <section className="ccc-lead-detail-section"><h3>All Thumbtack request fields</h3><dl>{lead.nativeDetails.map((detail, index) => <Fragment key={`${detail.question}-${index}`}><dt>{detail.question || "Request detail"}</dt><dd>{detail.answer || "—"}</dd></Fragment>)}</dl></section>}
         {(lead.estimate || lead.attachments.length > 0 || lead.requestReviewLink || lead.refundRequestLink) && <section className="ccc-lead-detail-section"><h3>Native payload references</h3><dl>{lead.estimate && <><dt>Estimate</dt><dd>{nativeValue(lead.estimate)}</dd></>}{lead.attachments.length > 0 && <><dt>Attachments</dt><dd>{nativeValue(lead.attachments)}</dd></>}{lead.requestReviewLink && <><dt>Review link</dt><dd><a href={lead.requestReviewLink} target="_blank" rel="noreferrer">Open Thumbtack review</a></dd></>}{lead.refundRequestLink && <><dt>Refund link</dt><dd><a href={lead.refundRequestLink} target="_blank" rel="noreferrer">Open refund request</a></dd></>}</dl></section>}
       </div>
-      <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={() => onMarkBooked(lead)}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button>{lead.phone && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
+      <footer><button type="button" className={lead.claimedBy ? "is-claimed" : ""} disabled={Boolean(lead.claimedBy) || claimPending} onClick={() => onClaim(lead)}>{lead.claimedBy ? <><Check />{lead.claimedBy}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={lead.isBooked || bookingPending || !lead.sessionId} onClick={() => onMarkBooked(lead)}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button>{lead.phone && <button type="button" onClick={() => onOpenSms(lead)}><MessageSquare />Text</button>}{lead.phone && <button type="button" className="ccc-live-test-bridge-button" disabled={bridgePending} onClick={() => onTestBridge(lead)}><PhoneCall />{bridgePending ? "Starting…" : "Test office bridge"}</button>}<a href={leadHref(lead)}>Open CRM <ChevronRight /></a></footer>
     </aside>
   </div>;
 }
@@ -1149,6 +1149,7 @@ export default function CommandChatExactLive() {
   const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: () => { setModal(null); setBookingPerson(""); setBookingAmount(""); setBookingNote(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); } });
   const markLeadBookedMutation = trpc.opsChat.markLeadBooked.useMutation();
   const callLeadMutation = trpc.commandCenter.callLead.useMutation();
+  const testBridgeMutation = trpc.commandCenter.startTwilioLeadBridge.useMutation();
   const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
     onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),
@@ -1342,6 +1343,15 @@ export default function CommandChatExactLive() {
       showNotice(error instanceof Error ? `Call could not be started: ${error.message}` : "Call could not be started.");
     }
   }, [callLeadMutation, showNotice]);
+  const testBridgeFromQueue = useCallback(async (lead: CommandLead) => {
+    if (!lead.phone || testBridgeMutation.isPending) return;
+    try {
+      await testBridgeMutation.mutateAsync({ leadPhone: lead.phone, leadName: lead.name, sessionId: lead.sessionId });
+      showNotice(`Office bridge started for ${lead.name}. Answer the office call and press 1.`);
+    } catch (error) {
+      showNotice(error instanceof Error ? `Office bridge could not start: ${error.message}` : "Office bridge could not start.");
+    }
+  }, [showNotice, testBridgeMutation]);
   const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
     const inboxConversation = smsInbox.find((conversation) => (
       (lead.sessionId !== null && conversation.id === lead.sessionId)
@@ -1620,12 +1630,12 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} callPending={callLeadMutation.isPending} onClaim={claimLeadFromQueue} onCall={callLeadFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} callPending={callLeadMutation.isPending} bridgePending={testBridgeMutation.isPending} onClaim={claimLeadFromQueue} onCall={callLeadFromQueue} onTestBridge={testBridgeFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
           </aside>
         </div>
       </section>
       {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
-      {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
+      {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} onTestBridge={testBridgeFromQueue} bridgePending={testBridgeMutation.isPending} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
       {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
