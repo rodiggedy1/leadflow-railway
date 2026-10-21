@@ -17,6 +17,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
   conversationSessions,
+  bookings,
   activityLog,
   leadCallLogs,
   aiInsightsCache,
@@ -49,6 +50,7 @@ import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSources";
 import { getBusinessDayStart } from "./businessTime";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import { normalizePhone as normalizeBookingPhone } from "./utils/phone";
 import { ENV } from "./_core/env";
 import { startTwilioLeadBridge } from "./twilioLeadBridge";
 const MANUAL_LEAD_CALL_VAPI_BASE = "https://api.vapi.ai";
@@ -693,7 +695,7 @@ export const commandCenterRouter = router({
       };
       if (!db) return empty;
 
-      const [assignedRows, bookedRows] = await Promise.all([
+      const [assignedRows, nativeBookingRows, sessionBookingRows] = await Promise.all([
         db
           .select({ id: conversationSessions.id })
           .from(conversationSessions)
@@ -704,6 +706,24 @@ export const commandCenterRouter = router({
           )),
         db
           .select({
+            status: bookings.status,
+            customerName: bookings.customerName,
+            customerPhone: bookings.customerPhone,
+            totalCents: bookings.firstCleaningTotalCents,
+          })
+          .from(bookings)
+          .where(and(
+            or(
+              eq(bookings.bookedByAgentId, input.agentId),
+              eq(bookings.bookedByAgentName, input.agentName),
+            ),
+            gte(bookings.createdAt, window.start),
+            lte(bookings.createdAt, new Date(window.endExclusive.getTime() - 1)),
+          )),
+        db
+          .select({
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
             bookedAmount: conversationSessions.bookedAmount,
             quotedPrice: conversationSessions.quotedPrice,
             extras: conversationSessions.extras,
@@ -722,7 +742,28 @@ export const commandCenterRouter = router({
           )),
       ]);
 
-      const bookedRevenue = bookedRows.reduce((sum, row) => sum + calcRevenue(row), 0);
+      const seenPhones = new Set<string>();
+      const bookedRows = [
+        ...nativeBookingRows
+          .filter((row) => !["cancelled", "canceled"].includes(row.status))
+          .map((row) => ({
+            customerName: row.customerName,
+            phone: normalizeBookingPhone(row.customerPhone),
+            revenue: Number(row.totalCents ?? 0) / 100,
+          })),
+        ...sessionBookingRows.map((row) => ({
+          customerName: row.leadName,
+          phone: normalizeBookingPhone(row.leadPhone),
+          revenue: calcRevenue(row),
+        })),
+      ].filter((row) => {
+        const phone = row.phone || `unknown:${row.customerName ?? "customer"}`;
+        if (seenPhones.has(phone)) return false;
+        seenPhones.add(phone);
+        return true;
+      });
+
+      const bookedRevenue = bookedRows.reduce((sum, row) => sum + row.revenue, 0);
       const leadsAssigned = assignedRows.length;
       const bookedCount = bookedRows.length;
       return {
