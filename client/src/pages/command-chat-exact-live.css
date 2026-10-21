@@ -292,4 +292,10 @@
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger{display:grid;place-items:center;width:25px;height:25px;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;}
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger:focus-visible{outline:2px solid #45d8a4;outline-offset:2px;}
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger:hover .ccc-presence-portrait{border-color:#45d8a4;}
-@media(max-width:1120px){.ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger{width:21px;height:21px;}.ccc-widget-app .ccc-live-agent-performance{right:-12px;width:236px;}}
+
+
+/* Performance range controls: horizontal and visibly selected. */
+.ccc-widget-app .ccc-agent-performance-ranges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:0 0 8px;padding:3px;border-radius:7px;background:#1c1c1f}
+.ccc-widget-app .ccc-agent-performance-range{min-width:0;padding:6px 4px;border:0;border-radius:5px;background:transparent;color:#aaa7ad;font-size:10px;font-weight:760;line-height:12px;white-space:nowrap;cursor:pointer}
+.ccc-widget-app .ccc-agent-performance-range:hover,.ccc-widget-app .ccc-agent-performance-range:focus-visible{color:#f1eff0;background:#302f34}
+.ccc-widget-app .ccc-agent-performance-range.active{background:#3a3a40;color:#bff5df;box-shadow:inset 0 0 0 1px rgba(69,216,164,.55)}
