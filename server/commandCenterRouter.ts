@@ -227,7 +227,7 @@ function getWindowStart(range: "today" | "7d" | "30d"): Date {
   return d;
 }
 
-type AgentPerformanceRange = "week" | "month";
+type AgentPerformanceRange = "today" | "week" | "month";
 
 function businessDateParts(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -249,7 +249,10 @@ function getAgentPerformanceWindow(range: AgentPerformanceRange, now = new Date(
   const currentDate = new Date(Date.UTC(current.year, current.month - 1, current.day));
   let startDate: Date;
   let endDate: Date;
-  if (range === "week") {
+  if (range === "today") {
+    startDate = new Date(currentDate);
+    endDate = new Date(currentDate);
+  } else if (range === "week") {
     const daysSinceMonday = (currentDate.getUTCDay() + 6) % 7;
     startDate = new Date(currentDate);
     startDate.setUTCDate(startDate.getUTCDate() - daysSinceMonday);
@@ -674,7 +677,7 @@ export const commandCenterRouter = router({
     .input(z.object({
       agentId: z.number().int().positive(),
       agentName: z.string().min(1).max(255),
-      range: z.enum(["week", "month"]).default("week"),
+      range: z.enum(["today", "week", "month"]).default("today"),
     }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -731,6 +734,29 @@ export const commandCenterRouter = router({
         conversionRate: leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0,
       };
     }),
+
+  /** Read-only list of team members with at least one booking scheduled today. */
+  getAgentsWithBookingsToday: agentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { agentIds: [], agentNames: [] };
+    const window = getAgentPerformanceWindow("today");
+    const rows = await db
+      .select({
+        agentId: conversationSessions.bookedByAgentId,
+        agentName: conversationSessions.bookedByAgentName,
+      })
+      .from(conversationSessions)
+      .where(and(
+        eq(conversationSessions.isBooked, 1),
+        gte(conversationSessions.bookedAt, window.start),
+        lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
+        or(isNotNull(conversationSessions.bookedByAgentId), isNotNull(conversationSessions.bookedByAgentName)),
+      ));
+    return {
+      agentIds: Array.from(new Set(rows.map((row) => row.agentId).filter((id): id is number => id !== null))),
+      agentNames: Array.from(new Set(rows.map((row) => row.agentName?.trim()).filter((name): name is string => Boolean(name)))),
+    };
+  }),
 
   /**
    * KPI stat cards for the top row.
