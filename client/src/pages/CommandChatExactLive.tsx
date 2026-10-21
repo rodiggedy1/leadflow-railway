@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   AudioLines,
   Bell,
+  BarChart3,
   CalendarClock,
   CalendarDays,
   CarFront,
@@ -783,6 +784,37 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
   return photoUrl ? <img className={className} src={photoUrl} alt={`${name} profile`} /> : <span className={className}>{initials(name)}</span>;
 }
 
+type AgentPerformanceSnapshot = {
+  range: "week" | "month";
+  dateFrom: string;
+  dateTo: string;
+  leadsAssigned: number;
+  bookedCount: number;
+  bookedRevenue: number;
+  conversionRate: number;
+};
+
+function performanceDateLabel(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12)).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function AgentPerformancePopover({ agentName, range, snapshot, loading, onRangeChange }: { agentName: string; range: "week" | "month"; snapshot?: AgentPerformanceSnapshot; loading: boolean; onRangeChange: (range: "week" | "month") => void }) {
+  const rangeLabel = range === "week" ? "This week" : "This month";
+  return <div className="ccc-live-agent-performance" role="dialog" aria-label={`${agentName} performance`} onClick={(event) => event.stopPropagation()}>
+    <header><span><BarChart3 /><strong>{agentName}</strong></span><small>{snapshot ? `${performanceDateLabel(snapshot.dateFrom)} – ${performanceDateLabel(snapshot.dateTo)}` : rangeLabel}</small></header>
+    <div className="ccc-live-agent-performance-ranges" role="tablist" aria-label="Performance period">
+      {(["week", "month"] as const).map((option) => <button type="button" key={option} className={range === option ? "active" : ""} aria-selected={range === option} onClick={() => onRangeChange(option)}>{option === "week" ? "This week" : "This month"}</button>)}
+    </div>
+    {loading ? <div className="ccc-live-agent-performance-loading"><Loader2 className="animate-spin" />Loading metrics…</div> : snapshot ? <div className="ccc-live-agent-performance-grid">
+      <span><b>{snapshot.bookedCount}</b><small>Bookings</small></span>
+      <span><b>{snapshot.conversionRate}%</b><small>Conversion</small></span>
+      <span><b>${snapshot.bookedRevenue.toLocaleString()}</b><small>Revenue</small></span>
+    </div> : <p className="ccc-live-agent-performance-empty">No metrics available for this team member.</p>}
+    {snapshot && <footer>{snapshot.leadsAssigned} assigned leads in range</footer>}
+  </div>;
+}
+
 function leadCardConversation(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
   const phone = normalizedLeadPhone(lead.phone);
   const name = lead.name.trim().toLowerCase();
@@ -1176,6 +1208,13 @@ export default function CommandChatExactLive() {
     const now = Date.now();
     return agents.agents.map((agent) => ({ ...agent, presence: commandPresenceStatus(agent, now) }));
   }, [agents.agents]);
+  const [selectedAgentPerformanceId, setSelectedAgentPerformanceId] = useState<number | null>(null);
+  const [agentPerformanceRange, setAgentPerformanceRange] = useState<"week" | "month">("week");
+  const selectedAgentPerformanceName = headerAgentPresence.find((agent) => agent.id === selectedAgentPerformanceId)?.name ?? "";
+  const { data: selectedAgentPerformance, isFetching: agentPerformanceLoading } = trpc.commandCenter.getAgentPerformance.useQuery(
+    { agentId: selectedAgentPerformanceId ?? 0, agentName: selectedAgentPerformanceName, range: agentPerformanceRange },
+    { enabled: isAuthenticated && selectedAgentPerformanceId !== null && selectedAgentPerformanceId > 0 && Boolean(selectedAgentPerformanceName), staleTime: 30_000, refetchInterval: 60_000 },
+  );
   const rootMessages = useMemo(() => (channelMessages as ChannelMessage[]).filter((message) => !message.threadParentId), [channelMessages]);
   const pendingRootMessages = useMemo(
     () => pendingOutgoingMessages.filter((pending) => !rootMessages.some((persisted) => (
@@ -1609,7 +1648,7 @@ export default function CommandChatExactLive() {
           </aside>
 
           <section className="ccc-command-panel ccc-center-panel">
-            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{unreadThreadCount}</b> Threads</button><span className="ccc-header-metric-bookings ccc-header-booking-hover" tabIndex={0} aria-label={`${todayBookingCount} bookings today`}><CalendarClock /><b>{todayBookingCount}</b> Booked{todayBookingDetails.length > 0 && <span className="ccc-header-booking-popover" role="tooltip"><strong>Today&apos;s bookings</strong>{todayBookingDetails.map((booking, index) => <span className="ccc-header-booking-row" key={`${booking.customerName ?? "customer"}-${index}`}><span><b>{booking.customerName?.trim() || "Customer"}</b><small>{booking.bookedByAgentName?.trim() ? `Booked by ${booking.bookedByAgentName.trim()}` : "Public booking"}</small></span><em>${(Number(booking.totalCents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</em></span>)}</span>}</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /><i aria-hidden="true" /></span>)}</div></div></div></div>
+            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{unreadThreadCount}</b> Threads</button><span className="ccc-header-metric-bookings ccc-header-booking-hover" tabIndex={0} aria-label={`${todayBookingCount} bookings today`}><CalendarClock /><b>{todayBookingCount}</b> Booked{todayBookingDetails.length > 0 && <span className="ccc-header-booking-popover" role="tooltip"><strong>Today&apos;s bookings</strong>{todayBookingDetails.map((booking, index) => <span className="ccc-header-booking-row" key={`${booking.customerName ?? "customer"}-${index}`}><span><b>{booking.customerName?.trim() || "Customer"}</b><small>{booking.bookedByAgentName?.trim() ? `Booked by ${booking.bookedByAgentName.trim()}` : "Public booking"}</small></span><em>${(Number(booking.totalCents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</em></span>)}</span>}</span><span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><button type="button" className="ccc-live-presence-trigger" aria-label={`View ${agent.name} performance`} aria-expanded={selectedAgentPerformanceId === agent.id} onClick={() => setSelectedAgentPerformanceId((current) => current === agent.id ? null : agent.id)}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /></button><i aria-hidden="true" />{selectedAgentPerformanceId === agent.id && <AgentPerformancePopover agentName={agent.name} range={agentPerformanceRange} snapshot={selectedAgentPerformance as AgentPerformanceSnapshot | undefined} loading={agentPerformanceLoading} onRangeChange={setAgentPerformanceRange} />}</span>)}</div></div></div></div>
             <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Dismiss pinned note locally" onClick={() => showNotice("Pins are managed from channel actions.")}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>

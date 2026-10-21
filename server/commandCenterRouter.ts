@@ -47,6 +47,9 @@ import { getCompletedBookingsForDate } from "./launch27";
 import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSources";
+import { getBusinessDayStart } from "./businessTime";
+import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import { ENV } from "./_core/env";
 import { startTwilioLeadBridge } from "./twilioLeadBridge";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -133,6 +136,50 @@ function getWindowStart(range: "today" | "7d" | "30d"): Date {
   const d = new Date(now);
   d.setDate(d.getDate() - 30);
   return d;
+}
+
+type AgentPerformanceRange = "week" | "month";
+
+function businessDateParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return { year: value("year"), month: value("month"), day: value("day") };
+}
+
+function isoBusinessDate(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getAgentPerformanceWindow(range: AgentPerformanceRange, now = new Date()) {
+  const current = businessDateParts(now);
+  const currentDate = new Date(Date.UTC(current.year, current.month - 1, current.day));
+  let startDate: Date;
+  let endDate: Date;
+  if (range === "week") {
+    const daysSinceMonday = (currentDate.getUTCDay() + 6) % 7;
+    startDate = new Date(currentDate);
+    startDate.setUTCDate(startDate.getUTCDate() - daysSinceMonday);
+    endDate = new Date(startDate);
+    endDate.setUTCDate(endDate.getUTCDate() + 6);
+  } else {
+    startDate = new Date(Date.UTC(current.year, current.month - 1, 1));
+    endDate = new Date(Date.UTC(current.year, current.month, 0));
+  }
+  const dateFrom = isoBusinessDate(startDate);
+  const dateTo = isoBusinessDate(endDate);
+  const endExclusiveDate = new Date(endDate);
+  endExclusiveDate.setUTCDate(endExclusiveDate.getUTCDate() + 1);
+  return {
+    dateFrom,
+    dateTo,
+    start: new Date(businessLocalDateTimeToUtcMs(dateFrom, "00:00", "America/New_York")),
+    endExclusive: new Date(businessLocalDateTimeToUtcMs(isoBusinessDate(endExclusiveDate), "00:00", "America/New_York")),
+  };
 }
 
 /** Compute an intent score (0–100) for a lead based on stage, recency, and conversation data */
@@ -521,6 +568,73 @@ export const commandCenterRouter = router({
           activity: leadsCrmThirtyDayActivity(history, now),
         };
       });
+    }),
+
+  /**
+   * Read-only performance snapshot for the team-member avatar popover.
+   * Assigned leads use session creation time, matching agents.myStats; bookings
+   * and revenue use the booking timestamp and booked-agent attribution.
+   */
+  getAgentPerformance: agentProcedure
+    .input(z.object({
+      agentId: z.number().int().positive(),
+      agentName: z.string().min(1).max(255),
+      range: z.enum(["week", "month"]).default("week"),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      const window = getAgentPerformanceWindow(input.range);
+      const empty = {
+        range: input.range,
+        dateFrom: window.dateFrom,
+        dateTo: window.dateTo,
+        leadsAssigned: 0,
+        bookedCount: 0,
+        bookedRevenue: 0,
+        conversionRate: 0,
+      };
+      if (!db) return empty;
+
+      const assignedRows = await db
+        .select({ id: conversationSessions.id })
+        .from(conversationSessions)
+        .where(and(
+          eq(conversationSessions.assignedAgentId, input.agentId),
+          gte(conversationSessions.createdAt, window.start),
+          lte(conversationSessions.createdAt, new Date(window.endExclusive.getTime() - 1)),
+        ));
+
+      const bookedRows = await db
+        .select({
+          bookedAmount: conversationSessions.bookedAmount,
+          quotedPrice: conversationSessions.quotedPrice,
+          extras: conversationSessions.extras,
+          reactivationLastPrice: conversationSessions.reactivationLastPrice,
+          reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+        })
+        .from(conversationSessions)
+        .where(and(
+          or(
+            eq(conversationSessions.bookedByAgentId, input.agentId),
+            eq(conversationSessions.bookedByAgentName, input.agentName),
+          ),
+          eq(conversationSessions.isBooked, 1),
+          gte(conversationSessions.bookedAt, window.start),
+          lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
+        ));
+
+      const bookedRevenue = bookedRows.reduce((sum, row) => sum + calcRevenue(row), 0);
+      const leadsAssigned = assignedRows.length;
+      const bookedCount = bookedRows.length;
+      return {
+        range: input.range,
+        dateFrom: window.dateFrom,
+        dateTo: window.dateTo,
+        leadsAssigned,
+        bookedCount,
+        bookedRevenue,
+        conversionRate: leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0,
+      };
     }),
 
   /**
