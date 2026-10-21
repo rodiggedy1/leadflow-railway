@@ -286,8 +286,6 @@
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger:hover .ccc-presence-portrait{border-color:#45d8a4;}
 .ccc-widget-app .ccc-live .ccc-center-panel{overflow:visible;}
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-agent.has-booking-today .ccc-presence-portrait{box-shadow:0 0 0 2px #45d8a4,0 0 0 4px rgba(69,216,164,.18);}
-.ccc-widget-app .ccc-live-agent-performance{position:absolute;z-index:60;top:calc(100% + 12px);right:-8px;width:252px;padding:13px;border:1px solid #46464c;border-radius:12px;background:#242427;box-shadow:0 18px 42px rgba(0,0,0,.48);color:#e9e9ed;text-align:left;}
-.ccc-widget-app .ccc-live-agent-performance:before{position:absolute;top:-6px;right:16px;width:10px;height:10px;border-top:1px solid #46464c;border-left:1px solid #46464c;background:#242427;content:"";transform:rotate(45deg);}
 .ccc-widget-app .ccc-live-agent-performance header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:0 0 11px;}
 .ccc-widget-app .ccc-live-agent-performance header span{display:flex;align-items:center;min-width:0;gap:7px;}
 .ccc-widget-app .ccc-live-agent-performance header svg{width:15px;height:15px;flex:none;color:#45d8a4;}
