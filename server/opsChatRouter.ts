@@ -1949,6 +1949,38 @@ export const opsChatRouter = router({
     }),
 
   /**
+   * unclaimLead — remove the current agent's claim from a Command Chat lead.
+   */
+  unclaimLead: opsChatProcedure
+    .input(z.object({ messageId: z.number(), sessionId: z.number().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [existing] = await db
+        .select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.messageId))
+        .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(existing.metadata ?? "{}"); } catch { /* ignore */ }
+      if (meta.claimedBy && meta.claimedBy !== ctx.opsCaller.name) {
+        throw new TRPCError({ code: "FORBIDDEN", message: `Lead is claimed by ${String(meta.claimedBy)}` });
+      }
+      delete meta.claimedBy;
+      delete meta.claimedAt;
+      await db.update(opsChatMessages).set({ metadata: JSON.stringify(meta) }).where(eq(opsChatMessages.id, input.messageId));
+      if (input.sessionId) {
+        await db
+          .update(conversationSessions)
+          .set({ assignedAgentId: null, assignedAgentName: null })
+          .where(and(eq(conversationSessions.id, input.sessionId), eq(conversationSessions.assignedAgentName, ctx.opsCaller.name)));
+      }
+      broadcastOpsUpdate("lead_update");
+      return { success: true };
+    }),
+
+  /**
    * openIssue — post a general (non-job-specific) issue card to the command channel.
    */
   openIssue: opsChatProcedure
@@ -2947,6 +2979,23 @@ export const opsChatRouter = router({
         })
         .where(eq(conversationSessions.id, input.sessionId));
       await markReactivationContactBooked(input.sessionId).catch(console.error);
+      broadcastOpsUpdate("lead_update");
+      return { success: true };
+    }),
+
+  /**
+   * unbookLead — reverse the booked state from a Command Chat lead card.
+   * The existing announcement remains as historical Command Chat activity.
+   */
+  unbookLead: opsChatProcedure
+    .input(z.object({ sessionId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db
+        .update(conversationSessions)
+        .set({ isBooked: 0, stage: "UNHANDLED", bookedAt: null, bookedByAgentId: null, bookedByAgentName: null, bookedAmount: null })
+        .where(eq(conversationSessions.id, input.sessionId));
       broadcastOpsUpdate("lead_update");
       return { success: true };
     }),
