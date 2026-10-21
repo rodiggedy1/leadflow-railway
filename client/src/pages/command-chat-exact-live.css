@@ -285,10 +285,13 @@
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger:focus-visible{outline:2px solid #45d8a4;outline-offset:2px;}
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger:hover .ccc-presence-portrait{border-color:#45d8a4;}
 .ccc-widget-app .ccc-live .ccc-center-panel{overflow:visible;}
-.ccc-widget-app .ccc-live-header-presence .ccc-live-presence-agent.has-booking-today .ccc-presence-portrait{box-shadow:0 0 0 2px #45d8a4,0 0 0 4px rgba(69,216,164,.18);}
 
 /* Performance range controls: horizontal and visibly selected; no other dropdown behavior changes. */
 .ccc-widget-app .ccc-agent-performance-ranges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:0 0 8px;padding:3px;border-radius:7px;background:#1c1c1f}
 .ccc-widget-app .ccc-agent-performance-range{min-width:0;padding:6px 4px;border:0;border-radius:5px;background:transparent;color:#aaa7ad;font-size:10px;font-weight:760;line-height:12px;white-space:nowrap;cursor:pointer}
 .ccc-widget-app .ccc-agent-performance-range:hover,.ccc-widget-app .ccc-agent-performance-range:focus-visible{color:#f1eff0;background:#302f34}
 .ccc-widget-app .ccc-agent-performance-range.active{background:#3a3a40;color:#bff5df;box-shadow:inset 0 0 0 1px rgba(69,216,164,.55)}
+
+.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge{position:absolute;top:-3px;right:-3px;display:grid;place-items:center;width:9px;height:9px;border:1.5px solid #1b1b1d;border-radius:50%;background:#dfc27d;color:#242326;pointer-events:none;z-index:2}
+.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge svg{width:6px;height:6px;stroke-width:3}
+@media(max-width:1120px){.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge{top:-2px;right:-2px;width:8px;height:8px}.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge svg{width:5px;height:5px}}
