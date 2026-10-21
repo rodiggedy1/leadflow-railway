@@ -693,33 +693,34 @@ export const commandCenterRouter = router({
       };
       if (!db) return empty;
 
-      const assignedRows = await db
-        .select({ id: conversationSessions.id })
-        .from(conversationSessions)
-        .where(and(
-          eq(conversationSessions.assignedAgentId, input.agentId),
-          gte(conversationSessions.createdAt, window.start),
-          lte(conversationSessions.createdAt, new Date(window.endExclusive.getTime() - 1)),
-        ));
-
-      const bookedRows = await db
-        .select({
-          bookedAmount: conversationSessions.bookedAmount,
-          quotedPrice: conversationSessions.quotedPrice,
-          extras: conversationSessions.extras,
-          reactivationLastPrice: conversationSessions.reactivationLastPrice,
-          reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
-        })
-        .from(conversationSessions)
-        .where(and(
-          or(
-            eq(conversationSessions.bookedByAgentId, input.agentId),
-            eq(conversationSessions.bookedByAgentName, input.agentName),
-          ),
-          eq(conversationSessions.isBooked, 1),
-          gte(conversationSessions.bookedAt, window.start),
-          lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
-        ));
+      const [assignedRows, bookedRows] = await Promise.all([
+        db
+          .select({ id: conversationSessions.id })
+          .from(conversationSessions)
+          .where(and(
+            eq(conversationSessions.assignedAgentId, input.agentId),
+            gte(conversationSessions.createdAt, window.start),
+            lte(conversationSessions.createdAt, new Date(window.endExclusive.getTime() - 1)),
+          )),
+        db
+          .select({
+            bookedAmount: conversationSessions.bookedAmount,
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+          })
+          .from(conversationSessions)
+          .where(and(
+            or(
+              eq(conversationSessions.bookedByAgentId, input.agentId),
+              eq(conversationSessions.bookedByAgentName, input.agentName),
+            ),
+            eq(conversationSessions.isBooked, 1),
+            gte(conversationSessions.bookedAt, window.start),
+            lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
+          )),
+      ]);
 
       const bookedRevenue = bookedRows.reduce((sum, row) => sum + calcRevenue(row), 0);
       const leadsAssigned = assignedRows.length;
