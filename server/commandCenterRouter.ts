@@ -17,6 +17,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
   conversationSessions,
+  bookings,
   activityLog,
   leadCallLogs,
   aiInsightsCache,
@@ -41,7 +42,7 @@ import { extractQuoteInputsFromText, resolveVerifiedQuote, type QuoteInputs } fr
 import { PUBLIC_BOOKING_PRICED_EXTRAS } from "../shared/publicBookingPricing";
 import { sendSms } from "./openphone";
 import { normalizePhone } from "./routers";
-import { normalizePhoneLegacy } from "./utils/phone";
+import { normalizePhone as normalizePhoneStrict, normalizePhoneLegacy } from "./utils/phone";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { getCompletedBookingsForDate } from "./launch27";
 import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
@@ -49,8 +50,100 @@ import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSources";
 import { getBusinessDayStart } from "./businessTime";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import { normalizePhone as normalizeBookingPhone } from "./utils/phone";
 import { ENV } from "./_core/env";
 import { startTwilioLeadBridge } from "./twilioLeadBridge";
+const MANUAL_LEAD_CALL_VAPI_BASE = "https://api.vapi.ai";
+const MANUAL_LEAD_CALL_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473";
+const MANUAL_LEAD_CALL_OFFICE_NUMBER = "+12028885362";
+const MANUAL_LEAD_CALL_DEDUP_WINDOW_MS = 30_000;
+const manualLeadCallLocks = new Map<string, number>();
+
+async function placeManualLeadBridgeCall(input: { leadPhone: string; leadName: string; serviceType?: string | null }) {
+  const normalizedPhone = normalizePhoneStrict(input.leadPhone);
+  if (!normalizedPhone) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "A valid customer phone number is required to call this lead." });
+  }
+  if (!ENV.vapiPrivateKey) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "VAPI_PRIVATE_KEY is not configured." });
+  }
+  const previousCallAt = manualLeadCallLocks.get(normalizedPhone);
+  if (previousCallAt && Date.now() - previousCallAt < MANUAL_LEAD_CALL_DEDUP_WINDOW_MS) {
+    throw new TRPCError({ code: "CONFLICT", message: "A call to this lead was just started. Please wait before trying again." });
+  }
+  const lockTimestamp = Date.now();
+  manualLeadCallLocks.set(normalizedPhone, lockTimestamp);
+
+  const firstName = input.leadName.trim().split(/\s+/)[0] || "the client";
+  const service = input.serviceType?.trim() || "cleaning";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(`${MANUAL_LEAD_CALL_VAPI_BASE}/call`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${ENV.vapiPrivateKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+      phoneNumberId: MANUAL_LEAD_CALL_PHONE_NUMBER_ID,
+      customer: { number: MANUAL_LEAD_CALL_OFFICE_NUMBER },
+      assistant: {
+        name: "ManualLeadBridge",
+        firstMessage: `You have a lead call for ${firstName} about ${service}. Connecting you now...`,
+        model: {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          messages: [{
+            role: "system",
+            content: "You are a brief bridge system. After the announcement, immediately transfer the office call to the customer using the transferCall tool. Do not send SMS messages.",
+          }],
+          tools: [{
+            type: "transferCall",
+            destinations: [{
+              type: "number",
+              number: normalizedPhone,
+              message: `Connecting you to ${firstName} now...`,
+            }],
+          }],
+        },
+        voice: {
+          provider: "11labs",
+          voiceId: "EXAVITQu4vr4xnSDxMaL",
+          stability: 0.5,
+          similarityBoost: 0.75,
+        },
+        maxDurationSeconds: 120,
+      },
+      }),
+    });
+    if (!response.ok) {
+      const responseBody = await response.text();
+      console.error("[CommandCenter] Manual lead bridge rejected by Vapi", {
+        status: response.status,
+        body: responseBody.slice(0, 2000),
+        leadPhone: normalizedPhone,
+      });
+      throw new TRPCError({ code: "BAD_GATEWAY", message: "The office call could not be started." });
+    }
+    const result = await response.json() as { id?: string };
+    return { success: true, callId: result.id ?? null };
+  } catch (error) {
+    console.error("[CommandCenter] Manual lead bridge request failed", {
+      leadPhone: normalizedPhone,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    setTimeout(() => {
+      if (manualLeadCallLocks.get(normalizedPhone) === lockTimestamp) {
+        manualLeadCallLocks.delete(normalizedPhone);
+      }
+    }, MANUAL_LEAD_CALL_DEDUP_WINDOW_MS);
+  }
+}
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 type LeadsCrmHistoryEntry = {
@@ -123,9 +216,7 @@ function calcRevenue(row: {
 function getWindowStart(range: "today" | "7d" | "30d"): Date {
   const now = new Date();
   if (range === "today") {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    return d;
+    return getBusinessDayStart(now);
   }
   if (range === "7d") {
     const d = new Date(now);
@@ -281,7 +372,13 @@ export const commandCenterRouter = router({
     }))
     .mutation(async ({ input }) => startTwilioLeadBridge(input)),
 
-
+  callLead: agentProcedure
+    .input(z.object({
+      leadPhone: z.string().min(1),
+      leadName: z.string().trim().min(1),
+      serviceType: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => placeManualLeadBridgeCall(input)),
 
   listCommandChatInbox: agentProcedure
     .query(async () => {
@@ -582,7 +679,7 @@ export const commandCenterRouter = router({
     .input(z.object({
       agentId: z.number().int().positive(),
       agentName: z.string().min(1).max(255),
-      range: z.enum(["today", "week", "month"]).default("week"),
+      range: z.enum(["today", "week", "month"]).default("today"),
     }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -598,35 +695,75 @@ export const commandCenterRouter = router({
       };
       if (!db) return empty;
 
-      const assignedRows = await db
-        .select({ id: conversationSessions.id })
-        .from(conversationSessions)
-        .where(and(
-          eq(conversationSessions.assignedAgentId, input.agentId),
-          gte(conversationSessions.createdAt, window.start),
-          lte(conversationSessions.createdAt, new Date(window.endExclusive.getTime() - 1)),
-        ));
+      const [assignedRows, nativeBookingRows, sessionBookingRows] = await Promise.all([
+        db
+          .select({ id: conversationSessions.id })
+          .from(conversationSessions)
+          .where(and(
+            eq(conversationSessions.assignedAgentId, input.agentId),
+            gte(conversationSessions.createdAt, window.start),
+            lte(conversationSessions.createdAt, new Date(window.endExclusive.getTime() - 1)),
+          )),
+        db
+          .select({
+            status: bookings.status,
+            customerName: bookings.customerName,
+            customerPhone: bookings.customerPhone,
+            totalCents: bookings.firstCleaningTotalCents,
+          })
+          .from(bookings)
+          .where(and(
+            or(
+              eq(bookings.bookedByAgentId, input.agentId),
+              eq(bookings.bookedByAgentName, input.agentName),
+            ),
+            gte(bookings.createdAt, window.start),
+            lte(bookings.createdAt, new Date(window.endExclusive.getTime() - 1)),
+          )),
+        db
+          .select({
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            bookedAmount: conversationSessions.bookedAmount,
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+          })
+          .from(conversationSessions)
+          .where(and(
+            or(
+              eq(conversationSessions.bookedByAgentId, input.agentId),
+              eq(conversationSessions.bookedByAgentName, input.agentName),
+            ),
+            eq(conversationSessions.isBooked, 1),
+            gte(conversationSessions.bookedAt, window.start),
+            lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
+          )),
+      ]);
 
-      const bookedRows = await db
-        .select({
-          bookedAmount: conversationSessions.bookedAmount,
-          quotedPrice: conversationSessions.quotedPrice,
-          extras: conversationSessions.extras,
-          reactivationLastPrice: conversationSessions.reactivationLastPrice,
-          reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
-        })
-        .from(conversationSessions)
-        .where(and(
-          or(
-            eq(conversationSessions.bookedByAgentId, input.agentId),
-            eq(conversationSessions.bookedByAgentName, input.agentName),
-          ),
-          eq(conversationSessions.isBooked, 1),
-          gte(conversationSessions.bookedAt, window.start),
-          lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
-        ));
+      const seenPhones = new Set<string>();
+      const bookedRows = [
+        ...nativeBookingRows
+          .filter((row) => !["cancelled", "canceled"].includes(row.status))
+          .map((row) => ({
+            customerName: row.customerName,
+            phone: normalizeBookingPhone(row.customerPhone),
+            revenue: Number(row.totalCents ?? 0) / 100,
+          })),
+        ...sessionBookingRows.map((row) => ({
+          customerName: row.leadName,
+          phone: normalizeBookingPhone(row.leadPhone),
+          revenue: calcRevenue(row),
+        })),
+      ].filter((row) => {
+        const phone = row.phone || `unknown:${row.customerName ?? "customer"}`;
+        if (seenPhones.has(phone)) return false;
+        seenPhones.add(phone);
+        return true;
+      });
 
-      const bookedRevenue = bookedRows.reduce((sum, row) => sum + calcRevenue(row), 0);
+      const bookedRevenue = bookedRows.reduce((sum, row) => sum + row.revenue, 0);
       const leadsAssigned = assignedRows.length;
       const bookedCount = bookedRows.length;
       return {
@@ -639,6 +776,29 @@ export const commandCenterRouter = router({
         conversionRate: leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0,
       };
     }),
+
+  /** Read-only list of team members with at least one booking scheduled today. */
+  getAgentsWithBookingsToday: agentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { agentIds: [], agentNames: [] };
+    const window = getAgentPerformanceWindow("today");
+    const rows = await db
+      .select({
+        agentId: conversationSessions.bookedByAgentId,
+        agentName: conversationSessions.bookedByAgentName,
+      })
+      .from(conversationSessions)
+      .where(and(
+        eq(conversationSessions.isBooked, 1),
+        gte(conversationSessions.bookedAt, window.start),
+        lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
+        or(isNotNull(conversationSessions.bookedByAgentId), isNotNull(conversationSessions.bookedByAgentName)),
+      ));
+    return {
+      agentIds: Array.from(new Set(rows.map((row) => row.agentId).filter((id): id is number => id !== null))),
+      agentNames: Array.from(new Set(rows.map((row) => row.agentName?.trim()).filter((name): name is string => Boolean(name)))),
+    };
+  }),
 
   /**
    * KPI stat cards for the top row.
