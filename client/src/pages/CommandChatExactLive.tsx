@@ -822,7 +822,7 @@ function leadCardStatus(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
       : { kind: "new", label: "New", ts } as const;
 }
 
-function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, callPending, bridgePending, onClaim, onUnclaim, onMarkBooked, onUnbook, onCall, onTestBridge, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; callPending: boolean; bridgePending: boolean; onClaim: (lead: CommandLead) => void; onUnclaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onUnbook: (lead: CommandLead) => void; onCall: (lead: CommandLead) => void; onTestBridge: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void })
+function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, callPending, bridgePending, onClaim, onUnclaim, onMarkBooked, onUnbook, onCall, onTestBridge, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; callPending: boolean; bridgePending: boolean; onClaim: (lead: CommandLead) => void; onUnclaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onUnbook: (lead: CommandLead) => void; onCall: (lead: CommandLead) => void; onTestBridge: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
   useEffect(() => {
