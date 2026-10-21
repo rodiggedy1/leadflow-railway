@@ -2931,7 +2931,7 @@ export const opsChatRouter = router({
    * as the lead card itself.
    */
   markLeadBooked: opsChatProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
+    .input(z.object({ sessionId: z.number().int().positive(), bookedAmount: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -2943,6 +2943,7 @@ export const opsChatRouter = router({
           stage: "BOOKED",
           bookedAt: now,
           bookedByAgentName: ctx.opsCaller.name,
+          bookedAmount: input.bookedAmount,
         })
         .where(eq(conversationSessions.id, input.sessionId));
       await markReactivationContactBooked(input.sessionId).catch(console.error);

@@ -963,6 +963,7 @@ export default function CommandChatExactLive() {
   const [selectedLeadCardDraft, setSelectedLeadCardDraft] = useState<{ scenario: string; jobContext: string } | null>(null);
   const [optimisticClaimedBy, setOptimisticClaimedBy] = useState<Record<number, string>>({});
   const [optimisticBookedBySession, setOptimisticBookedBySession] = useState<Record<number, string>>({});
+  const [leadBookingDraft, setLeadBookingDraft] = useState<{ lead: CommandLead; amount: string; error: string } | null>(null);
   const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState<ChannelMessage[]>([]);
@@ -1305,11 +1306,11 @@ export default function CommandChatExactLive() {
     setOptimisticClaimedBy((current) => ({ ...current, [lead.id]: callerName }));
     claimCommandLead.mutate({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}) });
   }, [callerName, claimCommandLead, claimCommandLead.isPending]);
-  const markLeadBookedFromQueue = useCallback(async (lead: CommandLead) => {
+  const markLeadBookedFromQueue = useCallback(async (lead: CommandLead, bookedAmount: number) => {
     if (lead.isBooked || !lead.sessionId || markLeadBookedMutation.isPending) return;
     let marked = false;
     try {
-      await markLeadBookedMutation.mutateAsync({ sessionId: lead.sessionId });
+      await markLeadBookedMutation.mutateAsync({ sessionId: lead.sessionId, bookedAmount });
       marked = true;
       setOptimisticBookedBySession((current) => ({ ...current, [lead.sessionId!]: callerName }));
       void utils.bookings.todayStats.invalidate();
@@ -1318,7 +1319,7 @@ export default function CommandChatExactLive() {
       await announceBooking.mutateAsync({
         channel: "command",
         personName: lead.name,
-        ...(lead.priceLabel ? { amount: lead.priceLabel } : {}),
+        amount: `$${bookedAmount.toLocaleString()}`,
         authorName: profile?.name || callerName,
       });
       showNotice(`${lead.name} marked as booked and announced.`);
@@ -1333,6 +1334,22 @@ export default function CommandChatExactLive() {
       showNotice(marked ? "Lead marked booked, but the Command Chat announcement failed." : error instanceof Error ? `Booking update failed: ${error.message}` : "Booking update failed.");
     }
   }, [announceBooking, callerName, commandLeadSessionIds, markLeadBookedMutation, profile?.name, showNotice, utils]);
+  const requestLeadBooked = useCallback((lead: CommandLead) => {
+    if (lead.isBooked || !lead.sessionId || markLeadBookedMutation.isPending) return;
+    setLeadBookingDraft({ lead, amount: "", error: "" });
+  }, [markLeadBookedMutation.isPending]);
+  const confirmLeadBooked = useCallback(async () => {
+    if (!leadBookingDraft) return;
+    const amountText = leadBookingDraft.amount.trim().replace(/[$,\s]/g, "");
+    if (!/^\d+$/.test(amountText) || Number(amountText) <= 0 || !Number.isSafeInteger(Number(amountText))) {
+      setLeadBookingDraft((current) => current ? { ...current, error: "Enter a whole-dollar amount greater than $0." } : current);
+      return;
+    }
+    const lead = leadBookingDraft.lead;
+    const bookedAmount = Number(amountText);
+    setLeadBookingDraft(null);
+    await markLeadBookedFromQueue(lead, bookedAmount);
+  }, [leadBookingDraft, markLeadBookedFromQueue]);
   const callLeadFromQueue = useCallback(async (lead: CommandLead) => {
     if (!lead.phone || callLeadMutation.isPending) return;
     try {
@@ -1629,16 +1646,17 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} callPending={callLeadMutation.isPending} bridgePending={testBridgeMutation.isPending} onClaim={claimLeadFromQueue} onCall={callLeadFromQueue} onTestBridge={testBridgeFromQueue} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} callPending={callLeadMutation.isPending} bridgePending={testBridgeMutation.isPending} onClaim={claimLeadFromQueue} onCall={callLeadFromQueue} onTestBridge={testBridgeFromQueue} onMarkBooked={requestLeadBooked} onOpenSms={openSmsDrawerFromLead} /></>}
           </aside>
         </div>
       </section>
       {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
-      {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onMarkBooked={markLeadBookedFromQueue} onOpenSms={openSmsDrawerFromLead} onTestBridge={testBridgeFromQueue} bridgePending={testBridgeMutation.isPending} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
+      {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} claimPending={claimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending} onMarkBooked={requestLeadBooked} onOpenSms={openSmsDrawerFromLead} onTestBridge={testBridgeFromQueue} bridgePending={testBridgeMutation.isPending} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
       {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
+      {leadBookingDraft && <LeadBookingAmountModal lead={leadBookingDraft.lead} amount={leadBookingDraft.amount} error={leadBookingDraft.error} pending={markLeadBookedMutation.isPending} onAmount={(amount) => setLeadBookingDraft((current) => current ? { ...current, amount, error: "" } : current)} onClose={() => setLeadBookingDraft(null)} onSubmit={() => { void confirmLeadBooked(); }} />}
       {modal && <ActionModal kind={modal} onClose={() => setModal(null)} issueTitle={issueTitle} issueNotes={issueNotes} issueType={issueType} reminderBody={reminderBody} reminderMinutes={reminderMinutes} pinBody={pinBody} bookingPerson={bookingPerson} bookingAmount={bookingAmount} bookingNote={bookingNote} onIssueTitle={setIssueTitle} onIssueNotes={setIssueNotes} onIssueType={setIssueType} onReminderBody={setReminderBody} onReminderMinutes={setReminderMinutes} onPinBody={setPinBody} onBookingPerson={setBookingPerson} onBookingAmount={setBookingAmount} onBookingNote={setBookingNote} pending={createIssue.isPending || setReminder.isPending || pinNote.isPending || announceBooking.isPending} onSubmit={() => {
         if (modal === "issue") createIssue.mutate({ title: issueTitle.trim(), issueType, severity: "medium", notes: issueNotes.trim() || undefined, createdByName: profile?.name || callerName });
         if (modal === "reminder") setReminder.mutate({ channel, body: reminderBody.trim(), authorName: profile?.name || callerName, triggerAt: Date.now() + reminderMinutes * 60_000 });
@@ -2577,6 +2595,10 @@ function QuoteAssistantModal({ customerName, customerPhone, fields, initialMissi
 
 function LiveThreadEntry({ entry, mine, photo, root = false }: { entry: { from: string; body: string; ts: number }; mine: boolean; photo: string | null; root?: boolean }) {
   return <article className={`ccc-live-thread-entry ${mine ? "is-mine" : ""} ${root ? "is-root" : ""}`}><Avatar name={entry.from} photoUrl={photo} className="ccc-group-avatar" /><div><div><strong>{entry.from}</strong><time>{formatTime(entry.ts)}</time></div><p>{renderMessageBody(entry.body)}</p></div></article>;
+}
+
+function LeadBookingAmountModal({ lead, amount, error, pending, onAmount, onClose, onSubmit }: { lead: CommandLead; amount: string; error: string; pending: boolean; onAmount: (value: string) => void; onClose: () => void; onSubmit: () => void }) {
+  return <div className="ccc-modal-backdrop" onMouseDown={onClose}><section className="ccc-static-modal ccc-live-action-modal" onMouseDown={(event) => event.stopPropagation()}><header><div><CircleDollarSign /><span><strong>Confirm booking</strong><small>{lead.name}</small></span></div><button type="button" onClick={onClose} aria-label="Close booking amount prompt"><X /></button></header><label>Booked amount<input type="number" min="1" step="1" value={amount} onChange={(event) => onAmount(event.target.value)} placeholder="e.g. 320" autoFocus /></label>{error && <p className="ccc-booking-amount-error">{error}</p>}<footer><button type="button" onClick={onClose}>Cancel</button><button type="button" disabled={!amount.trim() || pending} onClick={onSubmit}>{pending ? <Loader2 className="animate-spin" /> : <Check />}{pending ? "Saving…" : "Mark booked"}</button></footer></section></div>;
 }
 
 function ActionModal({ kind, onClose, issueTitle, issueNotes, issueType, reminderBody, reminderMinutes, pinBody, bookingPerson, bookingAmount, bookingNote, onIssueTitle, onIssueNotes, onIssueType, onReminderBody, onReminderMinutes, onPinBody, onBookingPerson, onBookingAmount, onBookingNote, pending, onSubmit }: { kind: Exclude<ModalKind, null>; onClose: () => void; issueTitle: string; issueNotes: string; issueType: (typeof ISSUE_TYPES)[number][0]; reminderBody: string; reminderMinutes: number; pinBody: string; bookingPerson: string; bookingAmount: string; bookingNote: string; onIssueTitle: (value: string) => void; onIssueNotes: (value: string) => void; onIssueType: (value: (typeof ISSUE_TYPES)[number][0]) => void; onReminderBody: (value: string) => void; onReminderMinutes: (value: number) => void; onPinBody: (value: string) => void; onBookingPerson: (value: string) => void; onBookingAmount: (value: string) => void; onBookingNote: (value: string) => void; pending: boolean; onSubmit: () => void }) {
