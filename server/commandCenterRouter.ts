@@ -146,7 +146,9 @@ function calcRevenue(row: {
 function getWindowStart(range: "today" | "7d" | "30d"): Date {
   const now = new Date();
   if (range === "today") {
-    return getBusinessDayStart(now);
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    return d;
   }
   if (range === "7d") {
     const d = new Date(now);
