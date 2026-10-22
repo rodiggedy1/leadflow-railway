@@ -86,6 +86,8 @@ async function markTwilioLeadCalled(db: Awaited<ReturnType<typeof getDb>>, sessi
   }
   if (targetSessionId) {
     await db.execute(sql`UPDATE conversation_sessions SET lastCalledAt = CURRENT_TIMESTAMP(3) WHERE id = ${targetSessionId}`);
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("lead_update");
   }
 }
 
