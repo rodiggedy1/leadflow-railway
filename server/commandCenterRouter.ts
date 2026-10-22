@@ -26,8 +26,10 @@ import {
   completedJobs,
   campaignBlasts,
   smsOptOuts,
+  agents,
+  users,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, inArray, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
 const NON_LEAD_SOURCES = [
   "cs_initiated",
   "cs-inbound",
@@ -695,6 +697,24 @@ export const commandCenterRouter = router({
       };
       if (!db) return empty;
 
+      const [agentIdentity] = await db
+        .select({ agentName: agents.name, agentEmail: agents.email })
+        .from(agents)
+        .where(eq(agents.id, input.agentId))
+        .limit(1);
+      const [userIdentity] = agentIdentity?.agentEmail
+        ? await db
+            .select({ userName: users.name })
+            .from(users)
+            .where(eq(users.email, agentIdentity.agentEmail))
+            .limit(1)
+        : [];
+      const bookedByNames = Array.from(new Set([
+        input.agentName.trim(),
+        agentIdentity?.agentName?.trim(),
+        userIdentity?.userName?.trim(),
+      ].filter((name): name is string => Boolean(name))));
+
       const [assignedRows, nativeBookingRows, sessionBookingRows] = await Promise.all([
         db
           .select({ id: conversationSessions.id })
@@ -715,7 +735,7 @@ export const commandCenterRouter = router({
           .where(and(
             or(
               eq(bookings.bookedByAgentId, input.agentId),
-              eq(bookings.bookedByAgentName, input.agentName),
+              inArray(bookings.bookedByAgentName, bookedByNames),
             ),
             gte(bookings.createdAt, window.start),
             lte(bookings.createdAt, new Date(window.endExclusive.getTime() - 1)),
@@ -734,7 +754,7 @@ export const commandCenterRouter = router({
           .where(and(
             or(
               eq(conversationSessions.bookedByAgentId, input.agentId),
-              eq(conversationSessions.bookedByAgentName, input.agentName),
+              inArray(conversationSessions.bookedByAgentName, bookedByNames),
             ),
             eq(conversationSessions.isBooked, 1),
             gte(conversationSessions.bookedAt, window.start),
