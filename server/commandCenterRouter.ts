@@ -52,9 +52,9 @@ import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { NON_LEAD_SOURCES as LEADS_CRM_EXCLUDED_SOURCES } from "../shared/leadSources";
 import { getBusinessDayStart } from "./businessTime";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
-import { normalizePhone as normalizeBookingPhone } from "./utils/phone";
 import { ENV } from "./_core/env";
 import { startTwilioLeadBridge } from "./twilioLeadBridge";
+import { getUnifiedBookingDetails } from "./unifiedBookingMetrics";
 const MANUAL_LEAD_CALL_VAPI_BASE = "https://api.vapi.ai";
 const MANUAL_LEAD_CALL_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
 const MANUAL_LEAD_CALL_OFFICE_NUMBER = "+12028885362";
@@ -709,13 +709,28 @@ export const commandCenterRouter = router({
             .where(eq(users.email, agentIdentity.agentEmail))
             .limit(1)
         : [];
+      const activeAgentNames = await db
+        .select({ id: agents.id, name: agents.name })
+        .from(agents)
+        .where(eq(agents.isActive, 1));
       const bookedByNames = Array.from(new Set([
         input.agentName.trim(),
         agentIdentity?.agentName?.trim(),
         userIdentity?.userName?.trim(),
       ].filter((name): name is string => Boolean(name))));
+      const normalizeAgentName = (name: string | null | undefined) => name?.trim().toLocaleLowerCase().replace(/\s+/g, " ") ?? "";
+      const firstName = (name: string | null | undefined) => normalizeAgentName(name).split(" ")[0] ?? "";
+      const bookedByNameSet = new Set(bookedByNames.map(normalizeAgentName).filter(Boolean));
+      const selectedFirstName = firstName(input.agentName);
+      const selectedFirstNameAgentIds = activeAgentNames
+        .filter((agent) => firstName(agent.name) === selectedFirstName)
+        .map((agent) => agent.id);
+      const hasUniqueFirstName = selectedFirstNameAgentIds.length === 1 && selectedFirstNameAgentIds[0] === input.agentId;
+      const matchesAgent = (agentId: number | null, agentName: string | null | undefined) =>
+        agentId === input.agentId || bookedByNameSet.has(normalizeAgentName(agentName)) ||
+        (hasUniqueFirstName && firstName(agentName) === selectedFirstName);
 
-      const [assignedRows, nativeBookingRows, sessionBookingRows] = await Promise.all([
+      const [assignedRows, unifiedBookingRows] = await Promise.all([
         db
           .select({ id: conversationSessions.id })
           .from(conversationSessions)
@@ -724,64 +739,16 @@ export const commandCenterRouter = router({
             gte(conversationSessions.createdAt, window.start),
             lte(conversationSessions.createdAt, new Date(window.endExclusive.getTime() - 1)),
           )),
-        db
-          .select({
-            status: bookings.status,
-            customerName: bookings.customerName,
-            customerPhone: bookings.customerPhone,
-            totalCents: bookings.firstCleaningTotalCents,
-          })
-          .from(bookings)
-          .where(and(
-            or(
-              eq(bookings.bookedByAgentId, input.agentId),
-              inArray(bookings.bookedByAgentName, bookedByNames),
-            ),
-            gte(bookings.createdAt, window.start),
-            lte(bookings.createdAt, new Date(window.endExclusive.getTime() - 1)),
-          )),
-        db
-          .select({
-            leadName: conversationSessions.leadName,
-            leadPhone: conversationSessions.leadPhone,
-            bookedAmount: conversationSessions.bookedAmount,
-            quotedPrice: conversationSessions.quotedPrice,
-            extras: conversationSessions.extras,
-            reactivationLastPrice: conversationSessions.reactivationLastPrice,
-            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
-          })
-          .from(conversationSessions)
-          .where(and(
-            or(
-              eq(conversationSessions.bookedByAgentId, input.agentId),
-              inArray(conversationSessions.bookedByAgentName, bookedByNames),
-            ),
-            eq(conversationSessions.isBooked, 1),
-            gte(conversationSessions.bookedAt, window.start),
-            lte(conversationSessions.bookedAt, new Date(window.endExclusive.getTime() - 1)),
-          )),
+        getUnifiedBookingDetails(db, window.start, window.endExclusive),
       ]);
 
-      const seenPhones = new Set<string>();
-      const bookedRows = [
-        ...nativeBookingRows
-          .filter((row) => !["cancelled", "canceled"].includes(row.status))
-          .map((row) => ({
-            customerName: row.customerName,
-            phone: normalizeBookingPhone(row.customerPhone),
-            revenue: Number(row.totalCents ?? 0) / 100,
-          })),
-        ...sessionBookingRows.map((row) => ({
-          customerName: row.leadName,
-          phone: normalizeBookingPhone(row.leadPhone),
-          revenue: calcRevenue(row),
-        })),
-      ].filter((row) => {
-        const phone = row.phone || `unknown:${row.customerName ?? "customer"}`;
-        if (seenPhones.has(phone)) return false;
-        seenPhones.add(phone);
-        return true;
-      });
+      const bookedRows = unifiedBookingRows
+        .filter((row) => matchesAgent(row.bookedByAgentId, row.bookedByAgentName))
+        .map((row) => ({
+          customerName: row.customerName,
+          phone: row.phone,
+          revenue: Number(row.totalCents ?? 0) / 100,
+        }));
 
       const bookedRevenue = bookedRows.reduce((sum, row) => sum + row.revenue, 0);
       const leadsAssigned = assignedRows.length;
