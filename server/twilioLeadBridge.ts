@@ -81,7 +81,7 @@ async function markTwilioLeadCalled(db: Awaited<ReturnType<typeof getDb>>, sessi
   if (!db) return;
   let targetSessionId = sessionId;
   if (!targetSessionId) {
-    const rows = await db.execute(sql`SELECT id FROM conversation_sessions WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = ${leadPhone} ORDER BY updatedAt DESC LIMIT 1`) as unknown as [{ id: number }[], unknown];
+    const rows = await db.execute(sql`SELECT id FROM conversation_sessions WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = ${leadPhone.slice(-10)} ORDER BY updatedAt DESC LIMIT 1`) as unknown as [{ id: number }[], unknown];
     targetSessionId = rows[0]?.[0]?.id ?? null;
   }
   if (targetSessionId) {
