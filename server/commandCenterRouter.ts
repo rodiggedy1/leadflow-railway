@@ -28,6 +28,7 @@ import {
   smsOptOuts,
   agents,
   users,
+  opsChatMessages,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, inArray, like, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
 const NON_LEAD_SOURCES = [
@@ -674,8 +675,8 @@ export const commandCenterRouter = router({
 
   /**
    * Read-only performance snapshot for the team-member avatar popover.
-   * Assigned leads use session creation time, matching agents.myStats; bookings
-   * and revenue use the booking timestamp and booked-agent attribution.
+   * Claimed leads use the persisted claim event timestamp; bookings and revenue
+   * use the existing unified booking source and booked-agent attribution.
    */
   getAgentPerformance: agentProcedure
     .input(z.object({
@@ -690,7 +691,7 @@ export const commandCenterRouter = router({
         range: input.range,
         dateFrom: window.dateFrom,
         dateTo: window.dateTo,
-        leadsAssigned: 0,
+        leadsClaimed: 0,
         bookedCount: 0,
         bookedRevenue: 0,
         conversionRate: 0,
@@ -730,17 +731,28 @@ export const commandCenterRouter = router({
         agentId === input.agentId || bookedByNameSet.has(normalizeAgentName(agentName)) ||
         (hasUniqueFirstName && firstName(agentName) === selectedFirstName);
 
-      const [assignedRows, unifiedBookingRows] = await Promise.all([
+      const [claimRows, unifiedBookingRows] = await Promise.all([
         db
-          .select({ id: conversationSessions.id })
-          .from(conversationSessions)
-          .where(and(
-            eq(conversationSessions.assignedAgentId, input.agentId),
-            gte(conversationSessions.createdAt, window.start),
-            lte(conversationSessions.createdAt, new Date(window.endExclusive.getTime() - 1)),
-          )),
+          .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+          .from(opsChatMessages)
+          .where(eq(opsChatMessages.channel, "command")),
         getUnifiedBookingDetails(db, window.start, window.endExclusive),
       ]);
+      const claimedLeadKeys = new Set<string>();
+      for (const row of claimRows) {
+        let metadata: Record<string, unknown> = {};
+        try {
+          const parsed: unknown = JSON.parse(row.metadata ?? "{}");
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) metadata = parsed as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        const claimedAt = Number(metadata.claimedAt);
+        const claimedBy = typeof metadata.claimedBy === "string" ? metadata.claimedBy : null;
+        if (!claimedBy || !Number.isFinite(claimedAt) || claimedAt < window.start.getTime() || claimedAt >= window.endExclusive.getTime() || !matchesAgent(null, claimedBy)) continue;
+        const sessionId = typeof metadata.sessionId === "number" || typeof metadata.sessionId === "string" ? String(metadata.sessionId) : null;
+        claimedLeadKeys.add(sessionId ? `session:${sessionId}` : `message:${row.id}`);
+      }
 
       const bookedRows = unifiedBookingRows
         .filter((row) => matchesAgent(row.bookedByAgentId, row.bookedByAgentName))
@@ -751,16 +763,16 @@ export const commandCenterRouter = router({
         }));
 
       const bookedRevenue = bookedRows.reduce((sum, row) => sum + row.revenue, 0);
-      const leadsAssigned = assignedRows.length;
+      const leadsClaimed = claimedLeadKeys.size;
       const bookedCount = bookedRows.length;
       return {
         range: input.range,
         dateFrom: window.dateFrom,
         dateTo: window.dateTo,
-        leadsAssigned,
+        leadsClaimed,
         bookedCount,
         bookedRevenue,
-        conversionRate: leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0,
+        conversionRate: leadsClaimed > 0 ? Math.round((bookedCount / leadsClaimed) * 100) : 0,
       };
     }),
 
