@@ -96,6 +96,7 @@ type QuoteReplyTarget = {
 type CommandLead = {
   id: number;
   sessionId: number | null;
+  receivedAt?: number;
   name: string;
   sourceLabel: string;
   detail: string;
@@ -171,6 +172,8 @@ type SmsInboxConversation = {
   aiSummary: string | null;
   personType: "team" | "customer";
   lastInboundPhoneNumberId: string | null;
+  receivedAt: number;
+  calledAt: number | null;
 };
 
 type SmsInboxMessage = {
@@ -612,6 +615,7 @@ function leadForConversation(conversation: SmsInboxConversation, leads: CommandL
   return {
     id: conversation.id,
     sessionId: conversation.id > 0 ? conversation.id : null,
+    receivedAt: conversation.receivedAt,
     name: conversation.leadName?.trim() || "Customer conversation",
     sourceLabel: displayLeadSource(conversation.leadSource),
     detail: "Conversation",
@@ -831,8 +835,9 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
     setSelectedLead((current) => current ? leads.find((lead) => lead.id === current.id) ?? current : current);
   }, [leads]);
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
-  const renderLeadCard = (lead: CommandLead) => { const status = leadCardStatus(lead, smsInbox); return <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}${status.kind === "booked" ? " is-booked" : ""}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
+  const renderLeadCard = (lead: CommandLead) => { const status = leadCardStatus(lead, smsInbox); const conversation = leadCardConversation(lead, smsInbox); return <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}${status.kind === "booked" ? " is-booked" : ""}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
     <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em className={`is-${status.kind}`}><i /> <span>{status.label}</span><time>{formatRelative(status.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
+    <div className="ccc-live-lead-activity"><span>Received {formatRelative(lead.receivedAt ?? lead.ts)}</span>{conversation?.calledAt && <span>Called {formatRelative(conversation.calledAt)}</span>}</div>
     {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><button type="button" aria-label={`Call ${lead.name} through office`} title="Call through office" disabled={callPending} onClick={(event) => { event.stopPropagation(); onCall(lead); }}><Phone /></button></div></div>}
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>

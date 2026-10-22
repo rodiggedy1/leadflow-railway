@@ -62,7 +62,7 @@ const MANUAL_LEAD_CALL_OFFICE_NUMBER = "+12028885362";
 const MANUAL_LEAD_CALL_DEDUP_WINDOW_MS = 30_000;
 const manualLeadCallLocks = new Map<string, number>();
 
-async function placeManualLeadBridgeCall(input: { leadPhone: string; leadName: string; serviceType?: string | null }) {
+async function placeManualLeadBridgeCall(input: { leadPhone: string; leadName: string; serviceType?: string | null; sessionId?: number | null }) {
   const normalizedPhone = normalizePhoneStrict(input.leadPhone);
   if (!normalizedPhone) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "A valid customer phone number is required to call this lead." });
@@ -131,6 +131,14 @@ async function placeManualLeadBridgeCall(input: { leadPhone: string; leadName: s
       throw new TRPCError({ code: "BAD_GATEWAY", message: "The office call could not be started." });
     }
     const result = await response.json() as { id?: string };
+    if (input.sessionId) {
+      const db = await getDb();
+      if (db) {
+        await db.update(conversationSessions)
+          .set({ lastCalledAt: new Date() } as any)
+          .where(eq(conversationSessions.id, input.sessionId));
+      }
+    }
     return { success: true, callId: result.id ?? null };
   } catch (error) {
     console.error("[CommandCenter] Manual lead bridge request failed", {
@@ -380,6 +388,7 @@ export const commandCenterRouter = router({
       leadPhone: z.string().min(1),
       leadName: z.string().trim().min(1),
       serviceType: z.string().nullable().optional(),
+      sessionId: z.number().int().nullable().optional(),
     }))
     .mutation(async ({ input }) => placeManualLeadBridgeCall(input)),
 
@@ -408,6 +417,8 @@ export const commandCenterRouter = router({
           lastMessageText: conversationSessions.lastMessageText,
           lastMessageTs: conversationSessions.lastMessageTs,
           lastMessageRole: conversationSessions.lastMessageRole,
+          lastCalledAt: conversationSessions.lastCalledAt,
+          createdAt: conversationSessions.createdAt,
           updatedAt: conversationSessions.updatedAt,
         })
         .from(conversationSessions)
@@ -428,6 +439,8 @@ export const commandCenterRouter = router({
         return {
           ...session,
           lastMsgTs,
+          calledAt: session.lastCalledAt?.getTime() ?? null,
+          receivedAt: session.createdAt.getTime(),
           hasUnanswered: session.lastMessageRole === "user",
           lastSenderRole,
         };
