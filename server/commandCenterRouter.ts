@@ -461,6 +461,13 @@ export const commandCenterRouter = router({
       }
 
       const normalizePhone = (phone: string) => phone.replace(/[^\d]/g, "").slice(-10);
+      const latestCalledAtByPhone = new Map<string, number>();
+      for (const session of augmented) {
+        const phone = normalizePhone(session.leadPhone ?? "");
+        if (!phone || !session.calledAt) continue;
+        const current = latestCalledAtByPhone.get(phone) ?? 0;
+        if (session.calledAt > current) latestCalledAtByPhone.set(phone, session.calledAt);
+      }
       const sessionsByPhone = new Map<string, typeof augmented>();
       for (const session of augmented) {
         const phone = session.leadPhone?.trim() || "__no_phone__";
@@ -496,6 +503,10 @@ export const commandCenterRouter = router({
       return canonicalSessions
         .map((session) => ({
           ...session,
+          calledAt: Math.max(
+            session.calledAt ?? 0,
+            latestCalledAtByPhone.get(normalizePhone(session.leadPhone ?? "")) ?? 0,
+          ) || null,
           personType: session.csQueue === "Teams" || teamPhoneSet.has(normalizePhone(session.leadPhone ?? ""))
             ? "team" as const
             : "customer" as const,
