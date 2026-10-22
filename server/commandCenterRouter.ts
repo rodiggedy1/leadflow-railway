@@ -54,7 +54,7 @@ import { normalizePhone as normalizeBookingPhone } from "./utils/phone";
 import { ENV } from "./_core/env";
 import { startTwilioLeadBridge } from "./twilioLeadBridge";
 const MANUAL_LEAD_CALL_VAPI_BASE = "https://api.vapi.ai";
-const MANUAL_LEAD_CALL_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473";
+const MANUAL_LEAD_CALL_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
 const MANUAL_LEAD_CALL_OFFICE_NUMBER = "+12028885362";
 const MANUAL_LEAD_CALL_DEDUP_WINDOW_MS = 30_000;
 const manualLeadCallLocks = new Map<string, number>();

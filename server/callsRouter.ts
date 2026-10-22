@@ -5,7 +5,7 @@
  * raising job issues, firing VAPI outbound calls, and viewing the call log.
  *
  * VAPI setup mirrors fieldMgmtEngine.ts:
- *   - Phone number ID: 61431a3e-8144-4acd-b394-8f600ec3a473 (Twilio-backed, no daily cap)
+ *   - Phone number ID: f2f1c044-c70a-4d73-a755-051f8a2a96e4 (Twilio-backed, no daily cap)
  *   - Outbound number: +19347898077 (never call this — self-call protection)
  */
 
@@ -20,7 +20,7 @@ import { ENV } from "./_core/env";
 
 // ── VAPI constants (mirrors fieldMgmtEngine.ts) ───────────────────────────────
 const VAPI_API_BASE = "https://api.vapi.ai";
-const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed
+const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4"; // Twilio-backed
 const VAPI_OUTBOUND_PHONE_NUMBER = "+19347898077"; // self-call protection — never call this
 
 // ── VAPI helper ───────────────────────────────────────────────────────────────

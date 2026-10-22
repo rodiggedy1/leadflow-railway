@@ -19,7 +19,7 @@ import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const VAPI_API_BASE = "https://api.vapi.ai";
-const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473";
+const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
 const OFFICE_NUMBER = "+12028885362";
 
 async function vapiPost(path: string, body: unknown): Promise<unknown> {

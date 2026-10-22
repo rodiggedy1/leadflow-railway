@@ -31,7 +31,7 @@ const dateInput = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
 
 const vapiApiBase = "https://api.vapi.ai";
-const vapiOutboundPhoneNumberId = "61431a3e-8144-4acd-b394-8f600ec3a473";
+const vapiOutboundPhoneNumberId = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
 const vapiOutboundPhoneNumber = "+19347898077";
 
 interface AssignmentRow {

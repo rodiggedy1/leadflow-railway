@@ -70,7 +70,7 @@ const CLEANER_PORTAL_URL = "https://quote.maidinblack.com/cleaner";
 // ── VAPI call helper (reused from vapiLeadNotification pattern) ───────────────
 const VAPI_API_BASE = "https://api.vapi.ai";
 // ROLLBACK: old VAPI-bought number (daily outbound limit): f2f1c044-c70a-4d73-a755-051f8a2a96e4
-const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed, no daily cap
+const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4"; // Twilio-backed, no daily cap
 
 // ── Unassigned job guard ──────────────────────────────────────────────────────
 /**
