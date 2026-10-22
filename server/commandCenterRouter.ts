@@ -62,6 +62,25 @@ const MANUAL_LEAD_CALL_OFFICE_NUMBER = "+12028885362";
 const MANUAL_LEAD_CALL_DEDUP_WINDOW_MS = 30_000;
 const manualLeadCallLocks = new Map<string, number>();
 
+async function markLeadCalled(db: Awaited<ReturnType<typeof getDb>>, sessionId: number | null | undefined, normalizedPhone: string) {
+  if (!db) return;
+  let targetSessionId = sessionId ?? null;
+  if (!targetSessionId) {
+    const [matchingSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(sql`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) = ${normalizedPhone}`)
+      .orderBy(desc(conversationSessions.updatedAt))
+      .limit(1);
+    targetSessionId = matchingSession?.id ?? null;
+  }
+  if (targetSessionId) {
+    await db.update(conversationSessions)
+      .set({ lastCalledAt: new Date() } as any)
+      .where(eq(conversationSessions.id, targetSessionId));
+  }
+}
+
 async function placeManualLeadBridgeCall(input: { leadPhone: string; leadName: string; serviceType?: string | null; sessionId?: number | null }) {
   const normalizedPhone = normalizePhoneStrict(input.leadPhone);
   if (!normalizedPhone) {
@@ -131,14 +150,7 @@ async function placeManualLeadBridgeCall(input: { leadPhone: string; leadName: s
       throw new TRPCError({ code: "BAD_GATEWAY", message: "The office call could not be started." });
     }
     const result = await response.json() as { id?: string };
-    if (input.sessionId) {
-      const db = await getDb();
-      if (db) {
-        await db.update(conversationSessions)
-          .set({ lastCalledAt: new Date() } as any)
-          .where(eq(conversationSessions.id, input.sessionId));
-      }
-    }
+    await markLeadCalled(await getDb(), input.sessionId, normalizedPhone);
     return { success: true, callId: result.id ?? null };
   } catch (error) {
     console.error("[CommandCenter] Manual lead bridge request failed", {
@@ -425,6 +437,7 @@ export const commandCenterRouter = router({
         .where(or(
           and(or(inboundMessageActivityFilter, csTouchedOutboundFilter), isNull(conversationSessions.csResolvedAt)),
           inboundVoiceCallActivityFilter,
+          isNotNull(conversationSessions.lastCalledAt),
         ));
 
       const augmented = sessions.map((session) => {

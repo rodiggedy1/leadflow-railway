@@ -77,6 +77,18 @@ function safeProviderMessage(error: unknown): string {
   return `${code}${error.message}`.slice(0, 500);
 }
 
+async function markTwilioLeadCalled(db: Awaited<ReturnType<typeof getDb>>, sessionId: number | null, leadPhone: string) {
+  if (!db) return;
+  let targetSessionId = sessionId;
+  if (!targetSessionId) {
+    const rows = await db.execute(sql`SELECT id FROM conversation_sessions WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = ${leadPhone} ORDER BY updatedAt DESC LIMIT 1`) as unknown as [{ id: number }[], unknown];
+    targetSessionId = rows[0]?.[0]?.id ?? null;
+  }
+  if (targetSessionId) {
+    await db.execute(sql`UPDATE conversation_sessions SET lastCalledAt = CURRENT_TIMESTAMP(3) WHERE id = ${targetSessionId}`);
+  }
+}
+
 export async function startTwilioLeadBridge(input: { leadPhone: string; leadName: string; sessionId?: number | null }) {
   const leadPhone = normalizePhoneStrict(input.leadPhone);
   const leadName = input.leadName.trim() || "Lead";
@@ -99,9 +111,7 @@ export async function startTwilioLeadBridge(input: { leadPhone: string; leadName
       timeout: 25,
     });
     await updateBridge(bridgeId, { state: "office_ringing", officeCallSid: call.sid }, ["office_call_starting"]);
-    if (sessionId) {
-      await db.execute(sql`UPDATE conversation_sessions SET lastCalledAt = CURRENT_TIMESTAMP(3) WHERE id = ${sessionId}`);
-    }
+    await markTwilioLeadCalled(db, sessionId, leadPhone);
     return { success: true, bridgeId, officeCallSid: call.sid, state: "office_ringing" as const };
   } catch (error) {
     const providerMessage = safeProviderMessage(error);
@@ -198,9 +208,7 @@ export function registerTwilioLeadBridgeRoutes(app: Express): void {
         timeout: 25,
       });
       await updateBridge(bridgeId, { state: "office_ringing", officeCallSid: call.sid }, ["office_call_starting"]);
-      if (sessionId) {
-        await db.execute(sql`UPDATE conversation_sessions SET lastCalledAt = CURRENT_TIMESTAMP(3) WHERE id = ${sessionId}`);
-      }
+      await markTwilioLeadCalled(db, sessionId, leadPhone);
       return res.json({ success: true, bridgeId, officeCallSid: call.sid, state: "office_ringing" });
     } catch (error) {
       await updateBridge(bridgeId, { state: "failed", failureCode: "office_call_create_failed", failureMessage: safeProviderMessage(error) }, ["office_call_starting"]);
