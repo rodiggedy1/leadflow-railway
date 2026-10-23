@@ -3258,7 +3258,26 @@ async function markOutboundOpenPhoneCall(db: Awaited<ReturnType<typeof getDb>>, 
 }
 
 async function handleCallAnswered(event: any): Promise<void> {
-  const call = event?.data?.object;
+  const resource = event?.data?.resource ?? event?.data?.object;
+  const context = event?.data?.context ?? {};
+  const externalParticipants = Array.isArray(context?.participants?.external)
+    ? context.participants.external
+    : [];
+  const call = resource
+    ? {
+        ...resource,
+        id: resource.id,
+        userId: resource.userId ?? resource.answeredByUserId ?? context.userId,
+        answeredBy: resource.answeredBy ?? resource.answeredByUserId ?? context.userId,
+        initiatedBy: resource.initiatedBy ?? context.userId,
+        phoneNumberId: resource.phoneNumberId ?? context.phoneNumberId,
+        participants: Array.isArray(resource.participants)
+          ? resource.participants
+          : externalParticipants,
+        from: resource.from ?? (resource.direction === "incoming" ? externalParticipants[0] : undefined),
+        to: resource.to ?? (resource.direction === "outgoing" ? externalParticipants : undefined),
+      }
+    : null;
   if (!call?.id) return;
   const db = await getDb();
   if (!db) return;
