@@ -27,7 +27,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "@/pages/bookings-preview.css";
 
-type StatusFilter = "All" | "Confirmed" | "Needs attention" | "Completed";
+type StatusFilter = "All" | "Confirmed" | "Needs attention" | "Completed" | "Cancelled";
 type NativeExtra = { id: string; label: string; quantity: number };
 type StaffJobPhoto = {
   id: number;
@@ -104,11 +104,12 @@ const isActiveBookingRow = (row: WorkspaceRow) =>
 
 const API_STATUS: Record<
   Exclude<StatusFilter, "All">,
-  "confirmed" | "needs_attention" | "completed"
+  "confirmed" | "needs_attention" | "completed" | "cancelled"
 > = {
   Confirmed: "confirmed",
   "Needs attention": "needs_attention",
   Completed: "completed",
+  Cancelled: "cancelled",
 };
 const businessDate = () =>
   new Intl.DateTimeFormat("en-CA", {
@@ -565,7 +566,7 @@ export default function NativeBookingsWorkspace({
   } | null>(null);
   const listInput = useMemo(
     () => ({
-      date,
+      date: status === "Cancelled" ? undefined : date,
       status: status === "All" ? undefined : API_STATUS[status],
       query: query.trim() || undefined,
       limit: 200,
@@ -593,7 +594,7 @@ export default function NativeBookingsWorkspace({
     { staleTime: 10_000 }
   );
   const leadflowJobsQuery = trpc.leadflowJobs.list.useQuery(
-    { date, query: query.trim() || undefined },
+    { date: status === "Cancelled" ? undefined : date, query: query.trim() || undefined },
     { staleTime: 10_000 }
   );
   const leadflowJobsImportStatus = trpc.leadflowJobs.importStatus.useQuery(
@@ -676,9 +677,7 @@ export default function NativeBookingsWorkspace({
   const funnelLeads = funnelListQuery.data ?? [];
   const portalRequests = portalRequestsQuery.data ?? [];
   const rows = useMemo<WorkspaceRow[]>(() => {
-    const bookingRows = bookings
-      .filter(booking => !isCancelledBookingStatus(booking.status))
-      .map(booking => ({
+    const bookingRows = bookings.map(booking => ({
         key: `booking:${booking.id}`,
         source: "booking" as const,
         id: booking.id,
@@ -711,7 +710,11 @@ export default function NativeBookingsWorkspace({
         companyNotes: booking.companyNotes,
       }));
     const funnelRows = funnelLeads
-      .filter(lead => lead.source !== "customer-booking-link" && !lead.bookingId)
+      .filter(
+        lead =>
+          lead.source !== "customer-booking-link" &&
+          (!lead.bookingId || isCancelledBookingStatus(lead.stage))
+      )
       .map(lead => ({
         key: `funnel:${lead.id}`,
         source: "funnel" as const,
@@ -774,9 +777,7 @@ export default function NativeBookingsWorkspace({
     const inProgressFunnelRows = funnelRows.filter(
       row => row.status === "lead"
     );
-    const portalRequestRows = portalRequests
-      .filter(request => !isCancelledBookingStatus(request.status))
-      .map(request => ({
+    const portalRequestRows = portalRequests.map(request => ({
         key: `portal:${request.id}`,
         source: "portal" as const,
         id: request.id,
@@ -812,10 +813,7 @@ export default function NativeBookingsWorkspace({
         companyNotes: null,
       }));
     const importedRows = (leadflowJobsQuery.data ?? [])
-      .filter(
-        job =>
-          job.bookingId === null && !isCancelledBookingStatus(job.bookingStatus)
-      )
+      .filter(job => job.bookingId === null)
       .map(job => {
         const isRealLaunch27Import =
           job.origin === LEADFLOW_JOB_ORIGIN_LAUNCH27 &&
@@ -857,22 +855,29 @@ export default function NativeBookingsWorkspace({
         };
       });
     const scheduledRows = [
-      ...funnelRows.filter(
-        row => row.status !== "lead" && !isCancelledBookingStatus(row.status)
-      ),
+      ...funnelRows.filter(row => row.status !== "lead"),
       ...bookingRows,
       ...importedRows,
     ]
-      .filter(row => row.requestedLocalDate === date)
+      .filter(row => status === "Cancelled" || row.requestedLocalDate === date)
+      .filter(row =>
+        status === "Cancelled"
+          ? isCancelledBookingStatus(row.status)
+          : !isCancelledBookingStatus(row.status)
+      )
       .filter(
         row =>
           row.source !== "leadflow" ||
           status === "All" ||
           status === "Confirmed"
       );
-    const scheduledPortalRows = portalRequestRows.filter(
-      row => row.requestedLocalDate === date
-    );
+    const scheduledPortalRows = portalRequestRows
+      .filter(row => status === "Cancelled" || row.requestedLocalDate === date)
+      .filter(row =>
+        status === "Cancelled"
+          ? isCancelledBookingStatus(row.status)
+          : !isCancelledBookingStatus(row.status)
+      );
     if (view === "bookings") return [...scheduledPortalRows, ...scheduledRows];
     if (view === "quotes") return quoteRows;
     return inProgressFunnelRows;
@@ -1507,7 +1512,7 @@ export default function NativeBookingsWorkspace({
           {view === "bookings" ? (
             <div className="bookings-status-tabs">
               {(
-                ["All", "Confirmed", "Needs attention", "Completed"] as const
+                ["All", "Confirmed", "Needs attention", "Completed", "Cancelled"] as const
               ).map(option => (
                 <button
                   type="button"

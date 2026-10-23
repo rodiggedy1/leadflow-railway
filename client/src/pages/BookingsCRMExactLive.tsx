@@ -113,7 +113,9 @@ const labelStatus = (value: string | null | undefined) => {
         ? "Needs attention"
         : normalized === "pending_payment"
           ? "Pending payment"
-          : normalized === "missing_from_launch27"
+          : normalized === "cancelled" || normalized === "canceled"
+            ? "Cancelled"
+            : normalized === "missing_from_launch27"
             ? "No longer in Launch27"
             : normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };
@@ -1747,7 +1749,7 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
           <div className="bcr-status-tabs">
             {view === "bookings" ? (
               (
-                ["All", "Confirmed", "Needs attention", "Completed"] as const
+                ["All", "Confirmed", "Needs attention", "Completed", "Cancelled"] as const
               ).map(option => (
                 <button
                   type="button"
