@@ -566,7 +566,7 @@ export default function NativeBookingsWorkspace({
   } | null>(null);
   const listInput = useMemo(
     () => ({
-      date: status === "Cancelled" ? undefined : date,
+      ...(status === "Cancelled" ? {} : { date }),
       status: status === "All" ? undefined : API_STATUS[status],
       query: query.trim() || undefined,
       limit: 200,
@@ -594,7 +594,10 @@ export default function NativeBookingsWorkspace({
     { staleTime: 10_000 }
   );
   const leadflowJobsQuery = trpc.leadflowJobs.list.useQuery(
-    { date: status === "Cancelled" ? undefined : date, query: query.trim() || undefined },
+    {
+      ...(status === "Cancelled" ? {} : { date }),
+      query: query.trim() || undefined,
+    },
     { staleTime: 10_000 }
   );
   const leadflowJobsImportStatus = trpc.leadflowJobs.importStatus.useQuery(
