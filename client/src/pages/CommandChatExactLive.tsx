@@ -960,7 +960,9 @@ export default function CommandChatExactLive() {
   const utils = trpc.useUtils();
   const { data: agentMe, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
-    retry: false,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 4000),
+    refetchOnWindowFocus: true,
   });
   const isAuthenticated = Boolean(agentMe);
   const callerName = agentMe?.name || "MIB Team";
@@ -1701,7 +1703,8 @@ export default function CommandChatExactLive() {
 
 
   if (agentLoading) return <main className="ccc-app ccc-live-loading"><Loader2 className="animate-spin" /></main>;
-  if (agentError || !agentMe) return <LoginGate onSuccess={() => void refetchAgent()} />;
+  if (agentError && !agentMe) return <main className="ccc-app ccc-live-login"><div className="ccc-static-modal"><header><div><MessageSquare /><span><strong>MIB Command</strong><small>Unable to verify your session right now</small></span></div></header><p className="ccc-live-login-error">The connection to the account service was interrupted. Your session was not signed out.</p><footer><button type="button" onClick={() => void refetchAgent()}><RefreshCw />Try again</button></footer></div></main>;
+  if (!agentMe) return <LoginGate onSuccess={() => void refetchAgent()} />;
 
   return (
     <main className="ccc-app ccc-widget-app ccc-live" aria-label="MIB Command workspace">
