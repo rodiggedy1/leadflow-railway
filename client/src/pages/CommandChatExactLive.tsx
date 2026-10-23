@@ -159,6 +159,13 @@ type IncomingCallHandoff = {
   recordingUrl: string | null;
 };
 
+type VoiceCallEvidence = {
+  summary: string | null;
+  transcript: string | null;
+  endedReason: string | null;
+  recordingUrl: string | null;
+};
+
 type SmsInboxConversation = {
   id: number;
   leadName: string | null;
@@ -1103,6 +1110,11 @@ export default function CommandChatExactLive() {
       .filter((call) => Boolean(call.vapiCallId))
       .map((call) => [call.vapiCallId, { callerName: call.callerName?.trim() || null, callerPhone: call.callerPhone?.trim() || null }]),
   ), [inboundVoiceCallHistory?.calls]);
+  const voiceCallEvidenceByVapiId = useMemo(() => new Map<string, VoiceCallEvidence>(
+    (inboundVoiceCallHistory?.calls ?? [])
+      .filter((call) => Boolean(call.vapiCallId))
+      .map((call) => [call.vapiCallId, { summary: call.summary, transcript: call.transcript, endedReason: call.endedReason, recordingUrl: call.recordingUrl }]),
+  ), [inboundVoiceCallHistory?.calls]);
 
   const messageIds = useMemo(() => (channelMessages as ChannelMessage[]).map((message) => message.id).filter((id) => id > 0).slice(-500), [channelMessages]);
   const reactionsMutation = trpc.opsChat.getReactions.useMutation();
@@ -1727,7 +1739,7 @@ export default function CommandChatExactLive() {
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Remove pinned note" disabled={dismissPin.isPending} onClick={() => dismissPin.mutate({ channel })}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
               <div className="ccc-message-stream" ref={messageStreamRef} onScroll={trackCommandFeedScroll}>
-                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />
+                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} voiceCallEvidenceByVapiId={voiceCallEvidenceByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />
               </div>
               {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
               <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setShowNewMessage(true)}><Plus />Start new SMS</button><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
@@ -1881,7 +1893,7 @@ function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
   return <div className="ccc-live-photo-lightbox" onMouseDown={onClose} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} role="dialog" aria-modal="true" aria-label="Command attachment preview" tabIndex={-1} ref={(element) => element?.focus()}><button type="button" aria-label="Close photo" onMouseDown={(event) => event.stopPropagation()} onClick={onClose}><X /></button><img src={commandAttachmentUrl(url)} alt="Full-size command attachment" onMouseDown={(event) => event.stopPropagation()} /></div>;
 }
 
-function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId, mentionPattern, superAlert, reactions, onOpenPhoto, onThread, onReply, onReaction }: { message: ChannelMessage; callerName: string; photoUrl: string | null; voiceCallIdentityByVapiId: Map<string, VoiceCallerIdentity>; mentionPattern: RegExp | null; superAlert: boolean; reactions: Record<string, { count: number; names: string[] }>; onOpenPhoto: (url: string) => void; onThread: () => void; onReply: () => void; onReaction: (emoji: string) => void }) {
+function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId, voiceCallEvidenceByVapiId, mentionPattern, superAlert, reactions, onOpenPhoto, onThread, onReply, onReaction }: { message: ChannelMessage; callerName: string; photoUrl: string | null; voiceCallIdentityByVapiId: Map<string, VoiceCallerIdentity>; voiceCallEvidenceByVapiId: Map<string, VoiceCallEvidence>; mentionPattern: RegExp | null; superAlert: boolean; reactions: Record<string, { count: number; names: string[] }>; onOpenPhoto: (url: string) => void; onThread: () => void; onReply: () => void; onReaction: (emoji: string) => void }) {
   const mine = message.from === callerName;
   const team = message.role === "agent" && !mine;
   const system = message.role === "system";
@@ -1898,13 +1910,14 @@ function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId,
     } catch { /* preserve the generic message for legacy rows */ }
   }
   const voiceCaller = callHandoff?.vapiCallId ? voiceCallIdentityByVapiId.get(callHandoff.vapiCallId) : null;
+  const voiceEvidence = callHandoff?.vapiCallId ? voiceCallEvidenceByVapiId.get(callHandoff.vapiCallId) : null;
   const resolvedCallHandoff = callHandoff ? {
     ...callHandoff,
     callerName: voiceCaller?.callerName || callHandoff.callerName,
     callerPhone: voiceCaller?.callerPhone || callHandoff.callerPhone,
   } : null;
   if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
-  if (resolvedCallHandoff) return <IncomingCallHandoffCard handoff={resolvedCallHandoff} timestamp={message.ts} />;
+  if (resolvedCallHandoff) return <IncomingCallHandoffCard handoff={resolvedCallHandoff} evidence={voiceEvidence} timestamp={message.ts} />;
   if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{renderMessageBody(message.body)}<time>{formatTime(message.ts)}</time></span></div>;
   return <article id={`ccc-command-message-${message.id}`} className={`ccc-group-message ccc-group-message-${team ? "team" : "customer"} ccc-group-message-${mine ? "right" : "left"} ${superAlert ? "ccc-live-super-alert-message" : ""}`}><Avatar name={message.from} photoUrl={photoUrl} className={`ccc-group-avatar ${team ? "ccc-group-avatar-team" : "ccc-group-avatar-dispatch"}`} /><div><div className="ccc-message-meta"><strong>{message.from}</strong><em>{team ? "Team" : mine ? "You" : "Office"}</em>{superAlert && <em className="ccc-live-super-alert-badge"><Zap />Super Alert</em>}<time>{formatTime(message.ts)}</time></div><p>{renderMessageBody(message.body, mentionPattern)}</p>{bookedByAgentName && <small>Booked by {bookedByAgentName}</small>}{media.length > 0 && <div className="ccc-live-message-media">{media.map((url) => <button type="button" key={url} onClick={() => onOpenPhoto(url)} aria-label="Open command attachment"><img src={commandAttachmentUrl(url)} alt="Command attachment" /></button>)}</div>}{message.replyToBody && <button type="button" className="ccc-live-quoted-reply" onClick={onThread}>Replying to {message.replyToAuthor}: {message.replyToBody}</button>}<div className="ccc-live-message-tools">{Object.entries(reactions).map(([emoji, value]) => <button type="button" key={emoji} onClick={() => onReaction(emoji)} title={value.names.join(", ")}>{emoji} {value.count}</button>)}<button type="button" onClick={() => onReaction("👍")}>👍</button><button type="button" className="ccc-live-quote-reply-action" onClick={onReply}>Reply</button><button type="button" onClick={onThread}>Thread {message.replyCount > 0 && <b>{message.replyCount}</b>}</button></div></div></article>;
 }
@@ -1918,11 +1931,25 @@ function outcomeLabel(outcome: string) {
   return outcome.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function IncomingCallHandoffCard({ handoff, timestamp }: { handoff: IncomingCallHandoff; timestamp: number }) {
+function callCueLabel(value: string | null) {
+  const text = value?.toLowerCase() ?? "";
+  if (/cancel|stop|refund/.test(text)) return "Cancellation";
+  if (/book|reserve|schedule|appointment/.test(text)) return "Booking request";
+  if (/quote|estimate|price/.test(text)) return "Quote request";
+  if (/callback|call back|return/.test(text)) return "Callback";
+  if (/voicemail|voice mail/.test(text)) return "Voicemail";
+  return value?.trim() ? "Call summary" : "AI call";
+}
+
+function IncomingCallHandoffCard({ handoff, evidence, timestamp }: { handoff: IncomingCallHandoff; evidence: VoiceCallEvidence | null; timestamp: number }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const recordingUrl = proxyRecordingUrl(handoff.recordingUrl);
   const playLabel = recordingUrl ? (playing ? "Pause incoming call recording" : "Play incoming call recording") : "Recording unavailable";
+  const cue = callCueLabel(evidence?.summary || evidence?.endedReason);
+  const transcript = evidence?.transcript?.trim() || null;
+  const detailText = evidence?.summary?.trim() || evidence?.endedReason?.trim() || null;
   const togglePlayback = () => {
     if (!audioRef.current) return;
     if (audioRef.current.paused) void audioRef.current.play();
@@ -1933,6 +1960,14 @@ function IncomingCallHandoffCard({ handoff, timestamp }: { handoff: IncomingCall
     <div className="ccc-voice-handoff-player"><button type="button" aria-label={playLabel} disabled={!recordingUrl} onClick={togglePlayback}><Play fill="currentColor" /></button><span className="ccc-voice-handoff-waveform" aria-hidden="true">{VOICE_HANDOFF_BARS.map((height, index) => <i key={index} className={index < 11 ? "is-blue" : index < 30 ? "is-olive" : index < 41 ? "is-amber" : "is-silver"} style={{ height: `${height}%` }} />)}</span><time>{formatCallDuration(handoff.durationSeconds)}</time></div>
     {recordingUrl && <audio ref={audioRef} src={recordingUrl} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} preload="metadata" />}
     <footer><span><Headphones />{recordingUrl ? (playing ? "Playing call recording" : "Recording available") : "No recording stored"}</span><time>{dateLabel(timestamp)} · {formatTime(timestamp)}</time></footer>
+    <div className="ccc-voice-handoff-details">
+      <span className="ccc-voice-handoff-cue">{cue}</span>
+      {(detailText || transcript) && <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="ccc-voice-handoff-details-toggle">{detailsOpen ? "Hide call details" : "View call details"}<ChevronDown className={detailsOpen ? "is-open" : ""} /></button>}
+      {detailsOpen && <div className="ccc-voice-handoff-details-panel">
+        {detailText && <p><strong>Call cue</strong>{detailText}</p>}
+        {transcript && <div><strong>Transcript</strong><pre>{transcript}</pre></div>}
+      </div>}
+    </div>
   </article>;
 }
 
@@ -2024,12 +2059,13 @@ function TeamSmsFeedMessage({ event, onOpen }: { event: TeamSmsStreamEvent; onOp
   return <article className="ccc-group-message ccc-group-message-team ccc-group-message-left ccc-live-team-sms-message"><span className="ccc-group-avatar ccc-group-avatar-team"><Users /></span><div><div className="ccc-message-meta"><strong>{name}</strong><time>{formatTime(timestamp)}</time></div><button type="button" className="ccc-live-team-sms-card" onClick={onOpen} aria-label={`Open and reply to ${name}`}><p>{renderMessageBody(body)}</p><span className="ccc-live-team-reply-hint"><MessageSquare />Reply</span></button><div className="ccc-live-team-sms-reactions" aria-label="Team message reactions"><span><Heart fill="currentColor" /> <b>3</b></span><span><Users /></span></div></div></article>;
 }
 
-const CommandTimelineFeed = memo(function CommandTimelineFeed({ messagesLoading, timeline, callerName, photoMap, voiceCallIdentityByVapiId, mentionPattern, superAlertMessageIdSet, reactionsByMessage, teamSmsConversations, onOpenPhoto, onOpenThread, onReply, onReaction, onOpenSmsConversation }: {
+const CommandTimelineFeed = memo(function CommandTimelineFeed({ messagesLoading, timeline, callerName, photoMap, voiceCallIdentityByVapiId, voiceCallEvidenceByVapiId, mentionPattern, superAlertMessageIdSet, reactionsByMessage, teamSmsConversations, onOpenPhoto, onOpenThread, onReply, onReaction, onOpenSmsConversation }: {
   messagesLoading: boolean;
   timeline: CommandTimelineEntry[];
   callerName: string;
   photoMap: Record<string, string | null>;
   voiceCallIdentityByVapiId: Map<string, VoiceCallerIdentity>;
+  voiceCallEvidenceByVapiId: Map<string, VoiceCallEvidence>;
   mentionPattern: RegExp | null;
   superAlertMessageIdSet: Set<number>;
   reactionsByMessage: Record<number, Record<string, { count: number; names: string[] }>>;
@@ -2042,7 +2078,7 @@ const CommandTimelineFeed = memo(function CommandTimelineFeed({ messagesLoading,
 }) {
   if (messagesLoading) return <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading channel…</div>;
   if (timeline.length === 0) return <div className="ccc-live-empty"><MessageSquare />No messages match this view.</div>;
-  return <>{timeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} mentionPattern={mentionPattern} superAlert={superAlertMessageIdSet.has(entry.message.id)} reactions={reactionsByMessage[entry.message.id] ?? {}} onOpenPhoto={onOpenPhoto} onThread={() => onOpenThread(entry.message.id)} onReply={() => onReply(entry.message)} onReaction={(emoji) => onReaction(entry.message.id, emoji)} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) onOpenSmsConversation(conversation); }} />)}</>;
+  return <>{timeline.map((entry) => entry.kind === "internal" ? <LiveMessage key={entry.id} message={entry.message} callerName={callerName} photoUrl={photoMap[entry.message.from] ?? null} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} voiceCallEvidenceByVapiId={voiceCallEvidenceByVapiId} mentionPattern={mentionPattern} superAlert={superAlertMessageIdSet.has(entry.message.id)} reactions={reactionsByMessage[entry.message.id] ?? {}} onOpenPhoto={onOpenPhoto} onThread={() => onOpenThread(entry.message.id)} onReply={() => onReply(entry.message)} onReaction={(emoji) => onReaction(entry.message.id, emoji)} /> : <TeamSmsFeedMessage key={entry.id} event={entry.event} onOpen={() => { const conversation = teamSmsConversations.get(entry.event.sessionId); if (conversation) onOpenSmsConversation(conversation); }} />)}</>;
 });
 
 
