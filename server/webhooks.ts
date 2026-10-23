@@ -3257,13 +3257,13 @@ async function markOutboundOpenPhoneCall(db: Awaited<ReturnType<typeof getDb>>, 
   broadcastOpsUpdate("lead_update");
 }
 
-async function handleCallAnswered(event: any): Promise<void> {
+function normalizeOpenPhoneCallEvent(event: any): any | null {
   const resource = event?.data?.resource ?? event?.data?.object;
   const context = event?.data?.context ?? {};
   const externalParticipants = Array.isArray(context?.participants?.external)
     ? context.participants.external
     : [];
-  const call = resource
+  return resource
     ? {
         ...resource,
         id: resource.id,
@@ -3278,6 +3278,10 @@ async function handleCallAnswered(event: any): Promise<void> {
         to: resource.to ?? (resource.direction === "outgoing" ? externalParticipants : undefined),
       }
     : null;
+}
+
+async function handleCallAnswered(event: any): Promise<void> {
+  const call = normalizeOpenPhoneCallEvent(event);
   if (!call?.id) return;
   const db = await getDb();
   if (!db) return;
@@ -3437,10 +3441,11 @@ async function handleCallAnswered(event: any): Promise<void> {
 }
 
 async function handleCallCompleted(event: any): Promise<void> {
-  const call = event?.data?.object;
+  const call = normalizeOpenPhoneCallEvent(event);
   if (!call?.id) return;
   const db = await getDb();
   if (!db) return;
+  await markOutboundOpenPhoneCall(db, call, event?.type);
 
   const callId: string = call.id;
   const direction: string = call.direction ?? "incoming";
