@@ -13,7 +13,7 @@ import { calculateEffectivePayroll } from "./payrollCalculator";
 import { summarizeDashboardServices, summarizeDashboardSources } from "./dashboardAnalyticsPresentation";
 
 const listInput = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   query: z.string().trim().max(255).optional(),
 });
 
@@ -1067,7 +1067,7 @@ export const leadflowJobsRouter = router({
     const rows = await db
       .select()
       .from(leadflowJobs)
-      .where(eq(leadflowJobs.jobDate, input.date))
+      .where(input.date ? eq(leadflowJobs.jobDate, input.date) : undefined)
       .orderBy(asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
     return rows.filter((row) => !search || `${row.customerName} ${row.customerPhone ?? ""} ${row.customerEmail ?? ""} ${row.jobAddress ?? ""} ${row.launch27BookingId ?? ""}`.toLowerCase().includes(search));
   }),
