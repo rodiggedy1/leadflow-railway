@@ -304,3 +304,15 @@
 .ccc-live .ccc-live-lead-activity{display:flex;flex-wrap:wrap;gap:4px 10px;margin:5px 0 8px;color:#96969f;font-size:9px;line-height:1.3}
 .ccc-live .ccc-live-lead-activity span{white-space:nowrap}
 .ccc-live .ccc-live-lead-activity{grid-column:1 / -1}
+
+/* Additive AI-call evidence dropdown; the existing card anatomy remains unchanged. */
+.ccc-voice-handoff-details{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0 0;border-top:1px solid rgba(255,255,255,.08)}
+.ccc-voice-handoff-cue{color:#b9b0ff;font-size:10px;font-weight:760}
+.ccc-voice-handoff-details-toggle{display:inline-flex;align-items:center;gap:4px;padding:0;border:0;background:transparent;color:#a9a9b2;font:inherit;font-size:10px;font-weight:700;cursor:pointer}
+.ccc-voice-handoff-details-toggle:hover{color:#f0f0f2}
+.ccc-voice-handoff-details-toggle svg{width:13px;height:13px;transition:transform .15s ease}
+.ccc-voice-handoff-details-toggle svg.is-open{transform:rotate(180deg)}
+.ccc-voice-handoff-details-panel{flex:0 0 100%;display:grid;gap:9px;padding:9px 10px;border:1px solid #3b3b41;border-radius:8px;background:#242427;color:#d9d9de}
+.ccc-voice-handoff-details-panel p,.ccc-voice-handoff-details-panel>div{display:grid;gap:4px;margin:0;font-size:10px;line-height:1.45}
+.ccc-voice-handoff-details-panel strong{color:#a9a9b2;font-size:9px;letter-spacing:.45px;text-transform:uppercase}
+.ccc-voice-handoff-details-panel pre{max-height:180px;margin:0;overflow:auto;color:#e4e4e8;font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
