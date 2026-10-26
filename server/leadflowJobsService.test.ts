@@ -74,6 +74,7 @@ describe("isolated LeadFlow jobs import", () => {
   it("imports assigned active bookings and excludes terminal or rescheduled ones", () => {
     expect(isActiveLaunch27Booking(booking())).toBe(true);
     expect(isActiveLaunch27Booking(booking({ bookingStatus: "cancelled" }))).toBe(false);
+    expect(isActiveLaunch27Booking(booking({ bookingStatus: "canceled" }))).toBe(false);
     expect(isActiveLaunch27Booking(booking({ bookingStatus: "rescheduled" }))).toBe(false);
     expect(isActiveLaunch27Booking(booking({ bookingStatus: "completed", completed: false }))).toBe(false);
     expect(isActiveLaunch27Booking(booking({ completed: true }))).toBe(false);
@@ -102,6 +103,19 @@ describe("isolated LeadFlow jobs import", () => {
       customerNotes: "Front desk will let you in",
       staffNotes: "Use the rear service entrance",
       missingFromLaunch27At: null,
+    });
+  });
+
+  it("preserves a terminal Launch27 booking status and its assigned team in the mapped record", () => {
+    const mapped = launch27BookingToLeadflowJob(booking({
+      bookingStatus: "completed",
+      completed: true,
+      teams: [{ id: 12, title: "Team Morgan", share: 100, bgColor: "#222222" }],
+    }), "2026-09-06");
+    expect(mapped).toMatchObject({
+      bookingStatus: "completed",
+      teamId: 12,
+      teamName: "Team Morgan",
     });
   });
 

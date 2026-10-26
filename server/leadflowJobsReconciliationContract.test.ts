@@ -5,6 +5,13 @@ const service = readFileSync(new URL("./leadflowJobsService.ts", import.meta.url
 
 describe("per-date Launch27 active-row reconciliation", () => {
   const prohibitedLegacySymbol = ["cleaner", "Jobs"].join("");
+  it("reconciles every returned Launch27 booking by its immutable source ID", () => {
+    expect(service).toContain("for (const booking of response.bookings)");
+    expect(service).not.toContain("for (const booking of activeBookings)");
+    expect(service).toContain("const sourceIsActive = isActiveLaunch27Booking(booking);");
+    expect(service).toContain("if (sourceIsActive) active++;");
+  });
+
   it("refreshes an existing source row regardless of its prior terminal status", () => {
     expect(service).toContain("if (existing.length > 0) {");
     expect(service).toContain("await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));");
@@ -17,9 +24,9 @@ describe("per-date Launch27 active-row reconciliation", () => {
     expect(service).toContain("await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, raced[0].id));");
   });
 
-  it("reports the number of active rows actually reconciled to persistent storage", () => {
-    expect(service).toContain("let reconciled = 0;");
-    expect(service).toContain("active: reconciled");
+  it("keeps the active count separate from all-status reconciliation", () => {
+    expect(service).toContain("let active = 0;");
+    expect(service).toContain("active, created, updated, alreadyPresent");
   });
 
   it("updates the amount only within the existing isolated Bookings refresh", () => {
@@ -31,6 +38,8 @@ describe("per-date Launch27 active-row reconciliation", () => {
     expect(service).toContain("export function findUniqueRecurringPlaceholder");
     expect(service).toContain("candidate.origin === LEADFLOW_JOB_ORIGIN_RECURRENCE");
     expect(service).toContain("candidate.launch27BookingId === null");
+    expect(service).toContain("const placeholder = sourceIsActive");
+    expect(service).toContain("...(sourceIsActive ? {} : { nextOccurrenceCreatedAt: new Date() })");
     expect(service).toContain("await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, placeholder.id));");
     expect(service).toContain("mergeExistingDuplicates");
     expect(service).toContain("mergeRecurringPlaceholderIntoImportedJob");
