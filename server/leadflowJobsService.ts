@@ -57,7 +57,7 @@ export function getConsecutiveBusinessDates(startDate: string, days = LEADFLOW_J
 
 export function isActiveLaunch27Booking(booking: Launch27Booking): boolean {
   const status = booking.bookingStatus.trim().toLowerCase();
-  return booking.completed !== true && status !== "completed" && status !== "cancelled" && status !== "rescheduled";
+  return booking.completed !== true && status !== "completed" && status !== "cancelled" && status !== "canceled" && status !== "rescheduled";
 }
 
 export function shouldMarkImportedLaunch27JobMissing(
@@ -166,13 +166,12 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
     return { date, fetched: 0, active: 0, created: 0, updated: 0, alreadyPresent: 0, sourceMissing: 0, error: response.error };
   }
 
-  const activeBookings = response.bookings.filter(isActiveLaunch27Booking);
   const returnedBookingIds = new Set(response.bookings.map((booking) => booking.id));
   const seenBookingIds = new Set<number>();
   let created = 0;
   let updated = 0;
   let alreadyPresent = 0;
-  let reconciled = 0;
+  let active = 0;
   let sourceMissing = 0;
   const recurringPlaceholders = await db.select().from(leadflowJobs).where(and(
     eq(leadflowJobs.origin, LEADFLOW_JOB_ORIGIN_RECURRENCE),
@@ -181,15 +180,22 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
   ));
   const consumedPlaceholderIds = new Set<number>();
 
-  for (const booking of activeBookings) {
+  for (const booking of response.bookings) {
     if (seenBookingIds.has(booking.id)) continue;
     seenBookingIds.add(booking.id);
+    const sourceIsActive = isActiveLaunch27Booking(booking);
+    if (sourceIsActive) active++;
     const existing = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
-    const values = launch27BookingToLeadflowJob(booking, date);
-    const placeholder = findUniqueRecurringPlaceholder(
-      recurringPlaceholders.filter((candidate) => !consumedPlaceholderIds.has(candidate.id)),
-      values,
-    );
+    const values = {
+      ...launch27BookingToLeadflowJob(booking, date),
+      ...(sourceIsActive ? {} : { nextOccurrenceCreatedAt: new Date() }),
+    };
+    const placeholder = sourceIsActive
+      ? findUniqueRecurringPlaceholder(
+          recurringPlaceholders.filter((candidate) => !consumedPlaceholderIds.has(candidate.id)),
+          values,
+        )
+      : null;
     if (existing.length > 0) {
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));
       if (placeholder && options.mergeExistingDuplicates) {
@@ -197,20 +203,17 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
         await mergeRecurringPlaceholderIntoImportedJob(db, placeholder.id, existing[0].id);
       }
       updated++;
-      reconciled++;
       continue;
     }
     if (placeholder) {
       consumedPlaceholderIds.add(placeholder.id);
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, placeholder.id));
       updated++;
-      reconciled++;
       continue;
     }
     try {
       await db.insert(leadflowJobs).values(values);
       created++;
-      reconciled++;
     } catch (error) {
       if (!isDuplicateEntry(error)) throw error;
       const raced = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
@@ -221,7 +224,6 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
         await mergeRecurringPlaceholderIntoImportedJob(db, placeholder.id, raced[0].id);
       }
       updated++;
-      reconciled++;
     }
   }
 
@@ -235,7 +237,7 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
       sourceMissing++;
     }
   }
-  return { date, fetched: response.fetched, active: reconciled, created, updated, alreadyPresent, sourceMissing, error: null };
+  return { date, fetched: response.fetched, active, created, updated, alreadyPresent, sourceMissing, error: null };
 }
 
 export async function importNextThirtyDaysOfLaunch27Jobs(now = new Date()): Promise<{
