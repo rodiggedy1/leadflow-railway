@@ -53,6 +53,8 @@ import { keepLatestEmailThreadPerSender } from "./utils/emailInbox";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { markReactivationContactBooked } from "./campaignRouter";
+
+const MAX_MANUAL_BOOKING_DOLLARS = Math.floor(Number.MAX_SAFE_INTEGER / 100);
 import { invokeLLM } from "./_core/llm";
 import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
@@ -2179,20 +2181,30 @@ export const opsChatRouter = router({
       personName: z.string().min(1).max(128),
       amount: z.string().max(32).optional(),
       note: z.string().max(500).optional(),
+      bookedAmount: z.number().int().positive().max(MAX_MANUAL_BOOKING_DOLLARS).optional(),
       authorName: z.string().min(1).max(128),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
+      const hasManualHeaderBooking = input.bookedAmount !== undefined;
+      const amount = input.bookedAmount === undefined ? input.amount : `$${input.bookedAmount.toLocaleString()}`;
+      const bookedByAgentMetricId = hasManualHeaderBooking && !ctx.opsCaller.isOwner && /^\d+$/.test(ctx.opsCaller.id)
+        ? Number(ctx.opsCaller.id)
+        : null;
       const meta = JSON.stringify({
         personName: input.personName,
-        amount: input.amount ?? null,
+        amount: amount ?? null,
         note: input.note ?? null,
+        manualHeaderBooking: hasManualHeaderBooking,
+        bookedAmount: hasManualHeaderBooking ? input.bookedAmount : null,
+        bookedByAgentMetricId: Number.isSafeInteger(bookedByAgentMetricId) && bookedByAgentMetricId! > 0 ? bookedByAgentMetricId : null,
+        bookedByAgentMetricName: hasManualHeaderBooking ? ctx.opsCaller.name : null,
       });
 
-      const body = input.amount
-        ? `🎉 New booking! ${input.personName} — ${input.amount}${input.note ? ` · ${input.note}` : ""}`
+      const body = amount
+        ? `🎉 New booking! ${input.personName} — ${amount}${input.note ? ` · ${input.note}` : ""}`
         : `🎉 New booking! ${input.personName}${input.note ? ` · ${input.note}` : ""}`;
 
       await db.insert(opsChatMessages).values({
@@ -2207,7 +2219,7 @@ export const opsChatRouter = router({
       // Broadcast so all agents see the celebration card immediately
       broadcastOpsUpdate("new_message", { channel: input.channel });
 
-      return { success: true };
+      return { success: true, manualHeaderBooking: hasManualHeaderBooking };
     }),
 
   /**
