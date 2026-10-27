@@ -795,7 +795,6 @@ export const commandCenterRouter = router({
         .filter((row) => matchesAgent(row.bookedByAgentId, row.bookedByAgentName))
         .map((row) => ({
           customerName: row.customerName,
-          phone: row.phone,
           revenue: Number(row.totalCents ?? 0) / 100,
         }));
 

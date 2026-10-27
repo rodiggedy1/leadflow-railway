@@ -6,6 +6,34 @@ const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 describe("Command Chat exact live shell", () => {
+  it("keeps lead-card booking intact and marks only Announce booking for the unified header", () => {
+    const page = read("client/src/pages/CommandChatExactLive.tsx");
+    const opsChatRouter = read("server/opsChatRouter.ts");
+    const metrics = read("server/unifiedBookingMetrics.ts");
+
+    expect(page).toContain('onClick={() => setModal("booking")}><Sparkles />Announce booking');
+    expect(page).toContain('bookedAmount: Number(bookingAmount.trim())');
+    expect(page).toContain('const MAX_MANUAL_BOOKING_DOLLARS = Math.floor(Number.MAX_SAFE_INTEGER / 100);');
+    expect(page).toContain('Number(bookingAmount.trim()) <= MAX_MANUAL_BOOKING_DOLLARS');
+    expect(page).not.toContain('bookingNote');
+    expect(page).toContain('onSuccess: (result) =>');
+    expect(page).toContain('if (result.manualHeaderBooking) { void utils.bookings.todayStats.invalidate(); void utils.commandCenter.getAgentPerformance.invalidate(); }');
+    expect(page).toContain('if (selectedAgentPerformanceId !== null) void utils.commandCenter.getAgentPerformance.invalidate();');
+    expect(opsChatRouter).toContain('markLeadBooked: opsChatProcedure');
+    expect(opsChatRouter).toContain('unbookLead: opsChatProcedure');
+    expect(opsChatRouter).toContain('manualHeaderBooking: hasManualHeaderBooking');
+    expect(opsChatRouter).toContain('bookedAmount: z.number().int().positive().max(MAX_MANUAL_BOOKING_DOLLARS).optional()');
+    expect(opsChatRouter).not.toContain('command-chat-manual-booking');
+    expect(opsChatRouter).toContain('bookedByAgentMetricId: Number.isSafeInteger(bookedByAgentMetricId) && bookedByAgentMetricId! > 0 ? bookedByAgentMetricId : null');
+    expect(opsChatRouter).toContain('bookedByAgentMetricName: hasManualHeaderBooking ? ctx.opsCaller.name : null');
+    expect(opsChatRouter).not.toContain('bookedByAgentName: hasManualHeaderBooking');
+    expect(metrics).toContain('value.manualHeaderBooking !== true');
+    expect(metrics).toContain('bookedAmount > MAX_MANUAL_BOOKING_DOLLARS');
+    expect(metrics).toContain('ops-chat-message:${messageId}');
+    expect(metrics).not.toContain('manual-announcement:${messageId}');
+    expect(page).toContain('amount: `$${bookedAmount.toLocaleString()}`');
+  });
+
   it("keeps the approved review composition while binding only existing Command Chat data and actions", () => {
     const page = read("client/src/pages/CommandChatExactLive.tsx");
     const styles = read("client/src/pages/command-chat-exact-live.css");
