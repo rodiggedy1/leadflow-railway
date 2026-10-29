@@ -157,6 +157,7 @@ function WalletCardOnFileElement({
         elements,
         clientSecret: setup.clientSecret,
         confirmParams: {
+          return_url: window.location.href,
           payment_method_data: {
             billing_details: { name: customerName },
           },
